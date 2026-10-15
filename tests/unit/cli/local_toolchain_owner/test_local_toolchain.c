@@ -148,6 +148,16 @@ static void windows_tests(void) {
     XtcXirLocalToolchainRequest request={0}; XtcXirLocalToolchain *out=(XtcXirLocalToolchain *)(uintptr_t)1;
     XtcXirLocalDiagnostic diagnostic; size_t before=attempts;
     CHECK(xtc_xir_local_toolchain_open(r,&request,&out,&diagnostic)==XTC_XIR_LOCAL_INVALID && out==(void *)(uintptr_t)1 && attempts==before);
+    out=NULL;request.timeout_ms=30000;request.output_limit=1048576;request.manifest_limit=4194304;
+    request.driver=(XrXirWindowsDriver)99;
+    CHECK(xtc_xir_local_toolchain_open(r,&request,&out,&diagnostic)==XTC_XIR_LOCAL_INVALID&&!out&&attempts==before);
+    unit_free(owner,r);
+    owner=unit_owner(&r);
+    static const char response[]="C:/owned-\xc3\xa9&%/clang\r\n";
+    XrProcessByteBuffer line={(uint8_t *)response,sizeof(response)-1,false};char *path=NULL;
+    CHECK(local_output_path(owner,&line,false,&path)&&!strcmp(path,"C:/owned-\xc3\xa9&%/clang"));
+    xr_compile_resources_free(path);path=NULL;
+    CHECK(!local_output_path(owner,&line,true,&path)&&!path&&owner->diagnostic.status==XTC_XIR_LOCAL_UNSUPPORTED);
     unit_free(owner,r);
     puts("new Win32 IO/two OOM errors, Unicode ordinal, UTF16 values and invalid out preservation PASS");
 }
@@ -156,13 +166,13 @@ int main(void) { DWORD before=handles(); parser_tests(); windows_tests(); CHECK(
 static size_t environment_units(const wchar_t *p) {
     size_t n=0; while(p[n] || p[n+1]) ++n; return n+2;
 }
-static void real_once(char **argv) {
+static void real_once(char **argv,XrXirWindowsDriver driver) {
     reset(SIZE_MAX); XrCompileResources *r=NULL;
     CHECK(xr_compile_resources_new(&defaults,&r)==XR_COMPILE_RESOURCE_OK);
     char *text[3];
     for(unsigned i=0;i<3;++i) { size_t n=strlen(argv[i+1])+1; text[i]=physical_malloc(n); CHECK(text[i]); memcpy(text[i],argv[i+1],n); }
     XtcXirLocalToolchainRequest request={strcmp(text[1],"-")?text[1]:NULL,
-        strcmp(text[0],"-")?text[0]:NULL,strcmp(text[2],"-")?text[2]:NULL,30000,1048576,4194304};
+        strcmp(text[0],"-")?text[0]:NULL,strcmp(text[2],"-")?text[2]:NULL,30000,1048576,4194304,driver};
     XtcXirLocalToolchain *owner=NULL; XtcXirLocalDiagnostic diagnostic;
     wchar_t *environment_before=GetEnvironmentStringsW(); CHECK(environment_before);
     size_t units=environment_units(environment_before);
@@ -183,8 +193,10 @@ static void real_once(char **argv) {
         const XtcXirLocalToolchainView *view=xtc_xir_local_toolchain_view(owner);
         const XrXirRuntimeSdk *sdk=xtc_xir_local_toolchain_sdk(owner);
         CHECK(view->library_count==5 && xr_xir_runtime_sdk_resources(sdk)==r);
-        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==29);
+        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==30);
         printf("compiler=%s\nlinker=%s\nworkspace=%s\nsdk=%s\n",view->compiler,view->linker,view->workspace_parent,xr_xir_runtime_sdk_root(sdk));
+        CHECK(view->msvc.driver==driver&&(driver==XR_XIR_WINDOWS_CLANG_CL?view->msvc.builtin_include!=NULL:!view->msvc.builtin_include));
+        printf("driver=%u\nbuiltin=%s\n",(unsigned)driver,view->msvc.builtin_include?view->msvc.builtin_include:"");
         for(unsigned i=0;i<5;++i) { CHECK(view->libraries[i].path); printf("library%u=%s\n",i,view->libraries[i].path); }
     } else CHECK(!owner);
     xtc_xir_local_toolchain_free(owner); CHECK(!live);
@@ -194,9 +206,10 @@ static void real_once(char **argv) {
 }
 int wmain(int argc,wchar_t **wide) {
     XrWinPathStatus converted; char **argv=xr_win_utf16_arguments(argc,wide,&converted);
-    CHECK(argv && converted==XR_WIN_PATH_OK && argc==5);
-    real_once(argv); DWORD baseline=handles();
-    real_once(argv); CHECK(handles()==baseline);
+    CHECK(argv&&converted==XR_WIN_PATH_OK&&(argc==5||(argc==6&&!strcmp(argv[5],"clang"))));
+    XrXirWindowsDriver driver=argc==6?XR_XIR_WINDOWS_CLANG_CL:XR_XIR_WINDOWS_MSVC;
+    real_once(argv,driver);DWORD baseline=handles();
+    real_once(argv,driver);CHECK(handles()==baseline);
     puts("parent environment identical; repeated owner handle delta zero; request+ledger producer destroyed PASS");
     xr_win_utf8_arguments_free(argc,argv); return 0;
 }

@@ -6,6 +6,8 @@ exe, root, compiler, linker, sdk = map(lambda x: Path(x).resolve(), sys.argv[1:6
 mode = sys.argv[6]
 with tempfile.TemporaryDirectory(prefix='xray-native-operation-') as temporary:
     parent = Path(temporary)
+    if mode in ('clang-native','clang-preflight'):
+        parent=parent/'workspace parent with spaces';parent.mkdir()
     marker = parent / 'unrelated.txt'
     marker.write_bytes(b'preserve unrelated workspace-parent entry')
     if mode == 'unit':
@@ -21,6 +23,7 @@ with tempfile.TemporaryDirectory(prefix='xray-native-operation-') as temporary:
         command = [exe, mode, authority, source, root / 'stdlib', sdk, compiler, linker, parent, *libraries,
                    vc / 'include', kit / 'Include' / version / 'ucrt', kit / 'Include' / version / 'shared',
                    kit / 'Include' / version / 'um', os.environ['SystemRoot'], parent / 'export.exe']
+        if mode in ('clang-native','clang-preflight'):command.append(Path(sys.argv[7]).resolve())
         for path in [source, authority / 'counter.xr', authority / 'label.xr', sdk / 'src/execution/xr_xir_native_main.inc.c']:
             print(f'input {path} sha256={hashlib.sha256(path.read_bytes()).hexdigest()}', flush=True)
     started = time.perf_counter()
@@ -33,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='xray-native-operation-') as temporary:
     if result.returncode:
         # Preserve the first failed transaction without retry.
         raise SystemExit(result.returncode)
-    if mode == 'native':
+    if mode in ('native','clang-native'):
         native = subprocess.run([str(parent / 'export.exe')], capture_output=True, timeout=30)
         assert (native.returncode, native.stdout, native.stderr) == (0, b'owner\xe4\xb8\xad-ok 42 true\n', b''), native
         print('actual SDK launcher + complete 3-module output PASS', flush=True)

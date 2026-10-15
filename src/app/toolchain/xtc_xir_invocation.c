@@ -18,6 +18,7 @@
 #include "../../base/xio_policy.h"
 #include "../../base/xfileio.h"
 #include "../../base/xsha256.h"
+#include "../../base/xhash.h"
 #include "../../os/os_fs.h"
 #include "../../os/os_dir.h"
 #include <string.h>
@@ -26,18 +27,21 @@
 #include <appmodel.h>
 #endif
 
+#define INVOCATION_FILE_BUCKET_COUNT 256u
 typedef struct InvocationFile {
     XrXirInvocationFile facts;
     XtcXirFileLease *lease;
+    uint32_t key, next;
 } InvocationFile;
 typedef struct InvocationProfile {
-    XtcXirFileLease *directories[12];
-    const char *paths[12];
-    char *owned_paths[12];
-    bool missing[12];
+    XtcXirFileLease *directories[14];
+    const char *paths[14];
+    char *owned_paths[14];
+    bool missing[14];
+    XrXirWindowsDriver driver;
 #ifdef XR_OS_WINDOWS
-    wchar_t *wide[12];
-    size_t lengths[12];
+    wchar_t *wide[14];
+    size_t lengths[14];
 #endif
 } InvocationProfile;
 struct XrXirInvocation {
@@ -55,6 +59,7 @@ struct XrXirInvocation {
     XrDependencyFacts *reports[3];
     InvocationFile *files;
     uint32_t capacity;
+    uint32_t file_buckets[INVOCATION_FILE_BUCKET_COUNT];
     char *prefix;
     XtcXirFileLease *directories[2];
     XtcXirFileLease *output_lease; /* Borrowed from the owned file table. */
@@ -202,22 +207,44 @@ static bool invocation_file_reserve(XrXirInvocation *owner) {
     }
     return true;
 }
+/* Hashes only select candidates. Stage, kind, full canonical path, length and
+ * content digest still decide equality; no fingerprint uses this index. */
+static bool invocation_file_key(XrXirInvocation *owner, const char *path,
+    XrXirInvocationStage stage, XrXirInvocationFileKind kind, uint32_t *output) {
+    size_t length = 0;
+    if (stage < XR_XIR_INVOCATION_GENERATED || stage > XR_XIR_INVOCATION_LINK ||
+        kind < XR_XIR_INVOCATION_SOURCE || kind > XR_XIR_INVOCATION_PROVIDER_CONFIG)
+        return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
+    if (!invocation_length(owner, path, &length) || !invocation_work(owner, (uint64_t)length + 32)) return false;
+    uint32_t domain = (uint32_t)stage * 16u + (uint32_t)kind;
+    *output = xr_hash_bytes(path, length) ^ xr_hash_int((int64_t)domain); return true;
+}
 static bool invocation_file_publish(XrXirInvocation *owner, XrXirInvocationStage stage,
-    XrXirInvocationFileKind kind, const char *path, uint64_t length, const uint8_t *digest,
-    XtcXirFileLease *lease) {
-    if (!invocation_file_reserve(owner) || !invocation_work(owner, sizeof(InvocationFile) + 32)) return false;
+    XrXirInvocationFileKind kind, const XtcXirFileFacts *facts, XtcXirFileLease *lease) {
+    uint32_t key;
+    if (!invocation_file_key(owner, facts->path, stage, kind, &key) || !invocation_file_reserve(owner) ||
+        !invocation_work(owner, sizeof(InvocationFile) + 32 + 2 * sizeof(uint32_t))) return false;
+    uint32_t bucket = key & (INVOCATION_FILE_BUCKET_COUNT - 1);
     InvocationFile *file = &owner->files[owner->facts.file_count];
-    *file = (InvocationFile){{stage, kind, path, length, {0}}, lease};
-    memcpy(file->facts.digest, digest, sizeof(file->facts.digest));
+    *file = (InvocationFile){{stage, kind, facts->path, facts->length, {0}}, lease, key, owner->file_buckets[bucket]};
+    memcpy(file->facts.digest, facts->digest, sizeof(file->facts.digest));
     if (kind == XR_XIR_INVOCATION_OUTPUT) owner->output_lease = lease;
     ++owner->facts.file_count;
+    owner->file_buckets[bucket] = owner->facts.file_count;
     return true;
+}
+static bool invocation_image_publish(XrXirInvocation *owner, XrXirInvocationStage stage, const XrXirImageFile *image) {
+    XtcXirFileFacts facts;
+    if (!invocation_work(owner, sizeof(facts))) return false;
+    facts.path = image->path; facts.length = image->length;
+    memcpy(facts.digest, image->digest, sizeof(facts.digest));
+    return invocation_file_publish(owner, stage, XR_XIR_INVOCATION_PROVIDER_IMAGE, &facts, NULL);
 }
 static bool invocation_file_add(XrXirInvocation *owner, XrXirInvocationStage stage,
     XrXirInvocationFileKind kind, XtcXirFileLease **lease) {
     const XtcXirFileFacts *facts = xtc_xir_file_lease_facts(*lease);
     if (!facts) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
-    if (!invocation_file_publish(owner, stage, kind, facts->path, facts->length, facts->digest, *lease)) return false;
+    if (!invocation_file_publish(owner, stage, kind, facts, *lease)) return false;
     *lease = NULL;
     return true;
 }
@@ -260,30 +287,48 @@ static bool invocation_compile_recipe(XrXirInvocation *owner,
         "/D_CRT_SECURE_NO_WARNINGS"};
     const XrProcessView *view = &owner->commands[stage];
     const XrXirInvocationCompile *compile = &request->compile[stage];
+    bool clang=request->msvc.driver==XR_XIR_WINDOWS_CLANG_CL;
+    unsigned include_at=clang?16:14,tail=clang?24:21;
     if (view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_WINDOWS_TREE ||
-        view->argc != 26 + stage)
+        view->extension_policy != (clang ? XR_PROC_EXTENSIONS_DISABLED : XR_PROC_EXTENSIONS_DEFAULT) ||
+        view->argc != (clang?34u:26u) + stage)
         return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
     for (unsigned i = 0; i < 12; ++i)
-        if (!invocation_expect(owner, view->argv[i + 1], fixed[i])) return false;
+        if(!invocation_expect(owner,view->argv[i+1],clang&&i==3?"--no-default-config":fixed[i]))return false;
     static const char *const directories[] = {"src", "include", "generated"};
     for (unsigned i = 0; i < 3; ++i) {
         char *path = NULL;
         if (!invocation_io(owner, xr_path_join_owned(&owner->io, xr_xir_runtime_sdk_root(request->sdk),
             directories[i], &path))) return false;
-        bool okay = invocation_join_argument(owner, view->argv[14 + i], "/I", path);
+        bool okay=invocation_join_argument(owner,view->argv[include_at+i],"/I",path);
         xr_compile_resources_free(path);
         if (!okay) return false;
     }
     if (!invocation_expect(owner, view->argv[13], "/X")) return false;
+    if(clang&&(!invocation_expect(owner,view->argv[14],"/clang:-nobuiltininc")||
+        !invocation_expect(owner,view->argv[15],"/clang:-ffp-contract=off")||
+        !invocation_join_argument(owner,view->argv[19],"/imsvc",request->msvc.builtin_include)))return false;
     const char *external[] = {request->msvc.vc_include, request->msvc.ucrt_include,
         request->msvc.shared_include, request->msvc.um_include};
     for (unsigned i = 0; i < 4; ++i)
-        if (!invocation_join_argument(owner, view->argv[17 + i], "/I", external[i])) return false;
-    if (!invocation_expect(owner, view->argv[21], "/c") ||
-        !invocation_expect(owner, view->argv[22], compile->source) ||
-        !invocation_join_argument(owner, view->argv[23], "/Fo", compile->object) ||
-        !invocation_expect(owner, view->argv[24], "/sourceDependencies") ||
-        !invocation_expect(owner, view->argv[25], compile->report)) return false;
+        if(!invocation_join_argument(owner,view->argv[(clang?20:17)+i],clang?"/imsvc":"/I",external[i]))return false;
+    if(!invocation_expect(owner,view->argv[tail],"/c")||
+        !invocation_expect(owner,view->argv[tail+1],compile->source)||
+        !invocation_join_argument(owner,view->argv[tail+2],"/Fo",compile->object))return false;
+    if(clang) {
+        if(!invocation_expect(owner,view->argv[tail+3],"/clang:-MD")||
+            !invocation_expect(owner,view->argv[tail+4],"/clang:-MF")||
+            !invocation_join_argument(owner,view->argv[tail+5],"/clang:",compile->report)||
+            !invocation_expect(owner,view->argv[tail+6],"/clang:-MQ")||
+            !invocation_join_argument(owner,view->argv[tail+7],"/clang:",compile->object))return false;
+        char *vc_tools = NULL;
+        if (!invocation_io(owner, xr_path_dirname_owned(&owner->io, request->msvc.vc_include, &vc_tools))) return false;
+        bool okay = invocation_expect(owner, view->argv[tail+8], "/vctoolsdir") &&
+            invocation_expect(owner, view->argv[tail+9], vc_tools);
+        xr_compile_resources_free(vc_tools);
+        if (!okay) return false;
+    } else if(!invocation_expect(owner,view->argv[tail+3],"/sourceDependencies")||
+        !invocation_expect(owner,view->argv[tail+4],compile->report))return false;
     if (stage) {
         size_t length = 0;
         if (!invocation_length(owner, owner->prefix, &length)) return false;
@@ -291,7 +336,7 @@ static bool invocation_compile_recipe(XrXirInvocation *owner,
         if (length > 64) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
         if (!invocation_copy(owner, symbol, owner->prefix, length) ||
             !invocation_copy(owner, symbol + length, "_program", sizeof("_program"))) return false;
-        if (!invocation_join_argument(owner, view->argv[26], "/DXIR_SDK_PROGRAM_SYMBOL=", symbol)) return false;
+        if(!invocation_join_argument(owner,view->argv[tail+(clang?10:5)],"/DXIR_SDK_PROGRAM_SYMBOL=",symbol))return false;
     }
     return invocation_expect(owner, view->cwd, request->input_directory) && invocation_environment(owner, view, request);
 }
@@ -300,6 +345,9 @@ static bool invocation_link_recipe(XrXirInvocation *owner, const XrXirInvocation
     owner->diagnostic.stage = XR_XIR_INVOCATION_LINK;
     owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
     const XrProcessView *view = &owner->commands[2];
+    if (view->extension_policy != (request->msvc.driver == XR_XIR_WINDOWS_CLANG_CL ?
+        XR_PROC_EXTENSIONS_DISABLED : XR_PROC_EXTENSIONS_DEFAULT))
+        return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
     if (view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_WINDOWS_TREE ||
         request->library_count > XTC_PROCESS_MAX_ARGS - 14 || view->argc != 14 + request->library_count)
         return invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
@@ -457,7 +505,7 @@ static bool invocation_open_add(XrXirInvocation *owner, const char *path,
     return okay;
 }
 static bool invocation_report(XrXirInvocation *owner, const char *path, unsigned stage,
-    bool final, XrDependencyFacts **output) {
+    bool final,const char *object,XrDependencyFacts **output) {
     XtcXirFileLease *lease = NULL;
     void *bytes = NULL;
     size_t length = 0;
@@ -466,10 +514,20 @@ static bool invocation_report(XrXirInvocation *owner, const char *path, unsigned
     if (okay) okay = invocation_target(owner, xtc_xir_file_lease_read(lease,
         owner->limits.dependencies.frame_bytes, &bytes, &length));
     const XrProcessView *command = &owner->commands[stage];
-    XrDependencyInput input = {stage == 2 ? XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE : XR_DEPENDENCY_MSVC_SOURCE_1_2,
+    bool make=stage<2&&owner->profile.driver==XR_XIR_WINDOWS_CLANG_CL;
+    XrDependencyInput input = {stage == 2 ? XR_DEPENDENCY_MSVC_FULLPATH_RSP_UTF16LE :
+        make?XR_DEPENDENCY_WINDOWS_MAKE:XR_DEPENDENCY_MSVC_SOURCE_1_2,
         bytes, length, command->argv, (uint32_t)command->argc};
     if (okay) okay = invocation_target(owner, xtc_dependencies_parse(owner->context.resources,
         &input, owner->limits.dependencies, &report));
+    if(okay&&make) {
+        bool same=false;
+        okay=object&&xtc_dependencies_target(report)&&
+            invocation_profile_equal(owner,object,xtc_dependencies_target(report),&same);
+        if(okay&&!same)okay=invocation_fail(owner,XR_XIR_INVOCATION_REPLAY_MISMATCH,XR_XIR_INVOCATION_SELF,0);
+        if(!okay&&owner->status==XR_XIR_INVOCATION_OK)
+            invocation_fail(owner,XR_XIR_INVOCATION_INVALID,XR_XIR_INVOCATION_SELF,0);
+    }
     if (okay && final) okay = invocation_file_add(owner, (XrXirInvocationStage)stage,
         XR_XIR_INVOCATION_REPORT, &lease);
     /* Initial report leases end here; replay must be able to rewrite them. */
@@ -481,9 +539,21 @@ static bool invocation_report(XrXirInvocation *owner, const char *path, unsigned
 }
 static bool invocation_file_find(XrXirInvocation *owner, const XtcXirFileFacts *facts,
     unsigned stage, XrXirInvocationFileKind kind, uint32_t *index) {
-    for (uint32_t i = 0; i < owner->facts.file_count; ++i) {
-        if (!invocation_work(owner, sizeof(owner->files[i].facts.stage) + sizeof(owner->files[i].facts.kind))) return false;
-        const XrXirInvocationFile *file = &owner->files[i].facts;
+    uint32_t key;
+    if (!invocation_file_key(owner, facts->path, (XrXirInvocationStage)stage, kind, &key) ||
+        !invocation_work(owner, sizeof(uint32_t))) return false;
+    uint32_t slot = owner->file_buckets[key & (INVOCATION_FILE_BUCKET_COUNT - 1)];
+    while (slot) {
+        if (!invocation_work(owner, 5 * sizeof(uint32_t) + sizeof(void *))) return false;
+        if (!owner->files || slot > owner->facts.file_count || slot > owner->capacity)
+            return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
+        uint32_t i = slot - 1;
+        const InvocationFile *entry = &owner->files[i];
+        if (entry->next >= slot) return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
+        slot = entry->next;
+        if (entry->key != key) continue;
+        if (!invocation_work(owner, sizeof(entry->facts.stage) + sizeof(entry->facts.kind))) return false;
+        const XrXirInvocationFile *file = &entry->facts;
         if (file->stage != (XrXirInvocationStage)stage || file->kind != kind) continue;
         bool same = false;
         if (!invocation_same(owner, facts->path, file->path, &same)) return false;
@@ -512,7 +582,14 @@ static bool invocation_compile_inputs(XrXirInvocation *owner, const XrDependency
         XrXirInvocationFileKind kind = record->kind == XR_DEPENDENCY_SOURCE ?
             XR_XIR_INVOCATION_SOURCE : XR_XIR_INVOCATION_HEADER;
         XtcXirFileLease *lease = NULL;
-        bool okay = invocation_target(owner, invocation_file_open(owner, record->path, &lease));
+        XrXirTargetStatus opened;
+#ifdef XR_OS_WINDOWS
+        if (owner->profile.driver == XR_XIR_WINDOWS_CLANG_CL)
+            opened = xtc_xir_file_lease_open_traversed(owner->context.resources, record->path, owner->proof_cache, &lease);
+        else
+#endif
+            opened = invocation_file_open(owner, record->path, &lease);
+        bool okay = invocation_target(owner, opened);
         uint32_t index = UINT32_MAX;
         if (okay) okay = invocation_profile_contains(owner, xtc_xir_file_lease_facts(lease)->path, false);
         if (okay) okay = invocation_file_find(owner, xtc_xir_file_lease_facts(lease), stage, kind, &index);
@@ -629,7 +706,8 @@ static bool invocation_stage(XrXirInvocation *owner, const XrXirInvocationReques
     XrXirImageCollector *images = NULL;
     XrToolchainProcess *process = NULL;
     bool okay = invocation_run_process(owner, request, owner->process[stage], owner->images[stage]);
-    if (okay) okay = invocation_report(owner, path, stage, false, &observed);
+    const char *object=stage<2?request->compile[stage].object:NULL;
+    if (okay) okay = invocation_report(owner,path,stage,false,object,&observed);
     if (okay) okay = stage < 2 ? invocation_compile_inputs(owner, observed, stage, false) : invocation_link_inputs(owner, observed);
     if (okay) {
         owner->diagnostic.pass = XR_XIR_INVOCATION_REPLAY;
@@ -641,7 +719,7 @@ static bool invocation_stage(XrXirInvocation *owner, const XrXirInvocationReques
     }
     if (okay) okay = invocation_run_process(owner, request, process, images);
     if (okay) okay = invocation_image_inputs(owner, images, stage);
-    if (okay) okay = invocation_report(owner, path, stage, true, &replayed);
+    if (okay) okay = invocation_report(owner,path,stage,true,object,&replayed);
     if (okay) okay = stage < 2 ? invocation_compile_inputs(owner, replayed, stage, true) : invocation_link_inputs(owner, replayed);
     if (okay) okay = invocation_open_add(owner, stage < 2 ? request->compile[stage].object : request->output,
         (XrXirInvocationStage)stage, stage < 2 ? XR_XIR_INVOCATION_OBJECT : XR_XIR_INVOCATION_OUTPUT);
@@ -802,11 +880,12 @@ static bool invocation_finish(XrXirInvocation *owner) {
             const XrXirImageFile *image = xtc_xir_images_file(images, i);
             /* This owned collector retains the original same-ID image leases.
              * Each stage keeps its fact row; only a redundant lease is omitted. */
-            if (!invocation_file_publish(owner, (XrXirInvocationStage)stage, XR_XIR_INVOCATION_PROVIDER_IMAGE,
-                image->path, image->length, image->digest, NULL)) return false;
+            if (!invocation_image_publish(owner, (XrXirInvocationStage)stage, image)) return false;
         }
     }
-    if (!invocation_provider_versions(owner) || !invocation_work(owner, sizeof(owner->facts.kind))) return false;
+    if (!invocation_provider_versions(owner) ||
+        !invocation_copy(owner, &owner->facts.driver, &owner->profile.driver, sizeof(owner->facts.driver)) ||
+        !invocation_work(owner, sizeof(owner->facts.kind))) return false;
     owner->facts.kind = XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS;
     return true;
 }
@@ -849,7 +928,8 @@ XR_FUNC XrXirInvocationStatus xtc_xir_invocation_run(const XrXirInvocationReques
     owner->diagnostic.code = XR_XIR_INVOCATION_OK;
     owner->io = xr_compile_io_policy(context->resources);
     bool okay = invocation_copy(owner, &owner->context, context, sizeof(*context)) &&
-        invocation_copy(owner, &owner->limits, &request->limits, sizeof(request->limits));
+        invocation_copy(owner, &owner->limits, &request->limits, sizeof(request->limits)) &&
+        invocation_copy(owner,&owner->profile.driver,&request->msvc.driver,sizeof(request->msvc.driver));
 #ifdef XR_OS_WINDOWS
     if(okay)okay=invocation_target(owner,xtc_xir_hash_proof_cache_new(context->resources,
         request->limits.files,&owner->proof_cache));

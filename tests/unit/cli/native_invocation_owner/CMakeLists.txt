@@ -58,6 +58,9 @@ enable_testing()
 add_test(NAME native_invocation_provider COMMAND test_native_invocation_faults --provider-only
     "${INVOCATION_MSVC}" "${INVOCATION_LINKER}")
 set_tests_properties(native_invocation_provider PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+add_test(NAME native_invocation_clang_target COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_make_target.py" $<TARGET_FILE:test_native_invocation_faults>)
+set_tests_properties(native_invocation_clang_target PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
 find_program(INVOCATION_CLANG_IMAGE NAMES clang-cl)
 if(INVOCATION_CLANG_IMAGE)
     add_test(NAME native_invocation_provider_clang_image COMMAND test_native_invocation_faults --provider-image

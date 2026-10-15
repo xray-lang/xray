@@ -198,7 +198,8 @@ XR_FUNC XtcXirLocalStatus xtc_xir_local_toolchain_open(XrCompileResources *resou
     const XtcXirLocalToolchainRequest *request, XtcXirLocalToolchain **output, XtcXirLocalDiagnostic *diagnostic) {
     XtcXirLocalDiagnostic initial = {XTC_XIR_LOCAL_INVALID, XTC_XIR_LOCAL_REQUEST, XTC_XIR_LOCAL_SELF, 0, 0, 0};
     if (!resources || !request || !output || *output || !request->timeout_ms ||
-        !request->output_limit || request->output_limit == SIZE_MAX || !request->manifest_limit || request->manifest_limit == SIZE_MAX) {
+        !request->output_limit || request->output_limit == SIZE_MAX || !request->manifest_limit || request->manifest_limit == SIZE_MAX ||
+        (request->driver!=XR_XIR_WINDOWS_MSVC&&request->driver!=XR_XIR_WINDOWS_CLANG_CL)) {
         if (diagnostic) *diagnostic = initial;
         return initial.status;
     }
@@ -216,7 +217,9 @@ XR_FUNC XtcXirLocalStatus xtc_xir_local_toolchain_open(XrCompileResources *resou
     }
     owner->resources = resources; owner->policy = xr_compile_io_policy(resources);
     owner->diagnostic.stage = XTC_XIR_LOCAL_WORKSPACE;
-    bool okay = local_workspace(owner, request->workspace_parent);
+    bool okay=local_work(owner,sizeof(owner->view.msvc.driver));
+    if(okay)owner->view.msvc.driver=request->driver;
+    if(okay)okay=local_workspace(owner,request->workspace_parent);
     if (okay) { owner->diagnostic.stage = XTC_XIR_LOCAL_DISCOVERY; okay = local_discover(owner, request); }
     if (okay) { owner->diagnostic.stage = XTC_XIR_LOCAL_SDK; okay = local_sdk_select(owner, request->sdk_root, request->manifest_limit); }
     XtcXirLocalStatus status = owner->diagnostic.status;

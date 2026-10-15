@@ -146,6 +146,18 @@ static bool native_path(XtcXirNativeOperation *owner, const char *directory, con
         status == XR_OS_IO_IO ? XTC_XIR_NATIVE_IO : XTC_XIR_NATIVE_INVALID;
     native_fail(owner, mapped, XTC_XIR_NATIVE_PATH, status); return false;
 }
+static bool native_parent(XtcXirNativeOperation *owner, const char *path, char **out) {
+    if (owner->string_count == sizeof(owner->strings) / sizeof(owner->strings[0])) {
+        native_fail(owner, XTC_XIR_NATIVE_BUDGET, XTC_XIR_NATIVE_SELF, 0); return false;
+    }
+    XrOsIoPolicy policy = xr_compile_io_policy(owner->resources);
+    XrOsIoStatus status = xr_path_dirname_owned(&policy, path, out);
+    if (status == XR_OS_IO_OK) { owner->strings[owner->string_count++] = *out; return true; }
+    XtcXirNativeOperationStatus mapped = status == XR_OS_IO_BUDGET ? XTC_XIR_NATIVE_BUDGET :
+        status == XR_OS_IO_OUT_OF_MEMORY ? XTC_XIR_NATIVE_OUT_OF_MEMORY :
+        status == XR_OS_IO_IO ? XTC_XIR_NATIVE_IO : XTC_XIR_NATIVE_INVALID;
+    native_fail(owner, mapped, XTC_XIR_NATIVE_PATH, status); return false;
+}
 static bool native_length(XtcXirNativeOperation *owner, const char *text, size_t *length) {
     for (size_t i = 0;; ++i) {
         if (!native_work(owner, 1)) return false;
@@ -184,6 +196,8 @@ static bool native_spec(XtcXirNativeOperation *owner, const XtcXirNativeOperatio
     xtc_process_spec_init(spec, executable, owner->limits.timeout_ms);
     const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner->workspace);
     spec->completion_policy = XR_PROC_COMPLETE_ROOT;
+    spec->extension_policy = request->msvc.driver == XR_XIR_WINDOWS_CLANG_CL ?
+        XR_PROC_EXTENSIONS_DISABLED : XR_PROC_EXTENSIONS_DEFAULT;
     spec->environment_source = XTC_PROCESS_ENV_EXPLICIT;
     spec->cwd = paths->input; spec->output_limit = owner->limits.process_output_bytes;
     spec->env_count = 3;
@@ -192,29 +206,12 @@ static bool native_spec(XtcXirNativeOperation *owner, const XtcXirNativeOperatio
     spec->env_keys[2] = "TMP"; spec->env_values[2] = paths->output;
     return true;
 }
-static bool native_commands(XtcXirNativeOperation *owner, const XtcXirNativeOperationRequest *request,
-    XrXirInvocationRequest *invocation) {
-    const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner->workspace);
-    static const char *const leaves[8] = {"generated.c", "launcher.c", "generated.obj", "launcher.obj",
-        "generated.json", "launcher.json", "actual.rsp", "program.exe"};
-    char *files[8] = {0};
-    for (unsigned i = 0; i < 8; ++i) {
-        owner->stage = i >= 6 ? XR_XIR_INVOCATION_LINK :
-            i % 2 ? XR_XIR_INVOCATION_LAUNCHER : XR_XIR_INVOCATION_GENERATED;
-        if (!native_path(owner, i < 2 ? paths->input : paths->output, leaves[i], &files[i])) return false;
-    }
-    owner->stage = XR_XIR_INVOCATION_NO_STAGE;
-    const char *sdk_root = xr_xir_runtime_sdk_root(request->sdk);
-    static const char *const children[3] = {"src", "include", "generated"};
-    char *includes[7] = {0};
-    for (unsigned i = 0; i < 3; ++i) {
-        char *path = NULL;
-        if (!native_path(owner, sdk_root, children[i], &path) || !native_join(owner, "/I", path, "", &includes[i])) return false;
-    }
-    const char *external[4] = {request->msvc.vc_include, request->msvc.ucrt_include,
-        request->msvc.shared_include, request->msvc.um_include};
-    for (unsigned i = 0; i < 4; ++i)
-        if (!native_join(owner, "/I", external[i], "", &includes[3 + i])) return false;
+static bool native_compile_commands(XtcXirNativeOperation *owner,const XtcXirNativeOperationRequest *request,
+    char *const files[8],char *const includes[8],XrXirInvocationRequest *invocation) {
+    bool clang=request->msvc.driver==XR_XIR_WINDOWS_CLANG_CL;
+    char *vc_tools = NULL;
+    if (clang && !native_parent(owner, request->msvc.vc_include, &vc_tools)) return false;
+    unsigned include_at=clang?16:14,tail=clang?24:21;
     static const char *const flags[13] = {"/nologo", "/std:c11", "/utf-8", "/experimental:c11atomics",
         "/MD", "/O2", "/W4", "/WX", "/DNDEBUG", "/DNOMINMAX", "/DWIN32_LEAN_AND_MEAN",
         "/D_CRT_SECURE_NO_WARNINGS", "/X"};
@@ -223,20 +220,60 @@ static bool native_commands(XtcXirNativeOperation *owner, const XtcXirNativeOper
         XrProcessSpec spec;
         if (!native_spec(owner, request, request->compiler, &spec)) return false;
         for (unsigned i = 0; i < 13; ++i) spec.argv[1 + i] = flags[i];
-        for (unsigned i = 0; i < 7; ++i) spec.argv[14 + i] = includes[i];
+        if(clang) {
+            spec.argv[4]="--no-default-config";spec.argv[14]="/clang:-nobuiltininc";
+            spec.argv[15]="/clang:-ffp-contract=off";
+        }
+        for(unsigned i=0;i<(clang?8u:7u);++i)spec.argv[include_at+i]=includes[i];
         char *object_argument = NULL;
         if (!native_join(owner, "/Fo", files[2 + stage], "", &object_argument)) return false;
-        spec.argv[21] = "/c"; spec.argv[22] = files[stage]; spec.argv[23] = object_argument;
-        spec.argv[24] = "/sourceDependencies"; spec.argv[25] = files[4 + stage];
+        spec.argv[tail]="/c";spec.argv[tail+1]=files[stage];spec.argv[tail+2]=object_argument;
+        if(clang) {
+            char *report=NULL,*target=NULL;
+            if(!native_join(owner,"/clang:",files[4+stage],"",&report)||
+                !native_join(owner,"/clang:",files[2+stage],"",&target))return false;
+            spec.argv[tail+3]="/clang:-MD";spec.argv[tail+4]="/clang:-MF";spec.argv[tail+5]=report;
+            spec.argv[tail+6]="/clang:-MQ";spec.argv[tail+7]=target;
+            spec.argv[tail+8]="/vctoolsdir";spec.argv[tail+9]=vc_tools;
+        } else {spec.argv[tail+3]="/sourceDependencies";spec.argv[tail+4]=files[4+stage];}
         if (stage) {
             char *symbol = NULL;
             const XrXirNativeProjectionFacts *facts = xr_compile_native_projection_facts(request->projection);
             if (!native_join(owner, "/DXIR_SDK_PROGRAM_SYMBOL=", facts->prefix, "_program", &symbol)) return false;
-            spec.argv[26] = symbol;
+            spec.argv[tail+(clang?10:5)]=symbol;
         }
         if (!native_process(owner, xtc_process_prepare(owner->resources, &spec, &owner->processes[stage]))) return false;
         invocation->compile[stage] = (XrXirInvocationCompile){owner->processes[stage], files[stage], files[2 + stage], files[4 + stage]};
     }
+    return true;
+}
+static bool native_commands(XtcXirNativeOperation *owner, const XtcXirNativeOperationRequest *request,
+    XrXirInvocationRequest *invocation) {
+    const XtcXirWorkspacePaths *paths = xtc_xir_workspace_paths(owner->workspace);
+    bool clang=request->msvc.driver==XR_XIR_WINDOWS_CLANG_CL;
+    static const char *const leaves[8] = {"generated.c", "launcher.c", "generated.obj", "launcher.obj",
+        "generated.json", "launcher.json", "actual.rsp", "program.exe"};
+    char *files[8] = {0};
+    for (unsigned i = 0; i < 8; ++i) {
+        owner->stage = i >= 6 ? XR_XIR_INVOCATION_LINK :
+            i % 2 ? XR_XIR_INVOCATION_LAUNCHER : XR_XIR_INVOCATION_GENERATED;
+        const char *leaf=clang&&(i==4||i==5)?(i==4?"generated.d":"launcher.d"):leaves[i];
+        if (!native_path(owner, i < 2 ? paths->input : paths->output, leaf, &files[i])) return false;
+    }
+    owner->stage = XR_XIR_INVOCATION_NO_STAGE;
+    static const char *const children[3] = {"src", "include", "generated"};
+    char *includes[8] = {0};
+    for (unsigned i = 0; i < 3; ++i) {
+        char *path = NULL;
+        if (!native_path(owner,xr_xir_runtime_sdk_root(request->sdk),children[i],&path)||
+            !native_join(owner,"/I",path,"",&includes[i]))return false;
+    }
+    if(clang&&!native_join(owner,"/imsvc",request->msvc.builtin_include,"",&includes[3]))return false;
+    const char *external[4] = {request->msvc.vc_include, request->msvc.ucrt_include,
+        request->msvc.shared_include, request->msvc.um_include};
+    for (unsigned i = 0; i < 4; ++i)
+        if(!native_join(owner,clang?"/imsvc":"/I",external[i],"",&includes[3+(clang?1:0)+i]))return false;
+    if(!native_compile_commands(owner,request,files,includes,invocation))return false;
     XrProcessSpec spec;
     owner->stage = XR_XIR_INVOCATION_LINK;
     if (!native_spec(owner, request, request->linker, &spec)) return false;
@@ -299,6 +336,9 @@ XR_FUNC XtcXirNativeOperationStatus xtc_xir_native_operation_run(XtcXirNativeOpe
         xr_xir_runtime_sdk_resources(request->sdk) != owner->resources || !request->compiler || !request->linker ||
         !request->msvc.vc_include || !request->msvc.ucrt_include || !request->msvc.shared_include ||
         !request->msvc.um_include || !request->msvc.system_root ||
+        (request->msvc.driver!=XR_XIR_WINDOWS_MSVC&&request->msvc.driver!=XR_XIR_WINDOWS_CLANG_CL)||
+        (request->msvc.driver==XR_XIR_WINDOWS_MSVC?request->msvc.builtin_include!=NULL:
+            !request->msvc.builtin_include||!request->msvc.builtin_include[0])||
         request->library_count > XTC_PROCESS_MAX_ARGS - 15 || (request->library_count && !request->libraries))
         return native_fail(owner, XTC_XIR_NATIVE_INVALID, XTC_XIR_NATIVE_SELF, 0);
     owner->phase = XTC_XIR_NATIVE_RUNNING;

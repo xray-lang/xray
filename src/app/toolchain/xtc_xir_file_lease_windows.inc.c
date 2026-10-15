@@ -8,7 +8,7 @@
  * xtc_xir_file_lease_windows.inc.c - Role-neutral leases using sysroot ownership
  */
 static XrXirTargetStatus file_lease_open(XrCompileResources *resources, const char *path,
-    bool directory,XtcXirHashProofCache *cache,XtcXirFileLease **output) {
+    bool directory,bool traversed,XtcXirHashProofCache *cache,XtcXirFileLease **output) {
     if (!resources || !path || !output || *output || (cache && cache->resources!=resources)) return XR_XIR_TARGET_INVALID;
     void *memory = NULL;
     XrCompileResourceStatus allocated = xr_compile_resources_calloc(resources, 1, sizeof(XtcXirFileLease), &memory);
@@ -33,7 +33,8 @@ static XrXirTargetStatus file_lease_open(XrCompileResources *resources, const ch
             XR_XIR_TARGET_BUDGET:made==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_TARGET_OUT_OF_MEMORY:XR_XIR_TARGET_INVALID);
         storage->scratch=scratch;
     } else storage->scratch=xtc_xir_target_allocate(storage,XTC_XIR_TARGET_PATH_LIMIT*sizeof(wchar_t));
-    if (storage->scratch && sysroot_open_path(storage, path, directory, &canonical, &lease->lock)) {
+    if (storage->scratch && (traversed ? sysroot_open_traversed(storage, path, &canonical, &lease->lock) :
+        sysroot_open_path(storage, path, directory, &canonical, &lease->lock))) {
         if (directory) {
             if (sysroot_id(storage, lease->lock->handle, &lease->directory_facts.volume, lease->directory_facts.file_id) &&
                 xtc_xir_target_work(storage, sizeof(canonical) + sizeof(lease->lock->path))) {
@@ -55,16 +56,21 @@ static XrXirTargetStatus file_lease_open(XrCompileResources *resources, const ch
 }
 XR_FUNC XrXirTargetStatus xtc_xir_file_lease_open(XrCompileResources *resources,
     const char *path, XtcXirFileLease **output) {
-    return file_lease_open(resources,path,false,NULL,output);
+    return file_lease_open(resources,path,false,false,NULL,output);
 }
 XR_FUNC XrXirTargetStatus xtc_xir_file_lease_open_with_proof(XrCompileResources *resources,
     const char *path,XtcXirHashProofCache *cache,XtcXirFileLease **output) {
     if(!cache)return XR_XIR_TARGET_INVALID;
-    return file_lease_open(resources,path,false,cache,output);
+    return file_lease_open(resources,path,false,false,cache,output);
+}
+XR_FUNC XrXirTargetStatus xtc_xir_file_lease_open_traversed(XrCompileResources *resources,
+    const char *path,XtcXirHashProofCache *cache,XtcXirFileLease **output) {
+    if(!cache)return XR_XIR_TARGET_INVALID;
+    return file_lease_open(resources,path,false,true,cache,output);
 }
 XR_FUNC XrXirTargetStatus xtc_xir_file_lease_directory_open(XrCompileResources *resources,
     const char *path, XtcXirFileLease **output) {
-    return file_lease_open(resources,path,true,NULL,output);
+    return file_lease_open(resources,path,true,false,NULL,output);
 }
 XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
     XtcXirLock *lock, uint64_t file_length, size_t limit, void **owned_bytes, size_t *length) {

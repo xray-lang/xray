@@ -341,8 +341,7 @@ static bool owner_image_transaction(const char *path, const XrCompileResourceLim
     if (okay) okay = invocation_target(&owner, xtc_xir_images_seal(images));
     if (okay) {
         const XrXirImageFile *image = xtc_xir_images_file(images, 0); CHECK(image);
-        okay = invocation_file_publish(&owner, XR_XIR_INVOCATION_GENERATED,
-            XR_XIR_INVOCATION_PROVIDER_IMAGE, image->path, image->length, image->digest, NULL);
+        okay = invocation_image_publish(&owner, XR_XIR_INVOCATION_GENERATED, image);
         if (okay) {
             CHECK(owner.facts.file_count == 1 && !owner.files[0].lease && owner.files[0].facts.path == image->path);
             writable = CreateFileW(wide, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -477,6 +476,25 @@ static void provider_scalar_failures(const char *compiler,const char *linker,con
     for(unsigned stage=0;stage<3;++stage)xtc_xir_images_free(images[stage]);xr_compile_resources_release(resources);
     CHECK(!runtime_live&&!runtime_bytes);
     printf("provider scalar composition: %zu/%zu callback ordinals x IO/system OOM, same-owner sticky zero-work retry PASS\n",counts[0],counts[1]);
+}
+#include "invocation_index.inc.h"
+static int owner_make_target_suite(const char *path,const char *object) {
+    owner_file_index_suite();
+    XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
+    static const char *const arguments[]={"clang-cl.exe"};
+    for(unsigned wrong=0;wrong<2;++wrong) {
+        XrXirInvocation owner={0};owner.context.resources=resources;owner.io=xr_compile_io_policy(resources);
+        owner.limits.dependencies=(XrDependencyLimits){4u*1024u*1024u,32768,4096};
+        owner.profile.driver=XR_XIR_WINDOWS_CLANG_CL;
+        owner.commands[0].argv=arguments;owner.commands[0].argc=1;
+        XrDependencyFacts *report=NULL;
+        bool okay=invocation_report(&owner,path,0,false,wrong?"C:/different/object.obj":object,&report);
+        if(wrong)CHECK(!okay&&!report&&owner.status==XR_XIR_INVOCATION_REPLAY_MISMATCH);
+        else CHECK(okay&&report&&xtc_dependencies_target(report)&&xtc_dependencies_count(report)==2);
+        xtc_dependencies_free(report);
+    }
+    xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
+    puts("Make target composition: exact escaped-space object accepted; unrelated object rejected; no file authority; physical=0 PASS");return 0;
 }
 static int owner_provider_image(const char *compiler,const char *linker) {
     DWORD before,after;CHECK(GetProcessHandleCount(GetCurrentProcess(),&before));

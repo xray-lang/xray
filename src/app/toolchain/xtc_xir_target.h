@@ -42,6 +42,7 @@ typedef struct XrXirTargetCommandFacts {
     uint32_t image_mode;
     /* 0 waits for natural tree completion; 1 revokes execution after root EXIT. */
     uint32_t completion_policy;
+    uint32_t extension_policy;
 } XrXirTargetCommandFacts;
 struct XrXirImageCollector;
 typedef struct XrXirTargetSnapshotRequest {

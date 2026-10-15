@@ -41,7 +41,7 @@ static bool build_options_supported(const XrCliInvocation *inv) {
         if (!c_only && !strcmp(name,"cc")) continue;
         if (!c_only && !strcmp(name,"toolchain")) {
             const char *provider = xr_cli_opt_string(&inv->options,name,"");
-            if (!strcmp(provider,"auto") || !strcmp(provider,"msvc")) continue;
+            if(!strcmp(provider,"auto")||!strcmp(provider,"host")||!strcmp(provider,"msvc")||!strcmp(provider,"clang"))continue;
         }
         const char *expected = !strcmp(name,"profile") ? "hosted" : !strcmp(name,"artifact") ? "executable" :
             !strcmp(name,"c-dialect") ? "c11" : !strcmp(name,"target") ? "native" : NULL;

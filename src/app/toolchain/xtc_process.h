@@ -58,6 +58,7 @@ typedef struct XrProcessSpec {
      * Observations are provisional until run succeeds; the callback owns its
      * rollback. No image callback occurs during failure cleanup. */
     XrProcImageObserver image_observer;
+    XrProcExtensionPolicy extension_policy;
 } XrProcessSpec;
 
 typedef struct XrProcessByteBuffer {
@@ -84,6 +85,7 @@ typedef struct XrProcessView {
     size_t output_limit;
     XrProcImageMode image_mode;
     XrProcCompletionPolicy completion_policy;
+    XrProcExtensionPolicy extension_policy;
 } XrProcessView;
 
 XR_FUNC void xtc_process_spec_init(XrProcessSpec *spec, const char *executable,

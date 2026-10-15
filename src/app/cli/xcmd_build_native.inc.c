@@ -44,6 +44,11 @@ static int build_native_prepare(XrCompileResources *resources, const XrCliInvoca
     const XrCliToolchainConfigView *preferences = xr_cli_toolchain_config_view(config);
     const char *compiler = xr_cli_opt_string(&inv->options, "cc", NULL);
     const char *provider = xr_cli_opt_string(&inv->options, "toolchain", NULL);
+    XrToolchainSelector selector=XR_TOOLCHAIN_SELECTOR_AUTO;char error[256]={0};
+    if(provider&&!xtc_selector_parse(provider,&selector,error,sizeof(error))) {
+        fputs("XR_BUILD_6011: invalid native toolchain provider\n",stderr);
+        xr_cli_toolchain_config_free(config);return XR_CLI_EXIT_FAIL;
+    }
     for (size_t i = 0; !provider && i < preferences->count; ++i) {
         const XrCliToolchainPreference *preference = &preferences->preferences[i];
         XrCompileResourceStatus work = xr_compile_resources_work(resources, 7);
@@ -51,17 +56,18 @@ static int build_native_prepare(XrCompileResources *resources, const XrCliInvoca
             xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
         }
         if (strcmp(preference->target, "native")) continue;
-        if (preference->selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
-            preference->selector != XR_TOOLCHAIN_SELECTOR_MSVC &&
-            preference->selector != XR_TOOLCHAIN_SELECTOR_HOST) {
-            fputs("XR_BUILD_6011: selected native toolchain provider is unsupported by this build\n", stderr);
-            xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
-        }
+        selector=preference->selector;
         if (!compiler) compiler = preference->compiler;
         break;
     }
+    if(selector!=XR_TOOLCHAIN_SELECTOR_AUTO&&selector!=XR_TOOLCHAIN_SELECTOR_HOST&&
+        selector!=XR_TOOLCHAIN_SELECTOR_MSVC&&selector!=XR_TOOLCHAIN_SELECTOR_CLANG) {
+        fputs("XR_BUILD_6011: selected native toolchain provider is unsupported by this build\n",stderr);
+        xr_cli_toolchain_config_free(config);return XR_CLI_EXIT_FAIL;
+    }
     XtcXirLocalToolchainRequest locate = {compiler,
-        NULL, NULL, 30000, 4 * 1024 * 1024, 1024 * 1024};
+        NULL,NULL,30000,4*1024*1024,1024*1024,
+        selector==XR_TOOLCHAIN_SELECTOR_CLANG?XR_XIR_WINDOWS_CLANG_CL:XR_XIR_WINDOWS_MSVC};
     XtcXirLocalDiagnostic local_diagnostic = {0};
     XtcXirLocalToolchain *local = NULL;
     XtcXirLocalStatus found = xtc_xir_local_toolchain_open(resources, &locate, &local, &local_diagnostic);

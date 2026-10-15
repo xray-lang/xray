@@ -28,9 +28,10 @@ typedef struct NativeAdmission {
     XrXirInvocationFile output;
     uint32_t *indices, selected;
     uint32_t sdk_words[17];
+    uint32_t binding_provider;
 } NativeAdmission;
 static const char admission_triple[] = "x86_64-pc-windows-msvc";
-static const char admission_options[] = "xray:xir-native-commands:trusted-local:v2:sha256:";
+static const char admission_options[] = "xray:xir-native-commands:trusted-local:v3:sha256:";
 static bool admission_fail(NativeAdmission *a, XtcXirNativeAdmissionStatus status,
     XtcXirNativeAdmissionDomain domain, int code) {
     if (a->diagnostic.status == XTC_XIR_ADMISSION_OK) {
@@ -88,6 +89,10 @@ static bool admission_producers(NativeAdmission *a) {
         !identity_copy(&a->work, &a->provider, xtc_xir_native_operation_provider(a->operation), sizeof(a->provider))) return false;
     if (a->facts.kind != XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS || a->facts.completed_runs != 6 || !a->facts.file_count)
         return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
+    if (!identity_work(&a->work, sizeof(a->facts.driver) + sizeof(a->binding_provider))) return false;
+    if (a->facts.driver == XR_XIR_WINDOWS_MSVC) a->binding_provider = XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
+    else if (a->facts.driver == XR_XIR_WINDOWS_CLANG_CL) a->binding_provider = XR_TOOLCHAIN_BINDING_PROVIDER_CLANG;
+    else return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
     const XrXirSourceProductFacts *s = &a->source.source, *f = &a->facts.projection.source;
 #define SAME_WORD(field) do { if (!identity_work(&a->work, 2 * sizeof(s->field))) return false; \
     if (s->field != f->field) return admission_fail(a, XTC_XIR_ADMISSION_MISMATCH, XTC_XIR_ADMISSION_SELF, 0); } while (0)
@@ -127,7 +132,10 @@ static bool admission_producers(NativeAdmission *a) {
         if (!view->executable || !view->cwd || !view->argv || !view->env_keys || !view->env_values ||
             view->completion_policy != XR_PROC_COMPLETE_ROOT || view->image_mode != XR_PROC_IMAGES_WINDOWS_TREE ||
             !view->argc || view->argc > XTC_PROCESS_MAX_ARGS || view->env_count != 3 ||
-            (i < 2 && view->argc != 26 + i) || (i == 2 && view->argc < 15))
+            view->extension_policy != (a->facts.driver == XR_XIR_WINDOWS_CLANG_CL ?
+                XR_PROC_EXTENSIONS_DISABLED : XR_PROC_EXTENSIONS_DEFAULT) ||
+            (i < 2 && view->argc != (a->facts.driver == XR_XIR_WINDOWS_CLANG_CL ? 34u : 26u) + i) ||
+            (i == 2 && view->argc < 15))
             return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_OPERATION, 0);
     }
     return true;
@@ -262,9 +270,10 @@ static bool admission_files(NativeAdmission *a) {
     }
     if (!identity_work(&a->work, sizeof(counts))) return false;
     for (unsigned stage = 0; stage < 3; ++stage) {
+        uint32_t configs = stage == 2 || (stage == 0 && a->facts.driver == XR_XIR_WINDOWS_MSVC) ? 1u : 0u;
         if (!provider_seen[stage] || counts[stage][XR_XIR_INVOCATION_REPORT] != 1 ||
             (stage < 2 && (counts[stage][XR_XIR_INVOCATION_SOURCE] != 1 || counts[stage][XR_XIR_INVOCATION_OBJECT] != 1)) ||
-            (stage != 1 && counts[stage][XR_XIR_INVOCATION_PROVIDER_CONFIG] != 1))
+            counts[stage][XR_XIR_INVOCATION_PROVIDER_CONFIG] != configs)
             return admission_fail(a, XTC_XIR_ADMISSION_INVALID, XTC_XIR_ADMISSION_SELF, 0);
     }
     if (counts[2][XR_XIR_INVOCATION_OUTPUT] != 1 || counts[2][XR_XIR_INVOCATION_SDK_ARCHIVE] != 5 ||
@@ -327,10 +336,10 @@ static bool admission_sysroot(NativeAdmission *a, XrFingerprint *output) {
     return identity_end(&a->work, &hash, output->bytes);
 }
 static bool admission_commands(NativeAdmission *a, XrFingerprint *output) {
-    static const char domain[] = "xray:xir-native-commands:trusted-local:v2";
+    static const char domain[] = "xray:xir-native-commands:trusted-local:v3";
     XrSHA256Context hash;
     if (!identity_begin(&a->work, &hash) || !identity_bytes(&a->work, &hash, domain, sizeof(domain) - 1) ||
-        !identity_integer(&a->work, &hash, 2, 4) || !identity_integer(&a->work, &hash, 3, 4)) return false;
+        !identity_integer(&a->work, &hash, 3, 4) || !identity_integer(&a->work, &hash, 3, 4)) return false;
     for (unsigned stage = 0; stage < 3; ++stage) {
         const XrProcessView *c = &a->commands[stage];
         if (!identity_integer(&a->work, &hash, stage, 4) || !admission_text(a, &hash, c->executable) ||
@@ -344,7 +353,8 @@ static bool admission_commands(NativeAdmission *a, XrFingerprint *output) {
         if (!identity_integer(&a->work, &hash, c->timeout_ms, 4) ||
             !identity_integer(&a->work, &hash, c->output_limit, 8) ||
             !identity_integer(&a->work, &hash, c->image_mode, 4) ||
-            !identity_integer(&a->work, &hash, c->completion_policy, 4)) return false;
+            !identity_integer(&a->work, &hash, c->completion_policy, 4) ||
+            !identity_integer(&a->work, &hash, c->extension_policy, 4)) return false;
     }
     return identity_end(&a->work, &hash, output->bytes);
 }
@@ -362,7 +372,7 @@ static bool admission_profile(NativeAdmission *a, const XtcXirPeImage *image,
     XrSHA256Context hash;
     if (!identity_begin(&a->work, &hash) || !identity_bytes(&a->work, &hash, domain, sizeof(domain) - 1) ||
         !identity_integer(&a->work, &hash, 1, 4) || !identity_integer(&a->work, &hash, 1, 4) ||
-        !identity_integer(&a->work, &hash, XR_TOOLCHAIN_BINDING_PROVIDER_MSVC, 4) ||
+        !identity_integer(&a->work, &hash, a->binding_provider, 4) ||
         !admission_text(a, &hash, admission_triple) ||
         !identity_integer(&a->work, &hash, a->source.source.target.architecture, 4) ||
         !identity_integer(&a->work, &hash, a->source.source.target.abi_version, 4)) return false;
@@ -427,7 +437,7 @@ static bool admission_binding(NativeAdmission *a, const XtcXirPeImage *image, Xr
     options[sizeof(options) - 1] = 0;
     XrToolchainInput input;
     if (!identity_zero(&a->work, &input, sizeof(input))) return false;
-    input.schema_version = XR_TOOLCHAIN_BINDING_SCHEMA_VERSION; input.provider = XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
+    input.schema_version = XR_TOOLCHAIN_BINDING_SCHEMA_VERSION; input.provider = (uint8_t)a->binding_provider;
     input.provider_version = a->provider.compiler.version.file_text;
     input.target_triple = admission_triple; input.codegen_options = options;
     if (!identity_copy(&a->work, &input.sysroot_id, &sysroot, sizeof(sysroot)) ||

@@ -9,6 +9,7 @@ import sys
 import tempfile
 
 exe, sdk, compiler, output = map(lambda p: Path(p).resolve(), sys.argv[1:5])
+clang=Path(sys.argv[5]).resolve() if len(sys.argv)>5 else None
 output.mkdir(parents=True, exist_ok=True)
 output = Path(tempfile.mkdtemp(prefix='run-', dir=output))
 environment = dict(os.environ)
@@ -20,13 +21,14 @@ system = Path(os.environ['SystemRoot'])
 asan = [p for p in os.environ.get('PATH','').split(os.pathsep) if 'clang' in p.lower() and p.lower().endswith('windows')]
 environment['PATH'] = os.pathsep.join([*asan, str(system/'System32'), str(system), str(system/'System32/Wbem')])
 records = []
-def run(name, binary, bundle, cc, workspace, expected, expected_sdk=sdk, env=environment):
+def run(name, binary, bundle, cc, workspace, expected, expected_sdk=sdk, env=environment,driver=None,expected_compiler=compiler):
     framed = hashlib.sha256()
     for key, value in sorted(env.items()):
         for text in (key, value):
             data = text.encode('utf-8'); framed.update(len(data).to_bytes(8,'little')); framed.update(data)
     environment_identity = {'count':len(env), 'framed_sha256':framed.hexdigest()}
     command = [str(binary), str(bundle), str(cc), str(workspace), str(expected)]
+    if driver:command.append(driver)
     result = subprocess.run(command, env=env, capture_output=True, timeout=120)
     (output/f'{name}.stdout').write_bytes(result.stdout)
     (output/f'{name}.stderr').write_bytes(result.stderr)
@@ -40,11 +42,12 @@ def run(name, binary, bundle, cc, workspace, expected, expected_sdk=sdk, env=env
         sys.stdout.buffer.write(result.stdout); sys.stderr.buffer.write(result.stderr)
         raise SystemExit(result.returncode)
     if expected == 0:
-        values=dict(line.split('=',1) for line in result.stdout.decode('utf-8').splitlines() if line.startswith(('compiler=','linker=','sdk=','workspace=')))
-        assert Path(values['compiler']).samefile(compiler), values
+        values=dict(line.split('=',1) for line in result.stdout.decode('utf-8').splitlines() if line.startswith(('compiler=','linker=','sdk=','workspace=','builtin=')))
+        assert Path(values['compiler']).samefile(expected_compiler), values
         assert Path(values['linker']).samefile(compiler.parent/'link.exe'), values
         assert Path(values['sdk']).samefile(expected_sdk), values
         if workspace != '-': assert Path(values['workspace']).samefile(workspace), values
+        if driver=='clang':assert Path(values['builtin']).is_dir(),values
 with tempfile.TemporaryDirectory(prefix='xray-local-toolchain-') as temporary:
     parent = Path(temporary)
     fixture = parent / 'owned-中'; fixture.mkdir()
@@ -78,4 +81,9 @@ with tempfile.TemporaryDirectory(prefix='xray-local-toolchain-') as temporary:
     run('system-temp',exe,sdk,compiler,'-',0,env=no_temp)
     bad_temp=dict(environment); bad_temp['TEMP']=str(parent/'missing-temp'); bad_temp['TMP']=str(fixture)
     run('invalid-temp-no-fallback',exe,sdk,compiler,'-',2,env=bad_temp)
+    if clang:
+        run('clang-automatic',exe,sdk,'-',fixture,0,driver='clang',expected_compiler=clang)
+        run('clang-explicit',exe,sdk,clang,fixture,0,driver='clang',expected_compiler=clang)
+        run('clang-missing-explicit',exe,sdk,parent/'absent-clang.exe',fixture,2,driver='clang')
+        run('clang-wrong-driver',exe,sdk,compiler,fixture,8,driver='clang')
 print('real VS discovery, SDK admission, explicit no-fallback and owner lifetime PASS')

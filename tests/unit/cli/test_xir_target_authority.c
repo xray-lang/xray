@@ -135,7 +135,7 @@ static void setup(void) {
     files[1] = (XrXirTargetDependency){header_path, XR_XIR_TARGET_HEADER};
     files[2] = (XrXirTargetDependency){compiler_path, XR_XIR_TARGET_COMPILER};
     command = (XrXirTargetCommandFacts){compiler_path, directory, arguments, 3, environment,
-        (uint32_t)(sizeof(environment)/sizeof(environment[0])), 3000, 1048576, 0, 0};
+        (uint32_t)(sizeof(environment)/sizeof(environment[0])), 3000, 1048576, 0, 0, 0};
 }
 static void teardown(void) {
     CHECK(DeleteFileA(source_path)); CHECK(DeleteFileA(header_path)); CHECK(DeleteFileA(compiler_path));
@@ -158,7 +158,7 @@ static XrXirTargetSnapshot *capture(XrCompileResources *resources) {
 static void identity_and_lifetime(void) {
     XrCompileResources *resources = ledger(&unlimited); uint64_t baseline = stats(resources).live_bytes;
     XrXirTargetSnapshot *snapshot = capture(resources); const XrXirTargetFacts *facts = xtc_xir_target_facts(snapshot);
-    CHECK(facts->schema == 3 && facts->file_count == 3 && facts->command_count == 1);
+    CHECK(facts->schema == 4 && facts->file_count == 3 && facts->command_count == 1);
     uint8_t first[32], provider[32], sysroot[32]; memcpy(first, facts->identity, 32);
     memcpy(provider, facts->provider_identity, 32); memcpy(sysroot, facts->sysroot_identity, 32);
     static const uint8_t abc[32] = {0xba,0x78,0x16,0xbf,0x8f,0x01,0xcf,0xea,0x41,0x41,0x40,0xde,0x5d,0xae,0x22,0x23,
@@ -233,7 +233,7 @@ static void command_contract(void) {
     CHECK(strcmp(saved->executable, saved->argv[0]) && !strcmp(saved->executable, compiler_path));
     CHECK(saved->timeout_ms == 3000 && saved->output_limit == 1048576 && saved->image_mode == 0);
     xtc_xir_target_free(snapshot);
-    for (unsigned field = 0; field < 9; ++field) {
+    for (unsigned field = 0; field < 10; ++field) {
         command = original;
         const char *alternate_args[] = {"different argv0", argument_text, "source.c"};
         XrXirTargetEnvironment alternate_env[] = {{"EMPTY", ""}};
@@ -246,6 +246,7 @@ static void command_contract(void) {
         case 5: command.argv = alternate_args; break;
         case 6: command.argc--; break;
         case 7: command.completion_policy = XR_PROC_COMPLETE_ROOT; break;
+        case 9: command.extension_policy = XR_PROC_EXTENSIONS_DISABLED; break;
         default: command.environment = alternate_env; command.environment_count = 1; break;
         }
         snapshot = capture(resources);
@@ -270,6 +271,8 @@ static void command_contract(void) {
     command = original; command.image_mode = UINT32_MAX; expected_failure(&request, XR_XIR_TARGET_INVALID);
     command = original; command.completion_policy = 2; expected_failure(&request, XR_XIR_TARGET_INVALID);
     command = original; command.completion_policy = UINT32_MAX; expected_failure(&request, XR_XIR_TARGET_INVALID);
+    command = original; command.extension_policy = 2; expected_failure(&request, XR_XIR_TARGET_INVALID);
+    command = original; command.extension_policy = UINT32_MAX; expected_failure(&request, XR_XIR_TARGET_INVALID);
     char executable_text[] = "Z:/mutable-compiler.exe", cwd_text[] = "Z:/mutable-directory";
     command = original; command.executable = executable_text; command.cwd = cwd_text;
     command.timeout_ms = UINT32_MAX; command.output_limit = (uint64_t)SIZE_MAX - 1; command.image_mode = 1;
@@ -408,14 +411,14 @@ static void fixed_operation_work(void) {
     XrCompileResources *resources = ledger(&unlimited);
     XrXirTargetSnapshot snapshot = {0}; snapshot.resources = resources;
     const char *args[] = {"a"};
-    XrXirTargetCommandFacts description = {"Z:/x", "Z:/", args, 1, NULL, 0, 1, 1, 1, 0};
+    XrXirTargetCommandFacts description = {"Z:/x", "Z:/", args, 1, NULL, 0, 1, 1, 1, 0, 0};
     XrXirTargetSnapshotRequest request = {0}; request.commands = &description; request.command_count = 1;
     uint64_t command_before = stats(resources).work;
     CHECK(target_commands(&snapshot, &request));
     /* Five real calloc payloads; three scans, UTF8 checks and copies; six
-     * drive-prefix reads; 20 policy-copy bytes; the argv0 nonempty read. */
+     * drive-prefix reads; 24 policy-copy bytes; the argv0 nonempty read. */
     CHECK(stats(resources).work - command_before == sizeof(description) + 2 * sizeof(char *) +
-        5 * sizeof(XtcXirMemory) + 73);
+        5 * sizeof(XtcXirMemory) + 77);
     while (snapshot.memory) { XtcXirMemory *next = snapshot.memory->next;
         xr_compile_resources_free(snapshot.memory); snapshot.memory = next; }
     snapshot.commands = NULL;
@@ -467,6 +470,25 @@ static void bounded_scanning(void) {
     CHECK(!target_identity(&snapshot) && snapshot.status == XR_XIR_TARGET_BUDGET);
     xr_compile_resources_release(resources); CHECK(VirtualFree(memory, 0, MEM_RELEASE)); CHECK(!live);
 }
+static void lock_length_filter(void) {
+    SYSTEM_INFO info; GetSystemInfo(&info);
+    wchar_t *blocked=VirtualAlloc(NULL,info.dwPageSize,MEM_RESERVE|MEM_COMMIT,PAGE_NOACCESS);CHECK(blocked);
+    XrCompileResourceLimits limits=unlimited;limits.work=1+2*sizeof(size_t)+sizeof(void *);
+    XrCompileResources *resources=ledger(&limits);XrXirTargetSnapshot snapshot={0};snapshot.resources=resources;
+    XtcXirLock cached={0};cached.path=blocked;cached.length=1;snapshot.locks=&cached;
+    CHECK(!sysroot_lock(&snapshot,L"Z:\\different",12,true));
+    CHECK(snapshot.status==XR_XIR_TARGET_BUDGET && stats(resources).work==limits.work);
+    snapshot.locks=NULL;xr_compile_resources_release(resources);CHECK(VirtualFree(blocked,0,MEM_RELEASE));CHECK(!live);
+    resources=ledger(&unlimited);memset(&snapshot,0,sizeof(snapshot));snapshot.resources=resources;
+    const wchar_t *left=L"C:\\ordinal\\é",*right=L"c:\\ORDINAL\\É";
+    cached=(XtcXirLock){0};cached.path=(wchar_t *)right;cached.length=wcslen(right);cached.directory=true;snapshot.locks=&cached;
+    size_t length=wcslen(left);CHECK(length==cached.length);
+    CHECK(sysroot_lock(&snapshot,left,length,true)==&cached);
+    CHECK(stats(resources).work==1+2*sizeof(size_t)+(2*length+2)*sizeof(wchar_t)+1);
+    CHECK(!sysroot_lock(&snapshot,left,length,false) && snapshot.status==XR_XIR_TARGET_INVALID);
+    snapshot.locks=NULL;xr_compile_resources_release(resources);CHECK(!live);
+    puts("ordinal length prefilter: unreadable unequal path, exact scalar cost, Unicode case hit and file-role rejection PASS");
+}
 #endif
 static uint64_t diagnostic_number(const char *text, uint64_t maximum) {
     CHECK(text && *text); uint64_t value = 0;
@@ -495,7 +517,7 @@ static int diagnostic_lease(const char *manifest) {
         CHECK(count < 16384); lines[count++] = storage + i + 1;
     }
     uint32_t at = 0; CHECK(count > 3);
-    if (strcmp(lines[at++], "xray-target-command-v3")) { puts("STATUS 6"); return 2; }
+    if (strcmp(lines[at++], "xray-target-command-v4")) { puts("STATUS 6"); return 2; }
     uint32_t provider = (uint32_t)strtoul(lines[at++], NULL, 10);
     uint32_t file_count = (uint32_t)strtoul(lines[at++], NULL, 10); CHECK(file_count && file_count <= 4096);
     for (uint32_t i = 0; i < file_count; ++i) {
@@ -517,6 +539,7 @@ static int diagnostic_lease(const char *manifest) {
         commands[i].output_limit = diagnostic_number(lines[at++], UINT64_MAX);
         commands[i].image_mode = (uint32_t)diagnostic_number(lines[at++], UINT32_MAX);
         commands[i].completion_policy = (uint32_t)diagnostic_number(lines[at++], UINT32_MAX);
+        CHECK(at < count); commands[i].extension_policy = (uint32_t)diagnostic_number(lines[at++], UINT32_MAX);
     }
     XrCompileResources *resources = ledger(&unlimited);
     XrXirTargetSnapshotRequest request = {resources, "x86_64-windows-msvc", provider, 2, 11, dependencies, file_count, commands, command_count, NULL};
@@ -540,7 +563,7 @@ int main(int argc, char **argv) {
     setup(); identity_and_lifetime(); invalid_inputs(); command_contract(); environment_contract(); reparse_rejection(); resource_limits();
     allocation_failures();work_failures();
 #ifndef XIR_TARGET_PRODUCTION_TEST
-    io_failures();fixed_operation_work();bounded_scanning();
+    io_failures();fixed_operation_work();bounded_scanning();lock_length_filter();
 #endif
     teardown();
     puts("xir target snapshots: PASS"); return 0;

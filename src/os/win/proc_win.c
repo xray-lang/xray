@@ -367,12 +367,20 @@ static bool proc_debug_cleanup(ProcDebug *d, HANDLE process) {
     return ok;
 }
 
+static bool proc_group_member(ProcBuild *build, HANDLE job, HANDLE process) {
+    BOOL member = FALSE;
+    if (!proc_work(build, sizeof(member) + 1)) return false;
+    if (!IsProcessInJob(process, job, &member)) { build->status = xr_proc_last_error(); return false; }
+    if (!member) { build->status = XR_PROC_UNSUPPORTED; return false; }
+    return true;
+}
 XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *o, XrProcId *output) {
     if (!prog || !*prog || !argv || !argv[0] || !o || !output || *output != XR_PROC_INVALID ||
         !o->memory.alloc || !o->memory.free || !o->memory.work ||
         (o->env_count && (!o->env_keys || !o->env_values)) || (o->detached && o->new_process_group) ||
         (o->completion_policy != XR_PROC_COMPLETE_TREE && o->completion_policy != XR_PROC_COMPLETE_ROOT) ||
+        (o->extension_policy != XR_PROC_EXTENSIONS_DEFAULT && o->extension_policy != XR_PROC_EXTENSIONS_DISABLED) ||
         (o->completion_policy == XR_PROC_COMPLETE_ROOT && o->image_mode != XR_PROC_IMAGES_WINDOWS_TREE) ||
         (o->image_mode != XR_PROC_IMAGES_NONE && o->image_mode != XR_PROC_IMAGES_WINDOWS_TREE) ||
         ((o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE) != (o->image_observer.observe != NULL)) ||
@@ -381,6 +389,9 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     wchar_t *command = NULL, *program = NULL, *cwd = NULL, *environment = NULL;
     HANDLE job = NULL, redirected[3] = {NULL, NULL, NULL};
     STARTUPINFOEXW si = {0}; PROCESS_INFORMATION pi = {0}; bool attributes_ready = false, started = false;
+    DWORD64 mitigation = PROCESS_CREATION_MITIGATION_POLICY_EXTENSION_POINT_DISABLE_ALWAYS_ON;
+    DWORD attribute_count = 1u + (o->new_process_group ? 1u : 0u) +
+        (o->extension_policy == XR_PROC_EXTENSIONS_DISABLED ? 1u : 0u);
     si.StartupInfo.cb = sizeof(si); int slot = -1;
     ProcDebug *debug = NULL;
     DWORD debug_thread = o->image_mode == XR_PROC_IMAGES_WINDOWS_TREE ? GetCurrentThreadId() : 0;
@@ -451,26 +462,34 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
         }
         SIZE_T size = 0;
         if (!proc_work(&b, 1)) goto done;
-        (void)InitializeProcThreadAttributeList(NULL, 1, 0, &size);
+        (void)InitializeProcThreadAttributeList(NULL, attribute_count, 0, &size);
         if (!size) { b.status = xr_proc_last_error(); goto done; }
         si.lpAttributeList = proc_alloc(&b, size); if (!si.lpAttributeList) goto done;
         if (!proc_work(&b, 1)) goto done;
-        if (!InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &size)) { b.status = xr_proc_last_error(); goto done; }
+        if (!InitializeProcThreadAttributeList(si.lpAttributeList, attribute_count, 0, &size)) { b.status = xr_proc_last_error(); goto done; }
         attributes_ready = true;
         if (!proc_work(&b, 1)) goto done;
         if (!UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, redirected, sizeof(redirected), NULL, NULL)) { b.status = xr_proc_last_error(); goto done; }
+        if (!proc_work(&b, sizeof(o->extension_policy))) goto done;
+        if (o->extension_policy == XR_PROC_EXTENSIONS_DISABLED) {
+            if (!proc_work(&b, sizeof(mitigation) + 1)) goto done;
+            if (!UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,
+                &mitigation, sizeof(mitigation), NULL, NULL)) { b.status = xr_proc_last_error(); goto done; }
+        }
+        if (job) {
+            if (!proc_work(&b, sizeof(job) + 1)) goto done;
+            if (!UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                &job, sizeof(job), NULL, NULL)) { b.status = xr_proc_last_error(); goto done; }
+        }
         si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
         si.StartupInfo.hStdInput = redirected[0]; si.StartupInfo.hStdOutput = redirected[1]; si.StartupInfo.hStdError = redirected[2];
     }
     if (!proc_work(&b, 1)) goto done;
     if (!CreateProcessW(program, command, NULL, NULL, attributes_ready, CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED |
-        (o->new_process_group ? CREATE_NO_WINDOW : 0) | (debug ? DEBUG_PROCESS : 0) |
+        (o->new_process_group ? (debug ? DETACHED_PROCESS : CREATE_NO_WINDOW) : 0) | (debug ? DEBUG_PROCESS : 0) |
         (attributes_ready ? EXTENDED_STARTUPINFO_PRESENT : 0) | ((o->detached || o->new_process_group) ? CREATE_NEW_PROCESS_GROUP : 0), environment, cwd, &si.StartupInfo, &pi)) { b.status = xr_proc_last_error(); goto done; }
     started = true; if (debug) debug->root = pi.dwProcessId;
-    if (job) {
-        if (!proc_work(&b, 1)) goto done;
-        if (!AssignProcessToJobObject(job, pi.hProcess)) { b.status = xr_proc_last_error(); goto done; }
-    }
+    if (job && !proc_group_member(&b, job, pi.hProcess)) goto done;
     if (!proc_work(&b, 1)) goto done;
     if (ResumeThread(pi.hThread) == (DWORD)-1) { b.status = xr_proc_last_error(); goto done; }
     if (slot >= 0) {

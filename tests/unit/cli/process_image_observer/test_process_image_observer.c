@@ -31,13 +31,15 @@ static void observed_free(void *p) {
 #include "base/xcompile_resources.c"
 
 static size_t wait_calls, continue_calls, fail_wait_at=SIZE_MAX, fail_continue_at=SIZE_MAX;
-static bool null_image, fail_assign, fail_resume, fail_accounting, fail_image_close;
+static bool null_image, fail_membership, nonmember, fail_resume, fail_accounting, fail_image_close;
 static DWORD injected_error=ERROR_READ_FAULT;
 static bool persistent_wait, persistent_child_exit;
 static DWORD root_pid, blocked_exit_pid, detached_exit_pid;
 static size_t event_count, first_chance_av, second_chance_av;
 static bool profile_enabled;
 static XrProcCompletionPolicy command_completion=XR_PROC_COMPLETE_TREE;
+static XrProcExtensionPolicy command_extensions=XR_PROC_EXTENSIONS_DEFAULT;
+static size_t attribute_calls, fail_attribute=SIZE_MAX;
 static size_t terminate_calls, root_exit_continues, child_exit_continues;
 static bool fail_terminate, mismatch_accounting;
 static DWORD pending_exit_pid;
@@ -116,9 +118,10 @@ static BOOL debug_close(HANDLE handle) {
     if (ok && found>=0) { image_handles[found]=NULL; --image_handle_count; }
     return ok;
 }
-static BOOL debug_assign(HANDLE job,HANDLE process) {
-    if (fail_assign) { fail_assign=false; SetLastError(injected_error); return FALSE; }
-    return AssignProcessToJobObject(job,process);
+static BOOL debug_member(HANDLE process,HANDLE job,PBOOL member) {
+    if (fail_membership) { fail_membership=false; SetLastError(injected_error); return FALSE; }
+    if (nonmember) { nonmember=false; *member=FALSE; return TRUE; }
+    return IsProcessInJob(process,job,member);
 }
 static DWORD debug_resume(HANDLE thread) {
     if (fail_resume) { fail_resume=false; SetLastError(injected_error); return (DWORD)-1; }
@@ -141,12 +144,17 @@ static BOOL debug_terminate(HANDLE job,UINT code) {
     if (fail_terminate) { fail_terminate=false; SetLastError(injected_error); return FALSE; }
     return TerminateJobObject(job,code);
 }
+static bool debug_attribute_failure(void) {
+    if (attribute_calls++ != fail_attribute) return false;
+    SetLastError(injected_error); return true;
+}
+#define UpdateProcThreadAttribute(...) (debug_attribute_failure() ? FALSE : UpdateProcThreadAttribute(__VA_ARGS__))
 #define TerminateJobObject debug_terminate
 #define DebugActiveProcessStop debug_detach
 #define WaitForDebugEvent debug_wait
 #define ContinueDebugEvent debug_continue
 #define CloseHandle debug_close
-#define AssignProcessToJobObject debug_assign
+#define IsProcessInJob debug_member
 #define ResumeThread debug_resume
 #define QueryInformationJobObject debug_accounting
 #include "os/win/proc_win.c"
@@ -180,9 +188,10 @@ static XrProcWaitResult measured_poll(XrProcId pid,int *code) {
 #undef WaitForDebugEvent
 #undef ContinueDebugEvent
 #undef CloseHandle
-#undef AssignProcessToJobObject
+#undef IsProcessInJob
 #undef ResumeThread
 #undef QueryInformationJobObject
+#undef UpdateProcThreadAttribute
 
 static char executable[32768], directory[32768], dll_path[32768];
 static const XrCompileResourceLimits unlimited={UINT64_MAX,UINT64_MAX,UINT64_MAX};
@@ -270,6 +279,7 @@ static XrProcessStatus command(const char *mode, Observation *o, XrProcessResult
     spec.argv[1]=mode; spec.argv[2]=dll_path;
     spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
     spec.completion_policy=command_completion;
+    spec.extension_policy=command_extensions;
     spec.image_observer=(XrProcImageObserver){o,observe_image};
     XrToolchainProcess *process=NULL;
     XrProcessStatus status=xtc_process_prepare(o->resources,&spec,&process);
@@ -293,11 +303,12 @@ static void simple(bool warmup) {
 static void reset_faults(void) {
     CHECK(!physical && !allocation_count && !image_handle_count);
     calls=wait_calls=continue_calls=0;
+    attribute_calls=0;fail_attribute=SIZE_MAX;
     command_completion=XR_PROC_COMPLETE_TREE; fail_terminate=fail_root_continue=mismatch_accounting=false;
     exhaust_at_root=NULL; exhaust_work_limit=0;
     terminate_calls=root_exit_continues=child_exit_continues=0; pending_exit_pid=0;
     fail_at=fail_wait_at=fail_continue_at=SIZE_MAX;
-    null_image=fail_assign=fail_resume=fail_accounting=fail_image_close=false;
+    null_image=fail_membership=nonmember=fail_resume=fail_accounting=fail_image_close=false;
     cancellation=NULL; cancellation_context=NULL; command_timeout=5000;
     injected_error=ERROR_READ_FAULT;
     persistent_wait=persistent_child_exit=false;
@@ -384,7 +395,10 @@ static void root_completion(void) {
         reset_faults(); command_completion=XR_PROC_COMPLETE_ROOT;
         XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&finite,&r)==XR_COMPILE_RESOURCE_OK);
         Observation o={0}; o.resources=r; XrProcessResult result={0};
-        CHECK(command(modes[i],&o,&result)==XTC_PROCESS_OK && result.exit_code==(i==2 ? 77 : 0));
+        XrProcessStatus status=command(modes[i],&o,&result);
+        fprintf(stderr,"root completion %s status=%s exit=%d events=%zu work=%llu\n",modes[i],
+            xtc_process_status_name(status),result.exit_code,event_count,(unsigned long long)r->stats.work);
+        CHECK(status==XTC_PROCESS_OK && result.exit_code==(i==2 ? 77 : 0));
         root_executable_oracle(&o);
         /* Native invocation rejects the nonzero root before publishing reports. */
         xtc_process_result_free(&result); release_images(&o); xr_compile_resources_release(r);
@@ -420,14 +434,23 @@ static void root_completion(void) {
 
 static void failures(void) {
     XrCompileResourceStats out;
-    for (unsigned i=0;i<5;++i) {
+    if (command_extensions==XR_PROC_EXTENSIONS_DISABLED) {
+        const DWORD errors[]={ERROR_READ_FAULT,ERROR_OUTOFMEMORY,ERROR_NOT_ENOUGH_MEMORY};
+        for(unsigned error=0;error<3;++error)for(size_t point=0;point<3;++point) {
+            reset_faults();fail_attribute=point;injected_error=errors[error];
+            CHECK(trial("--plain",&unlimited,XR_PROC_OK,&out)==(error?XTC_PROCESS_OUT_OF_MEMORY:XTC_PROCESS_IO));
+            CHECK(attribute_calls==point+1);
+        }
+    }
+    for (unsigned i=0;i<6;++i) {
         reset_faults();
         if (i==0) null_image=true;
-        if (i==1) fail_assign=true;
+        if (i==1) fail_membership=true;
         if (i==2) fail_resume=true;
         if (i==3) fail_accounting=true;
         if (i==4) fail_image_close=true;
-        CHECK(trial("--plain",&unlimited,XR_PROC_OK,&out)==(i==0 ? XTC_PROCESS_UNSUPPORTED : XTC_PROCESS_IO));
+        if (i==5) nonmember=true;
+        CHECK(trial("--plain",&unlimited,XR_PROC_OK,&out)==(i==0||i==5 ? XTC_PROCESS_UNSUPPORTED : XTC_PROCESS_IO));
     }
     for (unsigned memory=0;memory<2;++memory) {
         for (unsigned which=0;which<2;++which) {
@@ -514,6 +537,7 @@ static void boundaries_and_lifetime(void) {
     XrCompileResources *r=NULL; CHECK(xr_compile_resources_new(&unlimited,&r)==XR_COMPILE_RESOURCE_OK);
     Observation o={0}; o.resources=r;
     XrProcessSpec spec; xtc_process_spec_init(&spec,executable,5000);
+    spec.extension_policy=command_extensions;
     spec.cwd=directory; spec.argv[1]="--load"; spec.argv[2]=dll_path;
     spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE; spec.image_observer=(XrProcImageObserver){&o,observe_image};
     XrToolchainProcess *process=NULL; CHECK(xtc_process_prepare(r,&spec,&process)==XTC_PROCESS_OK);
@@ -675,8 +699,13 @@ int main(int argc,char **argv) {
     CHECK(GetModuleFileNameA(NULL,executable,sizeof(executable)));
     CHECK(GetCurrentDirectoryA(sizeof(directory),directory));
     bool descendants_only=argc==3 && !strcmp(argv[1],"--descendant-gate");
-    CHECK((argc==2 || descendants_only) && strlen(argv[descendants_only ? 2 : 1])<sizeof(dll_path));
-    strcpy(dll_path,argv[descendants_only ? 2 : 1]);
+    bool isolated=argc==3 && !strcmp(argv[1],"--extension-policy");
+    CHECK((argc==2 || descendants_only || isolated) && strlen(argv[argc==3 ? 2 : 1])<sizeof(dll_path));
+    strcpy(dll_path,argv[argc==3 ? 2 : 1]);
     if (descendants_only) { profile_enabled=true; descendants_and_exceptions(2); return 0; }
+    if (isolated) {
+        command_extensions=XR_PROC_EXTENSIONS_DISABLED;
+        simple(true);simple(false);failures();boundaries_and_lifetime();puts("extension point isolation passed");return 0;
+    }
     simple(true); simple(false); descendants_and_exceptions(6); failures(); thread_and_budget(); policy_reentry(); boundaries_and_lifetime(); exact_dispatch_and_sticky_output(); persistent_cleanup(); root_completion(); puts("image observer passed"); return 0;
 }

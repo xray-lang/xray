@@ -126,10 +126,11 @@ static bool local_paths(XtcXirLocalToolchain *owner, const char *const *values, 
     bool okay = local_path(owner, values[0], true, &vc) && local_path(owner, values[1], true, &kit) &&
         local_path(owner, values[3], true, &owner->view.msvc.system_root) &&
         local_version_component(owner, values[2], &version) &&
-        local_join_path(owner, vc, "bin/Hostx64/x64/cl.exe", false, &owner->view.compiler) &&
         local_join_path(owner, vc, "bin/Hostx64/x64/link.exe", false, &owner->view.linker) &&
         local_join_path(owner, vc, "include", true, &owner->view.msvc.vc_include);
-    if (okay && compiler) {
+    if(okay&&owner->view.msvc.driver==XR_XIR_WINDOWS_MSVC)
+        okay=local_join_path(owner,vc,"bin/Hostx64/x64/cl.exe",false,&owner->view.compiler);
+    if (okay && compiler&&owner->view.msvc.driver==XR_XIR_WINDOWS_MSVC) {
         const char *actual = NULL;
         okay = local_path(owner, compiler, false, &actual) && local_same_path(owner, actual, owner->view.compiler);
     }
@@ -153,7 +154,8 @@ static bool local_paths(XtcXirLocalToolchain *owner, const char *const *values, 
     xr_compile_resources_free(version); xr_compile_resources_free(include);
     xr_compile_resources_free(libraries); xr_compile_resources_free(joined); return okay;
 }
-static bool local_installation(XtcXirLocalToolchain *owner, const XrProcessByteBuffer *bytes, char **output) {
+static bool local_output_path(XtcXirLocalToolchain *owner,const XrProcessByteBuffer *bytes,
+    bool shell_input,char **output) {
     if (!bytes->data || !bytes->length || bytes->truncated)
         return local_fail(owner, XTC_XIR_LOCAL_UNRESOLVED, XTC_XIR_LOCAL_SELF, 0);
     size_t start = 0, end = bytes->length;
@@ -172,10 +174,34 @@ static bool local_installation(XtcXirLocalToolchain *owner, const XrProcessByteB
         unsigned char c = bytes->data[i];
         /* cmd expands percent even inside quotes; batch metacharacters and
          * delayed expansion are not permitted in this discovery command. */
-        if (!c || c == '\r' || c == '\n' || c == '"' || c == '&' || c == '|' || c == '<' || c == '>' || c == '^' || c == '%' || c == '!')
+        if(!c||c=='\r'||c=='\n'||(shell_input&&
+            (c=='"'||c=='&'||c=='|'||c=='<'||c=='>'||c=='^'||c=='%'||c=='!')))
             return local_fail(owner, XTC_XIR_LOCAL_UNSUPPORTED, XTC_XIR_LOCAL_SELF, 0);
     }
     *output = local_copy(owner, (const char *)bytes->data + start, end - start); return *output != NULL;
+}
+static bool local_clang(XtcXirLocalToolchain *owner,const XtcXirLocalToolchainRequest *request) {
+    char *program_files=NULL,*resource=NULL;XrProcessResult result={0};
+    bool okay;
+    if(request->compiler)okay=local_path(owner,request->compiler,false,&owner->view.compiler);
+    else {
+        okay=local_io(owner,xr_os_io_environment_get(&owner->policy,"ProgramFiles",&program_files))&&
+            local_join_path(owner,program_files,"LLVM/bin/clang-cl.exe",false,&owner->view.compiler);
+    }
+    XrProcessSpec spec;
+    if(okay)okay=local_work(owner,sizeof(spec));
+    if(okay) {
+        xtc_process_spec_init(&spec,owner->view.compiler,request->timeout_ms);
+        spec.cwd=owner->view.msvc.system_root;spec.output_limit=request->output_limit;
+        spec.environment_source=XTC_PROCESS_ENV_EXPLICIT;spec.env_count=3;
+        spec.env_keys[0]="SystemRoot";spec.env_values[0]=owner->view.msvc.system_root;
+        spec.env_keys[1]="TEMP";spec.env_values[1]=owner->view.workspace_parent;
+        spec.env_keys[2]="TMP";spec.env_values[2]=owner->view.workspace_parent;
+        spec.argv[1]="--no-default-config";spec.argv[2]="/clang:-print-resource-dir";
+        okay=local_process(owner,&spec,&result)&&local_output_path(owner,&result.stdout_bytes,false,&resource)&&
+            local_join_path(owner,resource,"include",true,&owner->view.msvc.builtin_include);
+    }
+    xr_compile_resources_free(program_files);xr_compile_resources_free(resource);xtc_process_result_free(&result);return okay;
 }
 static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolchainRequest *request) {
     char *program_files = NULL, *system_root = NULL, *installation = NULL;
@@ -197,7 +223,7 @@ static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolcha
         spec.argv[5] = "-property"; spec.argv[6] = "installationPath";
         spec.argv[7] = "-format"; spec.argv[8] = "value"; spec.argv[9] = "-latest"; spec.argv[10] = "-utf8";
         okay = local_process(owner, &spec, &result) &&
-            local_installation(owner, &result.stdout_bytes, &installation) &&
+            local_output_path(owner,&result.stdout_bytes,true,&installation) &&
             local_join_path(owner, installation, "Common7/Tools/VsDevCmd.bat", false, &script);
     }
     xtc_process_result_free(&result);
@@ -215,6 +241,7 @@ static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolcha
     }
     xtc_process_result_free(&result);
     if (okay) { owner->diagnostic.stage = XTC_XIR_LOCAL_PATHS; okay = local_paths(owner, values, request->compiler); }
+    if(okay&&request->driver==XR_XIR_WINDOWS_CLANG_CL)okay=local_clang(owner,request);
     xr_compile_resources_free(program_files); xr_compile_resources_free(system_root);
     xr_compile_resources_free(installation); return okay;
 }

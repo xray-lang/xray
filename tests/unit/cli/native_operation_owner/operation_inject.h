@@ -36,7 +36,12 @@ static XrXirInvocationStatus operation_invoke(const XrXirInvocationRequest *requ
                 !strcmp(view.env_keys[1], "TEMP") && !strcmp(view.env_keys[2], "TMP"));
             CHECK(!strcmp(view.cwd, request->input_directory));
             CHECK(!strcmp(view.env_values[1], request->output_directory) && !strcmp(view.env_values[2], request->output_directory));
-            CHECK(i == 2 || (view.argc == (i ? 27u : 26u) && !strcmp(view.argv[13], "/X")));
+            bool clang=request->msvc.driver==XR_XIR_WINDOWS_CLANG_CL;
+            CHECK(view.extension_policy==(clang?XR_PROC_EXTENSIONS_DISABLED:XR_PROC_EXTENSIONS_DEFAULT));
+            CHECK(i==2||(view.argc==(clang?34u:26u)+i&&!strcmp(view.argv[13],"/X")));
+            if(clang&&i<2)CHECK(!strcmp(view.argv[4],"--no-default-config")&&
+                !strcmp(view.argv[14],"/clang:-nobuiltininc")&&!strcmp(view.argv[30],"/clang:-MQ"));
+            if(clang&&i<2)for(unsigned header=19;header<24;++header)CHECK(!strncmp(view.argv[header],"/imsvc",6));
         }
         *diagnostic = (XrXirInvocationDiagnostic){XR_XIR_INVOCATION_NO_STAGE, XR_XIR_INVOCATION_NO_PASS,
             XR_XIR_INVOCATION_SELF, XR_XIR_INVOCATION_IO, 0};

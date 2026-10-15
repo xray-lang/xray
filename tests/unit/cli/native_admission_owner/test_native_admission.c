@@ -91,7 +91,7 @@ static void facts_dump(const char *path,const XtcXirNativeOperation *op,const Xr
         fprintf(f,"%s{\"executable\":",stage?",":"");json_text(f,c->executable);fprintf(f,",\"cwd\":");json_text(f,c->cwd);
         fprintf(f,",\"argv\":[");for(size_t i=0;i<c->argc;++i){if(i)fputc(',',f);json_text(f,c->argv[i]);}
         fprintf(f,"],\"env\":[");for(size_t i=0;i<c->env_count;++i){if(i)fputc(',',f);fputc('[',f);json_text(f,c->env_keys[i]);fputc(',',f);json_text(f,c->env_values[i]);fputc(']',f);}
-        fprintf(f,"],\"timeout\":%u,\"limit\":%zu,\"image\":%u,\"completion\":%u}",c->timeout_ms,c->output_limit,(unsigned)c->image_mode,(unsigned)c->completion_policy);
+        fprintf(f,"],\"timeout\":%u,\"limit\":%zu,\"image\":%u,\"completion\":%u,\"extension\":%u}",c->timeout_ms,c->output_limit,(unsigned)c->image_mode,(unsigned)c->completion_policy,(unsigned)c->extension_policy);
     }
     fprintf(f,"],\"files\":[");for(uint32_t i=0;i<facts->file_count;++i){const XrXirInvocationFile *r=xtc_xir_native_operation_file(op,i);
         fprintf(f,"%s[%u,%u,",i?",":"",(unsigned)r->stage,(unsigned)r->kind);json_text(f,r->path);fprintf(f,",%llu,",(unsigned long long)r->length);json_hash(f,r->digest);fputc(']',f);}
@@ -128,7 +128,8 @@ static int run_test(int argc,char **argv) {
     XrXirNativeProjection *projection=real_projection(r,argv[2],argv[3],argv[4]);
     XrXirRuntimeSdk *sdk=real_sdk(r,argv[5]);
     XrXirInvocationLibrary libraries[5];for(unsigned i=0;i<5;++i)libraries[i]=(XrXirInvocationLibrary){argv[9+i],i==4?XR_XIR_INVOCATION_SYSTEM:XR_XIR_INVOCATION_CRT};
-    XtcXirNativeOperationRequest request={projection,sdk,argv[6],argv[7],{argv[14],argv[15],argv[16],argv[17],argv[18]},libraries,5,NULL,NULL};
+    XtcXirNativeOperationRequest request={projection,sdk,argv[6],argv[7],
+        {argv[14],argv[15],argv[16],argv[17],argv[18],XR_XIR_WINDOWS_MSVC,NULL},libraries,5,NULL,NULL};
     XtcXirWorkspaceRequest ws={argv[8],{32767,32,65536}};XtcXirNativeOperation *op=NULL;
     CHECK(xtc_xir_native_operation_new(r,&ws,&operation_limits,&op)==XTC_XIR_NATIVE_OK);
     CHECK(!xtc_xir_native_operation_command(op,XR_XIR_INVOCATION_GENERATED));
@@ -162,6 +163,8 @@ static int run_test(int argc,char **argv) {
     XtcXirNativeAdmissionStatus admitted=xtc_xir_native_admit(op,projection,sdk,64*1024*1024,&artifact,&d);
     printf("admission status=%u domain=%u code=%d stage=%u\n",(unsigned)admitted,(unsigned)d.domain,d.code,(unsigned)d.stage);fflush(stdout);
     CHECK(admitted==XTC_XIR_ADMISSION_OK && artifact);CHECK(xr_compile_resources_stats(r,&after)==XR_COMPILE_RESOURCE_OK);
+    printf("whole admitted work=%llu allocated=%llu peak=%llu\n",(unsigned long long)after.work,
+        (unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes);fflush(stdout);
     facts_dump(argv[20],op,artifact);
     XrXirNativeInput expected=xr_compile_native_artifact_view(artifact)->input;
     xr_compile_native_projection_owner_free(projection);xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(r);

@@ -84,5 +84,10 @@ XR_FUNC XrXirTargetStatus xtc_xir_images_new_with_proof(XrCompileResources *reso
 struct XtcXirFileLease;
 XR_FUNC XrXirTargetStatus xtc_xir_file_lease_open_with_proof(XrCompileResources *resources,
     const char *path,XtcXirHashProofCache *cache,struct XtcXirFileLease **output);
+/* Absolute dependency spellings may contain dot components. Check and retain
+ * every traversed directory, including prefixes later removed by '..'. Final
+ * files, all roots, identities, sharing and reparse checks remain unchanged. */
+XR_FUNC XrXirTargetStatus xtc_xir_file_lease_open_traversed(XrCompileResources *resources,
+    const char *path,XtcXirHashProofCache *cache,struct XtcXirFileLease **output);
 #endif
 #endif // XTC_XIR_SYSROOT_INTERNAL_H

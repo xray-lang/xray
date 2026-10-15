@@ -27,6 +27,10 @@ add_test(NAME native_invocation_provider COMMAND $<TARGET_FILE:test_native_invoc
     --provider-only "${XIR_INVOCATION_MSVC}" "${XIR_INVOCATION_LINKER}")
 set_tests_properties(native_invocation_provider PROPERTIES
     RUN_SERIAL TRUE TIMEOUT 180 COST 3 LABELS "unit;xir;toolchain;ownership;budget")
+add_test(NAME native_invocation_clang_target COMMAND ${XRAY_PYTHON} -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/native_invocation_owner/test_make_target.py" $<TARGET_FILE:test_native_invocation_faults>)
+set_tests_properties(native_invocation_clang_target PROPERTIES
+    RUN_SERIAL TRUE TIMEOUT 180 COST 3 LABELS "unit;xir;toolchain;ownership;budget")
 find_program(XIR_INVOCATION_CLANG_IMAGE NAMES clang-cl)
 if(XIR_INVOCATION_CLANG_IMAGE)
     add_test(NAME native_invocation_provider_clang_image COMMAND $<TARGET_FILE:test_native_invocation_faults>

@@ -56,10 +56,15 @@ endif()
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_program(LOCAL_MSVC NAMES cl REQUIRED)
 enable_testing()
+find_program(LOCAL_CLANG NAMES clang-cl)
+set(local_clang_arguments)
+if(LOCAL_CLANG)
+    list(APPEND local_clang_arguments "${LOCAL_CLANG}")
+endif()
 add_test(NAME local_toolchain_faults COMMAND test_local_toolchain_injected)
 add_test(NAME local_toolchain_real COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_local_toolchain.py" "$<TARGET_FILE:test_local_toolchain_production>"
-    "${LOCAL_SDK}" "${LOCAL_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/cases")
+    "${LOCAL_SDK}" "${LOCAL_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/cases" ${local_clang_arguments})
 set_tests_properties(local_toolchain_faults local_toolchain_real PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
 if(LOCAL_SANITIZE)
     set_tests_properties(local_toolchain_faults local_toolchain_real PROPERTIES

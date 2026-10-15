@@ -138,6 +138,15 @@ static void preflight(const char *parent, XrCompileResources *resources, XtcXirN
     CHECK(runtime_attempts == before && !xtc_xir_workspace_paths(owner->workspace)->root);
     close_owner(&owner); request->sdk = saved_sdk;
     xr_xir_runtime_sdk_free(foreign_sdk); xr_compile_resources_release(foreign);
+    XrXirMsvcRecipe saved_recipe=request->msvc;
+    for(unsigned bad=0;bad<3;++bad) {
+        request->msvc.driver=bad==0?(XrXirWindowsDriver)99:bad==1?XR_XIR_WINDOWS_MSVC:XR_XIR_WINDOWS_CLANG_CL;
+        request->msvc.builtin_include=bad==1?parent:NULL;
+        CHECK(xtc_xir_native_operation_new(resources,&ws,&test_limits,&owner)==XTC_XIR_NATIVE_OK);before=runtime_attempts;
+        CHECK(xtc_xir_native_operation_run(owner,request)==XTC_XIR_NATIVE_INVALID);
+        CHECK(runtime_attempts==before&&!xtc_xir_workspace_paths(owner->workspace)->root);close_owner(&owner);
+    }
+    request->msvc=saved_recipe;
     CHECK(xtc_xir_native_operation_new(resources, &ws, &test_limits, &owner) == XTC_XIR_NATIVE_OK);
     request->cancelled = cancelled; before = runtime_attempts;
     CHECK(xtc_xir_native_operation_run(owner, request) == XTC_XIR_NATIVE_CANCELLED);
@@ -166,16 +175,17 @@ static int run_test(int argc, char **argv) {
 #ifdef OPERATION_INJECTED
     if (argc == 3 && !strcmp(argv[1], "unit")) { unit(argv[2]); return 0; }
 #endif
-    CHECK(argc == 20);
+    CHECK(argc==20||(argc==21&&(!strcmp(argv[1],"clang-native")||!strcmp(argv[1],"clang-preflight"))));
     XrCompileResources *resources = sdk_ledger(&sdk_unlimited);
     XrXirNativeProjection *project = projection(resources, argv[2], argv[3], argv[4]);
     XrXirRuntimeSdk *sdk = load_sdk(resources, argv[5]);
     XrXirInvocationLibrary libraries[5];
     for (unsigned i = 0; i < 5; ++i) libraries[i] = (XrXirInvocationLibrary){argv[9 + i], i == 4 ? XR_XIR_INVOCATION_SYSTEM : XR_XIR_INVOCATION_CRT};
     XtcXirNativeOperationRequest request = {project, sdk, argv[6], argv[7],
-        {argv[14], argv[15], argv[16], argv[17], argv[18]}, libraries, 5, NULL, NULL};
+        {argv[14],argv[15],argv[16],argv[17],argv[18],
+         argc==21?XR_XIR_WINDOWS_CLANG_CL:XR_XIR_WINDOWS_MSVC,argc==21?argv[20]:NULL},libraries,5,NULL,NULL};
 #ifdef OPERATION_INJECTED
-    if (!strcmp(argv[1], "preflight")) {
+    if(!strcmp(argv[1],"preflight")||!strcmp(argv[1],"clang-preflight")) {
         preflight(argv[8], resources, &request);
         xr_compile_native_projection_owner_free(project); xr_xir_runtime_sdk_free(sdk);
         xr_compile_resources_release(resources); CHECK(!runtime_live && !runtime_bytes); return 0;
@@ -197,6 +207,13 @@ static int run_test(int argc, char **argv) {
     CHECK(provider && provider->compiler.path[0] && provider->linker.path[0]);
     CHECK(provider->compiler.version.file_text[0] && provider->linker.version.file_text[0]);
     CHECK(facts && facts->completed_runs == 6 && facts->kind == XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS);
+    if(argc==21) {
+        const XrProcessView *compile=xtc_xir_native_operation_command(owner,XR_XIR_INVOCATION_GENERATED);
+        CHECK(compile->argc==34&&!strcmp(compile->argv[4],"--no-default-config"));
+        CHECK(compile->extension_policy==XR_PROC_EXTENSIONS_DISABLED&&!strcmp(compile->argv[32],"/vctoolsdir"));
+        CHECK(!strcmp(compile->argv[14],"/clang:-nobuiltininc")&&!strcmp(compile->argv[15],"/clang:-ffp-contract=off"));
+        CHECK(!strcmp(compile->argv[30],"/clang:-MQ"));
+    }
     const XrXirInvocationFile *output = NULL;
     for (uint32_t i = 0; i < facts->file_count; ++i) {
         const XrXirInvocationFile *file = xtc_xir_native_operation_file(owner, i);

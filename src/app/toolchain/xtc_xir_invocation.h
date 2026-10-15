@@ -64,8 +64,16 @@ typedef struct XrXirInvocationLimits {
     uint64_t artifact_bytes;
     uint32_t files;
 } XrXirInvocationLimits;
+typedef enum XrXirWindowsDriver {
+    XR_XIR_WINDOWS_MSVC, XR_XIR_WINDOWS_CLANG_CL
+} XrXirWindowsDriver;
+
+/* Both drivers target the same MSVC runtime ABI and explicit SDK/CRT inputs.
+ * Clang requires its builtin include directory; MSVC requires it to be NULL. */
 typedef struct XrXirMsvcRecipe {
     const char *vc_include, *ucrt_include, *shared_include, *um_include, *system_root;
+    XrXirWindowsDriver driver;
+    const char *builtin_include;
 } XrXirMsvcRecipe;
 typedef struct XrXirInvocationRequest {
     const XrXirNativeProjection *projection;
@@ -95,6 +103,7 @@ typedef enum XrXirInvocationFactKind {
 typedef struct XrXirInvocationFacts {
     XrXirInvocationFactKind kind;
     uint32_t completed_runs, file_count;
+    XrXirWindowsDriver driver;
     XrXirNativeProjectionFacts projection;
     XrXirRuntimeSdkFacts sdk;
 } XrXirInvocationFacts;
@@ -111,7 +120,8 @@ typedef struct XrXirInvocationProviderFacts {
 } XrXirInvocationProviderFacts;
 typedef struct XrXirInvocation XrXirInvocation;
 
-/* Windows x64 MSVC C11/MD only, with /X and seven ordered include roots.
+/* Windows x64 MSVC-ABI C11/MD, using the exact MSVC or clang-cl recipe.
+ * Both use /X and ordered owned roots; clang-cl also disables builtin search.
  * Every actual prepared environment contains exactly SystemRoot, TEMP and TMP
  * in that order; no historical environment-source enum is inferred from it.
  * The synchronous request borrows all producers;

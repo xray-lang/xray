@@ -75,6 +75,11 @@ typedef enum XrProcImageMode {
 typedef enum XrProcCompletionPolicy {
     XR_PROC_COMPLETE_TREE, XR_PROC_COMPLETE_ROOT
 } XrProcCompletionPolicy;
+/* Windows legacy DLL extension points (AppInit, global hooks, legacy IMEs).
+ * DISABLED is explicit and unsupported on other operating systems. */
+typedef enum XrProcExtensionPolicy {
+    XR_PROC_EXTENSIONS_DEFAULT, XR_PROC_EXTENSIONS_DISABLED
+} XrProcExtensionPolicy;
 typedef enum XrProcImageKind {
     XR_PROC_IMAGE_EXECUTABLE, XR_PROC_IMAGE_DLL
 } XrProcImageKind;
@@ -106,10 +111,14 @@ typedef struct XrProcSpawnOptions {
     bool has_stderr;
     XrPipeHandle stderr_write;
     bool detached;
+    /* Windows 10+ groups join their job at creation. Observed groups have no
+     * initial console, while ordinary groups retain a hidden console. Both
+     * remain owned and waitable; this is not detached mode. */
     bool new_process_group;
     XrProcImageMode image_mode;
     XrProcImageObserver image_observer;
     XrProcCompletionPolicy completion_policy;
+    XrProcExtensionPolicy extension_policy;
 } XrProcSpawnOptions;
 
 typedef struct XrProcImagePumpResult {

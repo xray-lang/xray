@@ -18,12 +18,12 @@ endif()
 include_directories("${XR_ROOT}/src" "${XR_ROOT}/include" "${OPERATION_SDK}")
 set(operation_libraries)
 foreach(item src/xir/xray_xir_source_product src/xir/xray_xir_source src/xir/xray_xir_vm
-    src/xir/xray_xir_scalar src/xir/xray_xir_cgen src/xir/xray_xir src/xir/xray_xir_admission
+    src/xir/xray_xir_scalar src/xir/xray_xir_ctfe src/xir/xray_xir_cgen src/xir/xray_xir src/xir/xray_xir_admission
     src/xir/xray_xir_declarations src/xir/xray_compiler_parser src/base/xray_compile_resources
     src/toolchain/xray_xir_native_projection src/toolchain/xray_xir_native_artifact
     src/toolchain/xray_toolchain_binding src/toolchain/xray_xir_runtime_sdk
-    src/base/xray_json_cursor xray_xir_target xray_toolchain_dependencies xray_toolchain_process
-    xray_xir_workspace xray_xir_pe_version)
+    src/base/xray_json_cursor xray_toolchain_dependencies xray_toolchain_process
+    xray_xir_workspace)
     get_filename_component(name "${item}" NAME)
     set(path "${OPERATION_SOURCE_BUILD}/${item}.lib")
     if(NOT EXISTS "${path}")
@@ -35,7 +35,11 @@ foreach(item src/xir/xray_xir_source_product src/xir/xray_xir_source src/xir/xra
 endforeach()
 # Compile the current composition and invocation against qualified dependencies.
 add_library(operation_dependencies STATIC
-    "${XR_ROOT}/src/app/toolchain/xtc_xir_invocation.c")
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_invocation.c"
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_target.c"
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_sysroot.c"
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_images.c"
+    "${XR_ROOT}/src/app/toolchain/xtc_xir_pe_version.c")
 target_link_libraries(operation_dependencies PUBLIC ${operation_libraries} ntdll bcrypt)
 add_library(operation_production STATIC "${XR_ROOT}/src/app/toolchain/xtc_xir_native_operation.c")
 target_link_libraries(operation_production PUBLIC operation_dependencies)
@@ -59,3 +63,21 @@ foreach(mode unit preflight native)
         "${XR_ROOT}" "${OPERATION_MSVC}" "${OPERATION_LINKER}" "${OPERATION_SDK}" ${mode})
     set_tests_properties(native_operation_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
 endforeach()
+
+find_program(OPERATION_CLANG NAMES clang-cl)
+if(OPERATION_CLANG)
+    execute_process(COMMAND "${OPERATION_CLANG}" --no-default-config /clang:-print-resource-dir
+        OUTPUT_VARIABLE clang_resource OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+    foreach(mode native preflight)
+        if(mode STREQUAL "native")
+            set(binary test_native_operation_owner)
+        else()
+            set(binary test_native_operation_faults)
+        endif()
+        add_test(NAME native_operation_clang_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
+            "${CMAKE_CURRENT_LIST_DIR}/test_native_operation_owner.py" $<TARGET_FILE:${binary}> "${XR_ROOT}"
+            "${OPERATION_CLANG}" "${OPERATION_LINKER}" "${OPERATION_SDK}" clang-${mode} "${clang_resource}/include")
+        set_tests_properties(native_operation_clang_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 3
+            LABELS "unit;xir;toolchain;ownership;budget;generated-c")
+    endforeach()
+endif()

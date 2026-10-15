@@ -131,14 +131,16 @@ static void toolchain_probe_native(XrCompileResources *resources,const XrCliInvo
             toolchain_probe_failure(report,"PROVIDER_UNSUPPORTED","provider",0,0);goto done;
         }
     } else if (preference) selector=preference->selector;
-    if ((selector!=XR_TOOLCHAIN_SELECTOR_AUTO && selector!=XR_TOOLCHAIN_SELECTOR_HOST && selector!=XR_TOOLCHAIN_SELECTOR_MSVC) ||
+    if ((selector!=XR_TOOLCHAIN_SELECTOR_AUTO && selector!=XR_TOOLCHAIN_SELECTOR_HOST &&
+        selector!=XR_TOOLCHAIN_SELECTOR_MSVC&&selector!=XR_TOOLCHAIN_SELECTOR_CLANG) ||
         xr_cli_opt_present(&inv->options,"zig") || strcmp(xr_cli_opt_string(&inv->options,"profile","hosted"),"hosted")) {
         toolchain_probe_failure(report,"TARGET_UNSUPPORTED","provider",0,0);goto done;
     }
     const char *cc=xr_cli_opt_string(&inv->options,"cc",NULL);
     if (!cc && preference && (selector==preference->selector ||
         (selector==XR_TOOLCHAIN_SELECTOR_AUTO && preference->selector==XR_TOOLCHAIN_SELECTOR_MSVC))) cc=preference->compiler;
-    XtcXirLocalToolchainRequest locate={cc,NULL,NULL,30000,4*1024*1024,1024*1024};
+    XtcXirLocalToolchainRequest locate={cc,NULL,NULL,30000,4*1024*1024,1024*1024,
+        selector==XR_TOOLCHAIN_SELECTOR_CLANG?XR_XIR_WINDOWS_CLANG_CL:XR_XIR_WINDOWS_MSVC};
     XtcXirLocalDiagnostic found={0};XtcXirLocalStatus located=xtc_xir_local_toolchain_open(resources,&locate,&local,&found);
     if (located!=XTC_XIR_LOCAL_OK) {
         toolchain_probe_failure(report,found.stage==XTC_XIR_LOCAL_SDK ? "SDK_UNAVAILABLE" : "TOOLCHAIN_NOT_FOUND",
@@ -192,7 +194,13 @@ static void toolchain_probe_native(XrCompileResources *resources,const XrCliInvo
         !toolchain_probe_hex(resources,sdk->identity,report->runtime) || !toolchain_probe_hex(resources,native->id.bytes,report->fingerprint)) {
         toolchain_probe_failure(report,"PROBE_BUDGET","provider-facts",0,0);goto done;
     }
-    memcpy(report->version,provider->compiler.version.file_text,sizeof(report->version));report->provider="msvc";
+    memcpy(report->version,provider->compiler.version.file_text,sizeof(report->version));
+    uint32_t expected = view->msvc.driver == XR_XIR_WINDOWS_CLANG_CL ?
+        XR_TOOLCHAIN_BINDING_PROVIDER_CLANG : XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
+    if (native->input.toolchain.provider != expected) {
+        toolchain_probe_failure(report,"ABI_MISMATCH","provider-binding",0,0);goto done;
+    }
+    report->provider = native->input.toolchain.provider == XR_TOOLCHAIN_BINDING_PROVIDER_CLANG ? "clang" : "msvc";
     report->native_run=toolchain_probe_execute(resources,operation,report) ? "ok" : "failed";
     if (!strcmp(report->native_run,"failed") && !report->code)
         toolchain_probe_failure(report,"PROBE_INPUT_INVALID","native-run-input",0,0);

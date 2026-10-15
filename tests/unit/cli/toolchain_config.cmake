@@ -78,6 +78,15 @@ if(WIN32)
     set_tests_properties(cli_toolchain_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE
         ENVIRONMENT "XRAY_STDLIB_PATH=${PROJECT_SOURCE_DIR}/stdlib"
         LABELS "unit;cli;toolchain;sdk;generated-c;ownership")
+    find_program(XIR_CLI_CLANG NAMES clang-cl)
+    if(XIR_CLI_CLANG)
+        add_test(NAME cli_toolchain_clang COMMAND "${XRAY_PYTHON}" -X utf8
+            "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_clang.py" $<TARGET_FILE:xray>
+            "${XIR_CLI_CLANG}" "${XIR_INVOCATION_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/toolchain-clang" "${PROJECT_SOURCE_DIR}")
+        set_tests_properties(cli_toolchain_clang PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE
+            ENVIRONMENT "XRAY_STDLIB_PATH=${PROJECT_SOURCE_DIR}/stdlib"
+            LABELS "unit;cli;toolchain;sdk;generated-c;ownership")
+    endif()
     add_test(NAME cli_toolchain_preferences COMMAND "${XRAY_PYTHON}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_preferences.py" $<TARGET_FILE:xray>
         "${CMAKE_CURRENT_BINARY_DIR}/toolchain-preferences")

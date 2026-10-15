@@ -6,7 +6,13 @@ with tempfile.TemporaryDirectory(prefix='xray-file-lease-') as temporary:
     root=Path(temporary);(root/'input.bin').write_bytes(data);(root/'empty.bin').write_bytes(b'')
     (root/'中文.bin').write_bytes(data)
     (root/'child').mkdir();(root/'child'/'input.bin').write_bytes(data)
-    result=subprocess.run([sys.argv[1],str(root)],capture_output=True,timeout=170)
+    junction=root/'junction'
+    made=subprocess.run(['cmd.exe','/d','/c','mklink','/J',str(junction),str(root/'child')],capture_output=True)
+    assert made.returncode==0,(made.returncode,made.stdout,made.stderr)
+    try:
+        result=subprocess.run([sys.argv[1],str(root)],capture_output=True,timeout=170)
+    finally:
+        junction.rmdir()
     sys.stdout.buffer.write(result.stdout);sys.stderr.buffer.write(result.stderr)
     assert result.returncode==0,result.returncode
     records=dict(line.split(' ',1) for line in result.stdout.decode('utf-8').splitlines() if line.startswith(('SHA ','BYTES ')))

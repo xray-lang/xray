@@ -100,12 +100,15 @@ static void make_environment(wchar_t *block, bool changed) {
     }
 }
 static XrProcCompletionPolicy prepare_completion=XR_PROC_COMPLETE_TREE;
+static XrProcExtensionPolicy prepare_extensions=XR_PROC_EXTENSIONS_DEFAULT;
 static XrToolchainProcess *prepare(XrCompileResources *resources, bool observed) {
     XrProcessSpec spec; xtc_process_spec_init(&spec, executable, 5000);
     spec.environment_source = XTC_PROCESS_ENV_SNAPSHOT;
     spec.completion_policy = prepare_completion;
+    spec.extension_policy = prepare_extensions;
     spec.argv[0] = "deliberately-not-the-executable"; spec.argv[1] = "--child";
     spec.argv[2] = original_cwd; spec.argv[3] = executable; spec.argv[4] = "text|中";
+    spec.argv[5] = prepare_extensions == XR_PROC_EXTENSIONS_DISABLED ? "disabled" : "default";
     spec.cwd = NULL; spec.output_limit = 4096;
     if (observed) { spec.image_mode = XR_PROC_IMAGES_WINDOWS_TREE; spec.image_observer = (XrProcImageObserver){NULL, old_observe}; }
     XrToolchainProcess *source = NULL; CHECK(xtc_process_prepare(resources, &spec, &source) == XTC_PROCESS_OK); return source;
@@ -117,6 +120,7 @@ static void same_view(const XrToolchainProcess *left, const XrToolchainProcess *
     XrProcessView a, b; CHECK(xtc_process_view(left, &a) == XTC_PROCESS_OK && xtc_process_view(right, &b) == XTC_PROCESS_OK);
     same_text(a.executable, b.executable, distinct); same_text(a.cwd, b.cwd, distinct);
     CHECK(a.argc == b.argc && a.env_count == b.env_count && a.timeout_ms == b.timeout_ms && a.output_limit == b.output_limit && a.completion_policy == b.completion_policy);
+    CHECK(a.extension_policy == b.extension_policy && b.extension_policy == prepare_extensions);
     for (size_t i = 0; i < a.argc; ++i) same_text(a.argv[i], b.argv[i], distinct);
     for (size_t i = 0; i < a.env_count; ++i) { same_text(a.env_keys[i], b.env_keys[i], distinct); same_text(a.env_values[i], b.env_values[i], distinct); }
 #if defined(CLONE_INJECTED)
@@ -134,7 +138,12 @@ static void environment_value(const wchar_t *prefix, const wchar_t *value) {
     CHECK(found && FreeEnvironmentStringsW(block));
 }
 static int child(int argc, char **argv) {
-    CHECK(argc == 5 && !strcmp(argv[0], "deliberately-not-the-executable"));
+    CHECK(argc == 6 && !strcmp(argv[0], "deliberately-not-the-executable"));
+    if (!strcmp(argv[5], "disabled")) {
+        PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY policy = {0};
+        CHECK(GetProcessMitigationPolicy(GetCurrentProcess(), ProcessExtensionPointDisablePolicy, &policy, sizeof(policy)));
+        CHECK(policy.DisableExtensionPoints);
+    }
     /* The narrow Windows CRT argv uses ACP; the process boundary uses UTF-16. */
     char argument[64]; CHECK(WideCharToMultiByte(CP_ACP, 0, L"text|中", -1, argument, sizeof(argument), NULL, NULL));
     CHECK(!strcmp(argv[4], argument) && wcsstr(GetCommandLineW(), L"text|中"));
@@ -201,7 +210,7 @@ static void text_operations(Expected *e, const char *text) {
 static Expected expected_clone(const XrToolchainProcess *source) {
     Expected e = {0}; e.bytes = sizeof(CompileAllocation) + sizeof(XrToolchainProcess); e.allocations = 1;
     operation(&e, 1 + sizeof(XrToolchainProcess));
-    operation(&e, sizeof(XrCompileResources *) + 3 * sizeof(size_t) + sizeof(uint32_t) + sizeof(XrProcImageMode) + sizeof(XrProcImageObserver) + sizeof(XrProcCompletionPolicy));
+    operation(&e, sizeof(XrCompileResources *) + 3 * sizeof(size_t) + sizeof(uint32_t) + sizeof(XrProcImageMode) + sizeof(XrProcImageObserver) + sizeof(XrProcCompletionPolicy) + sizeof(XrProcExtensionPolicy));
     text_operations(&e, source->spec.executable); text_operations(&e, source->spec.cwd);
     for (size_t i = 0; i < source->argc; ++i) text_operations(&e, source->spec.argv[i]);
     for (size_t i = 0; i < source->spec.env_count; ++i) {
@@ -272,6 +281,12 @@ int main(int argc, char **argv) {
     run_lifetime(true); run_lifetime(false);
     prepare_completion=XR_PROC_COMPLETE_ROOT; run_lifetime(true); run_lifetime(false);
     prepare_completion=XR_PROC_COMPLETE_TREE;
+    prepare_extensions=XR_PROC_EXTENSIONS_DISABLED;
+#if defined(CLONE_INJECTED)
+    allocation_and_work();
+#endif
+    run_lifetime(true); run_lifetime(false);
+    prepare_completion=XR_PROC_COMPLETE_ROOT; run_lifetime(true); run_lifetime(false);
     CHECK(SetEnvironmentStringsW(previous_environment) && FreeEnvironmentStringsW(previous_environment));
     physical_zero(); puts("observed clone frozen owner PASS"); return 0;
 }

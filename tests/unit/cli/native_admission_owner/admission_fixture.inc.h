@@ -37,7 +37,7 @@ static void fixture_row(AdmissionFixture *f,unsigned stage,XrXirInvocationFileKi
 static XrOsProcStatus fixture_unexpected_image(void *context,const XrProcImageEvent *event) {
     (void)context;(void)event;return XR_PROC_INVALID_ARGUMENT;
 }
-static AdmissionFixture fixture_new(const char *path) {
+static AdmissionFixture fixture_driver(const char *path, XrXirWindowsDriver driver) {
     AdmissionFixture f={0}; f.resources=sdk_ledger(&sdk_unlimited);
     f.projection=fixture_alloc(f.resources,sizeof(*f.projection));
     f.projection->context=(XrXirCompileContext){f.resources,xr_xir_compile_default_limits()};
@@ -54,17 +54,19 @@ static AdmissionFixture fixture_new(const char *path) {
     XrXirInvocation *owner=fixture_alloc(f.resources,sizeof(*owner));f.operation->invocation=owner;
     owner->context=f.projection->context;owner->files=fixture_alloc(f.resources,32*sizeof(*owner->files));
     owner->facts.kind=XR_XIR_INVOCATION_LOCKED_REPLAY_FACTS;owner->facts.completed_runs=6;
-    owner->facts.projection=f.projection->facts;owner->facts.sdk=f.sdk->facts;
+    owner->facts.projection=f.projection->facts;owner->facts.sdk=f.sdk->facts;owner->facts.driver=driver;
     owner->prefix=fixture_alloc(f.resources,8);memcpy(owner->prefix,"fixture",8);owner->facts.projection.prefix=owner->prefix;
-    static const char *const provider[3]={"C:/tools/cl.exe","C:/tools/cl.exe","C:/tools/link.exe"};
+    const char *compiler=driver==XR_XIR_WINDOWS_CLANG_CL?"C:/llvm/clang-cl.exe":"C:/tools/cl.exe";
+    const char *const provider[3]={compiler,compiler,"C:/tools/link.exe"};
     for(unsigned stage=0;stage<3;++stage) {
         XrProcessSpec spec;xtc_process_spec_init(&spec,provider[stage],30000);spec.environment_source=XTC_PROCESS_ENV_EXPLICIT;
         spec.cwd="C:/fixture";spec.output_limit=4096;spec.env_count=3;
         spec.completion_policy=XR_PROC_COMPLETE_ROOT;spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
+        spec.extension_policy=driver==XR_XIR_WINDOWS_CLANG_CL?XR_PROC_EXTENSIONS_DISABLED:XR_PROC_EXTENSIONS_DEFAULT;
         spec.image_observer=(XrProcImageObserver){NULL,fixture_unexpected_image};
         spec.env_keys[0]="SystemRoot";spec.env_keys[1]="TEMP";spec.env_keys[2]="TMP";
         spec.env_values[0]="C:/Windows";spec.env_values[1]="C:/output";spec.env_values[2]="C:/output";
-        unsigned count=stage==0?26:stage==1?27:19;
+        unsigned count=stage<2?(driver==XR_XIR_WINDOWS_CLANG_CL?34u:26u)+stage:19u;
         for(unsigned j=0;j<count;++j)spec.argv[j]=j==0?"distinct-argv0":j==2?"":"argument";
         CHECK(xtc_process_prepare(f.resources,&spec,&owner->process[stage])==XTC_PROCESS_OK);
         CHECK(xtc_process_view(owner->process[stage],&owner->commands[stage])==XTC_PROCESS_OK);
@@ -74,7 +76,8 @@ static AdmissionFixture fixture_new(const char *path) {
         else {for(unsigned j=0;j<5;++j)fixture_row(&f,stage,XR_XIR_INVOCATION_SDK_ARCHIVE,fixture_paths[j]);
             fixture_row(&f,stage,XR_XIR_INVOCATION_CRT,"C:/crt/md.lib");fixture_row(&f,stage,XR_XIR_INVOCATION_SYSTEM,"C:/Windows/system.lib");}
         fixture_row(&f,stage,XR_XIR_INVOCATION_REPORT,"C:/output/report");
-        if(stage!=1)fixture_row(&f,stage,XR_XIR_INVOCATION_PROVIDER_CONFIG,stage?"C:/tools/link.exe.config":"C:/tools/cl.exe.config");
+        if(stage==2 || (stage==0 && driver==XR_XIR_WINDOWS_MSVC))
+            fixture_row(&f,stage,XR_XIR_INVOCATION_PROVIDER_CONFIG,stage?"C:/tools/link.exe.config":"C:/tools/cl.exe.config");
         fixture_row(&f,stage,XR_XIR_INVOCATION_PROVIDER_IMAGE,provider[stage]);
     }
     owner->provider.compiler=(XrXirInvocationProviderImageFacts){provider[0],4,{1},{{19,44,35219,0},{14,44,35219,0},"19.44.35219.0","14.44.35219.0"},0};
@@ -85,6 +88,9 @@ static AdmissionFixture fixture_new(const char *path) {
     InvocationFile *row=&owner->files[owner->facts.file_count-1];row->lease=owner->output_lease;
     row->facts.length=output->length;memcpy(row->facts.digest,output->digest,32);
     return f;
+}
+static AdmissionFixture fixture_new(const char *path) {
+    return fixture_driver(path, XR_XIR_WINDOWS_MSVC);
 }
 static void fixture_free(AdmissionFixture *f) {
     close_operation(&f->operation);xr_compile_native_projection_owner_free(f->projection);xr_xir_runtime_sdk_free(f->sdk);
@@ -101,8 +107,21 @@ static void fixture_failure(AdmissionFixture *f,XtcXirNativeAdmissionStatus expe
     CHECK(status==expected && !artifact);CHECK(xr_compile_resources_stats(f->resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==before.live_bytes);
 }
+static void fixture_driver_binding(const char *path) {
+    AdmissionFixture f=fixture_driver(path,XR_XIR_WINDOWS_CLANG_CL);
+    XrXirNativeArtifact *artifact=NULL;XtcXirNativeAdmissionDiagnostic d;
+    CHECK(fixture_admit(&f,&artifact,&d)==XTC_XIR_ADMISSION_OK && artifact);
+    const XrXirNativeArtifactView *view=xr_compile_native_artifact_view(artifact);
+    CHECK(view && view->input.toolchain.provider==XR_TOOLCHAIN_BINDING_PROVIDER_CLANG);
+    CHECK(f.sdk->facts.build_provider==XR_TOOLCHAIN_BINDING_PROVIDER_MSVC);
+    xr_compile_native_artifact_free(artifact);
+    f.operation->invocation->facts.driver=XR_XIR_WINDOWS_MSVC;
+    fixture_failure(&f,XTC_XIR_ADMISSION_INVALID);fixture_free(&f);
+    f=fixture_new(path);f.operation->invocation->facts.driver=XR_XIR_WINDOWS_CLANG_CL;
+    fixture_failure(&f,XTC_XIR_ADMISSION_INVALID);fixture_free(&f);
+}
 static void fixture_rejections(const char *path) {
-    for(unsigned scenario=0;scenario<18;++scenario) {
+    for(unsigned scenario=0;scenario<19;++scenario) {
         AdmissionFixture f=fixture_new(path);XrXirInvocation *i=f.operation->invocation;
         XtcXirNativeAdmissionStatus expected=XTC_XIR_ADMISSION_MISMATCH;
         switch(scenario){
@@ -124,13 +143,16 @@ static void fixture_rejections(const char *path) {
         case 15:f.sdk->facts.sanitizers=1;i->facts.sdk.sanitizers=1;expected=XTC_XIR_ADMISSION_UNSUPPORTED;break;
         case 16:i->files[2].facts.stage=XR_XIR_INVOCATION_LINK;expected=XTC_XIR_ADMISSION_INVALID;break;
         case 17:i->files[12].facts.kind=XR_XIR_INVOCATION_SYSTEM;expected=XTC_XIR_ADMISSION_INVALID;break;
+        case 18:i->facts.driver=(XrXirWindowsDriver)99;expected=XTC_XIR_ADMISSION_INVALID;break;
         }
         fixture_failure(&f,expected);fixture_free(&f);
     }
     /* Each prepared command must bind both completion and actual image observation. */
-    for(unsigned stage=0;stage<3;++stage)for(unsigned invalid=0;invalid<2;++invalid){
+    for(unsigned stage=0;stage<3;++stage)for(unsigned invalid=0;invalid<3;++invalid){
         AdmissionFixture changed=fixture_new(path);XrProcessView *view=&changed.operation->invocation->commands[stage];
-        if(!invalid)view->completion_policy=XR_PROC_COMPLETE_TREE;else view->image_mode=XR_PROC_IMAGES_NONE;
+        if(!invalid)view->completion_policy=XR_PROC_COMPLETE_TREE;
+        else if(invalid==1)view->image_mode=XR_PROC_IMAGES_NONE;
+        else view->extension_policy=XR_PROC_EXTENSIONS_DISABLED;
         fixture_failure(&changed,XTC_XIR_ADMISSION_INVALID);fixture_free(&changed);
     }
     AdmissionFixture f=fixture_new(path);XrCompileResources *foreign=sdk_ledger(&sdk_unlimited);
@@ -202,7 +224,7 @@ static int admission_unit(const char *path,const char *exported,const char *json
     /* Test actual submitted boundaries, not every integer up to total work. */
     for(size_t c=0;c<recorded;++c){if(c && cuts[c]==cuts[c-1])continue;f=fixture_new(path);
         f.resources->limits.work=f.resources->stats.work+cuts[c]-1;fixture_failure(&f,XTC_XIR_ADMISSION_BUDGET);fixture_free(&f);}
-    fixture_rejections(path);fixture_identities(path);
+    fixture_rejections(path);fixture_identities(path);fixture_driver_binding(path);
     for(unsigned point=1;point<=compare_count;++point)for(unsigned error=0;error<3;++error){f=fixture_new(path);compare_calls=0;compare_fail=point;
         compare_error=error==0?ERROR_ACCESS_DENIED:error==1?ERROR_OUTOFMEMORY:ERROR_NOT_ENOUGH_MEMORY;
         fixture_failure(&f,error?XTC_XIR_ADMISSION_OUT_OF_MEMORY:XTC_XIR_ADMISSION_IO);compare_fail=0;fixture_free(&f);}

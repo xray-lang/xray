@@ -22,7 +22,7 @@ static bool sysroot_error(XrXirTargetSnapshot *snapshot, DWORD error) {
         XR_XIR_TARGET_INVALID : XR_XIR_TARGET_IO;
     return xtc_xir_target_fail(snapshot, status);
 }
-static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input, bool directory) {
+static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input, bool directory, bool traversed) {
     char *text = xtc_xir_target_text(snapshot, input);
     if (!text) return NULL;
     size_t length;
@@ -56,7 +56,9 @@ static wchar_t *sysroot_path(XrXirTargetSnapshot *snapshot, const char *input, b
         wchar_t c = path[i];
         if (!c || c == '\\') {
             size_t part = i - start;
-            if (!part || path[i - 1] == '.' || path[i - 1] == ' ') {
+            bool dot = part == 1 && path[start] == '.';
+            bool parent = part == 2 && path[start] == '.' && path[start + 1] == '.';
+            if (!part || ((path[i - 1] == '.' || path[i - 1] == ' ') && !(traversed && (dot || parent)))) {
                 xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID); return NULL;
             }
             start = i + 1;
@@ -125,13 +127,21 @@ static bool sysroot_equal_id(XrXirTargetSnapshot *snapshot, const XtcXirLock *lo
         xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
 }
 static XtcXirLock *sysroot_lock(XrXirTargetSnapshot *snapshot, const wchar_t *path, size_t length, bool directory) {
-    for (XtcXirLock *p = snapshot->locks; p; p = p->next) {
-        if (!xtc_xir_target_work(snapshot, (length + p->length + 2) * sizeof(wchar_t))) return NULL;
-        bool same=false;
-        if (!sysroot_same_path(snapshot,path,p->path,&same))return NULL;
-        if (!same)continue;
-        if (!directory) xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
-        return directory ? p : NULL;
+    for (XtcXirLock *p = snapshot->locks; p;) {
+        if (!xtc_xir_target_work(snapshot, sizeof(length) + sizeof(p->length))) return NULL;
+        /* Ordinal equality cannot join different UTF-16 extents. Keep the
+         * case-aware OS comparison for every possible cache hit. */
+        if (length == p->length) {
+            if (!xtc_xir_target_work(snapshot, (length + p->length + 2) * sizeof(wchar_t))) return NULL;
+            bool same=false;
+            if (!sysroot_same_path(snapshot,path,p->path,&same))return NULL;
+            if (same) {
+                if (!directory) xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
+                return directory ? p : NULL;
+            }
+        }
+        if (!xtc_xir_target_work(snapshot, sizeof(p->next))) return NULL;
+        p=p->next;
     }
     XtcXirLock *lock = xtc_xir_target_allocate(snapshot, sizeof(*lock) + (length + 1) * sizeof(*path));
     if (!lock) return NULL;
@@ -189,7 +199,7 @@ static bool sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirT
 }
 static bool sysroot_open_path(XrXirTargetSnapshot *snapshot, const char *input, bool directory,
     const char **canonical, XtcXirLock **output) {
-    wchar_t *path = sysroot_path(snapshot, input, directory);
+    wchar_t *path = sysroot_path(snapshot, input, directory, false);
     if (!path) return false;
     size_t length;
     if (!sysroot_length(snapshot, path, &length)) return false;
@@ -211,6 +221,56 @@ static bool sysroot_open_path(XrXirTargetSnapshot *snapshot, const char *input, 
     if (!*canonical) return false;
     *output = lock;
     return true;
+}
+/* Every directory encountered before a parent component remains locked.
+ * Collapsing the spelling first would hide a reparse point or missing prefix. */
+static bool sysroot_open_traversed(XrXirTargetSnapshot *snapshot, const char *input,
+    const char **canonical, XtcXirLock **output) {
+    wchar_t *path = sysroot_path(snapshot, input, false, true);
+    size_t length;
+    if (!path || !sysroot_length(snapshot, path, &length)) return false;
+    wchar_t first = path[7]; path[7] = 0;
+    XtcXirLock *root = sysroot_lock(snapshot, path, 7, true); path[7] = first;
+    if (!root) return false;
+    size_t read = 7, write = 7;
+    while (read < length) {
+        size_t begin = read;
+        while (read < length) {
+            if (!xtc_xir_target_work(snapshot, sizeof(wchar_t))) return false;
+            if (path[read] == '\\') break;
+            ++read;
+        }
+        size_t part = read - begin;
+        bool directory = read < length;
+        bool dot = part == 1 && path[begin] == '.';
+        bool parent = part == 2 && path[begin] == '.' && path[begin + 1] == '.';
+        if (dot || parent) {
+            if (!directory || (parent && write == 7)) return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
+            if (parent) {
+                --write;
+                while (write > 7) {
+                    if (!xtc_xir_target_work(snapshot, sizeof(wchar_t))) return false;
+                    if (path[write - 1] == '\\') break;
+                    --write;
+                }
+            }
+        } else {
+            if (!xtc_xir_target_work(snapshot, 2 * part * sizeof(wchar_t) + sizeof(wchar_t))) return false;
+            memmove(path + write, path + begin, part * sizeof(wchar_t));
+            write += part; path[write] = 0;
+            XtcXirLock *lock = sysroot_lock(snapshot, path, write, directory);
+            if (!lock) return false;
+            if (!directory) {
+                const char *text = sysroot_canonical_text(snapshot);
+                if (!text) return false;
+                *canonical = text; *output = lock; return true;
+            }
+            if (!xtc_xir_target_work(snapshot, sizeof(wchar_t))) return false;
+            path[write++] = '\\';
+        }
+        ++read;
+    }
+    return xtc_xir_target_fail(snapshot, XR_XIR_TARGET_INVALID);
 }
 static bool sysroot_open_file(XrXirTargetSnapshot *snapshot, const XrXirTargetDependency *input,
     XrXirTargetFile *file, XtcXirLock **output) {

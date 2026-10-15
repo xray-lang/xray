@@ -35,3 +35,21 @@ foreach(mode unit preflight native)
         RUN_SERIAL TRUE TIMEOUT 300 COST 3
         LABELS "unit;xir;toolchain;ownership;budget;generated-c")
 endforeach()
+
+find_program(XIR_OPERATION_CLANG NAMES clang-cl)
+if(XIR_OPERATION_CLANG)
+    execute_process(COMMAND "${XIR_OPERATION_CLANG}" --no-default-config /clang:-print-resource-dir
+        OUTPUT_VARIABLE clang_resource OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+    foreach(mode native preflight)
+        if(mode STREQUAL "native")
+            set(binary test_native_operation_owner)
+        else()
+            set(binary test_native_operation_faults)
+        endif()
+        add_test(NAME native_operation_clang_${mode} COMMAND "${XRAY_PYTHON}" -X utf8
+            "${CMAKE_CURRENT_LIST_DIR}/native_operation_owner/test_native_operation_owner.py" $<TARGET_FILE:${binary}> "${PROJECT_SOURCE_DIR}"
+            "${XIR_OPERATION_CLANG}" "${XIR_OPERATION_LINKER}" "${CMAKE_BINARY_DIR}/xir-runtime-sdk" clang-${mode} "${clang_resource}/include")
+        set_tests_properties(native_operation_clang_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 3
+            LABELS "unit;xir;toolchain;ownership;budget;generated-c")
+    endforeach()
+endif()

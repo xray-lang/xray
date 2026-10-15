@@ -49,9 +49,15 @@ typedef struct CommandStorage {
     char source[32768], object[32768], report[32768];
     char object_argument[32768], include[7][32768];
 } CommandStorage;
-static XrToolchainProcess *compile(XrCompileResources *resources, const char *compiler,
-    const char *directory, const char *output_directory, const char *sdk, unsigned stage, CommandStorage *storage,
-    const XrXirMsvcRecipe *recipe) {
+typedef struct CommandInputs {
+    XrCompileResources *resources;
+    const char *compiler, *directory, *output_directory, *sdk;
+    const XrXirMsvcRecipe *recipe;
+} CommandInputs;
+static XrToolchainProcess *compile(const CommandInputs *input, unsigned stage, CommandStorage *storage) {
+    XrCompileResources *resources=input->resources;const char *compiler=input->compiler;
+    const char *directory=input->directory,*output_directory=input->output_directory,*sdk=input->sdk;
+    const XrXirMsvcRecipe *recipe=input->recipe;
     static const char *const fixed[] = {"/nologo", "/std:c11", "/utf-8", "/experimental:c11atomics",
         "/MD", "/O2", "/W4", "/WX", "/DNDEBUG", "/DNOMINMAX", "/DWIN32_LEAN_AND_MEAN", "/D_CRT_SECURE_NO_WARNINGS"};
     CHECK(snprintf(storage->source, sizeof(storage->source), "%s/%s.c", directory, stage ? "launcher" : "generated") > 0);
@@ -89,7 +95,7 @@ static XrToolchainProcess *compile(XrCompileResources *resources, const char *co
 }
 static int run_test(int argc, char **argv) {
     CHECK(argc == 21);
-    XrXirMsvcRecipe recipe = {argv[16], argv[17], argv[18], argv[19], argv[20]};
+    XrXirMsvcRecipe recipe={argv[16],argv[17],argv[18],argv[19],argv[20],XR_XIR_WINDOWS_MSVC,NULL};
     const char *mode = argv[15];
 #ifdef INVOCATION_INJECTED
     if (!strcmp(mode, "positive")) { owner_record_boundaries(argv[2]); owner_image_boundaries(argv[2]); }
@@ -115,7 +121,8 @@ static int run_test(int argc, char **argv) {
     XrXirRuntimeSdk *sdk = NULL; CHECK(xr_xir_runtime_sdk_load(&load, &sdk) == XR_XIR_SDK_OK); free(manifest);
     CommandStorage *commands = calloc(2, sizeof(*commands)); CHECK(commands);
     XrToolchainProcess *processes[3] = {NULL, NULL, NULL};
-    for (unsigned i = 0; i < 2; ++i) processes[i] = compile(resources, argv[5], argv[7], argv[14], xr_xir_runtime_sdk_root(sdk), i, &commands[i], &recipe);
+    CommandInputs inputs={resources,argv[5],argv[7],argv[14],xr_xir_runtime_sdk_root(sdk),&recipe};
+    for (unsigned i = 0; i < 2; ++i) processes[i] = compile(&inputs,i,&commands[i]);
     char output[32768], report[32768], output_argument[32768], report_argument[32768];
     CHECK(snprintf(output, sizeof(output), "%s/program.exe", argv[14]) > 0);
     CHECK(snprintf(report, sizeof(report), "%s/actual.rsp", argv[14]) > 0);
@@ -472,6 +479,7 @@ int main(int argc, char **argv) {
 #ifdef INVOCATION_INJECTED
     if (argc == 4 && !strcmp(argv[1], "--provider-only")) return owner_provider_suite(argv[2], argv[3]);
     if(argc==4&&!strcmp(argv[1],"--provider-image"))return owner_provider_image(argv[2],argv[3]);
+    if(argc==4&&!strcmp(argv[1],"--make-target"))return owner_make_target_suite(argv[2],argv[3]);
 #endif
     if (argc == 2 && !strcmp(argv[1], "--native-control-child")) return 0;
     /* A pure WinAPI child is an explicit control for process-wide lazy state.

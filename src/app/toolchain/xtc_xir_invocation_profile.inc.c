@@ -4,10 +4,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xtc_xir_invocation_profile.inc.c - One derivation of controlled MSVC roots
+ * xtc_xir_invocation_profile.inc.c - Role-specific Windows compiler and SDK roots
  */
 static void invocation_profile_free(InvocationProfile *profile) {
-    for (unsigned i = 0; i < 12; ++i) {
+    for (unsigned i = 0; i < 14; ++i) {
         xtc_xir_file_lease_free(profile->directories[i]);
         xr_compile_resources_free(profile->owned_paths[i]);
 #ifdef XR_OS_WINDOWS
@@ -63,6 +63,13 @@ static bool invocation_profile_configs(XrXirInvocation *owner) {
         owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
         char *path = NULL; void *bytes = NULL; size_t length = 0; XtcXirFileLease *lease = NULL;
         bool okay = invocation_profile_suffix(owner, owner->commands[stage].executable, ".config", &path);
+        if(okay&&!i&&owner->profile.driver==XR_XIR_WINDOWS_CLANG_CL) {
+            XrOsIoStatus status=xr_file_probe_owned(&owner->io,path,false);xr_compile_resources_free(path);
+            if(status==XR_OS_IO_NOT_FOUND)continue;
+            if(status==XR_OS_IO_OK||status==XR_OS_IO_BAD_ARGUMENT||status==XR_OS_IO_UNSUPPORTED)
+                return invocation_fail(owner,XR_XIR_INVOCATION_UNSUPPORTED,XR_XIR_INVOCATION_SELF,0);
+            return invocation_io(owner,status);
+        }
         if (okay) okay = invocation_target(owner, xtc_xir_file_lease_open(owner->context.resources, path, &lease));
         if (okay && xtc_xir_file_lease_facts(lease)->length != sizeof(expected) - 1)
             okay = invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
@@ -81,7 +88,9 @@ static bool invocation_profile_configs(XrXirInvocation *owner) {
 static bool invocation_profile_fields(const XrXirInvocationRequest *request) {
     return request && request->input_directory && request->output_directory &&
         request->msvc.vc_include && request->msvc.ucrt_include && request->msvc.shared_include &&
-        request->msvc.um_include && request->msvc.system_root;
+        request->msvc.um_include && request->msvc.system_root &&
+        ((request->msvc.driver==XR_XIR_WINDOWS_MSVC&&!request->msvc.builtin_include)||
+         (request->msvc.driver==XR_XIR_WINDOWS_CLANG_CL&&request->msvc.builtin_include&&request->msvc.builtin_include[0]));
 }
 #ifdef XR_OS_WINDOWS
 static bool invocation_profile_wide(XrXirInvocation *owner, const char *path,
@@ -108,6 +117,16 @@ static bool invocation_profile_relation(XrXirInvocation *owner, const wchar_t *l
     size_t common = a < b ? a : b;
     if (!common || common > INT_MAX)
         return invocation_fail(owner, XR_XIR_INVOCATION_INVALID, XR_XIR_INVOCATION_SELF, 0);
+    if (common >= 2) {
+        if (!invocation_work(owner, 4 * sizeof(wchar_t) + 1)) return false;
+        wchar_t l=left[0], r=right[0];
+        bool ll=(l>=L'A'&&l<=L'Z')||(l>=L'a'&&l<=L'z');
+        bool rr=(r>=L'A'&&r<=L'Z')||(r>=L'a'&&r<=L'z');
+        /* Proven different local drives need no Unicode prefix comparison. */
+        if (ll && rr && left[1]==L':' && right[1]==L':' && (l|32)!=(r|32)) {
+            *relation=3;return true;
+        }
+    }
     if (!invocation_work(owner, 2 * common * sizeof(wchar_t) + 1)) return false;
     int order = CompareStringOrdinal(left, (int)common, right, (int)common, TRUE);
     if (!order) return invocation_io(owner, io_windows_status(GetLastError()));
@@ -206,7 +225,8 @@ static bool invocation_profile_disjoint(XrXirInvocation *owner, const char *outp
     XtcXirFileLease *lease = NULL; wchar_t *wide = NULL; size_t length = 0;
     bool okay = invocation_target(owner, xtc_xir_file_lease_directory_open(owner->context.resources, output, &lease));
     if (okay) okay = invocation_profile_wide(owner, xtc_xir_file_lease_directory_facts(lease)->path, &wide, &length);
-    for (unsigned i = 0; okay && i < 12; ++i) {
+    for (unsigned i = 0; okay && i < 14; ++i) {
+        if(!owner->profile.paths[i])continue;
         int relation = 0;
         okay = invocation_profile_relation(owner, owner->profile.wide[i], owner->profile.lengths[i], wide, length, &relation);
         if (okay && relation != 3) okay = invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
@@ -234,11 +254,14 @@ static bool invocation_profile_derive(XrXirInvocation *owner, const XrXirInvocat
     char *bin = NULL, *link_bin = NULL, *windows = NULL, *system = NULL;
     bool same = false;
     bool okay = invocation_profile_equal(owner, owner->commands[0].executable, owner->commands[1].executable, &same);
-    if (okay && !same) okay = invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
+    if(okay&&!same)okay=invocation_fail(owner,XR_XIR_INVOCATION_UNSUPPORTED,XR_XIR_INVOCATION_SELF,0);
     if (okay) okay = invocation_io(owner, xr_path_dirname_owned(&owner->io, owner->commands[0].executable, &bin)) &&
         invocation_io(owner, xr_path_dirname_owned(&owner->io, owner->commands[2].executable, &link_bin)) &&
         invocation_profile_root(owner, 8, bin) && invocation_profile_equal(owner, bin, link_bin, &same);
-    if (okay && !same) okay = invocation_fail(owner, XR_XIR_INVOCATION_UNSUPPORTED, XR_XIR_INVOCATION_SELF, 0);
+    if(okay&&!same&&request->msvc.driver==XR_XIR_WINDOWS_MSVC)
+        okay=invocation_fail(owner,XR_XIR_INVOCATION_UNSUPPORTED,XR_XIR_INVOCATION_SELF,0);
+    if(okay&&request->msvc.driver==XR_XIR_WINDOWS_CLANG_CL)
+        okay=invocation_profile_root(owner,12,request->msvc.builtin_include)&&invocation_profile_root(owner,13,link_bin);
     if (okay) okay = invocation_profile_system_path(owner, false, &windows) && invocation_profile_system_path(owner, true, &system) &&
         invocation_profile_root(owner, 9, system) && invocation_profile_join_root(owner, 10, windows, "System") &&
         invocation_profile_root(owner, 11, windows) && invocation_profile_equal(owner, windows, request->msvc.system_root, &same);
@@ -252,12 +275,19 @@ static bool invocation_profile_contains(XrXirInvocation *owner, const char *path
     wchar_t *wide = NULL; size_t length = 0;
     if (!invocation_profile_wide(owner, path, &wide, &length)) return false;
     bool found = false;
-    for (unsigned i = image ? 8 : 0; !found && i < (image ? 12u : 8u); ++i) {
+    for(unsigned i=0;!found&&i<14;++i) {
+        if(!owner->profile.paths[i])continue;
+        if(image) {
+            if(i<8||i==12)continue;
+            if(owner->profile.driver==XR_XIR_WINDOWS_CLANG_CL&&
+                ((i==8&&owner->diagnostic.stage==XR_XIR_INVOCATION_LINK)||
+                 (i==13&&owner->diagnostic.stage!=XR_XIR_INVOCATION_LINK)))continue;
+        } else if(i>=8&&i!=12)continue;
         int relation = 3;
         if (!invocation_profile_relation(owner, owner->profile.wide[i], owner->profile.lengths[i], wide, length, &relation)) break;
         if (relation != 1) continue;
         found = true;
-        if (i >= 9) {
+        if(i>=9&&i<=11) {
             size_t at = owner->profile.lengths[i];
             if (!invocation_work(owner, sizeof(wchar_t))) break;
             if (wide[at] == L'\\') ++at;

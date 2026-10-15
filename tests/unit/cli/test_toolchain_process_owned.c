@@ -88,8 +88,8 @@ static BOOL test_process(LPCWSTR app, LPWSTR command, LPSECURITY_ATTRIBUTES proc
 static BOOL test_job_info(HANDLE job, JOBOBJECTINFOCLASS kind, LPVOID info, DWORD size) {
     if (os_fail()) return FALSE; return SetInformationJobObject(job, kind, info, size);
 }
-static BOOL test_job_assign(HANDLE job, HANDLE process) {
-    if (os_fail()) return FALSE; return AssignProcessToJobObject(job, process);
+static BOOL test_job_member(HANDLE process, HANDLE job, PBOOL member) {
+    if (os_fail()) return FALSE; return IsProcessInJob(process, job, member);
 }
 static DWORD test_resume(HANDLE thread) { if (os_fail()) return (DWORD)-1; return ResumeThread(thread); }
 static BOOL test_attributes(LPPROC_THREAD_ATTRIBUTE_LIST list, DWORD count, DWORD flags, PSIZE_T size) {
@@ -133,7 +133,7 @@ static BOOL test_exit(HANDLE process, LPDWORD code) {
     return GetExitCodeProcess(process, code);
 }
 #define SetInformationJobObject test_job_info
-#define AssignProcessToJobObject test_job_assign
+#define IsProcessInJob test_job_member
 #define ResumeThread test_resume
 #define InitializeProcThreadAttributeList test_attributes
 #define UpdateProcThreadAttribute test_attribute_update
@@ -173,7 +173,7 @@ static DWORD test_wait(HANDLE process, DWORD milliseconds) {
 #undef CreateFileW
 #undef CreateProcessW
 #undef SetInformationJobObject
-#undef AssignProcessToJobObject
+#undef IsProcessInJob
 #undef ResumeThread
 #undef InitializeProcThreadAttributeList
 #undef UpdateProcThreadAttribute
@@ -302,7 +302,7 @@ static void sdk_target_process(const char *root) {
     CHECK(view.env_count == 0 && xtc_process_resources(owner) == r);
     XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_PROVIDER_SUPPORT};
     XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc, NULL, 0,
-        view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy};
+        view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy, (uint32_t)view.extension_policy};
     XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
     CHECK(xtc_xir_target_snapshot_capture(&request, &target) == XR_XIR_TARGET_OK);
     xtc_process_free(owner); owner = NULL; memset(&view, 0xCD, sizeof(view));
@@ -414,7 +414,7 @@ static void hidden_environment(void) {
     for (size_t i = 0; i < view.env_count; ++i)
         environment[i] = (XrXirTargetEnvironment){view.env_keys[i], view.env_values[i]};
     XrXirTargetCommandFacts command = {view.executable, view.cwd, view.argv, (uint32_t)view.argc,
-        environment, (uint32_t)view.env_count, view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy};
+        environment, (uint32_t)view.env_count, view.timeout_ms, view.output_limit, (uint32_t)view.image_mode, (uint32_t)view.completion_policy, (uint32_t)view.extension_policy};
     XrXirTargetDependency dependency = {executable, XR_XIR_TARGET_COMPILER};
     XrXirTargetSnapshotRequest request = {r, "x86_64-windows-msvc", 3, 2, 11, &dependency, 1, &command, 1, NULL};
     XrXirTargetSnapshot *target = NULL;
@@ -586,6 +586,10 @@ static void missing_inputs(void) {
 }
 static void bad_requests(void) {
     XrCompileResources *r = ledger(unlimited); XrToolchainProcess *p = NULL; XrProcessSpec s;
+    spec_init(&s, "--child"); s.extension_policy = (XrProcExtensionPolicy)99;
+    size_t prepare_attempts = attempts;
+    CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_INVALID && !p);
+    CHECK(attempts == prepare_attempts);
     spec_init(&s, "--child"); s.env_keys[0] = "A"; s.env_values[0] = "1"; s.env_keys[1] = "a"; s.env_values[1] = "2"; s.env_count = 2;
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_INVALID && !p);
     spec_init(&s, "--child"); s.executable = "relative.exe";
@@ -619,7 +623,7 @@ static void budgets(void) {
     XrCompileResourceStats stats;
     CHECK(xtc_process_prepare(r, &s, &p) == XTC_PROCESS_OK);
     CHECK(xr_compile_resources_stats(r, &stats) == XR_COMPILE_RESOURCE_OK);
-    uint64_t expected = 2 + sizeof(s.completion_policy) + sizeof(XrToolchainProcess) + 3 * (uint64_t)(strlen(executable) + strlen(directory) + strlen(executable) + strlen("--child")) + 4 * 3;
+    uint64_t expected = 2 + sizeof(s.completion_policy) + sizeof(s.extension_policy) + sizeof(XrToolchainProcess) + 3 * (uint64_t)(strlen(executable) + strlen(directory) + strlen(executable) + strlen("--child")) + 4 * 3;
     CHECK(stats.work == expected);
     xtc_process_free(p); xr_compile_resources_release(r);
     for (unsigned field = 0; field < 3; ++field) for (unsigned less = 0; less < 2; ++less) {

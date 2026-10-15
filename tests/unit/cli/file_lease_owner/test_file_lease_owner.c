@@ -113,6 +113,8 @@ static BOOL lease_read(HANDLE file,LPVOID data,DWORD bytes,LPDWORD count,LPOVERL
 #undef xr_sha256_update
 #endif
 static char input_path[4096],empty_path[4096],child_path[4096];
+static char traversed_path[4096];
+static bool proof_traversed;
 static const char expected[]="same handle\0\xE4\xB8\xAD\xE6\x96\x87\r\n";
 static DWORD handles(void) {DWORD n=0;CHECK(GetProcessHandleCount(GetCurrentProcess(),&n));return n;}
 static void empty(void) {CHECK(!runtime_live&&!runtime_bytes);}
@@ -221,7 +223,8 @@ static XrXirTargetStatus proof_transaction(const XrCompileResourceLimits *limits
     XrXirTargetStatus status=xtc_xir_hash_proof_cache_new(r,8,&cache);
     if(status!=XR_XIR_TARGET_OK)CHECK(!cache);
     if(status==XR_XIR_TARGET_OK) {
-        status=xtc_xir_file_lease_open_with_proof(r,input_path,cache,&first);
+        status=proof_traversed?xtc_xir_file_lease_open_traversed(r,traversed_path,cache,&first):
+            xtc_xir_file_lease_open_with_proof(r,input_path,cache,&first);
         if(status!=XR_XIR_TARGET_OK)CHECK(!first);
     }
     if(status==XR_XIR_TARGET_OK) {
@@ -229,7 +232,8 @@ static XrXirTargetStatus proof_transaction(const XrCompileResourceLimits *limits
         CHECK(xtc_xir_file_lease_facts(first)->length==sizeof(expected)-1);
         CHECK(!memcmp(xtc_xir_file_lease_facts(first)->digest,expected_sha,32));
         xtc_xir_file_lease_free(first);first=NULL;
-        status=xtc_xir_file_lease_open_with_proof(r,input_path,cache,&second);
+        status=proof_traversed?xtc_xir_file_lease_open_traversed(r,traversed_path,cache,&second):
+            xtc_xir_file_lease_open_with_proof(r,input_path,cache,&second);
         if(status!=XR_XIR_TARGET_OK)CHECK(!second);
     }
     if(status==XR_XIR_TARGET_OK) {
@@ -293,6 +297,29 @@ static void proof_mapping(void) {
     CHECK(xtc_xir_file_lease_open_with_proof(r,input_path,cache,&lease)==XR_XIR_TARGET_OK);
     xtc_xir_file_lease_free(lease);xtc_xir_hash_proof_cache_free(cache);xr_compile_resources_release(r);empty();
 }
+static void traversed_guards(const char *root) {
+    XrCompileResources *r=sdk_ledger(&proof_limits);XtcXirHashProofCache *cache=NULL;
+    XtcXirFileLease *file=NULL;char path[4096];
+    CHECK(xtc_xir_hash_proof_cache_new(r,8,&cache)==XR_XIR_TARGET_OK);
+    CHECK(xtc_xir_file_lease_open_with_proof(r,traversed_path,cache,&file)==XR_XIR_TARGET_INVALID&&!file);
+    CHECK(xtc_xir_file_lease_open_traversed(r,traversed_path,cache,&file)==XR_XIR_TARGET_OK);
+    wchar_t child[4096],renamed[4096];
+    CHECK(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,child_path,-1,child,4096));
+    CHECK(swprintf_s(renamed,4096,L"%ls-renamed",child)>0);
+    CHECK(!MoveFileExW(child,renamed,0));
+    CHECK(xtc_xir_file_lease_facts(file)->length==sizeof(expected)-1);
+    xtc_xir_file_lease_free(file);file=NULL;
+    const char *suffixes[]={"missing/../input.bin","input.bin/../input.bin","junction/../input.bin",
+        "child/../input.bin:stream","child/.. /input.bin","child/../input.bin."};
+    for(unsigned i=0;i<sizeof(suffixes)/sizeof(*suffixes);++i) {
+        CHECK(snprintf(path,sizeof(path),"%s/%s",root,suffixes[i])>0);
+        XrXirTargetStatus status=xtc_xir_file_lease_open_traversed(r,path,cache,&file);
+        CHECK(status==(i?XR_XIR_TARGET_INVALID:XR_XIR_TARGET_UNRESOLVED)&&!file);
+    }
+    CHECK(snprintf(path,sizeof(path),"%c:/../input.bin",input_path[0])>0);
+    CHECK(xtc_xir_file_lease_open_traversed(r,path,cache,&file)==XR_XIR_TARGET_INVALID&&!file);
+    xtc_xir_hash_proof_cache_free(cache);xr_compile_resources_release(r);empty();
+}
 static void proof_matrix(void) {
     XrCompileResourceStats baseline,current;DWORD before=handles();
     runtime_attempts=0;boundary_count=0;
@@ -345,6 +372,7 @@ int main(int argc,char **argv) {
     CHECK(snprintf(input_path,sizeof(input_path),"%s/input.bin",argv[1])>0);
     CHECK(snprintf(empty_path,sizeof(empty_path),"%s/empty.bin",argv[1])>0);
     CHECK(snprintf(child_path,sizeof(child_path),"%s/child",argv[1])>0);
+    CHECK(snprintf(traversed_path,sizeof(traversed_path),"%s/./../input.bin",child_path)>0);
     XrCompileResourceStats baseline,current;
 #ifndef LEASE_PRODUCTION
     if(argc==3) {
@@ -384,5 +412,6 @@ int main(int argc,char **argv) {
     short_owned_read();
     printf("IO %zu points x 3 statuses\n",io_count);
 #endif
-    CHECK(handles()==before);printf("OOM %zu allocations; work %zu boundaries; three axes exact/minus1; owned physical heap/handles zero\n",count,boundary_count);poison_alloc=true;proof_matrix();return 0;
+    CHECK(handles()==before);printf("OOM %zu allocations; work %zu boundaries; three axes exact/minus1; owned physical heap/handles zero\n",count,boundary_count);
+    poison_alloc=true;proof_matrix();traversed_guards(argv[1]);proof_traversed=true;proof_matrix();return 0;
 }

@@ -36,6 +36,7 @@ typedef struct XtcXirLocalToolchainRequest {
     const char *compiler, *sdk_root, *workspace_parent;
     uint32_t timeout_ms;
     size_t output_limit, manifest_limit;
+    XrXirWindowsDriver driver;
 } XtcXirLocalToolchainRequest;
 typedef struct XtcXirLocalToolchainView {
     const char *compiler, *linker, *workspace_parent;
@@ -44,7 +45,8 @@ typedef struct XtcXirLocalToolchainView {
     uint32_t library_count;
 } XtcXirLocalToolchainView;
 
-/* Windows x64 MSVC only. NULL paths select automatic discovery; explicit paths
+/* Windows x64 cl or clang-cl with the discovered MSVC SDK/linker. NULL paths
+ * select discovery for the requested driver; explicit paths
  * never fall back. Discovery uses owned child output without modifying the
  * parent environment. SDK admission is real, but these paths do not grant
  * Target or execution authority. All memory and work use the required caller

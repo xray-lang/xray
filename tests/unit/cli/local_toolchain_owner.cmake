@@ -16,10 +16,15 @@ foreach(mode production injected)
         target_compile_options(${target} PRIVATE /experimental:c11atomics)
     endif()
 endforeach()
+find_program(XIR_LOCAL_CLANG NAMES clang-cl)
+set(local_clang_arguments)
+if(XIR_LOCAL_CLANG)
+    list(APPEND local_clang_arguments "${XIR_LOCAL_CLANG}")
+endif()
 add_test(NAME local_toolchain_faults COMMAND test_local_toolchain_injected)
 add_test(NAME local_toolchain_real COMMAND ${XRAY_PYTHON} -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/local_toolchain_owner/test_local_toolchain.py"
     $<TARGET_FILE:test_local_toolchain_production> "${CMAKE_BINARY_DIR}/xir-runtime-sdk"
-    "${XIR_INVOCATION_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/local-toolchain-owner")
+    "${XIR_INVOCATION_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/local-toolchain-owner" ${local_clang_arguments})
 set_tests_properties(local_toolchain_faults local_toolchain_real PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE
     COST 35 LABELS "unit;cli;xir;toolchain;ownership;budget")
