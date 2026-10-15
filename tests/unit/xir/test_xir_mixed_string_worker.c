@@ -21,6 +21,10 @@ static void string_worker_bytes(const XrXirValue *value) {
     CHECK(value->type == XR_XIR_STRING && xr_xir_string_view(value, &bytes, &length));
     CHECK(length == 8 && !memcmp(bytes, "A\0B!tail", 8));
 }
+static void string_worker_expect_pending(const XrXirValue *task) {
+    XrXirCallResult unavailable = {0};
+    CHECK(xr_xir_task_copy_outcome(task, &unavailable) == XR_XIR_CALL_BAD_STATE && xr_xir_call_result_empty(&unavailable));
+}
 static void string_worker_observe(XrXirCallView *view, const XrXirAction *action) {
     if (view->instance != string_worker_instance || !string_worker_pending || string_worker_pending->type ||
         action->kind != XR_XIR_ACTION_AWAIT_TASK) return;
@@ -45,8 +49,7 @@ static void string_worker_capture(XrXirInstance *instance, const WorkerControlCa
         CHECK(xr_xir_instance_poll_bounded(instance, 1).outcome.status == XR_XIR_CALL_READY && ++polls < 32768);
     }
     string_worker_instance = NULL; string_worker_pending = NULL;
-    XrXirCallResult unavailable = {0};
-    CHECK(xr_xir_task_copy_outcome(task, &unavailable) == XR_XIR_CALL_BAD_STATE && xr_xir_call_result_empty(&unavailable));
+    string_worker_expect_pending(task);
 }
 static void string_worker_mode(XrXirProgram *program, const WorkerControlCase *oracle,
     unsigned mode, XrXirValue *task, XrXirValue *returned) {
@@ -104,4 +107,6 @@ static int string_worker_main(int argc, char **argv) {
     printf("Owned string worker backend=%s four pending Task modes, independent8 bytes A-NUL-B!tail, root-only cancel child returns, stop/free child cancels, late alias/copies/root-result after all code owners, lease1, physical0/0\n", worker_backends[backend]);
     return 0;
 }
+#ifndef XR_STRING_WORKER_RESOURCE_MAIN
 int main(int argc, char **argv) { return string_worker_main(argc, argv); }
+#endif

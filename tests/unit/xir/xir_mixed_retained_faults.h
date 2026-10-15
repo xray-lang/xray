@@ -8,8 +8,15 @@
  */
 #ifndef XIR_MIXED_RETAINED_FAULTS_H
 #define XIR_MIXED_RETAINED_FAULTS_H
+typedef struct RetainedFaultOracle {
+    const WorkerControlCase *control;
+    XrXirInstance **observed_instance;
+    XrXirValue **observed_task;
+    void (*expect_pending)(const XrXirValue *task);
+    void (*check_value)(const XrXirValue *value);
+} RetainedFaultOracle;
 typedef struct RetainedFaultRun {
-    const WorkerControlCase *oracle;
+    const RetainedFaultOracle *oracle;
     XrXirInstance *instance;
     XrXirDomain *domain;
     XrXirValue tasks[2];
@@ -32,18 +39,18 @@ static void retained_fault_result(RetainedFaultRun *run, XrXirCallStatus expecte
     CHECK(status == expected);
     if (status == XR_XIR_CALL_RETURNED) {
         XrXirValue value = {0}; CHECK(xr_xir_instance_take_result(run->instance, &value) == XR_XIR_CALL_RETURNED);
-        CHECK(value.type == XR_XIR_I64 && value.payload == 7); xr_xir_value_drop(&value);
+        run->oracle->check_value(&value); xr_xir_value_drop(&value);
     }
 }
 static void retained_fault_round(RetainedFaultRun *run) {
-    XrXirCallStatus status = xr_xir_instance_start(run->instance, *run->oracle->entry, NULL, 0);
+    XrXirCallStatus status = xr_xir_instance_start(run->instance, *run->oracle->control->entry, NULL, 0);
     if (status != XR_XIR_CALL_READY) { CHECK(status == run->fault); run->complete = false; return; }
-    worker_retained_instance = run->instance; worker_retained_target = &run->tasks[run->round];
+    *run->oracle->observed_instance = run->instance; *run->oracle->observed_task = &run->tasks[run->round];
     status = retained_fault_poll(run, true);
-    worker_retained_instance = NULL; worker_retained_target = NULL;
+    *run->oracle->observed_instance = NULL; *run->oracle->observed_task = NULL;
     if (status == run->fault) { run->complete = false; run->driven = true; return; }
     CHECK(status == XR_XIR_CALL_READY && run->tasks[run->round].type);
-    worker_retained_expect_pending(&run->tasks[run->round]);
+    run->oracle->expect_pending(&run->tasks[run->round]);
     unsigned mode = run->round ? run->mode : 0;
     if (mode == 1) CHECK(xr_xir_instance_cancel_current(run->instance) == XR_XIR_CALL_CANCEL_REQUESTED);
     if (mode == 2 || mode == 3) {
@@ -75,16 +82,18 @@ static void retained_fault_copy(RetainedFaultRun *run, unsigned round) {
             CHECK(status == run->fault && xr_xir_value_valid(value)); run->complete = false;
         } else {
             CHECK(status == task->outcome.status && xr_xir_panic_empty(&copied.panic));
-            if (status == XR_XIR_CALL_RETURNED) CHECK(copied.value.type == XR_XIR_I64 && copied.value.payload == 7);
+            if (status == XR_XIR_CALL_RETURNED) run->oracle->check_value(&copied.value);
             else CHECK(!copied.value.type && !copied.value.payload);
         }
         xr_xir_call_result_drop(&copied);
     }
     xr_xir_value_drop(value);
 }
-static bool retained_fault_operation(XrXirProgram *program, const WorkerControlCase *oracle,
+static bool retained_fault_operation(XrXirProgram *program, const RetainedFaultOracle *oracle,
     unsigned mode, const XrXirInstanceConfig *limits, XrXirDomainBudgetStats *cost) {
-    CHECK(mode < 4 && !worker_retained_instance && !worker_retained_target);
+    CHECK(oracle && oracle->control && oracle->expect_pending && oracle->check_value &&
+        oracle->observed_instance && oracle->observed_task && mode < 4);
+    CHECK(!*oracle->observed_instance && !*oracle->observed_task);
     const size_t blocks = runtime_live, bytes = runtime_bytes;
     RetainedFaultRun run = {.oracle=oracle, .fault=limits ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_OOM, .mode=mode};
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -116,7 +125,7 @@ static bool retained_fault_operation(XrXirProgram *program, const WorkerControlC
     CHECK(runtime_live == blocks && runtime_bytes == bytes && !worker_code_releases);
     return run.complete;
 }
-static void retained_fault_axes(XrXirProgram *program, const WorkerControlCase *oracle, unsigned backend, bool fi) {
+static void retained_fault_axes(XrXirProgram *program, const RetainedFaultOracle *oracle, unsigned backend, bool fi) {
     for (unsigned mode = 0; mode < 4; ++mode) {
         XrXirDomainBudgetStats cost = {0}; runtime_attempts = 0; runtime_fail_at = SIZE_MAX;
         CHECK(retained_fault_operation(program, oracle, mode, NULL, &cost));
@@ -135,7 +144,7 @@ static void retained_fault_axes(XrXirProgram *program, const WorkerControlCase *
         }
         runtime_fail_at = SIZE_MAX;
         printf("Retained resources case=%s backend=%s mode=%u gate=%s sites=%zu value=%llu call=%llu work=%llu, twoRounds sameDomain exact/minus1 latecopy physical0/0\n",
-            oracle->name, worker_backends[backend], mode, fi ? "fi" : "axes", sites,
+            oracle->control->name, worker_backends[backend], mode, fi ? "fi" : "axes", sites,
             (unsigned long long)axes[0], (unsigned long long)axes[1], (unsigned long long)axes[2]);
     }
 }

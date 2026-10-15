@@ -9,7 +9,9 @@ add_custom_command(OUTPUT "${XIR_STRING_WORKER_GENERATED}"
     VERBATIM)
 add_executable(test_xir_mixed_string_worker xir/test_xir_mixed_string_worker.c "${XIR_STRING_WORKER_GENERATED}")
 target_link_libraries(test_xir_mixed_string_worker PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(string_worker_target IN ITEMS test_xir_mixed_string_worker_producer test_xir_mixed_string_worker)
+add_executable(test_xir_mixed_string_resources xir/test_xir_mixed_string_resources.c "${XIR_STRING_WORKER_GENERATED}")
+target_link_libraries(test_xir_mixed_string_resources PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(string_worker_target IN ITEMS test_xir_mixed_string_worker_producer test_xir_mixed_string_worker test_xir_mixed_string_resources)
     set_target_properties(${string_worker_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${string_worker_target} PRIVATE /W4 /WX /utf-8)
@@ -21,4 +23,10 @@ foreach(string_worker_backend IN ITEMS 0 1 vm native)
     add_test(NAME test_xir_mixed_string_worker_${string_worker_backend} COMMAND test_xir_mixed_string_worker ${string_worker_backend})
     set_tests_properties(test_xir_mixed_string_worker_${string_worker_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
         LABELS "unit;xir;mixed;root;worker;ownership;generated-c;execution;lifecycle;task;string")
+    foreach(string_worker_gate IN ITEMS axes fi)
+        add_test(NAME test_xir_mixed_string_worker_${string_worker_backend}_${string_worker_gate}
+            COMMAND test_xir_mixed_string_resources ${string_worker_backend} ${string_worker_gate})
+        set_tests_properties(test_xir_mixed_string_worker_${string_worker_backend}_${string_worker_gate} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 1 LABELS "unit;xir;mixed;root;worker;ownership;generated-c;execution;lifecycle;task;string;resources;${string_worker_gate}")
+    endforeach()
 endforeach()
