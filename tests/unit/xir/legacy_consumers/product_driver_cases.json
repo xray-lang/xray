@@ -26323,6 +26323,950 @@
         "Complete original CLI/VM/real C/native against independent bytes.",
         "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
       ]
+    },
+    {
+      "id": "complete_ffi_memory__extern_layout_bytecode_lib",
+      "oracle_id": "complete_ffi_memory__extern_layout_bytecode_lib",
+      "source": "tests/diff/cases/semantics/ffi/_extern_layout_bytecode_lib.xr",
+      "source_lf_sha256": "4bf2dc1f041e4b9debab9b29acaa5cc31a6aaf55f6d884145d24ea5140765c16",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 0,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/_extern_layout_bytecode_lib.xr",
+        "source_lf_sha256": "4bf2dc1f041e4b9debab9b29acaa5cc31a6aaf55f6d884145d24ea5140765c16"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory__native_size_layout_lib",
+      "oracle_id": "complete_ffi_memory__native_size_layout_lib",
+      "source": "tests/diff/cases/semantics/ffi/_native_size_layout_lib.xr",
+      "source_lf_sha256": "c740d4610c26c177c12d2818361315894f26980eaf5a5fe1c7feab2430a5ec00",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 0,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/_native_size_layout_lib.xr",
+        "source_lf_sha256": "c740d4610c26c177c12d2818361315894f26980eaf5a5fe1c7feab2430a5ec00"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_cfn_bsearch",
+      "oracle_id": "complete_ffi_memory_cfn_bsearch",
+      "source": "tests/diff/cases/semantics/ffi/cfn_bsearch.xr",
+      "source_lf_sha256": "edeb5489f7d6a9520dbfcbdd9d98ae7253d49757ce84dfe530a2688b3871c37d",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "false\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/cfn_bsearch.xr",
+        "source_lf_sha256": "edeb5489f7d6a9520dbfcbdd9d98ae7253d49757ce84dfe530a2688b3871c37d"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_cfn_optable",
+      "oracle_id": "complete_ffi_memory_cfn_optable",
+      "source": "tests/diff/cases/semantics/ffi/cfn_optable.xr",
+      "source_lf_sha256": "742e31d96ebb1b929c47acb07946fd7ccc07eaa53f3143e9cb2b801dfc15ce3d",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "sum=30\nf=1 v=10\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 2,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/cfn_optable.xr",
+        "source_lf_sha256": "742e31d96ebb1b929c47acb07946fd7ccc07eaa53f3143e9cb2b801dfc15ce3d"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_cfn_tail_thread",
+      "oracle_id": "complete_ffi_memory_cfn_tail_thread",
+      "source": "tests/diff/cases/semantics/ffi/cfn_tail_thread.xr",
+      "source_lf_sha256": "3b8ec49c2926043ac4daf8ab03e0ea06268c6f8514fbd2995ad51053eee90e33",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "result=42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/cfn_tail_thread.xr",
+        "source_lf_sha256": "3b8ec49c2926043ac4daf8ab03e0ea06268c6f8514fbd2995ad51053eee90e33"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_cfn_visitor_return_once",
+      "oracle_id": "complete_ffi_memory_cfn_visitor_return_once",
+      "source": "tests/diff/cases/semantics/ffi/cfn_visitor_return_once.xr",
+      "source_lf_sha256": "b91c706e3178af15a70dfd460a7bbc2c1dbf84b0499055b1727509a57408add6",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "seen=42\nresult=42\nvisits=1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 3,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/cfn_visitor_return_once.xr",
+        "source_lf_sha256": "b91c706e3178af15a70dfd460a7bbc2c1dbf84b0499055b1727509a57408add6"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_decl_large_layout_control_flow",
+      "oracle_id": "complete_ffi_memory_extern_decl_large_layout_control_flow",
+      "source": "tests/diff/cases/semantics/ffi/extern_decl_large_layout_control_flow.xr",
+      "source_lf_sha256": "94127d2a658f7006df3a39168cadf6e1ae764eb2c74bd2024885b71e8711c25f",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "72\n491\n10\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 3,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_decl_large_layout_control_flow.xr",
+        "source_lf_sha256": "94127d2a658f7006df3a39168cadf6e1ae764eb2c74bd2024885b71e8711c25f"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_decl_registry_matrix",
+      "oracle_id": "complete_ffi_memory_extern_decl_registry_matrix",
+      "source": "tests/diff/cases/semantics/ffi/extern_decl_registry_matrix.xr",
+      "source_lf_sha256": "a850ecc5b8287395cf5bce795d8e06db38e1c54d99e8ab62662594693b2f83cf",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "8\n103\n42\ntrue\nfalse\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 5,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_decl_registry_matrix.xr",
+        "source_lf_sha256": "a850ecc5b8287395cf5bce795d8e06db38e1c54d99e8ab62662594693b2f83cf"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_direct_noescape_pointer",
+      "oracle_id": "complete_ffi_memory_extern_direct_noescape_pointer",
+      "source": "tests/diff/cases/semantics/ffi/extern_direct_noescape_pointer.xr",
+      "source_lf_sha256": "1621d2122b26c1ee3a66bddf18dcb4a46370feda0c619aa2df3182741922080c",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "0\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_direct_noescape_pointer.xr",
+        "source_lf_sha256": "1621d2122b26c1ee3a66bddf18dcb4a46370feda0c619aa2df3182741922080c"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_layout_bytecode_roundtrip",
+      "oracle_id": "complete_ffi_memory_extern_layout_bytecode_roundtrip",
+      "source": "tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr",
+      "source_lf_sha256": "c9952f576205c27c0bf39d80fddbf319bdcc11f034cd9dfb4a6df11eb9d3176e",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "7\n37\n-37\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        },
+        {
+          "path": "tests/diff/cases/semantics/ffi/_extern_layout_bytecode_lib.xr",
+          "lf_sha256": "4bf2dc1f041e4b9debab9b29acaa5cc31a6aaf55f6d884145d24ea5140765c16"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 3,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr",
+        "source_lf_sha256": "c9952f576205c27c0bf39d80fddbf319bdcc11f034cd9dfb4a6df11eb9d3176e"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_layout_introspection",
+      "oracle_id": "complete_ffi_memory_extern_layout_introspection",
+      "source": "tests/diff/cases/semantics/ffi/extern_layout_introspection.xr",
+      "source_lf_sha256": "5f544f03224b91f4694c72d59725d99113c6a7a34e50f628a648ab18c930b017",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "8\n8\n6\n16\n8\n0\n8\n10\n24\n8\n0\n4\n8\n16\n4\n4\n0\n0\n32\n8\n0\n24\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 22,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_layout_introspection.xr",
+        "source_lf_sha256": "5f544f03224b91f4694c72d59725d99113c6a7a34e50f628a648ab18c930b017"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_libm_dylib",
+      "oracle_id": "complete_ffi_memory_extern_libm_dylib",
+      "source": "tests/diff/cases/semantics/ffi/extern_libm_dylib.xr",
+      "source_lf_sha256": "73b7f43d9fd2a865aa18578d2ed676516f22b3cd9da7f15ad3158cd653dd36c9",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1.0\n9.0\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 2,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_libm_dylib.xr",
+        "source_lf_sha256": "73b7f43d9fd2a865aa18578d2ed676516f22b3cd9da7f15ad3158cd653dd36c9"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_pointer_float_prototypes",
+      "oracle_id": "complete_ffi_memory_extern_pointer_float_prototypes",
+      "source": "tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr",
+      "source_lf_sha256": "fc945f3449b63b35f4ef74b466c63f8236bc21e6f6aefaba64c9a5da27258262",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "false\n66\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 3,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_pointer_float_prototypes.xr",
+        "source_lf_sha256": "fc945f3449b63b35f4ef74b466c63f8236bc21e6f6aefaba64c9a5da27258262"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_scalar_descriptor_matrix",
+      "oracle_id": "complete_ffi_memory_extern_scalar_descriptor_matrix",
+      "source": "tests/diff/cases/semantics/ffi/extern_scalar_descriptor_matrix.xr",
+      "source_lf_sha256": "9761eed7879d10017ee2c7ada4878066f00c97a41c7f09ce5a119458fda65ec9",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "3\ntrue\n1234567890123\n23\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 6,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_scalar_descriptor_matrix.xr",
+        "source_lf_sha256": "9761eed7879d10017ee2c7ada4878066f00c97a41c7f09ce5a119458fda65ec9"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_extern_used_dylib_unused_symbol_isolation",
+      "oracle_id": "complete_ffi_memory_extern_used_dylib_unused_symbol_isolation",
+      "source": "tests/diff/cases/semantics/ffi/extern_used_dylib_unused_symbol_isolation.xr",
+      "source_lf_sha256": "08e1f0abca68575c041ae29bfbcff7edbcee8488300b9cb568ca7d2c7903b74d",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "true\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/extern_used_dylib_unused_symbol_isolation.xr",
+        "source_lf_sha256": "08e1f0abca68575c041ae29bfbcff7edbcee8488300b9cb568ca7d2c7903b74d"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_mem_load_store_native_size",
+      "oracle_id": "complete_ffi_memory_mem_load_store_native_size",
+      "source": "tests/diff/cases/semantics/ffi/mem_load_store_native_size.xr",
+      "source_lf_sha256": "0385c27891c68607f1f722f8dd9676930c8a3c4a776763ebac4bb10feb87ad11",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "37\n-37\n91\n-91\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 6,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/mem_load_store_native_size.xr",
+        "source_lf_sha256": "0385c27891c68607f1f722f8dd9676930c8a3c4a776763ebac4bb10feb87ad11"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_mem_view_extern_layout",
+      "oracle_id": "complete_ffi_memory_mem_view_extern_layout",
+      "source": "tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr",
+      "source_lf_sha256": "06ccd9d1c6e6ab2f3de43b65af008e68370be3928d527baa438fb3545682bfc8",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "7\n4100\n91\n91\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr",
+        "source_lf_sha256": "06ccd9d1c6e6ab2f3de43b65af008e68370be3928d527baa438fb3545682bfc8"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_mem_view_extern_layout_native_size",
+      "oracle_id": "complete_ffi_memory_mem_view_extern_layout_native_size",
+      "source": "tests/diff/cases/semantics/ffi/mem_view_extern_layout_native_size.xr",
+      "source_lf_sha256": "546f77db298649653b17b7d5f2a77f99c47c62d830d25737f78e6845a5c85921",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "37\n-37\n91\n-91\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/mem_view_extern_layout_native_size.xr",
+        "source_lf_sha256": "546f77db298649653b17b7d5f2a77f99c47c62d830d25737f78e6845a5c85921"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_mem_view_imported_layout_native_size",
+      "oracle_id": "complete_ffi_memory_mem_view_imported_layout_native_size",
+      "source": "tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr",
+      "source_lf_sha256": "f54de878f96c1f1c325ac13de3158f83e9bf018341f4fd4e93969f69ed4cd29e",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "37\n-37\n91\n-91\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        },
+        {
+          "path": "tests/diff/cases/semantics/ffi/_native_size_layout_lib.xr",
+          "lf_sha256": "c740d4610c26c177c12d2818361315894f26980eaf5a5fe1c7feab2430a5ec00"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr",
+        "source_lf_sha256": "f54de878f96c1f1c325ac13de3158f83e9bf018341f4fd4e93969f69ed4cd29e"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_mem_view_packed_nested_native_size",
+      "oracle_id": "complete_ffi_memory_mem_view_packed_nested_native_size",
+      "source": "tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr",
+      "source_lf_sha256": "fa4e17fc57cf3c639a6795d8090b59328f5a5a2f00ceb9d9b35b56e3899a334a",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "7\n37\n-37\n91\n-91\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 5,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr",
+        "source_lf_sha256": "fa4e17fc57cf3c639a6795d8090b59328f5a5a2f00ceb9d9b35b56e3899a334a"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_mem_with_slice_mut_exception_loan_end",
+      "oracle_id": "complete_ffi_memory_mem_with_slice_mut_exception_loan_end",
+      "source": "tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr",
+      "source_lf_sha256": "95af03d141b69c8d98c578efbfee2b1ee2f4af14f7cd7066d131e0117d91f4cc",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "caught\n9\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 2,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr",
+        "source_lf_sha256": "95af03d141b69c8d98c578efbfee2b1ee2f4af14f7cd7066d131e0117d91f4cc"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_mem_with_slice_mut_extern_layout",
+      "oracle_id": "complete_ffi_memory_mem_with_slice_mut_extern_layout",
+      "source": "tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr",
+      "source_lf_sha256": "53d140e2de9bd052ef349596bb21e0974377330a0ace43892703b98c5ae2b290",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "-73\n73\n-73\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 3,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr",
+        "source_lf_sha256": "53d140e2de9bd052ef349596bb21e0974377330a0ace43892703b98c5ae2b290"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_ptr_memory",
+      "oracle_id": "complete_ffi_memory_ptr_memory",
+      "source": "tests/diff/cases/semantics/ffi/ptr_memory.xr",
+      "source_lf_sha256": "88bfc85a59cbbbdc0600eb80722b76a2d32463012e0c22287d721adaa205a3b9",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "10\n20\n30\n40\n30\nfalse\nfalse\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 7,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/ptr_memory.xr",
+        "source_lf_sha256": "88bfc85a59cbbbdc0600eb80722b76a2d32463012e0c22287d721adaa205a3b9"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_rawptr_copy_nonoverlap_owner",
+      "oracle_id": "complete_ffi_memory_rawptr_copy_nonoverlap_owner",
+      "source": "tests/diff/cases/semantics/ffi/rawptr_copy_nonoverlap_owner.xr",
+      "source_lf_sha256": "042c448f061edcbf5e833d3c4414a3dd85ce3f10c4fba839efb25c029d341f4b",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1\n13437923\n13438180\n13439465\n13439722\n13439979\n13441778\n13442035\n13445633\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 9,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/rawptr_copy_nonoverlap_owner.xr",
+        "source_lf_sha256": "042c448f061edcbf5e833d3c4414a3dd85ce3f10c4fba839efb25c029d341f4b"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_rawptr_static_null",
+      "oracle_id": "complete_ffi_memory_rawptr_static_null",
+      "source": "tests/diff/cases/semantics/ffi/rawptr_static_null.xr",
+      "source_lf_sha256": "3286a62cbce1c11f4b69c89bccfe764516ca8cbba3d01d97567988da565779d3",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "true\ntrue\ntrue\n0\n0\n0\nok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 7,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/rawptr_static_null.xr",
+        "source_lf_sha256": "3286a62cbce1c11f4b69c89bccfe764516ca8cbba3d01d97567988da565779d3"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
+    },
+    {
+      "id": "complete_ffi_memory_unsafe_return_block",
+      "oracle_id": "complete_ffi_memory_unsafe_return_block",
+      "source": "tests/diff/cases/semantics/ffi/unsafe_return_block.xr",
+      "source_lf_sha256": "d86139ee7173bba5fabb4ad2ab837e387b63fb99590785c38b4af9d762f2fb98",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P17"
+      ],
+      "independent_execution_model": "Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/ffi/unsafe_return_block.xr",
+        "source_lf_sha256": "d86139ee7173bba5fabb4ad2ab837e387b63fb99590785c38b4af9d762f2fb98"
+      },
+      "remaining_gates": [
+        "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
+        "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
+      ]
     }
   ]
 }
