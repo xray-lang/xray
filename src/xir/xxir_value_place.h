@@ -27,7 +27,12 @@ XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8(const XrXirValuePlace *
     const char *bytes, size_t length, XrXirValueAdmission *admission);
 typedef enum XrXirValuePathKind {
     XR_XIR_PATH_FIELD,
-    XR_XIR_PATH_INDEX
+    XR_XIR_PATH_INDEX,
+    /* Immutable wrapper selectors are observation facts. Value mutation and
+     * Cell projection do not accept them as writable storage paths. */
+    XR_XIR_PATH_TUPLE_FIELD,
+    XR_XIR_PATH_NULLABLE_VALUE,
+    XR_XIR_PATH_ENUM_FIELD
 } XrXirValuePathKind;
 typedef struct XrXirValuePathStep {
     XrXirValuePathKind kind;

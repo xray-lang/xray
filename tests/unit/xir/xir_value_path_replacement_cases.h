@@ -8,6 +8,7 @@
  */
 #ifndef XIR_VALUE_PATH_REPLACEMENT_CASES_H
 #define XIR_VALUE_PATH_REPLACEMENT_CASES_H
+#include "xir_value_observer_wrapper_cases.h"
 static void value_path_replacement_nested(XrXirValueAdmission *admission,bool boxed,bool resources) {
     XrXirValue root=value_path_root(admission,boxed),output={0},replacement={XR_XIR_I64,0,99};
     XrXirValuePath path={value_path_steps+(boxed ? 1 : 0),boxed ? 3 : 4};XrXirFaultDetail fault={0};
@@ -88,7 +89,7 @@ static void value_path_replacement_cases(bool resources) {
     CHECK(!live);XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     XrXirTypeArena *arena=value_path_arena(domain);XrXirValueAdmission admission={arena,domain,NULL,NULL,100000,65536};
     value_path_replacement_nested(&admission,false,resources);value_path_replacement_nested(&admission,true,resources);
-    xr_xir_compile_type_arena_drop(arena);value_path_replacement_identity(domain);
+    xr_xir_compile_type_arena_drop(arena);value_path_replacement_identity(domain);value_observer_wrapper_cases(domain);
     CHECK(domain->stats.live_bytes==sizeof(*domain));xr_xir_domain_drop(domain);
     CHECK(!live && !value_compile_live && !value_compile_bytes);
     puts("Private path replacements preserve roots and reject identity traversal; physical=0 PASS");

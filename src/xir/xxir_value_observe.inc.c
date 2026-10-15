@@ -27,12 +27,18 @@ static XrXirValueStatus value_observe_child_operation(const XrXirValue *value,co
     const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
     bool indexed=step->kind==XR_XIR_PATH_INDEX && xr_xir_type_is_array(types,(XrXirType)value->type);
     bool field=step->kind==XR_XIR_PATH_FIELD && xr_xir_type_is_struct(types,(XrXirType)value->type);
-    if (!indexed && !field) return XR_XIR_VALUE_BAD_ARGUMENT;
+    bool tuple=step->kind==XR_XIR_PATH_TUPLE_FIELD && xr_xir_tuple_signature(types,(XrXirType)value->type);
+    bool nullable=step->kind==XR_XIR_PATH_NULLABLE_VALUE && xr_xir_type_is_nullable(types,(XrXirType)value->type);
+    bool enumeration=step->kind==XR_XIR_PATH_ENUM_FIELD && xr_xir_type_is_enum(types,(XrXirType)value->type);
+    if (!indexed && !field && !tuple && !nullable && !enumeration) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!value_observe_work(admission,value_observe_header_work(types,(XrXirType)value->type))) return XR_XIR_VALUE_LIMIT;
     if (!xr_xir_value_argument(value,admission->arena,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirArray *array=indexed ? (XirArray *)object_pointer(value) : NULL;
-    XirNominalValue *record=field ? (XirNominalValue *)object_pointer(value) : NULL;
-    uint64_t count=indexed ? array->length : record->count;
+    XirNominalValue *record=field || enumeration ? (XirNominalValue *)object_pointer(value) : NULL;
+    XirTuple *ordered=tuple ? (XirTuple *)object_pointer(value) : NULL;
+    const XrXirValue *payload=NULL;bool some=false;
+    if (nullable && !xr_xir_nullable_view(value,&some,&payload)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    uint64_t count=indexed ? array->length : tuple ? ordered->count : nullable ? (uint64_t)some : record->count;
     if (step->selector<0 || (uint64_t)step->selector>=count) {
         *fault=(XrXirFaultDetail){XR_XIR_PANIC_BOUNDS,0,step->selector,(int64_t)count};return XR_XIR_VALUE_BOUNDS;
     }
@@ -41,7 +47,7 @@ static XrXirValueStatus value_observe_child_operation(const XrXirValue *value,co
         StorageSpan span={array->element,array_slot(array,(size_t)step->selector)};
         return storage_unpack_operation_mode(span,admission,output,true);
     }
-    const XrXirValue *child=&record->fields[step->selector];
+    const XrXirValue *child=tuple ? &ordered->fields[step->selector] : nullable ? payload : &record->fields[step->selector];
     if (!value_observe_work(admission,value_observe_header_work(types,(XrXirType)child->type))) return XR_XIR_VALUE_LIMIT;
     if (!xr_xir_value_argument(child,admission->arena,(XrXirType)child->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     return xr_xir_value_copy(child,output);

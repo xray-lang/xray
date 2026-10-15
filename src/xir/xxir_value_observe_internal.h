@@ -10,7 +10,7 @@
 #define XXIR_VALUE_OBSERVE_INTERNAL_H
 #include "xxir_value_place.h"
 #include "xxir_fault.h"
-/* Read one Array element or Struct field from an already-owned value. The
+/* Read one Array/Struct child or immutable wrapper payload from an owned value. The
  * original family validates its complete storage before materialization.
  * Class handles remain identities in their original Domain; no Domain, place,
  * invocation binding or write permission is returned. All observer work and
