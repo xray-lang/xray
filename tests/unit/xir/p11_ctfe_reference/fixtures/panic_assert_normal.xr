@@ -1,0 +1,2 @@
+fn answer()->i64{try{assertPanics(fn()->Array<string>{return ["owned","array"]},"normal")}catch panic(p){return p.code==445 && p.message=="normal" ? 42 : 0};return 0}
+export fn run()->i64{return comptime answer()}

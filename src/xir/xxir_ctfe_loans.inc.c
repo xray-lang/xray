@@ -13,6 +13,7 @@
 #include "xxir_ctfe_projection_bounds.inc.c"
 static void ctfe_call_frame_free(CtfeCallFrame *frame) {
     xr_xir_value_drop(&frame->returned);
+    xr_xir_panic_drop(&frame->panic);
     while (frame->loan_count) {
         XrXirCellLoan *loan=&frame->loans[--frame->loan_count].loan;
         if (frame->loans_committed) xr_xir_cell_loan_release(loan);else xr_xir_cell_loan_abort(loan);
@@ -55,7 +56,7 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
         XrXirValueAdmission admission=ctfe_value_admission(state);XrXirFaultDetail fault={0};
         XrXirValueStatus status=projected?xr_xir_cell_loan_prepare_path(&value,&state->authority,&admission,&fault,&record->loan):
             xr_xir_cell_loan_prepare(&value,&state->authority,&record->loan);
-        if (status==XR_XIR_VALUE_BOUNDS) return XR_XIR_CTFE_BOUNDS;
+        if (status==XR_XIR_VALUE_BOUNDS) return ctfe_bounds_fault(&frame->run,state,fault);
         if (status!=XR_XIR_VALUE_OK) return ctfe_value_status(status);
         ++frame->loan_count;
     }

@@ -1,0 +1,2 @@
+fn answer()->i64{try{defer{const n=1/0};return 42}catch panic{return 0}}
+export fn run()->i64{return comptime answer()}

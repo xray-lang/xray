@@ -28,6 +28,7 @@ static XrXirCtfeStatus ctfe_cleanup_continue(CtfeCallExecution *execution,XrXirV
     CtfeCallFrame *frame=execution->top;const XrXirFunction *body=frame->run.function;
     if (!scalar_compile_work(&frame->run,64)) return XR_XIR_CTFE_BUDGET;
     if (frame->state.frontier==frame->state.exit_target) {
+        if (frame->exit_kind==CTFE_EXIT_PANIC) return ctfe_panic_continue(execution,done);
         if (frame->exit_kind==CTFE_EXIT_ERROR) return ctfe_error_unwind(execution,done);
         if (frame->exit_kind==CTFE_EXIT_RETURN) {
             *done=!frame->parent;return ctfe_call_return(execution,&frame->returned,output);

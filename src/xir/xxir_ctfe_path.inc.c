@@ -64,7 +64,7 @@ static XrXirCtfeStatus ctfe_index_path_preflight(ScalarRun *run,CtfeOwnedState *
         XrXirValue child={0};XrXirFaultDetail fault={0};
         XrXirValueStatus received=field?xr_xir_struct_get(&current,(uint32_t)path->steps[i].selector,&admission,&child):
             xr_xir_array_get(&current,path->steps[i].selector,&admission,&child,&fault);
-        status=received==XR_XIR_VALUE_BOUNDS?XR_XIR_CTFE_BOUNDS:ctfe_value_status(received);
+        status=received==XR_XIR_VALUE_BOUNDS?ctfe_bounds_fault(run,state,fault):ctfe_value_status(received);
         if (status!=XR_XIR_CTFE_OK) { xr_xir_value_drop(&child);break; }
         if (owned) xr_xir_value_drop(&current);current=child;owned=true;
     }
@@ -87,7 +87,8 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     status=ctfe_validation_work(run,&bounded,root_op->type);if (status!=XR_XIR_CTFE_OK) goto done;
     if (projected) {
         status=ctfe_projection_access_work(run,&bounded,&cell,mutate);if (status!=XR_XIR_CTFE_OK) goto done;
-        XrXirValuePath empty={0};status=ctfe_value_status(xr_xir_cell_authorized_path_read(&cell,&state->authority,&empty,&admission,&root,&fault));
+        XrXirValuePath empty={0};XrXirValueStatus received=xr_xir_cell_authorized_path_read(&cell,&state->authority,&empty,&admission,&root,&fault);
+        status=received==XR_XIR_VALUE_BOUNDS?ctfe_bounds_fault(run,&bounded,fault):ctfe_value_status(received);
         if (status!=XR_XIR_CTFE_OK) goto done;held=true;
     } else {
         status=ctfe_value_status(xr_xir_cell_authorized_place(&cell,&state->authority,&admission,&place));if (status!=XR_XIR_CTFE_OK) goto done;
@@ -128,7 +129,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
         value_status=projected?xr_xir_cell_authorized_path_read(&cell,&state->authority,&path,&admission,&result,&fault):
             xr_xir_value_path_read(&place,&path,&admission,&result,&fault);
     }
-    status=value_status==XR_XIR_VALUE_BOUNDS?XR_XIR_CTFE_BOUNDS:ctfe_value_status(value_status);
+    status=value_status==XR_XIR_VALUE_BOUNDS?ctfe_bounds_fault(run,&bounded,fault):ctfe_value_status(value_status);
     if (status==XR_XIR_CTFE_OK) {
         if (op->type!=XR_XIR_UNIT) {
             uint32_t offset=run->layout->offsets[run->function->parameter_count+vm->instruction];
@@ -139,6 +140,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     }
 done:
     state->tuple_costs=bounded.tuple_costs;
+    state->fault=bounded.fault;
     if (held) xr_xir_value_drop(&root);
     xr_xir_value_drop(&target);xr_xir_value_drop(&result);xr_compile_resources_free((void *)path.steps);return status;
 }

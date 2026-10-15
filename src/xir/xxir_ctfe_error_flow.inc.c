@@ -10,7 +10,7 @@
  *   An error snapshot outlives the throwing child and its cleanup. Parent
  *   authority is restored before delivering the authentic retained enum.
  */
-enum { CTFE_EXIT_NONE,CTFE_EXIT_RETURN,CTFE_EXIT_ERROR,CTFE_EXIT_LOCAL_ERROR };
+enum { CTFE_EXIT_NONE,CTFE_EXIT_RETURN,CTFE_EXIT_ERROR,CTFE_EXIT_LOCAL_ERROR,CTFE_EXIT_PANIC };
 static XrXirCtfeStatus ctfe_frame_edge(CtfeCallExecution *execution,CtfeCallFrame *frame,uint32_t target) {
     const XrXirFunction *body=frame->run.function;
     if (target>=body->block_count) return XR_XIR_CTFE_BAD_ARTIFACT;

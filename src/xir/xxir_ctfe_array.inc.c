@@ -191,7 +191,7 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
         status=ctfe_array_bytes_work(run,state,(XrXirType)receiver.type,(uint64_t)capacity*2+4);if (status!=XR_XIR_CTFE_OK) return status;
         value_status=op->op==XR_XIR_ARRAY_SET?xr_xir_array_set(&place,ctfe_array_operand(run,ids[1]).payload,&element,&admission,&fault):xr_xir_array_push(&place,&element,&admission);
     }
-    status=value_status==XR_XIR_VALUE_BOUNDS?XR_XIR_CTFE_BOUNDS:ctfe_value_status(value_status);
+    status=value_status==XR_XIR_VALUE_BOUNDS?ctfe_bounds_fault(run,state,fault):ctfe_value_status(value_status);
     if (status==XR_XIR_CTFE_OK && op->type!=XR_XIR_UNIT) {
         uint32_t offset=run->layout->offsets[run->function->parameter_count+vm->instruction];
         if (xr_xir_type_is_owned(run->module->types,op->type)) xr_xir_owned_slot_move(run->frame,offset,&result);

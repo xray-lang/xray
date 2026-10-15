@@ -31,6 +31,44 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"panic_projection_recheck", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_abort_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_escape_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_work_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_error_channel", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_invoke", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_pending_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cleanup_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_error_cleanup_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_struct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cell", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_null", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_range", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert_true", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert_panics", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert_normal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_project_bounds", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_path_bounds", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_eval_once", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_return_info", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cleanup_escape", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime panic escaped defer cleanup", 2},
+    {"panic_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime requires an admitted", 2},
+    {"panic_unhandled_assert", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime assertion failed", 2},
+    {"panic_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"panic_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_code", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cross", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_bounds_message", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"error_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"error_cycle_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"error_cycle_acyclic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -631,7 +669,7 @@ static void reference_string(const XrXirCompileContext *context,XrXirSourceResul
     const char *expected=!strcmp(selected->name,"text_bool_false")?"false":!strcmp(selected->name,"text_cell")?"3.5":!strcmp(selected->name,"text_integer")?"-42,7":!strcmp(selected->name,"text_bool")?"true":
         !strcmp(selected->name,"text_rune")?"\0\xf0\x9f\x98\x80":!strcmp(selected->name,"text_float")?"3.5,-0.0":
         !strcmp(selected->name,"array_methods_join")?"a\0b|z":!strcmp(selected->name,"string_nul")?"a\0b":
-        !strcmp(selected->name,"string_empty")?"":"abcd";
+        !strcmp(selected->name,"string_empty")?"":!strcmp(selected->name,"panic_owning")?"ab":"abcd";
     size_t length=(size_t)selected->value;
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
     const XrXirFunction *body=&module->functions[reference_run_function(module)];bool literal=false;
@@ -713,6 +751,8 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_projection_cases.h"
 #include "xir_ctfe_error_cases.h"
 #include "xir_ctfe_error_abort_cases.h"
+#include "xir_ctfe_panic_cases.h"
+#include "xir_ctfe_panic_abort_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -733,6 +773,11 @@ int main(int argc, char **argv) {
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
         if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
+        else if (!strcmp(selected->name,"panic_abort_direct")) reference_panic_abort(&context,&source,false);
+        else if (!strcmp(selected->name,"panic_escape_direct")) reference_panic_abort(&context,&source,true);
+        else if (!strcmp(selected->name,"panic_work_direct")) reference_panic_work(&context,&source);
+        else if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_owning(&context,&source);
+        else if (!strcmp(selected->name,"panic_direct")) reference_panic_direct(&context,&source);
         else if (!strcmp(selected->name,"error_cycle_direct")) reference_function_cycle(&context,&source);
         else if (!strcmp(selected->name,"error_work_direct")) reference_error_work(&context,&source);
         else if (!strcmp(selected->name,"error_abort_direct")) reference_error_abort(&context,&source);
@@ -796,6 +841,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
     if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();
+    if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_last_owner();
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();

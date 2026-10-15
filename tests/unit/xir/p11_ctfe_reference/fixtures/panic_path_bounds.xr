@@ -1,0 +1,2 @@
+fn answer()->i64{var xs=[[40]];try{xs[0][3]=1}catch panic(p){return p.code==430 && p.message=="array index out of range: 3 (length 1)" && xs[0][0]==40 ? 42 : 0};return 0}
+export fn run()->i64{return comptime answer()}
