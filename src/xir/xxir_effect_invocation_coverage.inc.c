@@ -380,11 +380,10 @@ static XrXirStatus effect_invocation_coverage_verify_read(const EffectInvocation
         if (owner->final->nodes[n].body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus zero=effect_invocation_parameter_zero_shape(owner,request,n);
         if (zero!=XR_XIR_OK) return zero;
-        EffectBodyFunctionHead head={0};
-        XrXirStatus head_status=effect_body_request_head(request,owner->final->nodes[n].body,&head);
+        EffectBodyFunctionDimensions dimensions={0};
+        XrXirStatus head_status=effect_body_request_dimensions(request,owner->final->nodes[n].body,&dimensions);
         if (head_status!=XR_XIR_OK) return head_status;
-        const EffectBodyFunctionHead *function=&head;
-        uint64_t vertices=(uint64_t)function->parameter_count+function->instruction_count+1;
+        uint64_t vertices=(uint64_t)dimensions.parameter_count+dimensions.instruction_count+1;
         if (vertices>UINT64_MAX-maximum) return XR_XIR_BUDGET;
         maximum+=vertices;
     }
