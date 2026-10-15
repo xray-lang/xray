@@ -9,7 +9,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'spec/source/sections/015-14-built-in-type-methods.md': '2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b',
  'stdlib/types/array.xr': 'ac31595b3801ee1df3c3f3ab6f1903c5f66ef084f0fa016dc19d24a2fa653223',
  'stdlib/types/channel.xr': 'ff2be02bcc28be44f7927b746d316eec7fef4e815f2693207ef07176bbbf1284',
- 'stdlib/types/map.xr': 'd03fcc7b6b98019f566ed20639d3485a8618ea55fd0acabc66841d2b6cb4bb75',
+ 'stdlib/types/map.xr': '49c5f1ddd6d0addab7608d918bbb627e655219ca66d10154cab7b05773488f31',
  'tests/regression/11_coroutine/1155_channel_close_timeout_fanout.xr': 'c15c09543cd1fb97e2cdc35bc36e2ba73a3f44f3e3ec14d7ad8c24977a4c1271',
  'tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr': '18380493799fc52aac015153c997f5dee397092e925cb9fab17ff18b10de3444',
  'tests/regression/11_coroutine/1167_channel_explicit_transfer.xr': 'cb4717b562b6a32c87949a110840374e738fbeae700089e67f2e610416acfd03',

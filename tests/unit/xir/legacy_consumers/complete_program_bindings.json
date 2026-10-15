@@ -598,7 +598,7 @@
     },
     {
       "path": "stdlib/types/map.xr",
-      "lf_sha256": "d03fcc7b6b98019f566ed20639d3485a8618ea55fd0acabc66841d2b6cb4bb75"
+      "lf_sha256": "49c5f1ddd6d0addab7608d918bbb627e655219ca66d10154cab7b05773488f31"
     },
     {
       "path": "stdlib/types/panic_info.xr",
