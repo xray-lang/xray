@@ -1,0 +1,17 @@
+fn edit(values:ref Array<i64>)->i64 {
+    const before:Array<i64>=values
+    const incoming:Array<i64>=[100,13]
+    const right:i64=17
+    return values[0]+values[1]+before[0]+incoming[1]
+}
+class ChildArrayBox {
+    values:Array<i64>
+    constructor() { this.values=[11,13] }
+}
+fn worker()->i64 {
+    const box:ChildArrayBox=ChildArrayBox()
+    const result:i64=edit(ref box.values)
+    return result+box.values[0]+box.values[1]
+}
+const job=go worker()
+print(await job)

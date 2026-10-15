@@ -72,7 +72,7 @@ static XrXirValueStatus debug_write_replacement(XrXirVmDebug *debug,const XirVmD
             node->nominal.declaration,(uint32_t)step->selector,XR_XIR_NOMINAL_WRITE);
         if (allowed!=XR_XIR_OK) return allowed==XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
     }
-    XrXirValue root={0};XrXirValueStatus status=debug_write_status(xr_xir_instance_cell_read(point->view,cell,&root));
+    XrXirValue root={0};XrXirValueStatus status=debug_write_status(xir_instance_observe_cell(point->view,cell,&root));
     XrXirFaultDetail fault={0};XrXirValuePath path={debug->write.steps,debug->write.count};
     if (status==XR_XIR_VALUE_OK) status=xir_value_path_replacement(&root,&path,&debug->write.value,admission,output,&fault);
     xr_xir_value_drop(&root);return status;
@@ -103,7 +103,7 @@ static XrXirValueStatus debug_write_apply(XrXirVmDebug *debug,const XirVmDebugPo
     if (!identity && !typed_cell) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue replacement={0};DebugClassWrite class_write={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
     if (identity) {
-        XrXirValue root={0};status=typed_cell ? debug_write_status(xr_xir_instance_cell_read(point->view,&cell,&root)) : xr_xir_value_copy(&cell,&root);
+        XrXirValue root={0};status=typed_cell ? debug_write_status(xir_instance_observe_cell(point->view,&cell,&root)) : xr_xir_value_copy(&cell,&root);
         if (status==XR_XIR_VALUE_OK) status=debug_class_write_prepare(debug,point->view,live->point.binding->function,&root,boundary,&class_write);
         xr_xir_value_drop(&root);
     } else {
@@ -124,7 +124,7 @@ static XrXirValueStatus debug_write_apply(XrXirVmDebug *debug,const XirVmDebugPo
         if (identity) {
             XrXirFaultDetail fault={0};
             status=xr_xir_class_authorized_path_write(&class_write.root,&class_write.access.authority,&field,&class_write.candidate,admission,&fault);
-        } else status=debug_write_status(xr_xir_instance_cell_write(point->view,&cell,&replacement));
+        } else status=debug_write_status(xir_instance_debug_cell_write(point->view,&cell,&replacement));
     }
     debug_class_write_drop(&class_write);
     xr_xir_value_drop(&replacement);

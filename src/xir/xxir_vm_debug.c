@@ -410,7 +410,7 @@ static XrXirValueStatus copy_frame_values(XrXirVmDebug *debug, const DebugFrame 
         frame->known[i] = 1;
         if (xr_xir_type_is_cell(module->types, type)) {
             XrXirValue observed = {0};
-            XrXirCallStatus read = xr_xir_instance_cell_read(view, &value, &observed);
+            XrXirCallStatus read = xir_instance_observe_cell(view, &value, &observed);
             /* A bounds result has already passed the genuine loan check. */
             if (read == XR_XIR_CALL_BOUNDS) { frame->known[i]|=4;continue; }
             if (read == XR_XIR_CALL_BAD_ARGUMENT || read == XR_XIR_CALL_BAD_STATE) continue;

@@ -474,7 +474,8 @@ target_compile_definitions(test_dap_ref_write PRIVATE XR_DAP_STDLIB="${PROJECT_S
     XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
     XR_DAP_THREADS_FIXTURE="${XR_DAP_FIXTURE_DIR}/threads_fixture.xr" XR_DAP_ORIGIN_FIXTURE="${XR_DAP_FIXTURE_DIR}/write_projection.xr"
     XR_DAP_CHILD_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/child_write.xr" XR_DAP_REF_CLASS_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_class.xr"
-    XR_DAP_REF_VALUES_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_values.xr" XR_DAP_REF_WHOLE_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_whole.xr")
+    XR_DAP_REF_VALUES_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_values.xr" XR_DAP_REF_WHOLE_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_whole.xr"
+    XR_DAP_REF_CHILD_SCALAR_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_child_scalar.xr" XR_DAP_REF_CHILD_ARRAY_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_child_array.xr")
 if(MSVC)
     target_compile_options(test_dap_ref_write PRIVATE /W4 /WX)
 else()

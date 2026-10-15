@@ -130,6 +130,52 @@ static void ref_whole_aliases(void) {
     CHECK(found==6);xr_xir_value_drop(&cell);write_dispose(&fixture);
     printf("Whole-root loan: actual readable descendant aliases=%u, bounds unavailable then restored100, physical=0/0 PASS\n",count);
 }
+static size_t ref_child_case(bool array,size_t fail) {
+    const char *file=array ? XR_DAP_REF_CHILD_ARRAY_FIXTURE : XR_DAP_REF_CHILD_SCALAR_FIXTURE;
+    const char *name=array ? "values" : "value";WriteFixture fixture=write_open(file);XdapAdapter *adapter=fixture.adapter;char message[2048];
+    snprintf(message,sizeof(message),"{\"seq\":3,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"%s\"},\"breakpoints\":[{\"line\":%u}]}}",file,array ? 5 : 4);
+    request(adapter,message);request(adapter,"{\"seq\":4,\"type\":\"request\",\"command\":\"configurationDone\"}");
+    CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && adapter->snapshot && !adapter->running);capture.count=0;
+    XdapLexicalView lexical={0};CHECK(xdap_lexical_open(adapter->launch,adapter->snapshot,0,&lexical)==XR_XIR_OK);uint32_t operand=UINT32_MAX;
+    for (uint32_t b=lexical.environment;b;b=lexical.function->bindings[b-1].parent) {
+        const XrXirSourceDebugBinding *binding=&lexical.function->bindings[b-1];
+        if (!strcmp(lexical.source->declarations[binding->declaration-1].name,name)) { CHECK(binding->flags&XR_XIR_SOURCE_DEBUG_CELL);operand=binding->value;break; }
+    }
+    CHECK(operand!=UINT32_MAX);XrXirVmDebugSnapshot *old=NULL;CHECK(xdap_current_snapshot(adapter->launch->control,&old)==XR_XIR_VALUE_OK);
+    XrXirValue prior={0},cell={0};CHECK(xr_xir_vm_debug_snapshot_cell_value(old,0,operand,&prior)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_vm_debug_snapshot_value(old,0,operand,&cell)==XR_XIR_VALUE_OK && xr_xir_cell_is_projection(&cell));
+    if (array) ref_numbers(&prior,fixture.domain,11,13);else CHECK(prior.type==XR_XIR_I64 && prior.payload==11);
+    XrXirVmDebugFrameInfo frame=write_frame(old);CHECK(frame.thread!=1);uint64_t epoch=adapter->stop_epoch;
+    uint32_t scope=adapter->frames[0].scope;origin_message(message,sizeof(message),scope);request(adapter,message);
+    XrJsonValue *reply=last_response("variables",true),*variables=xjson_get_array(xjson_get_object(reply,"body"),"variables");bool visible=false;
+    for (int i=0;i<xjson_array_len(variables);++i) if (!strcmp(xjson_get_string(xjson_array_get(variables,i),"name"),name)) visible=true;
+    CHECK(visible);xjson_free(reply);capture.count=0;
+    size_t length=child_message(message,sizeof(message),scope,name,"incoming");uint32_t refs=adapter->value_count,next=adapter->next_handle;
+    size_t blocks=runtime_live,bytes=runtime_bytes,begin=runtime_attempts;runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;
+    XrXirStatus status=xdap_adapter_request(adapter,message,length);size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
+    if (fail==SIZE_MAX) {
+        CHECK(status==XR_XIR_OK && adapter->stop_epoch==epoch+1);reply=last_response("setVariable",true);
+        uint32_t returned=(uint32_t)xjson_get_int(xjson_get_object(reply,"body"),"variablesReference");xjson_free(reply);capture.count=0;
+        if (array) CHECK(returned && !child_set(adapter,returned,"[1]","right",true));else CHECK(!returned);
+        XrXirVmDebugFrameInfo same=write_frame(adapter->snapshot);CHECK(same.id==frame.id && same.instruction==frame.instruction && same.thread==frame.thread);
+    } else {
+        CHECK(status==XR_XIR_OUT_OF_MEMORY && sites>fail && adapter->snapshot==old && adapter->stop_epoch==epoch);
+        CHECK(runtime_live==blocks && runtime_bytes==bytes && adapter->value_count==refs && adapter->next_handle==next);
+    }
+    snprintf(message,sizeof(message),"{\"seq\":8,\"type\":\"request\",\"command\":\"continue\",\"arguments\":{\"threadId\":%llu}}",(unsigned long long)frame.thread);request(adapter,message);capture.count=0;
+    CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && adapter->terminal);uint32_t outputs=0;
+    const char *expected=array ? (fail==SIZE_MAX ? "258\n" : "72\n") : (fail==SIZE_MAX ? "311\n" : "44\n");
+    for (uint32_t i=0;i<capture.count;++i) {
+        reply=xjson_parse(capture.messages[i].bytes,capture.messages[i].size);const char *event=xjson_get_string(reply,"event");
+        if (event && !strcmp(event,"output")) { CHECK(!outputs++ && !strcmp(xjson_get_string(xjson_get_object(reply,"body"),"output"),expected)); }xjson_free(reply);
+    }
+    XrXirCallStatus freed=xdap_adapter_free(adapter);
+    if (outputs!=1 || freed!=XR_XIR_CALL_READY) fprintf(stderr,"Child ref end: array=%u fail=%zu outputs=%u free=%u\n",array,fail,outputs,(unsigned)freed);
+    CHECK(outputs==1 && freed==XR_XIR_CALL_READY);
+    if (array) ref_numbers(&prior,fixture.domain,11,13);else CHECK(prior.payload==11);
+    XrXirValuePath facts={0};CHECK(xir_cell_path_view(&cell,&facts)==XR_XIR_VALUE_OK && facts.count==1);
+    xr_xir_value_drop(&prior);xr_xir_value_drop(&cell);xr_xir_vm_debug_snapshot_drop(old);write_finish(&fixture);return sites;
+}
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     ref_whole_aliases();
@@ -137,6 +183,11 @@ int main(int argc,char **argv) {
         size_t sites=ref_case(kind!=0,SIZE_MAX);CHECK(sites);
         for (size_t i=0;i<sites;++i) if (resources || !i || i==sites-1) ref_case(kind!=0,i);
         printf("Actual projected ref write: class=%u sites=%zu injection=%s old11/current100-17/caller-denied/owned=0 PASS\n",kind,sites,resources ? "ALL" : "FIRST_LAST_ONLY");
+    }
+    for (uint32_t array=0;array<2;++array) {
+        size_t sites=ref_child_case(array!=0,SIZE_MAX);CHECK(sites);
+        for (size_t i=0;i<sites;++i) if (resources || !i || i==sites-1) ref_child_case(array!=0,i);
+        printf("Real child Class ref: array=%u sites=%zu injection=%s visible/caller-proof/old11/output311-258/physical0 PASS\n",array,sites,resources ? "ALL" : "FIRST_LAST_ONLY");
     }
     return 0;
 }
