@@ -115,7 +115,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
         (module->generics && (module->generics[selected].parameter_count ||
         module->generics[selected].argument_count)) )
         return XR_XIR_CTFE_NOT_LEAF;
-    XrXirCtfeStatus admitted=ctfe_body_type_admit(artifact,body->result,false);
+    XrXirCtfeStatus admitted=ctfe_body_type_admit(artifact,body->result,false,NULL);
     if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
     for (uint32_t m = 0; m < module->declarations->module_count; ++m) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
@@ -124,7 +124,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
         if (xr_xir_type_is_cell(module->types,body->parameters[p])) return XR_XIR_CTFE_NOT_LEAF;
-        admitted=ctfe_body_type_admit(artifact,body->parameters[p],true);
+        admitted=ctfe_body_type_admit(artifact,body->parameters[p],true,NULL);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
     }
     for (uint32_t b = 0; b < body->block_count; ++b) {
@@ -137,7 +137,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
         const XrXirInstruction *op = &body->instructions[i]; uint64_t work;
         if (ctfe_class_operation(op->op) || ctfe_error_operation(op->op) || ctfe_panic_operation(op->op) || op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_CLEANUP_LEAVE || op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_FUNCTION_WEAKEN || op->op==XR_XIR_CALL_INDIRECT ||
             !ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
-        admitted=ctfe_tuple_instruction_admit(artifact,body,op);
+        admitted=ctfe_tuple_instruction_admit(artifact,body,op,NULL);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
         bool unit = ctfe_unit_result(op->op) || ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_NULLABLE_UNWRAP) && op->type == XR_XIR_UNIT);
         if (!ctfe_storage_instruction(module, body, op) || (unit && op->type != XR_XIR_UNIT) ||

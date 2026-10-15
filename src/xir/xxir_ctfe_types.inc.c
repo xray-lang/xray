@@ -135,6 +135,28 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
 done:
     xr_compile_resources_free(memory);return status;
 }
+/* Numeric shapes belong only to this synchronous reachable-body scan. Every
+ * request verifies its complete Artifact, bodies and permissions afresh; these
+ * immutable metadata costs never authorize a Value, call or external export. */
+static XrXirCtfeStatus ctfe_internal_type_summary(const XrXirArtifact *artifact,
+    XrXirType type,XrXirCtfeTypeShape **summaries,XrXirCtfeTypeShape *output) {
+    const XrXirTypes *types=artifact->module.types;
+    if (!summaries || !ctfe_execution_node(types,type,true))
+        return ctfe_type_info(&artifact->context,types,type,true,output);
+    if (!xir_compile_work(&artifact->context,sizeof(*output)+2)) return XR_XIR_CTFE_BUDGET;
+    if (!*summaries) {
+        void *memory=NULL;
+        XrXirCtfeStatus status=ctfe_compile_status(xir_compile_resource_status(
+            xr_compile_resources_calloc(artifact->context.resources,types->count,sizeof(**summaries),&memory)));
+        if (status!=XR_XIR_CTFE_OK) return status;
+        *summaries=memory;
+    }
+    uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
+    if ((*summaries)[index].work) { *output=(*summaries)[index];return XR_XIR_CTFE_OK; }
+    XrXirCtfeStatus status=ctfe_type_info(&artifact->context,types,type,true,output);
+    if (status==XR_XIR_CTFE_OK) (*summaries)[index]=*output;
+    return status;
+}
 static XrXirCtfeStatus ctfe_equal_admit(const XrXirArtifact *artifact,XrXirType type) {
     for (;;) {
         if (!xir_compile_work(&artifact->context,2)) return XR_XIR_CTFE_BUDGET;
@@ -154,13 +176,13 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_shape(const XrXirCompileContext
     XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(context,types,type,false,&shape);
     if (status==XR_XIR_CTFE_OK) *output=shape;return status;
 }
-static XrXirCtfeStatus ctfe_body_type_admit(const XrXirArtifact *artifact,XrXirType type,bool parameter) {
+static XrXirCtfeStatus ctfe_body_type_admit(const XrXirArtifact *artifact,XrXirType type,bool parameter,XrXirCtfeTypeShape **summaries) {
     if (parameter && type==XR_XIR_UNIT) return XR_XIR_CTFE_NOT_SUPPORTED;
     if (parameter && xr_xir_type_is_cell(artifact->module.types,type)) type=xr_xir_cell_element(artifact->module.types,type);
-    XrXirCtfeTypeShape shape={0};return ctfe_type_info(&artifact->context,artifact->module.types,type,true,&shape);
+    XrXirCtfeTypeShape shape={0};return ctfe_internal_type_summary(artifact,type,summaries,&shape);
 }
 static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifact,
-    const XrXirFunction *body,const XrXirInstruction *op) {
+    const XrXirFunction *body,const XrXirInstruction *op,XrXirCtfeTypeShape **summaries) {
     if (op->op==XR_XIR_TO_STRING && !ctfe_scalar_type(xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
     bool array_receiver=op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_LEN || op->op==XR_XIR_ARRAY_CAPACITY ||
         op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_ARRAY_RESERVE ||
@@ -178,7 +200,7 @@ static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifac
             root=body->instructions[root-body->parameter_count].args[0];
         }
         if (depth && xr_xir_place_kind(body,root)!=XR_XIR_PLACE_CELL && xr_xir_place_kind(body,root)!=XR_XIR_PLACE_OBJECT) return XR_XIR_CTFE_NOT_SUPPORTED;
-        XrXirCtfeStatus receiver=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,ids[0]),false);
+        XrXirCtfeStatus receiver=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,ids[0]),false,summaries);
         if (receiver!=XR_XIR_CTFE_OK) return receiver;
     }
     if (op->op==XR_XIR_CELL_PLACE && !xr_xir_type_is_cell(artifact->module.types,xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
@@ -188,10 +210,10 @@ static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifac
         type=xr_xir_operand_type(body,op->args[0]);
     if (xr_xir_type_is_cell(artifact->module.types,type))
         type=xr_xir_cell_element(artifact->module.types,type);
-    XrXirCtfeStatus status=ctfe_body_type_admit(artifact,type,false);
+    XrXirCtfeStatus status=ctfe_body_type_admit(artifact,type,false,summaries);
     if (status==XR_XIR_CTFE_OK && (op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_IS_SOME || op->op==XR_XIR_NULLABLE_UNWRAP ||
         op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_CLASS_SET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_TAG || op->op==XR_XIR_ENUM_GET))
-        status=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,op->args[0]),false);
+        status=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,op->args[0]),false,summaries);
     return status;
 }
 static XrXirCtfeStatus ctfe_tuple_scratch(const XrXirArtifact *artifact,uint32_t function,uint64_t *bytes) {
