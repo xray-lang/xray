@@ -47,7 +47,8 @@ foreach(target IN LISTS source_sdk_targets)
     endforeach()
     set_target_properties(${archive_target} PROPERTIES OUTPUT_NAME ${target}
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/source-sdk-archives"
-        MSVC_RUNTIME_LIBRARY MultiThreadedDLL C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+        MSVC_RUNTIME_LIBRARY MultiThreadedDLL C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
+        EXPORT_COMPILE_COMMANDS ON)
     list(APPEND source_sdk_archive_targets ${archive_target})
 endforeach()
 set(XRAY_SOURCE_SDK_ARCHIVE_TARGETS "${source_sdk_archive_targets}")
