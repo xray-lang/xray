@@ -35,3 +35,20 @@ static bool source_native_read_arguments(SourceContext *ctx,AstNode *node,
     *supplied=(uint32_t)syntax.arg_count;
     return true;
 }
+static bool source_native_variadic_read_arguments(SourceContext *ctx,AstNode *node,
+    XrXirType parameter,SourceValue **values,uint32_t *supplied,const char *diagnostic) {
+    if (!values || !supplied || xr_xir_type_is_cell(&ctx->types,parameter))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"native variadic READ parameter is inconsistent");
+    SourceCallSyntax syntax;
+    if (!source_call_syntax(ctx,node,&syntax)) return false;
+    if (syntax.type_arg_count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,diagnostic);
+    SourceCallPlan plan={SOURCE_CALL_VARIADIC_READ,{0},{0},&parameter,NULL,XR_XIR_UNIT,
+        {0},NULL,0,0,NULL};
+    if (!source_call_expand(ctx,node,&syntax,&plan,65536)) return false;
+    uint32_t count=(uint32_t)syntax.arg_count;
+    plan.values=count ? source_recipe_storage(ctx,count,sizeof(*plan.values)) : NULL;
+    if (count && !plan.values) return false;
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+    *values=plan.values;*supplied=count;
+    return true;
+}

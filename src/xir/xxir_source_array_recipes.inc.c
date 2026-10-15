@@ -451,27 +451,14 @@ static bool source_array_append_snapshot(SourceContext *ctx, AstNode *node,
 static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
     const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < 0 ||
-        (call->arg_count && !call->arguments))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat takes ordinary trailing Array arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat arguments use ordinary READ values");
     SourceValue receiver;
     if (evaluated) receiver = *evaluated;
     else if (!expression(ctx, call->callee->as.member_access.object, &receiver)) return false;
     if (!xr_xir_type_is_array(&ctx->types, receiver.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat receiver is not an Array");
-    const uint32_t count = (uint32_t)call->arg_count + 1;
-    SourceValue *arrays = source_recipe_storage(ctx, count, sizeof(*arrays));
-    if (!arrays) return false;
-    arrays[0] = receiver;
-    for (uint32_t i = 1; i < count; ++i) {
-        if (!source_plan_expression(ctx, call->arguments[i - 1],
-                (SourceExpectedType){true, receiver.type, false, false}, &arrays[i])) return false;
-        if (arrays[i].type != receiver.type)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat argument type differs from its receiver");
-    }
+    uint32_t count=0;SourceValue *arrays=NULL;
+    if (!source_native_variadic_read_arguments(ctx,node,receiver.type,&arrays,&count,
+        "Array concat takes ordinary trailing Array arguments")) return false;
     XrXirType cell_type;
     SourceValue seed, store, candidate, zero;
     if (!source_cell_type(ctx, receiver.type, &cell_type) ||
@@ -479,6 +466,7 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_NEW, cell_type, {seed.id}, {0}, 0, {0}}, &store) ||
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_PLACE, receiver.type, {store.id}, {0}, 0, {0}}, &candidate) ||
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;
+    if (!source_array_append_snapshot(ctx,node,candidate,receiver,zero)) return false;
     for (uint32_t i = 0; i < count; ++i) {
         if (!source_array_append_snapshot(ctx,node,candidate,arrays[i],zero)) return false;
     }

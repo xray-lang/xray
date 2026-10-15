@@ -28,6 +28,7 @@ typedef struct SourceCallExpansion {
     SourceCallEntry *entries;
     SourceCallSpread *spreads;
     uint32_t spread_count,next_spread;
+    uint32_t entry_capacity;
 } SourceCallExpansion;
 static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,SourceExpectedType *output);
 static AstNode *source_call_argument_syntax(const SourceCallSyntax *call,uint32_t index) {
@@ -145,6 +146,23 @@ static bool source_call_spread_field_hints(SourceContext *ctx,AstNode *node,uint
     }
     return true;
 }
+/* Recipe storage never moves a published plan. Only this private entry vector
+ * grows; projections retain stable spread records rather than entry pointers. */
+static bool source_call_expand_reserve(SourceContext *ctx,AstNode *node,
+    SourceCallExpansion *expanded,uint32_t count,uint32_t required) {
+    if (required>65536 || count>required)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call entry capacity exceeds its checked arity");
+    if (required<=expanded->entry_capacity) return true;
+    uint32_t capacity=expanded->entry_capacity ? expanded->entry_capacity : 8;
+    while (capacity<required) {
+        if (!source_work(ctx,node)) return false;
+        capacity*=2;
+    }
+    SourceCallEntry *entries=source_recipe_storage(ctx,capacity,sizeof(*entries));
+    if (!entries || !source_copy_bytes(ctx,node,entries,expanded->entries,(size_t)count*sizeof(*entries))) return false;
+    expanded->entries=entries;expanded->entry_capacity=capacity;
+    return true;
+}
 static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax *call,
     const SourceCallPlan *formal,uint32_t parameter_count) {
     bool present=false;
@@ -155,9 +173,11 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
     if (!present) return true;
     SourceCallExpansion *expanded=source_recipe_storage(ctx,1,sizeof(*expanded));
     if (!expanded) return false;
-    expanded->entries=parameter_count ? source_recipe_storage(ctx,parameter_count,sizeof(*expanded->entries)) : NULL;
+    bool variadic=formal->family==SOURCE_CALL_VARIADIC_READ;
+    expanded->entry_capacity=variadic ? 0 : parameter_count;
+    expanded->entries=expanded->entry_capacity ? source_recipe_storage(ctx,expanded->entry_capacity,sizeof(*expanded->entries)) : NULL;
     expanded->spreads=source_recipe_storage(ctx,(uint32_t)call->arg_count,sizeof(*expanded->spreads));
-    if ((parameter_count && !expanded->entries) || !expanded->spreads) return false;
+    if ((expanded->entry_capacity && !expanded->entries) || !expanded->spreads) return false;
     SourceFact *facts=ctx->facts;SourceEpoch *epochs=ctx->epochs;uint32_t count=0;bool ok=false;
     for (int a=0;a<call->arg_count;++a) {
         AstNode *input=call->arguments[a];
@@ -194,6 +214,7 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
         if (formal->parameter_offset>parameter_count || arity>parameter_count-formal->parameter_offset-count) {
             source_fail(ctx,input,XR_XIR_BAD_TYPE,"too many call arguments");goto done;
         }
+        if (variadic && !source_call_expand_reserve(ctx,input,expanded,count,count+arity)) goto done;
         for (uint32_t f=0;f<arity;++f) {
             uint32_t parameter=count+formal->parameter_offset;
             SourceCallEntry *entry=&expanded->entries[count++];entry->syntax=input;entry->access=access;
@@ -260,7 +281,7 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
         for (uint32_t f=0;f<spread->count;++f) {
             if (spread->field_known[f]) {fields[f].type=spread->known_fields[f];continue;}
             uint32_t parameter=spread->first+f+formal->parameter_offset;
-            XrXirType wanted=formal->family==SOURCE_CALL_REQUIREMENT ? formal->requirement_parameters[parameter].type : formal->function_parameters[parameter];
+            XrXirType wanted=source_call_parameter_type(formal,parameter);
             SourceSubstitution substitution=formal->substitution;
             if (state) {
                 XrXirInferenceKnown known={0};
@@ -269,7 +290,7 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
                 if (!known.known) {complete=false;break;}
                 substitution=(SourceSubstitution){known.arguments,known.argument_count};
             }
-            if (formal->family==SOURCE_CALL_INDIRECT) fields[f].type=wanted;
+            if (source_call_caller_parameters(formal)) fields[f].type=wanted;
             else if (!source_substitute(ctx,&substitution,wanted,0,&fields[f].type)) return false;
         }
         if (complete) {

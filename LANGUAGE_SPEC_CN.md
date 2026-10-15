@@ -7772,11 +7772,11 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 ### 17.59 治理库配方的普通READ参数展开
 
-已准入的整数、Float/Bool/Rune、String方法及Array的contains/indexOf/join/clear、get/set/push/reserve/withCapacity、pop/shift/unshift/reverse/resize/fill和entries沿同一真实SourceCallSyntax、静态Tuple展开及有序参数worker接收READ实参。固定声明身份、接收者权限、签名与操作契约仍先核实；调用者池中的具体参数类型不被重解释成被调用者泛型参数。共用indirect参数作用域只保留该类型归属，不生成间接调用或授予Function/借用权限。所有值仍沿原普通转换、类型/权限检查和配方进入XIR，不改写AST或制造语法替身。
+已准入的整数、Float/Bool/Rune、String方法及Array的contains/indexOf/join/clear、get/set/push/reserve/withCapacity、pop/shift/unshift/reverse/resize/fill、entries和concat沿同一真实SourceCallSyntax、静态Tuple展开及有序参数worker接收READ实参。固定声明身份、接收者权限、签名与操作契约仍先核实；调用者池中的具体参数类型不被重解释成被调用者泛型参数。共用indirect和可变READ参数作用域只保留该类型归属，不生成间接调用或授予Function/借用权限。所有值仍沿原普通转换、类型/权限检查和配方进入XIR，不改写AST或制造语法替身。
 
-接收者先求值，展开源各求值一次，普通字段保持静态顺序，零字段展开仍在原位置执行。普通Unit实参仍占一个逻辑参数，不能因零宽SSA而擦除。Tuple字段只提供READ值，不能满足ref参数；可写Array接收者仍经原真实place/权限检查。get和entries在展开参数可能重绑根时保留原接收者快照；变更配方在参数完成后读取已绑定place的当前值，fill缺省end取该当前值的长度。已有COW、UTF-8/NUL、nullable和调用者泛型类型语义不变。
+接收者先求值，展开源各求值一次，普通字段保持静态顺序，零字段展开仍在原位置执行。普通Unit实参仍占一个逻辑参数，不能因零宽SSA而擦除。Tuple字段只提供READ值，不能满足ref参数；可写Array接收者仍经原真实place/权限检查。get、entries和concat在展开参数可能重绑根时保留原接收者快照；变更配方在参数完成后读取已绑定place的当前值，fill缺省end取该当前值的长度。concat的可变READ形参重复接收者的已实例化Array类型，共用展开器按实际宽度增长私有entry向量并计费复制，不先求值展开源、不预留最大参数数；全部实参快照完成后才构造候选结果。已有COW、UTF-8/NUL、nullable和调用者泛型类型语义不变。
 
-全部观察、计划存储及转换消耗原Source账本，Checked/Lowered和CTFE闭包、类型/identity、steps/frame/output与原预算继续完整复验。普通Array回调可按17.55/17.56使用真实内部Function和cleanup；这不代表回调或concat参数展开、未准入的sort/迭代/指针成员、core intrinsic、普通Unit形参、完整库模板或P12已经完成。脚本根的运行期顺序验证不开放编译期外部状态或库私有var。
+全部观察、计划存储及转换消耗原Source账本，Checked/Lowered和CTFE闭包、类型/identity、steps/frame/output与原预算继续完整复验。普通Array回调可按17.55/17.56使用真实内部Function和cleanup；这不代表回调参数展开、未准入的sort/迭代/指针成员、core intrinsic、普通Unit形参、完整库模板或P12已经完成。脚本根的运行期顺序验证不开放编译期外部状态或库私有var。
 
 ---
 

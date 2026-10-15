@@ -39,7 +39,8 @@ static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call arity or type arguments are not admitted");
     return true;
 }
-typedef enum SourceCallFamily { SOURCE_CALL_FUNCTION, SOURCE_CALL_REQUIREMENT, SOURCE_CALL_CONSTRUCTOR, SOURCE_CALL_INDIRECT } SourceCallFamily;
+typedef enum SourceCallFamily { SOURCE_CALL_FUNCTION, SOURCE_CALL_REQUIREMENT, SOURCE_CALL_CONSTRUCTOR,
+    SOURCE_CALL_INDIRECT, SOURCE_CALL_VARIADIC_READ } SourceCallFamily;
 typedef struct SourceCallStorage {
     XrXirType *types;
     SourceValue *values;
@@ -76,6 +77,14 @@ typedef struct SourceCallPlan {
     uint32_t parameter_offset, value_offset;
     const uint32_t *parameter_kinds;
 } SourceCallPlan;
+/* Variadic READ recipes repeat one already instantiated caller-pool type. */
+static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t index) {
+    if (plan->family==SOURCE_CALL_REQUIREMENT) return plan->requirement_parameters[index].type;
+    return plan->function_parameters[plan->family==SOURCE_CALL_VARIADIC_READ ? 0 : index];
+}
+static bool source_call_caller_parameters(const SourceCallPlan *plan) {
+    return plan->family==SOURCE_CALL_INDIRECT || plan->family==SOURCE_CALL_VARIADIC_READ;
+}
 typedef union SourceCallArgumentPlan {
     SourceExpressionPlan *value;
     SourceReferencePlan *reference;
@@ -195,7 +204,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
             SourceExpressionPlan *argument=references[a] ? NULL : arguments[a].value;
             if (references[a]) continue;
             uint32_t parameter=a+plan->parameter_offset;
-            XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
+            XrXirType formal=source_call_parameter_type(plan,parameter);
             uint32_t id=(uint32_t)formal;
             if (!source_work(ctx,node)) goto done;
             if (!argument->type_ready || !xr_xir_type_is_nullable(&ctx->types,argument->ground_type) ||
@@ -206,7 +215,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
             SourceExpressionPlan *argument=references[a] ? NULL : arguments[a].value;
             if (references[a] || !argument->type_ready) continue;
             uint32_t parameter=a+plan->parameter_offset;
-            XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
+            XrXirType formal=source_call_parameter_type(plan,parameter);
             XrXirInferenceKnown known={0};
             XrXirStatus status=xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
             if (status!=XR_XIR_OK) {source_fail(ctx,node,status,"ready argument context is invalid");goto done;}
@@ -232,7 +241,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
             if (!source_plan_soft_numeric(ctx,argument,&soft)) goto done;
             if (!soft) continue;
             uint32_t parameter=a+plan->parameter_offset;
-            XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
+            XrXirType formal=source_call_parameter_type(plan,parameter);
             XrXirInferenceKnown known={0};
             XrXirStatus status=xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
             if (status!=XR_XIR_OK) {source_fail(ctx,node,status,"literal argument context is invalid");goto done;}
@@ -256,7 +265,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
                 "direct call arguments must use the declared READ contract"); goto done;
         }
         uint32_t parameter=a+plan->parameter_offset;
-        XrXirType formal=requirement ? plan->requirement_parameters[parameter].type : plan->function_parameters[parameter];
+        XrXirType formal=source_call_parameter_type(plan,parameter);
         if (references[a]) {
             SourceValue *reference=&plan->values[a+plan->value_offset];
             if (!source_reference_argument_syntax(ctx,node,a,references,arguments[a].reference,call,reference)) goto done;
@@ -276,7 +285,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
             }
         } else {
             expected.present=true;
-            if (plan->family==SOURCE_CALL_INDIRECT) expected.type=formal;
+            if (source_call_caller_parameters(plan)) expected.type=formal;
             else if (!source_substitute(ctx,&plan->substitution,formal,0,&expected.type)) goto done;
         }
         SourceValue *value=&plan->values[a+plan->value_offset];
