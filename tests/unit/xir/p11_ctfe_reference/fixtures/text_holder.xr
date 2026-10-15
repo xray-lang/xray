@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<i64>=[42]; const text=a.join(""); const h:(string,i8)=(text,7); return h.0=="42" && h.1==7 }
+export fn run()->bool { return comptime answer() }

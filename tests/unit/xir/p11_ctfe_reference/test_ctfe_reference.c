@@ -31,6 +31,49 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"text_bool_false", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"text_widths", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"text_cell", XR_XIR_STRING, 3, XR_XIR_OK, NULL, 0},
+    {"text_holder", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_integer", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"text_unsigned", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_bool", XR_XIR_STRING, 4, XR_XIR_OK, NULL, 0},
+    {"text_rune", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"text_float", XR_XIR_STRING, 8, XR_XIR_OK, NULL, 0},
+    {"text_float_extreme", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"text_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"text_oversize", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"array_methods_fill_range", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_fill_invalid", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"array_methods_empty", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"array_methods_query", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_join", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"array_methods_reorder", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_extract", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_clear", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_fill", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_resize", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_concat", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_string_direct", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_path_set", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_push", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_reserve", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_cow", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_bounds", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 2},
+    {"array_path_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_path_export", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_path_direct", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"equal_array_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"equal_array_int", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_float", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_string", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nested", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nullable", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_nullable_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
     {"array_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"array_deep_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 1},
     {"array_repeat", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
@@ -458,7 +501,9 @@ static void reference_cell_leaf(const XrXirCompileContext *context,XrXirSourceRe
 
 static void reference_string(const XrXirCompileContext *context,XrXirSourceResult *source,
     const CtfeReferenceCase *selected) {
-    const char *expected=!strcmp(selected->name,"string_nul")?"a\0b":
+    const char *expected=!strcmp(selected->name,"text_bool_false")?"false":!strcmp(selected->name,"text_cell")?"3.5":!strcmp(selected->name,"text_integer")?"-42,7":!strcmp(selected->name,"text_bool")?"true":
+        !strcmp(selected->name,"text_rune")?"\0\xf0\x9f\x98\x80":!strcmp(selected->name,"text_float")?"3.5,-0.0":
+        !strcmp(selected->name,"array_methods_join")?"a\0b|z":!strcmp(selected->name,"string_nul")?"a\0b":
         !strcmp(selected->name,"string_empty")?"":"abcd";
     size_t length=(size_t)selected->value;
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
@@ -533,6 +578,8 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_float_cases.h"
 #include "xir_ctfe_nullable_cases.h"
 #include "xir_ctfe_array_cases.h"
+#include "xir_ctfe_equal_cases.h"
+#include "xir_ctfe_text_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -552,7 +599,9 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
+        if (!strcmp(selected->name,"text_direct")) reference_text_direct(&context,&source);
+        else if (!strcmp(selected->name,"equal_array_direct")) reference_owned_equal(&context,&source);
+        else if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
         else if (!strcmp(selected->name,"nullable_direct")) reference_nullable_direct(&context,&source);
         else if (!strncmp(selected->name,"nullable_",9) && selected->type==XR_XIR_UNIT) reference_nullable(&context,&source,selected);
         else if (!strcmp(selected->name,"float_tuple")) reference_tuple(&context,&source,selected);
@@ -578,9 +627,18 @@ int main(int argc, char **argv) {
     XrCompileResourceStats spent = reference_stats(&context);
     CHECK(spent.live_bytes == before.live_bytes && spent.work >= before.work &&
         spent.allocated_bytes >= before.allocated_bytes);
-    if (!strcmp(selected->name,"nullable_work")) {
+    if ((!strcmp(selected->name,"nullable_work") || !strcmp(selected->name,"equal_array_work"))) {
         CHECK(spent.work>=reference_limits.work-UINT64_C(131072));
-        fprintf(stderr,"CTFE Nullable String comparison scan paid original ledger: work=%llu/128000000; failure releases every owner\n",(unsigned long long)spent.work);
+        fprintf(stderr,"CTFE %s String comparison scan paid original ledger: work=%llu/128000000; failure releases every owner\n",
+            !strcmp(selected->name,"nullable_work")?"Nullable":"Array",(unsigned long long)spent.work);
+    }
+    if (!strcmp(selected->name,"array_path_work")) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(65536));
+        fprintf(stderr,"CTFE private path ancestor copy paid original ledger: work=%llu/128000000; unpayable capacity65536; physical0\n",(unsigned long long)spent.work);
+    }
+    if (!strcmp(selected->name,"text_work")) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(137216));
+        fprintf(stderr,"CTFE finite scalar text paid original ledger: work=%llu/128000000; unpayable format137216; physical0\n",(unsigned long long)spent.work);
     }
     CHECK(spent.allocated_bytes <= reference_limits.allocated_bytes &&
         spent.peak_bytes <= reference_limits.live_bytes && spent.work <= reference_limits.work);
@@ -589,7 +647,8 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
-    if (!strcmp(selected->name,"array_string")) reference_array_late_owner();
+    if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) reference_array_late_owner(selected->name);
+    if (!strcmp(selected->name,"text_direct")) reference_text_last_owner();
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,

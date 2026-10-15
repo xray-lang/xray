@@ -70,9 +70,9 @@ done:
     xr_compile_resources_free(stack);return status;
 }
 static bool ctfe_array_opcode(XrXirOp op) {
-    return op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
+    return op==XR_XIR_RANGE_CHECK || op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
         op==XR_XIR_ARRAY_SET || op==XR_XIR_ARRAY_PUSH || op==XR_XIR_ARRAY_CAPACITY ||
-        op==XR_XIR_ARRAY_WITH_CAPACITY || op==XR_XIR_ARRAY_RESERVE || op==XR_XIR_CELL_PLACE ||
+        op==XR_XIR_ARRAY_WITH_CAPACITY || op==XR_XIR_ARRAY_RESERVE || op==XR_XIR_CELL_PLACE || op==XR_XIR_INDEX_PLACE ||
         op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE;
 }
 static XrXirValue ctfe_array_operand(const ScalarRun *run,uint32_t id) {
@@ -86,12 +86,20 @@ static XrXirCtfeStatus ctfe_array_bytes_work(ScalarRun *run,CtfeOwnedState *stat
 }
 static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];
-    if (op->op==XR_XIR_CELL_PLACE) { ++vm->instruction;return XR_XIR_CTFE_OK; }
+    if (op->op==XR_XIR_RANGE_CHECK) {
+        const uint32_t *range=&run->function->operands[op->args[0]];
+        if (!xr_xir_range_valid(ctfe_array_operand(run,range[0]).payload,
+                ctfe_array_operand(run,range[1]).payload,ctfe_array_operand(run,range[2]).payload)) return XR_XIR_CTFE_NUMERIC_RANGE;
+        ++vm->instruction;return XR_XIR_CTFE_OK;
+    }
+    if (op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_INDEX_PLACE) { ++vm->instruction;return XR_XIR_CTFE_OK; }
     XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,.work=UINT64_MAX,.scratch_bytes=state->frame_spare};
     XrXirValue result={0},receiver={0};XrXirValuePlace place={0};XrXirFaultDetail fault={0};
     XrXirCtfeStatus status=XR_XIR_CTFE_OK;XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&run->function->operands[op->args[0]]:op->args;
     bool create=op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT || op->op==XR_XIR_ARRAY_WITH_CAPACITY;
+    if (!create && xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_INDEX)
+        return ctfe_index_path_step(run,vm,state);
     if (!create) {
         if (xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_CELL) {
             const XrXirInstruction *root=&run->function->instructions[ids[0]-run->function->parameter_count];

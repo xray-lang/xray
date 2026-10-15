@@ -1,0 +1,5 @@
+fn format(x:f64)->string { const a:Array<f64>=[x]; return a.join("") }
+fn format32(x:f32)->string { const a:Array<f32>=[x]; return a.join("") }
+fn check(x:f64,want:string)->bool { const a:Array<f64>=[x]; return a.join("")==want }
+fn check32(x:f32,want:string)->bool { const a:Array<f32>=[x]; return a.join("")==want }
+export fn run()->i64 { return 42 }

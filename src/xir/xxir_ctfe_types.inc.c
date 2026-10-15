@@ -83,7 +83,7 @@ static XrXirCtfeStatus ctfe_equal_admit(const XrXirArtifact *artifact,XrXirType 
         if (!xir_compile_work(&artifact->context,2)) return XR_XIR_CTFE_BUDGET;
         if (ctfe_parameter_type(type)) return XR_XIR_CTFE_OK;
         const XrXirTypeNode *node=xr_xir_type_node(artifact->module.types,type);
-        if (!node || node->kind!=XR_XIR_TYPE_NULLABLE) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (!node || (node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_ARRAY)) return XR_XIR_CTFE_NOT_SUPPORTED;
         type=node->element;
     }
 }
@@ -103,14 +103,23 @@ static XrXirCtfeStatus ctfe_body_type_admit(const XrXirArtifact *artifact,XrXirT
 }
 static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifact,
     const XrXirFunction *body,const XrXirInstruction *op) {
+    if (op->op==XR_XIR_TO_STRING && !ctfe_scalar_type(xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
     bool array_receiver=op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_LEN || op->op==XR_XIR_ARRAY_CAPACITY ||
         op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_ARRAY_RESERVE ||
-        op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE;
+        op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE;
     if (array_receiver) {
         const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&body->operands[op->args[0]]:op->args;
         XrXirPlaceKind kind=xr_xir_place_kind(body,ids[0]);
-        if ((op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE) && kind!=XR_XIR_PLACE_CELL) return XR_XIR_CTFE_NOT_SUPPORTED;
-        if (kind!=XR_XIR_PLACE_NONE && kind!=XR_XIR_PLACE_CELL) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if ((op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE) &&
+            kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (kind!=XR_XIR_PLACE_NONE && kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX) return XR_XIR_CTFE_NOT_SUPPORTED;
+        uint32_t root=ids[0],depth=0;
+        while (xr_xir_place_kind(body,root)==XR_XIR_PLACE_INDEX) {
+            if (!xir_compile_work(&artifact->context,4)) return XR_XIR_CTFE_BUDGET;
+            if (++depth>body->instruction_count) return XR_XIR_CTFE_BAD_ARTIFACT;
+            root=body->instructions[root-body->parameter_count].args[0];
+        }
+        if (depth && xr_xir_place_kind(body,root)!=XR_XIR_PLACE_CELL) return XR_XIR_CTFE_NOT_SUPPORTED;
         XrXirCtfeStatus receiver=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,ids[0]),false);
         if (receiver!=XR_XIR_CTFE_OK) return receiver;
     }

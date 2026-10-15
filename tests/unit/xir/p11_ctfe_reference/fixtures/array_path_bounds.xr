@@ -1,0 +1,2 @@
+fn fail()->i64 { var xs:Array<Array<i8>>=[[1,2]]; xs[1][0]=7; return 42 }
+export fn run()->i64 { return comptime fail() }

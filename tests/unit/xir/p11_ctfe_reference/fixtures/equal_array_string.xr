@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<string>=["a\0b","x"]; const b:Array<string>=["a\0b","x"]; const c:Array<string>=["a\0c","x"]; return a==b && a!=c }
+export fn run()->bool { return comptime answer() }
