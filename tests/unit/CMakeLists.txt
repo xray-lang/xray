@@ -582,8 +582,6 @@ set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;executi
 
 
 target_link_libraries(test_xir_source_query PRIVATE xray_xir_source xray_xir_vm)
-include(xir/effect_ordinary_environment.cmake)
-include(xir/source_function_boundary.cmake)
 add_test(NAME test_xir_source_core_syntax COMMAND test_xir_source_query --core-syntax)
 set_tests_properties(test_xir_source_core_syntax PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;ownership;metadata")
@@ -4567,6 +4565,8 @@ add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
 set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
+include(xir/effect_ordinary_environment.cmake)
+include(xir/source_function_boundary.cmake)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
 
 include(xir/cell_owner_source.cmake)
