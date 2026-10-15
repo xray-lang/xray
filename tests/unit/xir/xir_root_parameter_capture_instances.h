@@ -27,8 +27,8 @@ static const RootCaptureCase rci_cases[]={
     {8,8,true,false,false,true}
 };
 typedef struct RootCaptureFixture {
-    XrXirTypeNode nodes[4];XrXirTypes types;XrXirType parameter;
-    XrXirInstruction entry[4], factory[6], bind[3], pure[2], init[3];
+    XrXirTypeNode nodes[5];XrXirTypes types;XrXirType parameter;
+    XrXirInstruction entry[4], factory[6], bind[4], pure[2], init[4];
     XrXirBlock entry_block, factory_blocks[3], bind_block, pure_block, init_block;
     uint32_t entry_operand, factory_operand;
     XrXirFunction functions[5];XrXirFunctionIdentity identities[5];
@@ -47,7 +47,11 @@ static void rci_fixture(RootCaptureFixture *f, const RootCaptureCase *probe) {
         f->nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags[i]};
         if (flags[i]==probe->actual_flags) actual=256+i;
     }
-    CHECK(actual);f->types=(XrXirTypes){.nodes=f->nodes,.count=4};f->parameter=(XrXirType)256;
+    CHECK(actual);
+    if (probe->constant_root)
+        f->nodes[4]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
+    f->types=(XrXirTypes){.nodes=f->nodes,.count=probe->constant_root?5u:4u};
+    f->parameter=(XrXirType)256;
     f->pure[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7};
     f->pure[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0,0}};
     f->pure_block=(XrXirBlock){.count=2};
@@ -103,9 +107,10 @@ static void rci_fixture(RootCaptureFixture *f, const RootCaptureCase *probe) {
     f->bind[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={1,0}};
     f->bind_block=(XrXirBlock){.count=2};
     if (probe->constant_root) {
-        f->bind[0]=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=XR_XIR_I64};
-        f->bind[1]=(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0};
-        f->bind[2]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={2,0}};f->bind_block.count=3;
+        f->bind[0]=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)260};
+        f->bind[1]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={1,0}};
+        f->bind[2]=(XrXirInstruction){.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0};
+        f->bind[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={3,0}};f->bind_block.count=4;
     }
     f->functions[2]=(XrXirFunction){.name="bind",.name_length=4,.parameters=&f->parameter,.parameter_count=1,
         .result=XR_XIR_I64,.instructions=f->bind,.instruction_count=f->bind_block.count,
@@ -117,9 +122,10 @@ static void rci_fixture(RootCaptureFixture *f, const RootCaptureCase *probe) {
     f->init[0]=(XrXirInstruction){.op=XR_XIR_RETURN};f->init_block=(XrXirBlock){.count=1};
     if (probe->constant_root) {
         f->init[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=9};
-        f->init[1]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={0,0}};
-        f->init[2]=(XrXirInstruction){.op=XR_XIR_RETURN};f->init_block.count=3;
-        f->slot=(XrXirSlot){0,XR_XIR_I64,1};f->declarations.slots=&f->slot;f->declarations.slot_count=1;
+        f->init[1]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)260,.args={0,0}};
+        f->init[2]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={1,0}};
+        f->init[3]=(XrXirInstruction){.op=XR_XIR_RETURN};f->init_block.count=4;
+        f->slot=(XrXirSlot){0,(XrXirType)260,1};f->declarations.slots=&f->slot;f->declarations.slot_count=1;
     }
     f->functions[4]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=f->init,.instruction_count=f->init_block.count,.blocks=&f->init_block,.block_count=1};
@@ -137,6 +143,20 @@ static void rci_shape(const XrXirArtifact *artifact, const RootCaptureCase *prob
     CHECK(m && m->stage==XR_XIR_CHECKED && m->provenance && m->provenance->kind==XR_XIR_EVIDENCE_INSTANCE);
     const XrXirProvenance *p=m->provenance;const XrXirModule *source=xr_xir_compile_artifact_module(p->source);
     CHECK(source && source->function_count==5 && p->count==m->function_count);
+    if (probe->constant_root) {
+        CHECK(source->declarations && source->declarations->slot_count==1 &&
+            source->declarations->slots[0].mutable &&
+            xr_xir_cell_element(source->types,source->declarations->slots[0].type)==XR_XIR_I64);
+        CHECK(source->functions[2].instruction_count==4 &&
+            source->functions[2].instructions[0].op==XR_XIR_SLOT_LOAD &&
+            source->functions[2].instructions[1].op==XR_XIR_CELL_READ &&
+            source->functions[2].instructions[1].args[0]==1);
+        CHECK(source->functions[4].instruction_count==4 &&
+            source->functions[4].instructions[0].immediate==9 &&
+            source->functions[4].instructions[1].op==XR_XIR_CELL_NEW &&
+            source->functions[4].instructions[2].op==XR_XIR_SLOT_INIT &&
+            source->functions[4].instructions[2].args[0]==1);
+    }
     const XrXirInstruction *entry=&m->functions[0].instructions[2];
     CHECK(entry->op==XR_XIR_CALL && entry->immediate>=0 && (uint64_t)entry->immediate<m->function_count);
     uint32_t factory=(uint32_t)entry->immediate;
