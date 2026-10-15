@@ -105,6 +105,8 @@ static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContex
     XrXirEffects *effects,EffectInvocationCertificate **certificate) {
     if (!xir_compile_context_valid(work) || !effects || effects->resources!=work->resources ||
         !certificate) return XR_XIR_BAD_STRUCTURE;
+    if (effects->invocations && effects->invocations->final && effects->invocations->final->outcomes)
+        return XR_XIR_BAD_STRUCTURE;
     EffectInvocationCertificate *fresh=*certificate;uint32_t count=effects->count;
     EffectFinalFunctions *result=fresh && fresh->final?&fresh->final->summary:NULL;
     if (!result || result->resources!=work->resources || result->count!=count ||
@@ -145,6 +147,8 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
     const EffectInvocationDeclaredBounds *declared,const EffectOrdinaryContexts *dense) {
     if (!module || !graph || !xir_effects_context_matches(work,effects,module->function_count) ||
         !effects->contracts || (declared && declared->resources!=work->resources)) return XR_XIR_BAD_STRUCTURE;
+    if (effects->invocations && effects->invocations->final && effects->invocations->final->outcomes)
+        return XR_XIR_BAD_STRUCTURE;
     EffectInvocationDeclaredBounds *temporary=NULL;EffectInvocationCertificate *certificate=NULL;
     EffectFinalFunctions *publication=NULL;XrXirStatus status=XR_XIR_OK;
     if (!graph->material || (!graph->physical_owned && graph->material!=effects->generation))

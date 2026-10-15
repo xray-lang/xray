@@ -41,7 +41,7 @@ static void final_read_allocation_bounds(const XrXirCompileContext *context,
         RootParameterMark physical=rp_mark();XrCompileResourceStats before=rp_stats(context);
         CHECK(!rp_allocation_observer);
         final_read_extent_target=final;final_read_extent_callbacks=0;final_read_extent_mode=mode;
-        rp_allocation_observer=final_read_extent_grow;EffectInvocationWorkspace read={0};
+        rp_allocation_observer=final_read_extent_grow;EffectInvocationRead read={0};
         XrXirStatus status=effect_invocation_read_open(context,published,certificate->declared,final,&read);
         rp_allocation_observer=NULL;final_read_extent_target=NULL;
         *final=before_final;
@@ -51,7 +51,7 @@ static void final_read_allocation_bounds(const XrXirCompileContext *context,
         rp_balanced(physical);
         XrCompileResourceStats paid=rp_stats(context);
         CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes && paid.live_bytes==before.live_bytes);
-        read=(EffectInvocationWorkspace){0};
+        read=(EffectInvocationRead){0};
         CHECK(effect_invocation_read_open(context,published,certificate->declared,final,&read)==XR_XIR_OK && read.consumers);
         effect_invocation_read_close(&read);rp_balanced(physical);
         CHECK(rp_stats(context).work>paid.work && rp_stats(context).allocated_bytes>paid.allocated_bytes);

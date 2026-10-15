@@ -179,7 +179,7 @@ static XrXirStatus effect_invocation_forest_trace(const XrXirCompileContext *wor
     XrXirStatus status=effect_invocation_forest_match(work,forest);
     if (status!=XR_XIR_OK) return status;
     XrXirRootCauseTrace *trace=NULL;
-    status=effect_invocation_public_trace(work,forest->invocations,forest->count,function,&forest->facts[function],&trace);
+    status=effect_invocation_public_trace(work,forest->invocations,function,&forest->facts[function],&trace);
     uint64_t count=trace?(uint64_t)trace->counts[0]+trace->counts[1]:0;
     XrXirRootCauseStep *steps=trace?effect_root_trace_storage(trace):NULL;
     for (uint64_t s=0;s<count && status==XR_XIR_OK;++s) {

@@ -168,7 +168,7 @@ XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(const XrXirCompileConte
     if (effects && effects->contexts)
         return effect_context_owner_trace(context,effects,function,output);
     if (effects && effects->invocations)
-        return effect_invocation_public_trace(context,effects->invocations,effects->count,function,
+        return effect_invocation_public_trace(context,effects->invocations,function,
             function<effects->count?&effects->root[function]:NULL,output);
     if (!xir_compile_context_valid(context) || !effects || effects->resources != context->resources ||
         function >= effects->count || !effects->root || !effects->root_witnesses ||

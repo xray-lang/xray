@@ -55,8 +55,8 @@ static void ci_release(XrXirCompileContext *c,uint64_t baseline){
 }
 static void ci_golden(const XrXirEffects *e,CellBoundary boundary,bool snapshot){
     uint64_t bits=ci_expected(boundary,snapshot);
-    CHECK(e && e->count>=3 && e->atom_count==2 && e->words==1);
-    CHECK(e->errors[1]==bits);
+    CHECK(e && e->count>=3 && effect_final_outcomes(e)->atom_count==2 && effect_final_outcomes(e)->words==1);
+    CHECK(effect_final_outcomes(e)->errors[1]==bits);
     CHECK(xr_xir_effects_error_unknown(e,1)==((bits&1)!=0));
     CHECK(!xr_xir_effects_error_unidentified(e,1));
     CHECK(xr_xir_effects_error(e,1,(XrXirType)CI_ENUM,0)==((bits&4)!=0));
@@ -94,7 +94,7 @@ static void ci_erased_error(void){
         XrXirCompileContext c=ci_owner(ci_caps());uint64_t baseline=ci_stats(&c).live_bytes;XrXirEffects *e=NULL;
         CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e)==XR_XIR_OK);
-        CHECK(e && e->errors[1]==(snapshot?UINT64_C(4):UINT64_C(2)));
+        CHECK(e && effect_final_outcomes(e)->errors[1]==(snapshot?UINT64_C(4):UINT64_C(2)));
         CHECK(xr_xir_effects_error_unidentified(e,1)==(snapshot==0) && !xr_xir_effects_error_unknown(e,1));
         CHECK(xr_xir_effects_error(e,1,(XrXirType)CI_ENUM,0)==(snapshot!=0));
         CHECK(!xr_xir_effects_error(e,1,(XrXirType)CI_ENUM,1));
@@ -109,7 +109,7 @@ static void ci_storage(void){
     CHECK(effect_errors_seed(&input.domain,&e,&c)==XR_XIR_OK);
     EffectTerms terms={0};terms.remaining=&c;terms.types=f.types;
     ErrorFlow flow={0};flow.body=input;flow.effects=&e;flow.remaining=&c;flow.terms=&terms;
-    CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==12 && flow.cell_count==3);
+    CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==12 && flow.cell_count==3);
     for(uint32_t i=0;i<3;++i)CHECK(flow.cells[i]==f.expected_ids[i]);
     CHECK(flow.roots[f.alias]==f.new_cell && flow.roots[0]==0);
     CHECK(error_value(&flow,flow.work,f.snapshot)[0]==4 && error_value(&flow,flow.work,f.read_after)[0]==12);
@@ -119,12 +119,12 @@ static void ci_storage(void){
     flow.cells[0]=2;CHECK(error_cells(&flow,UINT32_MAX,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(error_value(&flow,flow.work,f.new_cell)[0]==before);flow.cells[0]=saved;
     uint8_t *storage=flow.storage;size_t capacity=flow.storage_capacity;
-    memset(flow.storage,0xff,capacity);CHECK(error_function(&flow,2)==XR_XIR_OK && flow.cell_count==0 && !e.errors[2]);
+    memset(flow.storage,0xff,capacity);CHECK(error_function(&flow,2)==XR_XIR_OK && flow.cell_count==0 && !e.outcomes_work.errors[2]);
     CHECK(flow.storage==storage && flow.storage_capacity==capacity);
-    memset(flow.storage,0xff,capacity);CHECK(error_function(&flow,1)==XR_XIR_OK && flow.cell_count==3 && e.errors[1]==12);
+    memset(flow.storage,0xff,capacity);CHECK(error_function(&flow,1)==XR_XIR_OK && flow.cell_count==3 && e.outcomes_work.errors[1]==12);
     for(uint32_t i=0;i<3;++i)CHECK(flow.cells[i]==f.expected_ids[i]);
     error_storage_free(&flow);CHECK(!flow.storage && !flow.cells && !flow.cell_count && !flow.roots && !flow.reachable);
-    effect_terms_free(&terms);xr_compile_resources_free(e.errors);xr_compile_resources_free(e.atoms);ci_release(&c,baseline);
+    effect_terms_free(&terms);xr_compile_resources_free(e.outcomes_work.errors);xr_compile_resources_free(e.outcomes_work.atoms);ci_release(&c,baseline);
 }
 static void ci_bulk(void){
     XrXirCompileContext c=ci_owner(ci_caps());uint64_t baseline=ci_stats(&c).live_bytes,before=ci_stats(&c).work;

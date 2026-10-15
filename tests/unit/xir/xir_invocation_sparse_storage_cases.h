@@ -8,6 +8,7 @@
  */
 #ifndef XIR_INVOCATION_SPARSE_STORAGE_CASES_H
 #define XIR_INVOCATION_SPARSE_STORAGE_CASES_H
+#include "xir_raw_physical_correspondence.h"
 
 /* Every body first passes Built checking and owned verification. Scalar
  * stores, COPY, local operations and PHI keep their full-SSA fixed flags. */
@@ -51,7 +52,7 @@ static XrXirStatus invocation_storage_copy_bounds(const XrXirCompileContext *con
     EffectBodyMaterial *material=NULL;
     EffectInvocationDeclaredBounds *selected=NULL;
     XrXirStatus status=effect_body_material_create(context,module,&material);
-    if (status==XR_XIR_OK) status=effect_physical_match(context,material->physical,module);
+    if (status==XR_XIR_OK) status=invocation_raw_physical_match(context,material->physical,module);
     if (status==XR_XIR_OK) status=effect_invocation_bounds_copy_physical(context,bounds,
         material->physical,&selected);
     if (status==XR_XIR_OK) {
@@ -115,7 +116,7 @@ static void invocation_storage_bitmap_controls(EffectInvocationFlow *flow) {
     }
 }
 static XrXirStatus invocation_storage_rows(EffectInvocationWorkspace *owner,uint32_t node,uint32_t mode,bool oracle) {
-    EffectInvocationFlow flow={.owner=owner,.node=node,.instruction=UINT32_MAX};
+    EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=node,.instruction=UINT32_MAX};
     XrXirStatus status=effect_invocation_origins(&flow);
     if (status==XR_XIR_OK && oracle) {
         uint32_t body=owner->final.nodes[node].body,expected=0;
