@@ -832,12 +832,14 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
     if (!function) return XR_XIR_CALL_BAD_STATE;
     XrXirCallFrontier frontier={0};
     if (xr_xir_call_invocation_pending(view,&frontier)) {
+        if (entry!=frontier.target ||
+            (function->type!=XR_XIR_UNIT)!=(frontier.producer!=UINT32_MAX)) return XR_XIR_CALL_BAD_STATE;
         XirEffectInvocationSelection selection={0};
         XrXirCallStatus selected=function->type!=XR_XIR_UNIT ?
             instance_invocation_select(view,frontier.instruction,function,arguments,count,&selection) :
             instance_invocation_direct(view,frontier.instruction,entry,arguments,count,&selection);
         if (selected!=XR_XIR_CALL_READY) return selected;
-        if (selection.target!=entry) return XR_XIR_CALL_BAD_STATE;
+        if (selection.target!=entry || selection.producer!=frontier.producer) return XR_XIR_CALL_BAD_STATE;
         if (prepared) {
             if (selection.owner != prepared->owner || selection.caller != prepared->caller ||
                 selection.instruction != prepared->instruction || selection.target != prepared->target ||
