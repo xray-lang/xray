@@ -117,6 +117,7 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
 #include "xxir_source_library_types.inc.c"
 
 typedef struct SourceLibraryMap {
+    const SourceHistoryUnit *history;
     SourceLibraryUnit *unit;
     uint32_t *modules;
     uint32_t module_count;
@@ -143,6 +144,8 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
     if (d->literal_count > UINT32_MAX - ctx->literal_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal inventory exhausted");
     SourceLibraryMap map = {0};
+    map.history=ctx->graph->specs[module].representation==XR_MODULE_CHECKED_HISTORY ?
+        ctx->graph->specs[module].history : NULL;
     map.unit = source_library_unit(ctx,library);
     if (library->types && !map.unit)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library declaration map is missing");
@@ -221,7 +224,7 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
         result.immediate += map->literal_begin;
         break;
     case XR_XIR_PRINT: case XR_XIR_OUTPUT:
-        if (!map->unit || !map->unit->history)
+        if (!map->history)
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
         break;
     default:
