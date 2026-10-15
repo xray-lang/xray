@@ -604,7 +604,8 @@ static void h1r_typed_failure(const RootParameterSourceOracle *oracle, bool limi
         else CHECK(xr_xir_instance_state(w->instance) == XR_XIR_INSTANCE_READY);
         h1r_failed_take(w);
         h1r_program_release(&t); h1r_forward(&t, peer, H1R_ENTRY_START, H1R_COPY);
-        h1r_final(&t, i, XR_XIR_CALL_READY, XR_XIR_CALL_READY);
+        /* No replacement root has bound, so shutdown preserves this fault. */
+        h1r_final(&t, i, expected, expected);
         printf("H1_VM_TYPED_FAILURE file=%s instance=%u status=%u typed=1 bytes_published=0 physical=0/0,0/0\n", oracle->file, i, expected);
     }
 }
