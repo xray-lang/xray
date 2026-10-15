@@ -1,0 +1,5 @@
+fn descend(depth:i64)->i64{
+    if (depth==0){Coro.yield();return 7}
+    return descend(depth-1)+1
+}
+export fn worker(depth:i64)->i64{return descend(depth)}
