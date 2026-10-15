@@ -724,6 +724,20 @@ static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
     }
     if (status!=XR_XIR_OK) return status;
     if (copied_zero) return error_instruction_begin(flow,i);
+    /* Every physical instruction retains its finite step and panic edge.
+     * Primitive literal rows have no error slot or Cell transfer. */
+    if(ref && i+1<block->first+block->count) {
+        if(!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+        if(!(ref->mask&UINT32_C(3)) &&
+            ((ref->base.op==XR_XIR_CONST_BOOL && ref->base.type==XR_XIR_BOOL) ||
+             (ref->base.op==XR_XIR_CONST_INT && ref->base.type==XR_XIR_I64) ||
+             (ref->base.op==XR_XIR_CONST_FLOAT && ref->base.type==XR_XIR_F64) ||
+             (ref->base.op==XR_XIR_CONST_RUNE && ref->base.type==XR_XIR_RUNE))) {
+            if(!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+            if(flow->slots[flow->function->parameter_count+i]!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+            return error_instruction_begin(flow,i);
+        }
+    }
     if (ref) {
         if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
         if (!row->constant || !row->decoded) {
