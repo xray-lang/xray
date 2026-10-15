@@ -174,7 +174,8 @@ static int history_check(const char *mode) {
     bool folded=!strcmp(mode,"--definitions-comptime");
     bool imported=!strcmp(mode,"--definitions-import");
     bool cell=definition_cell || !strcmp(mode,"--history-cell");
-    bool stateful=!strcmp(mode,"--history-stateful") || cell;
+    bool active_birth=!strcmp(mode,"--history-active-birth");
+    bool stateful=!strcmp(mode,"--history-stateful") || cell || active_birth;
     const char *next=definition_cell ? NULL : !strcmp(mode,"--history-function") ?
         "export fn answer()->i64{return old()+1}" : !strcmp(mode,"--history-generic") ?
         "export fn answer()->i64{return identity<i64>(42)}" : !strcmp(mode,"--history-type") ?
@@ -184,7 +185,8 @@ static int history_check(const char *mode) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,"history-check-test",imported ? XR_GENERATION_STDLIB : NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
-    const char *source=cell ? "var value:i64=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
+    const char *source=active_birth ? "const value=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->fn()->i64{return old}" :
+        cell ? "var value:i64=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
         stateful ? "const value=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
         imported ? "import _probe as library\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return library.answer()}" :
         folded ? "const value=comptime (6*7)\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return value}" :
@@ -203,7 +205,12 @@ static int history_check(const char *mode) {
     uint64_t runtime=0;CHECK(xr_xir_source_generation_prepare_instance(owner,first,instance,&runtime)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
-    CHECK(result.type==XR_XIR_I64 && result.payload==(folded || imported ? 42u : 0u));xr_xir_value_drop(&result);
+    XrXirValue birth_function={0};
+    if (active_birth) {
+        CHECK(xr_xir_value_valid(&result) && xr_xir_value_arena(&result));
+        birth_function=result;result=(XrXirValue){0};
+    } else CHECK(result.type==XR_XIR_I64 && result.payload==(folded || imported ? 42u : 0u));
+    xr_xir_value_drop(&result);
     CHECK(xr_xir_instance_generation_publish(instance,runtime)==XR_XIR_CALL_READY);source_publish(&compiler,owner,first);
     XrXirStatus status=XR_XIR_OK;uint64_t serial=0;
     if (next) {
@@ -240,11 +247,20 @@ static int history_check(const char *mode) {
         if (stateful) {
             CHECK(xr_xir_instance_generation_publish(instance,candidate)==XR_XIR_CALL_READY);
             source_publish(&compiler,owner,serial);
+            if (active_birth) {
+                CHECK(xr_xir_instance_start_function(instance,&birth_function,NULL,0)==XR_XIR_CALL_READY);
+            }
             uint64_t third=prepare(owner,"const value=true\nexport fn answer()->i64{return old()}");
             CHECK(xr_xir_compile_source_generation_view(owner,third,&view)==XR_XIR_OK && view.parent==serial);
             uint32_t third_entry=0;XrXirProgram *latest=program(&view,"answer",&third_entry);
             bind_program(&compiler,owner,third,latest);
             candidate=0;
+            if (active_birth) {
+                CHECK(xr_xir_source_generation_prepare_instance(owner,third,instance,&candidate)==XR_XIR_CALL_BUSY && !candidate);
+                CHECK(generation_poll(instance)==XR_XIR_CALL_RETURNED);
+                CHECK(xr_xir_instance_take_result(instance,&answer)==XR_XIR_CALL_RETURNED);
+                CHECK(answer.type==XR_XIR_I64 && answer.payload==42);xr_xir_value_drop(&answer);
+            }
             CHECK(xr_xir_source_generation_prepare_instance(owner,third,instance,&candidate)==XR_XIR_CALL_READY);
             CHECK(xr_xir_instance_start(instance,third_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
             CHECK(xr_xir_instance_take_result(instance,&answer)==XR_XIR_CALL_RETURNED);
@@ -270,6 +286,7 @@ static int history_check(const char *mode) {
         }
         xr_xir_compile_program_drop(received);
     } else CHECK(!serial);
+    xr_xir_value_drop(&birth_function);
     xr_xir_compile_source_generations_free(owner);xr_xir_compile_program_drop(initial);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);source_fixture_owner_free(&compiler);
     CHECK(status==XR_XIR_OK);
