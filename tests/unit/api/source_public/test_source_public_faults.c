@@ -124,13 +124,15 @@ static void named_copy_guards(void) {
 }
 #include "source_public_values_resources.h"
 #include "source_public_projection_resources.h"
+#include "source_public_instance_resources.h"
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--scalar-task") || !strcmp(argv[1],"--constructed-task") ||
         !strcmp(argv[1],"--named") || !strcmp(argv[1],"--named-probe") || !strcmp(argv[1],"--named-copy-guards") ||
         !strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe") ||
         !strcmp(argv[1],"--values") || !strcmp(argv[1],"--values-probe") ||
         !strcmp(argv[1],"--invoke-values") || !strcmp(argv[1],"--invoke-values-probe") || !strcmp(argv[1],"--invocation-name-guards") ||
-        !strcmp(argv[1],"--invoke-values-budget") || !strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe"))));
+        !strcmp(argv[1],"--invoke-values-budget") || !strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe") ||
+        !strcmp(argv[1],"--instance") || !strcmp(argv[1],"--instance-probe") || !strcmp(argv[1],"--instance-budget"))));
     if(argc==1)allocation_faults(0,3,false);
     else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4,false);
     else if(!strcmp(argv[1],"--constructed-task"))allocation_faults(4,5,false);
@@ -140,6 +142,8 @@ int main(int argc,char **argv) {
     else if(!strcmp(argv[1],"--invoke-values") || !strcmp(argv[1],"--invoke-values-probe"))
         invoke_values_faults(!strcmp(argv[1],"--invoke-values-probe"));
     else if(!strcmp(argv[1],"--invocation-name-guards"))invocation_name_guards();
+    else if(!strcmp(argv[1],"--instance") || !strcmp(argv[1],"--instance-probe"))public_instance_faults(!strcmp(argv[1],"--instance-probe"));
+    else if(!strcmp(argv[1],"--instance-budget"))public_instance_budgets();
     else if(!strcmp(argv[1],"--invoke-values-budget"))invoke_values_budgets();
     else if(!strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe")) {
         projection_faults(!strcmp(argv[1],"--value-projections-probe"));

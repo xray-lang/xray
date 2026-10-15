@@ -55,6 +55,25 @@ XRAY_API XrSourceStatus xray_source_invocation_init(XrSourceInvocation *invocati
     *invocation=(XrSourceInvocation){.api_version=XRAY_SOURCE_INVOCATION_VERSION,.struct_size=sizeof(*invocation)};
     return XR_SOURCE_OK;
 }
+static XrSourceStatus api_arguments(XrSourceProgram *program,const XrSourceValue *const *values,
+    size_t count,XrXirValue **arguments) {
+    if(count>UINT32_MAX || count>SIZE_MAX/sizeof(**arguments))return XR_SOURCE_LIMIT;
+    if(count && !values)return XR_SOURCE_BAD_ARGUMENT;
+    XrSourceStatus status=XR_SOURCE_OK;
+    if(count) {
+        status=api_resource(xr_compile_resources_calloc(program->resources,count,sizeof(**arguments),(void **)arguments));
+        if(status!=XR_SOURCE_OK)return status;
+        status=api_resource(xr_compile_resources_work(program->resources,(uint64_t)count*sizeof(**arguments)));
+        if(status!=XR_SOURCE_OK)return status;
+        for(uint32_t i=0;i<count;++i) {
+            const XrSourceValue *value=values[i];
+            if(!value || !value->resources)return XR_SOURCE_BAD_ARGUMENT;
+            if(!xr_xir_value_valid(&value->value))return XR_SOURCE_INVALID;
+            (*arguments)[i]=value->value;
+        }
+    }
+    return status;
+}
 static XrSourceStatus api_invocation_entry(XrSourceProgram *program,const XrSourceInvocation *invocation,
     ApiEntry *entry,XrXirValue **arguments) {
     if(!invocation || invocation->api_version!=XRAY_SOURCE_INVOCATION_VERSION ||
@@ -63,19 +82,8 @@ static XrSourceStatus api_invocation_entry(XrSourceProgram *program,const XrSour
     if(invocation->argument_count && !invocation->arguments)return XR_SOURCE_BAD_ARGUMENT;
     uint32_t ordinal=UINT32_MAX,count=(uint32_t)invocation->argument_count;
     XrSourceStatus status=api_named_entry(program,invocation->name,invocation->name_length,count,&ordinal);
+    if(status==XR_SOURCE_OK)status=api_arguments(program,invocation->arguments,count,arguments);
     if(status!=XR_SOURCE_OK)return status;
-    if(count) {
-        status=api_resource(xr_compile_resources_calloc(program->resources,count,sizeof(**arguments),(void **)arguments));
-        if(status!=XR_SOURCE_OK)return status;
-        status=api_resource(xr_compile_resources_work(program->resources,(uint64_t)count*sizeof(**arguments)));
-        if(status!=XR_SOURCE_OK)return status;
-        for(uint32_t i=0;i<count;++i) {
-            const XrSourceValue *value=invocation->arguments[i];
-            if(!value || !value->resources)return XR_SOURCE_BAD_ARGUMENT;
-            if(!xr_xir_value_valid(&value->value))return XR_SOURCE_INVALID;
-            (*arguments)[i]=value->value;
-        }
-    }
     *entry=(ApiEntry){program,ordinal,*arguments,count};return XR_SOURCE_OK;
 }
 XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceProgram *program,const XrSourceInvocation *invocation,
