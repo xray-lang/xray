@@ -13,50 +13,18 @@
 #define XR_DEEP_RESOURCE_MAIN
 #include "test_xir_mixed_deep_recursion.c"
 #include "xir_mixed_deep_compile.h"
+#include "xir_mixed_deep_source_prepare.h"
 
 static XrCompileResourceStats deep_source_compiled;
 static XrXirProgram *deep_source_lifetime_program(unsigned backend) {
-    CHECK(backend < 4 && !effects_compile_live && !effects_compile_bytes && !effects_source_owner_count);
-    CHECK(!deep_code && !worker_control_code && !worker_code_releases && !runtime_live);
-    DeepCompileState state = {0}; XrCompileResourceLimits caps = deep_compile_caps();
-    state.context.limits = xr_xir_compile_default_limits();
-    CHECK(xr_compile_resources_new(&caps, &state.context.resources) == XR_COMPILE_RESOURCE_OK);
-    CHECK(deep_compile_source(&state) && deep_compile_lower(&state));
-    const XrXirModule *module = xr_xir_compile_artifact_module(state.lowered);
-    CHECK(module->function_count == worker_deep_fixture_program.entry_count && module->function_count <= WORKER_FUNCTIONS);
-    DeepCode *owner = NULL;
-    CHECK(xr_compile_resources_calloc(state.context.resources, 1, sizeof(*owner), (void **)&owner) == XR_COMPILE_RESOURCE_OK);
-    WorkerControlCode *code = &owner->base;
-    CHECK(xr_compile_resources_calloc(state.context.resources, module->function_count, sizeof(*code->entries), (void **)&code->entries) == XR_COMPILE_RESOURCE_OK);
-    code->functions = module->function_count; code->root = worker_deep_entry; worker_control_targets(code, module);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(state.lowered);
-    CHECK(deep_compile_prepare(&state) && state.result.stage == 10);
-    CHECK(state.root == worker_deep_entry && state.descend == worker_deep_descend);
-    code->vm = state.vm; state.vm = NULL;
-    for (uint32_t f = 0; f < code->functions; ++f) {
-        code->native[f] = backend == 3 || (backend < 2 && (f == code->root) == (backend == 1));
-        CHECK(state.native->entries[f].resume != code->vm->entries[f].resume);
-        code->entries[f] = code->native[f] ? state.native->entries[f] : code->vm->entries[f];
-        code->delegates[f] = code->entries[f].resume; code->entries[f].resume = deep_resume;
-    }
-    XrXirProgramSpec spec = worker_deep_fixture_program;
-    spec.entries = code->entries; spec.types = state.native->types; spec.declarations = state.native->declarations;
-    spec.proof = proof; spec.code = (XrXirCodeLease){owner, deep_code_free};
-    XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_program_seal(&state.context, &spec, &program) == XR_XIR_OK);
-    deep_code = owner; worker_control_code = code;
-    xr_xir_compile_c_source_free(&state.c); xr_xir_compile_program_drop(state.native); state.native = NULL;
-    CHECK(!state.source.checked && !state.source.snapshot && !state.session && !state.packet.bytes);
-    CHECK(!state.checked && !state.closed && !state.lowered && !state.vm);
-    deep_compile_product(program, state.root, state.descend);
-    CHECK(xr_compile_resources_stats(state.context.resources, &state.result.stats) == XR_COMPILE_RESOURCE_OK);
-    deep_source_compiled = state.result.stats;
-    CHECK(effects_compile_attempts && effects_compile_attempts < 20000);
+    DeepSourcePrepared prepared = deep_source_prepare(backend, SIZE_MAX, deep_compile_caps());
+    CHECK(prepared.compile.status == XR_XIR_OK && prepared.compile.stage == 13 && prepared.program);
+    deep_source_compiled = prepared.compile.stats;
+    CHECK(prepared.compile.sites && prepared.compile.sites < 20000);
     printf("Deep Source lifetime backend=%s compilerSites=%zu allocated=%llu peak=%llu work=%llu cbytes=%zu, sourceSessionDead packetPoisoned nativePreparationDead callerReferenceReleasedBeforeExecution\n",
-        worker_backends[backend], effects_compile_attempts, (unsigned long long)state.result.stats.allocated_bytes,
-        (unsigned long long)state.result.stats.peak_bytes, (unsigned long long)state.result.stats.work, state.result.c_bytes);
-    xr_compile_resources_release(state.context.resources); state.context.resources = NULL;
-    CHECK(effects_compile_live && effects_compile_bytes && !effects_source_owner_count); return program;
+        worker_backends[backend], prepared.compile.sites, (unsigned long long)prepared.compile.stats.allocated_bytes,
+        (unsigned long long)prepared.compile.stats.peak_bytes, (unsigned long long)prepared.compile.stats.work, prepared.compile.c_bytes);
+    CHECK(effects_compile_live && effects_compile_bytes && !effects_source_owner_count); return prepared.program;
 }
 
 /* Terminal Tasks own their shared closed type pool, never the Program graph.
@@ -109,7 +77,7 @@ static void deep_source_lifetime_outcomes(XrXirValue *tasks) {
     CHECK(!runtime_live && !runtime_bytes && !effects_compile_live && !effects_compile_bytes);
 }
 
-int main(int argc, char **argv) {
+static int deep_source_lifetime_main(int argc, char **argv) {
     CHECK(argc == 2); (void)deep_main; (void)deep_compile_operation;
     unsigned backend = 0; while (backend < 4 && strcmp(argv[1], worker_backends[backend])) ++backend;
     XrXirProgram *program = deep_source_lifetime_program(backend); XrXirValue tasks[6] = {{0}}; DeepMetrics metrics[6];
@@ -132,3 +100,6 @@ int main(int argc, char **argv) {
     printf("Deep Source lifetime backend=%s sixLateTasks, exactTypeOwnerOnlyBeforeCopy compilerPhysical0AfterLastTask allTaskHandlesDeadBeforeOutcomeDrop physical0/0\n", worker_backends[backend]);
     return 0;
 }
+#ifndef XR_DEEP_SOURCE_PREPARATION_MAIN
+int main(int argc, char **argv) { return deep_source_lifetime_main(argc, argv); }
+#endif
