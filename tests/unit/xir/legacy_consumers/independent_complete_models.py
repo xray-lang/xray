@@ -227,7 +227,9 @@ _BINDING_PATHS = frozenset(['spec/source/sections/002-1-lexical-structure.md',
  'tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/array_set_unchecked_requires_unsafe.xr',
  'tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/closure_capture_blocks_rebind.xr',
  'tests/unit/xir/legacy_consumers/independent_observation_format.py'])
-_SOURCE_IDENTITIES = {'complete_original_array_array_char_compact': ('tests/diff/cases/semantics/collections/array_char_compact.xr',
+_SOURCE_IDENTITIES = {'complete_original_text_range_ranges': ('tests/diff/cases/basic/ranges.xr', 'tests/diff/cases/basic/ranges.xr', 'text_range', 'ranges', True),
+ 'complete_original_text_range_range_precedence': ('tests/diff/cases/basic/range_precedence.xr', 'tests/diff/cases/basic/range_precedence.xr', 'text_range', 'range_precedence', True),
+ 'complete_original_array_array_char_compact': ('tests/diff/cases/semantics/collections/array_char_compact.xr',
                                                 'tests/diff/cases/semantics/collections/array_char_compact.xr',
                                                 'arrays',
                                                 'array_char_compact',
@@ -498,7 +500,7 @@ def expected_rows():
     derived['numeric'] = {row['id']: row for row in complete_numeric_model.expected()
                           if row['id'] in ['exact_integer_bit_intrinsics', 'int_bits_methods', 'int_overflow_predicates', 'int_safe_methods', 'numeric_method_shared_core', 'stringbuilder_numeric_shared_core', 'uint64_divmod_unsigned', 'wrapping_fixed_width']}
     derived['text_range'] = {row['id']: row for row in complete_text_range_model.expected()
-                             if row['id'] in ['arrays', 'string_indexof_start_shared_core']}
+                             if row['id'] in ['arrays', 'string_indexof_start_shared_core', 'range_precedence', 'ranges']}
     rows = []
     identifiers = set()
     for entry in bindings['entries']:

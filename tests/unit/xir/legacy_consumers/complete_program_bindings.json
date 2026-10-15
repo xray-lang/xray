@@ -517,6 +517,28 @@
       "original_lf_sha256": "8f510c0bfd77d6960a8f6ae3e26e8f6978ede44b33488a09a07e9dced2209eae",
       "observation_suffix": "",
       "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_text_range_range_precedence",
+      "family": "text_range",
+      "model_key": "range_precedence",
+      "source": "tests/diff/cases/basic/range_precedence.xr",
+      "source_lf_sha256": "52fe37c7796d9832b83c6d57ffae8bdaa92851c652d30f1b9ee80e255d8d2808",
+      "original_source": "tests/diff/cases/basic/range_precedence.xr",
+      "original_lf_sha256": "52fe37c7796d9832b83c6d57ffae8bdaa92851c652d30f1b9ee80e255d8d2808",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_ranges",
+      "family": "text_range",
+      "model_key": "ranges",
+      "source": "tests/diff/cases/basic/ranges.xr",
+      "source_lf_sha256": "1a9c70b3946fb2f765d0251350665aa59714716a78600e9b04ac2b59c25daeb4",
+      "original_source": "tests/diff/cases/basic/ranges.xr",
+      "original_lf_sha256": "1a9c70b3946fb2f765d0251350665aa59714716a78600e9b04ac2b59c25daeb4",
+      "observation_suffix": "",
+      "original_run_corpus": true
     }
   ],
   "inputs": [
