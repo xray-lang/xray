@@ -175,7 +175,8 @@ int main(int argc, char **argv) {
     xr_xir_compile_program_drop(program); CHECK(worker_code_releases == 1 && !worker_control_code && !deep_code);
     for (unsigned mode = 0; mode < 6; ++mode) {
         XrXirCallResult out = {0}; XrXirCallStatus expected = mode < 3 ? XR_XIR_CALL_RETURNED : mode == 5 ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_CANCELLED;
-        CHECK(xr_xir_task_copy_outcome(&retained[mode], &out) == expected && xr_xir_panic_empty(&out.panic));
+        CHECK(xr_xir_task_copy_outcome(&retained[mode], &out) == expected && out.status == expected &&
+            !xr_xir_call_result_empty(&out) && xr_xir_panic_empty(&out.panic));
         if (mode < 3) CHECK(out.value.type == XR_XIR_I64 && out.value.payload == (int64_t)(mode ? DEEP_RECURSION : 16u)+7);
         else CHECK(!out.value.type && !out.value.payload);
         xr_xir_call_result_drop(&out); xr_xir_value_drop(&retained[mode]);
