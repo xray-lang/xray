@@ -5,19 +5,30 @@
  * Licensed under the MIT License
  *
  * xxir_source_context.inc.c - One Source construction and its owned semantic units
+ *
+ * KEY CONCEPT:
+ *   Actual receiving maps outlive the temporary checker before storage admission.
  */
+typedef struct SourceHistoryCorrespondence {
+    const struct XrXirSourceHistoryUnit *unit;
+    uint32_t *modules, *functions, *slots;
+    XrXirType *types;
+    uint32_t module_count, function_count, slot_count, type_count;
+} SourceHistoryCorrespondence;
 struct SourceSemanticEnvironment {
     XrModuleGraph *graph;
     SourceName **names, *symbols, **latest;
     uint32_t module_count, symbol_count, latest_count;
     uint32_t *binding_reads;
     uint32_t slot_count;
+    SourceHistoryCorrespondence history;
 };
 typedef struct XrXirSourceHistoryUnit {
     const struct XrXirSourceGenerations *owner;
     uint64_t serial;
     const SourceSemanticEnvironment *semantic;
     const XrXirArtifact *checked;
+    XrXirProgram *program;
     uint32_t entry_module;
     bool published;
 } SourceHistoryUnit;

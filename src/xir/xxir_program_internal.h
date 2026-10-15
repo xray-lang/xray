@@ -45,6 +45,8 @@ XR_FUNC void xir_program_permissions_free(XrXirProgramPermissions *permissions);
 struct XrXirProgram {
     _Atomic(uint32_t) references;
     XrXirCompileContext context;
+    XrXirTarget target;
+    uint8_t checked_identity[32];
     XrXirCallEntry *entries;
     uint32_t entry_count;
     XrXirDeclarations *declarations;

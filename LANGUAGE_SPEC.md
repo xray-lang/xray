@@ -7752,6 +7752,10 @@ Lexical scope is separate from module birth identity. A zero `lexical_scope` own
 
 Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
 
+Runtime receiving first binds a prepared Source record to an actual sealed Program. The ordinary compiler derives its exact specialized/Lowered proof again and compares the verified Program's retained proof digest and target. The record owns the actual receiving module, function, slot and type maps; Checked function ordinals are not assumed to be specialized function ordinals. The Source owner then retains its first actual runtime Domain and accepts subsequent Instance transactions only in that Domain. Sharing a Program does not authorize another Domain.
+
+The receiving transaction owns budgeted module and slot routes to actual birth generations and flattens routes across generations. It inherits readiness only from an actually initialized birth module and skips that completed initializer; it neither copies old values nor substitutes empty initializers. Reads still require current static module permission, actual birth-slot publication and ordinary value admission. Received slots cannot be published again. Values such as I64 and String that do not depend on a constructed-type arena can use this path. Cross-arena correspondence for Cell, Class, closures and other constructed values remains unfinished; ordinary admission continues to reject incompatible identities. Complete G2/G3, paired REPL coordination and all resource and safety gates remain required.
+
 ---
 
 ## 18. Error Codes

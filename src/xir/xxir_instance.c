@@ -57,6 +57,10 @@ static bool function_gate_retain(FunctionGate *gate) {
     }
 }
 
+typedef struct InstanceStorageRoute {
+    XrXirInstance *owner;
+    uint32_t index;
+} InstanceStorageRoute;
 struct XrXirInstance {
     XrXirProgram *program;
     XrXirInstanceConfig config;
@@ -64,6 +68,7 @@ struct XrXirInstance {
     XrXirDomain *domain;
     FunctionGate *function_gate;
     XrXirValue *slots;
+    InstanceStorageRoute *module_origins, *slot_origins;
     uint8_t *published, *ready;
     uint32_t *publication_order, publication_count, cursor, current_module, requested;
     uint32_t *published_counts;
@@ -285,6 +290,12 @@ static XrXirAction initialization_resume(XrXirCallView *view) {
         ++instance->cursor;
         instance->current_module = UINT32_MAX;
     }
+    while (instance->cursor < instance->program->initialization_count &&
+        instance->ready[instance->program->order[instance->cursor]]) {
+        if (!xr_xir_domain_work(instance->domain,1))
+            return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,XR_XIR_CALL_LIMIT},{0},0};
+        ++instance->cursor;
+    }
     if (instance->cursor < instance->program->initialization_count) {
         instance->current_module = instance->program->order[instance->cursor];
         *phase = 1;
@@ -358,6 +369,10 @@ static void instance_dispose(XrXirInstance *instance) {
         (uint64_t)d->slot_count * sizeof(*instance->publication_order));
     if (instance->published_counts) xr_xir_domain_metadata_deallocate(domain, instance->published_counts,
         (uint64_t)d->module_count * sizeof(*instance->published_counts));
+    if (instance->module_origins) xr_xir_domain_metadata_deallocate(domain,instance->module_origins,
+        (uint64_t)d->module_count*sizeof(*instance->module_origins));
+    if (instance->slot_origins) xr_xir_domain_metadata_deallocate(domain,instance->slot_origins,
+        (uint64_t)d->slot_count*sizeof(*instance->slot_origins));
     if (instance->function_gate) {
         instance->function_gate->instance = NULL;
         function_gate_drop(instance->function_gate);
@@ -1142,6 +1157,19 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t function = xr_xir_call_current_entry(view->activation), module = d->slots[slot].module;
     if (view_is_child(instance, view) && !worker_slot_read(instance, slot)) return XR_XIR_CALL_BAD_STATE;
+    if (instance->slot_origins && instance->slot_origins[slot].owner) {
+        InstanceStorageRoute route=instance->slot_origins[slot];
+        XrXirInstance *birth=route.owner;
+        if (!instance->ready[module] || d->functions[function].module!=module ||
+            route.index>=birth->program->declarations->slot_count || !birth->published[route.index] ||
+            !birth->ready[birth->program->declarations->slots[route.index].module]) return XR_XIR_CALL_BAD_STATE;
+        XrXirValueAdmission *admission=xr_xir_call_admission(view);
+        XrXirCallStatus status=admit_instance_value(admission,&birth->slots[route.index],d->slots[slot].type);
+        if (status!=XR_XIR_CALL_READY) return status;
+        if (d->slots[slot].mutable && (!instance_cell_published(birth,route.index,&birth->slots[route.index]) ||
+            !xr_xir_cell_unborrowed(&birth->slots[route.index]))) return XR_XIR_CALL_BAD_STATE;
+        return value_call_status(xr_xir_value_copy(&birth->slots[route.index],output));
+    }
     if (!instance->published[slot] || d->functions[function].module != module ||
         (!instance->ready[module] && instance->current_module != module)) return XR_XIR_CALL_BAD_STATE;
     if (d->slots[slot].mutable &&
@@ -1157,6 +1185,7 @@ XrXirCallStatus xr_xir_instance_slot_write(XrXirCallView *view, uint32_t slot,
         return XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t function = xr_xir_call_current_entry(view->activation), module = d->slots[slot].module;
+    if (instance->slot_origins && instance->slot_origins[slot].owner) return XR_XIR_CALL_BAD_STATE;
     if (d->functions[function].module != module || !(d->slots[slot].type == XR_XIR_UNIT ?
             (value && value_unit(*value)) :
             xr_xir_value_argument(value, instance->program->arena, d->slots[slot].type)))
