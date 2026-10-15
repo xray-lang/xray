@@ -21,6 +21,12 @@
 #include "xir/xxir_ctfe.h"
 static const XrCompileResourceLimits source_comptime_test_limits={
     UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const char source_comptime_cleanup_text[]=
+    "fn inc(x:ref i64) { x=x+1 }\n"
+    "fn twice(x:ref i64) { inc(ref x); inc(ref x) }\n"
+    "fn work(x:ref i64) { defer { twice(ref x) } }\n"
+    "fn answer()->i64 { var x=40; work(ref x); return x }\n"
+    "export fn run()->i64 { return comptime answer() }\n";
 static const char source_comptime_test_text[]=
     "fn leaf(x:i64)->i64 { return x+1 }\n"
     "fn middle(x:i64)->i64 { return leaf(x)+1 }\n"
@@ -89,6 +95,10 @@ static const char source_comptime_lexical_text[]=
     "class Math {private static twice(n:i64)->i64{return n*2};static value()->i64{return comptime Math.twice(21)}}\n"
     "fn answer()->i64{const b=Box.make();return b.get()==7 && b.text==\"ab\" ? Math.value() : 0}\n"
     "export fn run()->i64{return comptime answer()}\n";
+static const char source_comptime_function_text[]=
+    "fn make(n:i8)->fn()->i8{var x=n;return fn()->i8{x=x+1;return x}}\n"
+    "fn answer()->i64{const f=make(40);f();const g=fn()->i64{return f() as i64};return g()}\n"
+    "export fn run()->i64{return comptime answer()}\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -143,6 +153,11 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--cleanup")) {
+        source_comptime_test_answer(source_comptime_cleanup_text,XR_XIR_I64,42);
+        fprintf(stderr,"Source lexical cleanup/nested ref loans/independent scalar recipe complete Checked/query normal physical0\n");return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--function")) { source_comptime_test_answer(source_comptime_function_text,XR_XIR_I64,42);return 0; }
     if (argc==2 && !strcmp(argv[1],"--lexical")) {
         source_comptime_resource_text=source_comptime_lexical_text;SourceComptimeTestReport report={0};
         source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&report);CHECK(report.status==XR_XIR_OK);
@@ -153,7 +168,7 @@ int main(int argc,char **argv) {
         source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&report);CHECK(report.status==XR_XIR_OK);
         fprintf(stderr,"Source nominal independent recipe complete Checked/query producer normal physical0\n");return 0;
     }
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources") || !strcmp(argv[1],"--lexical-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources") || !strcmp(argv[1],"--lexical-resources") || !strcmp(argv[1],"--function-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -213,6 +228,14 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--lexical-resources")) {
             source_comptime_resource_text=source_comptime_lexical_text;
             fprintf(stderr,"Source lexical declaration owner/private owned recipe/class static whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--function-resources")) {
+            source_comptime_resource_text=source_comptime_function_text;
+            fprintf(stderr,"Source internal Function values/owned capture/indirect call/cross-frame/independent scalar recipe whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--cleanup-resources")) {
+            source_comptime_resource_text=source_comptime_cleanup_text;
+            fprintf(stderr,"Source lexical cleanup/nested ref loans/independent scalar recipe whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }

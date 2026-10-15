@@ -1,0 +1,2 @@
+fn adjust<T>(v:T)->i64 { var x=40; { defer { x=x+2 } }; return x }
+export fn run()->i64 { return comptime adjust<i8>(1) }

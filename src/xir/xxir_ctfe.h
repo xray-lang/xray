@@ -38,7 +38,8 @@ typedef struct XrXirCtfeRequest {
     XrXirCtfeLimits limits;
 } XrXirCtfeRequest;
 
-/* Dynamic marks a variable Array admission span. Pure arrays are primitive/
+/* Dynamic marks a variable receiving span; internal caches also count callable
+ * capture graphs. Public shapes admit exportable data only. Pure arrays are primitive/
  * String leaves or only Array wrappers, for which Value skips deep admission. */
 typedef struct XrXirCtfeTypeShape { uint64_t work;bool dynamic,pure_arrays; } XrXirCtfeTypeShape;
 /* Metadata cost only: no Value borrow, identity or execution authority. */
@@ -73,6 +74,9 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     XrXirValue *output);
 /* Direct calls execute only a fully checked scalar/Unit/String/Tuple reachable closure,
  * including frame-owned locals and private Cells on the compiler ledger.
+ * Internal ref/lexical cleanup parameters require fresh producer roles and
+ * authentic frame loans. Static cleanup targets join the complete closure;
+ * frontiers retire after child return and pending returns retain snapshots.
  * Numeric/CFG execution uses the common kernel. Depth
  * and live activation bytes bound the whole stack; steps/work are never reset
  * on a callee or refunded on return. Admission includes unused reachable body
@@ -81,9 +85,10 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
  * canonical Unit output. String exports own their compiler storage and measure
  * UTF-8 bytes. Comparison/search use ordinary Unicode index and byte-order rules,
  * prepay scan/table work and report NUMERIC_RANGE on invalid starts. Immutable
- * Tuple exports retain their type arena and fields. Other owned exports and
- * non-private managed values are separate
- * boundaries; this entry never invokes Instance, native code or a fallback. */
+ * Tuple/Nullable/Array and admitted struct/enum exports retain their actual type
+ * arena and active fields. External Cell/Function/composite arguments, Function
+ * exports, scoped projections and error/panic cleanup remain unadmitted.
+ * This entry never invokes Instance, native code or a fallback. */
 typedef struct XrXirCtfeCallRequest {
     XrXirCtfeRequest evaluation;
     uint32_t call_depth;

@@ -43,8 +43,8 @@ static void source_comptime_restore(SourceContext *ctx,const SourceComptimeScope
 }
 #include "xxir_source_comptime_tuple.inc.c"
 
-static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpectedType expected) {
-    SourceValue value={0};
+static bool source_comptime_body(SourceContext *ctx,AstNode *site,SourceExpectedType expected) {
+    AstNode *child=site?site->as.comptime_expr.expr:NULL;SourceValue value={0};
     if (!child) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime has no expression");
     bool unit_block=false;
     if (child->type==AST_BLOCK) {
@@ -63,7 +63,7 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpecte
     if (ctx->diagnostic.status!=XR_XIR_OK) return false;
     if (!unit_block && !source_plan_expression(ctx,child,expected,&value)) return false;
     if (!source_comptime_result_type(ctx,child,value.type))
-        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must belong to an admitted closed value family");
+        return source_fail(ctx,site,XR_XIR_BAD_TYPE,"comptime result must belong to an admitted closed value family");
     if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
     ctx->functions[ctx->function].result=value.type;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
@@ -95,7 +95,7 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     bool ok=source_query_declare(ctx,&declaration,XR_XIR_SOURCE_FUNCTION,ctx->bodies[outer].declaration,source_query_range(ctx,node,NULL));
     ctx->bodies[f].declaration=declaration.declaration;
     if (ok) ok=source_query_syntax_role(ctx,declaration.declaration,XR_XIR_SOURCE_SYNTAX_CLOSURE,0);
-    if (ok) ok=source_comptime_body(ctx,node->as.comptime_expr.expr,expected);
+    if (ok) ok=source_comptime_body(ctx,node,expected);
     if (ok) ((XrXirSourceDeclaration *)ctx->query.declarations)[declaration.declaration-1].type=source_query_type(ctx,ctx->functions[f].result);
     source_comptime_restore(ctx,&saved);
     if (ok) *output=f;

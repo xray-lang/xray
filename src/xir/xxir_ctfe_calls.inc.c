@@ -4,16 +4,22 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_ctfe_calls.inc.c - Finite compiler-owned direct call activations
+ * xxir_ctfe_calls.inc.c - Finite compiler-owned direct and indirect call activations
  *
  * KEY CONCEPT:
- *   Each request checks its whole actual reachable scalar closure. Numeric and
- *   CFG execution share scalar_step; direct calls never enter runtime admission.
+ *   Each request admits all direct and Function producer targets. Numeric and
+ *   CFG execution share scalar_step; compiler calls never enter Instance admission.
  */
+typedef struct CtfeCellLoan { XrXirValue value;XrXirCellLoan loan; } CtfeCellLoan;
 typedef struct CtfeCallFrame {
     struct CtfeCallFrame *parent;
     uint32_t function, return_value;
     size_t bytes;
+    uint64_t epoch;
+    CtfeCellLoan *loans;
+    uint32_t loan_count,loan_capacity,cleanup_parent;
+    bool loans_committed,cleanup,returning;
+    XrXirValue returned;
     VmState state;
     ScalarRun run;
 } CtfeCallFrame;
@@ -22,7 +28,7 @@ typedef struct CtfeCallExecution {
     const XrXirCtfeCallRequest *request;
     const XrXirArtifact *artifact;
     CtfeCallFrame *top;
-    uint64_t steps, live_bytes;
+    uint64_t steps, live_bytes,epoch;
     uint32_t depth;
     CtfeOwnedState owned;
 } CtfeCallExecution;
@@ -38,8 +44,7 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
     XrXirCtfeStatus owner=ctfe_nominal_owner_admit(artifact,identity->nominal_owner);
     if (owner!=XR_XIR_CTFE_OK) return owner;
-    if (identity->cleanup_owner ||
-        (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count)))
+    if (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count))
         return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus admitted=ctfe_body_type_admit(artifact,body->result,false);
     if (admitted!=XR_XIR_CTFE_OK) return admitted;
@@ -54,7 +59,7 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     }
     for (uint32_t b=0;b<body->block_count;++b) {
         if (!xir_compile_work(work,2)) return XR_XIR_CTFE_BUDGET;
-        if (body->blocks[b].panic || body->blocks[b].frontier) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (body->blocks[b].panic) return XR_XIR_CTFE_NOT_SUPPORTED;
     }
     for (uint32_t i=0;i<body->instruction_count;++i) {
         if (!xir_compile_work(work,3)) return XR_XIR_CTFE_BUDGET;
@@ -62,18 +67,21 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
         admitted=ctfe_tuple_instruction_admit(artifact,body,op);
         if (admitted!=XR_XIR_CTFE_OK) return admitted;
         bool unit=ctfe_unit_result(op->op) ||
-            ((op->op==XR_XIR_CALL || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP) && op->type==XR_XIR_UNIT);
+            ((op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP) && op->type==XR_XIR_UNIT);
         if (!ctfe_storage_instruction(module,body,op) || (unit && op->type!=XR_XIR_UNIT) ||
             (!unit && op->type==XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_SUPPORTED;
-        if (op->op==XR_XIR_CALL) {
+        if (op->op==XR_XIR_CALL || op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_CLEANUP_REGISTER) {
             if (!xir_compile_work(work,5)) return XR_XIR_CTFE_BUDGET;
-            if (op->immediate<0 || (uint64_t)op->immediate>=module->function_count)
-                return XR_XIR_CTFE_BAD_ARTIFACT;
+            if (op->immediate<0 || (uint64_t)op->immediate>=module->function_count) return XR_XIR_CTFE_BAD_ARTIFACT;
             const XrXirFunction *callee=&module->functions[(uint32_t)op->immediate];
-            if (op->type!=callee->result || op->args[1]!=callee->parameter_count ||
-                op->args[0]>body->operand_count || op->args[1]>body->operand_count-op->args[0])
-                return XR_XIR_CTFE_BAD_ARTIFACT;
+            if (op->args[0]>body->operand_count || op->args[1]>body->operand_count-op->args[0]) return XR_XIR_CTFE_BAD_ARTIFACT;
+            if ((op->op==XR_XIR_CALL || op->op==XR_XIR_CLEANUP_REGISTER) &&
+                (op->type!=callee->result || op->args[1]!=callee->parameter_count)) return XR_XIR_CTFE_BAD_ARTIFACT;
+        } else if (op->op==XR_XIR_CALL_INDIRECT) {
+            if (!xir_compile_work(work,5)) return XR_XIR_CTFE_BUDGET;
+            const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,xr_xir_operand_type(body,(uint32_t)op->immediate));
+            if (!signature || signature->parameter_count!=op->args[1] || signature->result!=op->type) return XR_XIR_CTFE_BAD_ARTIFACT;
         } else if (!ctfe_opcode_work(op->op,&ignored)) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (op->op==XR_XIR_EQUAL) {
             if (!xir_compile_work(work,2)) return XR_XIR_CTFE_BUDGET;
@@ -90,7 +98,23 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
 
 /* Numeric visitation state bounds construction of the present reachable set.
  * It is not a stored proof: every queued body is fully admitted on this request. */
-static XrXirCtfeStatus ctfe_call_closure(const XrXirArtifact *artifact,uint32_t selected,bool *owned) {
+static XrXirCtfeStatus ctfe_call_cells_admit(const XrXirArtifact *artifact,uint32_t function,XrXirCellProvenance **proof) {
+    const XrXirFunction *body=&artifact->module.functions[function];
+    for (uint32_t p=0;p<body->parameter_count;++p) {
+        if (!xir_compile_work(&artifact->context,4)) return XR_XIR_CTFE_BUDGET;
+        if (!xr_xir_type_is_cell(artifact->module.types,body->parameters[p])) continue;
+        if (!*proof) {
+            XrXirCtfeStatus status=ctfe_compile_status(xr_xir_compile_cell_provenance_verified(&artifact->context,&artifact->module,proof,NULL));
+            if (status!=XR_XIR_CTFE_OK) return status;
+        }
+        XrXirCellProofRole role=xr_xir_cell_provenance_role(*proof,function,p);
+        if (role!=XR_XIR_CELL_PROOF_OWNED_CAPTURE && role!=XR_XIR_CELL_PROOF_SCOPED_REF &&
+            role!=XR_XIR_CELL_PROOF_LEXICAL_CLEANUP) return XR_XIR_CTFE_NOT_SUPPORTED;
+    }
+    return XR_XIR_CTFE_OK;
+}
+static XrXirCtfeStatus ctfe_call_closure(const XrXirArtifact *artifact,uint32_t selected,bool *owned,
+    XrXirCellProvenance **cells,void **closure) {
     const XrXirModule *module=&artifact->module;
     uint32_t count=module->function_count;
     uint64_t bytes=(uint64_t)count*(sizeof(uint32_t)+sizeof(uint8_t));
@@ -100,12 +124,13 @@ static XrXirCtfeStatus ctfe_call_closure(const XrXirArtifact *artifact,uint32_t 
         xr_compile_resources_calloc(artifact->context.resources,1,(size_t)bytes,&memory)));
     if (status!=XR_XIR_CTFE_OK) return status;
     uint32_t *queue=memory;uint8_t *seen=(uint8_t *)(queue+count);
-    uint32_t first=0,last=1;
+    uint32_t first=0,last=1;bool functions=false;
     if (!xir_compile_work(&artifact->context,sizeof(*queue)+1)) { status=XR_XIR_CTFE_BUDGET;goto done; }
     queue[0]=selected;seen[selected]=1;
     while (first<last && status==XR_XIR_CTFE_OK) {
         if (!xir_compile_work(&artifact->context,2)) { status=XR_XIR_CTFE_BUDGET;break; }
         uint32_t f=queue[first++];
+        status=ctfe_call_cells_admit(artifact,f,cells);if (status!=XR_XIR_CTFE_OK) break;
         status=ctfe_call_body_admit(artifact,f);
         if (status!=XR_XIR_CTFE_OK) break;
         if (artifact->layouts[f].owned_count || module->functions[f].result==XR_XIR_STRING) *owned=true;
@@ -113,7 +138,8 @@ static XrXirCtfeStatus ctfe_call_closure(const XrXirArtifact *artifact,uint32_t 
         for (uint32_t i=0;i<body->instruction_count;++i) {
             if (!xir_compile_work(&artifact->context,1)) { status=XR_XIR_CTFE_BUDGET;break; }
             const XrXirInstruction *op=&body->instructions[i];
-            if (op->op!=XR_XIR_CALL) continue;
+            if (op->op!=XR_XIR_CALL && op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLEANUP_REGISTER) continue;
+            if (op->op==XR_XIR_FUNCTION_REF) functions=true;
             uint32_t target=(uint32_t)op->immediate;
             if (!xir_compile_work(&artifact->context,1)) { status=XR_XIR_CTFE_BUDGET;break; }
             if (seen[target]) continue;
@@ -123,16 +149,20 @@ static XrXirCtfeStatus ctfe_call_closure(const XrXirArtifact *artifact,uint32_t 
         }
     }
 done:
+    if (status==XR_XIR_CTFE_OK && functions) { *closure=memory;memory=NULL; }
     xr_compile_resources_free(memory);return status;
 }
 
-static XrXirCtfeStatus ctfe_call_prepare(const XrXirCtfeCallRequest *request,bool *owned) {
+static XrXirCtfeStatus ctfe_call_prepare(const XrXirCtfeCallRequest *request,bool *owned,
+    XrXirCellProvenance **cells,void **closure) {
     const XrXirCtfeRequest *input=&request->evaluation;
     const XrXirArtifact *artifact=input->artifact;
     XrXirCtfeStatus status=ctfe_compile_status(xr_xir_compile_artifact_verify(artifact,NULL));
     if (status!=XR_XIR_CTFE_OK) return status;
     if (artifact->module.stage!=XR_XIR_LOWERED || input->function>=artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (artifact->module.declarations && artifact->module.declarations->functions &&
+        artifact->module.declarations->functions[input->function].cleanup_owner) return XR_XIR_CTFE_NOT_SUPPORTED;
     const XrXirCompileContext *work=&artifact->context;
     if (!xir_compile_work(work,1)) return XR_XIR_CTFE_BUDGET;
     const XrXirTarget *target=xr_xir_compile_artifact_target(artifact);
@@ -143,13 +173,14 @@ static XrXirCtfeStatus ctfe_call_prepare(const XrXirCtfeCallRequest *request,boo
         if (!xir_compile_work(work,1)) return XR_XIR_CTFE_BUDGET;
         if (input->checked_identity[b]!=artifact->checked_identity[b]) return XR_XIR_CTFE_IDENTITY;
     }
-    status=ctfe_call_closure(artifact,input->function,owned);
+    status=ctfe_call_closure(artifact,input->function,owned,cells,closure);
     if (status!=XR_XIR_CTFE_OK) return status;
     const XrXirFunction *body=&artifact->module.functions[input->function];
+    status=xr_xir_compile_ctfe_type_admit(work,artifact->module.types,body->result);if (status!=XR_XIR_CTFE_OK) return status;
     if (input->argument_count!=body->parameter_count) return XR_XIR_CTFE_BAD_ARGUMENT;
     for (uint32_t a=0;a<input->argument_count;++a) {
         if (!xir_compile_work(work,1)) return XR_XIR_CTFE_BUDGET;
-        if (ctfe_composite_node(artifact->module.types,body->parameters[a])) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (!ctfe_parameter_type(body->parameters[a])) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (!xr_xir_value_argument(&input->arguments[a],NULL,body->parameters[a])) return XR_XIR_CTFE_BAD_ARGUMENT;
     }
     if (!xr_xir_type_is_owned(artifact->module.types,body->result)) {
@@ -169,11 +200,16 @@ static XrXirCtfeStatus ctfe_call_frame_new(CtfeCallExecution *execution,uint32_t
     uint64_t scratch=0;
     XrXirCtfeStatus status=ctfe_tuple_scratch(artifact,function,&scratch);
     if (status!=XR_XIR_CTFE_OK) return status;
-    uint64_t bytes=(uint64_t)sizeof(CtfeCallFrame)+artifact->layouts[function].frame_bytes+scratch;
+    uint32_t cells=0;const XrXirFunction *body=&artifact->module.functions[function];
+    for (uint32_t p=0;p<body->parameter_count;++p) {
+        if (!xir_compile_work(&artifact->context,2)) return XR_XIR_CTFE_BUDGET;
+        if (xr_xir_type_is_cell(artifact->module.types,body->parameters[p])) ++cells;
+    }
+    uint64_t bytes=(uint64_t)sizeof(CtfeCallFrame)+artifact->layouts[function].frame_bytes+scratch+(uint64_t)cells*sizeof(CtfeCellLoan);
     uint64_t maximum=execution->request->evaluation.limits.frame_bytes;
     if (bytes>SIZE_MAX || execution->live_bytes>maximum || bytes>maximum-execution->live_bytes)
         return XR_XIR_CTFE_FRAME_LIMIT;
-    if (!xir_compile_work(&artifact->context,(uint64_t)artifact->layouts[function].owned_count*2))
+    if (!xir_compile_work(&artifact->context,(uint64_t)artifact->layouts[function].owned_count*2+(uint64_t)cells*sizeof(CtfeCellLoan)*4))
         return XR_XIR_CTFE_BUDGET;
     void *memory=NULL;
     status=ctfe_compile_status(xir_compile_resource_status(
@@ -184,6 +220,8 @@ static XrXirCtfeStatus ctfe_call_frame_new(CtfeCallExecution *execution,uint32_t
     }
     CtfeCallFrame *frame=memory;
     frame->parent=execution->top;frame->function=function;frame->return_value=return_value;frame->bytes=(size_t)bytes;
+    frame->epoch=++execution->epoch;frame->loan_capacity=cells;
+    frame->loans=(CtfeCellLoan *)((uint8_t *)(frame+1)+artifact->layouts[function].frame_bytes+scratch);
     /* The Artifact is borrowed synchronously and cannot grow during execution. */
     frame->run=(ScalarRun){&artifact->module,&artifact->module.functions[function],
         &artifact->layouts[function],frame+1,execution->owned.arena,artifact->context.resources};
@@ -194,43 +232,53 @@ static XrXirCtfeStatus ctfe_call_frame_new(CtfeCallExecution *execution,uint32_t
     *output=frame;return XR_XIR_CTFE_OK;
 }
 
+#include "xxir_ctfe_loans.inc.c"
+
 static void ctfe_call_frames_free(CtfeCallExecution *execution) {
     while (execution->top) {
         CtfeCallFrame *frame=execution->top;execution->top=frame->parent;
-        ctfe_owned_frame_clear(&frame->run);xr_compile_resources_free(frame);
+        ctfe_call_frame_free(frame);
     }
 }
 
 static XrXirCtfeStatus ctfe_call_enter(CtfeCallExecution *execution,
-    const XrXirInstruction *op) {
+    const XrXirInstruction *op,bool cleanup) {
     CtfeCallFrame *parent=execution->top;
     const XrXirArtifact *artifact=execution->artifact;
     const XrXirFunction *body=&artifact->module.functions[parent->function];
-    const XrXirFunctionLayout *layout=&artifact->layouts[parent->function];
-    uint32_t callee=(uint32_t)op->immediate;
+    uint32_t callee=(uint32_t)op->immediate,captures=0;const XrXirFunctionBinding *binding=NULL;
+    if (op->op==XR_XIR_CALL_INDIRECT) {
+        XrXirValue function=ctfe_nominal_operand(&parent->run,(uint32_t)op->immediate);
+        XrXirCtfeStatus resolved=ctfe_function_binding(&execution->owned,&function,&binding);if (resolved!=XR_XIR_CTFE_OK) return resolved;
+        callee=binding->entry;captures=binding->capture_count;
+    }
     const XrXirFunction *target=&artifact->module.functions[callee];
     const XrXirFunctionLayout *target_layout=&artifact->layouts[callee];
+    if (captures>target->parameter_count || op->args[1]!=target->parameter_count-captures) return XR_XIR_CTFE_BAD_ARTIFACT;
     CtfeCallFrame *child=NULL;
     XrXirCtfeStatus status=ctfe_call_frame_new(execution,callee,
-        body->parameter_count+parent->state.instruction,&child);
+        cleanup?UINT32_MAX:body->parameter_count+parent->state.instruction,&child);
     if (status!=XR_XIR_CTFE_OK) return status;
+    child->cleanup=cleanup;
     for (uint32_t p=0;p<target->parameter_count;++p) {
         if (!xir_compile_work(&artifact->context,6+sizeof(XrXirValue))) { status=XR_XIR_CTFE_BUDGET;break; }
-        uint32_t id=body->operands[op->args[0]+p];
-        XrXirValue argument={(uint32_t)xr_xir_operand_type(body,id),0,
-            xr_xir_scalar_load(parent+1,layout->offsets[id])};
+        XrXirValue argument={0};
+        if (p<captures) argument=binding->captures[p];
+        else { uint32_t id=body->operands[op->args[0]+p-captures];argument=ctfe_nominal_operand(&parent->run,id); }
         status=ctfe_validation_work(&parent->run,&execution->owned,target->parameters[p]);
         if (status!=XR_XIR_CTFE_OK) break;
         if (!xr_xir_value_argument(&argument,execution->owned.arena,target->parameters[p])) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
         status=ctfe_argument_store(&child->run,target_layout->offsets[p],&argument,&execution->owned,false);
         if (status!=XR_XIR_CTFE_OK) break;
     }
-    if (status!=XR_XIR_CTFE_OK) { ctfe_owned_frame_clear(&child->run);xr_compile_resources_free(child);return status; }
+    if (status==XR_XIR_CTFE_OK) status=ctfe_call_loans_prepare(execution,child,captures);
+    if (status!=XR_XIR_CTFE_OK) { ctfe_call_frame_free(child);return status; }
     if (!xir_compile_work(&artifact->context,sizeof(parent->state.instruction)+
         sizeof(execution->top)+sizeof(execution->depth)+sizeof(execution->live_bytes))) {
-        ctfe_owned_frame_clear(&child->run);xr_compile_resources_free(child);return XR_XIR_CTFE_BUDGET;
+        ctfe_call_frame_free(child);return XR_XIR_CTFE_BUDGET;
     }
-    ++parent->state.instruction;execution->top=child;++execution->depth;execution->live_bytes+=child->bytes;
+    ctfe_call_loans_commit(execution,child);
+    if (!cleanup) ++parent->state.instruction;execution->top=child;++execution->depth;execution->live_bytes+=child->bytes;
     return XR_XIR_CTFE_OK;
 }
 
@@ -251,19 +299,25 @@ static XrXirCtfeStatus ctfe_call_return(CtfeCallExecution *execution,
     const XrXirFunction *caller=&artifact->module.functions[parent->function];
     const XrXirFunctionLayout *layout=&artifact->layouts[parent->function];
     if (!xir_compile_work(&artifact->context,4)) return XR_XIR_CTFE_BUDGET;
-    if (frame->return_value>=layout->slot_count || (uint32_t)xr_xir_operand_type(caller,frame->return_value)!=value->type)
+    if (!frame->cleanup && (frame->return_value>=layout->slot_count || (uint32_t)xr_xir_operand_type(caller,frame->return_value)!=value->type))
         return XR_XIR_CTFE_BAD_ARTIFACT;
     if (!xir_compile_work(&artifact->context,sizeof(execution->top)+sizeof(execution->depth)+
         sizeof(execution->live_bytes)+1))
         return XR_XIR_CTFE_BUDGET;
-    if (value->type!=XR_XIR_UNIT) {
+    if (frame->cleanup) {
+        if (value->type!=XR_XIR_UNIT || !parent->state.cleanup_waiting) return XR_XIR_CTFE_BAD_ARTIFACT;
+        parent->state.frontier=frame->cleanup_parent;parent->state.cleanup_waiting=false;
+    }
+    if (!frame->cleanup && value->type!=XR_XIR_UNIT) {
         XrXirCtfeStatus status=ctfe_argument_store(&parent->run,layout->offsets[frame->return_value],
             value,&execution->owned,false);
         if (status!=XR_XIR_CTFE_OK) return status;
     }
     execution->top=parent;--execution->depth;execution->live_bytes-=frame->bytes;
-    ctfe_owned_frame_clear(&frame->run);xr_compile_resources_free(frame);return XR_XIR_CTFE_OK;
+    ctfe_call_frame_free(frame);return XR_XIR_CTFE_OK;
 }
+
+#include "xxir_ctfe_cleanup.inc.c"
 
 static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue *output) {
     const XrXirArtifact *artifact=execution->artifact;
@@ -277,9 +331,14 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         if (frame->state.instruction>=body->instruction_count) return XR_XIR_CTFE_BAD_ARTIFACT;
         const XrXirInstruction *op=&body->instructions[frame->state.instruction];
         execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes;
-        if (op->op==XR_XIR_CALL) {
+        execution->owned.authority=(XrXirCellAuthority){execution,frame,frame->epoch};
+        if (frame->state.leaving) {
+            bool done=false;XrXirCtfeStatus status=ctfe_cleanup_continue(execution,output,&done);
+            if (status!=XR_XIR_CTFE_OK || done) return status;continue;
+        }
+        if (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT) {
             if (!scalar_compile_work(run,2)) return XR_XIR_CTFE_BUDGET;
-            XrXirCtfeStatus status=ctfe_call_enter(execution,op);
+            XrXirCtfeStatus status=ctfe_call_enter(execution,op,false);
             if (status!=XR_XIR_CTFE_OK) return status;
             continue;
         }
@@ -288,6 +347,13 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         if (!scalar_compile_work(run,work+1)) return XR_XIR_CTFE_BUDGET;
         XrXirCtfeStatus flow=ctfe_tuple_flow_work(run,op,&execution->owned);
         if (flow!=XR_XIR_CTFE_OK) return flow;
+        if (op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_CLEANUP_LEAVE) {
+            XrXirCtfeStatus status=ctfe_cleanup_step(execution,op);if (status!=XR_XIR_CTFE_OK) return status;continue;
+        }
+        if (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_FUNCTION_WEAKEN) {
+            XrXirCtfeStatus status=ctfe_function_step(run,&frame->state,&execution->owned,frame->function);
+            if (status!=XR_XIR_CTFE_OK) return status;continue;
+        }
         if (ctfe_float_opcode(run,op)) {
             XrXirCtfeStatus status=ctfe_float_step(run,&frame->state.instruction);
             if (status!=XR_XIR_CTFE_OK) return status;
@@ -330,6 +396,13 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
             ran==XR_XIR_RUN_DIVIDE_BY_ZERO?XR_XIR_CTFE_DIVIDE_BY_ZERO:
             ran==XR_XIR_RUN_NUMERIC_RANGE?XR_XIR_CTFE_NUMERIC_RANGE:XR_XIR_CTFE_BAD_ARTIFACT;
         if (action.kind==XIR_SCALAR_RETURN) {
+            if (frame->state.frontier) {
+                XrXirCtfeStatus status=ctfe_admission_work(run,&execution->owned,&action.value);
+                if (status!=XR_XIR_CTFE_OK) return status;
+                status=ctfe_value_status(xr_xir_value_copy(&action.value,&frame->returned));
+                if (status!=XR_XIR_CTFE_OK) return status;
+                frame->returning=true;frame->state.leaving=true;frame->state.exit_target=0;continue;
+            }
             bool outer=!frame->parent;
             XrXirCtfeStatus status=ctfe_call_return(execution,&action.value,output);
             if (status!=XR_XIR_CTFE_OK || outer) return status;
@@ -345,15 +418,15 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *re
         request->evaluation.limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
         request->evaluation.limits.output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES ||
         request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH) return XR_XIR_CTFE_BAD_ARGUMENT;
-    bool owned=false;
-    XrXirCtfeStatus status=ctfe_call_prepare(request,&owned);
-    if (status!=XR_XIR_CTFE_OK) return status;
-    if (!xir_compile_work(&request->evaluation.artifact->context,sizeof(CtfeCallExecution)))
-        return XR_XIR_CTFE_BUDGET;
-    CtfeCallExecution execution={.request=request,.artifact=request->evaluation.artifact,
-        .steps=request->evaluation.limits.steps};
+    bool owned=false;XrXirCellProvenance *cells=NULL;void *closure=NULL;
+    XrXirCtfeStatus status=ctfe_call_prepare(request,&owned,&cells,&closure);
+    if (status==XR_XIR_CTFE_OK && !xir_compile_work(&request->evaluation.artifact->context,sizeof(CtfeCallExecution))) status=XR_XIR_CTFE_BUDGET;
+    if (status!=XR_XIR_CTFE_OK) { if (cells) xr_xir_compile_cell_provenance_free(cells);xr_compile_resources_free(closure);return status; }
+    CtfeCallExecution execution={.request=request,.artifact=request->evaluation.artifact,.steps=request->evaluation.limits.steps};
     status=ctfe_owned_new(execution.artifact,owned,&execution.owned);
-    if (status!=XR_XIR_CTFE_OK) return status;
+    if (status!=XR_XIR_CTFE_OK) { if (cells) xr_xir_compile_cell_provenance_free(cells);xr_compile_resources_free(closure);return status; }
+    execution.owned.cells=cells;execution.owned.closure=closure;
+    execution.owned.reachable=closure?(uint8_t *)((uint32_t *)closure+execution.artifact->module.function_count):NULL;
     CtfeCallFrame *first=NULL;
     status=ctfe_call_frame_new(&execution,request->evaluation.function,UINT32_MAX,&first);
     if (status!=XR_XIR_CTFE_OK) { ctfe_owned_free(&execution.owned);return status; }

@@ -1,0 +1,2 @@
+fn answer()->i64{const f=fn()->i64{return 42};const g=fn()->i64{return f()};return g()}
+export fn run()->i64{return comptime answer()}
