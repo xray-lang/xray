@@ -146,9 +146,12 @@ static void ri_faults_axes(void) {
     printf("actual apply Check/write/read/specialize OOM sites=%zu\n",sites);
 }
 
-int main(void) {
-    ri_roundtrip();ri_forged();ri_faults_axes();
-    rci_cases_run();
+int main(int argc,char **argv) {
+    bool normal=argc==2 && !strcmp(argv[1],"--normal");
+    CHECK(argc==1 || normal);
+    ri_roundtrip();ri_forged();if (!normal) ri_faults_axes();
+    if (normal) {rci_literals();rci_forged();rci_query_rejections();}
+    else rci_cases_run();
     CHECK(!rp_live && !rp_live_bytes);
     return 0;
 }

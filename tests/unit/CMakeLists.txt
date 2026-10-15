@@ -4471,6 +4471,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_mixed.cmake)
 include(xir/error_dependency_worklist.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/error_cfg_pending.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameters.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/owned_root_runs.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameter_vm.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameter_native.cmake)
 

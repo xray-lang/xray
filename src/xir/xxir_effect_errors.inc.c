@@ -761,7 +761,10 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
         if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,1+sizeof(row->constant)+sizeof(row->decoded)))
             return XR_XIR_BUDGET;
-        row->constant=ref->mask==0;row->decoded=false;
+        /* Integer literal transfer consumes only opcode and result type.
+         * Its signed immediate and unused fields remain in the real codec. */
+        row->constant=ref->mask==0 || (ref->base.op==XR_XIR_CONST_INT && !(ref->mask&UINT32_C(3)));
+        row->decoded=false;
         uint32_t first=ref->first<block->first?block->first:ref->first;
         uint32_t limit=ref->first+ref->count<end?ref->first+ref->count:end;
         for (uint32_t i=first;i<limit;++i) {

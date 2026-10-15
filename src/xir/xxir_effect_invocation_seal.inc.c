@@ -301,20 +301,41 @@ static XrXirStatus effect_invocation_input_seed(const XrXirCompileContext *work,
                 UINT32_MAX,UINT32_MAX,UINT32_MAX,0};
         }
     }
-    EffectBodyRead read=effect_body_compile_read(work);
-    for (uint32_t i=0;i<head->instruction_count;++i) {
-        XrXirInstruction op;XrXirStatus status=effect_body_instruction_get(&read,head,i,&op);
+    EffectBodyRequest body_request=effect_body_owned_request(work,body);
+    EffectBodyRecordCursor cursor;
+    XrXirStatus sequence=effect_body_request_sequence_begin(&body_request,&cursor);
+    if (sequence!=XR_XIR_OK) return sequence;
+    EffectBodyRecordCursor finish={0,0,UINT32_MAX};
+    while (cursor.first<head->instruction_count) {
+        const EffectBodyRun *ref;
+        XrXirStatus status=effect_body_range_ref(&body_request.read,head,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        if (op.op==XR_XIR_CALL_INDIRECT || op.op==XR_XIR_INVOKE_INDIRECT) continue;
-        if (op.op==XR_XIR_SLOT_LOAD || op.op==XR_XIR_SLOT_PLACE || op.op==XR_XIR_SLOT_STORE) {
-            if (!decls || !decls->slots || op.immediate<0 || (uint64_t)op.immediate>=decls->slot_count)
-                return XR_XIR_BAD_STRUCTURE;
+        finish=(EffectBodyRecordCursor){ref->first,cursor.run-1,cursor.first-1};
+        XrXirInstruction storage;
+        status=effect_body_instruction_ref_value(&body_request.read,ref,ref->first,&storage);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(work,4+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        if (!(ref->mask&UINT32_C(1)) && effect_root_seed_rule(storage.op)==EFFECT_ROOT_SEED_NONE) continue;
+        for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
+            if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+            if (i!=ref->first) {
+                status=effect_body_instruction_ref_value(&body_request.read,ref,i,&storage);
+                if (status!=XR_XIR_OK) return status;
+            }
+            const XrXirInstruction *op=&storage;
+            if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) continue;
+            if (op->op==XR_XIR_SLOT_LOAD || op->op==XR_XIR_SLOT_PLACE || op->op==XR_XIR_SLOT_STORE) {
+                if (!decls || !decls->slots || op->immediate<0 || (uint64_t)op->immediate>=decls->slot_count)
+                    return XR_XIR_BAD_STRUCTURE;
+            }
+            const EffectRootSeedRecord request={&body->domain,op,function,i,XR_XIR_UNIT};
+            status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
+            if (status!=XR_XIR_OK) return status;
+            if (op->op==XR_XIR_CALL_REQUIREMENT) {facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0};}
         }
-        const EffectRootSeedRecord request={&body->domain,&op,function,i,XR_XIR_UNIT};
-        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
-        if (status!=XR_XIR_OK) return status;
-        if (op.op==XR_XIR_CALL_REQUIREMENT) { facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0}; }
     }
+    sequence=effect_body_request_sequence_finish(&body_request,function,&finish);
+    if (sequence!=XR_XIR_OK) return sequence;
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=facts;return XR_XIR_OK;
 }
