@@ -130,6 +130,12 @@ static const XrCliOptionSpec deps_options[] = {
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
+static const XrCliOptionSpec toolchain_options[] = {
+    {"target", 0, XR_CLI_VALUE_STRING, false, false, "TARGET", "Preference target or native"},
+    {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Compiler path to store for use"},
+    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Zig path to store for use"},
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit preference facts as JSON"},
+    XR_CLI_OPT_END};
 
 static const XrCliOptionSpec info_options[] = {
     {"installation", 0, XR_CLI_VALUE_NONE, false, false, NULL,
@@ -166,6 +172,10 @@ static XrCliCommandSpec cli_commands[] = {
 
     /* Utility commands */
     {"deps", "Analyze source dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
+    {"toolchain", "List, use or reset toolchain preferences",
+     "list [--target TARGET]; config-path; use --target TARGET PROVIDER [--cc PATH | --zig PATH]; reset [--target TARGET]",
+     toolchain_options, 1, 2, false,
+     false, NULL, NULL, 0},
     {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,
      NULL, 0},
     {"doctor", "Diagnose Xray installation state", NULL, info_options, 0, 1, false, false, NULL,

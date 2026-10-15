@@ -2490,6 +2490,7 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
     ${XRAY_CLI_ROOT}/xcmd_deps.c
+    ${XRAY_CLI_ROOT}/xcmd_toolchain.c
     ${XRAY_CLI_ROOT}/xcmd_check.c
     ${XRAY_CLI_ROOT}/xcmd_fmt.c
     ${XRAY_CLI_ROOT}/xcmd_test.c
@@ -2627,6 +2628,9 @@ endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
 target_link_libraries(xray PRIVATE xray_cli_toolchain_config)
+if(TARGET xray_cli_toolchain_update)
+    target_link_libraries(xray PRIVATE xray_cli_toolchain_update)
+endif()
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so
