@@ -11,7 +11,9 @@ add_executable(test_xir_mixed_diamond xir/test_xir_mixed_diamond.c "${XIR_DIAMON
 target_link_libraries(test_xir_mixed_diamond PRIVATE xray_xir_vm xray_xir_scalar)
 add_executable(test_xir_mixed_diamond_resources xir/test_xir_mixed_diamond_resources.c "${XIR_DIAMOND_GENERATED}")
 target_link_libraries(test_xir_mixed_diamond_resources PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(diamond_target IN ITEMS test_xir_mixed_diamond_producer test_xir_mixed_diamond test_xir_mixed_diamond_resources)
+add_executable(test_xir_mixed_diamond_cancel xir/test_xir_mixed_diamond_cancel.c "${XIR_DIAMOND_GENERATED}")
+target_link_libraries(test_xir_mixed_diamond_cancel PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(diamond_target IN ITEMS test_xir_mixed_diamond_producer test_xir_mixed_diamond test_xir_mixed_diamond_resources test_xir_mixed_diamond_cancel)
     set_target_properties(${diamond_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${diamond_target} PRIVATE /W4 /WX /utf-8)
@@ -23,6 +25,9 @@ foreach(diamond_backend IN ITEMS 0 1 vm native)
     add_test(NAME test_xir_mixed_diamond_${diamond_backend} COMMAND test_xir_mixed_diamond ${diamond_backend})
     set_tests_properties(test_xir_mixed_diamond_${diamond_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
         LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;lifecycle;diamond;initialization")
+    add_test(NAME test_xir_mixed_diamond_cancel_${diamond_backend} COMMAND test_xir_mixed_diamond_cancel ${diamond_backend})
+    set_tests_properties(test_xir_mixed_diamond_cancel_${diamond_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;lifecycle;diamond;initialization;cancel")
     foreach(diamond_gate IN ITEMS axes fi)
         add_test(NAME test_xir_mixed_diamond_${diamond_backend}_${diamond_gate}
             COMMAND test_xir_mixed_diamond_resources ${diamond_backend} ${diamond_gate})

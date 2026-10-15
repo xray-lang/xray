@@ -24,7 +24,7 @@ typedef struct DiamondRecord {
     DiamondCode *code;
     XrXirInstance *instance;
     XrXirCallObserver observer;
-    unsigned initializers[4], roots, vm_frames, native_frames;
+    unsigned initializers[4], initializer_leaves[4], roots, vm_frames, native_frames;
 } DiamondRecord;
 struct DiamondCode {
     XrXirProgram *vm;
@@ -49,6 +49,9 @@ static void diamond_event(void *owner, const XrXirCallEvent *event) {
         if (event->entry == diamond_entry) { ++record->roots; CHECK(record->roots <= 2); }
     }
     if (event->kind == XR_XIR_CALL_FRAME_LEAVE && event->entry < record->code->functions) {
+        for (unsigned i = 0; i < 4; ++i) if (event->entry == diamond_initializers[i]) {
+            ++record->initializer_leaves[i]; CHECK(record->initializer_leaves[i] == record->initializers[i]);
+        }
         CHECK(event->status == XR_XIR_CALL_RETURNED ||
             (diamond_expected_fault != XR_XIR_CALL_READY && event->status == diamond_expected_fault));
         if (event->code == XR_XIR_CALL_CODE_UNKNOWN) { CHECK(event->status == diamond_expected_fault); return; }
@@ -115,7 +118,9 @@ static void diamond_value(const XrXirValue *value) {
 }
 static bool diamond_once(const DiamondRecord *record) {
     return record->initializers[0] == 1 && record->initializers[1] == 1 &&
-        record->initializers[2] == 1 && record->initializers[3] == 1 && record->roots == 2;
+        record->initializers[2] == 1 && record->initializers[3] == 1 && record->roots == 2 &&
+        record->initializer_leaves[0] == 1 && record->initializer_leaves[1] == 1 &&
+        record->initializer_leaves[2] == 1 && record->initializer_leaves[3] == 1;
 }
 static void diamond_verify(const DiamondRecord *record, unsigned backend) {
     CHECK(diamond_once(record));
