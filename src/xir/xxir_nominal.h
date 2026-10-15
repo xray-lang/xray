@@ -87,7 +87,8 @@ XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table);
 typedef enum XrXirNominalAccess {
     XR_XIR_NOMINAL_CONSTRUCT, XR_XIR_NOMINAL_READ, XR_XIR_NOMINAL_WRITE, XR_XIR_NOMINAL_TYPE
 } XrXirNominalAccess;
-/* Requires a verified module; declaration ownership grants no generic facts. */
-XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, uint32_t declaration, uint32_t field, XrXirNominalAccess access);
+/* Requires a verified module and its actual canonical nominal instance. A
+ * declaration ordinal cannot identify ordered generic arguments or a pool. */
+XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, uint32_t field, XrXirNominalAccess access);
 XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type);
 #endif // XXIR_NOMINAL_H

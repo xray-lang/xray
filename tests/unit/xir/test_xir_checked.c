@@ -789,30 +789,44 @@ static void nominal_projection_cases(void) {
     xr_xir_compile_artifact_free(checked);checked=NULL;
 }
 
+static XrXirType nominal_authority_instance(const XrXirModule *module) {
+    XrXirType result=XR_XIR_UNIT;
+    for(uint32_t t=0;t<module->types->count;++t) {
+        const XrXirTypeNode *node=&module->types->nodes[t];
+        if(node->kind!=XR_XIR_TYPE_NOMINAL || node->nominal.declaration!=0 ||
+            node->nominal.argument_count!=1 || node->nominal.arguments[0]!=XR_XIR_I64)continue;
+        CHECK(result==XR_XIR_UNIT);result=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+    }
+    CHECK(result!=XR_XIR_UNIT);return result;
+}
 static void nominal_member_authority(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 3), *decoded = NULL, *closed = NULL, *lowered = NULL;
     const XrXirModule *module = xr_xir_compile_artifact_module(checked);
+    XrXirType instance=nominal_authority_instance(module);
     XrXirFunctionIdentity *ids = (XrXirFunctionIdentity *) module->declarations->functions;
     XrXirCompileContext access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,100001});
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 5, 0, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 3, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 5, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_WRITE) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 0, XR_XIR_NOMINAL_WRITE) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 2, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, XR_XIR_UNIT, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, XR_XIR_I64, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, (XrXirType)65535, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 5, instance, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 3, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 5, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_WRITE) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 0, XR_XIR_NOMINAL_WRITE) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 2, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_STRUCTURE);
     XrXirNominalDeclaration *d = (XrXirNominalDeclaration *) module->types->nominals->declarations;
     d[0].exported = 0;
-    CHECK(xr_xir_compile_nominal_access(&access, module, 3, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 3, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     d[0].exported = 1;
     XrXirNominalField *fields = (XrXirNominalField *) d[0].fields;
     fields[1].flags = XR_XIR_FIELD_PROTECTED;
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     fields[1].flags = XR_XIR_FIELD_PRIVATE;
     const uint32_t invalid_functions[] = {7, 5, 2, 3};
     for (unsigned i = 0; i < 4; ++i) {
@@ -821,7 +835,7 @@ static void nominal_member_authority(void) {
         ids[invalid_functions[i]].nominal_owner = 0;
     }
     access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BUDGET);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
@@ -832,9 +846,10 @@ static void nominal_member_authority(void) {
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL; module = xr_xir_compile_artifact_module(lowered); access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,10001});
+    instance=nominal_authority_instance(module);
     CHECK(module->declarations->functions[4].nominal_owner == 1);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     xr_xir_compile_artifact_free(lowered);lowered=NULL;
 }
 static void uninitialized_packet(void) {
