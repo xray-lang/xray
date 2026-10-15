@@ -231,9 +231,9 @@ static bool cell_proof_inventory_storage(CellProofBuild *build,uint64_t values) 
                 if (!cell_proof_inventory_store(build,f,head.parameter_count+run.first,run.count,run.operation.type))
                     return false;
             } else for (uint32_t i=run.first;i-run.first<run.count;++i) {
-                XrXirType type=cell_proof_type(build,f,head.parameter_count+i);
-                if (build->status!=XR_XIR_OK ||
-                    !cell_proof_inventory_store(build,f,head.parameter_count+i,1,type)) return false;
+                XrXirInstruction operation;const XrXirInstruction *op=
+                    cell_proof_run_operation(build,&cursor,&run,i,&operation);
+                if (!op || !cell_proof_inventory_store(build,f,head.parameter_count+i,1,op->type)) return false;
             }
         }
     }
@@ -258,13 +258,13 @@ static bool cell_proof_inventory_run(CellProofBuild *build,const XrXirCellProofR
         }
         return true;
     }
+    /* Complete range rows carry the actual canonical type word. A second
+     * random lookup would decode that same physical word again. */
     for (uint32_t i=run->first;i-run->first<run->count;++i) {
-        XrXirType type=cell_proof_type(build,f,head->parameter_count+i);
-        if (build->status!=XR_XIR_OK || !cell_proof_work(build,3)) return false;
+        if (!cell_proof_work(build,3)) return false;
         XrXirInstruction operation;const XrXirInstruction *op=cell_proof_run_operation(build,cursor,run,i,&operation);
         if (!op) return false;
-        if (op->type!=type) return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
-        if (!cell_proof_inventory_instruction(build,f,i,type,op->op,tracked)) return false;
+        if (!cell_proof_inventory_instruction(build,f,i,op->type,op->op,tracked)) return false;
     }
     return true;
 }
