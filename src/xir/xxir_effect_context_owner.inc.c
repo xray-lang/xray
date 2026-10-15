@@ -17,6 +17,16 @@ struct EffectContextOwner {
     EffectRefinementBounds *refinement;
 };
 
+/* Publication removes the ordinary classifier's real allocations and its
+ * construction identity. Surviving descriptors belong to this Final owner. */
+static bool effect_context_owner_published(XrCompileResources *resources,const EffectContextOwner *owner) {
+    return resources && owner && owner->ordinary && owner->dense && owner->forest &&
+        owner->ordinary->resources==resources && owner->dense->resources==resources &&
+        owner->forest->resources==resources && !owner->ordinary->dense && owner->dense->dense &&
+        !owner->refinement && !owner->ordinary->terms.remaining && !owner->dense->terms.remaining &&
+        !owner->forest->terms.remaining && effect_ordinary_work_empty(owner->ordinary);
+}
+
 static void effect_context_owner_free(EffectContextOwner *owner) {
     if (!owner) return;
     /* Retire summary views while the forest still owns their Result.
@@ -28,12 +38,7 @@ static void effect_context_owner_free(EffectContextOwner *owner) {
 }
 
 static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
-    effect_parameters_free(&contexts->uses);
-    xr_compile_resources_free(contexts->uses.outcomes_work.functions);
-    xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
-    xr_compile_resources_free(contexts->uses.outcomes_work.root);
-    xr_compile_resources_free(contexts->uses.outcomes_work.root_witnesses);
-    xr_compile_resources_free(contexts->uses.outcomes_work.unresolved_witnesses);
+    effect_ordinary_results_free(contexts);
     contexts->uses=(XrXirEffects){.resources=contexts->terms.remaining->resources,.count=contexts->count};
 }
 
@@ -534,6 +539,7 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     if (status==XR_XIR_OK) {
         owner->dense=xir_compile_calloc(context,1,sizeof(*owner->dense),&status);
         if (!owner->dense) { effect_context_owner_free(owner);return status; }
+        owner->dense->resources=context->resources;
         owner->dense->terms.remaining=context;owner->dense->dense=true;
         owner->dense->source_type_count=source->types->count;owner->dense->base_count=source->function_count;
         status=effect_terms_seed(&owner->dense->terms,&owner->ordinary->terms.types);
