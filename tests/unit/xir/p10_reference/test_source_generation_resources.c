@@ -65,6 +65,7 @@ static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResou
     const char *first=comptime ? "const value=comptime (6*7)\nexport fn answer()->i64{return value}" :
         "const value=5\nexport fn answer()->i64{return value}";
     if (history) first="const value=5\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}";
+    if (program_binding) first="const value=5\nvar cell:i64=40\nfn old()->i64{return cell+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}";
     XrXirSourceText text={NULL,first,strlen(first)};uint64_t serial=0;
     status=xr_xir_compile_source_generation_prepare(owner,&text,&serial,NULL);
     if (status!=XR_XIR_OK) { CHECK(!serial);goto done; }
