@@ -19,6 +19,8 @@
 #include "xlsp_imports.h"
 #include "xlsp_utils.h"
 #include "xlsp_source_index_store.h"
+#include "xlsp_source_settings.h"
+#include "../../api/xsource_compile.h"
 #include "xlsp_index_pool.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
@@ -28,7 +30,7 @@
 #define FILE_CHANGE_CHANGED 2
 #define FILE_CHANGE_DELETED 3
 
-void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *params) {
+XR_FUNC void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *changes = xjson_get_array(params, "changes");
     if (!changes)
         return;
@@ -113,7 +115,7 @@ void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *p
 // ============================================================================
 
 // Add a workspace folder
-void xlsp_handle_ws_add_folder(XrLspServer *server, const char *uri, const char *name) {
+XR_FUNC void xlsp_handle_ws_add_folder(XrLspServer *server, const char *uri, const char *name) {
     if (server->workspace_folder_count >= MAX_WORKSPACE_FOLDERS) {
         lsp_log("Warning: Maximum workspace folders reached");
         return;
@@ -136,7 +138,7 @@ void xlsp_handle_ws_add_folder(XrLspServer *server, const char *uri, const char 
 }
 
 // Remove a workspace folder and purge related state
-void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri) {
+XR_FUNC void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri) {
     for (int i = 0; i < server->workspace_folder_count; i++) {
         if (strcmp(server->workspace_folders[i].uri, uri) == 0) {
             lsp_log("Removed workspace folder: %s", server->workspace_folders[i].name);
@@ -165,7 +167,7 @@ void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri) {
     }
 }
 
-void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, XrJsonValue *params) {
+XR_FUNC void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *event = xjson_get_object(params, "event");
     if (!event)
         return;
@@ -204,99 +206,31 @@ void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, XrJsonValu
 // Configuration
 // ============================================================================
 
-void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settings) {
-    if (!settings)
-        return;
-
-    // Get xray settings section
-    XrJsonValue *xray = xjson_get_object(settings, "xray");
-    if (!xray)
-        return;
-
-    // Diagnostic settings
-    XrJsonValue *diagnostics = xjson_get_object(xray, "diagnostics");
-    if (diagnostics) {
-        if (xjson_get(diagnostics, "enabled")) {
-            bool was_enabled = server->config.diagnostics_enabled;
-            server->config.diagnostics_enabled = xjson_get_bool(diagnostics, "enabled");
-            // On disable: clear pending queue and publish empty diagnostics
-            if (was_enabled && !server->config.diagnostics_enabled) {
-                for (int i = 0; i < server->pending_diag_count; i++) {
-                    if (server->pending_diag[i]) {
-                        server->pending_diag[i]->diag_pending = false;
-                    }
-                }
-                server->pending_diag_count = 0;
-                xlsp_clear_all_diagnostics(server);
-            }
-        }
-        if (xjson_get(diagnostics, "debounceMs")) {
-            server->config.diagnostic_debounce_ms = (int) xjson_get_int(diagnostics, "debounceMs");
-        }
+static void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settings) {
+    if (!server || !settings) return;
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResources *resources = NULL;
+    XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
+    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XlspSourceSettings *patch = NULL; bool clear = false;
+    if (status == XR_XIR_OK) status = xlsp_source_settings_read(resources, settings, &patch);
+    if (status == XR_XIR_OK) status = xlsp_source_settings_apply(patch, server, &clear);
+    xlsp_source_settings_free(patch);
+    xr_compile_resources_release(resources);
+    if (status == XR_XIR_UNRESOLVED) return;
+    server->source_failure.stage = status == XR_XIR_OK ? 0 : 13;
+    server->source_failure.status = (unsigned)status;
+    if (status != XR_XIR_OK) {
+        lsp_log("Configuration rejected (status=%u)", (unsigned)status); return;
     }
-
-    // Completion settings
-    XrJsonValue *completion = xjson_get_object(xray, "completion");
-    if (completion) {
-        if (xjson_get(completion, "maxItems")) {
-            server->config.completion_max_items = (int) xjson_get_int(completion, "maxItems");
-        }
-    }
-
-    // Format settings
-    XrJsonValue *format = xjson_get_object(xray, "format");
-    if (format) {
-        if (xjson_get(format, "tabSize")) {
-            server->config.format_tab_size = (int) xjson_get_int(format, "tabSize");
-        }
-        if (xjson_get(format, "insertSpaces")) {
-            server->config.format_insert_spaces = xjson_get_bool(format, "insertSpaces");
-        }
-        if (xjson_get(format, "alignBranchArrows")) {
-            server->config.format_align_branch_arrows = xjson_get_bool(format, "alignBranchArrows");
-        }
-        if (xjson_get(format, "maxLineLength")) {
-            server->config.format_max_line_length = (int) xjson_get_int(format, "maxLineLength");
-        }
-        if (xjson_get(format, "alignEnumValues")) {
-            server->config.format_align_enum_values = xjson_get_bool(format, "alignEnumValues");
-        }
-        if (xjson_get(format, "alignStructFields")) {
-            server->config.format_align_struct_fields = xjson_get_bool(format, "alignStructFields");
-        }
-        if (xjson_get(format, "alignTrailingComments")) {
-            server->config.format_align_trailing_comments =
-                xjson_get_bool(format, "alignTrailingComments");
-        }
-        if (xjson_get(format, "wrapLongLines")) {
-            server->config.format_wrap_long_lines = xjson_get_bool(format, "wrapLongLines");
-        }
-        if (xjson_get(format, "multilineTrailingComma")) {
-            server->config.format_multiline_trailing_comma =
-                xjson_get_bool(format, "multilineTrailingComma");
-        }
-    }
-
-    // Inlay hints settings
-    XrJsonValue *inlay_hints = xjson_get_object(xray, "inlayHints");
-    if (inlay_hints) {
-        if (xjson_get(inlay_hints, "typeAnnotations")) {
-            server->config.inlay_hints_type_annotations =
-                xjson_get_bool(inlay_hints, "typeAnnotations");
-        }
-        if (xjson_get(inlay_hints, "parameterNames")) {
-            server->config.inlay_hints_parameter_names =
-                xjson_get_bool(inlay_hints, "parameterNames");
-        }
-    }
-
+    if (clear) xlsp_clear_all_diagnostics(server);
     lsp_log("Configuration updated: debounce=%dms, diagnostics=%s, maxItems=%d, tabSize=%d",
-            server->config.diagnostic_debounce_ms,
-            server->config.diagnostics_enabled ? "on" : "off", server->config.completion_max_items,
-            server->config.format_tab_size);
+        server->config.diagnostic_debounce_ms, server->config.diagnostics_enabled ? "on" : "off",
+        server->config.completion_max_items, server->config.format_tab_size);
 }
 
-void xlsp_handle_ws_did_change_configuration(XrLspServer *server, XrJsonValue *params) {
+XR_FUNC void xlsp_handle_ws_did_change_configuration(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *settings = xjson_get_object(params, "settings");
     xlsp_handle_ws_apply_configuration(server, settings);
 }
