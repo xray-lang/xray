@@ -9,6 +9,7 @@
 #include "xdap_dispatch_internal.h"
 #include "xdap_hit.h"
 #include "xdap_lexical.h"
+#include "xdap_expression.h"
 #include <stdio.h>
 #include <string.h>
 static XrXirStatus inspect_finish(XdapAdapter *s,const XdapRequest *r,XdapJsonWriter *body) {
@@ -370,6 +371,42 @@ static XrXirStatus inspect_disassemble(XdapAdapter *s,const XdapRequest *r) {
     }
     XDAP_TEXT(&body,"]}");return inspect_finish(s,r,&body);
 }
+static XrXirStatus inspect_evaluate(XdapAdapter *s,const XdapRequest *r) {
+    uint64_t handle=0;uint32_t expression=0;XrXirStatus status=xdap_dispatch_number(r,"frameId",0,&handle);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"expression",&expression);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t frame=handle ? inspect_frame(s,handle,false) : 0;
+    if (!s->snapshot || frame>=s->depth) return xdap_dispatch_response(s,r,false,NULL,"Invalid or retired stopped frame");
+    if (!expression || r->document.nodes[expression].kind!=XDAP_JSON_STRING || !r->document.nodes[expression].length)
+        return xdap_dispatch_response(s,r,false,NULL,"A complete expression is required");
+    XdapLexicalView lexical={0};status=xdap_lexical_open(s->launch,s->snapshot,frame,&lexical);
+    XrXirValue value={0};
+    if (status==XR_XIR_OK) {
+        const XdapJsonNode *text=&r->document.nodes[expression];
+        XdapExpressionRequest request={s->compiler,&lexical,text->text,text->length,s->config.message_limit};
+        status=xdap_expression_evaluate(&request,&value);
+    }
+    if (status!=XR_XIR_OK) {
+        if (status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_BUDGET) return status;
+        return xdap_dispatch_response(s,r,false,NULL,"Expression is not admitted in the selected stopped frame");
+    }
+    uint32_t before=s->value_count,reference=0;XdapValueShape shape={0};
+    status=inspect_reference(s,&value,frame,&reference,&shape);
+    XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);body.status=status;
+    XDAP_TEXT(&body,"{\"result\":");
+    if (!inspect_value(&body,&value) && body.status==XR_XIR_OK) body.status=XR_XIR_BAD_STRUCTURE;
+    if (s->variable_types && body.status==XR_XIR_OK) {
+        XdapValueView view={&value,s->config.observer_metadata,s->snapshot,frame};XdapTypeText type={0};
+        XrXirValueStatus formatted=xdap_value_type_text(&view,&type);
+        if (formatted!=XR_XIR_VALUE_OK) body.status=formatted==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        else { XDAP_TEXT(&body,",\"type\":");xdap_json_quote(&body,type.bytes,type.length); }
+    }
+    XDAP_TEXT(&body,",\"variablesReference\":");xdap_json_unsigned(&body,reference);
+    if (shape.children) { XDAP_TEXT(&body,",");const char *key=shape.indexed ? "indexedVariables" : "namedVariables";
+        xdap_json_quote(&body,key,strlen(key));XDAP_TEXT(&body,":");xdap_json_unsigned(&body,shape.children); }
+    XDAP_TEXT(&body,"}");xr_xir_value_drop(&value);status=inspect_finish(s,r,&body);
+    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
+}
 XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,const char *command) {
     if (!s->initialized) return xdap_dispatch_response(s,r,false,NULL,"Initialize first");
     if (!strcmp(command,"threads")) return inspect_threads(s,r);
@@ -378,7 +415,8 @@ XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,co
     if (!strcmp(command,"variables")) return inspect_variables(s,r);
     if (!strcmp(command,"setFunctionBreakpoints")) return inspect_function_breakpoints(s,r);
     if (!strcmp(command,"setBreakpoints")) return xdap_dispatch_source_breakpoints(s,r);
-    if (!strcmp(command,"evaluate") || !strcmp(command,"setVariable"))
+    if (!strcmp(command,"evaluate")) return inspect_evaluate(s,r);
+    if (!strcmp(command,"setVariable"))
         return xdap_dispatch_response(s,r,false,NULL,"Paused lexical expression admission is not yet available");
     if (!strcmp(command,"restart")) return xdap_dispatch_response(s,r,false,NULL,"Restart construction is not yet available");
     if (!strcmp(command,"disassemble")) return inspect_disassemble(s,r);
