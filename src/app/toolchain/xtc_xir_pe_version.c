@@ -12,7 +12,7 @@
 
 typedef struct PeVersionReader {
     XrCompileResources *resources;
-    const uint8_t *bytes;
+    const XtcXirPeSource *source;
     size_t length, sections, resource, pe, optional, mapped_section;
     uint32_t resource_size, directories;
     uint16_t section_count;
@@ -37,9 +37,17 @@ static bool pe_range(PeVersionReader *reader, size_t offset, size_t length) {
 static bool pe_read(PeVersionReader *reader, size_t offset, unsigned width, uint32_t *output) {
     if (!pe_range(reader, offset, width) || !pe_work(reader, width)) return false;
     uint32_t value = 0;
-    for (unsigned i = 0; i < width; ++i) value |= (uint32_t)reader->bytes[offset + i] << (8 * i);
+    XtcXirPeVersionStatus status=reader->source->read(reader->source->context,offset,width,&value);
+    if (status!=XTC_XIR_PE_VERSION_OK) return pe_fail(reader,status);
+    if (width<4 && value>>(width*8)) return pe_fail(reader,XTC_XIR_PE_VERSION_INVALID);
     *output = value;
     return true;
+}
+static XtcXirPeVersionStatus pe_memory_read(const void *context,size_t offset,
+    unsigned width,uint32_t *output) {
+    const uint8_t *bytes=context;uint32_t value=0;
+    for (unsigned i=0;i<width;++i) value|=(uint32_t)bytes[offset+i]<<(8*i);
+    *output=value;return XTC_XIR_PE_VERSION_OK;
 }
 /* RVA translation never interprets zero-filled virtual bytes as file bytes.
  * Check every candidate rather than choosing the first overlapping section. */
@@ -220,8 +228,14 @@ static bool pe_decimal(PeVersionReader *reader, const uint16_t parts[4], char ou
 XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(XrCompileResources *resources,
     const uint8_t *bytes, size_t length, XtcXirPeVersion *output) {
     if (!resources || !bytes || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
+    XtcXirPeSource source={bytes,length,pe_memory_read};
+    return xtc_xir_pe_version_parse_source(resources,&source,output);
+}
+XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse_source(XrCompileResources *resources,
+    const XtcXirPeSource *source,XtcXirPeVersion *output) {
+    if (!resources || !source || !source->read || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
     PeVersionReader reader = {0};
-    reader.resources = resources; reader.bytes = bytes; reader.length = length;
+    reader.resources = resources; reader.source = source; reader.length = source->length;
     uint32_t ancestors[3];
     if (!pe_header(&reader) || !pe_resource(&reader) || !pe_directory(&reader, 0, 0, ancestors)) return reader.status;
     if (!reader.found) return XTC_XIR_PE_VERSION_NOT_FOUND;
@@ -241,8 +255,9 @@ XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(XrCompileResources *resou
 XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(XrCompileResources *resources,
     const uint8_t *bytes, size_t length, XtcXirPeImage *output) {
     if (!resources || !bytes || !output) return XTC_XIR_PE_VERSION_BAD_ARGUMENT;
+    XtcXirPeSource source={bytes,length,pe_memory_read};
     PeVersionReader reader = {0};
-    reader.resources = resources; reader.bytes = bytes; reader.length = length;
+    reader.resources = resources; reader.source = &source; reader.length = length;
     if (!pe_header(&reader)) return reader.status;
     uint32_t machine, magic, characteristics, subsystem, entry, image, headers, flags;
     if (!pe_read(&reader, reader.pe + 4, 2, &machine) ||

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "%d: %s\n", __LINE__, #x); exit(1); } } while (0)
 _Static_assert(sizeof(XtcXirPeVersion) == 64, "The version result is a self-contained fixed value");
 
@@ -224,6 +225,79 @@ static void image_cases(void) {
     image_fixture(bytes);put16(bytes,OPT,0x10b);CHECK(image_case(bytes,FRAME,UINT64_MAX,&used)==XTC_XIR_PE_VERSION_UNSUPPORTED);
     printf("image_without_version_work=%llu all_image_limits/truncations/rva/header=PASS allocations=0\n",(unsigned long long)work);
 }
+typedef struct SparsePeSource {
+    uint8_t bytes[FRAME];
+    size_t calls,read_bytes,fail_at;
+} SparsePeSource;
+enum { SPARSE_RESOURCE=100*1024*1024 };
+static XtcXirPeVersionStatus sparse_read(const void *context,size_t offset,
+    unsigned width,uint32_t *output) {
+    SparsePeSource *source=(SparsePeSource *)context;
+    CHECK(width==1 || width==2 || width==4);
+    if (source->calls++==source->fail_at) return XTC_XIR_PE_VERSION_IO;
+    CHECK(offset<RESOURCE || offset>=SPARSE_RESOURCE);
+    size_t physical=offset<RESOURCE ? offset : RESOURCE+offset-SPARSE_RESOURCE;
+    CHECK(physical<=FRAME && width<=FRAME-physical);
+    uint32_t value=0;
+    for (unsigned i=0;i<width;++i) value|=(uint32_t)source->bytes[physical+i]<<(8*i);
+    source->read_bytes+=width;*output=value;return XTC_XIR_PE_VERSION_OK;
+}
+static void source_cases(void) {
+    SparsePeSource source={0};fixture(source.bytes);put32(source.bytes,SECTION+20,SPARSE_RESOURCE);
+    XtcXirPeSource request={&source,SPARSE_RESOURCE+512,sparse_read};
+    source.fail_at=SIZE_MAX;
+    XrCompileResources *resources=ledger(UINT64_MAX);XrCompileResourceStats before,after;
+    CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XtcXirPeVersion result;
+    CHECK(xtc_xir_pe_version_parse_source(resources,&request,&result)==XTC_XIR_PE_VERSION_OK);
+    CHECK(!strcmp(result.file_text,"1.2.3.4") && !strcmp(result.product_text,"5.6.7.8"));
+    CHECK(source.calls && source.read_bytes<FRAME*4);
+    CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.allocation_count==before.allocation_count && after.live_bytes==before.live_bytes);
+    size_t count=source.calls,read_bytes=source.read_bytes;xr_compile_resources_release(resources);
+    for (size_t cut=0;cut<count;++cut) {
+        source.calls=source.read_bytes=0;source.fail_at=cut;resources=ledger(UINT64_MAX);
+        XtcXirPeVersion saved;memset(&saved,0xa5,sizeof(saved));result=saved;
+        CHECK(xtc_xir_pe_version_parse_source(resources,&request,&result)==XTC_XIR_PE_VERSION_IO);
+        CHECK(source.calls==cut+1 && !memcmp(&result,&saved,sizeof(result)));
+        xr_compile_resources_release(resources);
+    }
+    source.calls=0;source.fail_at=SIZE_MAX;request.length=0;resources=ledger(UINT64_MAX);
+    XtcXirPeVersion saved;memset(&saved,0xa5,sizeof(saved));result=saved;
+    CHECK(xtc_xir_pe_version_parse_source(resources,&request,&result)==XTC_XIR_PE_VERSION_TRUNCATED);
+    CHECK(!source.calls && !memcmp(&result,&saved,sizeof(result)));xr_compile_resources_release(resources);
+    printf("source_sparse_offset=%u reads=%zu bytes=%zu all_read_failures_preserve_output allocations=0\n",
+        SPARSE_RESOURCE,count,read_bytes);
+}
+typedef struct FilePeSource {
+    FILE *file;
+    XrCompileResources *resources;
+    size_t calls,read_bytes;
+} FilePeSource;
+static XtcXirPeVersionStatus file_read(const void *context,size_t offset,
+    unsigned width,uint32_t *output) {
+    FilePeSource *source=(FilePeSource *)context;uint8_t bytes[4];uint32_t value=0;
+    if (offset>LONG_MAX || width>sizeof(bytes)) return XTC_XIR_PE_VERSION_BUDGET;
+    if (xr_compile_resources_work(source->resources,width+2)!=XR_COMPILE_RESOURCE_OK)
+        return XTC_XIR_PE_VERSION_BUDGET;
+    if (fseek(source->file,(long)offset,SEEK_SET) || fread(bytes,1,width,source->file)!=width)
+        return XTC_XIR_PE_VERSION_IO;
+    for (unsigned i=0;i<width;++i) value|=(uint32_t)bytes[i]<<(8*i);
+    ++source->calls;source->read_bytes+=width;*output=value;return XTC_XIR_PE_VERSION_OK;
+}
+static int real_source(const char *path,const char *file,const char *product) {
+    FILE *stream=fopen(path,"rb");CHECK(stream && !fseek(stream,0,SEEK_END));
+    long length=ftell(stream);CHECK(length>0);
+    XrCompileResources *resources=ledger(UINT64_MAX);FilePeSource source={stream,resources,0,0};
+    XtcXirPeSource request={&source,(size_t)length,file_read};XtcXirPeVersion output;
+    CHECK(xtc_xir_pe_version_parse_source(resources,&request,&output)==XTC_XIR_PE_VERSION_OK);
+    CHECK(!strcmp(file,output.file_text) && !strcmp(product,output.product_text));
+    XrCompileResourceStats stats;CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
+    CHECK(stats.allocation_count==1 && source.read_bytes<65536 && !fclose(stream));
+    printf("source_file=%s bytes=%ld file_version=%s product_version=%s reads=%zu read_bytes=%zu allocations=0\n",
+        path,length,output.file_text,output.product_text,source.calls,source.read_bytes);
+    xr_compile_resources_release(resources);return 0;
+}
 static int real_file(const char *path, const char *file, const char *product) {
     FILE *stream = fopen(path, "rb"); CHECK(stream); CHECK(!fseek(stream, 0, SEEK_END));
     long length = ftell(stream); CHECK(length > 0); rewind(stream);
@@ -238,8 +312,9 @@ static int real_file(const char *path, const char *file, const char *product) {
     xr_compile_resources_release(resources); xr_free(bytes); return 0;
 }
 int main(int argc, char **argv) {
+    if (argc==5 && !strcmp(argv[1],"--source")) return real_source(argv[2],argv[3],argv[4]);
     if (argc == 4) return real_file(argv[1], argv[2], argv[3]);
-    CHECK(argc == 1); reject_cases(); value_cases(); work_cases(); image_cases();
+    CHECK(argc == 1); reject_cases(); value_cases(); work_cases(); image_cases(); source_cases();
 #ifndef PE_VERSION_PRODUCTION
     CHECK(live == 0); printf("physical_live=0 ledger_allocations=%zu\n", allocation_calls);
 #endif

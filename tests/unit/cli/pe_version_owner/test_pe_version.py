@@ -37,10 +37,10 @@ def fixed_version(path):
 
 
 def main():
-    executable, compiler, linker, destination = map(pathlib.Path, sys.argv[1:])
+    executable, compiler, linker, destination, *extra = map(pathlib.Path, sys.argv[1:])
     destination.mkdir(parents=True, exist_ok=True)
     facts = []
-    for source in (compiler, linker):
+    for source in (compiler, linker, *extra):
         data = source.read_bytes()
         size, digest = len(data), hashlib.sha256(data).hexdigest()
         copy = destination / (source.name + ".bytes")
@@ -49,6 +49,9 @@ def main():
         result = subprocess.run([str(executable), str(copy), file_version, product_version],
                                 check=True, capture_output=True, text=True)
         print(result.stdout, end="")
+        streamed = subprocess.run([str(executable), "--source", str(copy), file_version, product_version],
+                                 check=True, capture_output=True, text=True)
+        print(streamed.stdout, end="")
         assert copy.read_bytes() == data
         facts.append(dict(source=str(source), bytes=size, sha256=digest, file_version=file_version,
                           product_version=product_version, fixed_words=words))

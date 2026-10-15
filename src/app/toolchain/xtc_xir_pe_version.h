@@ -19,7 +19,8 @@ typedef enum XtcXirPeVersionStatus {
     XTC_XIR_PE_VERSION_TRUNCATED,
     XTC_XIR_PE_VERSION_UNSUPPORTED,
     XTC_XIR_PE_VERSION_AMBIGUOUS,
-    XTC_XIR_PE_VERSION_NOT_FOUND
+    XTC_XIR_PE_VERSION_NOT_FOUND,
+    XTC_XIR_PE_VERSION_IO
 } XtcXirPeVersionStatus;
 typedef struct XtcXirPeVersion {
     uint16_t file[4], product[4];
@@ -31,6 +32,13 @@ typedef struct XtcXirPeImage {
     uint32_t entry_rva, size_of_image, size_of_headers;
     uint32_t entry_section_characteristics;
 } XtcXirPeImage;
+
+typedef struct XtcXirPeSource {
+    const void *context;
+    size_t length;
+    XtcXirPeVersionStatus (*read)(const void *context, size_t offset,
+        unsigned width, uint32_t *value);
+} XtcXirPeSource;
 
 /* Decode bounded AMD64 PE32+ image facts using the same header/RVA reader.
  * The entry must have unique file-backed bytes. Version resources are not
@@ -48,4 +56,13 @@ XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_image_parse(XrCompileResources *resourc
  * Output is a self-contained value and is unchanged on every failure. */
 XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse(XrCompileResources *resources,
     const uint8_t *bytes, size_t length, XtcXirPeVersion *output);
+
+/* The same decoder can read a held image without materializing its unrelated
+ * sections. Each callback receives one bounds-checked little-endian scalar of
+ * width 1, 2 or 4; it preserves value on failure and charges actual I/O to the
+ * caller's original ledger. Source/context remain borrowed until return.
+ * Decoding is allocation-free and preserves the entire output on failure.
+ * These self-reported fixed facts grant no provider or execution authority. */
+XR_FUNC XtcXirPeVersionStatus xtc_xir_pe_version_parse_source(XrCompileResources *resources,
+    const XtcXirPeSource *source, XtcXirPeVersion *output);
 #endif // XTC_XIR_PE_VERSION_H
