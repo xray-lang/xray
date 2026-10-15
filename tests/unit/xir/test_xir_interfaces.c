@@ -292,6 +292,13 @@ static void checked_owner_outlives_producer(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1],"--constraint-owner-structure")) {
+        constraint_proof_shared_type_walk();
+        constraint_proof_interface_identity_work();
+        stage_contexts_free(); CHECK(!interface_live);
+        puts("Shared callable type owners retain explicit unresolved root bounds and exact proof budgets");
+        return 0;
+    }
     if (argc == 2 && !strcmp(argv[1],"--callable-admission")) {
         type_inference_callable_mode_admission_case();
         Fixture declared; fixture(&declared); declared.types.interfaces = &declared.table;
