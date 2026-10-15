@@ -55,6 +55,22 @@ static void value_path_replacement_identity(XrXirDomain *domain) {
     CHECK(xr_xir_array_new((XrXirType)257,&first,1,&admission,&array)==XR_XIR_VALUE_OK);
     const XrXirValuePathStep steps[]={{XR_XIR_PATH_INDEX,(XrXirType)257,0},{XR_XIR_PATH_FIELD,(XrXirType)256,0}};
     XrXirValuePath path={steps,2};XrXirFaultDetail fault={0};size_t blocks=live;uint64_t bytes=domain->stats.live_bytes;
+    XrXirDomain *observer=NULL;XrXirDomainBudgetControls observer_limits={65536,65536,65536,65536,65536};
+    CHECK(xr_xir_domain_new_budgeted(65536,&observer_limits,&observer)==XR_XIR_VALUE_OK);
+    XrXirValueAdmission observing={arena,observer,NULL,NULL,65536,65536};XrXirValue observed={0};
+    CHECK(xr_xir_array_get(&array,0,&observing,&observed,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&observed));
+    uint64_t observer_work=xr_xir_domain_budget_stats(observer).work;
+    CHECK(xir_value_observe_child(&array,steps,&observing,&observed,&fault)==XR_XIR_VALUE_OK);
+    CHECK(observed.type==first.type && observed.payload==first.payload && object_pointer(&observed)->domain==domain);
+    CHECK(xr_xir_domain_budget_stats(observer).work>observer_work && xr_xir_domain_stats(observer).live_bytes==sizeof(*observer));
+    CHECK(xr_xir_class_set(&observed,0,&replacement,&observing)==XR_XIR_VALUE_BAD_ARGUMENT);class_value_count(&first,11);
+    XrXirValuePathStep missing=steps[0];missing.selector=-1;XrXirValue unavailable={0};
+    CHECK(xir_value_observe_child(&array,&missing,&observing,&unavailable,&fault)==XR_XIR_VALUE_BOUNDS);
+    CHECK(unit_value(&unavailable) && fault.code==430 && fault.index==-1 && fault.length==1);
+    XrXirFaultDetail retained={430,0,7,9};fault=retained;observing.work=0;
+    CHECK(xir_value_observe_child(&array,steps,&observing,&unavailable,&fault)==XR_XIR_VALUE_LIMIT);
+    CHECK(unit_value(&unavailable) && !memcmp(&fault,&retained,sizeof(fault)));
+    xr_xir_domain_drop(observer);class_value_count(&observed,11);xr_xir_value_drop(&observed);fault=(XrXirFaultDetail){0};
     CHECK(xir_value_path_replacement(&array,&path,&replacement,&admission,&output,&fault)==XR_XIR_VALUE_UNSUPPORTED);
     CHECK(live==blocks && domain->stats.live_bytes==bytes && unit_value(&output));class_value_count(&first,11);class_value_count(&next,37);
     path=(XrXirValuePath){steps+1,1};
@@ -66,6 +82,7 @@ static void value_path_replacement_identity(XrXirDomain *domain) {
     CHECK(xr_xir_array_get(&output,0,&admission,&changed,&fault)==XR_XIR_VALUE_OK && changed.payload==next.payload);
     xr_xir_value_drop(&old);xr_xir_value_drop(&changed);xr_xir_value_drop(&output);xr_xir_value_drop(&array);
     xr_xir_value_drop(&first);xr_xir_value_drop(&next);xr_xir_value_drop(&text);xr_xir_compile_type_arena_drop(arena);
+    puts("Observer child retains foreign Class identity, spends only observer ledger and grants no Class write; bounds/work preserved PASS");
 }
 static void value_path_replacement_cases(bool resources) {
     CHECK(!live);XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);

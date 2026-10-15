@@ -17,6 +17,7 @@ typedef struct StorageUnpack {
     XrXirValueAdmission *admission;
     StorageUnpackFrame *frames;
     uint32_t depth, capacity;
+    bool observer;
 } StorageUnpack;
 
 static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
@@ -73,7 +74,7 @@ static XrXirValueStatus storage_unpack_walk(StorageUnpack *unpack,
     StorageSpan span, XrXirValue *output) {
     XrXirValue ready = {0}; bool first = true;
     while (first || unpack->depth) {
-        if (!unpack->admission->work) return XR_XIR_VALUE_LIMIT;
+        if (!unpack->admission->work || (unpack->observer && !xr_xir_domain_work(unpack->admission->domain,1))) return XR_XIR_VALUE_LIMIT;
         --unpack->admission->work;
         XrXirValueStatus status = XR_XIR_VALUE_OK;
         if (first) { first = false; status = storage_unpack_enter(unpack, span, &ready); }
@@ -113,8 +114,8 @@ static void storage_unpack_discard(StorageUnpack *unpack) {
 }
 /* Input belongs to a previously admitted owner and remains borrowed for this
  * synchronous operation. Materialization confers no new construction authority. */
-static XrXirValueStatus storage_unpack_operation(StorageSpan span,
-    XrXirValueAdmission *admission, XrXirValue *output) {
+static XrXirValueStatus storage_unpack_operation_mode(StorageSpan span,
+    XrXirValueAdmission *admission, XrXirValue *output,bool observer) {
     if (!admission || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!inline_nominal_type(xr_xir_compile_type_arena_types(admission->arena), span.type))
         return storage_unpack_leaf(span, admission, output);
@@ -123,7 +124,7 @@ static XrXirValueStatus storage_unpack_operation(StorageSpan span,
     uint64_t scratch = (uint64_t)layout->depth * sizeof(StorageUnpackFrame);
     if (scratch > SIZE_MAX || scratch > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
-    StorageUnpack unpack = {admission, NULL, 0, layout->depth};
+    StorageUnpack unpack = {admission, NULL, 0, layout->depth,observer};
     unpack.frames = xr_xir_domain_allocate(admission->domain, (size_t)scratch, &status);
     if (!unpack.frames) return status;
     admission->scratch_bytes -= scratch;
@@ -132,6 +133,10 @@ static XrXirValueStatus storage_unpack_operation(StorageSpan span,
     xr_xir_domain_deallocate(admission->domain, unpack.frames, (size_t)scratch);
     admission->scratch_bytes += scratch;
     return status;
+}
+static XrXirValueStatus storage_unpack_operation(StorageSpan span,
+    XrXirValueAdmission *admission,XrXirValue *output) {
+    return storage_unpack_operation_mode(span,admission,output,false);
 }
 
 static XrXirValueStatus storage_unpack(StorageSpan span,
