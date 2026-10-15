@@ -17,6 +17,7 @@ static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrX
     for(uint32_t n=0;n<2;++n){
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
+        bool driven_oom=false;
         for(uint32_t e=0;e<14 && status!=XR_XIR_CALL_OOM;++e){
             status=xr_xir_instance_start(instance,ids[e],NULL,0);
             if(status==XR_XIR_CALL_READY){
@@ -27,7 +28,7 @@ static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrX
                     if(status!=XR_XIR_CALL_READY)break;
                     run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 }
-                if(status==XR_XIR_CALL_READY)status=run.outcome.status;
+                if(status==XR_XIR_CALL_READY){status=run.outcome.status;driven_oom=status==XR_XIR_CALL_OOM;}
                 if(status!=XR_XIR_CALL_OOM)CHECK(yields==(e==13 ? 1u : 0u));
             }
             if(status==XR_XIR_CALL_OOM)break;
@@ -38,7 +39,18 @@ static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrX
             if(e>=10 && e<=12)held[n][e-10]=value;
             else {CHECK(value.type==XR_XIR_I64 && value.payload==41);xr_xir_value_drop(&value);}
         }
-        if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        XrXirCallStatus completion=driven_oom ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+        if(instance){
+            CHECK(xr_xir_task_executor_root_idle(instance->executor));
+            if(instance->call){
+                const XrXirExecutorBinding binding={instance->executor,instance->call->executor_activation,
+                    instance->call->executor_generation,instance->call->executor_ticket};
+                XrXirCallStatus failure=XR_XIR_CALL_BAD_STATE;
+                CHECK(xr_xir_call_driver_failure(instance->call,&binding,&failure) && failure==completion);
+            }
+            CHECK(xr_xir_task_executor_completion_status(instance->executor)==completion);
+        }else CHECK(!driven_oom);
+        CHECK(xr_xir_instance_free(instance)==completion);
         if(status==XR_XIR_CALL_OOM)return false;
     }
     return true;
