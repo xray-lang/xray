@@ -353,13 +353,11 @@ static XrXirRunStatus vm_call_step(ScalarRun *run, VmState *state, const XrXirIn
     XrXirValue value = {0};
     for (uint32_t i = 0; i < op->args[1]; ++i) {
         uint32_t id = run->function->operands[op->args[0] + i];
-        state->arguments[i] = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, id), 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
+        state->arguments[i] = vm_value_operand(run,id);
     }
     uint32_t at = (uint32_t) (op - run->function->instructions);
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
-        value = (XrXirValue) {(uint32_t) xr_xir_operand_type(run->function, callee), 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[callee])};
+        value = vm_value_operand(run,callee);
         XrXirCallStatus status = xr_xir_instance_resolve_function_at(run->view,at,&value,
             op->args[1]?state->arguments:NULL,op->args[1],&callee);
         if (status != XR_XIR_CALL_READY) {
