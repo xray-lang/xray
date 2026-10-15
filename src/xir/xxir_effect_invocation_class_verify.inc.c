@@ -109,11 +109,11 @@ static XrXirStatus effect_invocation_class_verify_read(const EffectInvocationRea
     bool enabled=false;
     for (uint32_t f=0;f<request->domain.function_count;++f) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        EffectBodyFunctionHead head={0};
-        XrXirStatus status=effect_body_request_head(request,f,&head);
+        XrXirType result=XR_XIR_UNIT;
+        XrXirStatus status=effect_body_request_result(request,f,&result);
         if (status!=XR_XIR_OK) return status;
         enabled|=owner->final->physical->functions[f].classes!=0 ||
-            xr_xir_type_is_class(request->domain.types,head.result);
+            xr_xir_type_is_class(request->domain.types,result);
     }
     if (enabled!=owner->class_enabled) return XR_XIR_BAD_STRUCTURE;
     if (!enabled) return XR_XIR_OK;

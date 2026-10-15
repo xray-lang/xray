@@ -15,8 +15,8 @@
 
 static unsigned owned_error_refusals;
 static XrXirStatus owned_error_refuse_head(const EffectBodyRequest *read,uint32_t function,
-    EffectBodyFunctionHead *head,EffectBodyFunctionDimensions *dimensions) {
-    (void)read;(void)function;(void)head;(void)dimensions;
+    EffectBodyFunctionHead *head,EffectBodyFunctionDimensions *dimensions,XrXirType *result) {
+    (void)read;(void)function;(void)head;(void)dimensions;(void)result;
     ++owned_error_refusals;return XR_XIR_BAD_STRUCTURE;
 }
 

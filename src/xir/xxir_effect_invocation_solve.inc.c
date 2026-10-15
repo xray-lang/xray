@@ -849,10 +849,10 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) {
         for (uint32_t f=0;f<owner->final.physical->count;++f) {
             if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
-            EffectBodyFunctionHead head={0};status=effect_invocation_head(&owner->read,f,&head);
+            XrXirType result=XR_XIR_UNIT;status=effect_invocation_result(&owner->read,f,&result);
             if (status!=XR_XIR_OK) break;
             owner->read.class_enabled|=owner->final.physical->functions[f].classes!=0 ||
-                xr_xir_type_is_class(owner->read.body.domain.types,head.result);
+                xr_xir_type_is_class(owner->read.body.domain.types,result);
         }
     }
     if (status==XR_XIR_OK && owner->read.class_enabled) {

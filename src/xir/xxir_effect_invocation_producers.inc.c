@@ -14,11 +14,10 @@
 static XrXirStatus effect_invocation_producer_return_read(const EffectInvocationRead *owner,
     const EffectBodyRequest *request,uint32_t body,bool *output) {
     if (!owner || !request || !output || body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionHead head={0};
-    XrXirStatus status=effect_body_request_head(request,body,&head);
+    XrXirType result=XR_XIR_UNIT;
+    XrXirStatus status=effect_body_request_result(request,body,&result);
     if (status!=XR_XIR_OK) return status;
-    const XrXirTypeNode *signature=xr_xir_callable_signature(request->domain.types,
-        head.result);
+    const XrXirTypeNode *signature=xr_xir_callable_signature(request->domain.types,result);
     if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
     if (signature && (!xr_xir_callable_flags_valid(signature->flags) ||
         (!!signature->parameters!=!!signature->parameter_count))) return XR_XIR_BAD_TYPE;
