@@ -24,7 +24,7 @@ class NativeDeclarations(unittest.TestCase):
         for name, text in first.items():
             self.assertEqual((ROOT / name).read_text(encoding='utf-8'), text)
         header, members = schema.parse_source(self.source, self.prelude)
-        self.assertEqual(header[:3], (1, 'Array', 'T'))
+        self.assertEqual(header[:3], (1, 'Array', ('T',)))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
                          {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY',
@@ -164,7 +164,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_string_value_identity_and_full_member_spans(self):
         source = (ROOT / 'stdlib/types/string.xr').read_text(encoding='utf-8')
         header, members = schema.parse_source(source, self.prelude)
-        self.assertEqual(header[:3], (2, 'string', ''))
+        self.assertEqual(header[:3], (2, 'string', ()))
         self.assertEqual(len(members), 19)
         rows = source.splitlines()
         self.assertEqual(rows[header[3] - 1][header[4] - 1:], 'string {')
@@ -249,11 +249,36 @@ class NativeDeclarations(unittest.TestCase):
             subprocess.run([sys.executable, str(Path(embed.__file__)), str(root), '--check', str(output)],
                            check=True, capture_output=True)
 
+    def test_hash_declarations_preserve_ordered_binders_and_value_identity(self):
+        for stem, identity, name, binders, count in [('map', 6, 'Map', ('K', 'V'), 13),
+                                                     ('set', 7, 'Set', ('T',), 15)]:
+            source = (ROOT / f'stdlib/types/{stem}.xr').read_text(encoding='utf-8')
+            header, members = schema.parse_source(source, self.prelude)
+            self.assertEqual(header[:3], (identity, name, binders))
+            self.assertEqual(len(members), count)
+            self.assertTrue(all(member.operation == 'NONE' for member in members))
+            self.assertNotIn(f'xr_native_def_{stem}', embed.render(ROOT / 'stdlib/types'))
+            for before, after in [('struct ', 'class '), (': Hashable', ''),
+                                  (': Hashable', ': Equal'), ('ref clear()', 'clear()'),
+                                  ('toString() -> string', 'toString() -> i64')]:
+                with self.subTest(stem=stem, before=before), self.assertRaises(ValueError):
+                    schema.parse_source(source.replace(before, after), self.prelude)
+        source = (ROOT / 'stdlib/types/map.xr').read_text(encoding='utf-8')
+        _, members = schema.parse_source(source, self.prelude)
+        get = next(member for member in members if member.name == 'get')
+        put = next(member for member in members if member.name == 'set')
+        self.assertEqual(schema.simple_term(get.result, ('K', 'V')), 'NULLABLE_VALUE')
+        self.assertEqual([schema.simple_term(p[1], ('K', 'V')) for p in put.parameters], ['KEY', 'VALUE'])
+        for header in ('Map<V, K: Hashable>', 'Map<K: Hashable, K>', 'Map<K: Hashable>', 'Map<K, V: Hashable>'):
+            with self.subTest(header=header), self.assertRaises(ValueError):
+                schema.parse_source(source.replace('Map<K: Hashable, V>', header), self.prelude)
+
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
             for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr',
-                             'stdlib/types/coroutine.xr', 'stdlib/prelude/builtin_symbols.def']:
+                             'stdlib/types/coroutine.xr', 'stdlib/types/map.xr', 'stdlib/types/set.xr',
+                             'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())

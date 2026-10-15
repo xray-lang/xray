@@ -67,6 +67,10 @@ static bool source_constraint_same(SourceContext *ctx, AstNode *node,
 }
 /* Predicate spellings come from the registry. Ordinary visible declarations
  * and parameter bindings win before the builtin category is considered. */
+static uint32_t source_builtin_hashable_marker(SourceContext *ctx, const char *name, uint32_t arity) {
+    if (arity) return 0;
+    return source_text_same(ctx, NULL, name, "Hashable") ? XR_XIR_CONSTRAINT_HASHABLE : 0;
+}
 static uint32_t source_predicate_marker(SourceContext *ctx, const char *name) {
     if (!name || visible_name(ctx,name)) return 0;
     int count = 0;
@@ -79,6 +83,8 @@ static uint32_t source_predicate_marker(SourceContext *ctx, const char *name) {
 #define XR_XIR_PREDICATE_ATOMIC_BOOLEAN XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN
 #define XR_BUILTIN_PREDICATE(spelling, arity, identity) \
     if (source_text_same(ctx, NULL, name, spelling)) return XR_XIR_PREDICATE_##identity;
+#define XR_BUILTIN_IFACE(spelling, arity) \
+    if (source_text_same(ctx, NULL, name, spelling)) return source_builtin_hashable_marker(ctx, spelling, arity);
 #include "../../stdlib/prelude/builtin_symbols.def"
 #undef XR_XIR_PREDICATE_VALUE_EQUAL
 #undef XR_XIR_PREDICATE_ATOMIC_VALUE

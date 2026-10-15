@@ -557,6 +557,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
 }
 #include "xxir_source_intern.inc.c"
 #include "xxir_source_native.inc.c"
+#include "xxir_source_hash_type.inc.c"
 #include "xxir_source_atomic.inc.c"
 #include "xxir_source_task_type.inc.c"
 #include "xxir_source_ordering.inc.c"
@@ -585,6 +586,8 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     }
     if (node.kind != XR_XIR_TYPE_CALLABLE && node.kind != XR_XIR_TYPE_TUPLE) {
         if (!source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
+        if (node.kind == XR_XIR_TYPE_MAP &&
+            !source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
         return source_intern_type(ctx, node, output);
     }
     XrXirCallableParameter *parameters = node.parameter_count ? source_alloc(ctx, node.parameter_count, sizeof(*parameters)) : NULL;
@@ -705,6 +708,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
             return source_native_atomic_type(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Task"))
             return source_native_task_type(ctx,ref,type);
+        if (ref->name && (source_text_same(ctx,NULL,ref->name,"Map") || source_text_same(ctx,NULL,ref->name,"Set")))
+            return source_native_hash_type(ctx,ref,type);
         if (ref->name && source_native_find(ctx,ref->name))
             return source_native_array_type(ctx, ref, type);
         return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
