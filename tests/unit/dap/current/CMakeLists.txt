@@ -467,3 +467,19 @@ endif()
 add_test(NAME test_dap_child_write COMMAND test_dap_child_write)
 add_test(NAME test_dap_child_write_resources COMMAND test_dap_child_write --resources)
 set_tests_properties(test_dap_child_write test_dap_child_write_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")
+
+add_executable(test_dap_ref_write test_ref_write.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_ref_write PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_ref_write PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_THREADS_FIXTURE="${XR_DAP_FIXTURE_DIR}/threads_fixture.xr" XR_DAP_ORIGIN_FIXTURE="${XR_DAP_FIXTURE_DIR}/write_projection.xr"
+    XR_DAP_CHILD_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/child_write.xr" XR_DAP_REF_CLASS_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_class.xr"
+    XR_DAP_REF_VALUES_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_values.xr" XR_DAP_REF_WHOLE_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_whole.xr")
+if(MSVC)
+    target_compile_options(test_dap_ref_write PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_ref_write PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_ref_write COMMAND test_dap_ref_write)
+add_test(NAME test_dap_ref_write_resources COMMAND test_dap_ref_write --resources)
+set_tests_properties(test_dap_ref_write test_dap_ref_write_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")

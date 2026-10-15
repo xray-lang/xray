@@ -36,7 +36,7 @@ static XrXirStatus inspect_lexical(XdapAdapter *s,const XdapRequest *r,uint32_t 
         if (hidden || body.status!=XR_XIR_OK) continue;
         XrXirValue value={0};const char *name=NULL;size_t length=0;
         XrXirValueStatus copied=xdap_lexical_read(&view,bindings[i-1],&value,&name,&length);
-        if (copied==XR_XIR_VALUE_BAD_ARGUMENT) continue;
+        if (copied==XR_XIR_VALUE_BAD_ARGUMENT || copied==XR_XIR_VALUE_UNSUPPORTED) continue;
         if (copied!=XR_XIR_VALUE_OK) { body.status=copied==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;break; }
         if (ordinal++<start || (count && shown>=count)) { xr_xir_value_drop(&value);continue; }
         if (shown++) XDAP_TEXT(&body,",");

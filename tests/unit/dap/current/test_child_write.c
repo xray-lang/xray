@@ -102,7 +102,10 @@ static void child_io(void) {
     XrXirVmDebugFrameInfo same=write_frame(adapter->snapshot);CHECK(same.id==original.id && same.instruction==original.instruction);
     adapter->config.write=write_write;child_output(adapter,23,CHILD_TEXT_REPLACEMENT);write_dispose(&fixture);
 }
-int main(int argc,char **argv) {
+#ifndef XR_DAP_CHILD_ENTRY
+#define XR_DAP_CHILD_ENTRY main
+#endif
+int XR_DAP_CHILD_ENTRY(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     child_normal();child_io();size_t sites=child_fault(SIZE_MAX);CHECK(sites);
     for (size_t i=0;i<sites;++i) if (resources || !i || i==sites-1) child_fault(i);

@@ -50,25 +50,7 @@ XR_FUNC XrXirValueStatus xir_vm_debug_write_visit(XrXirVmDebug *debug) {
     }
     return debug_write_status(driven);
 }
-/* Root Cell replacement updates every already-readable plain alias. Scoped
- * projections need their own prepared path transaction and reject here. */
-static XrXirValueStatus debug_write_aliases(XrXirVmDebug *debug,XrXirVmDebugSnapshot *snapshot,const XrXirValue *cell,const XrXirValue *replacement) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
-    for (uint32_t f=0;f<snapshot->count;++f) {
-        SnapshotFrame *frame=&snapshot->frames[f];
-        if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
-        for (uint32_t v=0;v<frame->info.value_count;++v) {
-            if (!(frame->known[v]&1) || !xr_xir_type_is_cell(module->types,(XrXirType)frame->values[v].type) ||
-                !xr_xir_cell_same_owner(cell,&frame->values[v])) continue;
-            if (xr_xir_cell_is_projection(&frame->values[v])) return XR_XIR_VALUE_UNSUPPORTED;
-            if (!(frame->known[v]&2)) continue;
-            XrXirValue owned={0};XrXirValueStatus status=xr_xir_value_copy(replacement,&owned);
-            if (status!=XR_XIR_VALUE_OK) return status;
-            xr_xir_value_drop(&frame->cell_values[v]);frame->cell_values[v]=owned;
-        }
-    }
-    return XR_XIR_VALUE_OK;
-}
+#include "xxir_vm_debug_aliases.inc.c"
 static XrXirValueStatus debug_write_replacement(XrXirVmDebug *debug,const XirVmDebugPoint *point,
     uint32_t function,const XrXirValue *cell,XrXirValue *output) {
     XrXirValueAdmission *admission=xr_xir_call_admission(point->view);
@@ -105,7 +87,7 @@ static XrXirValueStatus debug_write_apply(XrXirVmDebug *debug,const XirVmDebugPo
     XrXirType type=xr_xir_operand_type(function,operand);uint32_t offset=live->point.layout->offsets[operand];
     if (!xr_xir_type_is_cell(module->types,type) || offset==UINT32_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue cell={(uint32_t)type,0,xr_xir_scalar_load(live->point.frame,offset)};
-    if (!xr_xir_value_valid(&cell) || xr_xir_cell_is_projection(&cell)) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!xr_xir_value_valid(&cell)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueAdmission *admission=xr_xir_call_admission(point->view);
     if (!admission) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue replacement={0};
@@ -115,7 +97,7 @@ static XrXirValueStatus debug_write_apply(XrXirVmDebug *debug,const XirVmDebugPo
     if (status==XR_XIR_VALUE_OK) status=capture_prepare(debug,point->view,NULL,debug->snapshot->cause,&fresh);
     if (status==XR_XIR_VALUE_OK && debug->snapshot->exception.type)
         status=xr_xir_value_copy(&debug->snapshot->exception,&fresh->exception);
-    if (status==XR_XIR_VALUE_OK) status=debug_write_aliases(debug,fresh,&cell,&replacement);
+    if (status==XR_XIR_VALUE_OK) status=debug_write_aliases(debug,fresh,&cell,&replacement,admission);
     if (status==XR_XIR_VALUE_OK) {
         if (!xr_xir_reference_retain(&fresh->references)) status=XR_XIR_VALUE_REFCOUNT_LIMIT;else reserved=fresh;
     }
