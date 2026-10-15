@@ -14,6 +14,7 @@
 
 #include "xxir_program_internal.h"
 #include "xxir_instance_value.h"
+#include "xxir_instance_binding.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_call_internal.h"
@@ -82,7 +83,11 @@ struct XrXirInstance {
     XrXirTaskExecutor *replacement_executor;
     uint64_t generation_id, generation_counter, call_epoch;
     XrXirCallStatus last_outcome;
+    struct XirInstanceBindingTable *symbol_bindings;
+    bool bindings_published;
 };
+static void instance_bindings_free(XrXirInstance *instance);
+static bool instance_bindings_ready(const XrXirInstance *instance);
 static XrXirInstance *instance_root(XrXirInstance *instance) {
     return instance && instance->owner ? instance->owner : instance;
 }
@@ -342,6 +347,7 @@ static void instance_dispose(XrXirInstance *instance) {
     xr_xir_value_drop(&instance->pending_function);
     XR_CHECK(xr_xir_task_executor_free(instance->executor, NULL) == XR_XIR_CALL_READY,
         "unpublished or already drained instance executor has no incomplete cleanup");
+    instance_bindings_free(instance);
     if (instance->entries) xr_xir_domain_metadata_deallocate(domain, instance->entries,
         ((uint64_t)program->entry_count + 1) * sizeof(*instance->entries));
     if (instance->slots) xr_xir_domain_metadata_deallocate(domain, instance->slots,
@@ -1484,3 +1490,4 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
     *pc = handler_pc;
     return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
 }
+#include "xxir_instance_binding.inc.c"
