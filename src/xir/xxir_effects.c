@@ -85,6 +85,8 @@ static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) 
     *outcomes=(EffectFinalOutcomes){0};
 }
 
+static bool effect_outcomes_empty(const EffectFinalOutcomes *outcomes);
+static bool effect_context_owner_published(XrCompileResources *resources,const EffectContextOwner *owner);
 static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effects);
 static bool effect_public_root_context(const XrXirEffects *effects,uint32_t function);
 static XrXirStatus effect_public_root_match(const XrXirCompileContext *work,const XrXirEffects *effects);

@@ -45,6 +45,13 @@ static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *w
         if (status==XR_XIR_OK) status=effect_terms_retire(work,&certificate->terms,true);
         if (status==XR_XIR_OK) status=effect_final_retire_body(work,certificate->body);
         if (status==XR_XIR_OK) status=effect_final_retire_body(work,owner->ordinary->uses.generation);
+        if (status==XR_XIR_OK && (owner->ordinary->resources!=work->resources ||
+            owner->ordinary->uses.resources!=work->resources)) status=XR_XIR_BAD_STRUCTURE;
+        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(owner->ordinary->uses))) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) {
+            effect_ordinary_results_free(owner->ordinary);
+            owner->ordinary->uses=(XrXirEffects){0};
+        }
     }
     return status;
 }
@@ -225,7 +232,8 @@ static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
         normalized=*source;normalized.types=&effect_empty_types;source=&normalized;
     }
     const EffectContextOwner *owner=effect_contexts_read(effects);
-    if (!owner || !owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
+    if (!effect_context_owner_published(work->resources,owner) ||
+        !owner || !owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
         owner->ordinary->terms.remaining || owner->dense->terms.remaining || owner->forest->terms.remaining)
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,21)) return XR_XIR_BUDGET;
@@ -350,8 +358,8 @@ static XrXirStatus effect_source_outcomes(const XrXirCompileContext *work,const 
 
 XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
-    if (!xir_effects_context_matches(work,effects,source?source->function_count:0) || !source ||
-        source->stage!=XR_XIR_CHECKED || !source->provenance ||
+    if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
+        !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !source->provenance ||
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !effects->invocations ||
         effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_source_certificate(work,effects->invocations,effects);
