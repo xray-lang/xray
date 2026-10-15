@@ -274,6 +274,27 @@ static void sdk_locked_files(const XrXirRuntimeSdk *sdk) {
     CHECK(xr_xir_runtime_sdk_file(sdk,"../lib/xray_xir_admission.lib",&missing)==XR_XIR_SDK_UNRESOLVED && !missing);
     CHECK(xr_xir_runtime_sdk_file(sdk,"LIB/xray_xir_admission.lib",&missing)==XR_XIR_SDK_UNRESOLVED && !missing);
 }
+static void sdk_io_faults(const XrXirRuntimeSdkRequest *original,size_t first,size_t sites,
+    size_t live,size_t bytes,DWORD handles) {
+    for (size_t i=first;i<sites;++i) {
+        for (unsigned mode=0;mode<2;++mode) {
+            sdk_io_attempts=0;sdk_io_fail_at=i;XrXirRuntimeSdk *sdk=NULL;
+            sdk_io_error=mode ? ERROR_NOT_ENOUGH_MEMORY : ERROR_READ_FAULT;
+            XrXirRuntimeSdkStatus status=xr_xir_runtime_sdk_load(original,&sdk);
+            XrXirRuntimeSdkStatus expected=mode ? XR_XIR_SDK_OUT_OF_MEMORY : XR_XIR_SDK_IO;
+            if (status!=expected || sdk) {
+                XrCompileResourceStats spent=sdk_stats(original->resources);
+                fprintf(stderr,"SDK IO cut=%zu mode=%u status=%u expected=%u attempts=%zu allocated=%llu work=%llu live=%llu\n",
+                    i,mode,(unsigned)status,(unsigned)expected,sdk_io_attempts,
+                    (unsigned long long)spent.allocated_bytes,(unsigned long long)spent.work,
+                    (unsigned long long)spent.live_bytes);
+            }
+            CHECK(status==expected && !sdk);
+            sdk_io_fail_at=SIZE_MAX;
+            CHECK(runtime_live==live && runtime_bytes==bytes && sdk_handles()==handles);
+        }
+    }
+}
 static void sdk_actual_faults(const XrXirRuntimeSdkRequest *original) {
     size_t live=runtime_live,bytes=runtime_bytes;DWORD handles=sdk_handles();
     XrCompileResourceStats before=sdk_stats(original->resources);
@@ -305,25 +326,35 @@ static void sdk_actual_faults(const XrXirRuntimeSdkRequest *original) {
         xr_compile_resources_release(request.resources);
         CHECK(runtime_live==live && runtime_bytes==bytes && sdk_handles()==handles);
     }
-    for (size_t i=0;i<io_sites;++i) {
-        for (unsigned mode=0;mode<2;++mode) {
-            sdk_io_attempts=0;sdk_io_fail_at=i;sdk=NULL;
-            sdk_io_error=mode ? ERROR_NOT_ENOUGH_MEMORY : ERROR_READ_FAULT;
-            CHECK(xr_xir_runtime_sdk_load(original,&sdk)==(mode ? XR_XIR_SDK_OUT_OF_MEMORY : XR_XIR_SDK_IO) && !sdk);
-            sdk_io_fail_at=SIZE_MAX;
-            CHECK(runtime_live==live && runtime_bytes==bytes && sdk_handles()==handles);
-        }
-    }
+    sdk_io_faults(original,0,io_sites,live,bytes,handles);
     sdk_io_attempts=0;sdk_io_fail_at=1;sdk_io_error=ERROR_NOT_ENOUGH_MEMORY;sdk=NULL;
     CHECK(xr_xir_runtime_sdk_load(original,&sdk)==XR_XIR_SDK_OUT_OF_MEMORY && !sdk);
     sdk_io_fail_at=SIZE_MAX;sdk_io_error=ERROR_READ_FAULT;
     CHECK(runtime_live==live && runtime_bytes==bytes && sdk_handles()==handles);
     printf("SDK actual allocation sites=%zu IO/OOM sites=%zu exact/minus1 allocated/live/work refunds PASS\n",sites,io_sites);
 }
+static void sdk_io_profile(const XrXirRuntimeSdkRequest *request) {
+    size_t live=runtime_live,bytes=runtime_bytes;DWORD handles=sdk_handles();
+    XrCompileResourceStats before=sdk_stats(request->resources);
+    runtime_attempts=0;sdk_io_attempts=0;XrXirRuntimeSdk *sdk=NULL;
+    CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK && sdk);
+    size_t allocations=runtime_attempts,ios=sdk_io_attempts;
+    XrXirRuntimeSdkFacts facts=*xr_xir_runtime_sdk_facts(sdk);
+    XrCompileResourceStats used=sdk_stats(request->resources);
+    printf("SDK baseline files=%u bytes=%llu allocations=%zu ios=%zu work=%llu allocated=%llu peak=%llu\n",
+        facts.file_count,(unsigned long long)facts.file_bytes,allocations,ios,
+        (unsigned long long)(used.work-before.work),
+        (unsigned long long)(used.allocated_bytes-before.allocated_bytes),
+        (unsigned long long)used.peak_bytes);
+    xr_xir_runtime_sdk_free(sdk);
+    CHECK(runtime_live==live && runtime_bytes==bytes && sdk_handles()==handles);
+    CHECK(ios>=32);sdk_io_faults(request,ios-32,ios,live,bytes,handles);
+    puts("SDK last32 actual IO/OOM cuts passed; full cuts remain in default mode");
+}
 #include "xir_sdk_shared_resources.inc.c"
 int main(int argc,char **argv) {
-    if ((argc!=3 && argc!=4) || (argc==4 && strcmp(argv[3],"status") && strcmp(argv[3],"--shared-resources"))) {
-        fputs("usage: sdk-test ROOT MANIFEST [status|--shared-resources]\n",stderr);return 2;
+    if ((argc!=3 && argc!=4) || (argc==4 && strcmp(argv[3],"status") && strcmp(argv[3],"--shared-resources") && strcmp(argv[3],"--io-prefix") && strcmp(argv[3],"--io-profile"))) {
+        fputs("usage: sdk-test ROOT MANIFEST [status|--shared-resources|--io-prefix|--io-profile]\n",stderr);return 2;
     }
     bool shared_only=argc==4 && !strcmp(argv[3],"--shared-resources");
     if (!shared_only) sdk_known_bytes();
@@ -331,6 +362,16 @@ int main(int argc,char **argv) {
     XrCompileResources *resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdkRequest request={argv[1],manifest,length,resources};
     DWORD initial_handles=sdk_handles();
+    if (argc==4 && !strcmp(argv[3],"--io-prefix")) {
+        sdk_io_faults(&request,0,32,runtime_live,runtime_bytes,initial_handles);
+        xr_free(manifest);xr_compile_resources_release(resources);
+        CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
+        puts("SDK first32 actual IO/OOM cuts passed; full cuts remain in default mode");return 0;
+    }
+    if (argc==4 && !strcmp(argv[3],"--io-profile")) {
+        sdk_io_profile(&request);xr_free(manifest);xr_compile_resources_release(resources);
+        CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);return 0;
+    }
     if (shared_only) {
         sdk_shared_resources(&request,false);
         xr_free(manifest);xr_compile_resources_release(resources);

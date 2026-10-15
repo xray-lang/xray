@@ -23,6 +23,14 @@ if(WIN32)
     endif()
     add_test(NAME test_xir_runtime_sdk_owner COMMAND test_xir_runtime_sdk
         ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json)
+    add_test(NAME test_xir_runtime_sdk_io_prefix COMMAND test_xir_runtime_sdk
+        ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json --io-prefix)
+    add_test(NAME test_xir_runtime_sdk_io_profile COMMAND test_xir_runtime_sdk
+        ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json --io-profile)
+    set_tests_properties(test_xir_runtime_sdk_io_prefix test_xir_runtime_sdk_io_profile
+        PROPERTIES LABELS "unit;xir;ownership;sdk;io;diagnostic" RUN_SERIAL TRUE TIMEOUT 60)
+    set_tests_properties(test_xir_runtime_sdk_io_prefix PROPERTIES COST 1)
+    set_tests_properties(test_xir_runtime_sdk_io_profile PROPERTIES COST 10)
     # Target-only impact gate; SDK loader/parser changes still require the full owner matrix.
     add_test(NAME test_xir_runtime_sdk_shared_resources COMMAND test_xir_runtime_sdk
         ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json --shared-resources)
@@ -42,10 +50,8 @@ if(WIN32)
     set_tests_properties(test_xir_runtime_sdk_owner test_xir_runtime_sdk_manifest test_xir_runtime_sdk_install
         test_xir_runtime_sdk_wire_vector test_xir_runtime_sdk_current_wire_vector
         PROPERTIES LABELS "unit;xir;execution;ownership;sdk;abi" RUN_SERIAL TRUE TIMEOUT 300 COST 30)
-    # The exhaustive instrumented fault matrix takes substantially longer than its Release lane.
-    if(ENABLE_ASAN OR ENABLE_SANITIZERS)
-        set_tests_properties(test_xir_runtime_sdk_owner PROPERTIES COST 210)
-    endif()
+    # The complete Release fault matrix currently takes about four minutes.
+    set_tests_properties(test_xir_runtime_sdk_owner PROPERTIES COST 250)
     find_program(XIR_SDK_LINKER NAMES link REQUIRED)
     find_program(XIR_SDK_MSVC NAMES cl)
     find_program(XIR_SDK_CLANG NAMES clang)
