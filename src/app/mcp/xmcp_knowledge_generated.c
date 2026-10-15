@@ -7492,6 +7492,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Admitted XIR floating semantics\n"
             "New-XIR typed print accepts f32/f64 (spec section 17.27). Finite values use the shortest round-tripping decimal at their original precision, with an even final digit on equal-distance ties. Decimal exponents in [-4,16) use fixed notation (integral values end in .0); others use lowercase e and a signed exponent. Special spellings are nan, inf, -inf, 0.0 and -0.0. A complete output group is prepared before one sink call; insufficient budget, allocation failure and rejected output retain OUTPUT_ERROR cleanup semantics.\n"
+            "\n"
+            "### Closed owned display text\n"
+            "Spec \xc2\xa7""17.68/\xc2\xa7""17.70 defines one closed domain for interpolation, explicit string conversion and Checked TO_STRING: Unit, scalars, String, Array, nullable and every enum payload. Functions, Class, Struct and open generics reject even in inactive payloads. Formatting borrows authentic storage, preserves depth3/first32, quoting, UTF8 and NUL, and prepares a complete owned String on the original ledger. VM, generated C and CTFE share the formatter; CTFE grants no output authority and reserves bounded local workspace. Bare null still requires an exact nullable context. Semantic77 rejects complete old76 and earlier inputs without a compatibility reader. Full fault/resource/safety/provider qualification remains separate from declared capability or a passing example.\n"
             "",
     },
     {
@@ -8953,7 +8956,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Tuple types\n"
-            "Tuples preserve ordered field types and independently owned immutable values. Flat destructuring uses exact arity and evaluates its RHS once; module bindings publish as one prepared group (spec \xc2\xa7""17.35). Unit fields carry no payload and do not admit ordinary Unit generic arguments or formals. Nested tuple values do not imply admitted nested patterns; Sendable remains the conjunction of fields and wrapping grants no execution permission.\n"
+            "Tuples preserve ordered field types and independently owned immutable values. Flat destructuring uses exact arity and evaluates its RHS once; module bindings publish as one prepared group (spec \xc2\xa7""17.35). Unit fields carry no payload. Fixed Unit READ parameters retain logical arity and canonical zero carriers under spec \xc2\xa7""17.69; the ordinary generic Unit-argument domain requires separate admission. Nested tuple values do not imply admitted nested patterns; Sendable remains the conjunction of fields and wrapping grants no execution permission.\n"
             "```xray\n"
             "// Literals\n"
             "var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)\n"

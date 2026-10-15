@@ -20,7 +20,7 @@
 #include "xir_runtime_allocations.h"
 #include "xir_nested_nullable_fixture.h"
 #include "xir_nested_nullable_golden.h"
-#include "xir_nested_nullable76_golden.h"
+#include "xir_nested_nullable77_golden.h"
 #include "xir_nested_nullable_cases.h"
 extern const XrXirProgramSpec nested_nullable_program;
 /* Historical59 single is genuinely accepted by the archived reader.  The
@@ -81,8 +81,8 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
     /* Reconstruct old62/59 from the independently preserved old63 body. Both
      * packet digest and full proof identity are independently verified below. */
     uint8_t old_nested[1689];uint8_t identity[32];XrSHA256Context sha;
-    CHECK(spec->proof.length==sizeof(nested_nullable76_golden) &&
-        !memcmp(spec->proof.bytes,nested_nullable76_golden,spec->proof.length));
+    CHECK(spec->proof.length==sizeof(nested_nullable77_golden) &&
+        !memcmp(spec->proof.bytes,nested_nullable77_golden,spec->proof.length));
     /* Preserve the genuine complete prior body. Current opcodes moved, so
      * relabeling the current body would not reconstruct old62/59 packets. */
     _Static_assert(sizeof(nested_nullable_golden)==sizeof(old_nested),"complete historical packet width");

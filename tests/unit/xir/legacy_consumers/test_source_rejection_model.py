@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 import task_rejection_model as model
 
-IDENTITIES = {'checked_schema':29, 'semantic_identity':76, 'value_abi':25}
+IDENTITIES = {'checked_schema':29, 'semantic_identity':77, 'value_abi':25}
 
 
 def report():

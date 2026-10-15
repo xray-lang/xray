@@ -29,6 +29,10 @@
     {
       "heading": "Admitted XIR floating semantics",
       "markdown": "New-XIR typed print accepts f32/f64 (spec section 17.27). Finite values use the shortest round-tripping decimal at their original precision, with an even final digit on equal-distance ties. Decimal exponents in [-4,16) use fixed notation (integral values end in .0); others use lowercase e and a signed exponent. Special spellings are nan, inf, -inf, 0.0 and -0.0. A complete output group is prepared before one sink call; insufficient budget, allocation failure and rejected output retain OUTPUT_ERROR cleanup semantics."
+    },
+    {
+      "heading": "Closed owned display text",
+      "markdown": "Spec §17.68/§17.70 defines one closed domain for interpolation, explicit string conversion and Checked TO_STRING: Unit, scalars, String, Array, nullable and every enum payload. Functions, Class, Struct and open generics reject even in inactive payloads. Formatting borrows authentic storage, preserves depth3/first32, quoting, UTF8 and NUL, and prepares a complete owned String on the original ledger. VM, generated C and CTFE share the formatter; CTFE grants no output authority and reserves bounded local workspace. Bare null still requires an exact nullable context. Semantic77 rejects complete old76 and earlier inputs without a compatibility reader. Full fault/resource/safety/provider qualification remains separate from declared capability or a passing example."
     }
   ]
 }

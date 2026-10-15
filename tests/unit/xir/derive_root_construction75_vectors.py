@@ -62,8 +62,8 @@ def main():
     words = lambda *values: struct.pack('<' + 'I' * len(values), *values)
     original = model()
     checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
-    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+28u', checked)
-    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+75u', checked)
+    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+29u', checked)
+    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+77u', checked)
     body, _ = encoder.encode_body(original, 0)
     assert body[-8:] == bytes(8) and original['generics'] is None
     # Actual alpha.initializer is f0; none of the remaining five definitions

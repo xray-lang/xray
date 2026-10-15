@@ -4,11 +4,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_ctfe_text.inc.c - Prepaid deterministic scalar text through the common owner
+ * xxir_ctfe_text.inc.c - Prepaid deterministic value text through the common owner
  *
  * KEY CONCEPT:
- *   Only scalar_text chooses bytes. IEEE exponent bounds pay decimal work
- *   before formatting, while fixed local workspaces consume remaining frame.
+ *   Scalars retain the common conversion and owned values borrow one formatter.
+ *   IEEE bounds prepay decimal work and local workspace consumes remaining frame.
  */
 #include "xxir_output.h"
 #include "xxir_float.h"

@@ -71,7 +71,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 只含 bool/i64；unit 可作结果和终结操作类型，不产生值 ID。
 此子集没有托管值、借用、泛型或新源码拼写；未实现操作必须拒绝。内部直接调用另见下文。
 CFG 的块完整划分指令，均从入口可达，并以一个终结操作结束；入口无前驱。
-SSA 使用必须由同块较早定义或支配块定义提供；除§17.68认证的空Tuple外，unit 指令不能作为值使用。
+SSA 使用必须由同块较早定义或支配块定义提供；除§17.69认证的空Tuple外，unit 指令不能作为值使用。
 抽象 copy 只在 Built/Checked，物理 scalar-copy 只在 Lowered，不能仅改阶段标签。
 阶段转换重新验证并复制所有元数据，成功产物不借用输入；失败不发布部分产物。
 验证的结构、类型、支配关系和工作量有预算，未知阶段、操作和类型均拒绝。
@@ -548,7 +548,7 @@ CTFE要求实际普通函数声明身份。结构合法但没有declarations/fun
 
 ### 17.41 CTFE的规范Unit返回与普通Source重放
 
-没有值参数的普通Unit结果函数可进入CTFE的实际闭包准入；其Unit RETURN保留零type/reserved/payload，目标逻辑输出大小为零。Unit返回没有SSA存储槽，子调用返回不得向该槽写入；调用者的标量参数与已活跃值保持。普通Unit值参数按§17.68保留逻辑arity并通过真实接点准入；入口仍按实际类型和完整Lowered身份复验。
+没有值参数的普通Unit结果函数可进入CTFE的实际闭包准入；其Unit RETURN保留零type/reserved/payload，目标逻辑输出大小为零。Unit返回没有SSA存储槽，子调用返回不得向该槽写入；调用者的标量参数与已活跃值保持。普通Unit值参数按§17.69保留逻辑arity并通过真实接点准入；入口仍按实际类型和完整Lowered身份复验。
 
 Source的Unit comptime结果经同一有限CTFE管线接收，再独立重放为普通Unit表达式，保留站点匹配、覆盖和规范结果验证。空块或末尾为普通语句的块产生Unit，拥有型局部状态继续依赖实际值域接点；comptime块不授予从外围函数非局部return的许可。I/O、非终结循环及不可接收的实际操作仍分别按闭包准入或预算规则拒绝，失败输出和原编译账本保持。
 
@@ -918,7 +918,7 @@ are bool/i64; unit is a result/terminator type without a value ID. Managed value
 unsupported operations reject. Internal direct calls are defined below.
 Blocks partition instructions, are reachable from the entry, and end in exactly
 one terminator; entry has no predecessors. SSA uses require an earlier same-block
-definition or a dominating definition; Unit instructions do not produce values except the authenticated empty Tuple in section17.68.
+definition or a dominating definition; Unit instructions do not produce values except the authenticated empty Tuple in section17.69.
 Abstract copy belongs to Built/Checked and physical scalar-copy to Lowered;
 changing a stage tag is insufficient. Transitions reverify and copy all metadata,
 publish no partial artifact on failure, and never borrow input storage. Structure,
@@ -1501,7 +1501,7 @@ CTFE requires actual ordinary function declaration identity. Structurally valid 
 
 ### 17.41 Canonical CTFE Unit returns and ordinary Source replay
 
-Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Ordinary Unit value arguments retain logical arity and use the authentic boundary in section17.68; receiving still repeats actual type and complete Lowered identity checks.
+Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Ordinary Unit value arguments retain logical arity and use the authentic boundary in section17.69; receiving still repeats actual type and complete Lowered identity checks.
 
 Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
 

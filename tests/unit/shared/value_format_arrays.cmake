@@ -31,6 +31,12 @@ add_test(NAME test_xir_owned_text_public
         --binary $<TARGET_FILE:xray> --root "${PROJECT_SOURCE_DIR}")
 set_tests_properties(test_xir_owned_text_public PROPERTIES
     TIMEOUT 180 LABELS "unit;xir;text;ownership;public-cli;native;ctfe")
+add_test(NAME test_xir_owned_text_semantic_fields
+    COMMAND ${Python3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_semantic77_vectors.py")
+add_test(NAME test_xir_owned_text_root_fields
+    COMMAND ${Python3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_local_semantic77_consumers.py")
+set_tests_properties(test_xir_owned_text_semantic_fields test_xir_owned_text_root_fields PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;text;wire;oracle")
 
 add_executable(test_array_format_public "${PROJECT_SOURCE_DIR}/tests/unit/xir/legacy_consumers/test_array_format_public.c")
 target_link_libraries(test_array_format_public PRIVATE xray_source_api)
