@@ -67,7 +67,9 @@
     "slice/string_byte_slice_view": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
     "functions/higher_order_closures": "tests/diff/cases/semantics/functions/higher_order_closures.xr",
     "functions/vararg_functions": "tests/diff/cases/semantics/functions/vararg_functions.xr",
-    "condition/match_is_arms_no_separator": "tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr"
+    "condition/match_is_arms_no_separator": "tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr",
+    "generic_type_alias": "tests/diff/cases/semantics/generic_type_alias.xr",
+    "oop/override_checked_valid": "tests/diff/cases/semantics/oop/override_checked_valid.xr"
   },
   "inputs": [
     {
@@ -385,6 +387,14 @@
     {
       "path": "src/xir/xxir_float_format.inc.c",
       "lf_sha256": "84b274ea969dbd5a62a7b8b780d87cad905c20dff46c3f752662c1aab87ef457"
+    },
+    {
+      "path": "tests/diff/cases/semantics/generic_type_alias.xr",
+      "lf_sha256": "f6d7e3ce00a163a821f938bdfc997a1b37d9a856f040c4eb9b1d36456d585d0b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/oop/override_checked_valid.xr",
+      "lf_sha256": "de5bbf5c4db212d008a1cfef5b2b6e258c02c808ac6fcdd39b05aa5b7b8225b3"
     }
   ],
   "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",

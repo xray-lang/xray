@@ -25903,6 +25903,76 @@
         "Complete original program CLI/VM/real C projection/native execution against independent bytes.",
         "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
       ]
+    },
+    {
+      "id": "independent_behavior_generic_type_alias",
+      "oracle_id": "independent_behavior_generic_type_alias",
+      "source": "tests/diff/cases/semantics/generic_type_alias.xr",
+      "source_lf_sha256": "f6d7e3ce00a163a821f938bdfc997a1b37d9a856f040c4eb9b1d36456d585d0b",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "42\nxray\nn=7\n3.5\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "The complete original expands structural Pair, Array Vec, callable Mapper and forward structural Box aliases; exact fields, element concatenation and the actual lambda argument produce all four values without executing Xray.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/generic_type_alias.xr",
+        "source_lf_sha256": "f6d7e3ce00a163a821f938bdfc997a1b37d9a856f040c4eb9b1d36456d585d0b"
+      },
+      "remaining_gates": [
+        "Complete original program CLI/VM/real C projection/native execution against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "independent_behavior_oop_override_checked_valid",
+      "oracle_id": "independent_behavior_oop_override_checked_valid",
+      "source": "tests/diff/cases/semantics/oop/override_checked_valid.xr",
+      "source_lf_sha256": "de5bbf5c4db212d008a1cfef5b2b6e258c02c808ac6fcdd39b05aa5b7b8225b3",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "auto-override-ok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "The complete original declares a matching override signature and prints its marker once. Neither speak body is called; this is complete declaration admission, not runtime dispatch or inheritance qualification.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/override_checked_valid.xr",
+        "source_lf_sha256": "de5bbf5c4db212d008a1cfef5b2b6e258c02c808ac6fcdd39b05aa5b7b8225b3"
+      },
+      "remaining_gates": [
+        "Complete original program CLI/VM/real C projection/native execution against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
     }
   ]
 }

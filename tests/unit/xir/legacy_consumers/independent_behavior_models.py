@@ -190,6 +190,20 @@ def observations() -> dict[str, tuple[list, str]]:
         [first_match(42), first_match('hello'), second_match(7), second_match('x')],
         'Both complete original consecutive type-pattern matches select their i64/string '
         'arms for all four calls, preserving interpolation and the exact spaces.')
+    pair = {'first': 11, 'second': 31}
+    words = ['x', 'ray']; box = {'value': 3.5}
+    apply = lambda function, value: function(value)
+    models['generic_type_alias'] = (
+        [pair['first'] + pair['second'], words[0] + words[1],
+         apply(lambda value: 'n=' + str(value), 7), box['value']],
+        'The complete original expands structural Pair, Array Vec, callable Mapper and '
+        'forward structural Box aliases; exact fields, element concatenation and the '
+        'actual lambda argument produce all four values without executing Xray.')
+    models['oop/override_checked_valid'] = (
+        ['auto-override-ok'],
+        'The complete original declares a matching override signature and prints its '
+        'marker once. Neither speak body is called; this is complete declaration admission, '
+        'not runtime dispatch or inheritance qualification.')
     return models
 
 
