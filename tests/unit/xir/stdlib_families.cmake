@@ -70,6 +70,12 @@ add_test(NAME test_xir_public_cli_nominal_ctfe
 set_tests_properties(test_xir_public_cli_nominal_ctfe PROPERTIES
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     LABELS "cli;xir;stdlib;execution;ownership;nominal;ctfe")
+add_test(NAME test_xir_public_cli_tuple_spread_ctfe
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_tuple_spread_ctfe.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
+set_tests_properties(test_xir_public_cli_tuple_spread_ctfe PROPERTIES
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "cli;xir;ctfe;tuple;spread;ownership")
+
 add_test(NAME test_xir_public_cli_open_generic_default
     COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_open_generic_default.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})

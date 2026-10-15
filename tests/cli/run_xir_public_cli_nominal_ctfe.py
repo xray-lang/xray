@@ -6,7 +6,7 @@ from xir_no_child_process import NoChildProcess
 from xir_nominal_ctfe_cases import CASES
 
 
-def main():
+def main(cases=CASES, negative_cases=None, family='NOMINAL_CTFE', case_semantics=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary',type=Path,required=True);parser.add_argument('--root',type=Path,required=True)
     parser.add_argument('--output',type=Path);args=parser.parse_args()
@@ -31,7 +31,7 @@ def main():
             results.append(row)
             if not passed:failures.append(row)
             return passed
-        for name,module,body,expected in CASES:
+        for name,module,body,expected in cases:
             (output/(name+'-values.xr')).write_text(module,encoding='utf-8');entry=output/(name+'.xr');entry.write_text(body,encoding='utf-8')
             result=invoke(name+'-vm',binary,['run',str(entry)],hidden)
             if not require(name+'-vm',(result.returncode,result.stdout,result.stderr)==(0,expected,b''),result):continue
@@ -45,7 +45,7 @@ def main():
         for name,expected in completed:
             result=invoke(name+'-source-absent',binary,['run',str(output/(name+'.xr'))],hidden)
             require(name+'-source-absent',(result.returncode,result.stdout,result.stderr)==(0,expected,b''),result)
-        negative=[
+        negative=negative_cases if negative_cases is not None else [
             ('class','class Box{value:i8;init(value){this.value=value}}\nfn make()->Box{return Box(7)}\nconst p=comptime make()\nprint(p.value)\n',b'comptime result must belong to an admitted closed value family'),
             ('io','struct Pair{value:i8}\nfn make()->Pair{print(1);return Pair{value:7}}\nconst p=comptime make()\nprint(p.value)\n',b'admitted deterministic scalar direct-call closure'),
             ('output','struct Pair{word:i64;tag:i8}\nfn make()->Pair{return Pair{word:7,tag:1}}\nconst p=comptime make()\nprint(p.word)\n',b'error: budget'),
@@ -54,13 +54,14 @@ def main():
         for name,body,message in negative:
             entry=output/(name+'.xr');entry.write_text(body,encoding='utf-8');result=invoke(name,binary,['run',str(entry)],hidden)
             require(name,result.returncode==1 and not result.stdout and message in result.stderr,result)
-        summary=dict(status='NOMINAL_CTFE_REQUIRED_CASES_FAIL' if failures else 'NOMINAL_CTFE_REQUIRED_CASES_PASS',commands=len(commands),
-            required_positive_cases=len(CASES),positive_cases_completed=[name for name,_ in completed],all_positive_cases_required=True,
-            case_results=results,failures=failures,expected_full_commands=len(CASES)*5+len(negative),
+        summary=dict(status=family+'_REQUIRED_CASES_FAIL' if failures else family+'_REQUIRED_CASES_PASS',commands=len(commands),
+            required_positive_cases=len(cases),positive_cases_completed=[name for name,_ in completed],all_positive_cases_required=True,
+            case_results=results,failures=failures,expected_full_commands=len(cases)*5+len(negative),
+            case_semantics=case_semantics or {name:'compiler_constant' for name,_,_,_ in cases},
             source_absence_verified_for_completed_cases=True,source_poisoned=True,Windows_absolute_child_denial=policy.control,
             foreign_aggregate_inputs=False,library_generic_templates=False,library_private_var_opened=False,complete_standard_library=False)
         (output/'summary.json').write_text(json.dumps(summary,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
-        print(json.dumps(dict(status=summary['status'],commands=len(commands),required_positive_cases=len(CASES),completed=summary['positive_cases_completed'],failures=failures),ensure_ascii=False),flush=True)
+        print(json.dumps(dict(status=summary['status'],commands=len(commands),required_positive_cases=len(cases),completed=summary['positive_cases_completed'],failures=failures),ensure_ascii=False),flush=True)
         return 1 if failures else 0
     finally:
         if temporary:temporary.cleanup()
