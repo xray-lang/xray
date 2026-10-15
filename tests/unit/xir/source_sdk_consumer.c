@@ -269,7 +269,112 @@ static void timer_waits(const char *stdlib) {
     CHECK(xray_source_call_drop(&call, &event) == XR_SOURCE_OK && !call);
     CHECK(out.length == 3 && !memcmp(out.bytes, "43\n", 3)); xray_source_result_free(result);
 }
+typedef struct TaskCase { const char *name, *source, *expected; size_t length; } TaskCase;
+#define TASK_CASE(name, source, expected) {name, source, expected, sizeof(expected)-1}
+static const TaskCase task_cases[] = {
+    TASK_CASE("scalar-control",
+        "fn worker()->string { Coro.yield(); return \"control\\0é\" }\n"
+        "fn calculate() { const task:Task<string> = go worker(); const first=await task;"
+        " assert(first==\"control\\0é\"); print(await task) }\ncalculate()\n",
+        "control\0é\n"),
+    TASK_CASE("array-i64",
+        "fn worker()->Array<i64> { Coro.yield(); return [17,29] }\n"
+        "fn calculate() { const task:Task<Array<i64>> = go worker(); var first=await task;"
+        " first[0]=101; assert(first[0]==101); const next=await task; print(next[0]); print(next[1]) }\ncalculate()\n",
+        "17\n29\n"),
+    TASK_CASE("nested-array-string",
+        "fn worker()->Array<Array<string>> { Coro.yield(); return [[\"a\\0b\",\"é😀\"],[\"tail\"]] }\n"
+        "fn calculate() { const task:Task<Array<Array<string>>> = go worker(); var first=await task;"
+        " first[0][0]=\"changed\"; assert(first[0][0]==\"changed\"); const next=await task;"
+        " print(next[0][0]); print(next[0][1]); print(next[1][0]) }\ncalculate()\n",
+        "a\0b\né😀\ntail\n"),
+    TASK_CASE("nullable-i64",
+        "fn worker()->i64? { Coro.yield(); return -17 }\n"
+        "fn calculate() { const task:Task<i64?> = go worker(); const first=await task;"
+        " assert(first! == -17); const next=await task; print(next!) }\ncalculate()\n",
+        "-17\n"),
+    TASK_CASE("nullable-array",
+        "fn worker()->Array<i64>? { Coro.yield(); return [17,29] }\n"
+        "fn calculate() { const task:Task<Array<i64>?> = go worker(); const first=await task;"
+        " assert(first![0]==17); const next=await task; print(next![1]) }\ncalculate()\n",
+        "29\n"),
+    TASK_CASE("tuple-string",
+        "fn worker()->(i64,string) { Coro.yield(); return (-17,\"t\\0é\") }\n"
+        "fn calculate() { const task:Task<(i64,string)> = go worker(); const first=await task;"
+        " assert(first.0 == -17); const next=await task; print(next.0); print(next.1) }\ncalculate()\n",
+        "-17\nt\0é\n"),
+    TASK_CASE("enum-array",
+        "enum Choice { Empty, Selected { values:Array<i64> } }\n"
+        "fn worker()->Choice { Coro.yield(); return Choice.Selected{values:[17,29]} }\n"
+        "fn calculate() { const task:Task<Choice> = go worker(); const first=await task;"
+        " print(match(first){Choice.Empty -> 0, Choice.Selected{values} -> values[0]});"
+        " const next=await task; print(match(next){Choice.Empty -> 0, Choice.Selected{values} -> values[1]}) }\ncalculate()\n",
+        "17\n29\n"),
+    TASK_CASE("atomic-shared",
+        "fn worker()->Atomic<i64> { Coro.yield(); return Atomic<i64>(17) }\n"
+        "fn calculate() { const task:Task<Atomic<i64>> = go worker(); const first=await task;"
+        " print(first.fetchAdd(5)); const next=await task; print(next.load()) }\ncalculate()\n",
+        "17\n22\n"),
+    TASK_CASE("task-nested",
+        "fn leaf()->i64 { Coro.yield(); return 29 }\n"
+        "fn worker()->Task<i64> { Coro.yield(); return go leaf() }\n"
+        "fn calculate() { const task:Task<Task<i64>> = go worker(); const first=await task;"
+        " const next=await task; print(await first); print(await next) }\ncalculate()\n",
+        "29\n29\n")
+};
+static int constructed_task_case(const TaskCase *test, const char *stdlib, size_t ordinal) {
+    XrSourceCompiler *compiler = compiler_new(stdlib);
+    char source[2048]; size_t length = strlen(test->source);
+    CHECK(length < sizeof(source)); memcpy(source, test->source, length);
+    XrSourceText text = {NULL, test->name, source, length};
+    XrSourceProgram *program = NULL; XrSourceDiagnostic *diagnostic = NULL;
+    XrSourceStatus status = xray_source_compile_text(compiler, &text, &program, &diagnostic);
+    memset(source, '!', sizeof(source));
+    xray_source_compiler_free(compiler);
+    if (status != XR_SOURCE_OK) {
+        CHECK(!program && diagnostic); XrSourceDiagnosticInfo info;
+        CHECK(xray_source_diagnostic_info(diagnostic, &info) == XR_SOURCE_OK);
+        fprintf(stderr, "case=%s compile status=%u stage=%u message=%s\n",
+            test->name, (unsigned)status, info.stage, info.message);
+        xray_source_diagnostic_free(diagnostic);
+        return (int)(10+ordinal);
+    }
+    CHECK(program && !diagnostic); Output out = {{0}, 0};
+    XrSourceCallOptions options;
+    CHECK(xray_source_call_options_init(&options, sizeof(options)) == XR_SOURCE_OK);
+    options.write = capture; options.context = &out;
+    XrSourceCall *call = NULL;
+    CHECK(xray_source_call_begin(program, &options, &call) == XR_SOURCE_OK && call);
+    xray_source_program_free(program);
+    XrSourceEvent event = {0}; size_t steps = 0;
+    for (;;) {
+        CHECK(steps++ < 4096);
+        CHECK(xray_source_call_poll(call, 8, &event) == XR_SOURCE_OK);
+        if (event.state == XR_SOURCE_RUN_READY) continue;
+        if (event.state != XR_SOURCE_RUN_SUSPENDED) break;
+        XrSourceWait wait;
+        CHECK(xray_source_call_wait_request(call, event.epoch, event.wake, &wait, sizeof(wait)) == XR_SOURCE_OK);
+        CHECK(wait.kind == XR_SOURCE_WAIT_YIELD || wait.kind == XR_SOURCE_WAIT_TASK);
+        CHECK(xray_source_call_resume(call, event.epoch, event.wake) == XR_SOURCE_OK);
+        CHECK(xray_source_call_wait_request(call, event.epoch, event.wake, &wait, sizeof(wait)) == XR_SOURCE_BAD_STATE);
+    }
+    CHECK(event.state == XR_SOURCE_RUN_RETURNED);
+    XrSourceResult *result = NULL;
+    CHECK(xray_source_call_take(call, &result) == XR_SOURCE_OK && result);
+    CHECK(xray_source_call_drop(&call, NULL) == XR_SOURCE_OK && !call);
+    CHECK(xray_source_result_event(result, &event) == XR_SOURCE_OK && event.state == XR_SOURCE_RUN_RETURNED);
+    int64_t value = -1;
+    CHECK(xray_source_result_i64(result, &value) == XR_SOURCE_OK && value == 0);
+    CHECK(out.length == test->length && !memcmp(out.bytes, test->expected, test->length));
+    xray_source_result_free(result);
+    printf("case=%s PASS bytes=%zu producers-dead\n", test->name, out.length);
+    return 0;
+}
+static void constructed_tasks(const char *stdlib) {
+    for (size_t i = 0; i < sizeof(task_cases)/sizeof(task_cases[0]); ++i)
+        CHECK(constructed_task_case(&task_cases[i], stdlib, i) == 0);
+}
 int main(int argc, char **argv) {
-    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]);
+    CHECK(argc == 2); checked_program(argv[1]); detached_cancellation(argv[1]); owned_panic(argv[1]); typed_tasks(argv[1]); timer_waits(argv[1]); library_methods(argv[1]); generic_initializers(argv[1]); compiler_constants(argv[1]); constructed_tasks(argv[1]);
     puts("Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS"); return 0;
 }

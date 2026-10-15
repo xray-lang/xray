@@ -60,7 +60,14 @@ def main():
     configure('consumer-configure', output/'consumer-build')
     run('consumer-build', ['cmake', '--build', output/'consumer-build', '--parallel', '2'])
     stdout = run('consumer-run', [output/'consumer-build/source_consumer.exe', stdlib])
-    assert stdout.replace(b'\r\n', b'\n') == b'Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS\n'
+    task_cases = (
+        ('scalar-control', 11), ('array-i64', 6), ('nested-array-string', 16),
+        ('nullable-i64', 4), ('nullable-array', 3), ('tuple-string', 9),
+        ('enum-array', 6), ('atomic-shared', 6), ('task-nested', 6))
+    expected = b''.join(f'case={name} PASS bytes={length} producers-dead\n'.encode('ascii')
+                        for name, length in task_cases)
+    expected += b'Installed public Source SDK: Checked io/time, detached cancellation and owned panic PASS\n'
+    assert stdout.replace(b'\r\n', b'\n') == expected
     object_file, direct = output/'direct.obj', output/'direct.exe'
     if 'clang' in Path(args.compiler).name.lower() and 'clang-cl' not in Path(args.compiler).name.lower():
         compile_command = [args.compiler, '--target=x86_64-windows-msvc', '-std=c11', '-O2',

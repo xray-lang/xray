@@ -1,0 +1,46 @@
+// scalar-control: independent Task result and repeated-await ownership.
+fn sdk_task_scalar_control_worker()->string { Coro.yield(); return "control\0é" }
+fn sdk_task_scalar_control_calculate() { const task:Task<string> = go sdk_task_scalar_control_worker(); const first=await task; assert(first=="control\0é"); print(await task) }
+sdk_task_scalar_control_calculate()
+
+// array-i64: independent Task result and repeated-await ownership.
+fn sdk_task_array_i64_worker()->Array<i64> { Coro.yield(); return [17,29] }
+fn sdk_task_array_i64_calculate() { const task:Task<Array<i64>> = go sdk_task_array_i64_worker(); var first=await task; first[0]=101; assert(first[0]==101); const next=await task; print(next[0]); print(next[1]) }
+sdk_task_array_i64_calculate()
+
+// nested-array-string: independent Task result and repeated-await ownership.
+fn sdk_task_nested_array_string_worker()->Array<Array<string>> { Coro.yield(); return [["a\0b","é😀"],["tail"]] }
+fn sdk_task_nested_array_string_calculate() { const task:Task<Array<Array<string>>> = go sdk_task_nested_array_string_worker(); var first=await task; first[0][0]="changed"; assert(first[0][0]=="changed"); const next=await task; print(next[0][0]); print(next[0][1]); print(next[1][0]) }
+sdk_task_nested_array_string_calculate()
+
+// nullable-i64: independent Task result and repeated-await ownership.
+fn sdk_task_nullable_i64_worker()->i64? { Coro.yield(); return -17 }
+fn sdk_task_nullable_i64_calculate() { const task:Task<i64?> = go sdk_task_nullable_i64_worker(); const first=await task; assert(first! == -17); const next=await task; print(next!) }
+sdk_task_nullable_i64_calculate()
+
+// nullable-array: independent Task result and repeated-await ownership.
+fn sdk_task_nullable_array_worker()->Array<i64>? { Coro.yield(); return [17,29] }
+fn sdk_task_nullable_array_calculate() { const task:Task<Array<i64>?> = go sdk_task_nullable_array_worker(); const first=await task; assert(first![0]==17); const next=await task; print(next![1]) }
+sdk_task_nullable_array_calculate()
+
+// tuple-string: independent Task result and repeated-await ownership.
+fn sdk_task_tuple_string_worker()->(i64,string) { Coro.yield(); return (-17,"t\0é") }
+fn sdk_task_tuple_string_calculate() { const task:Task<(i64,string)> = go sdk_task_tuple_string_worker(); const first=await task; assert(first.0 == -17); const next=await task; print(next.0); print(next.1) }
+sdk_task_tuple_string_calculate()
+
+// enum-array: independent Task result and repeated-await ownership.
+enum sdk_task_enum_array_Choice { Empty, Selected { values:Array<i64> } }
+fn sdk_task_enum_array_worker()->sdk_task_enum_array_Choice { Coro.yield(); return sdk_task_enum_array_Choice.Selected{values:[17,29]} }
+fn sdk_task_enum_array_calculate() { const task:Task<sdk_task_enum_array_Choice> = go sdk_task_enum_array_worker(); const first=await task; print(match(first){sdk_task_enum_array_Choice.Empty -> 0, sdk_task_enum_array_Choice.Selected{values} -> values[0]}); const next=await task; print(match(next){sdk_task_enum_array_Choice.Empty -> 0, sdk_task_enum_array_Choice.Selected{values} -> values[1]}) }
+sdk_task_enum_array_calculate()
+
+// atomic-shared: independent Task result and repeated-await ownership.
+fn sdk_task_atomic_shared_worker()->Atomic<i64> { Coro.yield(); return Atomic<i64>(17) }
+fn sdk_task_atomic_shared_calculate() { const task:Task<Atomic<i64>> = go sdk_task_atomic_shared_worker(); const first=await task; print(first.fetchAdd(5)); const next=await task; print(next.load()) }
+sdk_task_atomic_shared_calculate()
+
+// task-nested: independent Task result and repeated-await ownership.
+fn sdk_task_task_nested_leaf()->i64 { Coro.yield(); return 29 }
+fn sdk_task_task_nested_worker()->Task<i64> { Coro.yield(); return go sdk_task_task_nested_leaf() }
+fn sdk_task_task_nested_calculate() { const task:Task<Task<i64>> = go sdk_task_task_nested_worker(); const first=await task; const next=await task; print(await first); print(await next) }
+sdk_task_task_nested_calculate()
