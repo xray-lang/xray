@@ -4570,3 +4570,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_probe.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_performance.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_compile_domain.cmake")
