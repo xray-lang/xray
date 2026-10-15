@@ -124,16 +124,19 @@ static int enum_required(const char *uri) {
     XrJsonValue *edits=xjson_get_array(xjson_array_get(documents,0),"edits");CHECK(edits&&edits->as.array.count==3);
     xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);return 0;
 }
+#include "rename_resources.h"
 static int run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
-    CHECK(argc==4||argc==5);if(argc==5&&!strcmp(argv[4],"--enum-required"))return enum_required(argv[1]);
-    bool full=argc==4;CHECK(full||!strcmp(argv[4],"--normal"));
-    for(unsigned mode=0;mode<8;++mode){XrCompileResourceStats stats={0};runtime_attempts=0;runtime_fail_at=SIZE_MAX;CHECK(once(argv[1],argv[2],argv[3],mode,limits,&stats,SIZE_MAX,NULL)==XR_XIR_OK);size_t sites=runtime_attempts,json_sites=lsp_json_calls;
-        if(full){for(size_t i=0;i<sites;++i){runtime_attempts=0;runtime_fail_at=i;CHECK(once(argv[1],argv[2],argv[3],mode,limits,NULL,SIZE_MAX,NULL)==XR_XIR_OUT_OF_MEMORY&&runtime_attempts>i);}runtime_fail_at=SIZE_MAX;
-            for(size_t i=0;i<json_sites;++i){bool injected=false;CHECK(once(argv[1],argv[2],argv[3],mode,limits,NULL,i,&injected)==XR_XIR_OUT_OF_MEMORY&&injected);}
-            for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits exact={stats.allocated_bytes,stats.peak_bytes,stats.work};uint64_t *bound=axis==0?&exact.allocated_bytes:axis==1?&exact.live_bytes:&exact.work;CHECK(*bound&&*bound<INT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);CHECK(once(argv[1],argv[2],argv[3],mode,exact,NULL,SIZE_MAX,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));}}
-        printf("Source rename mode=%u SourceFI=%zu JSONFI=%zu full=%u direct binding/versioned edit/candidate check physical0/0\n",mode,sites,json_sites,full?1u:0u);
-    }rejected(argv[1],argv[2]);return 0;
+    int resource=rename_resource_command(argc,argv);if(resource>=0)return resource;
+    CHECK(argc==5);
+    if(!strcmp(argv[4],"--enum-required"))return enum_required(argv[1]);
+    CHECK(!strcmp(argv[4],"--normal"));
+    for(unsigned mode=0;mode<8;++mode){
+        XrCompileResourceStats stats={0};runtime_attempts=0;runtime_fail_at=SIZE_MAX;
+        CHECK(once(argv[1],argv[2],argv[3],mode,limits,&stats,SIZE_MAX,NULL)==XR_XIR_OK);
+        printf("Source rename mode=%u SourceFI=%zu JSONFI=%zu full=0 direct binding/versioned edit/candidate check physical0/0\n",mode,runtime_attempts,lsp_json_calls);
+    }
+    rejected(argv[1],argv[2]);return 0;
 }
 #if XR_OS_WINDOWS
 int wmain(int argc,wchar_t **wide){XrWinPathStatus status;char **argv=xr_win_utf16_arguments(argc,wide,&status);CHECK(argv);int result=run(argc,argv);xr_win_utf8_arguments_free(argc,argv);return result;}

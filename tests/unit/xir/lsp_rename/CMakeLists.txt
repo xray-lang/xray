@@ -18,7 +18,13 @@ endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME test_lsp_source_rename COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_rename.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib")
-set_tests_properties(test_lsp_source_rename PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+set_tests_properties(test_lsp_source_rename PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 8 COST 290 LABELS "unit;lsp;ownership;metadata;allocation")
 add_test(NAME test_lsp_source_rename_enum_required COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_rename.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib" --enum-required)
 set_tests_properties(test_lsp_source_rename_enum_required PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;source;required")
+add_test(NAME test_lsp_source_rename_resource_probe COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_rename.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib" --probe)
+set_tests_properties(test_lsp_source_rename_resource_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;lsp;ownership;metadata;allocation")
+add_test(NAME test_lsp_source_rename_normal COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_rename.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib" --normal)
+set_tests_properties(test_lsp_source_rename_normal PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;lsp;source;ownership")
