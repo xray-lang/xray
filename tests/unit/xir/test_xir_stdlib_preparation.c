@@ -51,7 +51,12 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     preparation_stage_ticks[3] = clock();
     *stage = 3;
     status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
-    if (status != XR_XIR_OK) goto finish;
+    if (status != XR_XIR_OK) {
+        if (effects_compile_fail_at==SIZE_MAX)
+            fprintf(stderr,"stdlib Source status=%u module=%u line=%d column=%d diagnostic=%s\n",
+                status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+        goto finish;
+    }
     preparation_stage_offsets[4] = effects_compile_attempts-first_attempt;
     preparation_stage_ticks[4] = clock();
     *stage = 4;
@@ -182,6 +187,10 @@ int main(int argc, char **argv) {
     }
     preparation_constructor_controls(caps);
     StdlibPreparationRun normal = preparation_run(argv[1],argv[2],caps,SIZE_MAX);
+    if (normal.status!=XR_XIR_OK)
+        fprintf(stderr,"stdlib preparation baseline failed status=%u stage=%u sites=%zu allocated=%llu peak=%llu work=%llu\n",
+            normal.status,normal.stage,normal.sites,(unsigned long long)normal.whole.allocated_bytes,
+            (unsigned long long)normal.whole.peak_bytes,(unsigned long long)normal.whole.work);
     CHECK(normal.status == XR_XIR_OK && normal.stage == 9 && normal.sites && !normal.injected);
     printf("stdlib preparation baseline actual=%zu operation=%zu preparation allocated=%llu peak=%llu work=%llu whole allocated=%llu peak=%llu work=%llu physical0\n",
         normal.sites,normal.attempts-normal.sites,

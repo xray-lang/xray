@@ -144,6 +144,21 @@ add_test(NAME test_xir_public_cli_library_calls
 set_tests_properties(test_xir_public_cli_library_calls PROPERTIES
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     LABELS "cli;xir;stdlib;native;execution;ownership;ctfe")
+foreach(mode IN ITEMS measure faults)
+    if(mode STREQUAL "measure")
+        set(library_call_binding_mode binding-measure)
+    else()
+        set(library_call_binding_mode faults)
+    endif()
+    add_test(NAME test_xir_library_calls_preparation_${mode}
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/library_call_resources.py
+            $<TARGET_FILE:test_xir_stdlib_preparation> ${PROJECT_SOURCE_DIR} ${mode})
+    add_test(NAME test_xir_library_calls_binding_${mode}
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/library_call_resources.py
+            $<TARGET_FILE:test_xir_stdlib_resources> ${PROJECT_SOURCE_DIR} ${library_call_binding_mode})
+    set_tests_properties(test_xir_library_calls_preparation_${mode} test_xir_library_calls_binding_${mode} PROPERTIES
+        TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;stdlib;resources;ownership;ctfe")
+endforeach()
 
 add_test(NAME test_xir_public_cli_integer_bits
     COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_integer_bits.py
