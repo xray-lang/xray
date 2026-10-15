@@ -12,13 +12,14 @@
 #include "xir/xxir_types.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_emit_c.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
-#include "xir_source_compile_owner.h"
-#include "xir_runtime_allocations.h"
+#include "xir_source_derivation_enum_runtime.h"
 #include "xir_generated_schema.h"
 #include "xir_source_derivation_enum_source.h"
 static void enum_source(const XrXirCompileContext *context,const char *text,
@@ -44,16 +45,11 @@ static uint32_t enum_function(const XrXirModule *module,const char *name) {
         }
     CHECK(found!=UINT32_MAX);return found;
 }
-static XrXirValue enum_call(XrXirProgram *program,uint32_t function) {
-    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_start(instance,function,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instance,4096).outcome.status==XR_XIR_CALL_RETURNED);
-    XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);return value;
-}
-static void enum_execute(const XrXirCompileContext *context,XrXirSourceResult *source) {
+static void enum_execute(const XrXirCompileContext *context,XrXirSourceResult *source,const char *emit,const char *packet_path,bool faults) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
+    if(packet_path) {
+        FILE *file=fopen(packet_path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+    }
     xr_xir_compile_source_result_free(source);XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
@@ -63,17 +59,30 @@ static void enum_execute(const XrXirCompileContext *context,XrXirSourceResult *s
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t entries[]={enum_function(module,"first"),enum_function(module,"payload"),
         enum_function(module,"last"),enum_function(module,"main")};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
-    XrXirValue values[4];for(unsigned i=0;i<4;++i)values[i]=enum_call(program,entries[i]);
-    xr_xir_compile_program_drop(program);const char *expected[]={"Alpha","Payload","Omega"};
-    for(unsigned i=0;i<3;++i) {
-        const char *bytes=NULL;size_t length=0;CHECK(values[i].type==XR_XIR_STRING &&
-            xr_xir_string_view(&values[i],&bytes,&length) && length==strlen(expected[i]) && !memcmp(bytes,expected[i],length));
-        xr_xir_value_drop(&values[i]);
+    if(emit) {
+        uint32_t method=enum_function(module,"caseName");XrXirCSource output={0};
+        CHECK(xr_xir_compile_emit_c(lowered,"fixture_enum",8388608,&output)==XR_XIR_OK);
+        for(size_t i=0;i<output.length;++i) if(output.text[i]=='(') {
+            size_t next=i+1;while(next<output.length && isspace((unsigned char)output.text[next]))++next;
+            CHECK(next==output.length || output.text[next]!='{');
+        }
+        FILE *file=fopen(emit,"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
+        CHECK(fprintf(file,"\nconst uint32_t fixture_enum_selection[5]={%uu,%uu,%uu,%uu,%uu};\n",
+            entries[0],entries[1],entries[2],entries[3],method)>0 && !fclose(file));xr_xir_compile_c_source_free(&output);
     }
-    CHECK(values[3].type==XR_XIR_I64 && values[3].payload==42 && !values[3].reserved);xr_xir_value_drop(&values[3]);
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+    XrXirValue values[4];
+    for(unsigned i=0;i<4;++i) {
+        size_t sites=enum_runtime_failures(program,entries[i],i,faults);
+        printf("ordinary enum VM case%u: sites=%zu full runtime FI=%u\n",i,sites,faults);
+        values[i]=enum_runtime_take(program,entries[i]);
+    }
+    xr_xir_compile_program_drop(program);
+    for(unsigned i=0;i<4;++i) {enum_runtime_expected(&values[i],i);xr_xir_value_drop(&values[i]);}
 }
-int main(void) {
+int main(int argc,char **argv) {
+    bool emit=argc==4 && !strcmp(argv[1],"--emit-native"),faults=argc==2 && !strcmp(argv[1],"--runtime-resources");
+    CHECK(argc==1 || emit || faults);
     const XrCompileResourceLimits caps={67108864,8388608,128000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0},after={0};
@@ -91,7 +100,7 @@ int main(void) {
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     memset(&binding,0xa5,sizeof(binding));memset(&input,0xa5,sizeof(input));XrXirSourceResult user={0};
     enum_source(&context,enum_user_source,XR_XIR_PROGRAM,catalog,&user);xr_xir_compile_library_catalog_free(catalog);
-    enum_execute(&context,&user);CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+    enum_execute(&context,&user,emit?argv[2]:NULL,emit?argv[3]:NULL,faults);CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
     printf("Ordinary enum generator: future variants/real CFG, payload and both empty cases, comptime+independent VM oracle, producer death/physical0; allocated=%llu peak=%llu work=%llu\n",
