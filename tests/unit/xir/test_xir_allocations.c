@@ -710,32 +710,44 @@ static void allocation_remaining_resources(void) {
     initialization_region_allocations();
 }
 
-static void allocation_phase_matrix(void) {
+static void allocation_phase_matrix(bool axes) {
     function_allocation_phase_case(false);function_allocation_phase_case(true);
     function_producer_allocation_phase_case();
     for(unsigned mode=0;mode<8;++mode)invocation_runtime_allocation_phase_case(mode);
-    allocation_phase_case_begin("runtime",0,0);allocation_stage="resource-axes";
-    invocation_runtime_owner_axes();CHECK(!live);
+    if(axes) {
+        allocation_phase_case_begin("runtime",0,0);allocation_stage="resource-axes";
+        invocation_runtime_owner_axes();CHECK(!live);
+    }
     for(unsigned mode=0;mode<8;++mode)invocation_direct_allocation_phase_case(mode);
-    allocation_phase_case_begin("direct",0,0);allocation_stage="resource-axes";
-    invocation_direct_owner_axes();CHECK(!live);
+    if(axes) {
+        allocation_phase_case_begin("direct",0,0);allocation_stage="resource-axes";
+        invocation_direct_owner_axes();CHECK(!live);
+    }
     for(unsigned scalar=0;scalar<2;++scalar) {
         for(unsigned mode=0;mode<8;++mode)invocation_capture_allocation_phase_case(mode,scalar!=0);
-        allocation_phase_case_begin("capture",scalar,0);allocation_stage="resource-axes";
-        invocation_capture_owner_axes(scalar!=0);CHECK(!live);
+        if(axes) {
+            allocation_phase_case_begin("capture",scalar,0);allocation_stage="resource-axes";
+            invocation_capture_owner_axes(scalar!=0);CHECK(!live);
+        }
         for(unsigned mode=0;mode<8;++mode)invocation_return_capture_allocation_phase_case(mode,scalar!=0);
-        allocation_phase_case_begin("return_capture",scalar,0);allocation_stage="resource-axes";
-        invocation_return_capture_owner_axes(scalar!=0);CHECK(!live);
+        if(axes) {
+            allocation_phase_case_begin("return_capture",scalar,0);allocation_stage="resource-axes";
+            invocation_return_capture_owner_axes(scalar!=0);CHECK(!live);
+        }
         for(unsigned mode=0;mode<8;++mode)invocation_function_cell_allocation_phase_case(mode,scalar!=0);
-        allocation_phase_case_begin("function_cell",scalar,0);allocation_stage="resource-axes";
-        invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
+        if(axes) {
+            allocation_phase_case_begin("function_cell",scalar,0);allocation_stage="resource-axes";
+            invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
+        }
     }
     CHECK(allocation_phase_cases==67);
-    printf("FI map total: cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu axes=88\n",
+    printf("FI map total: cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu axes=%u\n",
         allocation_phase_cases,allocation_phase_ordinals,allocation_phase_compiler_ordinals,
-        allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals);
+        allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals,axes?88u:0u);
 }
+#include "xir_allocation_case_workers.h"
 int main(int argc,char **argv) {
+    if(allocation_worker_dispatch(argc,argv))return 0;
     CHECK(argc<=2);
     if(argc==2) {
         if(!strcmp(argv[1],"--bookkeeping")) {allocation_bookkeeping_cases();return 0;}
@@ -748,6 +760,6 @@ int main(int argc,char **argv) {
         else {fprintf(stderr,"unknown allocation test selection: %s\n",argv[1]);return 2;}
     }
     if(argc==1)allocation_remaining_resources();
-    allocation_phase_matrix();
+    allocation_phase_matrix(true);
     CHECK(!live && !class_live_bytes);return 0;
 }
