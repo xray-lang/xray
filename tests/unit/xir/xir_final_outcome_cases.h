@@ -57,8 +57,8 @@ static XrXirStatus pc_outcome_late_operation(const XrXirCompileContext *context,
     memset(functions,0xCE,sizeof(functions));memset(rows,0xCE,sizeof(rows));
     if (effects) {
         pc_empty_golden(effects,0);
-        CHECK(xr_xir_effects_function(effects,1)->suspend==XR_XIR_EFFECT_NONE &&
-            xr_xir_effects_function(effects,1)->throws==XR_XIR_EFFECT_NONE &&
+        CHECK(xr_xir_effects_read(effects,1).control.suspend==XR_XIR_EFFECT_NONE &&
+            xr_xir_effects_read(effects,1).control.throws==XR_XIR_EFFECT_NONE &&
             xr_xir_effects_go_safe(effects,1)==XR_XIR_OK &&
             xr_xir_effects_task_errors(effects,1)==XR_XIR_OK &&
             xr_xir_effects_task_creation(effects,1)==XR_XIR_EFFECT_NONE &&
@@ -87,8 +87,19 @@ static void pc_outcome_owner_literals(void) {
     CHECK(final && final==effects->invocations->final->outcomes &&
         final->resources==context.resources && final->count==3 && final->error_rows>=3 &&
         !effects->outcomes_owner && effect_outcomes_empty(&effects->outcomes_work));
-    const XrXirFunctionEffects *control=xr_xir_effects_function(effects,1);
-    CHECK(control==&final->functions[1]);
+    XrXirEffectFacts control_read=xr_xir_effects_read(effects,1);
+    const XrXirFunctionEffects *control=(control_read.status==XR_XIR_OK?&control_read.control:NULL);
+    CHECK(control && control->suspend==XR_XIR_EFFECT_NONE && control->throws==XR_XIR_EFFECT_NONE);
+    const XrXirFunctionEffects *stored=&final->functions[1];
+    XrXirEffectFacts detached=xr_xir_effects_read(effects,0);
+    CHECK(detached.status==XR_XIR_OK && detached.root.requires_root && !detached.root.unresolved &&
+        detached.root_witness.cause==XR_XIR_ROOT_CAUSE_INITIALIZER);
+    XrXirRootEffects untouched={true,true};
+    XrCompileResourceStats denied=pc_stats(&context);size_t denied_attempts=attempts;
+    CHECK(xir_effects_construction_root(&context,effects,0,&untouched)==XR_XIR_BAD_STRUCTURE &&
+        untouched.requires_root && untouched.unresolved && pc_stats(&context).work==denied.work &&
+        attempts==denied_attempts);
+
     EffectInvocationCertificate *again=effects->invocations;EffectGraph graph={0};
     XrCompileResourceStats published=pc_stats(&context);size_t published_attempts=attempts;
     const XrXirModule *source=xr_xir_compile_artifact_module(checked);
@@ -99,12 +110,14 @@ static void pc_outcome_owner_literals(void) {
         pc_stats(&context).work==published.work && attempts==published_attempts &&
         effect_final_outcomes(effects)==final);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
-    pc_empty_golden(effects,0);CHECK(xr_xir_effects_function(effects,1)==control);
+    pc_empty_golden(effects,0);CHECK(&effect_final_outcomes(effects)->functions[1]==stored &&
+        xr_xir_effects_read(effects,1).control.suspend==control->suspend &&
+        xr_xir_effects_read(effects,1).control.throws==control->throws);
     XrXirEffects incomplete={.resources=context.resources,.count=effects->count,.invocations=effects->invocations};
     incomplete.outcomes_work.functions=final->functions;
     XrCompileResourceStats before=pc_stats(&context);size_t attempts_before=attempts;
-    CHECK(!effect_final_outcomes(&incomplete) && !xr_xir_effects_function(&incomplete,1) &&
-        !xr_xir_effects_suspend_witness(&incomplete,1) &&
+    CHECK(!effect_final_outcomes(&incomplete) && !(xr_xir_effects_read(&incomplete,1).status==XR_XIR_OK) &&
+        !(xr_xir_effects_read(&incomplete,1).status==XR_XIR_OK && xr_xir_effects_read(&incomplete,1).suspend_witness.cause!=0) &&
         xr_xir_effects_go_safe(&incomplete,1)==XR_XIR_BAD_STRUCTURE &&
         xr_xir_effects_task_errors(&incomplete,1)==XR_XIR_BAD_STRUCTURE &&
         xr_xir_effects_task_creation(&incomplete,1)==XR_XIR_EFFECT_UNKNOWN &&
@@ -112,9 +125,13 @@ static void pc_outcome_owner_literals(void) {
     CHECK(pc_stats(&context).work==before.work && attempts==attempts_before);
     uint32_t count=effects->invocations->final->outcomes->count;
     effects->invocations->final->outcomes->count=count+1;
-    CHECK(!effect_final_outcomes(effects) && !xr_xir_effects_function(effects,1));
+    CHECK(!effect_final_outcomes(effects) && !(xr_xir_effects_read(effects,1).status==XR_XIR_OK));
     effects->invocations->final->outcomes->count=count;pc_empty_golden(effects,0);
-    xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    xr_xir_compile_effects_free(effects);
+    CHECK(detached.status==XR_XIR_OK && detached.root.requires_root && !detached.root.unresolved &&
+        detached.control.suspend==XR_XIR_EFFECT_NONE && detached.control.throws==XR_XIR_EFFECT_NONE &&
+        detached.root_witness.cause==XR_XIR_ROOT_CAUSE_INITIALIZER);
+    pc_release(&context,baseline);
 }
 
 static void pc_outcome_error_rows_literals(void) {

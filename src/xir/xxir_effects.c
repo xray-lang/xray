@@ -251,9 +251,23 @@ void xr_xir_compile_effects_free(XrXirEffects *effects) {
         xr_compile_resources_free(effects);
     }
 }
-const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function) {
+XR_FUNC XrXirEffectFacts xr_xir_effects_read(const XrXirEffects *effects,uint32_t function) {
+    XrXirEffectFacts read={.status=XR_XIR_BAD_STRUCTURE};
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    return final && function<final->count?&final->functions[function]:NULL;
+    if (!final || function>=final->count || !effects->root ||
+        !effects->root_witnesses || !effects->unresolved_witnesses) return read;
+    read.status=XR_XIR_OK;read.control=final->functions[function];read.root=effects->root[function];
+    read.suspend_witness=final->witnesses[function];read.root_witness=effects->root_witnesses[function];
+    read.unresolved_witness=effects->unresolved_witnesses[function];return read;
+}
+/* Source refinement reads only its genuine unpublished constructor. This
+ * capability cannot recover provisional values through a public query. */
+XR_FUNC XrXirStatus xir_effects_construction_root(const XrXirCompileContext *context,
+    const XrXirEffects *effects,uint32_t function,XrXirRootEffects *output) {
+    if (!output || !xir_effects_context_matches(context,effects,effects?effects->count:0) ||
+        !effects->outcomes_owner || !effects->root || function>=effects->count)
+        return XR_XIR_BAD_STRUCTURE;
+    *output=effects->root[function];return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_effects_task_errors(const XrXirEffects *effects, uint32_t function) {
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
@@ -266,11 +280,6 @@ XR_FUNC XrXirStatus xr_xir_effects_go_safe(const XrXirEffects *effects, uint32_t
 XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, uint32_t function) {
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     return final && function<final->count?final->task_creation[function]:XR_XIR_EFFECT_UNKNOWN;
-}
-const XrXirEffectWitness *xr_xir_effects_suspend_witness(const XrXirEffects *effects, uint32_t function) {
-    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    return final && function<final->count && final->witnesses[function].cause?
-        &final->witnesses[function]:NULL;
 }
 /* An unclassified opcode must not acquire an accidental no-effect proof. */
 static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,

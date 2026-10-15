@@ -61,10 +61,11 @@ static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
     const XrXirEffects *effects, bool *changed) {
     const XrXirInstruction *op = &ctx->functions[f].instructions[i];
     uint32_t target = (uint32_t)op->immediate;
-    const XrXirRootEffects *facts = xr_xir_effects_root(effects,target);
+    XrXirRootEffects copied={0};const XrXirRootEffects *facts=&copied;
     XrXirRootEffects contextual={0};
     XrXirDeclarations declarations;XrXirModule view=source_module_view(ctx,&declarations);
     XrXirStatus status=xir_effects_context_refresh(&ctx->compile,&view,effects);
+    if (status==XR_XIR_OK) status=xir_effects_construction_root(&ctx->compile,effects,target,&copied);
     if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"context generation rebuild failed");
     if (xir_effects_context_available(&ctx->compile,effects) &&
         (!ctx->has_generics || !ctx->generics[f].parameter_count)) {

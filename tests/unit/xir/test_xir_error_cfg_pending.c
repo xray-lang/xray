@@ -312,7 +312,7 @@ static void pc_empty_golden(const XrXirEffects *effects,unsigned mode) {
 static void pc_empty_constructed(const XrXirEffects *effects,unsigned mode) {
     CHECK(effects->outcomes_owner && !effects->invocations->final->outcomes && !effect_final_outcomes(effects));
     pc_empty_records(effects,&effects->outcomes_work,mode);
-    CHECK(!xr_xir_effects_function(effects,0) && !xr_xir_effects_suspend_witness(effects,0) &&
+    CHECK(!(xr_xir_effects_read(effects,0).status==XR_XIR_OK) && !(xr_xir_effects_read(effects,0).status==XR_XIR_OK && xr_xir_effects_read(effects,0).suspend_witness.cause!=0) &&
         xr_xir_effects_go_safe(effects,0)==XR_XIR_BAD_STRUCTURE &&
         xr_xir_effects_task_errors(effects,0)==XR_XIR_BAD_STRUCTURE &&
         xr_xir_effects_task_creation(effects,0)==XR_XIR_EFFECT_UNKNOWN);

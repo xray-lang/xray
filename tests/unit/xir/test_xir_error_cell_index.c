@@ -61,7 +61,7 @@ static void ci_golden(const XrXirEffects *e,CellBoundary boundary,bool snapshot)
     CHECK(!xr_xir_effects_error_unidentified(e,1));
     CHECK(xr_xir_effects_error(e,1,(XrXirType)CI_ENUM,0)==((bits&4)!=0));
     CHECK(xr_xir_effects_error(e,1,(XrXirType)CI_ENUM,1)==((bits&8)!=0));
-    CHECK(xr_xir_effects_function(e,1)->throws==XR_XIR_EFFECT_MAY);
+    CHECK(xr_xir_effects_read(e,1).control.throws==XR_XIR_EFFECT_MAY);
 }
 static XrXirStatus ci_whole(const XrXirCompileContext *c,CellBoundary boundary,bool snapshot,bool large){
     CellIndexFixture f;ci_fixture(&f,boundary,snapshot,large);XrXirDiagnostic d={0};XrXirEffects *e=NULL;

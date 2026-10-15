@@ -116,7 +116,7 @@ static void go_shape_cases(bool resources) {
         checked=go_replay(checked);XrXirEffects *effects=NULL;CHECK(effect_analyze(checked,&effects)==XR_XIR_OK);
         root_fact(effects,2,expected[mode].root,expected[mode].unknown);
         CHECK(xr_xir_effects_go_safe(effects,2)==expected[mode].status);
-        if(mode>=3)CHECK(xr_xir_effects_function(effects,2)->suspend==XR_XIR_EFFECT_NONE);
+        if(mode>=3)CHECK(xr_xir_effects_read(effects,2).control.suspend==XR_XIR_EFFECT_NONE);
         effect_summary_free(effects);effect_artifact_free(checked);
         XrXirDiagnostic diagnostic={0};checked=NULL;
         CHECK(go_shape_check(&effect_context,mode,true,&checked,&diagnostic)==expected[mode].status);

@@ -46,3 +46,9 @@ add_test(NAME test_xir_effect_final_outcomes_resources
 set_tests_properties(test_xir_effect_final_outcomes_resources PROPERTIES
     LABELS "unit;xir;ownership;metadata;final-outcomes;callback;compiler-fault;resources"
     TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_source_ref_places
+    COMMAND test_xir_source_query --enum-ref-next)
+set_tests_properties(test_xir_effect_source_ref_places PROPERTIES
+    LABELS "unit;xir;ownership;metadata;root-effects;source;producer-lifetime"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)

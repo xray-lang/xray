@@ -72,7 +72,8 @@ static void admission_private_module_state(const XrXirArtifact *artifact) {
     }
     CHECK(visible<module->function_count && declarations->functions[visible].exported);
     CHECK(declarations->functions[visible].module==declarations->slots[0].module);
-    const XrXirRootEffects *facts=xr_xir_effects_root(effects,visible);
+    XrXirEffectFacts facts_read=xr_xir_effects_read(effects,visible);
+    const XrXirRootEffects *facts=(facts_read.status==XR_XIR_OK?&facts_read.root:NULL);
     CHECK(facts && facts->requires_root && !facts->unresolved);
     xr_xir_compile_effects_free(effects);
 }

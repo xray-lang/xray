@@ -64,7 +64,7 @@ static void ee_golden(const XrXirEffects *e, EdgeCase mode, bool snapshot) {
     CHECK(!xr_xir_effects_error_unknown(e,1) && !xr_xir_effects_error_unidentified(e,1));
     CHECK(xr_xir_effects_error(e,1,(XrXirType)EE_ENUM,0)==((bits&4)!=0));
     CHECK(xr_xir_effects_error(e,1,(XrXirType)EE_ENUM,1)==((bits&8)!=0));
-    CHECK(xr_xir_effects_function(e,1)->throws==XR_XIR_EFFECT_MAY);
+    CHECK(xr_xir_effects_read(e,1).control.throws==XR_XIR_EFFECT_MAY);
 }
 static XrXirStatus ee_whole(const XrXirCompileContext *c, EdgeCase mode, bool snapshot) {
     EdgeFixture f;ee_fixture(&f,mode,snapshot);XrXirDiagnostic d={0};XrXirEffects *e=NULL;

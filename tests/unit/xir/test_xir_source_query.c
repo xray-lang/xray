@@ -966,7 +966,7 @@ static void query_next_scope(XrXirSourceRequest *request, XrCompilerSession **se
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--interface-name-spans") ||
         !strcmp(argv[1], "--core-syntax") || !strcmp(argv[1], "--requirement-capacity") ||
-        !strcmp(argv[1], "--requirement-provenance"))));
+        !strcmp(argv[1], "--requirement-provenance") || !strcmp(argv[1], "--enum-ref-next"))));
     stage_context = stage_context_default(); generic_storage_cases();
     nominal_query_boundary(&stage_context);
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -980,7 +980,8 @@ int main(int argc, char **argv) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
     XrXirSourceRequest request = {session, root, &authority, &stage_context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     if (argc == 2) {
-        if (!strcmp(argv[1], "--core-syntax")) source_core_syntax_facts(&request);
+        if (!strcmp(argv[1], "--enum-ref-next")) source_enum_ref_place_cases(&request);
+        else if (!strcmp(argv[1], "--core-syntax")) source_core_syntax_facts(&request);
         else if (!strcmp(argv[1], "--requirement-capacity")) source_requirement_value_boundaries(&request);
         else if (!strcmp(argv[1], "--requirement-provenance")) source_requirement_value_provenance(&request);
         else source_interface_name_spans(&request);
