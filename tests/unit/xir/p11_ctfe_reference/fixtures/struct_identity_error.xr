@@ -1,0 +1,5 @@
+enum E{Bad}
+struct Wrap{value:Error}
+fn fail(e:Error)->i64{throw e}
+fn answer()->i64{const e:Error=E.Bad;const w=Wrap{value:e};try{return fail(w.value)}catch(e:E){return 42}}
+export fn run()->i64{return comptime answer()}

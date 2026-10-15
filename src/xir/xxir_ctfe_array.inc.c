@@ -11,6 +11,7 @@
  *   span. Private Cell places borrow canonical payloads only synchronously.
  */
 #include "xxir_array.h"
+#include "xxir_struct.h"
 typedef struct CtfeAdmissionFrame { XrXirValue value;uint32_t next,count;bool owned;const XrXirFunctionBinding *function; } CtfeAdmissionFrame;
 static XrXirCtfeStatus ctfe_array_scan_work(ScalarRun *run,CtfeOwnedState *state,
     XrXirType element,uint64_t count) {
@@ -31,6 +32,18 @@ static XrXirCtfeStatus ctfe_array_member_read(ScalarRun *run,CtfeOwnedState *sta
     XrXirValueAdmission admission=ctfe_value_admission(state);admission.scratch_bytes-=256;
     XrXirFaultDetail fault={0};
     return ctfe_value_status(xr_xir_array_observe(receiver,index,&admission,output,&fault));
+}
+static XrXirCtfeStatus ctfe_struct_member_read(ScalarRun *run,CtfeOwnedState *state,
+    const XrXirValue *receiver,uint32_t field,XrXirValue *output) {
+    const XrXirTypeNode *node=xr_xir_type_node(run->module->types,(XrXirType)receiver->type);
+    if (!node || !xr_xir_type_is_struct(run->module->types,(XrXirType)receiver->type) ||
+        field>=node->nominal.field_count) return XR_XIR_CTFE_BAD_ARTIFACT;
+    XrXirCtfeStatus status=ctfe_validation_work(run,state,(XrXirType)receiver->type);
+    if (status==XR_XIR_CTFE_OK) status=ctfe_validation_work(run,state,node->nominal.fields[field]);
+    if (status!=XR_XIR_CTFE_OK) return status;
+    if (!scalar_compile_work(run,512)) return XR_XIR_CTFE_BUDGET;
+    XrXirValueAdmission admission=ctfe_value_admission(state);
+    return ctfe_value_status(xr_xir_struct_observe(receiver,field,&admission,output));
 }
 static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *input,bool data_only) {
     XrXirValue concrete={0};
@@ -57,7 +70,8 @@ static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *stat
             /* Value wrappers can prove an inactive authority branch while the
              * root loan prevents replacement. Active identities still refuse. */
             if (!wrapper || (wrapper->kind!=XR_XIR_TYPE_TUPLE && wrapper->kind!=XR_XIR_TYPE_NULLABLE && wrapper->kind!=XR_XIR_TYPE_ARRAY &&
-                    !xr_xir_type_is_enum(run->module->types,(XrXirType)current.type))) break;
+                    !xr_xir_type_is_enum(run->module->types,(XrXirType)current.type) &&
+                    !xr_xir_type_is_struct(run->module->types,(XrXirType)current.type))) break;
         }
         if (current.type==XR_XIR_ERROR) {
             XrXirValue erased={0};status=ctfe_error_concrete(run,state,&current,&erased);if (status!=XR_XIR_CTFE_OK) break;current=erased;
@@ -104,7 +118,7 @@ static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *stat
             if (!xr_xir_nullable_view(&current,&some,&payload)) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
             if (!some) descend=false;
         }
-        if (descend && node && node->kind==XR_XIR_TYPE_NOMINAL && !identity) {
+        if (descend && node && xr_xir_type_is_enum(run->module->types,(XrXirType)current.type)) {
             XrXirEnumBorrow borrowed={0};status=ctfe_value_status(xr_xir_enum_borrow(&current,&borrowed));
             if (status!=XR_XIR_CTFE_OK) break;count=borrowed.field_count;if (!count) descend=false;
         }
@@ -141,6 +155,10 @@ next_child:
                 status=ctfe_array_member_read(run,&bounded,&frame->value,frame->next++,&current);state->tuple_costs=bounded.tuple_costs;
             }
             else if (node->kind==XR_XIR_TYPE_TUPLE) status=ctfe_value_status(xr_xir_tuple_get(&frame->value,frame->next++,&current));
+            else if (xr_xir_type_is_struct(run->module->types,(XrXirType)frame->value.type)) {
+                CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)capacity*sizeof(*stack);
+                status=ctfe_struct_member_read(run,&bounded,&frame->value,frame->next++,&current);state->tuple_costs=bounded.tuple_costs;
+            }
             else if (node->kind==XR_XIR_TYPE_NOMINAL) {
                 XrXirEnumBorrow borrowed={0};status=ctfe_value_status(xr_xir_enum_borrow(&frame->value,&borrowed));
                 if (status==XR_XIR_CTFE_OK) status=ctfe_value_status(xr_xir_value_copy(&borrowed.fields[frame->next++],&current));

@@ -7711,7 +7711,7 @@ CTFE在每次完整Lowered、identity/target/profile复验后，将实际direct 
 
 每个实际Function带本次执行私有lease，按原资源owner登记。接收时先在活跃登记表匹配owner，再核原Artifact、真实producer指令/type、原FUNCTION_REF entry/capture及本次可达集合，不能先解引用任意binding.owner。弱化必须通过既有callable weakening规则；新lease独立保存原producer事实，不借悬空父lease。capture由共同Value持有，最后释放仅摘链和释放原资源，不分配。外部Function参数在读取payload或调用其准入回调之前拒绝；Function及任何含Function的结果不能导出或写成Source常量。
 
-按值capture保持共同Value所有权。可变capture只接受本次新推导的真实Cell provenance中OWNED_CAPTURE角色，且必须处于当前compiler Domain、无借用、非投影、非module storage；Function capture仍拒绝scoped/ref和cleanup角色；内部调用参数与静态cleanup另遵守17.56。每次私有Cell/path写入之前，迭代观察输入的真实Function capture与Cell快照，拒绝通向目标Cell的回边，保全旧值；无环共享和替换并不因此禁止。该检查不制造另一种值表示，也不读取私有对象头。动态struct child仍fail closed；内部Array<Function>按17.64逐实际capture接收。
+按值capture保持共同Value所有权。可变capture只接受本次新推导的真实Cell provenance中OWNED_CAPTURE角色，且必须处于当前compiler Domain、无借用、非投影、非module storage；Function capture仍拒绝scoped/ref和cleanup角色；内部调用参数与静态cleanup另遵守17.56。每次私有Cell/path写入之前，迭代观察输入的真实Function capture与Cell快照，拒绝通向目标Cell的回边，保全旧值；无环共享和替换并不因此禁止。该检查不制造另一种值表示，也不读取私有对象头。内部动态struct按17.66接收；内部Array<Function>按17.64逐实际capture接收。
 
 类型/签名、登记表扫描、capture向量、Cell元素形状、完整getter/复制和最终共同Value接收均先付原累计work；显式观察栈和同时接收scratch占原剩余frame。所有调用共享原steps/depth/frame，仍为steps65536、depth128、frame65536、17.61规定的输出上限及work128M/allocated64MiB/live8MiB。OOM、耗尽、非法闭包或循环写入保全空输出/借用值并释放每个activation、capture和lease，累计费用不退款或重置。内部Function准入不授予外部权限；静态cleanup/ref调用遵守17.56，P12和正式共享/provider/安全资格仍须独立验证。
 
@@ -7741,7 +7741,7 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 每次完整Lowered/identity/target/profile复验后，CTFE把INVOKE与direct CALL、FUNCTION_REF和cleanup目标共同纳入实际可达闭包。INVOKE_INDIRECT仍只调用本次真实Function lease已经验证的目标；未执行的错误分支或cleanup也不能隐藏I/O、挂起或其他未准入操作。ERROR_ERASE/IS/NARROW直接使用共同Value的真实enum视图、精确声明身份与既有权限规则，不制造另一Error包装、Value表示或解释器。Error可在准入族内作内部参数/返回、Cell、owned局部、PHI及Tuple/Nullable/enum持有值；外部Error参数及Error或含Error的拥有常量导出继续拒绝，不能借Error擦除扩大类型/声明或执行权限。
 
-真实可达enum创建点的完整形状，与投影所需的Cell根形状共同决定128倍浅层metadata预付上界。opaque Error先付该原ledger费用，再经公开error_borrow取得实际enum视图；完整有界接收另按实际活动字段、String/Array跨度、Function capture及Cell付费。Tuple getter和Nullable unwrap返回Error时也先付实际opaque元数据上界。内部Error类型只标记变量接收，不为其他拥有族绕过原类型限制；内部Array<Error>按17.64接收；动态struct child及其他缺有界观察的深变量族继续明确拒绝。私有Cell写入前，Error内的Function/Cell图仍沿既有观察路径检查目标Cell回边；合法无环持有与替换允许，环不能由Error隐藏。
+真实可达enum创建点的完整形状，与投影所需的Cell根形状共同决定128倍浅层metadata预付上界。opaque Error先付该原ledger费用，再经公开error_borrow取得实际enum视图；完整有界接收另按实际活动字段、String/Array跨度、Function capture及Cell付费。Tuple getter和Nullable unwrap返回Error时也先付实际opaque元数据上界。内部Error类型只标记变量接收，不为其他拥有族绕过原类型限制；内部Array<Error>按17.64接收；内部动态struct按17.66接收；其他缺有界观察的深变量族继续明确拒绝。私有Cell写入前，Error内的Function/Cell图仍沿既有观察路径检查目标Cell回边；合法无环持有与替换允许，环不能由Error隐藏。
 
 成功INVOKE沿真实正常边进入专属INVOKE_RESULT或INVOKE_DISCARD，Unit正常边不伪造值槽。错误先保留真实concrete enum快照，沿该frame的frontier执行LIFO cleanup；每个注册仍只在cleanup child正常返回后退休。跨普通CALL传播先结束child、逆序释放其loan、恢复真实父authority，再将保留错误交给父frame退出。对应INVOKE接收则沿专属INVOKE_ERROR边保留共同Error视图，原shared scalar edge负责真实predecessor与并行PHI；marker必须绑定实际callsite。当前frame的CLEANUP_ERROR保持已求值错误快照，在离开相应scope后沿原错误continuation继续，不能因为cleanup改变Cell而追溯改变抛出的String/Array值。
 
@@ -7771,7 +7771,7 @@ OBJECT_PLACE代表完整Class根，FIELD_PLACE才增加字段selector。经已�
 
 字段get返回真实拥有值；返回String快照不受随后Class字段替换影响，并在Source/Artifact/ledger调用者死亡后保持有效。普通返回、Error与panic的LIFO cleanup、真实父loan恢复和资源失败语义继续遵守17.56–17.59。完整物理FI包括构造、字段图接收、投影/cleanup、拥有String和回边拒绝的所有已观测分配点，失败后同一原owner重试，保持空输出及live归零。遍历栈/loan/路径与共同scratch计原frame；work耗尽后重试不能重置费用。
 
-原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和17.61规定的最大逻辑输出；其他限额不变。本族不改Value/Call/Instance/SourceContext ABI、schema或opcode。内部Array<Class>按17.64执行；动态struct child、缺少有界观察的foreign/deep-variable接收、私有外部Source物化、完整P12后继消费及共享/provider/正式安全资格仍有独立未完成项；私有Class通过不代表完整P11或生产发布。
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和17.61规定的最大逻辑输出；其他限额不变。本族不改Value/Call/Instance/SourceContext ABI、schema或opcode。内部Array<Class>按17.64执行；内部动态struct按17.66接收；缺少有界观察的foreign/deep-variable接收、私有外部Source物化、完整P12后继消费及共享/provider/正式安全资格仍有独立未完成项；私有Class通过不代表完整P11或生产发布。
 
 ### 17.61 版本化8MiB逻辑输出政策与原预算保全
 
@@ -7805,7 +7805,7 @@ Class字段的声明类型含身份并不代表当前值存在子身份。初始
 
 ### 17.64 内部动态元素Array的真实接收
 
-唯一CTFE路径可在内部执行Array<Class>、Array<Function>、Array<Error>以及它们在已准入Tuple、Nullable、enum或嵌套Array中的组合。类型shape只预付固定header和inline表示，不能代表变量子图。原显式拥有栈先认证当前Array并观察长度，按全部元素shape预付静态复制/验证跨度，再逐实际动态元素继续原Class字段、Function capture、Cell和Error活动值遍历。每次委托观察前预付receiver和元素完整浅层验证跨度；外层遍历栈与物化scratch同时占用原frame，长度、乘法和栈增长溢出拒绝。动态struct child仍未准入。
+唯一CTFE路径可在内部执行Array<Class>、Array<Function>、Array<Error>以及它们在已准入Tuple、Nullable、enum或嵌套Array中的组合。类型shape只预付固定header和inline表示，不能代表变量子图。原显式拥有栈先认证当前Array并观察长度，按全部元素shape预付静态复制/验证跨度，再逐实际动态元素继续原Class字段、Function capture、Cell和Error活动值遍历。每次委托观察前预付receiver和元素完整浅层验证跨度；外层遍历栈与物化scratch同时占用原frame，长度、乘法和栈增长溢出拒绝。内部动态struct另按17.66接收。
 
 共同Value层的xr_xir_array_observe只在已验证Array的精确arena/Domain上同步观察一个元素。调用者必须在同一原work owner预付所选类型的全部浅层验证与inline物化费用；接口先付固定header观察，再通过原storage_unpack取得拥有快照，不扫描无关后代。它不授予调用、成员或loan权限，普通完整接收仍独立检查；xr_xir_array_get保持原完整receiver准入。这是原Value表示上的内部观察接口，不是foreign深接收、替代值表示或可信来源标记。
 
@@ -7828,6 +7828,16 @@ Source查询显示参数的逻辑元素类型、可变绑定和真实源码范�
 CTFE复用同一Lowered执行和既有Function/Cell/loan协议，可执行真实ref闭包的直接、返回后调用、重借用、Array及投影place、cleanup和已准入panic组合。捕获同一可变Cell又传作ref实参仍须通过真实loan排他检查，签名合法不能消除运行权限冲突。拥有返回值保留求值快照及独立Source重放；没有第二evaluator、宿主Instance执行或保存的CTFE指针。
 
 原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出保持，失败保留空输出和原owner累计费用。完整物理FI、原owner重试、exact/minus-one、最后拥有者释放与正式安全资格仍分别提供实测证据。此族不改变公共Value/Call/Instance/SourceContext布局、schema或opcode，也不补授foreign/deep-variable接收、身份根投影、私有Source物化或完整P11资格。
+
+### 17.66 内部动态struct的真实字段接收
+
+唯一CTFE路径可在内部执行含Class、Function、Error及已准入Array、Tuple、Nullable、enum和嵌套struct的值。类型shape只描述固定浅层跨度，动态子图仍逐实际字段、活动分支、Function capture及Cell观察；struct不再误用enum借用视图。所有字段类型、完整nominal身份与构造/访问权限仍由共同Checker复验，字段观察不授予私有构造或读取权限。
+
+共同Value接口xr_xir_struct_observe只观察已验证struct在精确arena/Domain上的一个字段。调用者在同一原work owner预付完整浅层receiver与所选字段的验证跨度，接口再付固定header观察费用，返回真实拥有快照而不接收无关后代。普通struct_get保留完整receiver接收。CTFE接收栈在观察前支付真实类型/字段费用，外层栈与所有同时存活scratch继续计原frame；此接口没有另一种值表示或可信来源标记。
+
+构造、整体替换和已授权写入先接收实际输入图。struct包装不能隐藏通向目标Cell或Class的回边；无环替换仍合法。struct副本保持值语义和COW，内部Class保持身份别名；返回的String快照不受cleanup整体替换原struct影响，最后释放不分配。Class根的真实整根loan也可通过struct字段证明实际无活动子权限，活动身份仍拒绝；借用leaf必须可导出纯数据。含身份的数据Cell严格后代投影仍因独立预算/权限义务未闭合而拒绝，直接canonical Cell的整根ref保持独立准入。
+
+外部含身份struct参数或常量导出、未具备有界观察的foreign/deep-variable接收以及私有值Source重放的合法声明owner/函数库存仍未获准。原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和policy2/8MiB逻辑输出保持；失败保全空输出、原owner费用及全部已准备前缀。无公共布局、ABI、schema、opcode或替代evaluator变化；完整FI、同owner重试、资源/寿命、共同/provider/正式安全仍需各自真实资格，不能由本族正例替代。
 
 ---
 

@@ -31,6 +31,25 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"struct_identity_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_acyclic_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_function_cycle", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"struct_identity_class_cycle", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"struct_identity_export", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "closed value family", 3},
+    {"struct_identity_projected_root_refused", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 5},
+    {"struct_identity_absent_loan", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_active_loan", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 6},
+    {"struct_identity_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"struct_identity_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"struct_identity_class", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"ref_closure_result", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"ref_closure_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"ref_closure_return", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -283,7 +302,7 @@ static const CtfeReferenceCase reference_cases[] = {
     {"nominal_enum_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"nominal_field_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_large", XR_XIR_UNIT, 9, XR_XIR_OK, NULL, 0},
-    {"nominal_dynamic_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"nominal_dynamic_gap", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_class", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct_method", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
@@ -876,9 +895,9 @@ int main(int argc, char **argv) {
         if (!strncmp(selected->name,"output_",7)) reference_output(&context,&source,selected);
         else if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
         else if (!strcmp(selected->name,"class_direct")) reference_class_direct(&context,&source);
-        else if (!strcmp(selected->name,"ref_closure_direct")) reference_dynamic_direct(&context,&source,false,false);
-        else if (!strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
-        else if (!strcmp(selected->name,"ref_closure_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"struct_identity_direct") || !strcmp(selected->name,"ref_closure_direct")) reference_dynamic_direct(&context,&source,false,false);
+        else if (!strcmp(selected->name,"struct_identity_owning_direct") || !strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
+        else if (!strcmp(selected->name,"struct_identity_owning") || !strcmp(selected->name,"ref_closure_owning")) reference_dynamic_source_string(&context,&source);
         else if (!strcmp(selected->name,"array_identity_direct")) reference_dynamic_direct(&context,&source,false,false);
         else if (!strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
         else if (!strcmp(selected->name,"array_identity_owning")) reference_dynamic_source_string(&context,&source);
@@ -957,7 +976,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
     if (!strcmp(selected->name,"class_owning_direct")) reference_class_last_owner();
-    if (!strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_last_owner(selected->name);
+    if (!strcmp(selected->name,"struct_identity_owning_direct") || !strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_last_owner(selected->name);
     if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct") || !strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_last_owner(selected->name);
     if (!strcmp(selected->name,"output_fibonacci_direct") || !strcmp(selected->name,"output_pair_direct")) reference_output_last_owner(selected);
     if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();

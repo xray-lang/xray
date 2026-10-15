@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   Local IDs have meaning only in their verified immutable pool. An explicit
- *   ledger-owned DFS rejects cyclic or authority-bearing Tuple/Nullable fields.
+ *   ledger-owned DFS separates internal graph reception from exportable data.
  */
 #include "xxir_operand_roles.h"
 typedef struct CtfeTypeFrame { uint64_t work;uint32_t index,next;bool dynamic,pure_arrays; } CtfeTypeFrame;
@@ -78,7 +78,7 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
         }
         if (frame->next==ctfe_type_fields(node)) {
             if (!internal && node->kind==XR_XIR_TYPE_ARRAY && frame->dynamic) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
-            if (nominal && xr_xir_type_is_struct(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+frame->index)) && frame->dynamic) {
+            if (!internal && nominal && xr_xir_type_is_struct(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+frame->index)) && frame->dynamic) {
                 status=XR_XIR_CTFE_NOT_SUPPORTED;break;
             }
             colors[frame->index]=2;costs[frame->index]=(XrXirCtfeTypeShape){frame->work,
