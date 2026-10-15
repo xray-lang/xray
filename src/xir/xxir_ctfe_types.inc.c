@@ -155,7 +155,6 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_shape(const XrXirCompileContext
     if (status==XR_XIR_CTFE_OK) *output=shape;return status;
 }
 static XrXirCtfeStatus ctfe_body_type_admit(const XrXirArtifact *artifact,XrXirType type,bool parameter) {
-    if (parameter && type==XR_XIR_UNIT) return XR_XIR_CTFE_NOT_SUPPORTED;
     if (parameter && xr_xir_type_is_cell(artifact->module.types,type)) type=xr_xir_cell_element(artifact->module.types,type);
     XrXirCtfeTypeShape shape={0};return ctfe_type_info(&artifact->context,artifact->module.types,type,true,&shape);
 }
@@ -204,7 +203,7 @@ static XrXirCtfeStatus ctfe_tuple_scratch(const XrXirArtifact *artifact,uint32_t
             uint32_t arity=body->instructions[i].args[1];
             if (arity>count) count=arity;continue;
         }
-        if (body->instructions[i].op!=XR_XIR_TUPLE_NEW) continue;
+        if (body->instructions[i].op!=XR_XIR_TUPLE_NEW || body->instructions[i].type==XR_XIR_UNIT) continue;
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(artifact->module.types,body->instructions[i].type);
         if (!tuple || tuple->parameter_count>artifact->layouts[function].outgoing_count) return XR_XIR_CTFE_BAD_ARTIFACT;
         if (tuple->parameter_count>count) count=tuple->parameter_count;

@@ -170,15 +170,18 @@ static bool source_constructor_declare(SourceContext *ctx, SourceName *owner, As
         XrParamNode *param = method->params[p];
         if (param->passing_mode != XR_PARAM_READ || param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this"))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter contract is not admitted");
+        bool parameter_known=param->type!=NULL;
         if (param->type) { if (!source_type(ctx, param->type, &body->parameters[p])) return false; }
         else {
             for (uint32_t f = 0; f < decl->field_count; ++f) {
                 if (!source_work(ctx, node)) return false;
                 if (source_text_size(ctx, param->name) == decl->fields[f].name.length &&
-                    source_span_same(ctx, NULL, param->name, decl->fields[f].name.bytes, decl->fields[f].name.length)) body->parameters[p] = decl->fields[f].type;
+                    source_span_same(ctx, NULL, param->name, decl->fields[f].name.bytes, decl->fields[f].name.length)) {
+                    body->parameters[p] = decl->fields[f].type;parameter_known=true;
+                }
             }
         }
-        if (body->parameters[p] == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter needs a declaration type");
+        if (!parameter_known) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor parameter needs a declaration type");
         for (uint32_t q = 0; q < p; ++q) {
             if (!source_work(ctx, node)) return false;
             if (source_text_same(ctx, NULL, param->name, method->params[q]->name)) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate constructor parameter");
@@ -275,7 +278,8 @@ static bool source_constructor_body(SourceContext *ctx) {
     for (uint32_t p = 0; p < (uint32_t)method->param_count; ++p) {
         SourceName *symbol = add_name(ctx, &ctx->locals, method->params[p]->name, body->node);
         if (!symbol) return false;
-        symbol->kind = SOURCE_LOCAL; symbol->index = p; symbol->type = body->parameters[p];
+        symbol->type = body->parameters[p];
+        symbol->kind = symbol->type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;symbol->index = p;
         XrParamNode *parameter = method->params[p];
         XrXirSourceRange range = {ctx->module, parameter->line, parameter->column, parameter->line, 0};
         if (parameter->column > 0 && source_text_size(ctx, symbol->name) <= (size_t)(INT_MAX - parameter->column))

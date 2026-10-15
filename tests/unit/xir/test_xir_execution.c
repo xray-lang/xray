@@ -63,7 +63,10 @@ int main(void) {
     CHECK(layout.size == 8 && layout.alignment == 8);
     CHECK(xr_xir_builtin_layout(XR_XIR_I64, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_OK);
     CHECK(layout.size == 16 && layout.alignment == 8);
-    CHECK(xr_xir_builtin_layout(XR_XIR_UNIT, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_BAD_LAYOUT);
+    CHECK(xr_xir_builtin_layout(XR_XIR_UNIT, &target, XR_XIR_LAYOUT_PARAMETER, &layout) == XR_XIR_OK);
+    CHECK(layout.size == 16 && layout.alignment == 8);
+    CHECK(xr_xir_builtin_layout(XR_XIR_UNIT, &target, XR_XIR_LAYOUT_FRAME, &layout) == XR_XIR_OK);
+    CHECK(!layout.size && layout.alignment == 1);
     XrXirFunctionLayout *physical = (XrXirFunctionLayout *) xr_xir_compile_artifact_layout(artifact, 0);
     CHECK(physical->frame_bytes == 48 && physical->slot_count == 9);
     uint32_t *offsets = (uint32_t *) physical->offsets;

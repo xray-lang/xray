@@ -71,7 +71,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 只含 bool/i64；unit 可作结果和终结操作类型，不产生值 ID。
 此子集没有托管值、借用、泛型或新源码拼写；未实现操作必须拒绝。内部直接调用另见下文。
 CFG 的块完整划分指令，均从入口可达，并以一个终结操作结束；入口无前驱。
-SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不能作为值使用。
+SSA 使用必须由同块较早定义或支配块定义提供；除§17.68认证的空Tuple外，unit 指令不能作为值使用。
 抽象 copy 只在 Built/Checked，物理 scalar-copy 只在 Lowered，不能仅改阶段标签。
 阶段转换重新验证并复制所有元数据，成功产物不借用输入；失败不发布部分产物。
 验证的结构、类型、支配关系和工作量有预算，未知阶段、操作和类型均拒绝。
@@ -548,7 +548,7 @@ CTFE要求实际普通函数声明身份。结构合法但没有declarations/fun
 
 ### 17.41 CTFE的规范Unit返回与普通Source重放
 
-没有值参数的普通Unit结果函数可进入CTFE的实际闭包准入；其Unit RETURN保留零type/reserved/payload，目标逻辑输出大小为零。Unit返回没有SSA存储槽，子调用返回不得向该槽写入；调用者的标量参数与已活跃值保持。Unit不作为普通值参数开放，入口仍按实际类型和完整Lowered身份复验。
+没有值参数的普通Unit结果函数可进入CTFE的实际闭包准入；其Unit RETURN保留零type/reserved/payload，目标逻辑输出大小为零。Unit返回没有SSA存储槽，子调用返回不得向该槽写入；调用者的标量参数与已活跃值保持。普通Unit值参数按§17.68保留逻辑arity并通过真实接点准入；入口仍按实际类型和完整Lowered身份复验。
 
 Source的Unit comptime结果经同一有限CTFE管线接收，再独立重放为普通Unit表达式，保留站点匹配、覆盖和规范结果验证。空块或末尾为普通语句的块产生Unit，拥有型局部状态继续依赖实际值域接点；comptime块不授予从外围函数非局部return的许可。I/O、非终结循环及不可接收的实际操作仍分别按闭包准入或预算规则拒绝，失败输出和原编译账本保持。
 
@@ -798,11 +798,23 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 词法作用域与模块出生身份独立：模块的`lexical_scope=0`表示独立作用域，非零值为同一作用域规范模块编号加一；引用必须在界内，不能指向自身或另一条引用。当前会话输入与准确接收的历史会话根共享词法作用域，普通导入模块继续独立。该关系只替代跨输入的模块私有可见性检查，不授予缺失依赖、私有成员、initializer调用或运行时存储权限。函数、名义类型、slot和初始化归属仍保留准确模块。
 
-作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用Checked schema29、语义75和Program ABI31，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
+作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用§17.6的唯一当前Checked与Program协议，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
 
 运行时接收须先把准备中的Source记录绑定到真实封装Program：普通编译器重新推导准确特化/Lowered证明，并核对已验证Program保存的证明摘要及目标。记录拥有接收时产生的模块、函数、slot和类型映射；Checked函数编号不直接作为特化后函数编号。随后同一Source拥有者保留首个实际运行域，只接受该域的后继Instance事务。Program相同不授权另一个运行域。
 
 接收事务在运行域预算内拥有模块与slot路由，直接指向实际出生代；多代路由展平。仅实际出生模块已完成初始化时，接收代才继承其就绪状态并跳过旧initializer；不复制旧值或制造空initializer。读取须继续通过当前静态模块权限、实际出生槽发布状态和普通值准入，收到的槽不能再次发布。I64及String等不依赖构造类型池的值可使用该路径。Cell、Class、闭包及其他构造值的跨类型池对应仍须实现，普通准入继续拒绝不兼容身份；完整G2/G3、成对REPL协调和全部资源/安全门尚未完成。
+
+### 17.68 Unit逻辑值与普通参数
+
+Unit保留一个真实逻辑参数与有序arity，不能按零宽frame擦除。边界仍为类型、零reserved及零payload的16/8盒装Value；物理frame为0/1，唯一offset为UINT32_MAX。普通类型匹配先验完整canonical零值，bool false、非零reserved或payload都不是Unit。Unit无owner，不取得arena、借用、可写性、执行或构造权限；同一Program/Call仍验证完整类型、Root、效果及所有权。
+
+已有TUPLE_NEW可构造Unit空Tuple：两个args均零、零字段/零payload，普通Unit语句不因此成为SSA值。调用实参先在原位置各执行一次，再准备真实Unit值；Unit形参可被普通读取并继续传递，未被求值的表达式或PRINT等语句不能仅凭Unit结果类型充当该值。VM、编译期执行及生成C使用共同typed构造；无Unit frame load/store，全部保逻辑参数数量与求值/throw/panic/清理顺序。
+
+当前Source沿共同实参计划接入自由函数、callable/closure、方法/构造器、接口签名及泛型定义中的固定Unit READ形参；未能推导的构造器参数仍拒绝。独立public leaf CTFE、生成C leaf与原Tuple的VM/native/mixed消费者沿同一接点验证。泛型Unit实参域及各表面完整资格仍须分别闭合，不能从固定Unit参数推断额外能力。Source、Program、Instance及库state权限的原限制不变。
+
+本族扩展Checked值验证域，唯一semantic为76；wire29与Value24/Call29/Program31的字段、布局和ABI事实未变。旧75完整包及SDK语义在早期准入拒绝，不留旧reader或别名；独立完整旧前像保留作拒例，新向量从明确字段推导而非writer输出刷新。布局与identity仍由§17.6列出的实现常量唯一承担。
+
+Unit空值本身不分配，结构接收、完整复验和参数元数据仍计原ledger。所有原完整物理FI、分配/peak/work三轴、same-owner重试、失败输出保全、取消/physical0、sanitizer及provider门继续必需；本族不调高128M、64MiB/8MiB、steps/frame/depth或既有timeout，也不开放库私有var或授予完整标准库资格。
 
 <!-- /xr-spec:cn -->
 
@@ -880,7 +892,7 @@ are bool/i64; unit is a result/terminator type without a value ID. Managed value
 unsupported operations reject. Internal direct calls are defined below.
 Blocks partition instructions, are reachable from the entry, and end in exactly
 one terminator; entry has no predecessors. SSA uses require an earlier same-block
-definition or a dominating definition; unit instructions do not produce values.
+definition or a dominating definition; Unit instructions do not produce values except the authenticated empty Tuple in section17.68.
 Abstract copy belongs to Built/Checked and physical scalar-copy to Lowered;
 changing a stage tag is insufficient. Transitions reverify and copy all metadata,
 publish no partial artifact on failure, and never borrow input storage. Structure,
@@ -1463,7 +1475,7 @@ CTFE requires actual ordinary function declaration identity. Structurally valid 
 
 ### 17.41 Canonical CTFE Unit returns and ordinary Source replay
 
-Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Unit is not admitted as an ordinary value argument, and receiving still repeats actual type and complete Lowered identity checks.
+Ordinary Unit-result functions without value parameters can enter actual CTFE closure admission. Their Unit RETURN preserves zero type/reserved/payload and has zero target logical output size. A Unit return has no SSA storage slot, so a child return must not write that slot; the caller retains scalar parameters and other live values. Ordinary Unit value arguments retain logical arity and use the authentic boundary in section17.68; receiving still repeats actual type and complete Lowered identity checks.
 
 Source receives Unit comptime results through the same bounded CTFE pipeline and independently replays ordinary Unit expressions, preserving site matching, coverage and canonical result verification. Empty blocks and blocks ending in ordinary statements produce Unit; owned local state continues to require the actual value-domain interface. A comptime block grants no nonlocal return from its enclosing function. I/O, nonterminating loops and unsupported actual operations retain closure or budget rejection, with failure outputs and the original compiler ledger preserved.
 
@@ -1713,10 +1725,22 @@ A persistent Source owner supplies a candidate with only that owner's published,
 
 Lexical scope is separate from module birth identity. A zero `lexical_scope` owns an independent scope; a nonzero value is one plus its canonical module ordinal. References must remain in bounds and cannot refer to themselves or another reference. Current and accurately received historical session roots share a lexical scope; ordinary imports remain separate. This relation replaces only module-private visibility across inputs. It grants no missing dependency, private-member, initializer-call or runtime-storage permission. Functions, nominal types, slots and initialization keep their exact owning modules.
 
-Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
+Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses the sole current Checked and Program protocols identified by section17.6, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
 
 Runtime receiving first binds a prepared Source record to an actual sealed Program. The ordinary compiler derives its exact specialized/Lowered proof again and compares the verified Program's retained proof digest and target. The record owns the actual receiving module, function, slot and type maps; Checked function ordinals are not assumed to be specialized function ordinals. The Source owner then retains its first actual runtime Domain and accepts subsequent Instance transactions only in that Domain. Sharing a Program does not authorize another Domain.
 
 The receiving transaction owns budgeted module and slot routes to actual birth generations and flattens routes across generations. It inherits readiness only from an actually initialized birth module and skips that completed initializer; it neither copies old values nor substitutes empty initializers. Reads still require current static module permission, actual birth-slot publication and ordinary value admission. Received slots cannot be published again. Values such as I64 and String that do not depend on a constructed-type arena can use this path. Cross-arena correspondence for Cell, Class, closures and other constructed values remains unfinished; ordinary admission continues to reject incompatible identities. Complete G2/G3, paired REPL coordination and all resource and safety gates remain required.
+
+### 17.68 Logical Unit values and ordinary parameters
+
+Unit retains one authentic logical parameter and ordered arity; a zero-width frame never erases it. Its boundary remains a16/8 boxed Value with Unit type, zero reserved and zero payload. Physical frame storage is0/1 with the sole UINT32_MAX offset. Exact type admission validates the complete canonical zero value; bool false, a nonzero reserved field or payload is not Unit. Unit owns no arena or object and grants no borrow, mutation, execution or construction authority. Programs and Calls still check complete types, Root/effects and ownership.
+
+The existing TUPLE_NEW constructs the empty Unit Tuple with both args zero and no fields or payload. Other Unit statements do not become SSA values. Arguments evaluate once each in their original positions before preparing an authentic Unit value. A Unit formal can be read and forwarded; an unevaluated expression or PRINT statement cannot supply that value merely because its result type is Unit. VM, compiler execution and generated C consume the common typed constructor, perform no Unit frame loads/stores and preserve logical argument counts, order, throw/panic and cleanup.
+
+Current Source receiving uses the common argument plan for fixed Unit READ parameters in free functions, callable/closures, methods/constructors, interface signatures and generic definitions. Unresolved constructor parameter types still reject. Independent public leaf CTFE, generated C leaf and the original Tuple VM/native/mixed consumers verify the same boundary. Generic Unit-argument domains and complete qualification for each surface remain separate obligations, not permissions inferred from a fixed Unit formal. Existing Source, Program, Instance and library-state restrictions remain.
+
+This family expands Checked value validation and uses the sole semantic76. Wire29 and Value24/Call29/Program31 fields, layouts and ABI facts are unchanged. Complete old75 packets and SDK semantics reject at early admission without an old reader or alias. Independent complete old preimages remain negative evidence; explicit field models derive new vectors without refreshing from product writer output. Section17.6 identifies the sole implementation constants for layout and identity.
+
+The empty Unit value itself allocates nothing; structural receiving, full verification and parameter metadata still pay the original ledger. Complete physical FI, allocation/peak/work axes, same-owner retry, failed-output preservation, cancellation/physical0, sanitizers and providers remain required. This family raises no128M,64MiB/8MiB,steps/frame/depth or existing timeout, opens no private library variables and does not qualify the complete standard library.
 
 <!-- /xr-spec:en -->

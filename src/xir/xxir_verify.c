@@ -261,7 +261,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_NUMBER && !xr_xir_type_is_number(op->type)) ||
         (rule->result == RULE_FLOAT && !xr_xir_float_bits(op->type)) ||
         (rule->result == RULE_INTEGER && !xr_xir_type_is_integer(op->type)) ||
-        (rule->result == RULE_OWNED && (!xr_xir_type_is_owned(module->types, op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
+        (rule->result == RULE_OWNED && !(op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) && (!xr_xir_type_is_owned(module->types, op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
         (rule->result == RULE_RUNE && op->type != XR_XIR_RUNE) ||
         (rule->result == RULE_PANIC && op->type != XR_XIR_UNIT && op->type != XR_XIR_PANIC_INFO) ||
@@ -271,7 +271,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
             !xr_xir_type_is_nominal(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
-        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ) && op->type == XR_XIR_UNIT) &&
+        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_NEW) && op->type == XR_XIR_UNIT) &&
             !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
@@ -370,7 +370,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
     for (uint32_t p = 0; p < function->parameter_count; ++p) {
         if (!xir_compile_work(&context->remaining, 1))
             return XR_XIR_BUDGET;
-        if (!xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
+        if (function->parameters[p]!=XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
             return XR_XIR_BAD_TYPE;
         visibility = signature_type_use_context(context, function_id, function->parameters[p], signature_constraints_proved);
         if (visibility != XR_XIR_OK) return visibility;
@@ -570,7 +570,7 @@ static XrXirStatus value_use(const XrXirFunction *function, const Graph *graph,
         return function->parameters[value] == expected ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     uint32_t definition = value - function->parameter_count;
     if (definition >= function->instruction_count ||
-        function->instructions[definition].type == XR_XIR_UNIT ||
+        (function->instructions[definition].type == XR_XIR_UNIT && function->instructions[definition].op != XR_XIR_TUPLE_NEW) ||
         op_rules[function->instructions[definition].op].terminal)
         return XR_XIR_BAD_VALUE;
     if (function->instructions[definition].type != expected)
@@ -1122,7 +1122,6 @@ static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCo
         uint32_t count = module->generics ? module->generics[f].parameter_count : 0;
         status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->result, count, &scratch);
         for (uint32_t p = 0; p < function->parameter_count && status == XR_XIR_OK; ++p) {
-            if (function->parameters[p] == XR_XIR_UNIT) { status = XR_XIR_BAD_TYPE; break; }
             status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->parameters[p], count, &scratch);
         }
         if (status != XR_XIR_OK) break;

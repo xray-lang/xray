@@ -9020,6 +9020,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "In the new-XIR subset, f32 and f64 preserve their original IEEE precision across arithmetic and output (spec section 17.27). Zero signs and gradual subnormal values are preserved; invalid floating operations produce canonical NaN, and finite nonzero division by zero produces signed infinity. VM and native AOT use the same integer-only arithmetic implementation with independent exact-result tests; this does not imply the entire language or standard library is migrated.\n"
             "\n"
             "Frozen next Atomic cutover: runtime f64 admits every binary64 payload and preserves bits in transport; runtime f32 and CONST_FLOAT retain canonical-NaN restrictions. Arithmetic, conversions including same-width conversion, and negation canonicalize NaN results. This expanded carrier domain remains pending implementation and qualification (spec 2.3.2/17.24/17.27).\n"
+            "\n"
+            "### Logical Unit parameters\n"
+            "Unit is the empty Tuple and retains one logical argument even with zero frame payload. Fixed Unit READ formals in free functions, callable/closures, methods/constructors, interface signatures and generic definitions use canonical zero Values and the common checked argument plan. Calls retain arity and effects; other Unit statements do not become SSA values. Generic Unit-argument domains and full fault/safety qualifications remain separate obligations. See compilation pipeline section17.68.\n"
             "",
     },
     {

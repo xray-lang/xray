@@ -2137,7 +2137,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
         bool by_reference = param->passing_mode == XR_PARAM_REF;
         if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || param->is_rest ||
             (by_reference && param->default_value) ||
-            !source_type(ctx, param->type, &body->parameters[i]) || (body->parameters[i] == XR_XIR_UNIT && !by_reference))
+            !source_type(ctx, param->type, &body->parameters[i]))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
         /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
          * caller's binding through it, exactly as a captured mutable variable does. */
@@ -2625,11 +2625,10 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         if (param->type) {
             if (!source_type(ctx, param->type, &type)) return false;
         } else type = context->parameters[i].type;
-        if (type == XR_XIR_UNIT)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter cannot be unit");
         SourceName *symbol = add_name(ctx, &ctx->locals, param->name, node);
         if (!symbol) return false;
-        symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t) i; symbol->type = type;
+        symbol->kind = type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;
+        symbol->index = scan->count + (uint32_t)i; symbol->type = type;
         XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
         if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t) (INT_MAX - param->column))
             range.end_column = param->column + (int) source_text_size(ctx, param->name);
@@ -2822,7 +2821,9 @@ static bool build_bodies(SourceContext *ctx) {
         for (int i = 0; i < decl->param_count; ++i) {
             SourceName *symbol = add_name(ctx, &ctx->locals, decl->params[i]->name, ctx->bodies[f].node);
             if (!symbol) return false;
-            symbol->kind = SOURCE_LOCAL; symbol->index = (uint32_t) i; symbol->type = ctx->bodies[f].parameters[i];
+            symbol->type = ctx->bodies[f].parameters[i];
+            symbol->kind = symbol->type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;
+            symbol->index = (uint32_t)i;
             XrParamNode *param = decl->params[i];
             if (param->passing_mode == XR_PARAM_REF) {
                 symbol->type = xr_xir_cell_element(&ctx->types, symbol->type);

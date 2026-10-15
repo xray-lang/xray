@@ -137,7 +137,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     layout.size > sizeof(uint64_t) || !span.bytes) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 current = storage_leaf_value(type, span.bytes, layout.size);
             }
-            if (type==XR_XIR_UNIT ? (!tuple_field || inlined || !unit_value(&current)) :
+            if (type==XR_XIR_UNIT ? (inlined || !unit_value(&current)) :
                 !xr_xir_value_argument(&current, admission->arena, type)) {
                 status = XR_XIR_VALUE_BAD_ARGUMENT; break;
             }

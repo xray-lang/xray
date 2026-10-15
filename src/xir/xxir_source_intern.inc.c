@@ -35,7 +35,8 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
         if (!source_work(ctx, NULL)) return false;
-        if (!node.parameters[p].type && node.kind != XR_XIR_TYPE_TUPLE)
+        if (node.parameters[p].type == XR_XIR_UNIT && node.kind != XR_XIR_TYPE_TUPLE &&
+            !(node.kind == XR_XIR_TYPE_CALLABLE && node.parameters[p].mode == XR_PARAM_READ))
             return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable parameter must be a value type");
         uint32_t component = xr_xir_type_span(&ctx->types, node.parameters[p].type);
         if (component > span) span = component;

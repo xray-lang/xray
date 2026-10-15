@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_tuple_verify.inc.c - Ordered fields with a strict non-Unit operand table
+ * xxir_tuple_verify.inc.c - Typed ordered fields and authenticated zero-payload Unit values
  */
 static XrXirStatus tuple_uses(const Graph *graph, const XrXirFunction *function,
     VerifyContext *context, uint32_t instruction) {
@@ -14,6 +14,10 @@ static XrXirStatus tuple_uses(const Graph *graph, const XrXirFunction *function,
     XrXirTypeDescription description={0};
     XrXirStatus status=xr_xir_compile_type_description(&context->remaining,context->module->types,type,&description);
     if (status!=XR_XIR_OK) return status;
+    if (construct && type==XR_XIR_UNIT) {
+        status=type_use_context(context,context->location.function,type);
+        return status==XR_XIR_OK && (op->args[0] || op->args[1]) ? XR_XIR_BAD_STRUCTURE : status;
+    }
     if (description.kind!=XR_XIR_TYPE_TUPLE) return XR_XIR_BAD_TYPE;
     const XrXirTypeNode *node=description.node;
     status=type_use_context(context,context->location.function,type);

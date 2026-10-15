@@ -309,7 +309,7 @@ XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena
     if (!value || value->type != (uint32_t) type || !xr_xir_value_valid(value)) return false;
     if (type == XR_XIR_ERROR || (uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
         return arena && object_pointer(value)->arena == arena;
-    return type != XR_XIR_UNIT;
+    return true;
 }
 XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output) {
     if (!output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;

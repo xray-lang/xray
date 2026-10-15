@@ -664,6 +664,28 @@ static const char native_spread_shape_source[] =
     "    return trace * 1000000 + saved * 10000 + combined[0] * 100 + combined[1] * 10 + (first as i64) + (last as i64)\n"
     "}\n";
 
+static const char tuple_spread_unit_parameter_source[] =
+    "fn widen<T>(pair: (T, i8), empty: ()) -> ((), T, i64, ()) {\r\n"
+    "    return (empty, ...pair, ())\r\n"
+    "}\r\n"
+    "fn layer<T>(value: T) -> T? { return value }\r\n"
+    "fn missing(value: i64?) -> i64 {\r\n"
+    "    if (value == null) { return 1 }\r\n"
+    "    return 0\r\n"
+    "}\r\n"
+    "fn classify(value: i64?" "?) -> i64 {\r\n"
+    "    if (value == null) { return 0 }\r\n"
+    "    if (value == null) { return 1 }\r\n"
+    "    return 2\r\n"
+    "}\r\n"
+    "fn unitCost(value: ()) -> i64 { return 5 }\r\n"
+    "export fn referenceAnswer() -> i64 {\r\n"
+    "    const result: ((), i64?, i64, (), i64??, string) = (...widen<i64?>((null, 7), ()), ...(...(layer<i64?>(null), \"a\\0b\"),))\r\n"
+    "    const hinted: (i8?, i8) = (...((null, 7)),)\r\n"
+    "    if (hinted.0 != null || hinted.1 != 7) { return 0 }\r\n"
+    "    return missing(result.1) * 100000 + unitCost(result.0) * 10000 + result.2 * 1000 + unitCost(result.3) * 100 + classify(result.4) * 10 + len(result.5)\r\n"
+    "}\r\n";
+
 typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
 static const InitializerCase cases[] = {
     {"ordinary",source,sizeof(source)-1},
@@ -698,7 +720,8 @@ static const InitializerCase cases[] = {
     {"native-spread-generic",native_spread_generic_source,sizeof(native_spread_generic_source)-1},
     {"native-spread-suspend",native_spread_suspend_source,sizeof(native_spread_suspend_source)-1},
     {"native-spread-failure",native_spread_failure_source,sizeof(native_spread_failure_source)-1},
-    {"native-spread-shape",native_spread_shape_source,sizeof(native_spread_shape_source)-1}
+    {"native-spread-shape",native_spread_shape_source,sizeof(native_spread_shape_source)-1},
+    {"tuple-spread-unit_parameter",tuple_spread_unit_parameter_source,sizeof(tuple_spread_unit_parameter_source)-1}
 };
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -803,6 +826,8 @@ int main(int argc,char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--native-spread-failure")) { first=31;last=32; }
     else if (argc==2 && !strcmp(argv[1],"--native-spread-shape")) { first=32;last=33; }
     else if (argc==2 && !strcmp(argv[1],"--native-spread-baseline")) { first=27;last=33;baseline=true; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-unit_parameter")) { first=33;last=34; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-unit_parameter-baseline")) { first=33;last=34;baseline=true; }
     else CHECK(argc==1);
     for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;

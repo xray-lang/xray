@@ -164,8 +164,6 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate interface method parameter");
         }
         if (!source_type(ctx, parameter->type, &parameters[p].type)) return false;
-        if (parameters[p].type == XR_XIR_UNIT)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface method parameter must be a value type");
     }
     XrXirType result, signature;
     if (!source_type(ctx, method->return_type, &result) ||
