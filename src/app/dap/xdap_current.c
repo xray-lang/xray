@@ -8,12 +8,13 @@
  */
 #include "xdap_current.h"
 #include "../../xir/xxir_value_internal.h"
+#include "../../xir/xxir_vm_debug_internal.h"
 #include <string.h>
 struct XdapCurrent {
     XrXirDomain *metadata;
     XrXirVmDebug *debug;
     XrXirInstance *instance;
-    bool ended, driving;
+    bool ended, driving, active, polled;
 };
 XR_FUNC XrXirValueStatus xdap_current_new(XrXirDomain *metadata,
     XrXirVmDebug **debug, XrXirProgram *program, const XrXirInstanceConfig *config, XdapCurrent **output) {
@@ -31,7 +32,7 @@ XR_FUNC XrXirValueStatus xdap_current_new(XrXirDomain *metadata,
         return created == XR_XIR_CALL_OOM ? XR_XIR_VALUE_OOM :
             created == XR_XIR_CALL_LIMIT ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
     }
-    *session = (XdapCurrent){metadata, *debug, instance, false, false};
+    *session = (XdapCurrent){.metadata=metadata,.debug=*debug,.instance=instance};
     *debug = NULL;
     *output = session;
     return XR_XIR_VALUE_OK;
@@ -39,8 +40,10 @@ XR_FUNC XrXirValueStatus xdap_current_new(XrXirDomain *metadata,
 XR_FUNC XrXirCallStatus xdap_current_start(XdapCurrent *session, uint32_t entry,
     const XrXirValue *arguments, uint32_t count) {
     if (session && session->driving) return XR_XIR_CALL_BUSY;
-    return session && !session->ended ? xr_xir_instance_start(session->instance, entry, arguments, count) :
+    XrXirCallStatus status=session && !session->ended ? xr_xir_instance_start(session->instance, entry, arguments, count) :
         XR_XIR_CALL_BAD_STATE;
+    if (status==XR_XIR_CALL_READY) { session->active=true;session->polled=false; }
+    return status;
 }
 XR_FUNC void xdap_current_result_drop(XdapCurrentResult *result) {
     if (!result) return;
@@ -61,6 +64,7 @@ XR_FUNC XrXirValueStatus xdap_current_poll(XdapCurrent *session, uint64_t quantu
         XrXirValueStatus observed=xr_xir_vm_debug_observation_status(session->debug,false);
         if (observed!=XR_XIR_VALUE_OK) return observed;
         session->driving = true;
+        session->polled = true;
         result = xr_xir_instance_poll_bounded(session->instance, 1);
         session->driving = false;
         observed=xr_xir_vm_debug_observation_status(session->debug,result.outcome.status==XR_XIR_CALL_RETURNED);
@@ -78,9 +82,20 @@ XR_FUNC XrXirValueStatus xdap_current_poll(XdapCurrent *session, uint64_t quantu
     XrXirValueStatus status = xr_xir_call_result_copy(&result.outcome, &owned.outcome);
     if (status != XR_XIR_VALUE_OK) return status;
     if (result.outcome.status == XR_XIR_CALL_SUSPENDED) owned.state = XDAP_CURRENT_WAITING;
-    else if (result.outcome.status != XR_XIR_CALL_READY) owned.state = XDAP_CURRENT_ENDED;
+    else if (result.outcome.status != XR_XIR_CALL_READY) { owned.state = XDAP_CURRENT_ENDED;session->active=false; }
     *output = owned;
     return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xdap_current_threads(XdapCurrent *session,uint64_t *output,uint32_t capacity,uint32_t *count) {
+    if (!session || session->driving || !count || (capacity && !output) || capacity>1025) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(session->metadata,sizeof(*count))) return XR_XIR_VALUE_LIMIT;
+    if (!session->active || session->ended) { *count=0;return XR_XIR_VALUE_OK; }
+    if (!session->polled) {
+        if (!capacity) return XR_XIR_VALUE_LIMIT;
+        if (!xr_xir_domain_work(session->metadata,sizeof(*output))) return XR_XIR_VALUE_LIMIT;
+        output[0]=1;*count=1;return XR_XIR_VALUE_OK;
+    }
+    return xir_vm_debug_threads(session->debug,output,capacity,count);
 }
 XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t epoch,
     XrXirVmDebugMode mode) {

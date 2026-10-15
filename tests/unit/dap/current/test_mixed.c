@@ -127,9 +127,19 @@ static XrXirVmDebugFrameInfo mixed_frame(XrXirVmDebugSnapshot *snapshot,uint32_t
 }
 static void mixed_run(bool root_native,bool cancel) {
     MixedFixture fixture;mixed_new(&fixture,root_native);
+    uint64_t threads[2]={0};uint32_t thread_count=77;
+    CHECK(xdap_current_threads(fixture.session,threads,2,&thread_count)==XR_XIR_VALUE_OK && !thread_count);
     uint32_t stop=root_native ? MIX_PURE : MIX_RELAY;
     CHECK(xdap_current_breakpoint(fixture.session,stop,0,true)==XR_XIR_VALUE_OK);
     CHECK(xdap_current_start(fixture.session,MIX_ROOT,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xdap_current_threads(fixture.session,threads,2,&thread_count)==XR_XIR_VALUE_OK && thread_count==1 && threads[0]==1);
+    if (root_native) {
+        XdapCurrentResult ingress={0};CHECK(xdap_current_poll(fixture.session,1,&ingress)==XR_XIR_VALUE_OK);
+        CHECK(ingress.state==XDAP_CURRENT_RUNNING);xdap_current_result_drop(&ingress);
+        threads[0]=123;thread_count=77;
+        CHECK(xdap_current_threads(fixture.session,threads,2,&thread_count)==XR_XIR_VALUE_UNSUPPORTED);
+        CHECK(threads[0]==123 && thread_count==77);
+    }
     xr_xir_compile_program_drop(fixture.program);fixture.program=NULL;
     XdapCurrentResult result=mixed_poll(&fixture);CHECK(result.state==XDAP_CURRENT_STOPPED);
     XrXirVmDebugSnapshot *escaped=NULL;CHECK(xdap_current_snapshot(fixture.session,&escaped)==XR_XIR_VALUE_OK);
@@ -139,6 +149,8 @@ static void mixed_run(bool root_native,bool cancel) {
     CHECK(top.code==XR_XIR_VM_DEBUG_VM && top.thread>1 && top.thread==native.thread && top.value_count);
     CHECK(native.code==XR_XIR_VM_DEBUG_NATIVE && !native.value_count && native.instruction==UINT32_MAX);
     CHECK(xr_xir_vm_debug_snapshot_stopped_thread(escaped)==top.thread);
+    CHECK(xdap_current_threads(fixture.session,threads,2,&thread_count)==XR_XIR_VALUE_OK && thread_count==2);
+    CHECK(threads[0]==1 && threads[1]==top.thread);
     XrXirVmDebugFrameInfo root=mixed_frame(escaped,root_native ? 3u : 2u,"root");
     CHECK(root.thread==1 && !root.value_count && root.code==(root_native ? XR_XIR_VM_DEBUG_NATIVE : XR_XIR_VM_DEBUG_VM));
     XrXirValue absent={0};CHECK(xr_xir_vm_debug_snapshot_value(escaped,1,0,&absent)==XR_XIR_VALUE_BAD_ARGUMENT);
@@ -149,6 +161,8 @@ static void mixed_run(bool root_native,bool cancel) {
     } else {
         CHECK(xdap_current_breakpoint(fixture.session,stop,0,false)==XR_XIR_VALUE_OK);
         CHECK(xdap_current_continue(fixture.session,result.debug_epoch,XR_XIR_VM_DEBUG_STEP_OUT)==XR_XIR_VALUE_OK);
+        CHECK(xdap_current_threads(fixture.session,threads,2,&thread_count)==XR_XIR_VALUE_OK && thread_count==2);
+        CHECK(threads[0]==1 && threads[1]==top.thread);
         xdap_current_result_drop(&result);result=mixed_poll(&fixture);
         if (root_native) {
             CHECK(result.state==XDAP_CURRENT_STOPPED);XrXirVmDebugSnapshot *next=NULL;
@@ -162,6 +176,7 @@ static void mixed_run(bool root_native,bool cancel) {
         CHECK(result.state==XDAP_CURRENT_ENDED && result.outcome.status==XR_XIR_CALL_RETURNED);
         CHECK(result.outcome.value.type==XR_XIR_I64 && result.outcome.value.payload==42 && fixture.outputs==1);
     }
+    CHECK(xdap_current_threads(fixture.session,threads,2,&thread_count)==XR_XIR_VALUE_OK && !thread_count);
     xdap_current_result_drop(&result);XrXirCallStatus retired=xdap_current_free(fixture.session);
     CHECK(retired==XR_XIR_CALL_READY);fixture.session=NULL;
     XrXirVmDebugFrameInfo still=mixed_frame(escaped,1,root_native ? "relay" : "child");CHECK(still.id==native.id && still.thread==native.thread);

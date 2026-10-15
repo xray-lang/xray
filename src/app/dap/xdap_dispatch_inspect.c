@@ -35,23 +35,21 @@ static bool inspect_source(XdapAdapter *s,XdapJsonWriter *body,uint32_t function
     return body->status==XR_XIR_OK;
 }
 static XrXirStatus inspect_threads(XdapAdapter *s,const XdapRequest *r) {
+    uint64_t ids[65]={0};uint32_t count=0;
+    if (s->launch && s->configured && !s->terminal) {
+        XrXirValueStatus status=xdap_current_threads(s->launch->control,ids,65,&count);
+        if (status==XR_XIR_VALUE_UNSUPPORTED)
+            return xdap_dispatch_response(s,r,false,NULL,"Complete thread observation requires admitted VM ingress");
+        if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+    }
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
-    if (s->snapshot) {
-        uint64_t ids[64]={0};uint32_t count=0;XDAP_TEXT(&body,"{\"threads\":[");
-        for (uint32_t i=0;i<s->depth;++i) {
-            XrXirVmDebugFrameInfo info={0};XrXirValue name={0};
-            if (xr_xir_vm_debug_snapshot_frame(s->snapshot,i,&info,&name)!=XR_XIR_VALUE_OK) { body.status=XR_XIR_BUDGET;break; }
-            xr_xir_value_drop(&name);bool duplicate=false;
-            for (uint32_t j=0;j<count;++j) if (ids[j]==info.thread) duplicate=true;
-            if (duplicate) continue;
-            ids[count++]=info.thread;if (count>1) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");
-            xdap_json_unsigned(&body,info.thread);XDAP_TEXT(&body,",\"name\":");
-            char label[64];int length=snprintf(label,sizeof(label),"%s %llu",info.thread==1 ? "Root" : "Activation",(unsigned long long)info.thread);
-            xdap_json_quote(&body,label,(size_t)length);XDAP_TEXT(&body,"}");
-        }
-        XDAP_TEXT(&body,"]}");
-    } else if (s->launch && s->configured && !s->terminal) XDAP_TEXT(&body,"{\"threads\":[{\"id\":1,\"name\":\"Root\"}]}");
-    else XDAP_TEXT(&body,"{\"threads\":[]}");
+    XDAP_TEXT(&body,"{\"threads\":[");
+    for (uint32_t i=0;i<count;++i) {
+        if (i) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,ids[i]);XDAP_TEXT(&body,",\"name\":");
+        char label[64];int length=snprintf(label,sizeof(label),"%s %llu",ids[i]==1 ? "Root" : "Activation",(unsigned long long)ids[i]);
+        xdap_json_quote(&body,label,(size_t)length);XDAP_TEXT(&body,"}");
+    }
+    XDAP_TEXT(&body,"]}");
     return inspect_finish(s,r,&body);
 }
 static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {

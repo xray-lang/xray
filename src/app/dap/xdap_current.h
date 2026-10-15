@@ -44,6 +44,10 @@ XR_FUNC XrXirValueStatus xdap_current_rules_replace(XdapCurrent *,const XrXirVmD
 XR_FUNC XrXirValueStatus xdap_current_break_on_throw(XdapCurrent *,bool enabled);
 XR_FUNC XrXirValueStatus xdap_current_snapshot(XdapCurrent *session,
     XrXirVmDebugSnapshot **output);
+/* Actual live activation identities between polls. A not-yet-polled admitted
+ * root is known directly; after polling, incomplete observer ingress rejects
+ * instead of presenting a partial inventory. Outputs survive failure. */
+XR_FUNC XrXirValueStatus xdap_current_threads(XdapCurrent *,uint64_t *,uint32_t,uint32_t *);
 XR_FUNC XrXirCallStatus xdap_current_cancel(XdapCurrent *session);
 /* Stop and drain the whole target, including child activations. The ordinary
  * Instance stop owns cleanup and its exact failure status is preserved. */

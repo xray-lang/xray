@@ -28,4 +28,8 @@ XR_FUNC void xir_vm_debug_after(XrXirVmDebug *debug, const XirVmDebugPoint *poin
 XR_FUNC XrXirValueStatus xir_vm_debug_inbox(XrXirVmDebug *debug, void *state, uint32_t offset);
 XR_FUNC void xir_vm_debug_release(XrXirVmDebug *debug, void *state);
 XR_FUNC void xir_vm_debug_faulted(XrXirVmDebug *,const XrXirCallView *);
+/* Between driver quanta only. Copies authenticated live activation identities,
+ * never frame state or values. Failure preserves both outputs. Before the first
+ * admitted VM ingress there is no complete Call observer inventory. */
+XR_FUNC XrXirValueStatus xir_vm_debug_threads(XrXirVmDebug *,uint64_t *,uint32_t,uint32_t *);
 #endif // XXIR_VM_DEBUG_INTERNAL_H

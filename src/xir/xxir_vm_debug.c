@@ -587,6 +587,24 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot(XrXirVmDebug *debug,
 XR_FUNC uint32_t xr_xir_vm_debug_snapshot_depth(const XrXirVmDebugSnapshot *snapshot) {
     return snapshot_valid(snapshot) ? snapshot->count : 0;
 }
+XR_FUNC XrXirValueStatus xir_vm_debug_threads(XrXirVmDebug *debug,uint64_t *output,uint32_t capacity,uint32_t *count) {
+    if (!debug_valid(debug) || !count || (capacity && !output) || capacity>1025 ||
+        debug->calls.current!=UINT32_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (debug->disabled || !debug->calls.installed) return XR_XIR_VALUE_UNSUPPORTED;
+    XrXirValueStatus status=xir_debug_calls_pay(&debug->calls);if (status!=XR_XIR_VALUE_OK) return status;
+    uint64_t work=sizeof(uint64_t)*1025+(uint64_t)debug->calls.capacity*(debug->calls.capacity+1)*(sizeof(uint64_t)+1)/2+
+        (uint64_t)capacity*sizeof(*output)+sizeof(*count);
+    if (!xr_xir_domain_work(debug->domain,work)) return XR_XIR_VALUE_LIMIT;
+    uint64_t fresh[1025]={0};uint32_t size=0;
+    for (uint32_t i=0;i<debug->calls.capacity;++i) {
+        const XirDebugCallFrame *frame=&debug->calls.frames[i];if (!frame->active) continue;
+        uint32_t at=0;while (at<size && fresh[at]<frame->thread) ++at;
+        if (at<size && fresh[at]==frame->thread) continue;
+        if (size==capacity) return XR_XIR_VALUE_LIMIT;
+        memmove(fresh+at+1,fresh+at,(size_t)(size-at)*sizeof(*fresh));fresh[at]=frame->thread;++size;
+    }
+    if (size) memcpy(output,fresh,(size_t)size*sizeof(*output));*count=size;return XR_XIR_VALUE_OK;
+}
 XR_FUNC uint64_t xr_xir_vm_debug_snapshot_stopped_thread(const XrXirVmDebugSnapshot *snapshot) {
     return snapshot_valid(snapshot) ? snapshot->stopped_thread : 0;
 }

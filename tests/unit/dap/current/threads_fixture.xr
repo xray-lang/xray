@@ -1,0 +1,8 @@
+fn worker(value:i64)->i64 {
+    var left=256
+    while(left>0) { left-=1 }
+    return value
+}
+const first=go worker(11)
+const second=go worker(22)
+print((await first)+(await second))
