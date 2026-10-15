@@ -341,7 +341,7 @@ XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *contex
         if (status!=XR_XIR_OK) return status;
         mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (selected.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
-    } else if (effects->contracts && !effects->contexts) {
+    } else if (effect_contracts_read(effects) && !effects->contexts) {
         XrXirStatus status=effect_invocation_effect_edge_mask(context,effects,
             function,instruction,(uint32_t)op->immediate,&mask);
         if (status!=XR_XIR_OK) return status;

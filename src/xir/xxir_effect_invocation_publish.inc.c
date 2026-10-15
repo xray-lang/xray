@@ -111,7 +111,7 @@ static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContex
     EffectFinalFunctions *result=fresh && fresh->final?&fresh->final->summary:NULL;
     if (!result || result->resources!=work->resources || result->count!=count ||
         fresh->resources!=work->resources || result->capacity!=count ||
-        !result->functions || !result->facts || !result->witnesses || !effects->contracts ||
+        !result->functions || !result->facts || !result->witnesses || !effects->outcomes_work.contracts ||
         !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses || !effects->outcomes_work.unresolved_witnesses)
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_invocation_publication_match(work,fresh,result);
@@ -122,8 +122,8 @@ static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContex
     EffectInvocationCertificate *old=effects->invocations;
     const EffectFinalFunctions *old_result=effects->result_borrow;
     for (uint32_t f=0;f<count;++f) {
-        if (!old_result) xr_compile_resources_free((void *)effects->contracts[f].formula.terms);
-        effects->contracts[f].formula=result->functions[f].formula;
+        if (!old_result) xr_compile_resources_free((void *)effects->outcomes_work.contracts[f].formula.terms);
+        effects->outcomes_work.contracts[f].formula=result->functions[f].formula;
     }
     memcpy(effects->outcomes_work.root,result->facts,(size_t)count*sizeof(*effects->outcomes_work.root));
     memcpy(effects->outcomes_work.root_witnesses,result->witnesses,(size_t)count*sizeof(*effects->outcomes_work.root_witnesses));
@@ -146,7 +146,7 @@ static XrXirStatus effect_invocation_publish(const XrXirCompileContext *work,
     const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
     const EffectInvocationDeclaredBounds *declared,const EffectOrdinaryContexts *dense) {
     if (!module || !graph || !xir_effects_context_matches(work,effects,module->function_count) ||
-        !effects->contracts || (declared && declared->resources!=work->resources)) return XR_XIR_BAD_STRUCTURE;
+        !effects->outcomes_work.contracts || (declared && declared->resources!=work->resources)) return XR_XIR_BAD_STRUCTURE;
     if (effects->invocations && effects->invocations->final && effects->invocations->final->outcomes)
         return XR_XIR_BAD_STRUCTURE;
     EffectInvocationDeclaredBounds *temporary=NULL;EffectInvocationCertificate *certificate=NULL;

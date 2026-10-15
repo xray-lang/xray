@@ -421,7 +421,7 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
             }
         }
         if (v<function->parameter_count)
-            fixed[v]=(uint8_t)(owner->ordinary->uses.contracts[dense->nodes[index].ordinary].parameters[v].kind!=
+            fixed[v]=(uint8_t)(owner->ordinary->uses.outcomes_work.contracts[dense->nodes[index].ordinary].parameters[v].kind!=
                 XR_XIR_EFFECT_PARAMETER_VARIABLE);
     }
     if (dense->uses.outcomes_work.root && index<dense->uses.count) {

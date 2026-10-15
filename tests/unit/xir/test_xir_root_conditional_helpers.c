@@ -148,8 +148,8 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
     }
     if (status==XR_XIR_OK && oracle) {
         CHECK(contexts && contexts->count==5 && selected==4);
-        const XrXirFunctionEffectContract *base=&contexts->uses.contracts[1];
-        const XrXirFunctionEffectContract *closed=&contexts->uses.contracts[selected];
+        const XrXirFunctionEffectContract *base=&contexts->uses.outcomes_work.contracts[1];
+        const XrXirFunctionEffectContract *closed=&contexts->uses.outcomes_work.contracts[selected];
         CHECK(base->parameters[1].kind==2 && base->parameters[1].uses==2);
         CHECK(closed->parameters[1].kind==(mode==1 || mode==3 ? 0u : 1u));
         CHECK(closed->parameters[1].uses==(mode==1 || mode==3 ? 8u : 2u));
@@ -161,7 +161,7 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         memset(&f,0,sizeof(f));
         CHECK(!memcmp(contexts->terms.types.nominals->declarations[0].name.bytes,"Runner",6));
         CHECK(contexts->nodes[selected].declaration==1 && contexts->nodes[selected].arguments[0]==(XrXirType)256);
-        CHECK(contexts->uses.contracts[0].parameters[1].kind==(mode==1 || mode==3 ? 0u : 1u));
+        CHECK(contexts->uses.outcomes_work.contracts[0].parameters[1].kind==(mode==1 || mode==3 ? 0u : 1u));
     }
     effect_context_owner_free(execution);effect_ordinary_free(contexts);effect_context_free(resolved);return status;
 }
@@ -338,7 +338,7 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
                 fprintf(stderr," context%u decl%u ordinary%u root%u unknown%u",n,owner->dense->nodes[n].declaration,
                     owner->dense->nodes[n].ordinary,owner->dense->uses.outcomes_work.root[n].requires_root,owner->dense->uses.outcomes_work.root[n].unresolved);
                 for (uint32_t p=0;p<body->parameter_count;++p)
-                    fprintf(stderr," p%u:%u/k%u",p,body->parameters[p],owner->dense->uses.contracts[n].parameters[p].kind);
+                    fprintf(stderr," p%u:%u/k%u",p,body->parameters[p],owner->dense->uses.outcomes_work.contracts[n].parameters[p].kind);
                 for (uint32_t i=0;i<body->instruction_count;++i)
                     fprintf(stderr," i%u:%u/t%u/to%lld",i,body->instructions[i].op,body->instructions[i].type,(long long)body->instructions[i].immediate);
                 fputc('\n',stderr);
@@ -557,10 +557,10 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
         CHECK(effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
         CHECK(effect_roots_read(effects)->root[4].unresolved && !effect_roots_read(effects)->root[4].requires_root);
         CHECK(!effect_roots_read(effects)->root[5].unresolved && !effect_roots_read(effects)->root[5].requires_root);
-        CHECK(effects->contracts[0].parameters[0].kind==XR_XIR_EFFECT_PARAMETER_FIXED);
-        CHECK(effects->contracts[0].formula.term_count==1 &&
-            effects->contracts[0].formula.terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER &&
-            effects->contracts[0].formula.terms[0].index==0);
+        CHECK(effect_roots_read(effects)->contracts[0].parameters[0].kind==XR_XIR_EFFECT_PARAMETER_FIXED);
+        CHECK(effect_roots_read(effects)->contracts[0].formula.term_count==1 &&
+            effect_roots_read(effects)->contracts[0].formula.terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER &&
+            effect_roots_read(effects)->contracts[0].formula.terms[0].index==0);
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(context,effects,0,&entry)==XR_XIR_OK &&
             !entry.intrinsic_mask && entry.parameter_count==1 && entry.parameters[0]==0);
@@ -743,8 +743,8 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     XrXirStatus status=conditional_zero_checked(context,&module,&effects);
     if (status==XR_XIR_OK && oracle) {
         CHECK(effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root);
-        CHECK(effects->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED &&
-            !effects->contracts[0].formula.term_count && !effects->contracts[0].formula.terms);
+        CHECK(effect_roots_read(effects)->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED &&
+            !effect_roots_read(effects)->contracts[0].formula.term_count && !effect_roots_read(effects)->contracts[0].formula.terms);
         XirEffectEntryRootView view={0};
         CHECK(xir_effects_entry_root(context,effects,0,&view)==XR_XIR_OK &&
             view.intrinsic_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !view.parameter_count);
@@ -755,7 +755,7 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     ops[2]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
     status=conditional_zero_checked(context,&module,&effects);
     if (status==XR_XIR_OK) CHECK(!effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root &&
-        !effects->contracts[0].formula.constant_mask && !effects->contracts[0].formula.term_count);
+        !effect_roots_read(effects)->contracts[0].formula.constant_mask && !effect_roots_read(effects)->contracts[0].formula.term_count);
     xr_xir_compile_effects_free(effects);effects=NULL;
     if (status!=XR_XIR_OK) return status;
     /* Exhaustive opcode admission precedes every zero-origin decision. */
@@ -805,8 +805,8 @@ static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context
         bool needed=true;
         CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && !needed);
         CHECK(effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&
-            effects->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_REQUIRED &&
-            !effects->contracts[0].formula.term_count);
+            effect_roots_read(effects)->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_REQUIRED &&
+            !effect_roots_read(effects)->contracts[0].formula.term_count);
         CHECK(!effect_roots_read(effects)->root[1].requires_root && !effect_roots_read(effects)->root[1].unresolved);
         CHECK(effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
         XirEffectEntryRootView view={0};

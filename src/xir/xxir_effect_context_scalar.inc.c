@@ -163,11 +163,11 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
     if (!contexts || contexts->uses.resources!=flow->terms->remaining->resources ||
         !contexts->uses.outcomes_work.root || !contexts->uses.constant_witnesses || !contexts->uses.formula_terminals ||
         contexts->terms.types.nodes!=flow->terms->types.nodes || op.immediate<0 ||
-        (uint64_t)op.immediate>=contexts->count || !contexts->uses.contracts)
+        (uint64_t)op.immediate>=contexts->count || !contexts->uses.outcomes_work.contracts)
         return XR_XIR_BAD_STRUCTURE;
     if (op.args[1] && (!flow->function->operands || op.args[0]>flow->function->operand_count ||
         op.args[1]>flow->function->operand_count-op.args[0])) return XR_XIR_BAD_STRUCTURE;
-    const XrXirFunctionEffectContract *callee=&contexts->uses.contracts[op.immediate];
+    const XrXirFunctionEffectContract *callee=&contexts->uses.outcomes_work.contracts[op.immediate];
     if (op.args[1]>callee->parameter_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=callee->formula.constant_mask;
     /* The dense owner has already authenticated this real capture edge and
