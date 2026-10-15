@@ -23,11 +23,14 @@ static EdgePhysical pc_physical[2048];
 static size_t live,live_bytes,attempts,fail_at=SIZE_MAX;
 static bool injected;
 static void (*pc_free_hook)(void *,size_t);
+static void (*pc_allocate_hook)(void *,size_t);
 static void *pc_malloc(size_t bytes) {
     if (attempts++==fail_at) { injected=true;return NULL; }
     void *p=xr_malloc(bytes);if (!p) return NULL;
     CHECK(live<2048 && bytes<=SIZE_MAX-live_bytes);
-    pc_physical[live++]=(EdgePhysical){p,bytes};live_bytes+=bytes;return p;
+    pc_physical[live++]=(EdgePhysical){p,bytes};live_bytes+=bytes;
+    if (pc_allocate_hook) pc_allocate_hook(p,bytes);
+    return p;
 }
 static void pc_free(void *p) {
     if (!p) return;
@@ -343,8 +346,8 @@ static void pc_local_final_mutations(const XrXirCompileContext *c,
         if (!mode) node->intrinsic_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
         if (mode==1) node->local_mask=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         if (mode==2) ++node->instruction_count;
-        if (mode==3) node->expanded=false;
-        if (mode==4) node->queued=true;
+        if (mode==3) node->parameter_count=1;
+        if (mode==4) --node->cause_count;
         if (mode==5) node->return_coverage=1;
         if (mode==6) node->class_return_mask=EFFECT_CLASS_ROOT;
         if (mode==7) node->edge_head=0;
@@ -395,12 +398,9 @@ static void pc_local_source_fields(const XrXirCompileContext *c,
         if (word==8) row->type_arguments[0]=1;
         if (word==9) row->type_arguments[1]=1;
         CHECK(effect_body_source_match(c,body,source)==XR_XIR_BAD_STRUCTURE);
-        /* Complete source equality rejects both scalar IDs. Physical
-         * membership deliberately projects only the actual type category. */
-        if (!word)
-            CHECK(effect_invocation_current_input_match(c,source,body)==XR_XIR_BAD_STRUCTURE);
-        else if (word==1)
-            CHECK(effect_invocation_current_input_match(c,source,body)==XR_XIR_OK);
+        /* Exact current-input equality also rejects fields that do not
+         * change sparse physical membership or the apparent type category. */
+        CHECK(effect_invocation_current_input_match(c,source,body)==XR_XIR_BAD_STRUCTURE);
         *row=saved;
     }
     CHECK(effect_invocation_current_input_match(c,source,body)==XR_XIR_OK);
@@ -423,7 +423,7 @@ static void pc_local_transfer_positive(void) {
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);pc_empty_golden(effects,0);
     EffectInvocationLocalInput *inputs=NULL;
     CHECK(effect_invocation_local_inputs(&c,effects->invocations->body,&inputs)==XR_XIR_OK && !inputs);
-    CHECK(effect_invocation_public_gate(&c,effects->invocations,effects->count)==XR_XIR_OK);
+    CHECK(effect_invocation_public_gate(&c,effects->invocations)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
 }
 
@@ -606,6 +606,7 @@ static void pc_local_type_controls(const XrXirCompileContext *c,EffectBodyMateri
         pc_stats(c).live_bytes==before.live_bytes);
 }
 
+#include "xir_current_input_callback_cases.h"
 static void pc_local_equation_controls(void) {
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     EdgeFixture fixture;pc_empty_fixture(&fixture,0);
@@ -636,10 +637,11 @@ static void pc_local_equation_controls(void) {
     CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
     CHECK(effect_invocation_local_equations_match(&c,certificate->final,inputs)==XR_XIR_OK);
     CHECK(effect_invocation_certificate_result_match(&c,certificate,(&certificate->final->summary))==XR_XIR_OK);
-    CHECK(effect_invocation_public_gate(&c,certificate,effects->count)==XR_XIR_OK);pc_empty_golden(effects,0);
+    CHECK(effect_invocation_public_gate(&c,certificate)==XR_XIR_OK);pc_empty_golden(effects,0);
     xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);
     pc_local_formal_preflight(&c);pc_release(&c,baseline);
     pc_local_transfer_positive();pc_local_callback_boundary();pc_local_release_boundary();
+    pc_current_input_callbacks();
     puts("empty transfer: genuine unused Cell pool, initializer/thrower, final counterfacts, raw ten fields and producer death");
 }
 
@@ -793,11 +795,14 @@ static void pc_resources(void) {
 int main(int argc,char **argv) {
     if (argc!=1) {
         if (argc!=2 || (strcmp(argv[1],"--semantics") && strcmp(argv[1],"--performance") &&
-            strcmp(argv[1],"--resources"))) {
-            fputs("usage: test_xir_error_cfg_pending [--semantics|--performance|--resources]\n",stderr);
+            strcmp(argv[1],"--resources") && strcmp(argv[1],"--current-input-callback") &&
+            strcmp(argv[1],"--current-input-resources"))) {
+            fputs("usage: test_xir_error_cfg_pending [--semantics|--performance|--resources|--current-input-callback|--current-input-resources]\n",stderr);
             return 2;
         }
-        if (!strcmp(argv[1],"--semantics")) pc_semantics();
+        if (!strcmp(argv[1],"--current-input-resources")) pc_current_input_resources();
+        else if (!strcmp(argv[1],"--current-input-callback")) pc_current_input_callbacks();
+        else if (!strcmp(argv[1],"--semantics")) pc_semantics();
         else if (!strcmp(argv[1],"--performance")) pc_performance();
         else pc_resources();
         CHECK(!live && !live_bytes);puts("typed-error CFG pending selected feedback PASS");return 0;

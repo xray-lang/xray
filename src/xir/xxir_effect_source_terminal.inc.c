@@ -140,13 +140,12 @@ static XrXirStatus effect_source_atoms(const XrXirCompileContext *work,
 
 static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
-    uint32_t count=effect_body_count(certificate->body);
     const EffectFinalFunctions *result=(&certificate->final->summary);
     /* This same independent receiving core checks all canonical terms,
      * selected atoms, current causes and final transformed witnesses. */
     XrXirStatus status=effect_invocation_publication_match(work,certificate,result);
     if (status!=XR_XIR_OK) return status;
-    return effect_invocation_public_gate(work,certificate,count);
+    return effect_invocation_public_gate(work,certificate);
 }
 
 /* Only verification modes consume this shallow request view. The stack owner
@@ -198,7 +197,7 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
-    if (status==XR_XIR_OK) status=effect_invocation_closed(&owner);
+    if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
     if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final.physical);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,&local);
