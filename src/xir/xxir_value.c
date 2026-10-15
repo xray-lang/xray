@@ -24,6 +24,7 @@
 #include "xxir_error.h"
 #include "xxir_panic.h"
 #include "xxir_equal.h"
+#include "xxir_key.h"
 #include "xxir_nullable.h"
 #include "xxir_tuple.h"
 #include "xxir_float.h"
@@ -1793,3 +1794,4 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_error_value.inc.c"
 #include "xxir_panic_value.inc.c"
 #include "xxir_value_equal.inc.c"
+#include "xxir_value_key.inc.c"
