@@ -716,8 +716,8 @@ set(XIR_ARRAY_REORDER_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xi
 set(XIR_ARRAY_REORDER_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_reorder.c)
 add_custom_command(OUTPUT ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_source_arrays> ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
-    DEPENDS test_xir_source_arrays
+    COMMAND $<TARGET_FILE:test_xir_source_array_packets> ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
+    DEPENDS test_xir_source_array_packets
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/producer.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/bounds.xr
@@ -730,8 +730,8 @@ target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_CHECKED_FIX
 target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_BOUNDS_CHECKED_FIXTURE="${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}"
     XR_ARRAY_REORDER_CHECKED_FIXTURE="${XIR_ARRAY_REORDER_CHECKED_GENERATED}")
 add_custom_command(OUTPUT ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_array_packet_vm> ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
-    DEPENDS test_xir_array_packet_vm ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_array_c_producer> ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
+    DEPENDS test_xir_array_c_producer ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
     VERBATIM)
 add_executable(test_xir_source_array_native xir/test_xir_source_array_native.c ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED})
 target_link_libraries(test_xir_source_array_native PRIVATE xray_xir_scalar)
