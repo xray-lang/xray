@@ -7,11 +7,11 @@
  * xxir_tuple_sendable.inc.c - Bounded conjunction from complete type facts
  *
  * KEY CONCEPT:
- *   Enum identity is insufficient: every variant payload contributes, after
+ *   Nominal identity is insufficient: every value field contributes, after
  *   the actual field projection has matched its owning declaration.
  */
 typedef struct SendableFrame { uint32_t index, next; } SendableFrame;
-static XrXirStatus sendable_enum_shape(const XrXirConstraintEnvironment *environment,
+static XrXirStatus sendable_nominal_shape(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node, const XrXirCompileContext *work) {
     const XrXirNominalTable *table = environment->types->nominals;
     if (!table || (!!table->declarations == !!table->identities) ||
@@ -24,7 +24,8 @@ static XrXirStatus sendable_enum_shape(const XrXirConstraintEnvironment *environ
     uint32_t arity = d ? d->parameter_count : identity->arity;
     uint32_t variant_count = d ? d->variant_count : identity->variant_count;
     const XrXirNominalVariant *variants = d ? d->variants : identity->variants;
-    if (kind != XR_XIR_NOMINAL_ENUM || !variant_count || !variants ||
+    if ((kind != XR_XIR_NOMINAL_ENUM && kind != XR_XIR_NOMINAL_STRUCT) ||
+        (kind == XR_XIR_NOMINAL_ENUM ? (!variant_count || !variants) : (variant_count || variants)) ||
         node->nominal.argument_count != arity || (!!node->nominal.arguments != !!arity) ||
         (!!node->nominal.fields != !!node->nominal.field_count)) return XR_XIR_BAD_TYPE;
     /* Identity-only pools have no declaration from which missing fields can
@@ -38,7 +39,7 @@ static XrXirStatus sendable_enum_shape(const XrXirConstraintEnvironment *environ
             return XR_XIR_BAD_STRUCTURE;
         end += variants[v].field_count;
     }
-    if (end != count) return XR_XIR_BAD_STRUCTURE;
+    if (kind == XR_XIR_NOMINAL_ENUM && end != count) return XR_XIR_BAD_STRUCTURE;
     if (d && node->nominal.field_count) {
         if (!d->fields) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t f = 0; f < count; ++f) {
@@ -84,7 +85,7 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
     if (node->kind == XR_XIR_TYPE_ATOMIC)
         return constraint_atomic(environment, node->element, XR_XIR_CONSTRAINT_ATOMIC_VALUE, work);
     if (node->kind == XR_XIR_TYPE_NOMINAL) {
-        XrXirStatus status = sendable_enum_shape(environment, node, work);
+        XrXirStatus status = sendable_nominal_shape(environment, node, work);
         if (status != XR_XIR_OK) return status;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
