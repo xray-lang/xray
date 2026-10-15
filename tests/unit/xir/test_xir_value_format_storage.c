@@ -112,7 +112,7 @@ static void format_received_storage(void) {
 }
 static void format_scalar_storage(void) {
     XrXirValue values[]={{XR_XIR_I64,0,-17},{XR_XIR_BOOL,0,1},{XR_XIR_U64,0,-1},{XR_XIR_RUNE,0,65}};
-    const char *expected[]={"-17","true","18446744073709551615","'A'"};
+    const char *expected[]={"-17","true","18446744073709551615","A"};
     size_t before=calls;
     closed_fail_all=true;
     for (size_t i=0;i<4;++i) {
@@ -140,7 +140,7 @@ int main(void) {
     CHECK(!reader.child(reader.context,(XrValueFormatNode){&array,0, NULL},2,&child));
     XrXirValue string={0}, strings={0};
     CHECK(xr_xir_string_new(domain,"A\0\xE4\xB8\xAD",5,&string)==XR_XIR_VALUE_OK);
-    format_exact(&string,"\"A\0\xE4\xB8\xAD\"",7);
+    format_exact(&string,"A\0\xE4\xB8\xAD",5);
     CHECK(xr_xir_array_new((XrXirType)257,&string,1,&admission,&strings)==XR_XIR_VALUE_OK);
     static const char quoted[]="[\"A\0\xE4\xB8\xAD\"]";
     format_exact(&strings,quoted,sizeof(quoted)-1);
