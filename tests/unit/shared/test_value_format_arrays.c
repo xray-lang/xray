@@ -44,7 +44,7 @@ static int format_child(const void *context, XrValueFormatNode node, uint32_t in
     const FormatNode *source = node.value;
     ++probe->child_reads;
     CHECK(index < source->count && index < XR_VALUE_FORMAT_MAX_ELEMENTS && source->children);
-    *child = (XrValueFormatNode){&source->children[index], 0};
+    *child = (XrValueFormatNode){&source->children[index], 0, NULL};
     return 1;
 }
 static int format_write(void *context, const void *bytes, size_t length) {
@@ -57,7 +57,7 @@ static int format_write(void *context, const void *bytes, size_t length) {
 }
 static int render(const FormatNode *node, FormatProbe *probe) {
     XrValueFormatReader reader = {probe, format_read, format_child};
-    return xr_value_format_value(reader, (XrValueFormatNode){node, 0},
+    return xr_value_format_value(reader, (XrValueFormatNode){node, 0, NULL},
         (XrValueFormatSink){probe, format_write}, 0);
 }
 static void exact(const FormatNode *node, const char *expected, size_t length) {
@@ -81,7 +81,7 @@ static void scalar_and_nested(void) {
     exact(&empty, "[]", 2);
     FormatProbe probe = {0}; probe.fail_at=SIZE_MAX;
     XrValueFormatReader reader = {&probe,format_read,NULL};
-    CHECK(xr_value_format_value(reader,(XrValueFormatNode){&empty,0},
+    CHECK(xr_value_format_value(reader,(XrValueFormatNode){&empty,0, NULL},
         (XrValueFormatSink){&probe,format_write},0) && probe.used==2 && !probe.child_reads);
     const FormatNode rows[] = {node, empty};
     const FormatNode nested = {.kind=XR_VALUE_FORMAT_ARRAY, .children=rows, .count=2};

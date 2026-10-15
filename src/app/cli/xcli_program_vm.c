@@ -248,7 +248,7 @@ XrCliVmResult xr_cli_program_vm_invoke(XrCliProgramVm *vm, uint32_t function_id,
     result.timed_out = deadline.expired;
     if (errors && outcome.kind == XR_VM_OUTCOME_ERROR)
         result.error_reported = xr_value_format_uncaught(xr_vm_value_format_reader(vm->code),
-            (XrValueFormatNode) {&outcome.error_value, 0u}, *errors, 0, xr_diag_use_color()) != 0;
+            (XrValueFormatNode) {&outcome.error_value, 0u, NULL}, *errors, 0, xr_diag_use_color()) != 0;
     if (errors && outcome.kind == XR_VM_OUTCOME_PANIC) {
         XrVmStringView message = {0};
         bool has_message = xr_vm_panic_message_view(&result.panic_info, &message);

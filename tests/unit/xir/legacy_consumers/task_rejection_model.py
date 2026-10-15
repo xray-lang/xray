@@ -18,7 +18,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'src/xir/xxir_source_task_type.inc.c': 'b891bd32ab468133012098c50c74f6235da6f3a3e5a5d1d346bcb836ed0421e1',
  'src/xir/xxir_task_verify.inc.c': '1f29133b74148988ccd453f334cdee0847cb67a803e34d5eb0e926f91949990a',
  'src/xir/xxir_types.h': '9cb358b9604f9298105c845e8dbd6012de147d6517a10cad3a3020042edef7d3',
- 'src/xir/xxir_value.h': '156165293bc0c0d2ea44e3279ca1537d00b8e856b879d54288e36bf79d4db44c',
+ 'src/xir/xxir_value.h': '08ea52eeffffd623eaa2dfd66cfc74ebe8dc772a4dc82b170d2ed4551cda4adc',
  'tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr': '68952e6c3b9d277b1e6fcb47c5f98e0657638f89fdcc00bdb0843d1c7b2549f7',
  'tests/lib/xraytest/__init__.py': '39d234cb4da7097df911c0a99fdfabe7fcc829beeefc536ab1108503217b640d',
  'tests/lib/xraytest/platform.py': 'c03df3dc8b3381586b2d8832edde82cc5bcdaa6c745bf291e6d7826f338bce53',

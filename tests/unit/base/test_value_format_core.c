@@ -95,18 +95,18 @@ TEST(value_format_preserves_typed_error_payload) {
     XrValueFormatReader reader = {NULL, read_fixture, child_fixture};
     FormatCapture capture = {.capacity = sizeof(capture.bytes)};
     XrValueFormatSink sink = {&capture, capture_bytes};
-    ASSERT_TRUE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0}, sink, 0, 0));
+    ASSERT_TRUE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0, NULL}, sink, 0, 0));
     ASSERT_STR_EQ(capture.bytes,
         "[Uncaught Error] Failure.Failed(-9223372036854775808, 18446744073709551615, true, "
         "\"detail\", Nested.Empty)\n");
     capture.size = 0;
-    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode) {&root, 0}, sink, 4));
+    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode) {&root, 0, NULL}, sink, 4));
     ASSERT_STR_EQ(capture.bytes, "...");
     capture.size = 0;
     capture.capacity = 8;
-    ASSERT_FALSE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0}, sink, 0, 0));
+    ASSERT_FALSE(xr_value_format_uncaught(reader, (XrValueFormatNode) {&root, 0, NULL}, sink, 0, 0));
     ASSERT_EQ_INT(capture.size, 0);
-    ASSERT_FALSE(xr_value_format_value(reader, (XrValueFormatNode) {NULL, 0}, sink, 0));
+    ASSERT_FALSE(xr_value_format_value(reader, (XrValueFormatNode) {NULL, 0, NULL}, sink, 0));
 }
 
 TEST(value_format_streams_long_and_embedded_zero_strings) {
@@ -118,11 +118,11 @@ TEST(value_format_streams_long_and_embedded_zero_strings) {
     FormatCapture capture = {.capacity = sizeof(capture.bytes)};
     XrValueFormatReader reader = {NULL, read_fixture, child_fixture};
     XrValueFormatSink sink = {&capture, capture_bytes};
-    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode) {&root, 0}, sink, 0));
+    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode) {&root, 0, NULL}, sink, 0));
     ASSERT_EQ_INT(capture.size, sizeof(bytes));
     ASSERT_TRUE(memcmp(capture.bytes, bytes, sizeof(bytes)) == 0);
     capture.size = 0;
-    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode) {&root, 0}, sink, 1));
+    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode) {&root, 0, NULL}, sink, 1));
     ASSERT_EQ_INT(capture.size, sizeof(bytes) + 2);
     ASSERT_TRUE(capture.bytes[0] == '"' && capture.bytes[sizeof(bytes) + 1] == '"');
     ASSERT_TRUE(memcmp(capture.bytes + 1, bytes, sizeof(bytes)) == 0);
@@ -136,13 +136,13 @@ TEST(value_format_names_are_spans_and_style_only_colors_labels) {
     FormatCapture capture = {.capacity = sizeof(capture.bytes)};
     XrValueFormatReader reader = {NULL, read_fixture, child_fixture};
     XrValueFormatSink sink = {&capture, capture_bytes};
-    ASSERT_TRUE(xr_value_format_uncaught(reader, (XrValueFormatNode){&value, 0}, sink, 0, 1));
+    ASSERT_TRUE(xr_value_format_uncaught(reader, (XrValueFormatNode){&value, 0, NULL}, sink, 0, 1));
     const char expected[] = "\033[1;31m[Uncaught Error]\033[0m AB.C\0Z\n";
     ASSERT_EQ_INT(capture.size, sizeof(expected) - 1);
     ASSERT_TRUE(!memcmp(capture.bytes, expected, sizeof(expected) - 1));
     capture.size = 0;
     value.view.kind = XR_VALUE_FORMAT_LITERAL;
-    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode){&value, 0}, sink, 0));
+    ASSERT_TRUE(xr_value_format_value(reader, (XrValueFormatNode){&value, 0, NULL}, sink, 0));
     ASSERT_EQ_INT(capture.size, 2);
     ASSERT_TRUE(!memcmp(capture.bytes, "AB", 2));
     capture.size = 0;

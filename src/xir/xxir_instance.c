@@ -16,6 +16,7 @@
 #include "xxir_instance_value.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
+#include "xxir_type_arena_internal.h"
 #include "xxir_call_internal.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
@@ -939,6 +940,17 @@ static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
     if (view_is_child(instance, view) && (writable || !worker_slot_read(instance, slot)))
         return XR_XIR_CALL_BAD_STATE;
     uint32_t function = xr_xir_call_current_entry(view->activation);
+    if (instance->slot_origins && instance->slot_origins[slot].owner) {
+        InstanceStorageRoute route=instance->slot_origins[slot];XrXirInstance *birth=route.owner;
+        if (d->slots[slot].type!=receiver->type || !instance->ready[module] ||
+            d->functions[function].module!=module || route.index>=birth->program->declarations->slot_count ||
+            !birth->published[route.index] || !birth->ready[birth->program->declarations->slots[route.index].module])
+            return XR_XIR_CALL_BAD_STATE;
+        XrXirCallStatus status=admit_instance_value(admission,&birth->slots[route.index],receiver->type);
+        if (status!=XR_XIR_CALL_READY) return status;
+        place->payload=&birth->slots[route.index].payload;
+        return XR_XIR_CALL_READY;
+    }
     if (d->slots[slot].type != receiver->type || !instance->published[slot] ||
         d->functions[function].module != module ||
         (!instance->ready[module] && instance->current_module != module) ||

@@ -105,14 +105,14 @@ XR_FUNC XrXirValueStatus xr_xir_value_format_string(const XrXirValue *value,
         admission->scratch_bytes>SIZE_MAX ? SIZE_MAX : (size_t)admission->scratch_bytes};
     XrValueFormatReader reader={&format,metered_format_read,metered_format_child};
     XrValueFormatSink sink={&format,metered_format_write};
-    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0},sink,0))
+    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0, NULL},sink,0))
         return format.status==XR_XIR_VALUE_OK ? XR_XIR_VALUE_BAD_ARGUMENT : format.status;
     size_t length=format.used, scratch=length ? length : 1;
     if (scratch>admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
     format.bytes=xr_xir_domain_allocate(admission->domain,scratch,&status);
     if (!format.bytes) return status;
     admission->scratch_bytes-=scratch; format.limit=length; format.used=0;
-    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0},sink,0) || format.used!=length)
+    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0, NULL},sink,0) || format.used!=length)
         status=format.status==XR_XIR_VALUE_OK ? XR_XIR_VALUE_BAD_ARGUMENT : format.status;
     else status=xr_xir_string_new(admission->domain,format.bytes,length,output);
     xr_xir_domain_deallocate(admission->domain,format.bytes,scratch);

@@ -36,8 +36,19 @@ static bool graph_storage_edges(StorageCursor *cursor, GraphEdgeVisitor visit, v
             return false;
         }
         if (!found) return true;
-        XrXirValue value = {(uint32_t)leaf.type, 0, 0};
-        memcpy(&value.payload, leaf.bytes, sizeof(value.payload));
+        XrXirValue value = {(uint32_t)leaf.type,0,0};
+        memcpy(&value.payload,leaf.bytes,sizeof(value.payload));
+        /* Unlink leaves zero handles for the later empty-descriptor pass.
+         * Each visitor owns that phase's liveness checks; metadata identity
+         * remains valid until all detached nodes have been traversed. */
+        if (value.payload) {
+            const XirObject *owner=object_pointer(&value);
+            if (leaf.type!=XR_XIR_ERROR) value.type=(uint32_t)owner->type;
+            if (!xir_type_arena_same_type(owner->arena,(XrXirType)value.type,cursor->arena,leaf.type)) {
+                if (budget) budget->status=XR_XIR_VALUE_BAD_ARGUMENT;
+                return false;
+            }
+        }
         if (!visit(&value, (void *)leaf.bytes, context)) return false;
     }
 }

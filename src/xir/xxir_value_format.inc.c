@@ -16,29 +16,33 @@ typedef struct FormatStorage {
     XrXirValue leaf;
     const XrXirTypeNode *type;
     const XrXirStorageLayout *layout;
+    const XrXirTypeArena *arena;
     uint32_t variant;
     bool none;
 } FormatStorage;
 
 static bool format_storage_resolve(const XrXirTypeArena *arena,
     XrValueFormatNode node, FormatStorage *out) {
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    if (!arena) return false;
     *out = (FormatStorage){0};
     for (uint32_t hop = 0; hop < XR_XIR_CONSTRUCTED_TYPE_LIMIT; ++hop) {
+        if (node.owner) arena = node.owner;
         if (!node.type) {
             const XrXirValue *value = node.value;
             if (!xr_xir_value_valid(value)) return false;
             out->leaf = *value;
             const XrXirTypeArena *owner = xr_xir_value_arena(value);
-            if (owner && owner != arena) return false;
+            if (owner) arena = owner;
+            const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
             bool some = false; const XrXirValue *payload = NULL;
             if (owner && xr_xir_type_is_nullable(types, (XrXirType)value->type)) {
                 if (!xr_xir_nullable_view(value, &some, &payload)) return false;
-                if (!some) { out->none = true; out->node = node; return true; }
-                node = (XrValueFormatNode){payload, 0}; continue;
+                if (!some) { out->none = true; out->node = node; out->arena = arena; return true; }
+                node = (XrValueFormatNode){payload, 0, arena}; continue;
             }
-            out->node = node; return true;
+            out->node = node; out->arena = arena; return true;
         }
+        const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
         XrXirType type = (XrXirType)node.type;
         XrXirLayout physical = {0};
         if (!xr_xir_compile_type_arena_layout(arena, type, &physical) ||
@@ -47,9 +51,9 @@ static bool format_storage_resolve(const XrXirTypeArena *arena,
         const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(arena, type);
         if (descriptor && descriptor->kind == XR_XIR_TYPE_NULLABLE) {
             if (!layout || !node.value || *(const unsigned char *)node.value > 1) return false;
-            if (!*(const unsigned char *)node.value) { out->none = true; out->node = node; return true; }
+            if (!*(const unsigned char *)node.value) { out->none = true; out->node = node; out->arena = arena; return true; }
             node = (XrValueFormatNode){(const unsigned char *)node.value + layout->value.alignment,
-                (uint16_t)descriptor->element}; continue;
+                (uint16_t)descriptor->element, arena}; continue;
         }
         if (descriptor && xr_xir_type_is_enum(types, type)) {
             if (!layout) return false;
@@ -58,11 +62,14 @@ static bool format_storage_resolve(const XrXirTypeArena *arena,
             const XrXirNominalIdentity *identity = &types->nominals->identities[descriptor->nominal.declaration];
             if (variant >= identity->variant_count) return false;
             out->node = node; out->type = descriptor; out->layout = layout; out->variant = variant;
+            out->arena = arena;
             return true;
         }
         if (!physical.size || physical.size > sizeof(uint64_t) || inline_nominal_type(types, type)) return false;
-        out->leaf = storage_leaf_value(type, node.value, physical.size);
+        if (!storage_leaf_value(arena, type, node.value, physical.size, &out->leaf)) return false;
         if (!xr_xir_value_argument(&out->leaf, arena, type)) return false;
+        out->arena = xr_xir_value_arena(&out->leaf);
+        if (!out->arena) out->arena = arena;
         out->node = node; return true;
     }
     return false;
@@ -77,7 +84,7 @@ XR_FUNC bool xr_xir_value_format_storage(const void *context, XrValueFormatNode 
     if (storage.none) {
         view->kind = XR_VALUE_FORMAT_LITERAL; view->name = "null"; view->name_size = 4; return true;
     }
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(storage.arena);
     if (storage.type) {
         const XrXirNominalIdentity *identity = &types->nominals->identities[storage.type->nominal.declaration];
         const XrXirNominalVariant *variant = &identity->variants[storage.variant];
@@ -106,23 +113,23 @@ XR_FUNC int xr_xir_value_format_child(const void *context, XrValueFormatNode nod
     const XrXirTypeArena *arena = context;
     FormatStorage storage;
     if (!child || !format_storage_resolve(arena, node, &storage) || storage.none) return 0;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(storage.arena);
     if (storage.type) {
         const XrXirNominalIdentity *identity = &types->nominals->identities[storage.type->nominal.declaration];
         const XrXirNominalVariant *variant = &identity->variants[storage.variant];
         if (index >= variant->field_count) return 0;
         uint32_t field = variant->field_begin + index;
         *child = (XrValueFormatNode){storage.node.value ? (const unsigned char *)storage.node.value +
-            storage.layout->field_offsets[field] : NULL, (uint16_t)storage.type->nominal.fields[field]};
+            storage.layout->field_offsets[field] : NULL, (uint16_t)storage.type->nominal.fields[field], storage.arena};
         return 1;
     }
     if (xr_xir_type_is_array(types, (XrXirType)storage.leaf.type)) {
         const XirArray *array = (const XirArray *)object_pointer(&storage.leaf);
         if (index >= array->length) return 0;
         *child = (XrValueFormatNode){array->data ? array->data + (size_t)index * array->stride : NULL,
-            (uint16_t)array->element}; return 1;
+            (uint16_t)array->element, array->object.arena}; return 1;
     }
     XrXirEnumBorrow borrowed;
     if (xr_xir_enum_borrow(&storage.leaf, &borrowed) != XR_XIR_VALUE_OK || index >= borrowed.field_count) return 0;
-    *child = (XrValueFormatNode){&borrowed.fields[index], 0}; return 1;
+    *child = (XrValueFormatNode){&borrowed.fields[index], 0, storage.arena}; return 1;
 }

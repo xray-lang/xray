@@ -57,6 +57,7 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_more_suffix(char *buf, size_t cap, 
 typedef struct XrValueFormatNode {
     const void *value;
     uint16_t type;
+    const void *owner;
 } XrValueFormatNode;
 
 typedef enum XrValueFormatKind {

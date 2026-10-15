@@ -12,7 +12,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'spec/source/sections/012-11-modules.md': '3c32493b1e22d29c459362a9f465a6f5316856b5b375c3d1c1e06025756eecd8',
  'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
  'spec/source/sections/016-15-standard-library.md': 'c776ecb898f3dfbbac76e6e9eb08da0697041af5b118eb55bfd294a9630ba2fa',
- 'spec/source/sections/018-17-compilation-pipeline.md': 'db71b9a6b69133a2f2254f6d9abb4d6ed425d15af79af0428f176c946c835c6f',
+ 'spec/source/sections/018-17-compilation-pipeline.md': '19abae1415329b6d0f88d6fa6d70a224b795a0f9a638b5f5c38d4742236868f4',
  'stdlib/datetime/datetime.xr': 'cd05dfebf4afb1d5a1bf2326aa84afd2dbe17825d90ca6f9a340751db596197d',
  'stdlib/io/io.xr': 'cbb670fe3a25e42a3fa96a3bf3460f9696f459c0fac059b82ba8bc99c4d17096',
  'stdlib/log/log.xr': 'd6f32e59f72cbaf35df46ce3438f576756b7fb0a2820e1c98bbc03bebdfea835',

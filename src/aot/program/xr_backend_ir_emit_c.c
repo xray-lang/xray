@@ -4116,7 +4116,7 @@ static bool emit_main(CBuffer *buffer, const XrBackendIR *ir) {
         "        if (_setmode(_fileno(stderr), _O_BINARY) == -1) { exit_code = 1; }\n"
         "#endif\n"
         "        XrValueFormatReader reader = {NULL, xr_aot_format_read, xr_aot_format_child};\n"
-        "        XrValueFormatNode value = {result.error_value, result.error_type_id};\n"
+        "        XrValueFormatNode value = {result.error_value, result.error_type_id, NULL};\n"
         "        XrValueFormatSink sink = {stderr, xr_value_format_file_write};\n"
         "        if (!xr_value_format_uncaught(reader, value, sink, 0, error_color))\n"
         "            fputs(\"XR_RUN_6005: cannot render uncaught typed error\\n\", stderr);\n"
