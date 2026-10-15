@@ -43,7 +43,8 @@ static void closed_error_code_drop(void *owner) {
     xr_compile_resources_free(fixture->bindings);fixture->bindings=NULL;
     xr_xir_compile_artifact_free(fixture->lowered); fixture->lowered = NULL;
 }
-static void closed_error_build(ClosedErrorFixture *fixture, const char *backend) {
+static void closed_error_build_configure(ClosedErrorFixture *fixture,const char *backend,
+    void (*configure)(ClosedErrorFixture *,const XrXirModule *)) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     fixture->lowered = closed_error_lower(context, fixture->entry);
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);
@@ -61,12 +62,16 @@ static void closed_error_build(ClosedErrorFixture *fixture, const char *backend)
         bool use_native = all_native || (!vm && (worker != root_native));
         fixture->entries[f] = use_native ? native->entries[f] : vm_entries[f];
     }
+    if (configure) configure(fixture,module);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, native->target, fixture->entries, module->function_count,
         module->declarations, {fixture, closed_error_code_drop}, module->types, proof};
     CHECK(xr_xir_compile_program_seal(context, &spec, &fixture->program) == XR_XIR_OK);
     xr_compile_resources_free(vm_entries);
     for (unsigned n = 0; n < CLOSED_ERROR_CASES; ++n) for (unsigned mode = 0; mode < 2; ++mode)
         CHECK(fixture->entry[n][mode] == closed_error_entries[n][mode]);
+}
+static void closed_error_build(ClosedErrorFixture *fixture,const char *backend) {
+    closed_error_build_configure(fixture,backend,NULL);
 }
 static void closed_error_task_field_source(void) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
