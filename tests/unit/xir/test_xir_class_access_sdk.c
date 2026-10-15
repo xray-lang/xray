@@ -1,6 +1,7 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #include "xir/xxir_program.h"
 #include "xir/xxir_instance_value.h"
+#include "xir/xxir_instance_debug_internal.h"
 #include <stdio.h>
 #include <string.h>
 typedef XrXirCallStatus (*CellReadAt)(XrXirCallView *,uint32_t,const XrXirValue *,XrXirValue *,XrXirFaultDetail *);
@@ -36,6 +37,9 @@ static bool host_rejections(XrXirCallView *view,HostAccessWitness *witness) {
     const XrXirValueReceiver receiver={.kind=XR_XIR_ROOT_VALUE,.type=XR_XIR_I64,.value=value};
     const XrXirValuePath path={0};
     const XrXirFaultDetail observed={XR_XIR_PANIC_BOUNDS,0,9,7};
+    XrXirCallClassAccess access={0};
+    CHECK(xir_instance_debug_class_access(view,&value,&access)==XR_XIR_CALL_BAD_STATE);
+    CHECK(!access.value && !access.loan.cell && !access.authority.activation);
     for (uint32_t occupied=0;occupied<2;++occupied) {
         XrXirValue output=occupied?value:(XrXirValue){0};
         const XrXirValue original=output;

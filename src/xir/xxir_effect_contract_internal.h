@@ -237,6 +237,17 @@ typedef struct XirEffectClassAccessRequest {
 XR_FUNC XrXirStatus xir_effects_class_access(const struct XrXirEffects *effects,
     const XirEffectClassAccessRequest *request);
 
+typedef struct XirEffectClassScopeRequest {
+    uint32_t caller,node;
+    bool contextual,pure;
+    XrXirType root_type;
+    XirEffectRuntimeRead read;
+} XirEffectClassScopeRequest;
+/* Paused control has no language instruction. The genuine Instance supplies
+ * its actual frame selection and retains the Class reservation across replay. */
+XR_FUNC XrXirStatus xir_effects_class_scope(const struct XrXirEffects *effects,
+    const XirEffectClassScopeRequest *request);
+
 typedef struct XirEffectInvocationRequest {
     uint32_t caller,instruction,target,producer,node,count,captures;
     bool contextual;

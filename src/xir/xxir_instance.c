@@ -74,7 +74,7 @@ struct XrXirInstance {
     XrXirCallResult failure;
     XrXirValue pending_function;
     uint64_t epoch, metadata_bytes;
-    bool driving, stopping, observing;
+    bool driving, stopping, observing, debug_visiting;
 };
 /* Call notifications share the existing observation exclusion. In particular,
  * stop must reject before revoking the live root's function gate. */
@@ -501,8 +501,9 @@ XR_FUNC XrXirCallStatus xir_instance_visit_vm(XrXirInstance *instance,const XrXi
     if (!instance_owner_current(instance) || !instance || !binding || !entered) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance_observing(instance)) return XR_XIR_CALL_BUSY;
     if (instance->stopping || !instance->call || instance->state==XR_XIR_INSTANCE_FAILED) return XR_XIR_CALL_BAD_STATE;
-    instance->driving=true;XrXirCallStatus status=xir_task_executor_visit_vm(instance->executor,binding,frame,entered);
-    instance->driving=false;return status;
+    instance->driving=true;instance->debug_visiting=true;
+    XrXirCallStatus status=xir_task_executor_visit_vm(instance->executor,binding,frame,entered);
+    instance->debug_visiting=false;instance->driving=false;return status;
 }
 XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64_t quantum) {
     if (!instance_owner_current(instance)) return (XrXirInstanceResult){.outcome = {.status = XR_XIR_CALL_BAD_ARGUMENT}};

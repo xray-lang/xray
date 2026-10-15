@@ -62,6 +62,36 @@ static XrXirCallStatus instance_class_access_begin(XrXirCallView *view,uint32_t 
     else xr_xir_call_class_access_finish(access);
     return status;
 }
+XR_FUNC XrXirCallStatus xir_instance_debug_class_access(XrXirCallView *view,
+    const XrXirValue *value,XrXirCallClassAccess *access) {
+    XrXirInstance *instance=NULL;
+    XrXirCallStatus status=instance_class_view(view,&instance);
+    if (status!=XR_XIR_CALL_READY) return status;
+    if (!value || !access || !instance->driving || !instance->debug_visiting ||
+        !xr_xir_type_is_class(instance->program->types,(XrXirType)value->type)) return XR_XIR_CALL_BAD_STATE;
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    status=admit_instance_value(admission,value,(XrXirType)value->type);
+    if (status!=XR_XIR_CALL_READY) return status;
+    status=value_call_status(xr_xir_call_class_access_prepare(view,value,access));
+    if (status!=XR_XIR_CALL_READY) return status;
+    bool pure=view_is_child(instance,view);
+    if (pure && xr_xir_class_module_storage(value)) status=XR_XIR_CALL_BAD_STATE;
+    const XirEffectInvocationSelection *current=xr_xir_call_invocation(view);
+    uint32_t caller=xr_xir_call_current_entry(view->activation);
+    if (status==XR_XIR_CALL_READY && current &&
+        (current->owner!=instance->program->permissions->effects || current->target!=caller)) status=XR_XIR_CALL_BAD_STATE;
+    if (status==XR_XIR_CALL_READY) {
+        InstanceInvocationRead actual={admission,NULL,view,NULL};
+        XirEffectClassScopeRequest request={.caller=caller,.node=current?current->node:UINT32_MAX,
+            .contextual=current!=NULL,.pure=pure,.root_type=(XrXirType)value->type,
+            .read={.owner=&actual,.work=instance_invocation_work}};
+        XrXirStatus checked=xir_effects_class_scope(instance->program->permissions->effects,&request);
+        status=checked==XR_XIR_OK?XR_XIR_CALL_READY:checked==XR_XIR_BUDGET?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_STATE;
+    }
+    if (status==XR_XIR_CALL_READY) xr_xir_call_class_access_commit(view,access);
+    else xr_xir_call_class_access_finish(access);
+    return status;
+}
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_read_at(XrXirCallView *view,uint32_t instruction,
     const XrXirValue *cell,XrXirValue *output,XrXirFaultDetail *fault) {
     XrXirInstance *instance=NULL;
