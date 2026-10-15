@@ -38,7 +38,8 @@ def main():
             finally: sys.argv = saved
         for previous in sorted((Path(temporary) / 'tests/unit/xir').glob('*74_golden.h')):
             fixed = HERE / previous.name
-            assert previous.read_bytes() == fixed.read_bytes(), previous.name
+            # Header transport line endings do not change frozen packet bytes.
+            assert previous.read_text(encoding='utf-8') == fixed.read_text(encoding='utf-8'), previous.name
             rows = []
             for name, value in arrays(previous):
                 if '74' not in name: continue
@@ -50,7 +51,7 @@ def main():
                 rows.append((name.replace('74', '75'), value))
                 if name == 'checked_scalar74_golden': rows.append(('checked_scalar75_digest', value[32:64]))
             macros = [(name.replace('74', '75'), int(value)) for name, value in
-                      re.findall(r'#define (\w*74\w*) (\d+)u?', previous.read_text())]
+                      re.findall(r'#define (\w*74\w*) (\d+)u?', previous.read_text(encoding='utf-8'))]
             target = HERE / previous.name.replace('74', '75')
             fields.header(target, target.stem.upper() + '_H', rows, args.write, macros)
             records += [{'header': target.name, 'symbol': n, 'bytes': len(v),
