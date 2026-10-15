@@ -98,6 +98,14 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         module.generics=generics;module.declarations=&declarations;
         status=effect_context_owner_build(context,&module,NULL,NULL,&execution);
         if (status==XR_XIR_OK) {
+            if (oracle && context->limits.functions==5) {
+                CHECK(contexts->count==5 && execution->ordinary->count>module.function_count &&
+                    execution->dense->count>module.function_count &&
+                    execution->forest->invocations->final->summary.count==execution->dense->count);
+                fprintf(stderr,"ordinary namespace mode%u declarations%u ordinary%u dense%u final%u function_limit%u\n",
+                    mode,module.function_count,execution->ordinary->count,execution->dense->count,
+                    execution->forest->invocations->final->summary.count,context->limits.functions);
+            }
             uint32_t caller_index=(uint32_t)execution->dense->functions[4].instructions[0].immediate;
             CHECK(caller_index<execution->dense->count);
             uint32_t ordinary=execution->dense->nodes[caller_index].ordinary;
@@ -1467,7 +1475,7 @@ static void conditional_descriptor_failures(void) {
         if (mode<2) rp_fail_at=attempts+mode;
         XrXirStatus expected=mode<2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
         if (mode==3) CHECK(!effect_ordinary_descriptor_alloc(storage,2,SIZE_MAX));
-        else CHECK(effect_ordinary_capacity(storage,mode<2?capacity+1:33)==expected);
+        else CHECK(effect_ordinary_capacity(storage,mode<2?capacity+1:effect_body_entry_limit(&context)+1)==expected);
         CHECK(storage->terms.status==expected &&
             storage->nodes==nodes && storage->functions==functions && storage->count==1 && storage->capacity==capacity);
         CHECK(!memcmp(&node,&storage->nodes[0],sizeof(node)) && !memcmp(&function,&storage->functions[0],sizeof(function)));
@@ -1721,12 +1729,14 @@ static void conditional_nonroot_seed_resources(void) {
 static void conditional_ordinary_environment_keys(void) {
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        context.limits.functions=5;
         uint64_t baseline=rp_stats(&context).live_bytes;
         CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
         rp_owner_free(&context,baseline);rp_balanced(physical);
         size_t sites=0;XrCompileResourceStats single={0};
         for (size_t pass=0;pass<=sites;++pass) {
-            physical=rp_mark();context=rp_owner(rp_caps());XrCompileResourceStats entry=rp_stats(&context);
+            physical=rp_mark();context=rp_owner(rp_caps());context.limits.functions=5;
+            XrCompileResourceStats entry=rp_stats(&context);
             RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
             rp_attempts=0;rp_injected=false;rp_fail_at=pass?pass-1:SIZE_MAX;
             XrXirStatus status=conditional_resource_case(&context,mode);rp_fail_at=SIZE_MAX;
@@ -1764,6 +1774,15 @@ int main(int argc, char **argv) {
     if (argc==2 && !strcmp(argv[1],"--final-retirement-literals")) {
         invocation_final_retirement_literals();
         CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--ordinary-environment-literals")) {
+        for (uint32_t mode=0;mode<4;++mode) {
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+            context.limits.functions=5;uint64_t baseline=rp_stats(&context).live_bytes;
+            CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
+            rp_owner_free(&context,baseline);rp_balanced(physical);
+        }
+        CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--ordinary-environment-keys")) {
         conditional_ordinary_environment_keys();CHECK(!rp_live && !rp_live_bytes);return 0;
