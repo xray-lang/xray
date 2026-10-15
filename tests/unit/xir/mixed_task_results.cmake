@@ -22,7 +22,9 @@ add_executable(test_xir_mixed_task_result_pending xir/test_xir_mixed_task_result
 target_link_libraries(test_xir_mixed_task_result_pending PRIVATE xray_xir_vm xray_xir_scalar)
 add_executable(test_xir_mixed_task_pending_resources xir/test_xir_mixed_task_pending_resources.c "${XIR_MIXED_TASK_RESULT_C}")
 target_link_libraries(test_xir_mixed_task_pending_resources PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(task_result_target IN ITEMS test_xir_mixed_task_result_producer test_xir_mixed_task_result_lifetime test_xir_mixed_task_result_resources test_xir_mixed_task_source_compiler test_xir_mixed_task_result_pending test_xir_mixed_task_pending_resources)
+add_executable(test_xir_mixed_task_cancel_prefix xir/test_xir_mixed_task_cancel_prefix.c "${XIR_MIXED_TASK_RESULT_C}")
+target_link_libraries(test_xir_mixed_task_cancel_prefix PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(task_result_target IN ITEMS test_xir_mixed_task_result_producer test_xir_mixed_task_result_lifetime test_xir_mixed_task_result_resources test_xir_mixed_task_source_compiler test_xir_mixed_task_result_pending test_xir_mixed_task_pending_resources test_xir_mixed_task_cancel_prefix)
     set_target_properties(${task_result_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${task_result_target} PRIVATE /W4 /WX /utf-8)
@@ -51,6 +53,10 @@ foreach(task_compiler_backend IN ITEMS 0 1 vm native)
     endforeach()
 endforeach()
 foreach(task_result_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_task_cancel_prefix_${task_result_backend}
+        COMMAND test_xir_mixed_task_cancel_prefix ${task_result_backend})
+    set_tests_properties(test_xir_mixed_task_cancel_prefix_${task_result_backend} PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;ownership;generated-c;lifecycle;compound;cancel;prefix")
     add_test(NAME test_xir_mixed_task_pending_resources_${task_result_backend}_axes
         COMMAND test_xir_mixed_task_pending_resources ${task_result_backend} axes)
     set_tests_properties(test_xir_mixed_task_pending_resources_${task_result_backend}_axes PROPERTIES

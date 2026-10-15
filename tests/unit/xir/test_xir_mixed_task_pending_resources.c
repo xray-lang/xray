@@ -158,6 +158,7 @@ static size_t task_pending_resource_number(const char *text) {
     char *end = NULL; unsigned long number = strtoul(text, &end, 10);
     CHECK(text[0] && end && !*end && number < 20000); return (size_t)number;
 }
+#ifndef XR_TASK_CANCEL_PREFIX_MAIN
 int main(int argc, char **argv) {
     CHECK(argc == 3 || argc == 5); (void)task_late_graph; (void)task_result_axes;
     static const char *const names[] = {"0", "1", "vm", "native"}; unsigned backend = 0;
@@ -180,3 +181,4 @@ int main(int argc, char **argv) {
         backend, mode, sites);
     return 0;
 }
+#endif
