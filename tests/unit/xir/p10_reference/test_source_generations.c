@@ -106,7 +106,46 @@ static void failed_runtime(XrXirSourceGenerations *owner,XrXirInstance *instance
     CHECK(xr_xir_compile_source_generation_lookup(owner,"value",&binding)==XR_XIR_OK && binding.generation==first);
     xr_xir_compile_program_drop(candidate);
 }
-int main(void) {
+static int history_check(const char *mode) {
+    const char *next=!strcmp(mode,"--history-function") ?
+        "export fn answer()->i64{return old()+1}" : !strcmp(mode,"--history-generic") ?
+        "export fn answer()->i64{return identity<i64>(42)}" : !strcmp(mode,"--history-type") ?
+        "export fn answer()->i64{const item=Item{value:42};return item.value}" : NULL;
+    CHECK(next);
+    SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
+    XrXirSourceGenerationConfig config={compiler.context,"history-check-test",NULL,NULL,NULL};
+    XrXirSourceGenerations *owner=NULL;CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
+    uint64_t first=prepare(owner,"fn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}");
+    XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK);
+    const struct AstNode *original=view.ast;
+    uint32_t entry=0;XrXirProgram *initial=program(&view,"seed",&entry);
+    XrXirInstanceConfig runtime_config;CHECK(xr_xir_instance_config_init(&runtime_config,sizeof(runtime_config))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_generation_new(&runtime_config,&instance)==XR_XIR_CALL_READY);
+    uint64_t runtime=0;CHECK(xr_xir_instance_generation_prepare(instance,initial,&runtime)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
+    XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(result.type==XR_XIR_I64 && !result.payload);xr_xir_value_drop(&result);
+    CHECK(xr_xir_instance_generation_publish(instance,runtime)==XR_XIR_CALL_READY);source_publish(&compiler,owner,first);
+    uint64_t serial=0;XrXirSourceDiagnostic diagnostic={0};const XrXirSourceText text={NULL,next,strlen(next)};
+    XrXirStatus status=xr_xir_compile_source_generation_prepare(owner,&text,&serial,&diagnostic);
+    printf("history mode=%s source=%u line=%d serial=%llu message=%s\n",mode,(unsigned)status,
+        diagnostic.line,(unsigned long long)serial,diagnostic.message);
+    XrXirSourceGenerationBinding binding={0};
+    CHECK(xr_xir_compile_source_generation_lookup(owner,"old",&binding)==XR_XIR_OK && binding.generation==first);
+    CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK && view.published && view.ast==original);
+    if (status==XR_XIR_OK) {
+        CHECK(serial>first && xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK && view.parent==first);
+        CHECK(xr_xir_compile_source_generation_abort(owner,serial)==XR_XIR_OK);
+    } else CHECK(!serial);
+    xr_xir_compile_source_generations_free(owner);xr_xir_compile_program_drop(initial);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);source_fixture_owner_free(&compiler);
+    CHECK(status==XR_XIR_OK);
+    puts("Published historical declaration entered ordinary Source checking; candidate aborted without runtime/storage qualification");
+    return 0;
+}
+int main(int argc,char **argv) {
+    if (argc==2) return history_check(argv[1]);
+    CHECK(argc==1);
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     char namespace_id[]="source-generation-test";
     XrXirSourceGenerationConfig config={compiler.context,namespace_id,NULL,NULL,NULL};
