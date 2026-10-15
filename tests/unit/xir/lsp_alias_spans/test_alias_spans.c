@@ -113,7 +113,7 @@ done:
 #include "alias_resources.h"
 static XrXirStatus rejected_once(unsigned mode,XrCompileResourceLimits bounds,XrCompileResourceStats *stats) {
     const char *texts[]={"type Pair<T,T> = {a:T}\n","type Pair<T:Sendable> = {a:T}\n","type Loop = Loop\n","type Mapper<T> = (T)->T"};
-    const char *messages[]={"duplicate type parameter","do not support constraints","circular type alias","expected expression"};
+    const char *messages[]={"duplicate type parameter","do not support constraints","circular type alias","function types are written"};
     CHECK(mode<4);XrCompileResources *r=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *syntax=NULL;
     XrXirStatus s=resource_status(xr_compile_resources_new(&bounds,&r));
     if(s==XR_XIR_OK){XrCompilerSessionStatus opened=xr_compile_session_new(r,&session);
