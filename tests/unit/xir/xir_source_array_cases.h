@@ -200,7 +200,18 @@ static void source_array_runtime_failures(XrXirProgram *program, uint32_t entry,
             CHECK(runtime_attempts > runtime_fail_at && status == expected);
         }
         runtime_fail_at = SIZE_MAX;
-        if (instance) CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+        if (instance) {
+            bool idle = xr_xir_task_executor_root_idle(instance->executor);
+            XrXirCallStatus completed = idle ? xr_xir_task_executor_completion_status(instance->executor) : XR_XIR_CALL_BAD_STATE;
+            /* An authenticated driver fault remains this epoch's retirement
+             * status; failures before polling never entered that driver. */
+            XrXirCallStatus expected = site && !strcmp(phase, "poll") ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+            XrXirCallStatus retired = xr_xir_instance_free(instance);
+            if (retired != expected) fprintf(stderr,
+                "Array runtime free site=%zu/%zu phase=%s status=%u idle=%u completed=%u retired=%u physical=%zu/%zu baseline=%zu/%zu\n",
+                site, sites, phase, status, (unsigned)idle, completed, retired, runtime_live, runtime_bytes, baseline_live, baseline_bytes);
+            CHECK(retired == expected);
+        }
         CHECK(runtime_live == baseline_live && runtime_bytes == baseline_bytes);
     }
     printf("Source Array runtime: %zu allocation failure sites leave no live instance ownership\n", sites);
