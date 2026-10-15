@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
         XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
         XrXirSourceRequest request = {session, XR_SOURCE_FIXTURES "/root.xr", &authority,
-            &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+            &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
         unit_compile_attempts = 0; unit_compile_fail_at = pass ? pass - 1 : SIZE_MAX;
         unit_compile_injected = false;
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

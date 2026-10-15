@@ -16,7 +16,7 @@ static void atomic_ordering_dependencies(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
-    XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult source={0};CHECK(xr_xir_compile_source_check(&request,&source,NULL,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source.snapshot);

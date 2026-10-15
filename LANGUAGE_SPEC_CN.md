@@ -7785,6 +7785,14 @@ compiler-private输出政策版本为2，XR_XIR_CTFE_MAX_OUTPUT_BYTES固定为83
 
 政策版本2及硬帽属于compiler产物/未来持久CTFE缓存身份，不能只用公开签名或Checked函数摘要。任何持久结果键还必须包含完整私有依赖/准入/编译器与XIR身份、目标profile、授权、全部请求限制和原预算策略；较大预算成功不能变成较小预算的免费命中，失效失败不能由旧政策复用。当前evaluator与Source路径没有持久结果缓存；每次请求均完整验证、执行和计费，内部类型费用缓存只在单次执行内存活。该政策身份不宣称已实现缓存系统。局部Windows验证不等于完整P11、完整provider/sanitizer资格或生产发布。
 
+### 17.62 Source每请求逻辑结果限额
+
+compiler-private Source请求提供可选XrXirSourceComptimeLimits.output_bytes，借用仅在同步检查内有效。NULL政策使用17.61的8388608上限；显式0只允许逻辑零字节的comptime结果，不表示默认。请求数字在发现/构造前复制进SourceContext，第二次独立Source构造保留同值；每个comptime站点向唯一既有CTFE请求传递此上界，未改变evaluator、Value表示、输出计量或任何其它原预算。
+
+上界大于8388608的Source请求返回BAD_STRUCTURE，求值/额外账本收费之前拒绝且不发布结果；占用Checked/snapshot输出同样保全。8字节Source请求对原9字节Array、十项Fibonacci及16字节pair返回BUDGET、位置有效且无Checked/snapshot；9/10/16精确请求可接收完整独立recipe并经普通Checker/packet/VM核值，minus-one仍拒绝。Unit与空String在0限额可接收；普通运行期返回值不因未发生comptime求值而受此输出帽限制。
+
+失败后可在同一原owner上使用合适限额重试；所有失败前缀、重试、描述和独立receiving仍累计原allocated/work，不退款或重置。政策不授予字段权限、构造权或生成声明免检资格，不改变完整FI、600/60/原普通时限及安全/provider门。Source/authority/policy/session生产者死亡后，已发布结果仍独立拥有。当前evaluator没有持久CTFE结果缓存，较大限额成功不能为较小请求提供免费成功。
+
 ---
 
 ## 18. 错误码 (Error Codes)

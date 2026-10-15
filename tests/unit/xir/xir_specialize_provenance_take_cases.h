@@ -22,7 +22,7 @@ static XrXirStatus provenance_take_fixture(const XrXirCompileContext *context,
     if(opened!=XR_COMPILER_SESSION_OK)
         return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-take",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,provenance_take_text,sizeof(provenance_take_text)-1};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,&failure);
@@ -417,7 +417,7 @@ static void provenance_source_types_controls(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-source-types",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};char *failure=NULL;
     CHECK(xr_xir_compile_source_check_text(&request,&input,&result,NULL,&failure)==XR_XIR_OK && result.checked);
     xr_compile_session_free(session);xr_compile_resources_free(failure);

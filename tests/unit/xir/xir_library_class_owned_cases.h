@@ -33,7 +33,7 @@ static void library_class_owned_case(void) {
     library_typed_closed_negative(catalog,authority,"import \"./class_owned\" as lib;export fn result()->i64{var box:lib.Defaulted;return 41;}",XR_XIR_BAD_TYPE);
     library_typed_closed_negative(catalog,authority,"import \"./class_owned\" as lib;export fn result()->i64{const box=lib.Box<i64>{value:41,text:\"owned\"};return 41;}",XR_XIR_BAD_TYPE);
     XrCompilerSession *session=library_session_new(library_context);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/class_owned_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/class_owned_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"library class %u %s\n",status,diagnostic.message);

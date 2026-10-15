@@ -21,7 +21,7 @@ static XrXirStatus source_facts_case_fixture(const XrXirCompileContext *context,
     if (opened!=XR_COMPILER_SESSION_OK)
         return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-facts",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};char *failure=NULL;
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,NULL,&failure);
     if (status==XR_XIR_OK) { *output=result.checked;result.checked=NULL; }
@@ -101,7 +101,7 @@ static void source_facts_case_empty_types(void) {
     CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     static const char text[]="export fn plain(value:i64)->i64{return value+1}\nprint(plain(41))\n";
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-empty-types",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult output={0};
     CHECK(xr_xir_compile_source_check_text(&request,&input,&output,NULL,NULL)==XR_XIR_OK);
     XrXirArtifact *source=output.checked;output.checked=NULL;

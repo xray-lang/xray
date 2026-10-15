@@ -744,6 +744,14 @@ compiler-private输出政策版本为2，XR_XIR_CTFE_MAX_OUTPUT_BYTES固定为83
 
 政策版本2及硬帽属于compiler产物/未来持久CTFE缓存身份，不能只用公开签名或Checked函数摘要。任何持久结果键还必须包含完整私有依赖/准入/编译器与XIR身份、目标profile、授权、全部请求限制和原预算策略；较大预算成功不能变成较小预算的免费命中，失效失败不能由旧政策复用。当前evaluator与Source路径没有持久结果缓存；每次请求均完整验证、执行和计费，内部类型费用缓存只在单次执行内存活。该政策身份不宣称已实现缓存系统。局部Windows验证不等于完整P11、完整provider/sanitizer资格或生产发布。
 
+### 17.62 Source每请求逻辑结果限额
+
+compiler-private Source请求提供可选XrXirSourceComptimeLimits.output_bytes，借用仅在同步检查内有效。NULL政策使用17.61的8388608上限；显式0只允许逻辑零字节的comptime结果，不表示默认。请求数字在发现/构造前复制进SourceContext，第二次独立Source构造保留同值；每个comptime站点向唯一既有CTFE请求传递此上界，未改变evaluator、Value表示、输出计量或任何其它原预算。
+
+上界大于8388608的Source请求返回BAD_STRUCTURE，求值/额外账本收费之前拒绝且不发布结果；占用Checked/snapshot输出同样保全。8字节Source请求对原9字节Array、十项Fibonacci及16字节pair返回BUDGET、位置有效且无Checked/snapshot；9/10/16精确请求可接收完整独立recipe并经普通Checker/packet/VM核值，minus-one仍拒绝。Unit与空String在0限额可接收；普通运行期返回值不因未发生comptime求值而受此输出帽限制。
+
+失败后可在同一原owner上使用合适限额重试；所有失败前缀、重试、描述和独立receiving仍累计原allocated/work，不退款或重置。政策不授予字段权限、构造权或生成声明免检资格，不改变完整FI、600/60/原普通时限及安全/provider门。Source/authority/policy/session生产者死亡后，已发布结果仍独立拥有。当前evaluator没有持久CTFE结果缓存，较大限额成功不能为较小请求提供免费成功。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1598,5 +1606,13 @@ The same original compiler ledger retains128000000 work,64MiB cumulative allocat
 Results retain authentic TypeArena, Domain and nested field ownership. Complete vectors survive Source/Artifact/ledger caller death and final drop allocates nothing while restoring live bytes. Source independently rebuilds complete ordinary Array/Tuple/String recipes from the same immutable graph, preserving actual capacity, types and byte lengths; no CTFE pointer enters Checker storage. Version2 grants no Class/Function/Error/PanicInfo identity exports, foreign cross-arena receiving, private construction permission or new effects. Complete closure, target/profile/Checked digest and existing admission still reverify. Value/Call/Instance ABI, schema and opcodes remain unchanged.
 
 Policy version2 and its hard ceiling belong to compiler artifact and future persistent CTFE cache identity; a public signature or Checked function digest alone is insufficient. Any persistent result key must also bind complete private dependencies/admission/compiler and XIR identities, target profile, authority, every requested limit and original budget policy. Success at a larger budget cannot become a free smaller-budget hit and old policy results cannot override current refusals. The current evaluator and Source path have no persistent result cache: each request fully verifies, executes and pays; internal type-cost caches live only within one execution. This policy identifier claims no implemented cache system. Local Windows evidence establishes neither complete P11, full provider/sanitizer qualification nor production release.
+
+### 17.62 Per-request Source logical result limits
+
+The compiler-private Source request accepts optional XrXirSourceComptimeLimits.output_bytes, borrowed only during synchronous checking. A NULL policy selects the8388608 maximum from17.61; explicit0 admits only logically empty comptime results and does not select a default. The numeric limit is copied into SourceContext before discovery/construction and retained by the independent second Source construction. Every comptime site forwards this bound to the sole existing CTFE request without changing the evaluator, Value representation, logical measurement or any other original quota.
+
+A Source limit above8388608 returns BAD_STRUCTURE before evaluation or additional ledger charges and publishes no result. Occupied Checked/snapshot output is preserved too. An8-byte Source request rejects the original9-byte Array, ten-element Fibonacci and16-byte pair with BUDGET, an actual location and no Checked/snapshot. Exact9/10/16 requests receive complete independent recipes through ordinary Checker/packet/VM value checks; minus-one still rejects. Unit and empty String accept0; an ordinary runtime result is not subject to this comptime output cap when no comptime evaluation occurs.
+
+A suitable limit may retry on the same original owner. Every failed prefix, retry, description and independent receiving still accumulates original allocated/work charges without refunds or reset. This policy grants no field access, construction authority or unchecked generated declarations, and changes no complete FI,600/60/original normal timeout or safety/provider gate. Published results own their data after Source/authority/policy/session producer death. The current evaluator has no persistent CTFE result cache; a larger-limit success cannot grant a free smaller-request success.
 
 <!-- /xr-spec:en -->

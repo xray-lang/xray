@@ -63,7 +63,7 @@ int main(int argc,char **argv) {
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,argv[1]};
-    XrXirSourceProductRequest request={{session,argv[2],&authority,&context,argv[3],NULL,XR_XIR_PROGRAM,NULL},
+    XrXirSourceProductRequest request={{session,argv[2],&authority,&context,argv[3],NULL,XR_XIR_PROGRAM,NULL,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     reject_foreign_lockfile(&request.source);
     XrOsIoPolicy policy=xr_compile_io_policy(resources); XrLockfile *lock=NULL;

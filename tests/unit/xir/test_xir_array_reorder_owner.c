@@ -103,7 +103,7 @@ static ReorderCompile source_compile(size_t failure, uint64_t work) {
         goto done;
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_REORDER_OWNER_FIXTURES};
-    XrXirSourceRequest request={session,XR_REORDER_OWNER_FIXTURES "/root.xr",&authority,&run.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_REORDER_OWNER_FIXTURES "/root.xr",&authority,&run.context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     run.status=xr_xir_compile_source_check(&request,&result,&source_diagnostic,&failure_path);
     if (run.status!=XR_XIR_OK) {
         CHECK(!result.checked && !result.snapshot);

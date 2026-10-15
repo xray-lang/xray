@@ -72,7 +72,7 @@ static XrXirArtifact *unit_destructure_cell_check(const XrXirCompileContext *con
     XrXirLinkageKind kind,const XrXirLibraryCatalog *catalog,bool negatives) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     if (negatives && kind==XR_XIR_PROGRAM) unit_destructure_cell_source_negatives(&request);
     else if (negatives) {

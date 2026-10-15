@@ -29,7 +29,7 @@ static void source_requirement_value_allocations(void) {
         "[[declarations.function]]\nmodule=\"root.xr\"\nname=\"invoke\"\nno_suspend_parameters=[\"f\"]\nno_suspend=true\n"
         "[[declarations.function]]\nmodule=\"root.xr\"\nname=\"bind\"\nno_suspend=true\n")};
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL,NULL};
     for (uint32_t mode=0;mode<2;++mode) {
         FILE *file=fopen(path,"wb"); CHECK(file);
         CHECK(fputs(programs[mode],file)>=0 && fclose(file)==0);

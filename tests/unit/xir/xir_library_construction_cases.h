@@ -154,7 +154,7 @@ static void library_construction_case(void) {
     library_typed_closed_negative(catalog,authority,"import \"./construction\" as lib;struct Holder{const value:lib.Explicit;}export fn result()->i64{const h=Holder();return h.value.n;}",XR_XIR_BAD_TYPE);
     library_typed_closed_negative(catalog,authority,"import \"./construction\" as lib;export fn result()->i64{return lib.PrivateCtor().n;}",XR_XIR_BAD_TYPE);
     XrCompilerSession *session=library_session_new(library_context);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/construction_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/construction_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"construction source %u %s\n",status,diagnostic.message);

@@ -32,7 +32,7 @@ static void library_enum_owned_case(void) {
     library_typed_closed_negative(catalog,authority,"import \"./enum_owned\" as lib;export fn result()->i64{const x=lib.Packet<i64>.Value{item:41};return 41;}",XR_XIR_BAD_TYPE);
     library_typed_closed_negative(catalog,authority,"import \"./enum_owned\" as lib;export fn result()->i64{const x=lib.Packet<i64>.Value{item:\"bad\",text:\"owned\"};return 41;}",XR_XIR_BAD_TYPE);
     XrCompilerSession *session=library_session_new(library_context);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/enum_owned_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/enum_owned_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"library enum %u %s\n",status,diagnostic.message);

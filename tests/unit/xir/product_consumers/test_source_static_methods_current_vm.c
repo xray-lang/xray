@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
-    XrXirSourceProductRequest request = {{session, file, &authority, context, argv[3], NULL, XR_XIR_PROGRAM, NULL},
+    XrXirSourceProductRequest request = {{session, file, &authority, context, argv[3], NULL, XR_XIR_PROGRAM, NULL,NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);

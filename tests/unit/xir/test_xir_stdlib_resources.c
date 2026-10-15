@@ -36,7 +36,7 @@ static XrXirStatus resource_prepare(const XrXirCompileContext *context,
         goto finish;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog,NULL};
     status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if (status != XR_XIR_OK) goto finish;
     status = xr_xir_compile_checked_write(result.checked,&packet,NULL);

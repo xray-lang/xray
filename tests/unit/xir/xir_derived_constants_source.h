@@ -27,7 +27,7 @@ static XrXirStatus constant_source(const XrXirCompileContext *context,const char
         return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:
             opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
     }
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,bytes,length};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,diagnostic,NULL);
     xr_compile_session_free(session);memset(bytes,0xa5,sizeof(bytes));memset(name,0xa5,sizeof(name));

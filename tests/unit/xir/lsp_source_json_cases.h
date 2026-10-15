@@ -96,7 +96,7 @@ static void lsp_json_cases(const char *root) {
         {root_uri,source_root_text,strlen(root_uri),sizeof(source_root_text)-1,1},
         {library_uri,source_library_text,strlen(library_uri),sizeof(source_library_text)-1,7}};
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XlspSourceSnapshot *snapshot=NULL;CHECK(xlsp_source_snapshot_build(&request,documents,2,0,&snapshot,NULL,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);xr_compile_resources_release(context.resources);
     size_t sites=0;

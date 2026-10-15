@@ -43,7 +43,7 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
         goto finish;
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog,NULL};
     preparation_stage_offsets[3] = effects_compile_attempts-first_attempt;
     *stage = 3;
     status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);

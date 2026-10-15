@@ -131,7 +131,7 @@ static XrXirStatus views_session(H1Compiler *c) {
 static XrXirStatus views_source_request(H1Compiler *c,const char *path,XrXirLinkageKind kind,
     const XrXirLibraryCatalog *catalog,XrXirArtifact **output) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_PARAMETER_NATIVE_FIXTURES};
-    XrXirSourceRequest request={c->session,path,&authority,&c->context,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={c->session,path,&authority,&c->context,NULL,NULL,kind,catalog,NULL};
     unsigned char saved[sizeof(request)];memcpy(saved,&request,sizeof(request));
     XrXirSourceResult result={0},empty={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);

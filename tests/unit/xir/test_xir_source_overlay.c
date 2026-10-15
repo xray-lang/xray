@@ -50,7 +50,7 @@ static XrXirStatus overlay_source_check(const char *root, unsigned mode,
         inputs[0].length = strlen(texts[0]);
     }
     if (status == XR_XIR_OK) {
-        XrXirSourceRequest request = {session, paths[0], &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        XrXirSourceRequest request = {session, paths[0], &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
         XrXirSourceDiagnostic diagnostic = {0};
         status = xr_xir_compile_source_check_overlay(&request, inputs, count, output, &diagnostic, NULL);
         CHECK(diagnostic.status == status);
@@ -148,7 +148,7 @@ static void overlay_catalog_collision(const char *root) {
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
     char path[XR_TEST_PATH_MAX]; CHECK(snprintf(path, sizeof(path), "%s/lib.xr", root) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, root};
-    XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_LIBRARY, NULL};
+    XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_LIBRARY, NULL,NULL};
     const char source[] = "export fn value()->i64 { return 41 }\n"; XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check_text(&request, &(XrXirSourceText){"lib.xr", source, sizeof(source)-1}, &result, NULL, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0}; CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK);

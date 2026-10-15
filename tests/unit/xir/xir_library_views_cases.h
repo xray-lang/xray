@@ -12,7 +12,7 @@ static const char *library_views_names[]={"views_api.xr","views_left.xr","views_
 static XrXirCheckedPacket library_views_packet(const char *entry,XrModuleIdentityAuthority authority,
     const char *const *names,size_t name_count,XrXirLibraryModuleInput *bindings,size_t *count) {
     XrCompilerSession *session=library_session_new(library_context);
-    XrXirSourceRequest request={session,entry,&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,entry,&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"views producer %u %s\n",status,diagnostic.message);
@@ -107,7 +107,7 @@ static void library_views_case(unsigned mode) {
     for(unsigned i=0;i<2;++i)xr_xir_compile_checked_packet_free(&packets[i]);
     memset(bindings,0,sizeof(bindings));memset(inputs,0,sizeof(inputs));
     XrCompilerSession *consumer=library_session_new(library_context);
-    XrXirSourceRequest request={consumer,XR_SOURCE_FIXTURES "/views_root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={consumer,XR_SOURCE_FIXTURES "/views_root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"views consumer %u %s\n",status,diagnostic.message);

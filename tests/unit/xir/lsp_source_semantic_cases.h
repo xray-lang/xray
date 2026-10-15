@@ -40,7 +40,7 @@ static XrXirStatus semantic_once(const char *root,XrCompileResourceLimits limits
     XrXirStatus status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     char uri[XR_TEST_PATH_MAX],new_text[sizeof(semantic_source)+1];lsp_uri(uri,sizeof(uri),root,"semantic.xr");new_text[0]='\n';memcpy(new_text+1,semantic_source,sizeof(semantic_source));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     for(unsigned i=0;i<2&&status==XR_XIR_OK;++i) {
         XlspSourceDocument doc={uri,i?new_text:semantic_source,strlen(uri),sizeof(semantic_source)-1+i,(int64_t)i+1};
         status=xlsp_source_snapshot_build(&request,&doc,1,0,&snap[i],NULL,NULL);
@@ -101,7 +101,7 @@ static void lsp_semantic_cases(const char *root) {
     char uri[XR_TEST_PATH_MAX];lsp_uri(uri,sizeof(uri),root,"method.xr");
     static const char method[]="struct S { f()->i64 { return 1 } }\n";
     XlspSourceDocument document={uri,method,strlen(uri),sizeof(method)-1,1};
-    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XlspSourceSnapshot *snapshot=NULL;CHECK(xlsp_source_snapshot_build(&request,&document,1,0,&snapshot,NULL,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);xr_compile_resources_release(context.resources);XlspSourceTokens *tokens=NULL;
     CHECK(xlsp_source_semantic_tokens(snapshot,uri,strlen(uri),&tokens)==XR_XIR_OK&&tokens);

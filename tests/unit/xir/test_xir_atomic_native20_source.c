@@ -21,7 +21,7 @@ static XrXirStatus atomic_build(AtomicCompileOwner *owner,XrXirSourceProduct **p
     if(ss!=XR_COMPILER_SESSION_OK)return ss==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ATOMIC_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ATOMIC_FIXTURES "/root.xr",&authority,&owner->context,
-        XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,product,&diagnostic);
     if(status!=XR_XIR_OK && !atomic_program_compile_injected)fprintf(stderr,"Atomic source status=%u stage=%u line=%d %s\n",status,diagnostic.stage,diagnostic.source.line,diagnostic.source.message);

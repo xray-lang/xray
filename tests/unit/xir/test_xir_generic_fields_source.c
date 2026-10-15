@@ -93,7 +93,7 @@ int main(int argc,char **argv) {
         XrCompilerSession *session=NULL;
         CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
         const XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,
-            &owner->context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+            &owner->context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
         /* Fault ordinals cover Source Check, including all receiving metadata
          * allocators. Parser session setup is a separate resource boundary. */
         source_attempts=0; source_fail_at=pass ? pass-1 : SIZE_MAX; source_injected=false;

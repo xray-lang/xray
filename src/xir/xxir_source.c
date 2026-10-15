@@ -248,6 +248,7 @@ typedef struct SourceContext {
     SourceComptimeSite *comptime_sites;
     const SourceComptimeSite *comptime_input;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
+    uint64_t comptime_output_bytes;
     SourceExpressionPlan *active_expression;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;

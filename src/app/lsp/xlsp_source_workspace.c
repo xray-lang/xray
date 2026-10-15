@@ -88,7 +88,7 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
     for(size_t i=0;i<count;++i) {
         XrXirSourceRequest request={w->session,xr_cli_compile_graph_authority_source_path(w->authorities[i]),
             &identities[i],&w->context,w->stdlib.path,xr_cli_compile_graph_authority_lockfile(w->authorities[i]),
-            XR_XIR_PROGRAM,w->catalog};
+            XR_XIR_PROGRAM,w->catalog,NULL};
         XrXirSourceDiagnostic diagnostic={0};char *failure_path=NULL;
         status=xlsp_source_snapshot_build_authorities(&request,documents,identities,count,i,&w->snapshots[i],&diagnostic,&failure_path);
         if(status!=XR_XIR_OK) {

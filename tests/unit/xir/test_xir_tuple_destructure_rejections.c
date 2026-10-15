@@ -27,7 +27,7 @@ int main(void) {
         CHECK(length>0 && (size_t)length<sizeof(entry));
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TUPLE_DESTRUCTURE_REJECTED};
         XrXirSourceProductRequest request={{session,entry,&authority,context,XR_TUPLE_DESTRUCTURE_STDLIB,NULL,
-            XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+            XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
         XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
         if(status!=cases[i].expected)fprintf(stderr,"%s got=%u expected=%u stage=%u line=%d: %s\n",

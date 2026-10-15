@@ -199,7 +199,7 @@ static void product_crossed_owners(XrXirSourceProduct *product,const char *direc
     int length=snprintf(path,sizeof(path),"%s/product2.xr",directory);CHECK(length>0 && (size_t)length<sizeof(path));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(product->context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
-    XrXirSourceProductRequest request={{session,path,&authority,&product->context,stdlib,NULL,XR_XIR_PROGRAM,NULL},
+    XrXirSourceProductRequest request={{session,path,&authority,&product->context,stdlib,NULL,XR_XIR_PROGRAM,NULL,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *other=NULL;CHECK(xr_xir_compile_source_product_build(&request,&other,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);memset(&request,0xcc,sizeof(request));memset(&authority,0xcc,sizeof(authority));

@@ -369,7 +369,7 @@ static void array_source_allocations(void) {
     CHECK(fputs("fn first<T>(a:Array<T>)->T{return a[0]}\nvar a=[\"x\"]\na.push(a[0])\na.set(0,\"y\")\n"
         "print(len(a),first<string>(a),a.get(1))\n", file) >= 0 && fclose(file) == 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {NULL, path, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, path, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     size_t sites = allocation_case_begin(18);
     for(size_t site=allocation_first();allocation_more(site,sites);site=allocation_next(site)) {
         source_fixture_compile_attempts = 0; source_fixture_compile_fail_at = site ? site - 1 : SIZE_MAX; source_fixture_compile_injected=false;
@@ -474,7 +474,7 @@ static void method_promise_allocations(void) {
         "print(invoke(Box<i64>{value:23}.get),Box<i64>{value:29}.call())\n", file) >= 0);
     CHECK(fclose(file) == 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {NULL, path, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, path, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     char manifest_path[8192];
     CHECK(snprintf(manifest_path, sizeof(manifest_path), "%s/xray.toml", absolute) > 0);
     file = fopen(manifest_path, "wb"); CHECK(file);
@@ -514,7 +514,7 @@ static void method_promise_allocations(void) {
 #include "xir_call_storage_cases.h"
 static void source_root_allocations(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {NULL, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirArtifact *artifact = NULL;
     size_t count=allocation_case_begin(17);
     if(allocation_mode!=2){

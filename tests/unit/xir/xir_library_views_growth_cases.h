@@ -51,7 +51,7 @@ static void library_views_growth_case(void) {
     xr_xir_compile_checked_packet_free(&packet);memset(bindings,0,sizeof(bindings));memset(storage,0,sizeof(storage));memset(&input,0,sizeof(input));
     library_views_growth_graph(catalog,authority);
     XrCompilerSession *consumer=library_session_new(library_context);
-    XrXirSourceRequest request={consumer,XR_SOURCE_FIXTURES "/views_chain_root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={consumer,XR_SOURCE_FIXTURES "/views_chain_root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"views17 consumer %u %s\n",status,diagnostic.message);

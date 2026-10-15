@@ -63,7 +63,7 @@ static XrXirStatus default_input(const XrXirCompileContext *context,XrXirArtifac
     XrCompilerSessionStatus setup=xr_compile_session_new(context->resources,&session);
     XrXirStatus status=setup==XR_COMPILER_SESSION_OK?XR_XIR_OK:setup==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     if(status==XR_XIR_OK)status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status==XR_XIR_OK){CHECK(result.checked && result.snapshot);*output=result.checked;result.checked=NULL;}
     else if(status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)fprintf(stderr,"source %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

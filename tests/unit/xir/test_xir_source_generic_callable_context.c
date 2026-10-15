@@ -46,7 +46,7 @@ static void source_generic_definition_source_negative(const XrXirCompileContext 
     XrCompileResourceStats baseline=library_compile_stats(context);XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-generic-definition-negative",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceResult result={0};
     XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);
@@ -167,7 +167,7 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
         opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY);
     if(opened!=XR_COMPILER_SESSION_OK)return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-generic-callable-context",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,source_generic_definition_text,sizeof(source_generic_definition_text)-1};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;

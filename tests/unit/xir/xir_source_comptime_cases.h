@@ -95,7 +95,7 @@ static void source_comptime_test_occupied(void) {
     CHECK(source_comptime_test_build(&context,source_comptime_test_text,&output,&diagnostic)==XR_XIR_OK);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-comptime",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText text={NULL,source_comptime_test_text,sizeof(source_comptime_test_text)-1};
     XrXirSourceResult original=output;XrCompileResourceStats before=source_comptime_test_stats(&context);
     size_t attempts=source_fixture_compile_attempts;

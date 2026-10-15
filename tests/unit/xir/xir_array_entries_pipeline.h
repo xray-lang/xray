@@ -119,7 +119,7 @@ static EntriesCompile entries_build(size_t failure, XrCompileResourceLimits limi
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ENTRIES_FIXTURES};
     XrXirSourceRequest request = {session, XR_ENTRIES_FIXTURES "/" XR_ENTRIES_COMPONENT "/root.xr", &authority,
-        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     entries_profile_stage(&run, "session-new");
     run.stage = 1; run.status = xr_xir_compile_source_check(&request, &result, &diagnostic, &path);
     if (run.status != XR_XIR_OK) {

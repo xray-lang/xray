@@ -219,7 +219,7 @@ int main(int argc,char **argv) {
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,argv[1]};
-    XrXirSourceProductRequest request={{session,argv[2],&authority,&context,argv[3],NULL,XR_XIR_PROGRAM,NULL},
+    XrXirSourceProductRequest request={{session,argv[2],&authority,&context,argv[3],NULL,XR_XIR_PROGRAM,NULL,NULL},
                                      {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     bool scan=!strcmp(argv[7],"scan");product_guards(&request);
     if (scan && !strcmp(argv[4],"accept")) {product_build_oom(&request);product_take_oom(&request);product_cumulative_limits(&request);}

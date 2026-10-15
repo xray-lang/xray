@@ -35,7 +35,7 @@ static XrXirNativeProjection *projection(XrCompileResources *resources, const ch
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, directory};
-    XrXirSourceProductRequest request = {{session, source, &authority, &context, stdlib, NULL, XR_XIR_PROGRAM, NULL},
+    XrXirSourceProductRequest request = {{session, source, &authority, &context, stdlib, NULL, XR_XIR_PROGRAM, NULL,NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product = NULL;
     CHECK(xr_xir_compile_source_product_build(&request, &product, NULL) == XR_XIR_OK);

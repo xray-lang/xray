@@ -107,7 +107,7 @@ static void spec_key_source_controls(void) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(owner.context.resources,&session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY,"specialize-key-order",NULL};
-    XrXirSourceRequest request = {session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request = {session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     char text[8192]; spec_key_source_text(text,sizeof(text));
     XrXirSourceText input = {NULL,text,strlen(text)};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0};

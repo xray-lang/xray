@@ -33,7 +33,7 @@ static XrXirArtifact *default_gap_checked(const char *root,const char *path) {
     const XrXirCompileContext *context=source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"default gap %u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

@@ -36,7 +36,7 @@ static void state_one_visibility(void) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_STATE_ONE_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_STATE_ONE_FIXTURES "/reject-private.xr",&authority,context,
-        XR_STATE_ONE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_STATE_ONE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     CHECK(status==XR_XIR_BAD_STRUCTURE && !product);
@@ -51,7 +51,7 @@ int main(int argc,char **argv) {
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_STATE_ONE_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_STATE_ONE_FIXTURES "/root.xr",&authority,context,
-        XR_STATE_ONE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_STATE_ONE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;
     XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);

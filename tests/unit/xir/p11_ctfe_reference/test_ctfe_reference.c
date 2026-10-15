@@ -402,7 +402,7 @@ static XrXirStatus reference_source(const XrXirCompileContext *context, const ch
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, identity, NULL};
-    XrXirSourceRequest request = {session, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceText input = {NULL, text, bytes};
     XrXirStatus status = xr_xir_compile_source_check_text(&request, &input, result, diagnostic, NULL);
     xr_compile_session_free(session);

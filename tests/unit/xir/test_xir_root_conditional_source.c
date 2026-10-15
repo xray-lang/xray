@@ -158,7 +158,7 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
     if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"root-conditional",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirDiagnostic xir_diagnostic={0};
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;XrXirCheckedPacket first={0},second={0};

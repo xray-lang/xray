@@ -82,7 +82,7 @@ static void cs_source_checked(CsFixture *f, CsMetrics *m, XrXirArtifact **checke
     cs_compiler_step(m, 1, begin);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, f->root};
     XrXirSourceRequest request = {session, f->file, &authority, &f->compiler,
-        NULL, NULL, XR_XIR_PROGRAM, NULL};
+        NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};
     char *failure = NULL;

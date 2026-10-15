@@ -73,7 +73,7 @@ static XrXirProgram *unit_program(const UnitOracle *oracle, uint32_t *entry) {
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_TASK_UNIT_FIXTURES, oracle->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_UNIT_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0}; char *failure = NULL;
     XrXirDiagnostic diagnostic = {0}; XrXirCheckedPacket packet = {0};
     XrXirArtifact *read = NULL, *closed = NULL, *lowered = NULL;
@@ -182,7 +182,7 @@ static void unit_reject(const char *name) {
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_UNIT_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_UNIT_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     xr_compile_session_free(session);

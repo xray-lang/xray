@@ -49,7 +49,7 @@ static XrCliCompileSourceStatus build(const XrXirCompileContext *context, char *
             status=io_status(xr_lockfile_add_package_owned(lock,"fixture/math","1.0.0","",argv[4]));
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_PROJECT,"fixture",argv[1]};
-    XrXirSourceProductRequest request={{session,argv[2],&authority,context,argv[3],lock,XR_XIR_PROGRAM,NULL},
+    XrXirSourceProductRequest request={{session,argv[2],&authority,context,argv[3],lock,XR_XIR_PROGRAM,NULL,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic={0};
     if (status==XR_CLI_COMPILE_SOURCE_OK)

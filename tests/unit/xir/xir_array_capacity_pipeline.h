@@ -119,7 +119,7 @@ static CapacityCompile capacity_build(size_t failure, XrCompileResourceLimits li
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CAPACITY_FIXTURES};
     XrXirSourceRequest request = {session, XR_CAPACITY_FIXTURES "/" XR_CAPACITY_COMPONENT "/root.xr", &authority,
-        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     capacity_profile_stage(&run, "session-new");
     run.stage = 1; run.status = xr_xir_compile_source_check(&request, &result, &diagnostic, &path);
     if (run.status != XR_XIR_OK) {

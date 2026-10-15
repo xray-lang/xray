@@ -36,7 +36,7 @@ static XrXirStatus source_pipeline(const XrXirCompileContext *context,void *unus
     (void)unused;XrCompilerSession *session=NULL;XrCompilerSessionStatus session_status=xr_compile_session_new(context->resources,&session);
     if(session_status!=XR_COMPILER_SESSION_OK)return session_status==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
-    XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirArtifact *read=NULL,*specialized=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
@@ -135,7 +135,7 @@ static void source_cases(void) {
         write_source(negative[i]);LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
-        XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
         XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check(&request,&output,&diagnostic,NULL);
         if(status!=XR_XIR_BAD_TYPE)fprintf(stderr,"negative%u status%u %s\n",i,status,diagnostic.message);
@@ -189,7 +189,7 @@ static void shadow_cases(void) {
         write_source(sources[i]);LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
-        XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,root_path,&authority,&owner.context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
         if(status!=XR_XIR_OK)fprintf(stderr,"shadow%u status%u %s\n",i,status,diagnostic.message);

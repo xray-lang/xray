@@ -976,7 +976,7 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(stage_context.resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, &stage_context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, root, &authority, &stage_context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     if (argc == 2) {
         if (!strcmp(argv[1], "--core-syntax")) source_core_syntax_facts(&request);
         else source_interface_name_spans(&request);

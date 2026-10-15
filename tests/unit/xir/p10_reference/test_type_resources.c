@@ -68,7 +68,7 @@ static XrXirStatus pipeline(const SourceCase *test, const XrCompileResourceLimit
     }
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "type-fi", NULL};
-    const XrXirSourceRequest request = {session, NULL, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    const XrXirSourceRequest request = {session, NULL, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     const XrXirSourceText text = {NULL, test->source, strlen(test->source)};
     status = xr_xir_compile_source_check_text(&request, &text, &result, &diagnostic, NULL);
     CHECK(diagnostic.status == status);

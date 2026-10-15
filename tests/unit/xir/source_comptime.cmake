@@ -1,4 +1,5 @@
 # Complete Source constants use the same sole compiler and scalar interpreter.
+include("${CMAKE_CURRENT_LIST_DIR}/source_comptime_limits.cmake")
 add_executable(test_xir_source_comptime "${CMAKE_CURRENT_LIST_DIR}/test_xir_source_comptime.c")
 target_link_libraries(test_xir_source_comptime PRIVATE xray_xir_source xray_xir_vm)
 set_target_properties(test_xir_source_comptime PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)

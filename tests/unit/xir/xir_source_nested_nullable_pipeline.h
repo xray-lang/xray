@@ -18,7 +18,7 @@ static XrXirStatus sn_build(const XrXirCompileContext *context,const char *outpu
         session_status==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_NESTED_FIXTURES};
     const XrXirSourceProductRequest request={{session,XR_SOURCE_NESTED_FIXTURES "/root.xr",&authority,
-        context,NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     if (status==XR_XIR_OK) status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     sn_metadata_checkpoint(context,"build",status);
     if (status==XR_XIR_OK) {

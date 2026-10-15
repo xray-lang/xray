@@ -21,7 +21,7 @@ static void inference_source_allocation_fixture(unsigned case_id,const char *lab
     FILE *file=fopen(path,"wb"); CHECK(file);
     CHECK(fputs(source,file)>=0 && fclose(file)==0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={NULL,path,&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request={NULL,path,&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL,NULL};
     size_t baseline=source_fixture_compile_live,sites=allocation_case_begin(case_id);
     CHECK(resolver_fault==0);
     for(size_t attempt=allocation_first();allocation_more(attempt,sites);attempt=allocation_next(attempt)) {

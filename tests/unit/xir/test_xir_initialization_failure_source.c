@@ -45,7 +45,7 @@ static void init_compiler_faults(void){
   XrCompileResourceStats initial={0};CHECK(xr_compile_resources_stats(compile.resources,&initial)==XR_COMPILE_RESOURCE_OK);
   XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
   XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
   effects_compile_attempts=0;effects_compile_injected=false;effects_compile_fail_at=pass?pass-1:SIZE_MAX;
   XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
   XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
@@ -67,7 +67,7 @@ int main(int argc,char **argv){
  CHECK(argc==1||argc==2);const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
- XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+ XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
  XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
  if(status!=XR_XIR_OK)fprintf(stderr,"%u %d %s\n",status,diagnostic.line,diagnostic.message);

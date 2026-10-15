@@ -39,7 +39,7 @@ int main(int argc,char **argv) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TUPLE_DESTRUCTURE_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_TUPLE_DESTRUCTURE_FIXTURES "/root.xr",&authority,context,
-        XR_TUPLE_DESTRUCTURE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_TUPLE_DESTRUCTURE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     if(status!=XR_XIR_OK)fprintf(stderr,"status=%u stage=%u line=%d: %s\n",status,diagnostic.stage,diagnostic.source.line,diagnostic.source.message);

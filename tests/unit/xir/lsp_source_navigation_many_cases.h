@@ -33,7 +33,7 @@ static void lsp_navigation_many_cases(const char *root) {
         {root_uri,source_root_text,strlen(root_uri),sizeof(source_root_text)-1,1},
         {library_uri,source_library_text,strlen(library_uri),sizeof(source_library_text)-1,7}};
     XrModuleIdentityAuthority authorities[2]={{XR_MODULE_IDENTITY_SCRIPT,NULL,root},{XR_MODULE_IDENTITY_SCRIPT,NULL,root}};
-    XrXirSourceRequest request={session,NULL,&authorities[0],&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authorities[0],&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XlspSourceSnapshot *snapshots[2]={0};
     CHECK(xlsp_source_snapshot_build_authorities(&request,documents,authorities,2,0,&snapshots[0],NULL,NULL)==XR_XIR_OK);
     CHECK(xlsp_source_snapshot_build_authorities(&request,documents,authorities,2,1,&snapshots[1],NULL,NULL)==XR_XIR_OK);

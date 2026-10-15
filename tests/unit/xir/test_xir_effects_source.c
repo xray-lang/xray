@@ -221,7 +221,7 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 2);
     SourceTestFiles files = {0}; source_files_open(&files);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, files.root};
-    XrXirSourceRequest request = {NULL, files.entry, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, files.entry, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = effect_execution_check(&request, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "%u at %d:%d: %s\n", status,

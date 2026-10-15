@@ -7948,6 +7948,14 @@ Results retain authentic TypeArena, Domain and nested field ownership. Complete 
 
 Policy version2 and its hard ceiling belong to compiler artifact and future persistent CTFE cache identity; a public signature or Checked function digest alone is insufficient. Any persistent result key must also bind complete private dependencies/admission/compiler and XIR identities, target profile, authority, every requested limit and original budget policy. Success at a larger budget cannot become a free smaller-budget hit and old policy results cannot override current refusals. The current evaluator and Source path have no persistent result cache: each request fully verifies, executes and pays; internal type-cost caches live only within one execution. This policy identifier claims no implemented cache system. Local Windows evidence establishes neither complete P11, full provider/sanitizer qualification nor production release.
 
+### 17.62 Per-request Source logical result limits
+
+The compiler-private Source request accepts optional XrXirSourceComptimeLimits.output_bytes, borrowed only during synchronous checking. A NULL policy selects the8388608 maximum from17.61; explicit0 admits only logically empty comptime results and does not select a default. The numeric limit is copied into SourceContext before discovery/construction and retained by the independent second Source construction. Every comptime site forwards this bound to the sole existing CTFE request without changing the evaluator, Value representation, logical measurement or any other original quota.
+
+A Source limit above8388608 returns BAD_STRUCTURE before evaluation or additional ledger charges and publishes no result. Occupied Checked/snapshot output is preserved too. An8-byte Source request rejects the original9-byte Array, ten-element Fibonacci and16-byte pair with BUDGET, an actual location and no Checked/snapshot. Exact9/10/16 requests receive complete independent recipes through ordinary Checker/packet/VM value checks; minus-one still rejects. Unit and empty String accept0; an ordinary runtime result is not subject to this comptime output cap when no comptime evaluation occurs.
+
+A suitable limit may retry on the same original owner. Every failed prefix, retry, description and independent receiving still accumulates original allocated/work charges without refunds or reset. This policy grants no field access, construction authority or unchecked generated declarations, and changes no complete FI,600/60/original normal timeout or safety/provider gate. Published results own their data after Source/authority/policy/session producer death. The current evaluator has no persistent CTFE result cache; a larger-limit success cannot grant a free smaller-request success.
+
 ---
 
 ## 18. Error Codes

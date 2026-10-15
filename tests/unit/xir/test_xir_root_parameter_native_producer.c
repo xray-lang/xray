@@ -86,7 +86,7 @@ static void h1n_emit(const RootParameterSourceOracle *oracle, unsigned index, co
     begin = instance_compile_attempts;
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ROOT_PARAMETER_NATIVE_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &diagnostic, &failure);
     if (status != XR_XIR_OK)

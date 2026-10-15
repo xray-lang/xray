@@ -172,7 +172,7 @@ static void initial_ordinary_source(const XrXirCompileContext *context,XrXirSour
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"reference-refresh",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,text,sizeof(text)-1};
     XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,output,&diagnostic,&failure);

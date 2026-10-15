@@ -191,7 +191,7 @@ static Consumer build(unsigned mode, const char *output, size_t failure, XrCompi
     }
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_CONSUMER_ROOT};
     const XrXirSourceProductRequest request = {
-        {session, consumer_fixture->file, &authority, &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL},
+        {session, consumer_fixture->file, &authority, &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     run.status = xr_xir_compile_source_product_build(&request, &product, &diagnostic);
     if (run.status != XR_XIR_OK) {

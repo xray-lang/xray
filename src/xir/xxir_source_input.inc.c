@@ -35,6 +35,10 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         (failure_path && *failure_path)) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
+    ctx.comptime_output_bytes=request->comptime_limits?request->comptime_limits->output_bytes:XR_XIR_CTFE_MAX_OUTPUT_BYTES;
+    if (ctx.comptime_output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES) {
+        source_fail(&ctx,NULL,XR_XIR_BAD_STRUCTURE,"source comptime output limit exceeds the compiler maximum");goto done;
+    }
     ctx.compile = *request->context;
     ctx.remaining_blocks = ctx.compile.limits.blocks;
     ctx.remaining_instructions = ctx.compile.limits.instructions;
@@ -168,7 +172,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
         return status;
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_STDLIB,"prelude",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL,NULL};
     size_t length=0;
     while (true) {
         if (!xir_compile_work(context,1)) {

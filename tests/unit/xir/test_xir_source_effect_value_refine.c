@@ -101,7 +101,7 @@ static XrXirStatus source_effect_value_operation(const XrXirCompileContext *cont
     XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
     if(opened!=XR_COMPILER_SESSION_OK)return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-effect-value-refine",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText input={NULL,source_effect_value_text,sizeof(source_effect_value_text)-1};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;

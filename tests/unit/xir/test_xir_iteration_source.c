@@ -24,7 +24,7 @@
 #include "xir_runtime_allocations.h"
 #include "xir_iteration_runtime_cases.h"
 int main(int argc,char **argv){C(argc==1 || argc==2);const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));XrCompilerSession *session=NULL;C(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
- XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL, XR_XIR_PROGRAM, NULL};XrXirSourceResult result={0};XrXirSourceDiagnostic d={0};XrXirStatus status=xr_xir_compile_source_check(&request,&result,&d,NULL);fprintf(stderr,"source=%u %d:%d %s\n",status,d.line,d.column,d.message);C(status==XR_XIR_OK);
+ XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,NULL,NULL, XR_XIR_PROGRAM, NULL,NULL};XrXirSourceResult result={0};XrXirSourceDiagnostic d={0};XrXirStatus status=xr_xir_compile_source_check(&request,&result,&d,NULL);fprintf(stderr,"source=%u %d:%d %s\n",status,d.line,d.column,d.message);C(status==XR_XIR_OK);
  XrXirCheckedPacket packet={0};C(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK);C(packet.length<=262144);
  if(argc==2){FILE *packet_file=fopen(argv[1],"wb");C(packet_file);C(fwrite(packet.bytes,1,packet.length,packet_file)==packet.length);C(!fclose(packet_file));}
  xr_xir_compile_checked_packet_free(&packet);

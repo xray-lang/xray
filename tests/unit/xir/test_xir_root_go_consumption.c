@@ -32,7 +32,7 @@ static XrXirArtifact *go_source(const char *file,bool query,XrXirStatus expected
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",base,file)>0);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(effect_context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,base};
-    XrXirSourceRequest request={session,path,&authority,&effect_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,&effect_context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     if(status!=expected||(message&&strcmp(message,diagnostic.message)))

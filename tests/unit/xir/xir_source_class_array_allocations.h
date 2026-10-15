@@ -13,7 +13,7 @@
 #define XIR_SOURCE_CLASS_ARRAY_ALLOCATIONS_H
 static void source_class_array_allocations(void) {
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CLASS_ARRAY_FIXTURES};
-    XrXirSourceRequest request={NULL,XR_CLASS_ARRAY_FIXTURES "/root.xr",&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request={NULL,XR_CLASS_ARRAY_FIXTURES "/root.xr",&authority,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL,NULL};
     size_t sites=allocation_case_begin(24);
     for(size_t pass=allocation_first();allocation_more(pass,sites);pass=allocation_next(pass)){
         source_fixture_compile_attempts=0;source_fixture_compile_fail_at=pass?pass-1:SIZE_MAX; source_fixture_compile_injected=false;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};

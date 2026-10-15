@@ -77,7 +77,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         if (!source_comptime_helper(ctx,lowered,site,&f)) break;
         if (!source_work_units(ctx,site->syntax,sizeof(XrXirCtfeCallRequest)+sizeof(identity)+sizeof(XrXirValue))) break;
         XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,.function=f,.target=target,
-            .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}},
+            .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,ctx->comptime_output_bytes}},
             .call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
         memcpy(request.evaluation.checked_identity,identity,sizeof(identity));
         XrXirValue value={0};XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_calls(&request,&value);
@@ -118,6 +118,7 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     SourceContext received={0};received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
+    received.comptime_output_bytes=ctx->comptime_output_bytes;
     received.comptime_input=ctx->comptime_sites;
     XrXirSourceResult result={0};source_construct(&received,&result);
     if (received.diagnostic.status==XR_XIR_OK &&

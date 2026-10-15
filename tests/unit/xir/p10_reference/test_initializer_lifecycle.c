@@ -58,7 +58,7 @@ static XrXirProgram *compile_fixture(SourceFixtureOwner *owner,InitializerEntrie
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner->context.resources,&session)==XR_COMPILER_SESSION_OK);
     const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_LANGUAGE_FIXTURES};
     const XrXirSourceRequest request={session,XR_LANGUAGE_FIXTURES "/init_owned_fields.xr",&authority,&owner->context,
-        XR_LANGUAGE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+        XR_LANGUAGE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"source=%u line=%d %s\n",(unsigned)status,diagnostic.line,diagnostic.message);
