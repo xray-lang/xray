@@ -130,6 +130,9 @@ static const XrCliOptionSpec deps_options[] = {
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec toolchain_options[] = {
+    {"provider", 0, XR_CLI_VALUE_STRING, false, false, "PROVIDER", "Probe provider selector"},
+    {"profile", 0, XR_CLI_VALUE_STRING, false, false, "PROFILE", "Probe target profile"},
+    {"refresh", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Run a fresh readiness probe"},
     {"target", 0, XR_CLI_VALUE_STRING, false, false, "TARGET", "Preference target"},
     {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Explicit C compiler preference"},
     {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Explicit Zig preference"},

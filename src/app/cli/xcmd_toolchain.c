@@ -109,14 +109,18 @@ static int toolchain_write(XrCompileResources *resources,const XrCliInvocation *
     int closed=toolchain_update_close(&owner);return closed>result ? closed : result;
 }
 #endif
+#include "xcmd_toolchain_probe.inc.c"
 XR_FUNC int cmd_toolchain(const XrCliInvocation *inv) {
     if (!inv || !inv->positionals || inv->positional_count<1 ||
         (inv->options.count && (!inv->options.spec || !inv->options.present))) return XR_CLI_EXIT_USAGE;
-    XrCompileResourceLimits limits={67108864,16777216,128000000};XrCompileResources *resources=NULL;
+    const char *command=inv->positionals[0];
+    XrCompileResourceLimits limits=!strcmp(command,"probe") ? xr_source_compile_default_resource_limits() :
+        (XrCompileResourceLimits){67108864,16777216,128000000};XrCompileResources *resources=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
     if (created!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
-    const char *command=inv->positionals[0];int result=XR_CLI_EXIT_USAGE;
-    if (!strcmp(command,"config-path") || !strcmp(command,"list"))
+    int result=XR_CLI_EXIT_USAGE;
+    if (!strcmp(command,"probe")) result=toolchain_probe(resources,inv);
+    else if (!strcmp(command,"config-path") || !strcmp(command,"list"))
         result=toolchain_read(resources,inv,!strcmp(command,"config-path"));
 #if XR_OS_WINDOWS
     else if (!strcmp(command,"use") || !strcmp(command,"reset"))
