@@ -3,6 +3,7 @@
 #include "xlsp_source_buffer.h"
 #include <limits.h>
 #include <string.h>
+#include "../../base/xchecks.h"
 struct XlspSourceRequest {
     XrXirCompileContext context;
     XlspSourceDocument *documents;
@@ -58,11 +59,19 @@ done:
 static bool request_cancelled(const _Atomic bool *cancel) {
     return cancel&&atomic_load_explicit(cancel,memory_order_acquire);
 }
+static bool request_cancel_poll(const void *context) {
+    return request_cancelled((const _Atomic bool *)context);
+}
 XR_FUNC XrXirStatus xlsp_source_request_run(XlspSourceRequest *request,const _Atomic bool *cancel,XlspSourceRequestResult *out) {
     if(!request||request->started||!out||out->json||out->stage||out->cancelled||out->status!=XR_XIR_OK)return XR_XIR_BAD_STRUCTURE;
     request->started=true;
-    XlspSourceRequestResult result={0};XlspSourceWorkspace *workspace=NULL;
+    XlspSourceRequestResult result={0};XlspSourceWorkspace *workspace=NULL;bool bound=false;
     if(request_cancelled(cancel)){result.cancelled=true;goto done;}
+    if(cancel){
+        result.status=request_resource(xr_compile_resources_begin_cancel(request->context.resources,request_cancel_poll,(const void *)cancel));
+        if(result.status!=XR_XIR_OK)goto done;
+        bound=true;
+    }
     result.status=xlsp_source_workspace_build(&request->context,request->documents,request->count,&workspace,&result.stage,NULL);
     if(request_cancelled(cancel)){result.cancelled=true;goto done;}
     if(result.status==XR_XIR_OK) {
@@ -74,6 +83,12 @@ XR_FUNC XrXirStatus xlsp_source_request_run(XlspSourceRequest *request,const _At
     if(request_cancelled(cancel))result.cancelled=true;
 done:
     xlsp_source_workspace_free(workspace);
+    if(bound){
+        XrCompileResourceStatus ended=xr_compile_resources_end_cancel(request->context.resources,request_cancel_poll,(const void *)cancel);
+        XR_CHECK(ended==XR_COMPILE_RESOURCE_OK||ended==XR_COMPILE_RESOURCE_CANCELLED,"Source cancellation scope must retain its binding");
+        if(ended==XR_COMPILE_RESOURCE_CANCELLED)result.cancelled=true;
+    }
+    if(request_cancelled(cancel))result.cancelled=true;
     if(result.cancelled){xjson_free(result.json);result.json=NULL;}
     *out=result;return XR_XIR_OK;
 }

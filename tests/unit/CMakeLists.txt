@@ -4603,3 +4603,5 @@ include(xir/lsp_scope/CMakeLists.txt)
 include(xir/source_types/CMakeLists.txt)
 include(xir/lsp_types/CMakeLists.txt)
 include(xir/lsp_alias_spans/CMakeLists.txt)
+
+include(xir/source_cancel/CMakeLists.txt)
