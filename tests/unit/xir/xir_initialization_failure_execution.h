@@ -111,13 +111,26 @@ static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
     for(size_t pass=0;pass<=sites;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
         InitTrace trace={0};XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
         XrXirInstance *instance=NULL;XrXirCallResult held={0};XrXirCallStatus status=xr_xir_instance_new(program,&c,&instance);
+        bool driven_oom=false;
         if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,entry,NULL,0);
         if(status==XR_XIR_CALL_READY){XrXirInstanceResult r=xr_xir_instance_poll_bounded(instance, UINT64_MAX);status=r.outcome.status;
-            if(status==XR_XIR_CALL_SUSPENDED){CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;}}
+            if(status==XR_XIR_CALL_SUSPENDED){CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;}
+            driven_oom=status==XR_XIR_CALL_OOM;}
         if(status==XR_XIR_CALL_THROWN)status=xr_xir_instance_copy_failure(instance,&held);
         if(!pass){CHECK(status==XR_XIR_CALL_THROWN);sites=runtime_attempts;CHECK(sites);}
         else {if(status!=XR_XIR_CALL_OOM)fprintf(stderr,"init runtime failure %zu/%zu status %u\n",pass-1,sites,status);CHECK(status==XR_XIR_CALL_OOM);}
-        if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&held.value);
+        XrXirCallStatus completion=driven_oom ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+        if(instance){
+            CHECK(xr_xir_task_executor_root_idle(instance->executor));
+            if(instance->call){
+                const XrXirExecutorBinding binding={instance->executor,instance->call->executor_activation,
+                    instance->call->executor_generation,instance->call->executor_ticket};
+                XrXirCallStatus failure=XR_XIR_CALL_BAD_STATE;
+                CHECK(xr_xir_call_driver_failure(instance->call,&binding,&failure) && failure==completion);
+            }
+            CHECK(xr_xir_task_executor_completion_status(instance->executor)==completion);
+        }else CHECK(!driven_oom);
+        CHECK(xr_xir_instance_free(instance)==completion);xr_xir_value_drop(&held.value);
         CHECK(runtime_live==live_before&&runtime_bytes==bytes_before);
     }
     runtime_fail_at=SIZE_MAX;printf("initialization runtime %zu OOM sites, physical baseline restored\n",sites);
