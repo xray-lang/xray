@@ -70,6 +70,7 @@ static XrXirValueStatus ctfe_function_admit(void *context,const XrXirFunctionBin
         if (binding->captures[p].type!=(uint32_t)target->parameters[p]) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (!xr_xir_type_is_cell(module->types,target->parameters[p])) continue;
         XrXirValueStatus paid=ctfe_function_cell_work(state,target->parameters[p],work);if (paid!=XR_XIR_VALUE_OK) return paid;
+        if (!ctfe_function_work(state,work,state->cell_header_work)) return XR_XIR_VALUE_LIMIT;
         if (!state->cells || xr_xir_cell_provenance_role(state->cells,lease->entry,p)!=XR_XIR_CELL_PROOF_OWNED_CAPTURE ||
              !xr_xir_cell_in_domain(&binding->captures[p],state->domain) || !xr_xir_cell_unborrowed(&binding->captures[p]) ||
              xr_xir_cell_is_projection(&binding->captures[p]) || xr_xir_cell_module_storage(&binding->captures[p]))

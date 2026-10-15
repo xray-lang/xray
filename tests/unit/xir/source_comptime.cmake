@@ -92,3 +92,10 @@ set_tests_properties(test_xir_source_comptime_cleanup PROPERTIES
 add_test(NAME test_xir_source_comptime_cleanup_resources COMMAND test_xir_source_comptime --cleanup-resources)
 set_tests_properties(test_xir_source_comptime_cleanup_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;cleanup" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_projection COMMAND test_xir_source_comptime --projection)
+set_tests_properties(test_xir_source_comptime_projection PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;projection" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_projection_resources COMMAND test_xir_source_comptime --projection-resources)
+set_tests_properties(test_xir_source_comptime_projection_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;projection" TIMEOUT 600 RUN_SERIAL TRUE)

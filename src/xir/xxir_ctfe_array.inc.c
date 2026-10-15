@@ -32,7 +32,7 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
         bool descend=cell || (node && state->tuple_costs[current.type-XR_XIR_CONSTRUCTED_TYPE_BASE].dynamic);
         uint32_t count=cell?1:node?ctfe_composite_fields(node):0;const XrXirFunctionBinding *function=NULL;
         if (cell) {
-            if (!scalar_compile_work(run,64)) { status=XR_XIR_CTFE_BUDGET;break; }
+            if (!scalar_compile_work(run,64+state->cell_header_work)) { status=XR_XIR_CTFE_BUDGET;break; }
             if (!xr_xir_cell_in_domain(&current,state->domain) ||
                 xr_xir_cell_is_projection(&current) || xr_xir_cell_module_storage(&current)) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
             if (state->forbidden_cell.type && xr_xir_cell_same_owner(&current,&state->forbidden_cell)) {
@@ -99,7 +99,7 @@ done:
     xr_compile_resources_free(stack);return status;
 }
 static bool ctfe_array_opcode(XrXirOp op) {
-    return op==XR_XIR_RANGE_CHECK || op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
+    return op==XR_XIR_CELL_PROJECT || op==XR_XIR_RANGE_CHECK || op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
         op==XR_XIR_ARRAY_SET || op==XR_XIR_ARRAY_PUSH || op==XR_XIR_ARRAY_CAPACITY ||
         op==XR_XIR_ARRAY_WITH_CAPACITY || op==XR_XIR_ARRAY_RESERVE || op==XR_XIR_CELL_PLACE || op==XR_XIR_INDEX_PLACE || op==XR_XIR_FIELD_PLACE ||
         op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE;
@@ -115,6 +115,7 @@ static XrXirCtfeStatus ctfe_array_bytes_work(ScalarRun *run,CtfeOwnedState *stat
 }
 static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];
+    if (op->op==XR_XIR_CELL_PROJECT) return ctfe_projection_step(run,vm,state);
     if (op->op==XR_XIR_RANGE_CHECK) {
         const uint32_t *range=&run->function->operands[op->args[0]];
         if (!xr_xir_range_valid(ctfe_array_operand(run,range[0]).payload,
@@ -133,6 +134,8 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
         if (xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_CELL) {
             const XrXirInstruction *root=&run->function->instructions[ids[0]-run->function->parameter_count];
             XrXirValue cell=ctfe_array_operand(run,root->args[0]);
+            if (!scalar_compile_work(run,state->cell_header_work)) return XR_XIR_CTFE_BUDGET;
+            if (xr_xir_cell_is_projection(&cell)) return ctfe_index_path_step(run,vm,state);
             if (!xr_xir_cell_in_domain(&cell,state->domain)) return XR_XIR_CTFE_BAD_ARTIFACT;
             value_status=xr_xir_cell_authorized_place(&cell,&state->authority,&admission,&place);
             if (value_status!=XR_XIR_VALUE_OK) return ctfe_value_status(value_status);
