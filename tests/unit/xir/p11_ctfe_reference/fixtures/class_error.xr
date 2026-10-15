@@ -1,4 +1,4 @@
-class Box{value:i64;constructor(value:i64){this.value=value}}
+class Box{value:i64;init(value:i64){this.value=value}}
 enum E{Bad{b:Box}}
 fn answer()->i64{const b=Box(40);try{defer{b.value=b.value+2};throw E.Bad{b:b}}catch(e:E){return match(e){E.Bad{b}->b.value}}}
 export fn run()->i64{return comptime answer()}

@@ -28,7 +28,7 @@ static const char source_comptime_cleanup_text[]=
     "fn answer()->i64 { var x=40; work(ref x); return x }\n"
     "export fn run()->i64 { return comptime answer() }\n";
 static const char source_comptime_class_text[]=
-    "class Box{items:Array<i64>;constructor(items:Array<i64>){this.items=items}}\n"
+    "class Box{items:Array<i64>;init(items:Array<i64>){this.items=items}}\n"
     "fn inc(x:ref i64){defer{x=x+2}}\n"
     "fn answer()->i64{const b=Box([40]);inc(ref b.items[0]);return b.items[0]}\n"
     "export fn run()->i64{return comptime answer()}\n";

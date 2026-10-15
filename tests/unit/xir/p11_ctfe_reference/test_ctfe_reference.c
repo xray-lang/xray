@@ -215,7 +215,7 @@ static const CtfeReferenceCase reference_cases[] = {
     {"nominal_field_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_large", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
     {"nominal_dynamic_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
-    {"nominal_class", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_class_fields", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct_method", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
     {"nominal_struct_generic", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
