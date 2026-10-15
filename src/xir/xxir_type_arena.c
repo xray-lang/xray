@@ -14,6 +14,9 @@
 #include "xxir_types.h"
 #include "xxir_value_internal.h"
 #include "xxir_compile_memory.h"
+#include "xxir_type_arena_internal.h"
+
+typedef struct XirTypeIdentity { const XrXirTypeArena *owner; XrXirType type; } XirTypeIdentity;
 
 struct XrXirTypeArena {
     _Atomic(uint32_t) references;
@@ -21,6 +24,9 @@ struct XrXirTypeArena {
     XrXirTypes types;
     XirNominalValue ***empty_variants;
     XrXirStorageLayout *storage;
+    XrXirTypeArena *received_from;
+    const XrXirTypeArena *error_identity;
+    XirTypeIdentity *identities;
 };
 
 #include "xxir_type_arena_nominal.inc.c"
@@ -114,7 +120,12 @@ XR_FUNC bool xr_xir_compile_type_arena_retain(XrXirTypeArena *arena) {
     return arena && xr_xir_reference_retain(&arena->references);
 }
 XR_FUNC void xr_xir_compile_type_arena_drop(XrXirTypeArena *arena) {
-    if (arena && xr_xir_reference_release(&arena->references)) xr_compile_resources_free(arena);
+    while (arena && xr_xir_reference_release(&arena->references)) {
+        XrXirTypeArena *previous=arena->received_from;
+        xr_compile_resources_free(arena->identities);
+        xr_compile_resources_free(arena);
+        arena=previous;
+    }
 }
 XR_FUNC const XrXirTypes *xr_xir_compile_type_arena_types(const XrXirTypeArena *arena) {
     return arena ? &arena->types : NULL;
@@ -133,3 +144,4 @@ XR_FUNC bool xr_xir_compile_type_arena_layout(const XrXirTypeArena *arena,
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     return xr_xir_builtin_layout(type, &target, XR_XIR_LAYOUT_STORAGE, layout) == XR_XIR_OK;
 }
+#include "xxir_type_arena_receiving.inc.c"
