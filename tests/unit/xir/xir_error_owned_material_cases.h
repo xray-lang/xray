@@ -79,6 +79,16 @@ static void owned_error_source_controls(const XrXirCompileContext *context,
 
 /* The pure returned target and the non-producing factory retain independent
  * known and UNKNOWN error outcomes after both producers have been destroyed. */
+/* Replay allocates fresh writable rows from the actual retained Input.
+ * The published Final remains owned and unchanged throughout this probe. */
+static XrXirStatus owned_error_replay_begin(const XrXirCompileContext *context,
+    const XrXirEffects *effects,XrXirEffects *replay) {
+    XrXirStatus status=effect_source_outcomes_prepare(context,effects,replay);
+    XrXirCompileContext remaining=*context;
+    if (status==XR_XIR_OK) status=effect_errors_seed(&effects->invocations->body->domain,replay,&remaining);
+    return status;
+}
+
 static XrXirStatus conditional_owned_error(const XrXirCompileContext *context,
     uint32_t mode,bool oracle) {
     InvocationReturnedFixture fixture;invocation_returned_fixture(&fixture,mode?4:0);
@@ -88,30 +98,26 @@ static XrXirStatus conditional_owned_error(const XrXirCompileContext *context,
     if (status==XR_XIR_OK && oracle)
         owned_error_source_controls(context,effects->invocations->body,xr_xir_compile_artifact_module(checked));
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0xCE,sizeof(fixture));
-    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};
+    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};XrXirEffects replay={0};
+    if (status==XR_XIR_OK) status=owned_error_replay_begin(context,effects,&replay);
     if (status==XR_XIR_OK) {
         flow.body=effect_body_owned_request(context,effects->invocations->body);
-        terms.types=*flow.body.domain.types;flow.effects=effects;
+        terms.types=*flow.body.domain.types;flow.effects=&replay;
         flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
         flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
         if (oracle) owned_error_input_controls(context,effects,&flow);
         status=error_invocation_contexts_new(&flow,&flow.invocations);
     }
     if (status==XR_XIR_OK && !flow.invocations) status=XR_XIR_BAD_STRUCTURE;
-    if (status==XR_XIR_OK) {
-        size_t bytes=(size_t)effects->count*effects->words*sizeof(*effects->errors);
-        if (!xir_compile_work(context,bytes)) status=XR_XIR_BUDGET;
-        else memset(effects->errors,0,bytes);
-    }
     if (status==XR_XIR_OK) status=error_invocation_summaries(&flow);
     if (status==XR_XIR_OK) status=error_invocation_functions(&flow);
     if (status==XR_XIR_OK) {
-        CHECK(effects->count==5 && effects->errors && effects->words==1);
-        CHECK(error_bit(effects->errors,0)==(mode!=0) && !error_bit(effects->errors,1));
+        CHECK(effects->count==5 && replay.outcomes_work.errors && replay.outcomes_work.words==1);
+        CHECK(error_bit(replay.outcomes_work.errors,0)==(mode!=0) && !error_bit(replay.outcomes_work.errors,1));
         CHECK((effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL));
     }
     error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);xr_xir_compile_effects_free(effects);return status;
+    effect_terms_free(&terms);effect_source_outcomes_free(&replay);xr_xir_compile_effects_free(effects);return status;
 }
 
 /* Each scan starts at physical zero. The independent literal rows retain
@@ -475,20 +481,18 @@ static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *cont
         CHECK(effect_body_source_match(context,effects->invocations->body,&fixture.module)==XR_XIR_OK);
     }
     memset(&fixture,0xCE,sizeof(fixture));
-    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};
+    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};XrXirEffects replay={0};
+    if (status==XR_XIR_OK) status=owned_error_replay_begin(context,effects,&replay);
     if (status==XR_XIR_OK) {
         flow.body=effect_body_owned_request(context,effects->invocations->body);
-        terms.types=*flow.body.domain.types;flow.effects=effects;
+        terms.types=*flow.body.domain.types;flow.effects=&replay;
         flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
         flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
-        size_t bytes=(size_t)effects->count*effects->words*sizeof(*effects->errors);
-        if (!xir_compile_work(context,bytes)) status=XR_XIR_BUDGET;
-        else memset(effects->errors,0,bytes);
     }
     if (status==XR_XIR_OK) status=error_function(&flow,1);
     if (status==XR_XIR_OK) {
-        CHECK(effects->count==3 && effects->words==1 && effects->atom_count==2 &&
-            effects->errors[1]==(mode?UINT64_C(4):UINT64_C(12)) &&
+        CHECK(effects->count==3 && replay.outcomes_work.words==1 && replay.outcomes_work.atom_count==2 &&
+            replay.outcomes_work.errors[1]==(mode?UINT64_C(4):UINT64_C(12)) &&
             !xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
         CHECK(ci_expected(CI_CALL,mode!=0)==(mode?UINT64_C(4):UINT64_C(12)));
         CHECK(flow.cell_count==3 && flow.cell_type_count==3 && flow.cell_material==flow.body.owner &&
@@ -499,12 +503,12 @@ static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *cont
             CHECK(error_function(&flow,2)==XR_XIR_OK && !flow.cell_types && !flow.cell_material &&
                 !flow.cell_count && !flow.cell_type_count && flow.storage==storage && flow.storage_capacity==capacity);
             CHECK(error_function(&flow,1)==XR_XIR_OK && flow.cell_type_count==3 &&
-                effects->errors[1]==(mode?UINT64_C(4):UINT64_C(12)));
+                replay.outcomes_work.errors[1]==(mode?UINT64_C(4):UINT64_C(12)));
         }
     }
     error_storage_free(&flow);
     CHECK(!flow.cell_types && !flow.cell_material && !flow.cell_type_count);
-    effect_terms_free(&terms);xr_xir_compile_effects_free(effects);return status;
+    effect_terms_free(&terms);effect_source_outcomes_free(&replay);xr_xir_compile_effects_free(effects);return status;
 }
 
 /* The original two recipes retain their complete loops unchanged. These two

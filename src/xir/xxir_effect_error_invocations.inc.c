@@ -319,15 +319,16 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
 static XrXirStatus error_invocation_summaries(ErrorFlow *flow) {
     if (flow->summary_count<flow->effects->count || !flow->invocations) return XR_XIR_BAD_STRUCTURE;
     if (flow->summary_count==flow->effects->count) return XR_XIR_OK;
-    uint64_t words=(uint64_t)flow->summary_count*flow->effects->words;
-    uint64_t bytes=(uint64_t)flow->effects->count*flow->effects->words*sizeof(uint64_t);
+    uint64_t words=(uint64_t)flow->summary_count*flow->effects->outcomes_work.words;
+    uint64_t bytes=(uint64_t)flow->effects->count*flow->effects->outcomes_work.words*sizeof(uint64_t);
     if (words>SIZE_MAX/sizeof(uint64_t) || bytes>SIZE_MAX ||
         !xir_compile_work(flow->remaining,bytes)) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     uint64_t *rows=xir_compile_calloc(flow->remaining,(size_t)words,sizeof(*rows),&status);
     if (!rows) return status;
-    memcpy(rows,flow->effects->errors,(size_t)bytes);
-    xr_compile_resources_free(flow->effects->errors);flow->effects->errors=rows;return XR_XIR_OK;
+    memcpy(rows,flow->effects->outcomes_work.errors,(size_t)bytes);
+    xr_compile_resources_free(flow->effects->outcomes_work.errors);flow->effects->outcomes_work.errors=rows;
+    flow->effects->outcomes_work.error_rows=flow->summary_count;return XR_XIR_OK;
 }
 
 static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction *op,
@@ -348,8 +349,8 @@ static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction 
         if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
         if (e>=contexts->link_count || contexts->links[e].caller!=flow->invocation ||
             contexts->links[e].target>=contexts->count) return XR_XIR_BAD_STRUCTURE;
-        const uint64_t *from=flow->effects->errors+(size_t)contexts->nodes[contexts->links[e].target].summary*
-            flow->effects->words;
+        const uint64_t *from=flow->effects->outcomes_work.errors+(size_t)contexts->nodes[contexts->links[e].target].summary*
+            flow->effects->outcomes_work.words;
         XrXirStatus status=error_call_summary(flow,op,from,set);
         if (status!=XR_XIR_OK || flow->restart) return status;
     }
@@ -387,9 +388,9 @@ static XrXirStatus error_invocation_functions(ErrorFlow *flow) {
             bool empty=false;uint32_t f=contexts->nodes[n].body;
             status=error_empty_escaping_read(&flow->body,f,flow->remaining,&empty);
             if (status==XR_XIR_OK && empty) {
-                if (!xir_compile_work(flow->remaining,flow->effects->words)) return XR_XIR_BUDGET;
-                empty=!error_any(flow->effects->errors+(size_t)contexts->nodes[n].summary*
-                    flow->effects->words,flow->effects->words);
+                if (!xir_compile_work(flow->remaining,flow->effects->outcomes_work.words)) return XR_XIR_BUDGET;
+                empty=!error_any(flow->effects->outcomes_work.errors+(size_t)contexts->nodes[n].summary*
+                    flow->effects->outcomes_work.words,flow->effects->outcomes_work.words);
             }
             if (status==XR_XIR_OK && !empty) status=error_function(flow,f);
             if (status!=XR_XIR_OK || flow->restart || !flow->summary_changed) continue;
@@ -410,7 +411,7 @@ static XrXirStatus effect_errors_analyze(XrXirEffects *effects,
     EffectTerms terms = {0}; terms.remaining = remaining;
     if (!effects || !graph || !xir_compile_context_valid(remaining) ||
         !effects->invocations || effects->invocations->resources!=remaining->resources ||
-        effects->resources!=remaining->resources || !effects->functions || !effects->task_errors ||
+        effects->resources!=remaining->resources || !effects->outcomes_work.functions || !effects->outcomes_work.task_errors ||
         graph->physical_owned || graph->material!=effects->invocations->body ||
         !effect_body_material_shape(graph->material) || graph->material->resources!=remaining->resources ||
         graph->physical!=graph->material->physical || effects->count!=effect_body_count(graph->material))
@@ -431,29 +432,29 @@ static XrXirStatus effect_errors_analyze(XrXirEffects *effects,
      * outcomes while the sole error summary and authentic binders are alive. */
     XirMetadataDomain permission=flow.body.domain;permission.types=&terms.types;
     for (uint32_t f = 0; status == XR_XIR_OK && f < effects->count; ++f) {
-        const uint64_t *set = effects->errors + (size_t)f * effects->words;
+        const uint64_t *set = effects->outcomes_work.errors + (size_t)f * effects->outcomes_work.words;
         XrXirStatus qualified = error_bit(set, 0) || error_bit(set, 1) ? XR_XIR_BAD_TYPE : XR_XIR_OK;
         XirMetadataProofContext proof={&permission,{XR_XIR_CONTEXT_FUNCTION,f,0}};
-        for (uint32_t a = 0; qualified == XR_XIR_OK && a < effects->atom_count; ++a) {
+        for (uint32_t a = 0; qualified == XR_XIR_OK && a < effects->outcomes_work.atom_count; ++a) {
             if (!xir_compile_work(remaining, 1)) { status = XR_XIR_BUDGET; break; }
             if (!error_bit(set, a + 2)) continue;
-            qualified = xir_metadata_type_markers_prove(remaining,&proof, effects->atoms[a].type,
+            qualified = xir_metadata_type_markers_prove(remaining,&proof, effects->outcomes_work.atoms[a].type,
                 XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_SENDABLE);
             if (qualified == XR_XIR_BUDGET || qualified == XR_XIR_OUT_OF_MEMORY) { status = qualified; break; }
         }
-        effects->task_errors[f] = qualified;
+        effects->outcomes_work.task_errors[f] = qualified;
     }
     error_storage_free(&flow);
     error_invocation_contexts_free(flow.invocations);
     effect_terms_free(&terms);
     if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < effects->count; ++f) {
-        const uint64_t *set = effects->errors + (size_t)f * effects->words;
+        const uint64_t *set = effects->outcomes_work.errors + (size_t)f * effects->outcomes_work.words;
         XrXirEffect fact = error_bit(set, 0) ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE;
         if (error_bit(set,1)) fact=XR_XIR_EFFECT_MAY;
-        if (!xir_compile_work(remaining, effects->atom_count + 1)) return XR_XIR_BUDGET;
-        for (uint32_t a = 0; a < effects->atom_count; ++a) if (error_bit(set, a + 2)) fact = XR_XIR_EFFECT_MAY;
-        effects->functions[f].throws = fact;
+        if (!xir_compile_work(remaining, effects->outcomes_work.atom_count + 1)) return XR_XIR_BUDGET;
+        for (uint32_t a = 0; a < effects->outcomes_work.atom_count; ++a) if (error_bit(set, a + 2)) fact = XR_XIR_EFFECT_MAY;
+        effects->outcomes_work.functions[f].throws = fact;
     }
     return XR_XIR_OK;
 }

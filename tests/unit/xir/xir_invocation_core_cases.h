@@ -11,8 +11,8 @@ static XrXirStatus invocation_core_storage(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirEffects *effects) {
     *effects=(XrXirEffects){.resources=context->resources,.count=module->function_count};
     XrXirStatus status=XR_XIR_OK;uint32_t count=effects->count;
-    effects->functions=xir_compile_calloc(context,count,sizeof(*effects->functions),&status);
-    if (status==XR_XIR_OK) effects->task_creation=xir_compile_calloc(context,count,sizeof(*effects->task_creation),&status);
+    effects->outcomes_work.functions=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.functions),&status);
+    if (status==XR_XIR_OK) effects->outcomes_work.task_creation=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.task_creation),&status);
     if (status==XR_XIR_OK) effects->root=xir_compile_calloc(context,count,sizeof(*effects->root),&status);
     if (status==XR_XIR_OK) effects->root_witnesses=xir_compile_calloc(context,count,sizeof(*effects->root_witnesses),&status);
     if (status==XR_XIR_OK) effects->unresolved_witnesses=xir_compile_calloc(context,count,sizeof(*effects->unresolved_witnesses),&status);
@@ -21,7 +21,7 @@ static XrXirStatus invocation_core_storage(const XrXirCompileContext *context,
 
 static void invocation_core_storage_free(XrXirEffects *effects) {
     effect_parameters_free(effects);
-    xr_compile_resources_free(effects->functions);xr_compile_resources_free(effects->task_creation);
+    xr_compile_resources_free(effects->outcomes_work.functions);xr_compile_resources_free(effects->outcomes_work.task_creation);
     xr_compile_resources_free(effects->root);xr_compile_resources_free(effects->root_witnesses);
     xr_compile_resources_free(effects->unresolved_witnesses);*effects=(XrXirEffects){0};
 }

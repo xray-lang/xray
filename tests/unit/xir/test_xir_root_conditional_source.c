@@ -145,7 +145,8 @@ static void conditional_closed(const XrXirArtifact *artifact, const RootConditio
         if (m->provenance->origins[f].function==original) { CHECK(run==UINT32_MAX);run=f; }
     CHECK(run!=UINT32_MAX);XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
-    const XrXirRootEffects *facts=xr_xir_effects_root(effects,run);
+    XrXirEffectFacts facts_read=xr_xir_effects_read(effects,run);
+    const XrXirRootEffects *facts=(facts_read.status==XR_XIR_OK?&facts_read.root:NULL);
     CHECK(facts && facts->requires_root==oracle->root && facts->unresolved==oracle->unresolved);
     for (uint32_t f=0;f<m->function_count;++f) for (uint32_t i=0;i<m->functions[f].instruction_count;++i)
         CHECK(m->functions[f].instructions[i].op!=XR_XIR_CALL_REQUIREMENT);

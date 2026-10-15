@@ -35,3 +35,27 @@ add_test(NAME test_xir_effect_final_borrowed_read
 set_tests_properties(test_xir_effect_final_borrowed_read PROPERTIES
     LABELS "unit;xir;root-effects;ownership;metadata;final-read;producer-lifetime"
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_final_outcomes_literals
+    COMMAND test_xir_error_cfg_pending --outcomes-literals)
+set_tests_properties(test_xir_effect_final_outcomes_literals PROPERTIES
+    LABELS "unit;xir;ownership;metadata;final-outcomes;callback;producer-lifetime"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_effect_final_outcomes_resources
+    COMMAND test_xir_error_cfg_pending --outcomes-resources)
+set_tests_properties(test_xir_effect_final_outcomes_resources PROPERTIES
+    LABELS "unit;xir;ownership;metadata;final-outcomes;callback;compiler-fault;resources"
+    TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_source_ref_places
+    COMMAND test_xir_source_query --enum-ref-next)
+set_tests_properties(test_xir_effect_source_ref_places PROPERTIES
+    LABELS "unit;xir;ownership;metadata;root-effects;source;producer-lifetime"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_default_dense
+    COMMAND test_xir_default_invoke_source --generate-only
+        ${CMAKE_CURRENT_BINARY_DIR}/effect-default-dense.xrc unused)
+set_tests_properties(test_xir_effect_default_dense PROPERTIES
+    LABELS "unit;xir;ownership;metadata;root-effects;source;default-arguments"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)

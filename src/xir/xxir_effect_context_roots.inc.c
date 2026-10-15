@@ -202,10 +202,10 @@ static XrXirStatus effect_ordinary_root_storage(EffectOrdinaryContexts *contexts
     const XrXirCompileContext *context) {
     XrXirEffects *effects=&contexts->uses;
     XrXirStatus status=XR_XIR_OK;
-    effects->functions=xir_compile_calloc(context,contexts->count,sizeof(*effects->functions),&status);
-    if (!effects->functions) return status;
-    effects->task_creation=xir_compile_calloc(context,contexts->count,sizeof(*effects->task_creation),&status);
-    if (!effects->task_creation) return status;
+    effects->outcomes_work.functions=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.functions),&status);
+    if (!effects->outcomes_work.functions) return status;
+    effects->outcomes_work.task_creation=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.task_creation),&status);
+    if (!effects->outcomes_work.task_creation) return status;
     effects->root=xir_compile_calloc(context,contexts->count,sizeof(*effects->root),&status);
     if (!effects->root) return status;
     effects->root_witnesses=xir_compile_calloc(context,contexts->count,sizeof(*effects->root_witnesses),&status);

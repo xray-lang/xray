@@ -184,7 +184,7 @@ static void sg_singleton(void) {
         CHECK(error_cfg_enqueue(&flow,0)==XR_XIR_OK && (flow.reachable[0]&ERROR_BLOCK_PENDING));
         flow.scheduling=false;
         error_storage_free(&flow);effect_terms_free(&terms);
-        xr_compile_resources_free(effects.errors);xr_compile_resources_free(effects.atoms);
+        xr_compile_resources_free(effects.outcomes_work.errors);xr_compile_resources_free(effects.outcomes_work.atoms);
         pc_release(&context,baseline);
     }
     puts("singleton throw/no queue, duplicate/reschedule and precise entry-backedge rejection PASS");
@@ -198,7 +198,7 @@ static void sg_fresh_widths(void) {
         uint32_t width=widths[i];sg_fixture(&fixture,&graph,i%3,width);fixture.base.module.stage=XR_XIR_CHECKED;
         CHECK(xir_fixture_verify(&context,&fixture.base.module,NULL)==XR_XIR_OK);
         XrXirEffects effects={0};effects.count=fixture.base.module.function_count;
-        effects.source_type_count=fixture.base.types.count;
+        effects.outcomes_work.source_type_count=fixture.base.types.count;
         EffectTerms terms={0};terms.remaining=&context;terms.types=fixture.base.types;
         flow.body=effect_body_raw_request(&context,&fixture.base.module);
         flow.effects=&effects;flow.terms=&terms;
@@ -206,10 +206,20 @@ static void sg_fresh_widths(void) {
         if(flow.storage)memset(flow.storage,0xa5,flow.storage_capacity);
         CHECK(error_function(&flow,1)==XR_XIR_OK && !flow.scheduling && !flow.pending);
         CHECK(((uintptr_t)flow.queue%sizeof(uint32_t))==0);
-        CHECK(xr_xir_effects_error(&effects,1,(XrXirType)EE_ENUM,0));
-        CHECK(xr_xir_effects_error(&effects,1,(XrXirType)EE_ENUM,width-1));
-        for(uint32_t a=1;a+1<width;++a)CHECK(!xr_xir_effects_error(&effects,1,(XrXirType)EE_ENUM,a));
-        effect_terms_free(&terms);xr_compile_resources_free(effects.errors);xr_compile_resources_free(effects.atoms);
+        /* This workspace has no published Final. Check its exact atom rows
+         * without manufacturing an admission object for the public query. */
+        const uint64_t *row=effects.outcomes_work.errors+effects.outcomes_work.words;
+        for(uint32_t variant=0;variant<width;++variant) {
+            bool found=false,actual=false;
+            for(uint32_t a=0;a<effects.outcomes_work.atom_count;++a) {
+                EffectErrorAtom atom=effects.outcomes_work.atoms[a];
+                if(atom.type!=(XrXirType)EE_ENUM || atom.variant!=variant)continue;
+                uint32_t bit=a+2;found=true;actual=(row[bit/64]&(UINT64_C(1)<<(bit%64)))!=0;break;
+            }
+            CHECK(found && actual==(variant==0 || variant+1==width));
+        }
+        CHECK(!xr_xir_effects_error(&effects,1,(XrXirType)EE_ENUM,0));
+        effect_terms_free(&terms);xr_compile_resources_free(effects.outcomes_work.errors);xr_compile_resources_free(effects.outcomes_work.atoms);
     }
     error_storage_free(&flow);CHECK(!flow.queue && !flow.scheduling && !flow.pending);
     pc_release(&context,baseline);puts("real atom widths grow/shrink on poisoned same-owner scratch PASS");

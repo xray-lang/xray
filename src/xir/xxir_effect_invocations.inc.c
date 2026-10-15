@@ -126,6 +126,7 @@ struct EffectFinalFunctions {
  * queue, compile callback, mutable receiver or edge lookup workspace. */
 typedef struct EffectInvocationFinal {
     EffectFinalFunctions summary;
+    EffectFinalOutcomes *outcomes;
     EffectPhysicalDomain *physical;
     EffectBodyMaterial *material;
     const XrXirCellProvenance *cells;

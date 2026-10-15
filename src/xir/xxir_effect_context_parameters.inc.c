@@ -38,8 +38,8 @@ static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
     xr_compile_resources_free(contexts->uses.root);
     xr_compile_resources_free(contexts->uses.root_witnesses);
     xr_compile_resources_free(contexts->uses.unresolved_witnesses);
-    xr_compile_resources_free(contexts->uses.functions);
-    xr_compile_resources_free(contexts->uses.task_creation);
+    xr_compile_resources_free(contexts->uses.outcomes_work.functions);
+    xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
     xr_compile_resources_free(contexts->nodes);
     xr_compile_resources_free(contexts->functions);
     effect_terms_free(&contexts->terms);
