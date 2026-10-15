@@ -38,6 +38,7 @@ static void enum_source(const XrXirCompileContext *context,const char *text,
     memset(path,0xa5,sizeof(path));
 }
 #include "xir_source_derivation_enum_negative.h"
+#include "xir_source_derivation_enum_resources.h"
 static uint32_t enum_function(const XrXirModule *module,const char *name) {
     uint32_t found=UINT32_MAX;size_t length=strlen(name);
     for(uint32_t f=0;f<module->function_count;++f)
@@ -82,9 +83,12 @@ static void enum_execute(const XrXirCompileContext *context,XrXirSourceResult *s
     for(unsigned i=0;i<4;++i) {enum_runtime_expected(&values[i],i);xr_xir_value_drop(&values[i]);}
 }
 int main(int argc,char **argv) {
+    if (argc==7 && !strcmp(argv[1],"--compiler-fi")) {enum_compiler_partition(argv);return 0;}
+    bool generator_packet=argc==3 && !strcmp(argv[1],"--emit-generator");
+    bool compiler=argc==2 && (!strcmp(argv[1],"--compiler-controls") || !strcmp(argv[1],"--compiler-resources"));
     bool emit=argc==4 && !strcmp(argv[1],"--emit-native"),faults=argc==2 && !strcmp(argv[1],"--runtime-resources");
-    CHECK(argc==1 || emit || faults);
-    if(!emit && !faults) enum_negative_cases();
+    CHECK(argc==1 || emit || faults || compiler || generator_packet);
+    if(argc==1) enum_negative_cases();
     const XrCompileResourceLimits caps={67108864,8388608,128000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0},after={0};
@@ -96,6 +100,16 @@ int main(int argc,char **argv) {
     enum_source(&context,text,XR_XIR_LIBRARY,NULL,&producer);memset(text,0xa5,sizeof(text));
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&producer);
+    if (generator_packet || compiler) {
+        if (generator_packet) {
+            FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+        } else {
+            char path[2048];n=snprintf(path,sizeof(path),"%s/future_enum.xr",XR_SOURCE_DERIVATION_ENUM_WORK);
+            CHECK(n>0 && n<(int)sizeof(path));enum_compiler_resources(&packet,path,!strcmp(argv[1],"--compiler-resources"));
+        }
+        xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_release(context.resources);
+        CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);return 0;
+    }
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_DERIVATION_ENUM_WORK},"generator_enum.xr"};
     XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog)==XR_XIR_OK);

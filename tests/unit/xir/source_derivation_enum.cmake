@@ -11,6 +11,13 @@ else()
 endif()
 add_test(NAME test_xir_source_derivation_enum COMMAND test_xir_source_derivation_enum)
 set_tests_properties(test_xir_source_derivation_enum PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;library;enum;ownership")
+add_test(NAME test_xir_source_derivation_enum_compiler_controls COMMAND test_xir_source_derivation_enum --compiler-controls)
+set_tests_properties(test_xir_source_derivation_enum_compiler_controls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;enum;ownership;budget")
+add_test(NAME test_xir_source_derivation_enum_compiler_resources COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/run_source_derivation_compiler_faults.py"
+    --exe $<TARGET_FILE:test_xir_source_derivation_enum>
+    --output "${CMAKE_CURRENT_BINARY_DIR}/source-derivation-enum-compiler-fi")
+set_tests_properties(test_xir_source_derivation_enum_compiler_resources PROPERTIES TIMEOUT 600 COST 600 PROCESSORS 8 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;enum;ownership;compiler-fault;resources")
 set(XIR_SOURCE_ENUM_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_derivation_enum.c")
 set(XIR_SOURCE_ENUM_PACKET "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_source_derivation_enum.chk")
 add_custom_command(OUTPUT ${XIR_SOURCE_ENUM_C} ${XIR_SOURCE_ENUM_PACKET}
