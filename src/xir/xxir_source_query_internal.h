@@ -16,6 +16,8 @@
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy_v2(const XrXirCompileContext *context,
     const XrXirSourceView *view, const XrXirConstruction *construction, XrXirSourceSnapshot **output);
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapshot *, const XrXirSourceSyntaxView *);
+XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapshot *,
+    const XrXirSourceDebugView *, const XrXirModule *);
 /* Internal pre-publication attachment only. Failure preserves existing facts;
  * it never authorizes execution or mutates the checked construction owner. */
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_dependencies_copy(

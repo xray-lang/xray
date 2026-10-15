@@ -138,7 +138,12 @@ typedef struct SourceExpressionStorage {
     SourceExpressionPlan expressions[32];
 } SourceExpressionStorage;
 typedef struct SourceRootValue { uint8_t kind; XrXirType declared; uint32_t peer; } SourceRootValue;
-typedef struct SourceInstructionRecipe { XrXirInstruction instruction; uint32_t owner, value; SourceRootValue root; } SourceInstructionRecipe;
+typedef struct SourceInstructionRecipe {
+    XrXirInstruction instruction;
+    uint32_t owner, value;
+    SourceRootValue root;
+    XrXirSourceDebugPoint debug;
+} SourceInstructionRecipe;
 typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, runtime; } SourceBlockRecipe;
 typedef struct SourceRecipeStorage { struct SourceRecipeStorage *next; } SourceRecipeStorage;
 typedef struct SourceFunction {
@@ -158,6 +163,7 @@ typedef struct SourceFunction {
     SourceInstructionRecipe *recipes;
     SourceRecipeStorage *recipe_storage;
     bool region_sealed;
+    const XrXirSourceDebugPoint *debug_points;
     SourceRootValue *root_values;
     bool *root_captures; uint32_t root_capture_count;
     XrXirEffectParameter *effect_parameters;
@@ -248,6 +254,8 @@ typedef struct SourceContext {
     const SourceComptimeSite *comptime_input;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
     SourceExpressionPlan *active_expression;
+    XrXirSourceDebugPoint debug_point;
+    uint32_t debug_function;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
     SourceLoop *loop;
@@ -756,7 +764,9 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
         body->recipes = ops; body->capacity = capacity;
     }
     if (result) *result = (SourceValue) {ctx->functions[ctx->function].parameter_count + body->count, op.type};
-    body->recipes[body->count] = (SourceInstructionRecipe){op,ctx->function,ctx->functions[ctx->function].parameter_count+body->count,{0,op.type,UINT32_MAX}};
+    body->recipes[body->count] = (SourceInstructionRecipe){op,ctx->function,
+        ctx->functions[ctx->function].parameter_count+body->count,{0,op.type,UINT32_MAX},
+        ctx->debug_function==ctx->function ? ctx->debug_point : (XrXirSourceDebugPoint){0}};
     uint32_t own = ctx->functions[ctx->function].parameter_count + body->count;
     if (op.op == XR_XIR_PHI || op.op == XR_XIR_ARRAY_NEW) {
         for (uint32_t a = op.op == XR_XIR_PHI ? 1 : 0; a < op.args[1]; a += op.op == XR_XIR_PHI ? 2 : 1) {
@@ -2008,101 +2018,7 @@ static bool source_loop_exit(SourceContext *ctx, AstNode *node) {
 #include "xxir_source_iteration.inc.c"
 #include "xxir_source_catch.inc.c"
 static bool source_unreachable_statement(SourceContext *ctx, AstNode *node);
-static bool statement(SourceContext *ctx, AstNode *node, bool top) {
-    SourceConversionRecipe checked_conversion;
-    if (!node || !source_work(ctx, node)) return false;
-    if (ctx->returned) return source_unreachable_statement(ctx, node);
-    switch (node->type) {
-    case AST_DEFER_STMT: return source_defer(ctx, node);
-    case AST_TRY_CATCH: {
-        /* Handlers are alternative paths: no fact about a binding they write survives, and none is learned inside. */
-        ++ctx->flow_alternatives;
-        bool tried = source_facts_kill(ctx, node) && source_try(ctx, node);
-        --ctx->flow_alternatives;
-        return tried && source_facts_kill(ctx, node);
-    }
-    case AST_IF_STMT: return source_if(ctx, node);
-    case AST_WHILE_STMT:
-        if (node->as.while_stmt.label) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "labelled loops are not admitted");
-        return source_loop(ctx, node, node->as.while_stmt.condition, node->as.while_stmt.body, NULL);
-    case AST_FOR_STMT: return source_for(ctx, node);
-    case AST_FOR_IN_STMT: {
-        ++ctx->flow_alternatives;
-        bool iterated = source_facts_kill(ctx, node) && source_for_in(ctx, node);
-        --ctx->flow_alternatives;
-        return iterated && source_facts_kill(ctx, node);
-    }
-    case AST_INC: case AST_DEC: return source_increment(ctx, node);
-    case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_FUNCTION_DECL: return top || source_nested_function(ctx, node);
-    case AST_TYPE_ALIAS: return true;
-    case AST_IMPORT_STMT: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
-        return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
-    case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
-    case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
-    case AST_EXPR_STMT: {
-        SourceValue value; AstNode *expr=node->as.expr_stmt;
-        bool appended = false;
-        if (!source_string_append_statement(ctx, expr, &appended)) return false;
-        if (appended) return true;
-        if (expr->type!=AST_MATCH_EXPR) return expression(ctx,expr,&value);
-        SourceExpressionPlan *plan=source_plan_collect(ctx,expr,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
-        if (!plan) return false;
-        plan->statement_match=true;
-        return source_plan_complete(ctx,plan,&value);
-    }
-    case AST_THROW_STMT: {
-        SourceValue value = {0};
-        if (!expression(ctx, node->as.throw_stmt.expression, &value)) return false;
-        XrXirDeclarations declarations;
-        XrXirModule module = source_module_view(ctx,&declarations);
-        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status = xr_xir_compile_type_markers_prove(&ctx->compile, &context, value.type, XR_XIR_CONSTRAINT_ERROR);
-        if (status != XR_XIR_OK)
-            return source_fail(ctx, node, status, "throw requires a proved enum error value");
-        if (ctx->bodies[ctx->function].error_context) {
-            if (!(source_conversion_plan(ctx,node,(&value)->type,(SourceExpectedType){XR_XIR_ERROR != XR_XIR_UNIT,XR_XIR_ERROR, false, false},&checked_conversion) && source_conversion_emit(ctx,&checked_conversion,&value)) || !source_error_edge(ctx,value)) return false;
-            ctx->returned = true; return true;
-        }
-        ctx->returned = true;
-        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {value.id, 0}, {0, 0}, 0, {0}}, NULL);
-    }
-    case AST_RETURN_STMT: {
-        if (ctx->identities[ctx->function].cleanup_owner)
-            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "E0395: defer cannot return from its owning function");
-        if (source_constructor_active(ctx)) return source_constructor_return(ctx, node);
-        if (top || !ctx->bodies[ctx->function].node || node->as.return_stmt.value_count > 1)
-            return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid return placement or arity");
-        SourceValue value = {0};
-        SourceFunction *body = &ctx->bodies[ctx->function];
-        XrXirType expected = body->infer_result ? XR_XIR_UNIT : ctx->functions[ctx->function].result;
-        if (node->as.return_stmt.value_count && !source_plan_expression(ctx, node->as.return_stmt.values[0], (SourceExpectedType){!body->infer_result,expected, false, false}, &value)) return false;
-        if (body->infer_result && !body->saw_return) ctx->functions[ctx->function].result = value.type;
-        body->saw_return = true;
-        if (value.type != ctx->functions[ctx->function].result)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "return type does not match declaration");
-        ctx->returned = true;
-        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.type == XR_XIR_UNIT ? 0 : value.id, 0}, {0, 0}, 0, {0}}, NULL);
-    }
-    case AST_BLOCK: {
-        if (ctx->depth >= 128) return source_fail(ctx, node, XR_XIR_BUDGET, "source block depth exhausted");
-        SourceName *saved = ctx->locals, *scope = ctx->scope;
-        SourceFunction *body = &ctx->bodies[ctx->function]; uint32_t entry = body->frontier;
-        ctx->scope = saved; ++ctx->depth; ++body->lexical_depth;
-        bool ok = source_block_functions(ctx, node);
-        for (int i = 0; ok && i < node->as.block.count; ++i)
-            ok = statement(ctx, node->as.block.statements[i], false);
-        --ctx->depth; --body->lexical_depth; ctx->locals = saved; ctx->scope = scope;
-        if (ok && !ctx->returned && body->frontier != entry) {
-            ok = source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CLEANUP_LEAVE, XR_XIR_UNIT, {0}, {body->block_count}, entry, {0}}, NULL);
-            body->frontier = entry;
-            if (ok) ok = begin_block(ctx);
-        } else body->frontier = entry;
-        return ok;
-    }
-    default: return source_fail_syntax(ctx, node, "statement");
-    }
-}
+#include "xxir_source_statements.inc.c"
 static bool source_core_result_scope(SourceContext *ctx, AstNode *node, uint32_t index) {
     FunctionDeclNode *decl = &node->as.function_decl;
     if (decl->type_param_count || decl->param_count != 2 || !decl->params || !decl->params[0] || !decl->params[0]->type)
@@ -2933,6 +2849,7 @@ static bool source_query_modules(SourceContext *ctx) {
     return true;
 }
 #include "xxir_source_dependencies.inc.c"
+#include "xxir_source_debug_collect.inc.c"
 static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) {
     if (!output || !ctx->query_ready || ctx->diagnostic.status != XR_XIR_OK) {
         if (output) xr_xir_compile_source_result_free(output);
@@ -2948,6 +2865,10 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     if (status == XR_XIR_OK) {
         failure = "source syntax snapshot publication failed";
         status = xr_xir_compile_source_snapshot_syntax_copy(output->snapshot, &ctx->syntax);
+    }
+    if (status == XR_XIR_OK) {
+        failure = "source debug snapshot publication failed";
+        status = source_debug_publish(ctx, output);
     }
     if (status == XR_XIR_OK) {
         failure = "source dependency snapshot publication failed";

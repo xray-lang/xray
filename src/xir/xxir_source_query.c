@@ -25,6 +25,8 @@ struct XrXirSourceSnapshot {
     bool syntax_ready;
     XrXirSourceDependencies dependencies;
     bool dependencies_ready;
+    XrXirSourceDebugView debug;
+    bool debug_ready;
     SourceQueryMemory *memory;
 };
 typedef struct SourceQueryCopy {
@@ -324,3 +326,5 @@ XR_FUNC void xr_xir_compile_source_result_free(XrXirSourceResult *result) {
 #include "xxir_source_syntax_owner.inc.c"
 
 #include "xxir_source_dependencies_owner.inc.c"
+
+#include "xxir_source_debug_owner.inc.c"

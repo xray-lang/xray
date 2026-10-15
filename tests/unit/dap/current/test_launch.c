@@ -75,8 +75,15 @@ int main(int argc,char **argv) {
         xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);
-    const char text[]="fn leaf(value:i64)->string { var observed=value*2; const text=\"owned\\0value\"; "
-        "observed=observed+1; return text }\nfn main()->string { return leaf(20) }\nmain()\n";
+    const char text[]="fn leaf(value:i64)->string {\n"
+        "    var observed=value*2\n"
+        "    const text=\"owned\\0value\"\n"
+        "    observed=observed+1\n"
+        "    return text\n"
+        "}\n"
+        "fn main()->string {\n"
+        "    return leaf(20)\n"
+        "}\nmain()\n";
     XrSourceCompilerText input={NULL,"dap-launch",text,sizeof(text)-1};
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};XrXirDomain *domain=NULL;
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&domain)==XR_XIR_VALUE_OK);
@@ -109,8 +116,32 @@ int main(int argc,char **argv) {
         if (op->op==XR_XIR_CONST_STRING) string=function->parameters+i;
     }
     CHECK(at!=UINT32_MAX && string!=UINT32_MAX);
+    const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(launch->source);
+    CHECK(debug && debug->function_count==launch->function_count);
+    const XrXirSourceDebugFunction *mapped=&debug->functions[leaf];
+    CHECK(mapped->function==leaf && mapped->parameter_count==function->parameters &&
+        mapped->instruction_count==function->instructions && mapped->points);
+    bool source_lines[6]={0};
+    const int source_columns[6]={0,0,9,11,5,5};
+    for (uint32_t i=0;i<mapped->instruction_count;++i) {
+        const XrXirSourceDebugPoint *point=&mapped->points[i];
+        if (!point->statement) continue;
+        CHECK(point->range.module<view->module_count && point->range.line>=2 && point->range.line<=5);
+        if (point->range.column!=source_columns[point->range.line])
+            fprintf(stderr,"Source point i=%u line=%d column=%d\n",i,point->range.line,point->range.column);
+        CHECK(point->range.column==source_columns[point->range.line]);source_lines[point->range.line]=true;
+    }
+    if (!(source_lines[2] && source_lines[3] && source_lines[4] && source_lines[5]))
+        for (uint32_t i=0;i<mapped->instruction_count;++i)
+            fprintf(stderr,"Mapped %u op=%u statement=%u line=%d column=%d\n",i,
+                launch->instructions[function->first+i].op,mapped->points[i].statement,
+                mapped->points[i].range.line,mapped->points[i].range.column);
+    CHECK(source_lines[2] && source_lines[3] && source_lines[4] && source_lines[5]);
+    CHECK(mapped->points[at].range.line==5 && mapped->points[at].statement);
+    CHECK(mapped->points[string-function->parameters].range.line==3);
     CHECK(xdap_current_breakpoint(launch->control,leaf,at,true)==XR_XIR_VALUE_OK);
     xr_source_compiler_free(compiler);compiler=NULL;
+    CHECK(xr_xir_compile_source_product_debug(launch->source)==debug && mapped->points[at].range.line==5);
     CHECK(xdap_current_start(launch->control,launch->entry,NULL,0)==XR_XIR_CALL_READY);
     XdapCurrentResult result={0};CHECK(xdap_current_poll(launch->control,1000,&result)==XR_XIR_VALUE_OK);
     CHECK(result.state==XDAP_CURRENT_STOPPED);
@@ -130,5 +161,5 @@ int main(int argc,char **argv) {
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);
     CHECK(!runtime_live && !runtime_bytes);
-    puts("Canonical SourceCompiler/Closed packet/observed VM launch and producer death: PASS");return 0;
+    puts("Canonical SourceCompiler/Closed packet/observed VM launch, owned sealed Source instruction maps and producer death: PASS");return 0;
 }

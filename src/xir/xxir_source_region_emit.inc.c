@@ -42,23 +42,27 @@ static bool source_region_span(size_t *bytes,uint32_t count,size_t element,
 _Static_assert(_Alignof(SourceMemory)>=_Alignof(XrXirInstruction) &&
     _Alignof(SourceMemory)>=_Alignof(XrXirBlock) &&
     _Alignof(SourceMemory)>=_Alignof(uint32_t) &&
+    _Alignof(SourceMemory)>=_Alignof(XrXirSourceDebugPoint) &&
     sizeof(SourceMemory)%_Alignof(XrXirInstruction)==0,
     "source arena must align instruction storage");
 typedef struct SourceRegionOutput {
     XrXirInstruction *instructions;
     XrXirBlock *blocks;
     uint32_t *operands;
+    XrXirSourceDebugPoint *points;
 } SourceRegionOutput;
 static bool source_region_output_allocate(SourceContext *ctx,
     const SourceFunction *body,SourceRegionOutput *output) {
     /* All published arrays share one arena owner and retain distinct views. */
-    size_t output_bytes=0,instruction_offset=0,block_offset=0,operand_offset=0;
+    size_t output_bytes=0,instruction_offset=0,block_offset=0,operand_offset=0,point_offset=0;
     if (!source_region_span(&output_bytes,body->count,sizeof(XrXirInstruction),
             _Alignof(XrXirInstruction),&instruction_offset) ||
         !source_region_span(&output_bytes,body->block_count,sizeof(XrXirBlock),
             _Alignof(XrXirBlock),&block_offset) ||
         !source_region_span(&output_bytes,body->operand_count,sizeof(uint32_t),
-            _Alignof(uint32_t),&operand_offset)) {
+            _Alignof(uint32_t),&operand_offset) ||
+        !source_region_span(&output_bytes,body->count,sizeof(XrXirSourceDebugPoint),
+            _Alignof(XrXirSourceDebugPoint),&point_offset)) {
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"source region output size exhausted");
     }
     unsigned char *storage=output_bytes ? source_alloc(ctx,1,output_bytes) : NULL;
@@ -66,6 +70,7 @@ static bool source_region_output_allocate(SourceContext *ctx,
     output->instructions=body->count ? (XrXirInstruction *)(storage+instruction_offset) : NULL;
     output->blocks=body->block_count ? (XrXirBlock *)(storage+block_offset) : NULL;
     output->operands=body->operand_count ? (uint32_t *)(storage+operand_offset) : NULL;
+    output->points=body->count ? (XrXirSourceDebugPoint *)(storage+point_offset) : NULL;
     return true;
 }
 static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool seal) {
@@ -143,6 +148,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     if (emitted!=body->count) goto invalid;
     SourceRegionOutput views={0};
     if (!source_region_output_allocate(ctx,body,&views)) goto done;
+    if (!source_work_units(ctx,NULL,(uint64_t)body->count*sizeof(*views.points))) goto done;
     XrXirInstruction *instructions=views.instructions;
     XrXirBlock *emitted_blocks=views.blocks;
     uint32_t *operands=views.operands;
@@ -221,6 +227,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             if (root_values[emitted].peer != UINT32_MAX &&
                 !source_region_id(map,value_count,root_values[emitted].peer,&root_values[emitted].peer)) goto invalid;
         }
+        views.points[emitted]=body->recipes[i].debug;
         instructions[emitted++]=op;
       }
     }
@@ -233,7 +240,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             if (!source_work(ctx,NULL)) goto done;
             if (query->function == ctx->function && !source_region_id(map,value_count,query->value,&query->value)) goto invalid;
         }
-        body->region_sealed=true; body->root_values=root_values;
+        body->region_sealed=true; body->root_values=root_values;body->debug_points=views.points;
         while (body->recipe_storage) {
             SourceRecipeStorage *storage=body->recipe_storage;body->recipe_storage=storage->next;
             source_release_private(storage);

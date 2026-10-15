@@ -23,6 +23,23 @@ typedef struct XrXirSourceRange {
     uint32_t module;
     int line, column, end_line, end_column;
 } XrXirSourceRange;
+
+/* Source-owned display coordinates use the sealed instruction order. Zero
+ * statement means no source execution site; it never grants frame authority. */
+typedef struct XrXirSourceDebugPoint {
+    XrXirSourceRange range;
+    uint32_t statement;
+} XrXirSourceDebugPoint;
+
+typedef struct XrXirSourceDebugFunction {
+    uint32_t function, declaration, parameter_count, instruction_count;
+    const XrXirSourceDebugPoint *points;
+} XrXirSourceDebugFunction;
+
+typedef struct XrXirSourceDebugView {
+    const XrXirSourceDebugFunction *functions;
+    uint32_t function_count;
+} XrXirSourceDebugView;
 typedef struct XrXirSourceType {
     XrXirType type;
     uint32_t generic_owner;
@@ -116,6 +133,7 @@ typedef struct XrXirSourceResult {
     XrXirSourceSnapshot *snapshot;
 } XrXirSourceResult;
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_snapshot_view(const XrXirSourceSnapshot *snapshot);
+XR_FUNC const XrXirSourceDebugView *xr_xir_compile_source_snapshot_debug(const XrXirSourceSnapshot *snapshot);
 /* These immutable observations carry no construction or invocation authority. */
 XR_FUNC const XrXirConstruction *xr_xir_compile_source_snapshot_construction(const XrXirSourceSnapshot *snapshot);
 XR_FUNC void xr_xir_compile_source_snapshot_free(XrXirSourceSnapshot *snapshot);

@@ -94,6 +94,9 @@ XR_FUNC const XrXirSourceTests *xr_xir_compile_source_product_tests(const XrXirS
 XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output);
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_product_view(const XrXirSourceProduct *product);
+/* Closed function indexes and instructions are projected through authentic
+ * specialization origins. Points remain product-owned after VM transfer. */
+XR_FUNC const XrXirSourceDebugView *xr_xir_compile_source_product_debug(const XrXirSourceProduct *product);
 XR_FUNC const XrXirConstruction *xr_xir_compile_source_product_construction(const XrXirSourceProduct *product);
 /* Layout borrows end when the Lowered artifact transfers to a VM program. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduct *product,
