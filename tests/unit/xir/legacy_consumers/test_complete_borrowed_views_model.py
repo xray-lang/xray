@@ -1,4 +1,4 @@
-import copy,hashlib,unittest
+import hashlib,unittest
 from pathlib import Path
 from unittest import mock
 import complete_borrowed_views_model as model
@@ -29,9 +29,13 @@ class BorrowedViews(unittest.TestCase):
         with self.assertRaises(model.BorrowConflict):view.read(0)
     def test_child_reborrow_suspends_exclusive_parent(self):
         owner=model.Owner([1,2,3]);parent=owner.view(mutable=True);child=parent.child(1,3)
-        for operation in [lambda:parent.read(0),lambda:parent.write(0,9),parent.close]:
+        self.assertEqual(parent.read(0),1)
+        for operation in [lambda:parent.write(0,9),parent.close]:
             with self.subTest(operation=operation),self.assertRaises(model.BorrowConflict):operation()
-        self.assertEqual(child.snapshot(),[2,3]);child.close();parent.write(1,8);parent.close();self.assertEqual(owner.read(1),8)
+        self.assertEqual(child.snapshot(),[2,3]);child.close();parent.write(1,8)
+        child=parent.child(0,1,mutable=True)
+        with self.assertRaises(model.BorrowConflict):parent.read(0)
+        child.close();parent.close();self.assertEqual(owner.read(1),8)
     def test_clamping_and_empty_windows(self):
         for start,end,expected in [(-999,999,(0,4)),(-1,-999,(3,3)),(999,None,(4,4)),(None,-999,(0,0)),(4,4,(4,4))]:
             with self.subTest(start=start,end=end):self.assertEqual(model.bounds(4,start,end),expected)

@@ -85,7 +85,7 @@ class View:
     def access(self,write=False):
         if not self.active:raise BorrowConflict('view has ended')
         if write and not self.mutable:raise BorrowConflict('shared view cannot write')
-        if self.mutable and any(v.active for v in self.children):raise BorrowConflict('exclusive parent is reborrowed')
+        if self.mutable and any(v.active and (write or v.mutable) for v in self.children):raise BorrowConflict('exclusive parent is reborrowed')
     def length(self):self.access();return self.end-self.start
     def read(self,index):
         self.access()
