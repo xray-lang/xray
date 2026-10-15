@@ -2667,36 +2667,7 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
     }
     return true;
 }
-static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
-    XrXirCallableParameter *parameters, const XrXirTypeNode *context) {
-    if (!source_capture_parameters(ctx, node, scan)) return false;
-    SourceFunction *body = &ctx->bodies[ctx->function];
-    FunctionDeclNode *decl = &node->as.function_expr;
-    for (int i = 0; i < decl->param_count; ++i) {
-        XrParamNode *param = decl->params[i];
-        XrXirType type;
-        if (!source_work(ctx, node)) return false;
-        if (param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest ||
-            (!param->type && !context))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter requires an annotation or complete callable context");
-        if (param->type) {
-            if (!source_type(ctx, param->type, &type)) return false;
-        } else type = context->parameters[i].type;
-        if (type == XR_XIR_UNIT)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter cannot be unit");
-        SourceName *symbol = add_name(ctx, &ctx->locals, param->name, node);
-        if (!symbol) return false;
-        symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t) i; symbol->type = type;
-        XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
-        if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t) (INT_MAX - param->column))
-            range.end_column = param->column + (int) source_text_size(ctx, param->name);
-        if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
-        source_query_binding_type(ctx, symbol);
-        body->parameters[symbol->index] = type;
-        parameters[i] = (XrXirCallableParameter) {type, XR_PARAM_READ};
-    }
-    return true;
-}
+#include "xxir_source_closure_parameters.inc.c"
 #include "xxir_source_cleanup.inc.c"
 /* Inside its own body a nested declaration is the closure value rebuilt from the
  * body's captures, so recursion needs no extra capture and no cell. */
@@ -2742,7 +2713,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure arity differs from its callable context");
         for (uint32_t p = 0; p < context->parameter_count; ++p) {
             if (!source_work(ctx, node)) return false;
-            if (context->parameters[p].mode != XR_PARAM_READ)
+            if (context->parameters[p].mode != XR_PARAM_READ && context->parameters[p].mode != XR_PARAM_REF)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure context requires an unsupported parameter mode");
         }
     }
@@ -2810,7 +2781,9 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         ok = !decl->param_count || query_parameters;
         for (int i = 0; ok && i < decl->param_count; ++i) {
             ok = source_work(ctx, node);
-            query_parameters[i] = source_query_type(ctx, parameters[i].type);
+            XrXirType shown = parameters[i].type;
+            if (parameters[i].mode == XR_PARAM_REF) shown = xr_xir_cell_element(&ctx->types, shown);
+            query_parameters[i] = source_query_type(ctx, shown);
         }
         XrXirSourceDeclaration *query_declaration = (XrXirSourceDeclaration *) &ctx->query.declarations[body->declaration - 1];
         query_declaration->type = source_query_type(ctx, ctx->functions[index].result);
