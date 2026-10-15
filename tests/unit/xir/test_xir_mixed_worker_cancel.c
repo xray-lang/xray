@@ -97,4 +97,6 @@ static int worker_cancel_main(int argc, char **argv) {
         oracle->name, worker_backends[backend], prefixes, 3*prefixes);
     return 0;
 }
+#ifndef XR_WORKER_CANCEL_RESOURCE_MAIN
 int main(int argc, char **argv) { return worker_cancel_main(argc, argv); }
+#endif
