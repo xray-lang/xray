@@ -12,6 +12,7 @@
  *   Suspension tokens are resumed exactly and are never interpreted as clocks.
  */
 #include "xr_xir_host_execution.h"
+#include "../xir/xxir_instance_activation.h"
 #include "xr_xir_host_time.h"
 #include "../base/xmalloc.h"
 

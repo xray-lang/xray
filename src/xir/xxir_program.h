@@ -89,12 +89,6 @@ XR_FUNC XrXirCallStatus xr_xir_instance_start_test(XrXirInstance *instance, uint
 XR_FUNC XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64_t quantum);
 /* Cancels only the current activation; initialized module state remains usable. */
 XR_FUNC XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance);
-/* Cancels and reclaims the current root and all its child tasks with no control
- * allocation. Language cleanup keeps its ordinary budget. Ready module slots,
- * callable authority and the lifetime budget
- * remain owned by the Instance. Initialization failure stays sticky. A prepared
- * generation is rejected; failed cleanup permanently stops the owner. */
-XR_FUNC XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance);
 XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t epoch, uint64_t wake);
 /* Publishes the host request of the current suspension for its exact epoch and
  * wake token. Failure leaves output unchanged; nothing is read or resumed. */

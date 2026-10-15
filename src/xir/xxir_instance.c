@@ -13,6 +13,7 @@
 
 
 #include "xxir_program_internal.h"
+#include "xxir_instance_activation.h"
 #include "xxir_instance_value.h"
 #include "xxir_instance_binding.h"
 #include "xxir_instance_function_internal.h"
