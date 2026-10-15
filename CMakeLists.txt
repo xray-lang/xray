@@ -2477,6 +2477,7 @@ endif()
 # Source -> Checked -> Lowered pipeline. The Source adapter, path policy and
 # graph authority live in xray_source_compile and are linked, not recompiled here.
 set(XRAY_CLI_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli)
+include("${XRAY_CLI_ROOT}/toolchain_config.cmake")
 set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli.c
     ${XRAY_CLI_ROOT}/xcli_dispatch.c
@@ -2625,6 +2626,7 @@ else()
 endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
+target_link_libraries(xray PRIVATE xray_cli_toolchain_config)
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so

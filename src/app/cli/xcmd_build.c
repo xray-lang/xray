@@ -7,6 +7,7 @@
  * xcmd_build.c - One Source product and admitted output publication
  */
 #include "xcli.h"
+#include "xcli_toolchain_config.h"
 #include "../../api/xsource_compile.h"
 #include "../../api/xsource_paths.h"
 #include "../toolchain/xtc_xir_publication.h"
