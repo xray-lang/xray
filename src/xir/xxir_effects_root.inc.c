@@ -104,19 +104,11 @@ static XrXirStatus effect_root_callable(const EffectRootSeedRecord *request,XrXi
     }
     return XR_XIR_OK;
 }
-/* Explicit classification makes a newly executing opcode fail closed until its
- * authority rule is recorded, even when control effects already know it. */
-typedef enum EffectRootSeedRule {
-    EFFECT_ROOT_SEED_INVALID, EFFECT_ROOT_SEED_NONE, EFFECT_ROOT_SEED_SLOT,
-    EFFECT_ROOT_SEED_INITIALIZER, EFFECT_ROOT_SEED_CALLABLE
-} EffectRootSeedRule;
-static EffectRootSeedRule effect_root_seed_rule(XrXirOp op) {
-    switch (op) {
-    case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_PLACE: case XR_XIR_SLOT_STORE:
-        return EFFECT_ROOT_SEED_SLOT;
-    case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT:return EFFECT_ROOT_SEED_INITIALIZER;
-    case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: case XR_XIR_CALL_REQUIREMENT:
-        return EFFECT_ROOT_SEED_CALLABLE;
+/* Only these exhaustive opcode rules have no field-dependent intrinsic
+ * ROOT contribution. Unclassified opcodes retain the rejecting seed kernel;
+ * a local result never stands in for complete invocation propagation. */
+static bool effect_root_seed_local(XrXirOp opcode) {
+    switch (opcode) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD: case XR_XIR_ATOMIC_STORE:
     case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
@@ -166,10 +158,13 @@ static EffectRootSeedRule effect_root_seed_rule(XrXirOp op) {
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_GO:
     case XR_XIR_TASK_AWAIT: case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY:
     case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
-        return EFFECT_ROOT_SEED_NONE;
-    default:return EFFECT_ROOT_SEED_INVALID;
+        return true;
+    default:return false;
     }
 }
+
+/* Explicit classification makes a newly executing opcode fail closed until its
+ * authority rule is recorded, even when control effects already know it. */
 static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,XrXirRootEffects *facts,
     XrXirRootEffectWitness *required,XrXirRootEffectWitness *unresolved,
     const XrXirCompileContext *work) {
@@ -178,18 +173,20 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
         return XR_XIR_BAD_STRUCTURE;
     uint32_t i=request->ordinal;
     const XrXirInstruction *op=request->instruction;
-    switch (effect_root_seed_rule(op->op)) {
-    case EFFECT_ROOT_SEED_NONE:return XR_XIR_OK;
-    case EFFECT_ROOT_SEED_SLOT:return effect_root_slot(request,facts,required,work);
-    case EFFECT_ROOT_SEED_INITIALIZER: {
-        uint32_t slot=op->op==XR_XIR_SLOT_GROUP_INIT?
-            (uint32_t)((uint64_t)op->immediate>>32):(uint32_t)op->immediate;
-        facts->requires_root=true;
+    if (effect_root_seed_local(op->op)) return XR_XIR_OK;
+    switch (op->op) {
+    case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_PLACE: case XR_XIR_SLOT_STORE:
+        return effect_root_slot(request,facts,required,work);
+    case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT: {
+        uint32_t slot = op->op == XR_XIR_SLOT_GROUP_INIT ?
+            (uint32_t)((uint64_t)op->immediate >> 32) : (uint32_t)op->immediate;
+        (*facts).requires_root = true;
         effect_root_terminal(required,XR_XIR_ROOT_CAUSE_INITIALIZER,i,slot);
         return XR_XIR_OK;
     }
-    case EFFECT_ROOT_SEED_CALLABLE:return effect_root_callable(request,facts,required,unresolved,work);
-    default:return XR_XIR_BAD_STRUCTURE;
+    case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: case XR_XIR_CALL_REQUIREMENT:
+        return effect_root_callable(request,facts,required,unresolved,work);
+    default: return XR_XIR_BAD_STRUCTURE;
     }
 }
 /* Array ownership and the single receiving-row kernel are separate. Both
