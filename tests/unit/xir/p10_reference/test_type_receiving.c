@@ -32,8 +32,12 @@ static void no_change(const XrXirCompileContext *context,XrCompileResourceStats 
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==before.live_bytes);
 }
+#include "type_receiving_nested.h"
+#include "type_receiving_error.h"
 int main(void) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
+    received_nested_arrays(&compiler);
+    received_error_arrays(&compiler);
     XrXirTypeArena *source=arena(&compiler,0),*target=arena(&compiler,1),*unrelated=arena(&compiler,1);
     XrXirTypeArena *parent=arena(&compiler,0),*child=arena(&compiler,1);
     XirTypeReceivingRoot down={type(1),type(2)},up={type(2),type(1)};
@@ -76,6 +80,24 @@ int main(void) {
     CHECK(!xr_xir_value_argument(&cell,unrelated,type(2)));
     admission.arena=target;
     CHECK(xr_xir_value_admit(&cell,type(2),&admission)==XR_XIR_VALUE_OK);
+    int64_t length=-731;XrXirFaultDetail fault={0};XrXirValue element={0},reserved={0};
+    CHECK(xr_xir_array_len(&array,&admission,&length)==XR_XIR_VALUE_OK && length==2);
+    CHECK(xr_xir_array_capacity(&array,&admission,&length)==XR_XIR_VALUE_OK && length>=2);
+    CHECK(xr_xir_array_get(&array,1,&admission,&element,&fault)==XR_XIR_VALUE_OK && element.payload==42);
+    xr_xir_value_drop(&element);
+    CHECK(xr_xir_array_reserve(&array,8,&admission,&reserved)==XR_XIR_VALUE_OK);
+    CHECK(reserved.type==array.type && xr_xir_value_arena(&reserved)==source && reserved.payload!=array.payload);
+    XrXirValuePlace array_place={type(1),&reserved.payload};values[0].payload=63;
+    CHECK(xr_xir_array_set(&array_place,0,&values[0],&admission,&fault)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_array_push(&array_place,&values[0],&admission)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_array_len(&reserved,&admission,&length)==XR_XIR_VALUE_OK && length==3);
+    CHECK(xr_xir_array_get(&reserved,0,&admission,&element,&fault)==XR_XIR_VALUE_OK && element.payload==63);
+    xr_xir_value_drop(&element);xr_xir_value_drop(&reserved);
+    uint64_t saved_work=admission.work;admission.work=0;length=-731;
+    CHECK(xr_xir_array_len(&array,&admission,&length)==XR_XIR_VALUE_LIMIT && length==-731);
+    admission.work=saved_work;admission.arena=unrelated;
+    CHECK(xr_xir_array_len(&array,&admission,&length)==XR_XIR_VALUE_BAD_ARGUMENT && length==-731);
+    admission.arena=target;
     CHECK(cell.type==(uint32_t)type(1) && xr_xir_value_arena(&cell)==source);
     XrXirValue recovered={0};
     CHECK(xr_xir_value_from_payload(target,type(2),cell.payload,&recovered) && recovered.type==cell.type && recovered.payload==cell.payload);

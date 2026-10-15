@@ -22,7 +22,8 @@
 #include "source_history_cell_fixture.h"
 #if defined(XR_SOURCE_HISTORY_NATIVE)
 #include "source_history_native_generated.h"
-static bool history_native_case,history_native_mutating;
+static bool history_native_case;
+static unsigned history_native_kind;
 #endif
 
 static XrXirOutputStatus generation_output(void *context,const XrXirOutputGroup *group) {
@@ -54,7 +55,7 @@ static XrXirProgram *program(const XrXirSourceGenerationView *view,const char *n
     bool native=history_native_case && !(view->serial==1 ? XR_SOURCE_HISTORY_OLD_VM : XR_SOURCE_HISTORY_NEW_VM);
     if (native) {
         CHECK(view->serial>=1 && view->serial<=4);
-        const XrXirProgramSpec *spec=source_history_native_programs[history_native_mutating ? 1 : 0][view->serial-1];
+        const XrXirProgramSpec *spec=source_history_native_programs[history_native_kind][view->serial-1];
         CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(lowered),spec,&output)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);return output;
     }
@@ -138,7 +139,7 @@ static void failed_runtime(XrXirSourceGenerations *owner,XrXirInstance *instance
     xr_xir_compile_program_drop(candidate);
 }
 static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
-    const XrXirSourceGenerationView *view,bool has_value,bool mutable_value) {
+    const XrXirSourceGenerationView *view,bool has_value,bool mutable_value,bool array_value) {
     const XrXirModule *module=xr_xir_compile_artifact_module(view->result->checked);
     XrXirSourceGenerationDefinition definition={0},sentinel;
     bool imported=view->ast->as.program.statements[0]->type==AST_IMPORT_STMT;
@@ -160,9 +161,11 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
     CHECK(item->field_count==1 && item->fields[0].type==XR_XIR_I64);
     if (has_value) {
         CHECK(xr_xir_compile_source_generation_definition(owner,serial,"value",&definition)==XR_XIR_OK);
+        XrXirType element=mutable_value ? xr_xir_cell_element(module->types,definition.stored_type) : definition.stored_type;
+        CHECK(array_value ? xr_xir_type_is_array(module->types,element) &&
+            xr_xir_array_element(module->types,element)==XR_XIR_I64 : element==XR_XIR_I64);
         CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_BINDING && definition.mutable==mutable_value &&
-            (mutable_value ? xr_xir_cell_element(module->types,definition.stored_type)==XR_XIR_I64 :
-                definition.stored_type==XR_XIR_I64) && definition.ordinal<module->declarations->slot_count &&
+            definition.ordinal<module->declarations->slot_count &&
             module->declarations->slots[definition.ordinal].type==definition.stored_type &&
             definition.syntax==view->ast->as.program.statements[0]);
     }
@@ -185,16 +188,19 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
 }
 static int history_check(const char *mode) {
     bool definition_cell=!strcmp(mode,"--definitions-cell");
-    bool mutating=!strcmp(mode,"--history-cell-write");
+    bool array_const=!strcmp(mode,"--history-array-const");
+    bool array_value=array_const || !strcmp(mode,"--history-array");
+    bool mutating=(array_value && !array_const) || !strcmp(mode,"--history-cell-write");
+    unsigned storage_kind=array_const ? 3u : array_value ? 2u : mutating ? 1u : 0u;
     bool definitions=definition_cell || !strcmp(mode,"--definitions") || !strcmp(mode,"--definitions-comptime") || !strcmp(mode,"--definitions-import");
     bool folded=!strcmp(mode,"--definitions-comptime");
     bool imported=!strcmp(mode,"--definitions-import");
     bool cell=definition_cell || mutating || !strcmp(mode,"--history-cell");
     bool active_birth=!strcmp(mode,"--history-active-birth");
 #if defined(XR_SOURCE_HISTORY_NATIVE)
-    history_native_case=cell && !definition_cell;history_native_mutating=mutating;
+    history_native_case=(cell || array_value) && !definition_cell;history_native_kind=storage_kind;
 #endif
-    bool stateful=!strcmp(mode,"--history-stateful") || cell || active_birth;
+    bool stateful=!strcmp(mode,"--history-stateful") || cell || array_value || active_birth;
     const char *next=definition_cell ? NULL : !strcmp(mode,"--history-function") ?
         "export fn answer()->i64{return old()+1}" : !strcmp(mode,"--history-generic") ?
         "export fn answer()->i64{return identity<i64>(42)}" : !strcmp(mode,"--history-type") ?
@@ -205,7 +211,7 @@ static int history_check(const char *mode) {
     XrXirSourceGenerationConfig config={compiler.context,"history-check-test",imported ? XR_GENERATION_STDLIB : NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
     const char *source=active_birth ? "const value=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->fn()->i64{return old}" :
-        cell ? source_history_cell_input(1,mutating) :
+        cell || array_value ? source_history_cell_input(1,storage_kind) :
         stateful ? "const value=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
         imported ? "import _probe as library\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return library.answer()}" :
         folded ? "const value=comptime (6*7)\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return value}" :
@@ -213,7 +219,7 @@ static int history_check(const char *mode) {
     uint64_t first=prepare(owner,source);
     XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK);
     const struct AstNode *original=view.ast;
-    definition_checks(owner,first,&view,folded || stateful,cell);
+    definition_checks(owner,first,&view,folded || stateful,cell,array_value);
     uint32_t entry=0;XrXirProgram *initial=program(&view,"seed",&entry);
     bind_program(&compiler,owner,first,initial);
     XrXirInstanceConfig runtime_config;CHECK(xr_xir_instance_config_init(&runtime_config,sizeof(runtime_config))==XR_XIR_CALL_READY);
@@ -241,7 +247,7 @@ static int history_check(const char *mode) {
     XrXirSourceGenerationBinding binding={0};
     CHECK(xr_xir_compile_source_generation_lookup(owner,"old",&binding)==XR_XIR_OK && binding.generation==first);
     CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK && view.published && view.ast==original);
-    definition_checks(owner,first,&view,folded || stateful,cell);
+    definition_checks(owner,first,&view,folded || stateful,cell,array_value);
     if (next && status==XR_XIR_OK) {
         CHECK(serial>first && xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK && view.parent==first);
         const XrXirDeclarations *declarations=xr_xir_compile_artifact_module(view.result->checked)->declarations;
@@ -249,7 +255,7 @@ static int history_check(const char *mode) {
         CHECK(scope && scope-1!=root && xr_xir_module_same_scope(declarations,root,scope-1));
         uint32_t next_entry=0;XrXirProgram *received=program(&view,"answer",&next_entry);uint64_t candidate=0;
         CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,initial)==XR_XIR_BAD_STRUCTURE);
-        if (cell) {
+        if (cell || array_value) {
             XrXirInstance *in_use=NULL;
             CHECK(xr_xir_instance_new(received,&runtime_config,&in_use)==XR_XIR_CALL_READY);
             CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,received)==XR_XIR_BAD_STAGE);
@@ -275,7 +281,7 @@ static int history_check(const char *mode) {
             if (active_birth) {
                 CHECK(xr_xir_instance_start_function(instance,&birth_function,NULL,0)==XR_XIR_CALL_READY);
             }
-            uint64_t third=prepare(owner,source_history_cell_input(3,mutating));
+            uint64_t third=prepare(owner,source_history_cell_input(3,storage_kind));
             CHECK(xr_xir_compile_source_generation_view(owner,third,&view)==XR_XIR_OK && view.parent==serial);
             uint32_t third_entry=0;XrXirProgram *latest=program(&view,"answer",&third_entry);
             bind_program(&compiler,owner,third,latest);
@@ -292,7 +298,7 @@ static int history_check(const char *mode) {
             CHECK(answer.type==XR_XIR_I64 && answer.payload==(mutating ? 43 : 42));xr_xir_value_drop(&answer);
             CHECK(xr_xir_instance_generation_publish(instance,candidate)==XR_XIR_CALL_READY);
             source_publish(&compiler,owner,third);
-            uint64_t failed=prepare(owner,source_history_cell_input(4,mutating));
+            uint64_t failed=prepare(owner,source_history_cell_input(4,storage_kind));
             CHECK(xr_xir_compile_source_generation_view(owner,failed,&view)==XR_XIR_OK);
             uint32_t failed_entry=0;XrXirProgram *broken=program(&view,"fail",&failed_entry);
             bind_program(&compiler,owner,failed,broken);candidate=0;

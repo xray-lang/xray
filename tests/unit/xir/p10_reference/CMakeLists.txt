@@ -31,7 +31,7 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
 set_tests_properties(test_xir_p10_source_generations PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source")
-foreach(fact IN ITEMS function generic type stateful cell cell-write active-birth)
+foreach(fact IN ITEMS function generic type stateful cell cell-write array array-const active-birth)
     string(REPLACE "-" "_" suffix "${fact}")
     if(fact STREQUAL "active-birth")
         set(suffix "${fact}")
@@ -55,7 +55,7 @@ set_target_properties(source_history_native_producer PROPERTIES C_STANDARD 11 C_
 set(history_native_dir "${CMAKE_CURRENT_BINARY_DIR}/source_history_native")
 set(history_native_header "${history_native_dir}/source_history_native_generated.h")
 set(history_native_sources)
-foreach(history_mode IN ITEMS read write)
+foreach(history_mode IN ITEMS read write array array_const)
     foreach(history_generation RANGE 1 4)
         list(APPEND history_native_sources "${history_native_dir}/source_history_${history_mode}_${history_generation}.c")
     endforeach()
@@ -95,7 +95,7 @@ foreach(history_backend IN ITEMS native vm_native native_vm)
     else()
         target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
     endif()
-    foreach(history_kind IN ITEMS cell cell-write)
+    foreach(history_kind IN ITEMS cell cell-write array array-const)
         string(REPLACE "-" "_" history_suffix "${history_kind}")
         add_test(NAME test_xir_p10_source_history_${history_suffix}_${history_backend}
             COMMAND ${history_target} --history-${history_kind})
@@ -496,3 +496,15 @@ add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()
+
+foreach(storage_kind IN ITEMS array array-const)
+    string(REPLACE "-" "_" storage_suffix "${storage_kind}")
+    add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_resources
+        COMMAND test_xir_p10_source_generation_resources --program-${storage_kind})
+    set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_resources PROPERTIES
+        TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;source;resources;generation;ownership")
+    add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_baseline
+        COMMAND test_xir_p10_source_generation_resources --program-${storage_kind} --baseline)
+    set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_baseline PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;source;resources;generation;ownership;baseline")
+endforeach()
