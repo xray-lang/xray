@@ -291,3 +291,17 @@ endif()
 add_test(NAME test_dap_disassembly COMMAND test_dap_disassembly)
 add_test(NAME test_dap_disassembly_resources COMMAND test_dap_disassembly --resources)
 set_tests_properties(test_dap_disassembly test_dap_disassembly_resources PROPERTIES TIMEOUT 120 LABELS "dap;disassembly;source;ownership;resources")
+
+add_executable(test_dap_source_breakpoints test_source_breakpoints.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_source_breakpoints PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_source_breakpoints PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_LOOP_FIXTURE="${XR_DAP_FIXTURE_DIR}/conditional_hits.xr"
+    XR_DAP_PRIVATE_MAIN="${XR_DAP_FIXTURE_DIR}/type_private_main.xr" XR_DAP_PRIVATE_LIB="${XR_DAP_FIXTURE_DIR}/type_private_lib.xr")
+if(MSVC)
+    target_compile_options(test_dap_source_breakpoints PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_source_breakpoints PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_source_breakpoints COMMAND test_dap_source_breakpoints)
+add_test(NAME test_dap_source_breakpoints_resources COMMAND test_dap_source_breakpoints --resources)
+set_tests_properties(test_dap_source_breakpoints test_dap_source_breakpoints_resources PROPERTIES TIMEOUT 120 LABELS "dap;breakpoints;source;ownership;resources;fault-injection")

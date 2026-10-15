@@ -275,6 +275,11 @@ static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest
         }
         memcpy(names[i],source,length+1);
     }
+    XdapBreakpointSet combined={names,saved,logical_count,s->source_breakpoints,s->source_breakpoint_count};
+    status=xdap_breakpoints_collect(s->launch,&combined,rules,&location_count);
+    if (status!=XR_XIR_OK) {
+        for (uint32_t i=0;i<logical_count;++i) xr_compile_resources_free(names[i]);xdap_json_writer_free(&body);return status;
+    }
     XdapJsonWriter response={0};status=xdap_dispatch_prepare_response(s,r,true,&body,NULL,&response);
     xdap_json_writer_free(&body);
     if (status!=XR_XIR_OK) { for (uint32_t i=0;i<logical_count;++i) xr_compile_resources_free(names[i]);return status; }
@@ -388,7 +393,7 @@ XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,co
     if (!strcmp(command,"scopes")) return inspect_scopes(s,r);
     if (!strcmp(command,"variables")) return inspect_variables(s,r);
     if (!strcmp(command,"setFunctionBreakpoints")) return inspect_function_breakpoints(s,r);
-    if (!strcmp(command,"setBreakpoints")) return xdap_dispatch_response(s,r,false,NULL,"Owned source instruction mapping is not yet available");
+    if (!strcmp(command,"setBreakpoints")) return xdap_dispatch_source_breakpoints(s,r);
     if (!strcmp(command,"evaluate") || !strcmp(command,"setVariable"))
         return xdap_dispatch_response(s,r,false,NULL,"Paused lexical expression admission is not yet available");
     if (!strcmp(command,"restart")) return xdap_dispatch_response(s,r,false,NULL,"Restart construction is not yet available");

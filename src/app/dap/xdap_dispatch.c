@@ -104,6 +104,7 @@ XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *s) {
     if (status==XR_XIR_CALL_BUSY) return status;
     xr_xir_call_result_drop(&s->outcome);
     for (uint32_t i=0;i<s->function_breakpoint_count;++i) xr_compile_resources_free(s->function_breakpoints[i]);
+    for (uint32_t i=0;i<s->source_breakpoint_count;++i) xr_compile_resources_free(s->source_breakpoints[i].identity);
     xr_source_compiler_free(s->compiler);
     xr_xir_domain_drop(s->config.observer_metadata);xr_compile_resources_free(s);return status;
 }
@@ -200,12 +201,10 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     }
     xr_source_compile_diagnostic_free(&diagnostic);
     XrXirVmDebugRule rules[32]={{0}};uint32_t count=0;
-    for (uint32_t i=0;i<s->function_breakpoint_count;++i) {
-        XdapFunctionSelection selection={s->function_breakpoints[i],strlen(s->function_breakpoints[i]),s->function_rules[i]};
-        uint32_t matches=0;status=xdap_launch_function_rules(candidate,&selection,rules+count,32-count,&matches);
-        if (status!=XR_XIR_OK) { xdap_launch_free(candidate);return status; }
-        count+=matches;
-    }
+    XdapBreakpointSet breakpoints={s->function_breakpoints,s->function_rules,s->function_breakpoint_count,
+        s->source_breakpoints,s->source_breakpoint_count};
+    status=xdap_breakpoints_collect(candidate,&breakpoints,rules,&count);
+    if (status!=XR_XIR_OK) { xdap_launch_free(candidate);return status; }
     if (xdap_current_rules_replace(candidate->control,rules,count)!=XR_XIR_VALUE_OK) {
         xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart breakpoint admission failed");
     }
@@ -223,7 +222,7 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     }
     xdap_dispatch_clear_stop(s);xr_xir_call_result_drop(&s->outcome);
     s->launch=candidate;s->terminal=false;s->configured=true;s->running=true;s->wait_wake=0;
-    s->stop_reason=s->stop_entry ? "entry" : "function breakpoint";
+    s->stop_reason=s->stop_entry ? "entry" : s->source_breakpoint_count ? "breakpoint" : "function breakpoint";
     if (s->stop_entry) xdap_current_pause(candidate->control);
     status=xdap_dispatch_send_prepared(s,&response);xdap_json_writer_free(&response);return status;
 }
@@ -232,7 +231,7 @@ static XrXirStatus dispatch_start(XdapAdapter *s,const XdapRequest *r) {
     XrXirCallStatus started=xdap_current_start(s->launch->control,s->launch->entry,NULL,0);
     if (started!=XR_XIR_CALL_READY) return xdap_dispatch_response(s,r,false,NULL,"Instance start rejected");
     if (s->stop_entry) { xdap_current_pause(s->launch->control);s->stop_reason="entry"; }
-    else s->stop_reason="function breakpoint";
+    else s->stop_reason=s->source_breakpoint_count ? "breakpoint" : "function breakpoint";
     s->configured=true;s->running=true;return xdap_dispatch_response(s,r,true,NULL,NULL);
 }
 static XrXirStatus dispatch_control(XdapAdapter *s,const XdapRequest *r,const char *command) {
@@ -259,7 +258,8 @@ static XrXirStatus dispatch_control(XdapAdapter *s,const XdapRequest *r,const ch
     }
     status=dispatch_value(xdap_current_continue(s->launch->control,s->stop_epoch,mode));
     if (status!=XR_XIR_OK) return xdap_dispatch_response(s,r,false,NULL,"Stop epoch rejected");
-    xdap_dispatch_clear_stop(s);s->running=true;s->stop_reason=mode==XR_XIR_VM_DEBUG_CONTINUE ? "function breakpoint" : "step";
+    xdap_dispatch_clear_stop(s);s->running=true;
+    s->stop_reason=mode==XR_XIR_VM_DEBUG_CONTINUE ? (s->source_breakpoint_count ? "breakpoint" : "function breakpoint") : "step";
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     if (!strcmp(command,"continue")) XDAP_TEXT(&body,"{\"allThreadsContinued\":true}");
     status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);return status;

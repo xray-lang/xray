@@ -13,6 +13,19 @@
 #include "xdap_value.h"
 typedef struct XdapStopFrame { uint32_t handle, scope; } XdapStopFrame;
 typedef struct XdapValueRef { uint32_t handle,frame;XrXirValue value;XdapValueShape shape; } XdapValueRef;
+typedef struct XdapSourceBreakpoint {
+    char *identity;
+    size_t identity_length;
+    uint32_t line,column;
+    XrXirVmDebugRule rule;
+} XdapSourceBreakpoint;
+typedef struct XdapBreakpointSet {
+    char *const *functions;
+    const XrXirVmDebugRule *function_rules;
+    uint32_t function_count;
+    const XdapSourceBreakpoint *sources;
+    uint32_t source_count;
+} XdapBreakpointSet;
 struct XdapAdapter {
     XrSourceCompiler *compiler;
     XrCompileResources *resources;
@@ -27,6 +40,8 @@ struct XdapAdapter {
     char *function_breakpoints[32];
     XrXirVmDebugRule function_rules[32];
     uint32_t function_breakpoint_count;
+    XdapSourceBreakpoint source_breakpoints[32];
+    uint32_t source_breakpoint_count;
     uint32_t depth, next_handle, seq;
     uint64_t stop_epoch;
     uint64_t wait_epoch, wait_wake, wait_start, wait_duration;
@@ -50,4 +65,6 @@ XR_FUNC XrXirStatus xdap_dispatch_number(const XdapRequest *,const char *,uint64
 XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *,const XdapRequest *,const char *);
 XR_FUNC XrXirStatus xdap_dispatch_exception(XdapAdapter *,const XdapRequest *,bool configure);
 XR_FUNC void xdap_dispatch_clear_stop(XdapAdapter *);
+XR_FUNC XrXirStatus xdap_breakpoints_collect(const XdapLaunch *,const XdapBreakpointSet *,XrXirVmDebugRule *,uint32_t *);
+XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *,const XdapRequest *);
 #endif // XDAP_DISPATCH_INTERNAL_H
