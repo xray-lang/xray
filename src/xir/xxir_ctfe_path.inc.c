@@ -47,7 +47,7 @@ static XrXirCtfeStatus ctfe_index_path_preflight(ScalarRun *run,CtfeOwnedState *
         status=ctfe_admission_work(run,state,&current);if (status!=XR_XIR_CTFE_OK) break;
         if (i==path->count) { *target=current;owned=false;break; }
         if (current.type!=(uint32_t)path->steps[i].container) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
-        XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,.work=UINT64_MAX,.scratch_bytes=state->frame_spare};
+        XrXirValueAdmission admission=ctfe_value_admission(state);
         bool field=path->steps[i].kind==XR_XIR_PATH_FIELD;
         if (mutate && field) {
             const XrXirTypeNode *node=xr_xir_type_node(run->module->types,(XrXirType)current.type);
@@ -72,7 +72,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     XrXirCtfeStatus status=ctfe_index_path_build(run,op,state,&path,&root_id);
     if (status!=XR_XIR_CTFE_OK) return status;
     CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)path.count*sizeof(*path.steps);
-    XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,.work=UINT64_MAX,.scratch_bytes=bounded.frame_spare};
+    XrXirValueAdmission admission=ctfe_value_admission(&bounded);
     const XrXirInstruction *root_op=&run->function->instructions[root_id-run->function->parameter_count];
     XrXirValue cell=ctfe_array_operand(run,root_op->args[0]),root={0},target={0},result={0};
     XrXirValuePlace place={0};XrXirFaultDetail fault={0};
@@ -87,6 +87,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     if (mutate) {
         const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&run->function->operands[op->args[0]]:op->args;
         XrXirValue incoming=ctfe_array_operand(run,ids[op->op==XR_XIR_ARRAY_SET?2:1]);
+        bounded.forbidden_cell=cell;
         status=ctfe_admission_work(run,&bounded,&incoming);if (status!=XR_XIR_CTFE_OK) goto done;
         if (op->op==XR_XIR_ARRAY_PUSH) {
             int64_t capacity=0;status=ctfe_value_status(xr_xir_array_capacity(&target,&admission,&capacity));

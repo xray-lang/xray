@@ -7673,7 +7673,7 @@ CTFE在完整Lowered及整个可达闭包准入后支持以真实私有Cell为�
 
 路径计数与构造、每次类型/头观察、完整getter接收跨度、最终公共路径接收以及可能复制的每个祖先capacity字节，均在实际访问前预付原累计账本。push还预付叶Array可能增长的容量。溢出或无法预付先返回BUDGET。路径步骤本身占用原frame剩余额度；观察和最终Value操作的scratch只可使用扣除路径后的余额。所有临时观察owner在共同写入前释放，避免人为制造共享；唯一Value path read/write/push决定普通语义、COW及发布，不能另造CTFE写入算法。
 
-嵌套set/push、PLACE_READ/WRITE及普通reserve读/构造/写回配方沿这条路径执行。现有普通Array方法配方可继续组合已准入操作，包括contains/indexOf、String join、clear/reverse/unshift/pop/shift/resize/fill/concat/entries；各自仍须通过实际opcode、类型和完整闭包检查。此处不授予函数值回调或未接通的数值格式化操作。Source保留独立普通常量重放；路径结果导出仍按活跃逻辑字节与原output帽。
+嵌套set/push、PLACE_READ/WRITE及普通reserve读/构造/写回配方沿这条路径执行。现有普通Array方法配方可继续组合已准入操作，包括contains/indexOf、String join、clear/reverse/unshift/pop/shift/resize/fill/concat/entries；各自仍须通过实际opcode、类型和完整闭包检查。内部函数值回调遵守17.55，数值格式化遵守17.52。Source保留独立普通常量重放；路径结果导出仍按活跃逻辑字节与原output帽。
 
 已有快照保持普通COW语义。任一物理OOM、越界或work/step/frame/output错误保全空输出并释放全部帧与临时owner，累计费用不退款。Source/Artifact及ledger调用者死亡后，最后拥有结果仍保留真实类型/Domain寿命，最终drop无分配。路径开发资格不替代完整P11、公共sanitizer、provider和其他原门。
 
@@ -7683,7 +7683,7 @@ TO_STRING在完整Lowered及整个可达闭包准入后支持bool、整数、Run
 
 每次格式化前先支付有界元数据观察，随后预付原累计账本的算法费用和原frame中的固定工作区。整数/bool/Rune使用256 work、512 frame字节；浮点零及非有限值使用1024 work、512 frame字节。有限非零浮点以正常数的无偏二进制指数、或subnormal最低可能指数的绝对值d，预付131072+(d+2)×2048 work和16384 frame字节，覆盖至多17位/每位9次减法、全部bigint复制和正规化；费用判定只观察位宽/指数，不决定文本语义。共同decimal workspace的sizeof≤1024由编译断言保持，扩大它必须重新证明费用和frame上界。剩余frame不足或无法预付先失败；不得先进入格式化再检查预算。String构造的真实复制、分配和所有权继续计入原Domain/ledger。
 
-逻辑输出仍按完整UTF-8字节数遵守原output8；内部较长文本可用于比较，不能把内部长度误当导出权限。独立Source重放普通String/Bool常量并经过完整Checker/query。物理OOM、work/step/frame/output拒绝保全空输出与借用参数，费用不退款，释放全部帧/临时owner。真正格式化得到的最后String在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。其余nominal、函数值/cleanup、foreign接收及正式完整安全资格仍按原P11责任推进。
+逻辑输出仍按完整UTF-8字节数遵守原output8；内部较长文本可用于比较，不能把内部长度误当导出权限。独立Source重放普通String/Bool常量并经过完整Checker/query。物理OOM、work/step/frame/output拒绝保全空输出与借用参数，费用不退款，释放全部帧/临时owner。真正格式化得到的最后String在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。声明绑定nominal与内部函数值分别遵守17.53/17.55；cleanup、foreign接收及正式完整安全资格仍按原P11责任推进。
 
 ### 17.53 声明绑定的结构体、活动枚举与私有字段路径
 
@@ -7704,6 +7704,16 @@ Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；�
 Checked特化及完整Lowered接收之后，helper查找须匹配模块、唯一名称、零参数、关闭结果类型、真实nominal owner及member kind，并拒绝cleanup身份变化，不能假定所有helper都是无owner的顶层函数。观察与比较先付原累计work，任何错配失败保全已有结果和临时owner。
 
 声明owner本身不是class值或效果授权。纯class静态普通函数可在完整闭包准入下计算；class值、CLASS_NEW等身份操作、I/O/native/外部状态仍不获准。私有字段构造/调用只在真实声明owner中合法，独立Source重放保留该普通Checker权限。已经得到私有拥有值不授予外部函数私有构造权限；此类结果的完整物化机制仍属原目标，未实现处须拒绝，不能借反射/内存写入或runtime fallback绕过。
+
+### 17.55 内部真实Function值与有界间接调用
+
+CTFE在每次完整Lowered、identity/target/profile复验后，将实际direct CALL和全部FUNCTION_REF目标一并纳入本次可达闭包；尚未执行的回调目标也不能隐藏I/O或其他未准入操作。FUNCTION_REF、FUNCTION_WEAKEN及CALL_INDIRECT使用既有Value Function工厂、不可变capture向量、owned slot和同一有界activation机器。普通函数返回函数、高阶参数、PHI、Tuple/Nullable内部持有，以及已有Array map/filter/reduce普通配方可以组合已准入操作；不调用Instance/native/宿主函数体或AST解释器。
+
+每个实际Function带本次执行私有lease，按原资源owner登记。接收时先在活跃登记表匹配owner，再核原Artifact、真实producer指令/type、原FUNCTION_REF entry/capture及本次可达集合，不能先解引用任意binding.owner。弱化必须通过既有callable weakening规则；新lease独立保存原producer事实，不借悬空父lease。capture由共同Value持有，最后释放仅摘链和释放原资源，不分配。外部Function参数在读取payload或调用其准入回调之前拒绝；Function及任何含Function的结果不能导出或写成Source常量。
+
+按值capture保持共同Value所有权。可变capture只接受本次新推导的真实Cell provenance中OWNED_CAPTURE角色，且必须处于当前compiler Domain、无借用、非投影、非module storage；scoped/ref及cleanup角色仍明确拒绝。每次私有Cell/path写入之前，迭代观察输入的真实Function capture与Cell快照，拒绝通向目标Cell的回边，保全旧值；无环共享和替换并不因此禁止。该检查不制造另一种值表示，也不读取私有对象头。缺少有界接收的动态struct child、Array<Function>等仍fail closed。
+
+类型/签名、登记表扫描、capture向量、Cell元素形状、完整getter/复制和最终共同Value接收均先付原累计work；显式观察栈和同时接收scratch占原剩余frame。所有调用共享原steps/depth/frame，仍为steps65536、depth128、frame65536、output8及work128M/allocated64MiB/live8MiB。OOM、耗尽、非法闭包或循环写入保全空输出/借用值并释放每个activation、capture和lease，累计费用不退款或重置。内部Function准入不授予外部权限、cleanup、P12或正式共享/provider/安全资格。
 
 ---
 

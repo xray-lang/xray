@@ -78,3 +78,10 @@ set_tests_properties(test_xir_source_comptime_lexical PROPERTIES
 add_test(NAME test_xir_source_comptime_lexical_resources COMMAND test_xir_source_comptime --lexical-resources)
 set_tests_properties(test_xir_source_comptime_lexical_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;lexical" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_function COMMAND test_xir_source_comptime --function)
+set_tests_properties(test_xir_source_comptime_function PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;function" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_function_resources COMMAND test_xir_source_comptime --function-resources)
+set_tests_properties(test_xir_source_comptime_function_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;function" TIMEOUT 600 RUN_SERIAL TRUE)

@@ -38,7 +38,8 @@ typedef struct XrXirCtfeRequest {
     XrXirCtfeLimits limits;
 } XrXirCtfeRequest;
 
-/* Dynamic marks a variable Array admission span. Pure arrays are primitive/
+/* Dynamic marks a variable receiving span; internal caches also count callable
+ * capture graphs. Public shapes admit exportable data only. Pure arrays are primitive/
  * String leaves or only Array wrappers, for which Value skips deep admission. */
 typedef struct XrXirCtfeTypeShape { uint64_t work;bool dynamic,pure_arrays; } XrXirCtfeTypeShape;
 /* Metadata cost only: no Value borrow, identity or execution authority. */

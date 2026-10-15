@@ -1,0 +1,1 @@
+export fn run()->fn()->i64{return comptime fn()->i64{return 42}}

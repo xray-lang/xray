@@ -21,8 +21,7 @@ static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOw
     XrXirType type=create?op->type:xr_xir_operand_type(run->function,op->args[0]);
     XrXirCtfeStatus status=ctfe_validation_work(run,state,type);
     if (status!=XR_XIR_CTFE_OK) return status;
-    XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,
-        .work=UINT64_MAX,.scratch_bytes=state->frame_spare};
+    XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     if (create) {
         XrXirValue payload={0};

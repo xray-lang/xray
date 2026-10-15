@@ -41,6 +41,7 @@ static bool ctfe_result_value(const XrXirValue *value, XrXirType type, const XrX
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     switch (op) {
     case XR_XIR_CONST_FLOAT: case XR_XIR_CONST_RUNE: case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
+    case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN: *work=8;return true;
     case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER:
     case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
@@ -107,6 +108,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     }
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
+        if (xr_xir_type_is_cell(module->types,body->parameters[p])) return XR_XIR_CTFE_NOT_LEAF;
         admitted=ctfe_body_type_admit(artifact,body->parameters[p],true);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
     }
@@ -118,7 +120,8 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
         const XrXirInstruction *op = &body->instructions[i]; uint64_t work;
-        if (!ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
+        if (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_FUNCTION_WEAKEN || op->op==XR_XIR_CALL_INDIRECT ||
+            !ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
         admitted=ctfe_tuple_instruction_admit(artifact,body,op);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
         bool unit = ctfe_unit_result(op->op) || ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_NULLABLE_UNWRAP) && op->type == XR_XIR_UNIT);
@@ -161,11 +164,13 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     status = ctfe_admit(artifact, request->function);
     if (status != XR_XIR_CTFE_OK) return status;
     const XrXirFunction *body = &artifact->module.functions[request->function];
+    status=xr_xir_compile_ctfe_type_admit(&artifact->context,artifact->module.types,body->result);
+    if (status!=XR_XIR_CTFE_OK) return status;
     const XrXirFunctionLayout *layout = &artifact->layouts[request->function];
     if (request->argument_count != body->parameter_count) return XR_XIR_CTFE_BAD_ARGUMENT;
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(&artifact->context, 1)) return XR_XIR_CTFE_BUDGET;
-        if (ctfe_composite_node(artifact->module.types,body->parameters[p])) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (!ctfe_parameter_type(body->parameters[p])) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (!xr_xir_value_argument(&request->arguments[p], NULL, body->parameters[p]))
             return XR_XIR_CTFE_BAD_ARGUMENT;
     }

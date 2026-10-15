@@ -33,7 +33,7 @@ static XrXirCtfeStatus ctfe_nominal_step(ScalarRun *run,VmState *vm,CtfeOwnedSta
     XrXirValue receiver={0},result={0};XrXirType type=op->type;
     if (!create) { receiver=ctfe_nominal_operand(run,op->args[0]);type=(XrXirType)receiver.type; }
     XrXirCtfeStatus status=ctfe_validation_work(run,state,type);if (status!=XR_XIR_CTFE_OK) return status;
-    XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,.work=UINT64_MAX,.scratch_bytes=state->frame_spare};
+    XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     if (create) {
         uint32_t count=op->args[1];if (count && (!vm->arguments || count>run->layout->outgoing_count)) return XR_XIR_CTFE_BAD_ARTIFACT;

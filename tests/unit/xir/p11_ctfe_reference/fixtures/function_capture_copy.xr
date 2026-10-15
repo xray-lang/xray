@@ -1,0 +1,2 @@
+fn answer()->i64{const n:i8=7;const f=fn()->i8{return n};return f() as i64}
+export fn run()->i64{return comptime answer()}
