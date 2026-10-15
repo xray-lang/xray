@@ -142,7 +142,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceValue *arguments=storage.values;
     arguments[0] = receiver;
     SourceCallPlan plan = {SOURCE_CALL_REQUIREMENT,{application.arguments,parent},substitution,NULL,
-        formal.parameters,formal.result,result_context,arguments,0,1,NULL};
+        formal.parameters,formal.result,result_context,arguments,0,1,NULL,NULL};
     SourceCallSyntax syntax;
     if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,node,&syntax,&plan,formal.parameter_count)) goto done;
     if ((uint32_t)syntax.arg_count!=formal.parameter_count) {

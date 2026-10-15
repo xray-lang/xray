@@ -1,0 +1,3 @@
+struct Box { values:Array<i8> }
+fn answer()->bool { const b=Box{values:[1,2]}; return len(b.values)==2 && b.values[0]==1 && b.values[1]==2 }
+export fn run()->bool { return comptime answer() }

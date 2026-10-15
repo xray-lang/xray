@@ -1,0 +1,3 @@
+struct Box { const value:i8; get()->i8 { return this.value } }
+fn answer()->i64 { const b=Box{value:7}; return b.get() as i64 }
+export fn run()->i64 { return comptime answer() }

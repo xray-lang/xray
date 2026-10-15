@@ -1,0 +1,3 @@
+fn read(p:PanicInfo?)->i64{return p!.code-378}
+fn answer()->i64{try{return 1/0}catch panic(p){const q:PanicInfo?=p;return read(q)}}
+export fn run()->i64{return comptime answer()}

@@ -1,0 +1,2 @@
+fn answer()->i64{try{return 1/0}catch panic(p){var q=p;const f=fn()->i64{return q.code-378};return f()}}
+export fn run()->i64{return comptime answer()}

@@ -1,0 +1,2 @@
+fn answer()->string{var text="ab";try{defer{text=text+"c"};assert(false,text)}catch panic(p){return p.message};return ""}
+export fn run()->string{return comptime answer()}

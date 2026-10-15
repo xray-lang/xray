@@ -11,7 +11,7 @@
 static void trace_oom_function(uint32_t function) {
     TraceMark mark=trace_mark(); XrXirCompileContext context=trace_owner(trace_caps());
     uint64_t baseline=trace_stats(&context).live_bytes; XrXirEffects *effects=trace_summary(&context);
-    XrXirRootCauseTrace *output=NULL; trace_attempts=0;
+    XrXirRootCauseTrace *output=NULL; trace_attempts=0;trace_observe_begin();
     CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,function,&output)==XR_XIR_OK && output);
     size_t sites=trace_attempts; CHECK(sites==1); trace_oracle(output,function);
     xr_xir_compile_root_cause_trace_free(output); xr_xir_compile_effects_free(effects);
@@ -19,18 +19,18 @@ static void trace_oom_function(uint32_t function) {
     for(size_t point=0;point<sites;++point) {
         context=trace_owner(trace_caps()); baseline=trace_stats(&context).live_bytes; effects=trace_summary(&context);
         XrCompileResourceStats before=trace_stats(&context); TraceMark retained=trace_mark();
-        output=NULL; trace_attempts=0; trace_fail_at=point; trace_injected=false;
+        output=NULL; trace_attempts=0;trace_observe_begin(); trace_fail_at=point; trace_injected=false;
         CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,function,&output)==XR_XIR_OUT_OF_MEMORY);
         CHECK(!output && trace_injected && trace_attempts==point+1); trace_balanced(retained);
         XrCompileResourceStats paid=trace_stats(&context);
         uint64_t steps=(uint64_t)trace_expected[function].root_count+trace_expected[function].unknown_count;
-        CHECK(paid.work==before.work+steps+2 && paid.allocated_bytes==before.allocated_bytes &&
+        CHECK(paid.work==before.work+trace_observed_work+1 && paid.allocated_bytes==before.allocated_bytes &&
             paid.live_bytes==before.live_bytes && paid.allocation_count==before.allocation_count);
-        trace_fail_at=SIZE_MAX;
+        trace_fail_at=SIZE_MAX;trace_observe_begin();
         CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,function,&output)==XR_XIR_OK && output);
         trace_oracle(output,function); XrCompileResourceStats retry=trace_stats(&context);
         uint64_t bytes=sizeof(XrXirRootCauseTrace)+steps*sizeof(XrXirRootCauseStep);
-        CHECK(retry.work==paid.work+bytes+2*steps+3 && retry.allocated_bytes>paid.allocated_bytes);
+        CHECK(retry.work==paid.work+bytes+trace_observed_work+1 && retry.allocated_bytes>paid.allocated_bytes);
         xr_xir_compile_root_cause_trace_free(output); xr_xir_compile_effects_free(effects);
         trace_owner_free(&context,baseline); trace_balanced(mark);
     }
@@ -87,25 +87,34 @@ static void trace_budget_boundaries(void) {
     }
 }
 static void trace_post_admission_cuts(void) {
-    /* One entry charge plus four validations precede four record writes and
-     * the final header. Every partially initialized allocation is released. */
-    for(size_t point=5;point<10;++point) {
-        TraceMark mark=trace_mark(); XrXirCompileContext context=trace_owner(trace_caps());
-        uint64_t baseline=trace_stats(&context).live_bytes; XrXirEffects *effects=trace_summary(&context);
-        XrCompileResourceStats before=trace_stats(&context); TraceMark retained=trace_mark();
-        XrXirRootCauseTrace *output=NULL; trace_work_position=0; trace_work_cut_at=point;
-        trace_competing_charge=true; trace_attempts=0;
+    TraceMark initial=trace_mark();XrXirCompileContext probe=trace_owner(trace_caps());
+    uint64_t probe_baseline=trace_stats(&probe).live_bytes;XrXirEffects *summary=trace_summary(&probe);
+    XrXirRootCauseTrace *success=NULL;trace_attempts=0;trace_observe_begin();
+    CHECK(xr_xir_compile_root_cause_trace_copy(&probe,summary,8,&success)==XR_XIR_OK && success && trace_attempts==1);
+    size_t first=trace_last_allocation_work_position,total=trace_work_position;
+    CHECK(first!=SIZE_MAX && first<total && total-first>=5);
+    trace_oracle(success,8);xr_xir_compile_root_cause_trace_free(success);xr_xir_compile_effects_free(summary);
+    trace_owner_free(&probe,probe_baseline);trace_balanced(initial);
+    /* Every actual work call after the real allocation is cut. The original
+     * five writes remain included; the complete current denominator is used. */
+    for(size_t point=first;point<total;++point) {
+        TraceMark mark=trace_mark();XrXirCompileContext context=trace_owner(trace_caps());
+        uint64_t baseline=trace_stats(&context).live_bytes;XrXirEffects *effects=trace_summary(&context);
+        XrCompileResourceStats before=trace_stats(&context);TraceMark retained=trace_mark();
+        XrXirRootCauseTrace *output=NULL;trace_observe_begin();trace_work_cut_at=point;
+        trace_competing_charge=true;trace_attempts=0;
         CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,8,&output)==XR_XIR_BUDGET);
-        CHECK(!output && !trace_competing_charge && trace_attempts==1); trace_balanced(retained);
-        XrCompileResourceStats after=trace_stats(&context); XrCompileResourceLimits caps=trace_caps();
+        CHECK(!output && !trace_competing_charge && trace_attempts==1);trace_balanced(retained);
+        XrCompileResourceStats after=trace_stats(&context);XrCompileResourceLimits caps=trace_caps();
         CHECK(after.work==caps.work && after.allocated_bytes>before.allocated_bytes && after.live_bytes==before.live_bytes);
         output=(XrXirRootCauseTrace *)(uintptr_t)1;
         CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,8,&output)==XR_XIR_BAD_STRUCTURE);
-        CHECK(output==(XrXirRootCauseTrace *)(uintptr_t)1); trace_stats_equal(trace_stats(&context),after);
+        CHECK(output==(XrXirRootCauseTrace *)(uintptr_t)1);trace_stats_equal(trace_stats(&context),after);
         output=NULL;
         CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,8,&output)==XR_XIR_BUDGET && !output);
-        trace_stats_equal(trace_stats(&context),after); trace_balanced(retained);
-        xr_xir_compile_effects_free(effects); trace_owner_free(&context,baseline); trace_balanced(mark);
+        trace_stats_equal(trace_stats(&context),after);trace_balanced(retained);
+        xr_xir_compile_effects_free(effects);trace_owner_free(&context,baseline);trace_balanced(mark);
     }
+    printf("root trace actual post-allocation work calls %zu through %zu: %zu cuts physical0\n",first,total-1,total-first);
 }
 #endif // XIR_ROOT_TRACE_RESOURCES_H

@@ -1,0 +1,3 @@
+struct Box{value:PanicInfo}
+fn answer()->i64{try{return 1/0}catch panic(p){const b=Box{value:p};return b.value.code-378}}
+export fn run()->i64{return comptime answer()}

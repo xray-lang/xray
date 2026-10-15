@@ -1,0 +1,3 @@
+struct Box {private value:i8;text:string;static make()->Box{return comptime Box{value:7,text:"ab"}}}
+fn echo(x:Box)->Box{return x}
+export fn run()->i64{return comptime 7}

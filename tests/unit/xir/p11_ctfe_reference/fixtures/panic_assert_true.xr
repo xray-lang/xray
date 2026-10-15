@@ -1,0 +1,2 @@
+fn answer()->i64{assert(true,"ok");return 42}
+export fn run()->i64{return comptime answer()}

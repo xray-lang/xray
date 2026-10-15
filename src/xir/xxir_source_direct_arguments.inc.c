@@ -56,7 +56,7 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     bool ok = false;
     SourceSubstitution substitution = {types,count};
     SourceCallPlan plan = {SOURCE_CALL_FUNCTION,request->prefix,substitution,function.parameters,NULL,
-        function.result,request->expected_result,values,offset,offset,ctx->generics[index].parameter_kinds};
+        function.result,request->expected_result,values,offset,offset,ctx->generics[index].parameter_kinds,NULL};
     if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
     supplied=(uint32_t)syntax.arg_count+offset;
     if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;

@@ -1,0 +1,4 @@
+class Box{items:Array<(i64,i64)>;init(items:Array<(i64,i64)>){this.items=items}}
+fn change(xs:ref Array<(i64,i64)>){xs.push((1,2))}
+fn answer()->i64{const b=Box([(40,2)]);change(ref b.items);return b.items[0].0+b.items[0].1}
+export fn run()->i64{return comptime answer()}

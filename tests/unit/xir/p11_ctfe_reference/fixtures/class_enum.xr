@@ -1,0 +1,4 @@
+class Box{value:i64;init(value:i64){this.value=value}}
+enum E{Some{b:Box},None}
+fn answer()->i64{const b=Box(40);const e=E.Some{b:b};const x=match(e){E.Some{b}->b,E.None->Box(0)};x.value=x.value+2;return b.value}
+export fn run()->i64{return comptime answer()}

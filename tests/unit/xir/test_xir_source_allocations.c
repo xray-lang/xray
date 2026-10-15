@@ -127,7 +127,8 @@ static bool allocation_effect_work(const XrXirCompileContext *context,
     return accepted;
 }
 /* Compile the canonical effects implementation and forward every real debit.
- * The bounded observations allocate no ledger bytes and alter no work charge. */
+ * Paged observations allocate no bytes, alter no charge, and impose no
+ * separate limit on the number of compiler functions taking part. */
 #define xir_compile_work(context, fee) allocation_effect_work((context), (fee), __func__)
 #include "xir/xxir_effects.c"
 #undef xir_compile_work

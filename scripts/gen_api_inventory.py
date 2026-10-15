@@ -993,7 +993,9 @@ def collect_native_declaration(root: Path, path: Path, text: str,
     header, members = gen_native_declarations.parse_source(text, prelude)
     identity, name, binders, line, column = header
     owner = {1: ("Array", "array.xr"), 2: ("string", "string.xr"),
-             6: ("Map", "map.xr"), 7: ("Set", "set.xr")}.get(identity)
+             6: ("Map", "map.xr"), 7: ("Set", "set.xr"),
+             8: ("i64", "i64.xr"), 9: ("f64", "f64.xr"),
+             10: ("bool", "bool.xr"), 11: ("rune", "rune.xr")}.get(identity)
     if not owner or name != owner[0] or path != root / "stdlib/types" / owner[1]:
         raise ValueError("native declaration identity does not belong to this source path")
     header_text = text.splitlines()[line - 1]
@@ -1001,7 +1003,7 @@ def collect_native_declaration(root: Path, path: Path, text: str,
     declaration = item(category="native-type", namespace=name, name=name, kind="type",
                        signature=signature, source=rel(root, path), line=line,
                        doc_surface=doc_surface, doc_module=doc_module)
-    declaration.update(native_type_id=identity, declaration_kind="struct", column=column,
+    declaration.update(native_type_id=identity, declaration_kind="class" if identity >= 8 else "struct", column=column,
                        generic_parameter_count=len(binders), generic_parameter_names=list(binders))
     out = [declaration]
     for member_id, member in enumerate(members, 1):

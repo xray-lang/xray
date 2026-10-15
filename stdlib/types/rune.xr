@@ -1,6 +1,9 @@
 // Built-in Unicode scalar type. A rune is always a valid Unicode scalar value.
+// @native-type id=11
 class rune {
+    // @native-operation RUNE_TO_U32 allocation=no_heap failures=none ownership=owned
     toUInt32() -> u32
+    // @native-operation RUNE_TO_STRING allocation=may_heap failures=allocation,retain,limit ownership=owned
     toString() -> string
     isLetter() -> bool
     isNumber() -> bool

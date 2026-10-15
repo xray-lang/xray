@@ -52,18 +52,18 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
         for (uint32_t f=0;f<summary->count;++f) {
-            const XrXirRootFormula *view=&summary->contracts[f].formula;
+            const XrXirRootFormula *view=&effect_roots_read(summary)->contracts[f].formula;
             const XrXirRootFormula *actual=&borrowed->functions[f].formula;
             CHECK(view->terms==actual->terms && view->term_count==actual->term_count &&
                 view->constant_mask==actual->constant_mask);
         }
         effect_parameters_free(summary);
-        CHECK(!summary->result_borrow && !summary->contracts &&
+        CHECK(!summary->result_borrow && !effect_roots_read(summary)->contracts &&
             !summary->formula_terminals && !summary->constant_witnesses);
         effect_context_owner_free(owner);owner=NULL;
         CHECK(ordinary->references==1 && initial->references==references+1);
         status=ordinary_material_cell_match(context,dense,tracked);
-        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations,source->function_count);
+        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations);
         if (status==XR_XIR_OK) status=effect_invocation_forest_match(context,forest);
     }
     effect_context_forest_free(forest);effect_context_owner_free(owner);return status;
@@ -242,6 +242,21 @@ static void initial_ordinary_refresh_controls(void) {
     XrXirStatus status=initial_ordinary_effects(&context,original,&effects);
     if (status!=XR_XIR_OK) fprintf(stderr,"INITIAL_REFRESH_EFFECTS status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && effects);
+    /* A published owner has no constructor refresh capability. Its actual
+     * Final, output records and charged resource state must remain unchanged. */
+    EffectInvocationFinal *published=effects->invocations->final;
+    XrCompileResourceStats before_refresh=rp_stats(&context);
+    RootParameterMark retained=rp_mark();
+    CHECK(xir_effects_context_refresh(&context,original,effects)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats after_refresh=rp_stats(&context);
+    CHECK(!memcmp(&before_refresh,&after_refresh,sizeof(before_refresh)) &&
+        effects->invocations->final==published && effect_outcomes_empty(&effects->outcomes_work));
+    rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
+    /* This actual constructor remains private while Source refines its body.
+     * It is released without publishing facts for a changed Source input. */
+    CHECK(effect_infer_construct(&context,original,NULL,&effects)==XR_XIR_OK && effects &&
+        effects->outcomes_owner && !effects->invocations->final->outcomes);
+
     CHECK(effects->contexts && !effects->refinement &&
         effects->result_borrow==(&effects->invocations->final->summary) &&
         effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary));

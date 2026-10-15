@@ -61,11 +61,16 @@ static bool source_constructor_receiver(SourceContext *ctx, AstNode *node) {
     return symbol && symbol->construction;
 }
 static bool source_constructor_storage_type(SourceContext *ctx, XrXirType receiver, uint32_t field, XrXirType *type) {
-    const XrXirTypeNode *nominal = xr_xir_type_node(&ctx->types, receiver);
-    *type = nominal->nominal.fields[field];
-    if (ctx->bodies[ctx->function].constructor_shared &&
-        (ctx->nominals.declarations[nominal->nominal.declaration].fields[field].flags & XR_XIR_FIELD_MUTABLE))
-        return source_cell_type(ctx, *type, type);
+    XrXirTypeDescription description={0};
+    XrXirFieldDescription member={0};
+    XrXirStatus status=xr_xir_compile_type_description(&ctx->compile,&ctx->types,receiver,&description);
+    if (status==XR_XIR_OK) status=xr_xir_compile_description_field(&ctx->compile,&description,field,&member);
+    if (status==XR_XIR_OK && !member.resolved) status=XR_XIR_BAD_STRUCTURE;
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,status==XR_XIR_BUDGET ?
+        "constructor field budget exhausted" : "constructor field type is invalid");
+    *type=member.type;
+    if (ctx->bodies[ctx->function].constructor_shared && (member.flags & XR_XIR_FIELD_MUTABLE))
+        return source_cell_type(ctx,*type,type);
     return true;
 }
 static bool source_constructor_storage(SourceContext *ctx, AstNode *node, uint32_t field, SourceValue *value) {
@@ -217,7 +222,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument requires a value");
     }
     SourceCallPlan plan={SOURCE_CALL_CONSTRUCTOR,substitution,substitution,function->parameters,NULL,
-        type,{0},arguments,0,0,NULL};
+        type,{0},arguments,0,0,NULL,NULL};
     if (!source_call_expand(ctx,node,&syntax,&plan,function->parameter_count) ||
         !source_argument_arity(ctx,node,index,(uint32_t)syntax.arg_count) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
     for (uint32_t p = (uint32_t)syntax.arg_count; p < function->parameter_count; ++p)

@@ -20,7 +20,7 @@ static bool source_indirect_call(SourceContext *ctx,AstNode *node,SourceValue ca
         parameters[p]=signature.parameters[p].type;
     }
     SourceCallSyntax syntax;
-    SourceCallPlan plan={SOURCE_CALL_INDIRECT,{0},{0},parameters,NULL,signature.result,{0},arguments,0,0,NULL};
+    SourceCallPlan plan={SOURCE_CALL_INDIRECT,{0},{0},parameters,NULL,signature.result,{0},arguments,0,0,NULL,NULL};
     if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,node,&syntax,&plan,count)) return false;
     if ((uint32_t)syntax.arg_count!=count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"indirect call requires its declared signature");

@@ -1,0 +1,2 @@
+fn value()->i64 { if(false) { defer { print(1) } }; return 42 }
+export fn run()->i64 { return comptime value() }

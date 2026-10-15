@@ -9,7 +9,7 @@ import re
 
 
 TYPE_MARKER = re.compile(r'^\s*//\s*@native-type\s+id=([1-9][0-9]*)\s*$', re.M)
-OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z_]+)\s+allocation=(no_heap|may_heap)\s+'
+OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z_][A-Z_0-9]*)\s+allocation=(no_heap|may_heap)\s+'
                        r'failures=([a-z_,]+)\s+ownership=(owned|unit)\s*$')
 IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 TOKENS = re.compile(r'\s*(\.\.\.|->|[A-Za-z_][A-Za-z0-9_]*|[<>()?,:])')
@@ -148,6 +148,12 @@ def simple_term(term, binder):
         return 'UNIT'
     if term == ('name', 'i64', ()):
         return 'I64'
+    if term == ('nullable', ('name', 'i64', ())):
+        return 'NULLABLE_I64'
+    if term == ('name', 'f64', ()):
+        return 'F64'
+    if term == ('name', 'u32', ()):
+        return 'U32'
     if term == ('name', 'string', ()):
         return 'STRING'
     if term == ('name', 'bool', ()):
@@ -233,7 +239,7 @@ def parse_source(source, prelude):
     # Companion error enums are syntax-checked but grant no native operation authority.
     enum_pattern = re.compile(r'^enum\s+([A-Za-z_]\w*)\s*\{\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*\}', re.M)
     prefix = source[:TYPE_MARKER.search(source).start()]
-    if int(marks[0]) == 2:
+    if int(marks[0]) in (2, 8):
         seen = set()
         for enum in enum_pattern.finditer(prefix):
             if enum.group(1) in seen:
@@ -276,13 +282,15 @@ def parse_source(source, prelude):
                 parameters.append(parameter.groups())
             binder = tuple(p[0] for p in parameters)
             identity = int(marks[0])
-            valid = (identity == 1 and name == 'Array' and len(parameters) == 1 and not parameters[0][1] or
+            valid = (kind == 'struct' and (identity == 1 and name == 'Array' and len(parameters) == 1 and not parameters[0][1] or
                      identity == 2 and name == 'string' and not parameters or
                      identity == 6 and name == 'Map' and parameters == [('K', 'Hashable'), ('V', None)] or
-                     identity == 7 and name == 'Set' and parameters == [('T', 'Hashable')])
-            if kind != 'struct' or not valid:
+                     identity == 7 and name == 'Set' and parameters == [('T', 'Hashable')]) or
+                     kind == 'class' and not parameters and (identity, name) in
+                     ((8, 'i64'), (9, 'f64'), (10, 'bool'), (11, 'rune')))
+            if not valid:
                 raise ValueError('native identity, value kind or generic arity mismatch')
-            if identity != 2 and len(re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("' + name + r'",\s*' +
+            if identity in (1, 6, 7) and len(re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("' + name + r'",\s*' +
                                                str(len(binder)) + r',', prelude)) != 1:
                 raise ValueError('native declaration has no exact prelude binding')
             header = (int(marks[0]), name, binder, number, len(raw[:raw.index(name)].encode('utf-8')) + 1)
@@ -340,6 +348,68 @@ def parse_source(source, prelude):
     if header[0] in (6, 7):
         validate_hash_members(header[0], members)
         return header, members
+    if header[0] in (9, 10, 11):
+        contracts = {
+            9: {'FLOAT_ABS': ('abs', '() -> f64', 'no_heap', 'none'),
+                'FLOAT_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit'),
+                'FLOAT_TO_I64': ('toI64', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_FLOOR': ('floor', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_CEIL': ('ceil', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_ROUND': ('round', '() -> i64', 'no_heap', 'numeric_range'),
+                'FLOAT_IS_NAN': ('isNaN', '() -> bool', 'no_heap', 'none')},
+            10: {'BOOL_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
+            11: {'RUNE_TO_U32': ('toUInt32', '() -> u32', 'no_heap', 'none'),
+                'RUNE_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
+        }[header[0]]
+        used = set()
+        for member in members:
+            if member.operation == 'NONE':
+                continue
+            shape = (member.name, member.signature, member.allocation, member.failures)
+            if (shape != contracts.get(member.operation) or member.receiver != 'READ' or
+                    member.static or not member.method or member.lowered or member.ownership != 'owned' or
+                    member.operation in used):
+                raise ValueError('scalar operation disagrees with its complete declaration contract')
+            used.add(member.operation)
+        if used != set(contracts):
+            raise ValueError('scalar declaration omits an admitted recipe')
+        return header, members
+    if header[0] == 8:
+        contracts = {'INTEGER_ABS': ('abs', '() -> i64'),
+                     'INTEGER_WRAPPING_ADD': ('wrappingAdd', '(other: i64) -> i64'),
+                     'INTEGER_WRAPPING_SUB': ('wrappingSub', '(other: i64) -> i64'),
+                     'INTEGER_WRAPPING_MUL': ('wrappingMul', '(other: i64) -> i64'),
+                     'INTEGER_TO_STRING': ('toString', '() -> string'),
+                     'INTEGER_TO_HEX': ('toHex', '() -> string'),
+                     'INTEGER_TO_F64': ('toF64', '() -> f64'),
+                     'INTEGER_SQRT': ('sqrt', '() -> f64'),
+                     'INTEGER_MIN': ('min', '(other: i64) -> i64'),
+                     'INTEGER_MAX': ('max', '(other: i64) -> i64'),
+                     'INTEGER_POPCOUNT': ('popcount', '() -> i64'),
+                     'INTEGER_LEADING_ZEROS': ('leadingZeros', '() -> i64'),
+                     'INTEGER_TRAILING_ZEROS': ('trailingZeros', '() -> i64'),
+                     'INTEGER_BYTESWAP': ('byteswap', '() -> i64'),
+                     'INTEGER_ROTATE_LEFT': ('rotateLeft', '(n: i64) -> i64'),
+                     'INTEGER_ROTATE_RIGHT': ('rotateRight', '(n: i64) -> i64')}
+        for base, kind in [('checked', 'CHECKED'), ('saturating', 'SATURATING')]:
+            for suffix, op in [('Add', 'ADD'), ('Sub', 'SUB'), ('Mul', 'MUL')]:
+                contracts['INTEGER_' + kind + '_' + op] = (base + suffix, '(other: i64) -> i64' + ('?' if base == 'checked' else ''))
+        for base, op in [('add', 'ADD'), ('sub', 'SUB'), ('mul', 'MUL')]:
+            contracts['INTEGER_' + op + '_OVERFLOWS'] = (base + 'Overflows', '(other: i64) -> bool')
+        used = set()
+        for member in members:
+            if member.operation == 'NONE':
+                continue
+            expected = contracts.get(member.operation)
+            if (expected != (member.name, member.signature) or member.receiver != 'READ' or
+                    member.static or not member.method or member.lowered or
+                    member.allocation != ('may_heap' if (member.operation in ('INTEGER_TO_STRING', 'INTEGER_TO_HEX') or member.operation.startswith('INTEGER_CHECKED_')) else 'no_heap') or
+                    member.failures != ('allocation,retain,limit' if (member.operation in ('INTEGER_TO_STRING', 'INTEGER_TO_HEX') or member.operation.startswith('INTEGER_CHECKED_')) else 'none') or member.ownership != 'owned'):
+                raise ValueError('integer operation disagrees with its complete declaration contract')
+            used.add(member.operation)
+        if used != set(contracts):
+            raise ValueError('integer declaration omits an admitted recipe')
+        return header, members
     recipes = array_recipe_contracts(header[2][0]) if header[0] == 1 else {}
     used = set()
     for member in members:
@@ -366,6 +436,8 @@ def parse_source(source, prelude):
             'STRING_CONTAINS': ('contains', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_STARTS_WITH': ('startsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
+            'STRING_TO_STRING': ('toString', 'READ', (), 'STRING', 'no_heap', 'retain', 'owned'),
+            'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
         expected_optional = (False, True) if member.operation == 'STRING_INDEX_OF' else (False,) * len(member.parameters)
@@ -374,7 +446,8 @@ def parse_source(source, prelude):
         if shape != expected or member.static != expected_static or member.method != expected_method or optional != expected_optional or any(p[4] for p in member.parameters):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
-        'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF'}
+        'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
+        'STRING_TO_STRING', 'STRING_REPEAT'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members
@@ -415,7 +488,8 @@ def render_type(root, stem):
     header, members = parse_source(source, prelude)
     identity, name, binder, line, column = header
     if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'),
-                                     ('map', 6, 'Map'), ('set', 7, 'Set')):
+                                     ('map', 6, 'Map'), ('set', 7, 'Set'), ('i64', 8, 'i64'), ('f64', 9, 'f64'),
+                                     ('bool', 10, 'bool'), ('rune', 11, 'rune')):
         raise ValueError('native source path does not own this declaration identity')
     lines = []
     for index, member in enumerate(members):
@@ -646,8 +720,12 @@ def render(root):
     lines = ['/* Generated by gen_native_declarations.py; do not edit. */']
     array_lines, header, members = render_type(root, "array")
     string_lines, _, _ = render_type(root, "string")
-    lines += (array_lines + string_lines + render_atomic_identities(root) + render_task_identity(root) +
-              render_type(root, 'map')[0] + render_type(root, 'set')[0])
+    integer_lines, _, _ = render_type(root, "i64")
+    scalar_lines = []
+    for stem in ('f64', 'bool', 'rune'):
+        generated, _, _ = render_type(root, stem)
+        scalar_lines += generated
+    lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root) + render_type(root, 'map')[0] + render_type(root, 'set')[0]
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

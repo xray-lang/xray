@@ -1,0 +1,2 @@
+fn answer()->bool { const nan:Array<f64>=[0.0/0.0]; const a:Array<f64>=[0.0,1.5]; const b:Array<f64>=[-0.0,1.5]; return nan!=nan && a==b }
+export fn run()->bool { return comptime answer() }

@@ -1,0 +1,4 @@
+enum E{Bad}
+fn fail(n:i64)->i64{defer{var x=n};if(n==0){throw E.Bad};return fail(n-1)}
+fn answer()->i64{try{return fail(12)}catch(e:E){return 42}}
+export fn run()->i64{return comptime answer()}

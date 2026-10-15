@@ -1,0 +1,4 @@
+fn shrink(xs:ref Array<i64>)->i64{xs=[];return 0}
+fn take(x:ref i64,y:i64)->i64{return x+y}
+fn answer()->i64{var xs=[40];try{return take(ref xs[0],shrink(ref xs))}catch panic(p){return p.code==430 && p.message=="array index out of range: 0 (length 0)" && len(xs)==0 ? 42 : 0}}
+export fn run()->i64{return comptime answer()}

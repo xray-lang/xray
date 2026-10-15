@@ -9,6 +9,7 @@
 #define main stdlib_preparation_original_main
 #include "test_xir_stdlib_vm.c"
 #undef main
+#include <time.h>
 
 typedef struct StdlibPreparationRun {
     XrXirStatus status;
@@ -20,20 +21,24 @@ typedef struct StdlibPreparationRun {
 } StdlibPreparationRun;
 
 static size_t preparation_stage_offsets[10];
+static clock_t preparation_stage_ticks[10];
 
 static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     const char *root, const char *entry, XrXirArtifact **output, unsigned *stage) {
     size_t first_attempt = effects_compile_attempts;
     memset(preparation_stage_offsets,0,sizeof(preparation_stage_offsets));
+    memset(preparation_stage_ticks,0,sizeof(preparation_stage_ticks));
     XrXirLibraryCatalog *catalog = NULL;
     XrCompilerSession *session = NULL;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
     preparation_stage_offsets[1] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[1] = clock();
     *stage = 1;
     XrXirStatus status = xir_stdlib_library_catalog_new(context,root,&catalog);
     if (status != XR_XIR_OK) goto finish;
     preparation_stage_offsets[2] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[2] = clock();
     *stage = 2;
     XrCompilerSessionStatus session_status = xr_compile_session_new(context->resources,&session);
     if (session_status != XR_COMPILER_SESSION_OK) {
@@ -43,32 +48,44 @@ static XrXirStatus preparation_pipeline(const XrXirCompileContext *context,
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
     XrXirSourceRequest request = {session,entry,&authority,context,root,NULL,XR_XIR_PROGRAM,catalog};
     preparation_stage_offsets[3] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[3] = clock();
     *stage = 3;
     status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
-    if (status != XR_XIR_OK) goto finish;
+    if (status != XR_XIR_OK) {
+        if (effects_compile_fail_at==SIZE_MAX)
+            fprintf(stderr,"stdlib Source status=%u module=%u line=%d column=%d diagnostic=%s\n",
+                status,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message);
+        goto finish;
+    }
     preparation_stage_offsets[4] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[4] = clock();
     *stage = 4;
     status = xr_xir_compile_checked_write(result.checked,&packet,NULL);
     if (status != XR_XIR_OK) goto finish;
     preparation_stage_offsets[5] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[5] = clock();
     *stage = 5;
     status = xr_xir_compile_checked_read(context,packet.bytes,packet.length,&decoded,NULL);
     if (status != XR_XIR_OK) goto finish;
     preparation_stage_offsets[6] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[6] = clock();
     *stage = 6;
     status = xr_xir_compile_specialize(decoded,&closed,NULL);
     if (status != XR_XIR_OK) goto finish;
     preparation_stage_offsets[7] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[7] = clock();
     *stage = 7;
     status = xr_xir_compile_artifact_verify(closed,NULL);
     if (status != XR_XIR_OK) goto finish;
     XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     preparation_stage_offsets[8] = effects_compile_attempts-first_attempt;
+    preparation_stage_ticks[8] = clock();
     *stage = 8;
     status = xr_xir_compile_lower(closed,&target,output,NULL);
 finish:;
     size_t cleanup_first = effects_compile_attempts;
     preparation_stage_offsets[9] = cleanup_first-first_attempt;
+    preparation_stage_ticks[9] = clock();
     xr_xir_compile_artifact_free(closed); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_source_result_free(&result);
     xr_compile_session_free(session); xr_xir_compile_library_catalog_free(catalog);
@@ -151,10 +168,29 @@ static void preparation_constructor_controls(XrCompileResourceLimits caps) {
 }
 
 int main(int argc, char **argv) {
-    CHECK(argc == 4); bool full = !strcmp(argv[3],"faults"); CHECK(full || !strcmp(argv[3],"measure"));
+    CHECK(argc == 4); bool full = !strcmp(argv[3],"faults"); bool profile = !strcmp(argv[3],"profile");
+    CHECK(full || profile || !strcmp(argv[3],"measure"));
     const XrCompileResourceLimits caps = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    if (profile) {
+        double stage_seconds[9] = {0};
+        const unsigned repetitions = 32;
+        for (unsigned run = 0; run < repetitions; ++run) {
+            StdlibPreparationRun measured = preparation_run(argv[1],argv[2],caps,SIZE_MAX);
+            CHECK(measured.status == XR_XIR_OK && measured.stage == 9 && !measured.injected);
+            for (unsigned stage = 1; stage <= 8; ++stage)
+                stage_seconds[stage] += (double)(preparation_stage_ticks[stage+1]-preparation_stage_ticks[stage]) / CLOCKS_PER_SEC;
+        }
+        for (unsigned stage = 1; stage <= 8; ++stage)
+            printf("stdlib preparation profile stage=%u meanCPU=%.9f sites=%zu repeats=%u observation-only\n",
+                stage,stage_seconds[stage]/repetitions,preparation_stage_offsets[stage+1]-preparation_stage_offsets[stage],repetitions);
+        return 0;
+    }
     preparation_constructor_controls(caps);
     StdlibPreparationRun normal = preparation_run(argv[1],argv[2],caps,SIZE_MAX);
+    if (normal.status!=XR_XIR_OK)
+        fprintf(stderr,"stdlib preparation baseline failed status=%u stage=%u sites=%zu allocated=%llu peak=%llu work=%llu\n",
+            normal.status,normal.stage,normal.sites,(unsigned long long)normal.whole.allocated_bytes,
+            (unsigned long long)normal.whole.peak_bytes,(unsigned long long)normal.whole.work);
     CHECK(normal.status == XR_XIR_OK && normal.stage == 9 && normal.sites && !normal.injected);
     printf("stdlib preparation baseline actual=%zu operation=%zu preparation allocated=%llu peak=%llu work=%llu whole allocated=%llu peak=%llu work=%llu physical0\n",
         normal.sites,normal.attempts-normal.sites,

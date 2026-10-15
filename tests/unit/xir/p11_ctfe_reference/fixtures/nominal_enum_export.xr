@@ -1,0 +1,3 @@
+enum Choice { Empty, Some { text:string } }
+fn make()->Choice { return Choice.Some{text:"ab"} }
+export fn run()->Choice { return comptime make() }

@@ -103,9 +103,12 @@ static void bound_interfaces(void) {
             XrXirStatus status=invoke?bound_invoke(&context,flags[n],&checked,&diagnostic):bound_requirement(&context,flags[n],&checked,&diagnostic);
             if(status!=XR_XIR_OK)fprintf(stderr,"abstract flags%u invoke%u status%u f%u i%u\n",flags[n],invoke,status,diagnostic.function,diagnostic.instruction);
             CHECK(status==XR_XIR_OK && checked && xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK && effects);
-            const XrXirRootEffects *root=xr_xir_effects_root(effects,2);CHECK(root);
+            XrXirEffectFacts root_read=xr_xir_effects_read(effects,2);
+            const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);CHECK(root);
             CHECK(root->requires_root==known[n] && root->unresolved==unknown[n]);
-            const XrXirRootEffectWitness *k=xr_xir_effects_root_witness(effects,2),*u=xr_xir_effects_unresolved_witness(effects,2);
+            XrXirEffectFacts k_read=xr_xir_effects_read(effects,2);
+            const XrXirRootEffectWitness *k=(k_read.status==XR_XIR_OK && k_read.root_witness.cause!=0?&k_read.root_witness:NULL);XrXirEffectFacts u_read=xr_xir_effects_read(effects,2);
+            const XrXirRootEffectWitness *u=(u_read.status==XR_XIR_OK && u_read.unresolved_witness.cause!=0?&u_read.unresolved_witness:NULL);
             CHECK((k!=NULL)==known[n] && (u!=NULL)==unknown[n]);
             if(k)CHECK(k->instruction==0 && k->cause==(invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_REQUIREMENT));
             if(u)CHECK(u->instruction==0 && u->cause==(invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_REQUIREMENT));

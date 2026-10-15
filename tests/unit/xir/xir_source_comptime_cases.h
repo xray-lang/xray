@@ -57,6 +57,8 @@ static void source_comptime_test_answer(const char *text,XrXirType type,int64_t 
 static void source_comptime_test_semantics(void) {
     source_comptime_test_answer("export fn run()->i64 { return comptime (6*7) }\n",XR_XIR_I64,42);
     source_comptime_test_answer(source_comptime_test_text,XR_XIR_I64,42);
+    source_comptime_test_answer("fn indirect()->i64 { const f=fn(x:i64)->i64 { return x+1 }; return f(40) }\n"
+        "export fn run()->i64 { return comptime indirect() }\n",XR_XIR_I64,41);
     source_comptime_test_answer("fn cell()->i64 { var n=1; n=2; return n }\nexport fn run()->i64 { return comptime cell() }\n",XR_XIR_I64,2);
     source_comptime_test_answer("fn leaf(x:i64)->i64 { return x+1 }\nfn idle()->i64 { print(1); return 1 }\n"
         "export fn run()->i64 { return comptime leaf(41) }\n",XR_XIR_I64,42);
@@ -135,8 +137,6 @@ static void source_comptime_test_string_result(const char *text) {
 static void source_comptime_test_rejections(void) {
     source_comptime_test_refuse("fn io()->i64 { print(1); return 1 }\nexport fn run()->i64 { return comptime io() }\n",XR_XIR_BAD_TYPE);
     source_comptime_test_refuse("var n=1\nfn state()->i64 { return n }\nexport fn run()->i64 { return comptime state() }\n",XR_XIR_BAD_TYPE);
-    source_comptime_test_refuse("fn indirect()->i64 { const f=fn(x:i64)->i64 { return x+1 }; return f(40) }\n"
-        "export fn run()->i64 { return comptime indirect() }\n",XR_XIR_BAD_TYPE);
     source_comptime_test_refuse("export fn run(x:i64)->i64 { return comptime x }\n",XR_XIR_BAD_VALUE);
     source_comptime_test_refuse("fn recurse()->i64 { return recurse() }\nexport fn run()->i64 { return comptime recurse() }\n",XR_XIR_BUDGET);
     source_comptime_test_refuse("fn loop(flag:bool)->i64 { while(flag) {}; return 1 }\n"

@@ -1,0 +1,2 @@
+fn answer()->i64{const p=(fn()->i64{return 7},fn()->i64{return 35});return p.0()+p.1()}
+export fn run()->i64{return comptime answer()}

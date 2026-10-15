@@ -17,6 +17,16 @@ static XrXirCtfeStatus ctfe_argument_store(ScalarRun *run,uint32_t offset,
     }
     XrXirCtfeStatus validation=ctfe_validation_work(run,state,(XrXirType)value->type);
     if (validation!=XR_XIR_CTFE_OK) return validation;
+    if (xr_xir_type_is_cell(run->module->types,(XrXirType)value->type)) {
+        if (!scalar_compile_work(run,state->value_header_work)) return XR_XIR_CTFE_BUDGET;
+        if (xr_xir_cell_is_projection(value)) {
+            if (!xr_xir_cell_in_domain(value,state->domain) || xr_xir_cell_module_storage(value)) return XR_XIR_CTFE_NOT_SUPPORTED;
+            /* A new descendant descriptor is not readable until its real loan
+             * enters. Preparation authenticates it before any child executes. */
+        } else {
+            XrXirCtfeStatus access=ctfe_admission_work(run,state,value);if (access!=XR_XIR_CTFE_OK) return access;
+        }
+    }
     if (!snapshot) return ctfe_value_status(xr_xir_owned_slot_copy(run->frame,offset,
         state->arena,(XrXirType)value->type,value->payload));
     if (value->type!=XR_XIR_STRING) return XR_XIR_CTFE_NOT_SUPPORTED;
@@ -47,15 +57,17 @@ static XrXirCtfeStatus ctfe_result_publish(ScalarRun *run,const XrXirValue *valu
     *output=*value;return XR_XIR_CTFE_OK;
 }
 #include "xxir_ctfe_string_read.inc.c"
+#include "xxir_ctfe_text.inc.c"
 
 static bool ctfe_string_opcode(const ScalarRun *run,const XrXirInstruction *op) {
-    return ctfe_string_read_opcode(op->op) || op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING ||
+    return ctfe_string_read_opcode(op->op) || op->op==XR_XIR_TO_STRING || op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING ||
         op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN ||
         op->op==XR_XIR_STRING_LEN || op->op==XR_XIR_EQ_STRING || op->op==XR_XIR_NE_STRING ||
         (op->op==XR_XIR_EQUAL && xr_xir_operand_type(run->function,op->args[0])==XR_XIR_STRING);
 }
 static XrXirCtfeStatus ctfe_string_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];
+    if (op->op==XR_XIR_TO_STRING) return ctfe_text_step(run,cursor,state);
     if (ctfe_string_read_opcode(op->op)) return ctfe_string_read_step(run,cursor);
     uint32_t destination=run->layout->offsets[run->function->parameter_count+*cursor];
     XrXirValue result={0};XrXirValueStatus status=XR_XIR_VALUE_OK;

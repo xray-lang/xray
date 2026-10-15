@@ -172,16 +172,16 @@ static void pm_fixture(PmFixture *storage,PmCase *input) {
     CHECK(input->module_instructions==input->scalars+input->blocks+4 && input->module_blocks==input->blocks+2);
 }
 static void pm_golden(const XrXirEffects *effects,const PmCase *input) {
-    CHECK(effects && effects->count==3 && effects->atom_count==2 && effects->words==1);
-    CHECK(!effects->errors[0] && effects->errors[1]==(input->empty?0u:pc_expected(PC_FORWARD,false)));
-    CHECK(effects->errors[2]==8);
-    CHECK(effects->functions[1].throws==(input->empty?XR_XIR_EFFECT_NONE:XR_XIR_EFFECT_MAY));
+    CHECK(effects && effects->count==3 && effect_final_outcomes(effects)->atom_count==2 && effect_final_outcomes(effects)->words==1);
+    CHECK(!effect_final_outcomes(effects)->errors[0] && effect_final_outcomes(effects)->errors[1]==(input->empty?0u:pc_expected(PC_FORWARD,false)));
+    CHECK(effect_final_outcomes(effects)->errors[2]==8);
+    CHECK(effect_final_outcomes(effects)->functions[1].throws==(input->empty?XR_XIR_EFFECT_NONE:XR_XIR_EFFECT_MAY));
     CHECK(!xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
     CHECK(xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,0)==!input->empty);
     CHECK(!xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,1));
     for(uint32_t f=0;f<3;++f) {
-        CHECK(effects->task_errors[f]==XR_XIR_OK && effects->functions[f].suspend==XR_XIR_EFFECT_NONE);
-        CHECK(effects->root[f].requires_root==(f==0) && !effects->root[f].unresolved);
+        CHECK(effect_final_outcomes(effects)->task_errors[f]==XR_XIR_OK && effect_final_outcomes(effects)->functions[f].suspend==XR_XIR_EFFECT_NONE);
+        CHECK(effect_roots_read(effects)->root[f].requires_root==(f==0) && !effect_roots_read(effects)->root[f].unresolved);
     }
 }
 static void pm_summary(const PmCase *input,const PmPoint *before,const PmPoint *after,uint64_t infer_work) {

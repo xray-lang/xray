@@ -21,9 +21,3 @@ static bool source_rune_call(SourceContext *ctx,AstNode *node,bool construct,Sou
     return source_recipe_record(ctx,(XrXirInstruction){construct?XR_XIR_INTEGER_TO_RUNE:XR_XIR_RUNE_TO_INTEGER,
         construct?XR_XIR_RUNE:XR_XIR_I64,{input.id,0},{0},0,{0}},value);
 }
-static bool source_rune_codepoint(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value) {
-    CallExprNode *call=&node->as.call_expr;
-    if (call->arg_count || call->type_arg_count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"toUInt32 accepts no value or type arguments");
-    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RUNE_TO_INTEGER,XR_XIR_U32,{receiver.id,0},{0},0,{0}},value);
-}

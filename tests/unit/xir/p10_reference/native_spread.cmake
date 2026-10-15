@@ -72,7 +72,7 @@ add_test(NAME test_xir_p10_reference_reject_native_spread_type
     COMMAND test_xir_p10_reference --reject reject_native_spread_type 3 "expression cannot satisfy its declared type")
 set_tests_properties(test_xir_p10_reference_reject_native_spread_type PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native;spread;reject")
 add_test(NAME test_xir_p10_reference_reject_native_spread_ref
-    COMMAND test_xir_p10_reference --reject reject_native_spread_ref 4 "Array method arguments use ordinary READ values")
+    COMMAND test_xir_p10_reference --reject reject_native_spread_ref 4 "direct call arguments must use the declared READ contract")
 set_tests_properties(test_xir_p10_reference_reject_native_spread_ref PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;native;spread;reject")
 add_test(NAME test_xir_p10_reference_reject_native_spread_const
     COMMAND test_xir_p10_reference --reject reject_native_spread_const 3 "value mutation requires a mutable named root")

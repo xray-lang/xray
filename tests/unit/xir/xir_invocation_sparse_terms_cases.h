@@ -21,7 +21,7 @@ static const uint32_t sparse_counts[5]={1,1,3,1,1};
  * the original seal; the independent raw classifier supplies the expected set. */
 static void conditional_sparse_physical_bound_rejections(EffectInvocationWorkspace *owner,
     EffectFinalFunctions *solution) {
-    const XrXirCompileContext *context=owner->work;
+    const XrXirCompileContext *context=owner->read.work;
     EffectPhysicalFunction *physical=&owner->final.physical->functions[1];
     CHECK(physical->count && physical->records[0].value==0 &&
         physical->records[0].mask&EFFECT_PHYSICAL_CALLABLE);
@@ -35,7 +35,7 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationWorkspa
         rp_stats(context).allocation_count==before.allocation_count);
     physical->records[0].mask=original_mask;rp_balanced(retained);
     CHECK(effect_body_physical_match(context,owner->final.physical,owner->final.material)==XR_XIR_OK);
-    EffectInvocationDeclaredBounds *bounds=(EffectInvocationDeclaredBounds *)owner->declared;
+    EffectInvocationDeclaredBounds *bounds=(EffectInvocationDeclaredBounds *)owner->read.declared;
     EffectInvocationValueBound *bound=&bounds->functions[1].bounds[0];
     CHECK(bound->value==0 && bound->callable && bound->mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
 }
@@ -45,7 +45,7 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationWorkspa
  * write through either the staged storage or an aliased receiving request. */
 static void conditional_sparse_receiver_rejections(EffectInvocationWorkspace *owner,
     EffectFinalFunctions *solution,uint32_t mode) {
-    const XrXirCompileContext *context=owner->work;
+    const XrXirCompileContext *context=owner->read.work;
     XrXirRootFormula *formula=&solution->functions[1].formula;
     XrXirRootTerm *terms=(XrXirRootTerm *)formula->terms;
     CHECK(formula->term_count==sparse_counts[mode] && terms);

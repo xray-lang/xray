@@ -17,9 +17,9 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
     if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_effects_analyze(checked,&effects); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     if (status==XR_XIR_OK && oracle) {
-        CHECK(effects->invocations && !effects->contexts && effects->root[0].requires_root==(mode!=0) &&
-            !effects->root[0].unresolved && !effects->root[1].requires_root && effects->root[1].unresolved);
-        const XrXirRootFormula *formula=&effects->contracts[1].formula;
+        CHECK(effects->invocations && !effects->contexts && effect_roots_read(effects)->root[0].requires_root==(mode!=0) &&
+            !effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[1].requires_root && effect_roots_read(effects)->root[1].unresolved);
+        const XrXirRootFormula *formula=&effect_roots_read(effects)->contracts[1].formula;
         CHECK(!formula->constant_mask && formula->term_count==1 &&
             formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !formula->terms[0].index);
         CHECK(formula->terms==effects->invocations->final->summary.functions[1].storage &&
@@ -28,8 +28,8 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         CHECK(effects->result_borrow==result);
         CHECK(effects->formula_terminals==result->witnesses &&
             effects->constant_witnesses==result->witnesses+(size_t)result->count*2 &&
-            effects->root!=result->facts && effects->root_witnesses!=result->witnesses &&
-            effects->unresolved_witnesses!=result->witnesses+result->count);
+            effect_roots_read(effects)->root!=result->facts && effect_roots_read(effects)->root_witnesses!=result->witnesses &&
+            effect_roots_read(effects)->unresolved_witnesses!=result->witnesses+result->count);
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(context,effects,1,&entry)==XR_XIR_OK &&
             entry.intrinsic_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
@@ -37,11 +37,11 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         CHECK(effect_invocation_effect_edge_mask(context,effects,0,mode?2:3,1,&mask)==XR_XIR_OK &&
             mask==(mode?XR_XIR_CALLABLE_ROOT_REQUIRED:0));
         EffectInvocationCertificate *saved=effects->invocations;XrXirRootFormula prior=*formula;
-        XrXirRootEffects fact=effects->root[0];EffectGraph graph={0};
+        XrXirRootEffects fact=effect_roots_read(effects)->root[0];EffectGraph graph={0};
         EffectInvocationDeclaredBounds malformed={.resources=context->resources};
         CHECK(effect_invocation_publish(context,module,effects,&graph,&malformed,NULL)==XR_XIR_BAD_STRUCTURE &&
-            effects->invocations==saved && effects->contracts[1].formula.terms==prior.terms &&
-            effects->root[0].requires_root==fact.requires_root && effects->root[0].unresolved==fact.unresolved &&
+            effects->invocations==saved && effect_roots_read(effects)->contracts[1].formula.terms==prior.terms &&
+            effect_roots_read(effects)->root[0].requires_root==fact.requires_root && effect_roots_read(effects)->root[0].unresolved==fact.unresolved &&
             effects->result_borrow==result);
         effect_graph_free(&graph);
         size_t attempts=rp_attempts;XrXirEffects *occupied=effects;
@@ -61,7 +61,7 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         uint64_t baseline=rp_stats(&foreign).live_bytes;XrXirRootCauseTrace *untouched=NULL;
         CHECK(xr_xir_compile_root_cause_trace_copy(&foreign,effects,1,&untouched)==XR_XIR_BAD_STRUCTURE && !untouched);
         rp_owner_free(&foreign,baseline);rp_balanced(physical);
-        XrXirRootFormula *published=&effects->contracts[1].formula;
+        XrXirRootFormula *published=&effect_roots_read(effects)->contracts[1].formula;
         XrXirRootTerm *term=(XrXirRootTerm *)published->terms;uint32_t kind=term[0].kind;
         term[0].kind=XR_XIR_ROOT_TERM_PARAMETER;EffectInvocationCertificate *certificate=effects->invocations;
         CHECK(certificate->final->summary.functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER);
@@ -104,7 +104,7 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
         for (uint32_t f=0;f<summary->count;++f) {
-            const XrXirRootFormula *view=&summary->contracts[f].formula;
+            const XrXirRootFormula *view=&effect_roots_read(summary)->contracts[f].formula;
             const XrXirRootFormula *actual=&borrowed->functions[f].formula;
             CHECK(view->terms==actual->terms && view->term_count==actual->term_count &&
                 view->constant_mask==actual->constant_mask);
@@ -115,9 +115,9 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
             mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
         CHECK(effect_invocation_bounds_mask(context,effects->contexts->forest->invocations->declared,
             0,1,&mask)==XR_XIR_OK && mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-        CHECK(!effects->root[0].requires_root && !effects->root[0].unresolved &&
-            !effects->root[1].requires_root && effects->root[1].unresolved);
-        const XrXirRootFormula *formula=&effects->contracts[1].formula;
+        CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&
+            !effect_roots_read(effects)->root[1].requires_root && effect_roots_read(effects)->root[1].unresolved);
+        const XrXirRootFormula *formula=&effect_roots_read(effects)->contracts[1].formula;
         CHECK(!formula->constant_mask && formula->term_count==1 &&
             formula->terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER && !formula->terms[0].index);
         XrXirType *declared=NULL;size_t attempts=rp_attempts;

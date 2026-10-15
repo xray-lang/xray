@@ -1,0 +1,2 @@
+fn answer()->bool { const xs:Array<Array<i8>>=[[1,2],[3]]; const ys:Array<i8>=[1,2]; const nan:Array<f64>=[0.0/0.0]; return xs.contains(ys) && xs.indexOf(ys)==0 && xs.indexOf([9])==(-1) && !nan.contains(nan[0]) }
+export fn run()->bool { return comptime answer() }

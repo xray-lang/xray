@@ -60,7 +60,8 @@ static uint32_t h1n_export(const XrXirModule *module) {
 static void h1n_facts(XrXirArtifact *artifact, const RootParameterSourceOracle *oracle, uint32_t run) {
     XrXirEffects *effects = NULL;
     h1n_ok(xr_xir_compile_effects_analyze(artifact, &effects), oracle, "closed_effects");
-    const XrXirRootEffects *facts = xr_xir_effects_root(effects, run);
+    XrXirEffectFacts facts_read=xr_xir_effects_read(effects, run);
+    const XrXirRootEffects *facts=(facts_read.status==XR_XIR_OK?&facts_read.root:NULL);
     CHECK(facts && facts->requires_root == oracle->root && facts->unresolved == oracle->unresolved);
     xr_xir_compile_effects_free(effects);
 }

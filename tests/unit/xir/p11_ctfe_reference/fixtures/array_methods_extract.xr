@@ -1,0 +1,2 @@
+fn answer()->bool { var xs:Array<Array<i8>>=[[1,2,3]]; const a=xs[0].pop(); const b=xs[0].shift(); const expected:Array<i8>=[2]; const one:i8=1; const three:i8=3; return a! == three && b! == one && xs[0]==expected }
+export fn run()->bool { return comptime answer() }
