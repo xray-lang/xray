@@ -1,0 +1,3 @@
+import {mark,shared} from "./shared"
+var initialized:i64=mark("L")
+export fn left()->i64{return shared()*10+initialized}

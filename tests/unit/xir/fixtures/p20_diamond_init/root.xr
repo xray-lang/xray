@@ -1,0 +1,5 @@
+import {left} from "./left"
+import {right} from "./right"
+import {mark,total,snapshot} from "./shared"
+var initialized:i64=mark("T")
+export fn run()->string{if(left()!=12 || right()!=13 || initialized!=4 || total()!=4){return "bad"};return snapshot()}
