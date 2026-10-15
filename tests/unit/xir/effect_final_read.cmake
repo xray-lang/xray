@@ -17,3 +17,15 @@ add_test(NAME test_xir_effect_final_recursive_trace
 set_tests_properties(test_xir_effect_final_recursive_trace PROPERTIES
     LABELS "unit;xir;root-effects;ownership;metadata;final-read;recursion"
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_current_input_callback
+    COMMAND test_xir_error_cfg_pending --current-input-callback)
+set_tests_properties(test_xir_effect_current_input_callback PROPERTIES
+    LABELS "unit;xir;root-effects;ownership;metadata;final-input;callback"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_current_input_resources
+    COMMAND test_xir_error_cfg_pending --current-input-resources)
+set_tests_properties(test_xir_effect_current_input_resources PROPERTIES
+    LABELS "unit;xir;root-effects;ownership;metadata;final-input;callback;resources"
+    TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
