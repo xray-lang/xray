@@ -21,7 +21,7 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
 set_tests_properties(test_xir_p10_source_generations PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source")
-foreach(fact IN ITEMS function generic type stateful)
+foreach(fact IN ITEMS function generic type stateful cell)
     add_test(NAME test_xir_p10_source_history_${fact}
         COMMAND test_xir_p10_source_generations --history-${fact})
     set_tests_properties(test_xir_p10_source_history_${fact} PROPERTIES

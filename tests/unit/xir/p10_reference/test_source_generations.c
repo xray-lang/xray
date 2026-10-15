@@ -11,6 +11,7 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
+#include "xir/xxir_types.h"
 #include "module/xmodule_fingerprint.h"
 #include "frontend/parser/xast.h"
 #include <stdio.h>
@@ -122,7 +123,7 @@ static void failed_runtime(XrXirSourceGenerations *owner,XrXirInstance *instance
     xr_xir_compile_program_drop(candidate);
 }
 static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
-    const XrXirSourceGenerationView *view,bool has_value) {
+    const XrXirSourceGenerationView *view,bool has_value,bool mutable_value) {
     const XrXirModule *module=xr_xir_compile_artifact_module(view->result->checked);
     XrXirSourceGenerationDefinition definition={0},sentinel;
     bool imported=view->ast->as.program.statements[0]->type==AST_IMPORT_STMT;
@@ -144,8 +145,9 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
     CHECK(item->field_count==1 && item->fields[0].type==XR_XIR_I64);
     if (has_value) {
         CHECK(xr_xir_compile_source_generation_definition(owner,serial,"value",&definition)==XR_XIR_OK);
-        CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_BINDING && definition.stored_type==XR_XIR_I64 &&
-            !definition.mutable && definition.ordinal<module->declarations->slot_count &&
+        CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_BINDING && definition.mutable==mutable_value &&
+            (mutable_value ? xr_xir_cell_element(module->types,definition.stored_type)==XR_XIR_I64 :
+                definition.stored_type==XR_XIR_I64) && definition.ordinal<module->declarations->slot_count &&
             module->declarations->slots[definition.ordinal].type==definition.stored_type &&
             definition.syntax==view->ast->as.program.statements[0]);
     }
@@ -170,7 +172,8 @@ static int history_check(const char *mode) {
     bool definitions=!strcmp(mode,"--definitions") || !strcmp(mode,"--definitions-comptime") || !strcmp(mode,"--definitions-import");
     bool folded=!strcmp(mode,"--definitions-comptime");
     bool imported=!strcmp(mode,"--definitions-import");
-    bool stateful=!strcmp(mode,"--history-stateful");
+    bool cell=!strcmp(mode,"--history-cell");
+    bool stateful=!strcmp(mode,"--history-stateful") || cell;
     const char *next=!strcmp(mode,"--history-function") ?
         "export fn answer()->i64{return old()+1}" : !strcmp(mode,"--history-generic") ?
         "export fn answer()->i64{return identity<i64>(42)}" : !strcmp(mode,"--history-type") ?
@@ -180,14 +183,15 @@ static int history_check(const char *mode) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,"history-check-test",imported ? XR_GENERATION_STDLIB : NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
-    const char *source=stateful ? "const value=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
+    const char *source=cell ? "var value:i64=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
+        stateful ? "const value=41\nfn old()->i64{return value+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
         imported ? "import _probe as library\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return library.answer()}" :
         folded ? "const value=comptime (6*7)\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return value}" :
         "fn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}";
     uint64_t first=prepare(owner,source);
     XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK);
     const struct AstNode *original=view.ast;
-    definition_checks(owner,first,&view,folded || stateful);
+    definition_checks(owner,first,&view,folded || stateful,cell);
     uint32_t entry=0;XrXirProgram *initial=program(&view,"seed",&entry);
     bind_program(&compiler,owner,first,initial);
     XrXirInstanceConfig runtime_config;CHECK(xr_xir_instance_config_init(&runtime_config,sizeof(runtime_config))==XR_XIR_CALL_READY);
@@ -210,7 +214,7 @@ static int history_check(const char *mode) {
     XrXirSourceGenerationBinding binding={0};
     CHECK(xr_xir_compile_source_generation_lookup(owner,"old",&binding)==XR_XIR_OK && binding.generation==first);
     CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK && view.published && view.ast==original);
-    definition_checks(owner,first,&view,folded || stateful);
+    definition_checks(owner,first,&view,folded || stateful,cell);
     if (next && status==XR_XIR_OK) {
         CHECK(serial>first && xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK && view.parent==first);
         const XrXirDeclarations *declarations=xr_xir_compile_artifact_module(view.result->checked)->declarations;
@@ -225,7 +229,11 @@ static int history_check(const char *mode) {
         CHECK(xr_xir_source_generation_prepare_instance(owner,serial,foreign,&candidate)==XR_XIR_CALL_BAD_ARGUMENT && !candidate);
         CHECK(xr_xir_instance_free(foreign)==XR_XIR_CALL_READY);
         CHECK(xr_xir_source_generation_prepare_instance(owner,serial,instance,&candidate)==XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_start(instance,next_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_start(instance,next_entry,NULL,0)==XR_XIR_CALL_READY);
+        XrXirCallStatus outcome=generation_poll(instance);
+        if (outcome!=XR_XIR_CALL_RETURNED) fprintf(stderr,"history runtime mode=%s outcome=%u output_calls=%u\n",
+            mode,(unsigned)outcome,output_calls);
+        CHECK(outcome==XR_XIR_CALL_RETURNED);
         XrXirValue answer={0};CHECK(xr_xir_instance_take_result(instance,&answer)==XR_XIR_CALL_RETURNED);
         CHECK(answer.type==XR_XIR_I64 && answer.payload==42);xr_xir_value_drop(&answer);
         if (stateful) {
