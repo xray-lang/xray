@@ -369,12 +369,15 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourc
         .ordinal=symbol->index,.dependency=UINT32_MAX,.name=symbol->name,.syntax=symbol->node,
         .checked=record->result.checked,.mutable=symbol->mutable};
     switch (symbol->kind) {
-    case SOURCE_SLOT:
-        if (symbol->index>=checked->declarations->slot_count ||
-            checked->declarations->slots[symbol->index].module!=module ||
-            checked->declarations->slots[symbol->index].type!=symbol->type ||
-            checked->declarations->slots[symbol->index].mutable!=(uint32_t)symbol->mutable) return XR_XIR_BAD_STRUCTURE;
-        definition.kind=XR_XIR_SOURCE_DEFINITION_BINDING;definition.stored_type=symbol->type;break;
+    case SOURCE_SLOT: {
+        if (symbol->index>=checked->declarations->slot_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirSlot *slot=&checked->declarations->slots[symbol->index];
+        if (slot->module!=module || slot->mutable!=(uint32_t)symbol->mutable ||
+            (symbol->mutable ? !xr_xir_type_is_cell(checked->types,slot->type) ||
+                xr_xir_cell_element(checked->types,slot->type)!=symbol->type :
+                slot->type!=symbol->type)) return XR_XIR_BAD_STRUCTURE;
+        definition.kind=XR_XIR_SOURCE_DEFINITION_BINDING;definition.stored_type=slot->type;break;
+    }
     case SOURCE_UNIT_SLOT:
         definition.kind=XR_XIR_SOURCE_DEFINITION_UNIT;definition.ordinal=UINT32_MAX;break;
     case SOURCE_FUNCTION:
