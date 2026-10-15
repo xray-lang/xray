@@ -21,7 +21,7 @@ endif()
 include_directories("${XR_ROOT}/src" "${XR_ROOT}/include" "${INVOCATION_SDK}")
 set(source_libraries)
 foreach(item xir/xray_xir_source_product xir/xray_xir_source xir/xray_xir_vm
-    xir/xray_xir_scalar xir/xray_xir_cgen xir/xray_xir xir/xray_xir_admission
+    xir/xray_xir_scalar xir/xray_xir_ctfe xir/xray_xir_cgen xir/xray_xir xir/xray_xir_admission
     xir/xray_xir_declarations xir/xray_compiler_parser base/xray_compile_resources)
     get_filename_component(name "${item}" NAME)
     set(path "${INVOCATION_SOURCE_BUILD}/src/${item}.lib")
@@ -57,6 +57,13 @@ find_program(INVOCATION_LINKER NAMES link REQUIRED)
 enable_testing()
 add_test(NAME native_invocation_provider COMMAND test_native_invocation_faults --provider-only
     "${INVOCATION_MSVC}" "${INVOCATION_LINKER}")
+set_tests_properties(native_invocation_provider PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+find_program(INVOCATION_CLANG_IMAGE NAMES clang-cl)
+if(INVOCATION_CLANG_IMAGE)
+    add_test(NAME native_invocation_provider_clang_image COMMAND test_native_invocation_faults --provider-image
+        "${INVOCATION_CLANG_IMAGE}" "${INVOCATION_LINKER}")
+    set_tests_properties(native_invocation_provider_clang_image PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+endif()
 add_test(NAME native_invocation_owner COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_native_invocation_owner.py" $<TARGET_FILE:test_native_invocation_owner>
     "${XR_ROOT}" "${INVOCATION_MSVC}" "${INVOCATION_LINKER}" "${INVOCATION_SDK}")

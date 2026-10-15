@@ -471,6 +471,7 @@ static DWORD WINAPI invocation_thread(void *context) {
 int main(int argc, char **argv) {
 #ifdef INVOCATION_INJECTED
     if (argc == 4 && !strcmp(argv[1], "--provider-only")) return owner_provider_suite(argv[2], argv[3]);
+    if(argc==4&&!strcmp(argv[1],"--provider-image"))return owner_provider_image(argv[2],argv[3]);
 #endif
     if (argc == 2 && !strcmp(argv[1], "--native-control-child")) return 0;
     /* A pure WinAPI child is an explicit control for process-wide lazy state.

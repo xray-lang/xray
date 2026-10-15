@@ -136,7 +136,8 @@ XR_FUNC XrCompileResources *xtc_xir_invocation_resources(const XrXirInvocation *
 XR_FUNC const XrXirInvocationFacts *xtc_xir_invocation_facts(const XrXirInvocation *owner);
 /* Compiler and linker refer to the GENERATED and LINK observed collectors;
  * launcher_compiler_image_index refers to LAUNCHER's matching compiler row.
- * Version values come from those held image bytes, bounded by artifact_bytes,
+ * Version values come from scalar reads on those held image handles. Cumulative
+ * bytes read per version decode are bounded by artifact_bytes,
  * before result publication. Paths borrow this owner's collectors.
  * These self-reported versions grant no provider or Binding authority. */
 XR_FUNC const XrXirInvocationProviderFacts *xtc_xir_invocation_provider(const XrXirInvocation *owner);

@@ -716,24 +716,47 @@ static bool invocation_provider_index(XrXirInvocation *owner, unsigned stage, ui
     *output = selected;
     return true;
 }
+typedef struct InvocationPeSource {
+    /* Borrowed only during the synchronous decoder call. */
+    XrXirInvocation *owner;
+    unsigned stage;
+    uint32_t index;
+    uint64_t read_bytes;
+} InvocationPeSource;
+static XtcXirPeVersionStatus invocation_provider_scalar(const void *context,size_t offset,
+    unsigned width,uint32_t *value) {
+    InvocationPeSource *source=(InvocationPeSource *)context;
+    XrXirInvocation *owner=source->owner;
+    if(owner->status!=XR_XIR_INVOCATION_OK)return XTC_XIR_PE_VERSION_IO;
+    if(width>owner->limits.artifact_bytes-source->read_bytes) {
+        invocation_fail(owner,XR_XIR_INVOCATION_BUDGET,XR_XIR_INVOCATION_PE_VERSION,XTC_XIR_PE_VERSION_BUDGET);
+        return XTC_XIR_PE_VERSION_BUDGET;
+    }
+    if(!invocation_work(owner,sizeof(source->read_bytes)))return XTC_XIR_PE_VERSION_BUDGET;
+    source->read_bytes+=width;
+    XrXirTargetStatus status=xtc_xir_images_read_scalar(owner->images[source->stage],source->index,offset,width,value);
+    if(invocation_target(owner,status))return XTC_XIR_PE_VERSION_OK;
+    return status==XR_XIR_TARGET_BUDGET?XTC_XIR_PE_VERSION_BUDGET:XTC_XIR_PE_VERSION_IO;
+}
 static bool invocation_provider_read(XrXirInvocation *owner, unsigned stage, uint32_t index,
     XrXirInvocationProviderImageFacts *output) {
     owner->diagnostic.stage = (XrXirInvocationStage)stage;
     owner->diagnostic.pass = XR_XIR_INVOCATION_NO_PASS;
-    size_t limit = SIZE_MAX;
-    if (owner->limits.artifact_bytes < (uint64_t)SIZE_MAX) limit = (size_t)owner->limits.artifact_bytes;
-    void *bytes = NULL; size_t length = 0;
-    if (!invocation_target(owner, xtc_xir_images_read(owner->images[stage], index, limit, &bytes, &length))) return false;
+    const XrXirImageFile *image=xtc_xir_images_file(owner->images[stage],index);
+    if(!image)return invocation_fail(owner,XR_XIR_INVOCATION_INVALID,XR_XIR_INVOCATION_SELF,0);
+    if(image->length>SIZE_MAX)return invocation_fail(owner,XR_XIR_INVOCATION_BUDGET,XR_XIR_INVOCATION_PE_VERSION,XTC_XIR_PE_VERSION_BUDGET);
+    if(!invocation_work(owner,sizeof(InvocationPeSource)+sizeof(XtcXirPeSource)))return false;
+    InvocationPeSource context={owner,stage,index,0};
+    XtcXirPeSource source={&context,(size_t)image->length,invocation_provider_scalar};
     XtcXirPeVersion version;
-    XtcXirPeVersionStatus parsed = xtc_xir_pe_version_parse(owner->context.resources, bytes, length, &version);
-    xr_compile_resources_free(bytes);
+    XtcXirPeVersionStatus parsed=xtc_xir_pe_version_parse_source(owner->context.resources,&source,&version);
+    if(owner->status!=XR_XIR_INVOCATION_OK)return false;
     if (parsed != XTC_XIR_PE_VERSION_OK) {
         XrXirInvocationStatus status = parsed == XTC_XIR_PE_VERSION_BUDGET ? XR_XIR_INVOCATION_BUDGET :
             parsed == XTC_XIR_PE_VERSION_NOT_FOUND ? XR_XIR_INVOCATION_UNRESOLVED :
             parsed == XTC_XIR_PE_VERSION_UNSUPPORTED ? XR_XIR_INVOCATION_UNSUPPORTED : XR_XIR_INVOCATION_INVALID;
         return invocation_fail(owner, status, XR_XIR_INVOCATION_PE_VERSION, parsed);
     }
-    const XrXirImageFile *image = xtc_xir_images_file(owner->images[stage], index);
     return invocation_copy(owner, &output->path, &image->path, sizeof(output->path)) &&
         invocation_copy(owner, &output->length, &image->length, sizeof(output->length)) &&
         invocation_copy(owner, output->digest, image->digest, sizeof(output->digest)) &&

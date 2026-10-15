@@ -27,6 +27,13 @@ add_test(NAME native_invocation_provider COMMAND $<TARGET_FILE:test_native_invoc
     --provider-only "${XIR_INVOCATION_MSVC}" "${XIR_INVOCATION_LINKER}")
 set_tests_properties(native_invocation_provider PROPERTIES
     RUN_SERIAL TRUE TIMEOUT 180 COST 3 LABELS "unit;xir;toolchain;ownership;budget")
+find_program(XIR_INVOCATION_CLANG_IMAGE NAMES clang-cl)
+if(XIR_INVOCATION_CLANG_IMAGE)
+    add_test(NAME native_invocation_provider_clang_image COMMAND $<TARGET_FILE:test_native_invocation_faults>
+        --provider-image "${XIR_INVOCATION_CLANG_IMAGE}" "${XIR_INVOCATION_LINKER}")
+    set_tests_properties(native_invocation_provider_clang_image PROPERTIES
+        RUN_SERIAL TRUE TIMEOUT 180 COST 3 LABELS "unit;xir;toolchain;ownership;budget")
+endif()
 foreach(mode owner faults preflight profile)
     set(extra_args)
     set(binary test_native_invocation_owner)

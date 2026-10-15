@@ -219,29 +219,40 @@ static XrProcessStatus owner_run(const XrToolchainProcess *process, XrProcessCan
     }
     return status;
 }
-static unsigned provider_reads, provider_read_oom = UINT_MAX, provider_corrupt = UINT_MAX;
+static unsigned provider_reads,provider_current,provider_error_decode=UINT_MAX,provider_corrupt=UINT_MAX;
+static size_t provider_scalar_reads[2],provider_scalar_bytes[2],provider_fail_ordinal;
+static size_t provider_decode_allocations[2];
+static uint64_t provider_first_bytes,provider_io_limit=64u*1024u*1024u;
+static XrXirTargetStatus provider_error=XR_XIR_TARGET_OUT_OF_MEMORY;
 static uint64_t provider_read_before[2], provider_read_after[2];
-static XrXirTargetStatus provider_read(XrXirImageCollector *images, uint32_t index,
-    size_t limit, void **bytes, size_t *length) {
-    unsigned call = provider_reads++;
-    XrCompileResourceStats stats;
-    CHECK(xr_compile_resources_stats(xtc_xir_images_resources(images), &stats) == XR_COMPILE_RESOURCE_OK);
-    if (call < 2) provider_read_before[call] = stats.work;
-    size_t attempts = runtime_attempts;
-    if (call == provider_read_oom) runtime_fail_at = attempts;
-    XrXirTargetStatus status = xtc_xir_images_read(images, index, limit, bytes, length);
-    runtime_fail_at = SIZE_MAX;
-    if (call == provider_read_oom) CHECK(status == XR_XIR_TARGET_OUT_OF_MEMORY && runtime_attempts == attempts + 1);
-    CHECK(xr_compile_resources_stats(xtc_xir_images_resources(images), &stats) == XR_COMPILE_RESOURCE_OK);
-    if (call < 2) provider_read_after[call] = stats.work;
-    if (status == XR_XIR_TARGET_OK && call == provider_corrupt) {
-        /* Deliberately malformed decoded input tests the PE diagnostic boundary;
-         * it is not presented as a changed or authorized executable image. */
-        CHECK(*length); ((uint8_t *)*bytes)[0] = 0;
+static XrXirTargetStatus provider_scalar(XrXirImageCollector *images,uint32_t index,
+    uint64_t offset,unsigned width,uint32_t *value) {
+    CHECK(provider_current<2);size_t ordinal=provider_scalar_reads[provider_current]++;
+    size_t attempts=runtime_attempts;
+    if(provider_current==provider_error_decode&&ordinal==provider_fail_ordinal)return provider_error;
+    XrXirTargetStatus status=xtc_xir_images_read_scalar(images,index,offset,width,value);
+    CHECK(runtime_attempts==attempts);
+    if(status==XR_XIR_TARGET_OK) {
+        provider_scalar_bytes[provider_current]+=width;
+        /* Corrupt only the test decoder's first scalar, never the leased image. */
+        if(provider_current==provider_corrupt&&!ordinal)*value=0;
     }
     return status;
 }
-#define xtc_xir_images_read provider_read
+static XtcXirPeVersionStatus provider_parse(XrCompileResources *resources,
+    const XtcXirPeSource *source,XtcXirPeVersion *output) {
+    unsigned call=provider_reads++%2;provider_current=call;
+    XrCompileResourceStats stats;
+    CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);provider_read_before[call]=stats.work;
+    size_t attempts=runtime_attempts;
+    provider_decode_allocations[call]=attempts;
+    XtcXirPeVersionStatus status=xtc_xir_pe_version_parse_source(resources,source,output);
+    CHECK(runtime_attempts==attempts);
+    CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);provider_read_after[call]=stats.work;
+    return status;
+}
+#define xtc_xir_images_read_scalar provider_scalar
+#define xtc_xir_pe_version_parse_source provider_parse
 #define xr_compile_resources_alloc owner_alloc
 #define xr_compile_resources_calloc owner_calloc
 #define xr_compile_resources_resize owner_resize
@@ -255,7 +266,8 @@ static XrXirTargetStatus provider_read(XrXirImageCollector *images, uint32_t ind
 #define GetDllDirectoryW profile_dll_directory
 #define GetCurrentPackageFullName profile_package
 #include "app/toolchain/xtc_xir_invocation.c"
-#undef xtc_xir_images_read
+#undef xtc_xir_images_read_scalar
+#undef xtc_xir_pe_version_parse_source
 #undef GetWindowsDirectoryW
 #undef GetSystemDirectoryW
 #undef GetDllDirectoryW
@@ -367,16 +379,16 @@ static void owner_image_boundaries(const char *path) {
 
 /* Synthetic EXE events carry real file handles through the production collector.
  * This checks composition and does not claim that a provider process executed. */
-static void provider_collector(XrCompileResources *resources, const char *path,
+static XrXirTargetStatus provider_collector(XrCompileResources *resources, const char *path,
     bool executable, XrXirImageCollector **images) {
-    CHECK(xtc_xir_images_new(resources, images) == XR_XIR_TARGET_OK);
+    XrXirTargetStatus status=xtc_xir_images_new(resources,images);if(status!=XR_XIR_TARGET_OK)return status;
     wchar_t wide[32768]; CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, 32768));
     HANDLE handle = CreateFileW(wide, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     CHECK(handle != INVALID_HANDLE_VALUE);
     XrProcImageObserver observer = xtc_xir_images_observer(*images);
     XrProcImageEvent event = {GetCurrentProcessId(), executable ? XR_PROC_IMAGE_EXECUTABLE : XR_PROC_IMAGE_DLL, (intptr_t)handle};
-    CHECK(observer.observe(observer.context, &event) == XR_PROC_OK && CloseHandle(handle));
-    CHECK(xtc_xir_images_seal(*images) == XR_XIR_TARGET_OK);
+    XrOsProcStatus observed=observer.observe(observer.context,&event);CHECK(CloseHandle(handle));
+    return observed==XR_PROC_OK?xtc_xir_images_seal(*images):xtc_xir_images_status(*images);
 }
 static bool provider_transaction(const char *compiler, const char *linker,
     const XrCompileResourceLimits *limits, unsigned scenario, XrCompileResourceStats *cost) {
@@ -384,21 +396,24 @@ static bool provider_transaction(const char *compiler, const char *linker,
     XrXirInvocation *owner = NULL;
     CHECK(xr_compile_resources_calloc(resources, 1, sizeof(*owner), (void **)&owner) == XR_COMPILE_RESOURCE_OK);
     owner->context.resources = resources; owner->io = xr_compile_io_policy(resources);
-    owner->limits.artifact_bytes = UINT64_MAX; owner->limits.dependencies.path_bytes = 32768;
+    owner->limits.artifact_bytes=provider_io_limit;owner->limits.dependencies.path_bytes=32768;
+    XrXirInvocationProviderFacts unchanged;
+    memset(&owner->provider,0xa5,sizeof(owner->provider));unchanged=owner->provider;
+    bool prepared=true;
     for (unsigned stage = 0; stage < 3; ++stage) {
         const char *path = stage == 2 || (stage == 1 && scenario == 1) ? linker : compiler;
         owner->commands[stage].executable = path;
-        provider_collector(resources, path, stage != 1 || scenario != 2, &owner->images[stage]);
+        if(!invocation_target(owner,provider_collector(resources,path,stage!=1||scenario!=2,&owner->images[stage]))) {prepared=false;break;}
     }
     if (scenario == 3) owner->commands[0].executable = linker;
-    if (scenario == 4) owner->limits.artifact_bytes = xtc_xir_images_file(owner->images[0], 0)->length - 1;
+    if(scenario==4)owner->limits.artifact_bytes=provider_first_bytes-1;
 
-    XrXirInvocationProviderFacts unchanged;
-    memset(&owner->provider, 0xa5, sizeof(owner->provider)); unchanged = owner->provider;
     provider_reads = 0;
-    provider_read_oom = scenario == 5 ? 0u : scenario == 6 ? 1u : UINT_MAX;
+    memset(provider_scalar_reads,0,sizeof(provider_scalar_reads));memset(provider_scalar_bytes,0,sizeof(provider_scalar_bytes));
+    provider_error_decode=scenario==5?0u:scenario==6?1u:UINT_MAX;provider_fail_ordinal=0;
+    provider_error=XR_XIR_TARGET_OUT_OF_MEMORY;
     provider_corrupt = scenario == 7 ? 0u : scenario == 8 ? 1u : UINT_MAX;
-    bool okay = invocation_provider_versions(owner);
+    bool okay=prepared&&invocation_provider_versions(owner);
     if (scenario && scenario < 9) {
         XrXirInvocationStatus expected = scenario == 1 ? XR_XIR_INVOCATION_REPLAY_MISMATCH :
             scenario == 2 || scenario == 3 ? XR_XIR_INVOCATION_UNRESOLVED :
@@ -431,13 +446,52 @@ static bool provider_transaction(const char *compiler, const char *linker,
     if (okay) CHECK(!memcmp(xtc_xir_invocation_provider(owner), &saved, sizeof(saved)) &&
         xtc_xir_invocation_provider(owner)->compiler.path[0]);
     xtc_xir_invocation_free(owner);
-    provider_read_oom = provider_corrupt = UINT_MAX;
+    provider_error_decode=provider_corrupt=UINT_MAX;
     CHECK(!runtime_live && !runtime_bytes); return okay;
+}
+static void provider_scalar_failures(const char *compiler,const char *linker,const size_t counts[2]) {
+    XrCompileResources *resources=sdk_ledger(&sdk_unlimited);XrXirImageCollector *images[3]={0};
+    for(unsigned stage=0;stage<3;++stage)CHECK(provider_collector(resources,stage==2?linker:compiler,true,&images[stage])==XR_XIR_TARGET_OK);
+    for(unsigned decode=0;decode<2;++decode)for(unsigned error=0;error<2;++error)for(size_t cut=0;cut<counts[decode];++cut) {
+        XrXirInvocation owner={0};owner.context.resources=resources;owner.limits.artifact_bytes=64u*1024u*1024u;
+        owner.limits.dependencies.path_bytes=32768;owner.io=xr_compile_io_policy(resources);
+        for(unsigned stage=0;stage<3;++stage) {
+            owner.images[stage]=images[stage];owner.commands[stage].executable=stage==2?linker:compiler;
+        }
+        memset(&owner.provider,0xa5,sizeof(owner.provider));XrXirInvocationProviderFacts saved=owner.provider;
+        provider_reads=0;memset(provider_scalar_reads,0,sizeof(provider_scalar_reads));
+        provider_error_decode=decode;provider_fail_ordinal=cut;provider_error=error?XR_XIR_TARGET_OUT_OF_MEMORY:XR_XIR_TARGET_IO;
+        bool okay=invocation_provider_versions(&owner);
+        if(okay||owner.status!=(error?XR_XIR_INVOCATION_OUT_OF_MEMORY:XR_XIR_INVOCATION_IO))
+            fprintf(stderr,"scalar cut decode=%u error=%u ordinal=%zu okay=%d status=%d domain=%d code=%d\n",decode,error,cut,okay,owner.status,owner.diagnostic.domain,owner.diagnostic.code);
+        CHECK(!okay&&owner.status==(error?XR_XIR_INVOCATION_OUT_OF_MEMORY:XR_XIR_INVOCATION_IO));
+        CHECK(owner.diagnostic.domain==XR_XIR_INVOCATION_TARGET&&owner.diagnostic.code==provider_error);
+        CHECK(owner.diagnostic.stage==(decode?XR_XIR_INVOCATION_LINK:XR_XIR_INVOCATION_GENERATED));
+        CHECK(provider_scalar_reads[decode]==cut+1&&runtime_attempts==provider_decode_allocations[0]&&!memcmp(&owner.provider,&saved,sizeof(saved)));
+        XrCompileResourceStats before,after;CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
+        size_t reads=provider_scalar_reads[decode],mallocs=runtime_attempts;CHECK(!invocation_provider_versions(&owner));
+        CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK&&before.work==after.work);
+        CHECK(reads==provider_scalar_reads[decode]&&runtime_attempts==mallocs&&!memcmp(&owner.provider,&saved,sizeof(saved)));
+    }
+    provider_error_decode=UINT_MAX;
+    for(unsigned stage=0;stage<3;++stage)xtc_xir_images_free(images[stage]);xr_compile_resources_release(resources);
+    CHECK(!runtime_live&&!runtime_bytes);
+    printf("provider scalar composition: %zu/%zu callback ordinals x IO/system OOM, same-owner sticky zero-work retry PASS\n",counts[0],counts[1]);
+}
+static int owner_provider_image(const char *compiler,const char *linker) {
+    DWORD before,after;CHECK(GetProcessHandleCount(GetCurrentProcess(),&before));
+    XrCompileResourceStats cost;CHECK(provider_transaction(compiler,linker,&sdk_unlimited,0,&cost));
+    CHECK(GetProcessHandleCount(GetCurrentProcess(),&after)&&before==after);
+    printf("real provider images: read %zu/%zu scalars, %zu/%zu bytes under original 64MiB per-image read cap; full hashes/leases; no decoder allocation; handles=%lu/%lu PASS\n",
+        provider_scalar_reads[0],provider_scalar_reads[1],provider_scalar_bytes[0],provider_scalar_bytes[1],(unsigned long)before,(unsigned long)after);
+    return 0;
 }
 static int owner_provider_suite(const char *compiler, const char *linker) {
     DWORD handles, after; CHECK(GetProcessHandleCount(GetCurrentProcess(), &handles));
     XrCompileResourceStats baseline;
     CHECK(provider_transaction(compiler, linker, &sdk_unlimited, 0, &baseline));
+    provider_first_bytes=provider_scalar_bytes[0];size_t scalar_counts[2]={provider_scalar_reads[0],provider_scalar_reads[1]};
+    uint64_t byte_bound=provider_scalar_bytes[0]>provider_scalar_bytes[1]?provider_scalar_bytes[0]:provider_scalar_bytes[1];
     printf("provider transaction exact: allocated=%llu peak=%llu work=%llu\n",
         (unsigned long long)baseline.allocated_bytes, (unsigned long long)baseline.peak_bytes,
         (unsigned long long)baseline.work);
@@ -461,8 +515,13 @@ static int owner_provider_suite(const char *compiler, const char *linker) {
     for (unsigned scenario = 1; scenario <= 8; ++scenario) {
         XrCompileResourceStats actual; CHECK(!provider_transaction(compiler, linker, &sdk_unlimited, scenario, &actual));
     }
+    for(unsigned edge=0;edge<3;++edge) {
+        provider_io_limit=byte_bound-1+edge;XrCompileResourceStats actual;
+        CHECK(provider_transaction(compiler,linker,&sdk_unlimited,0,&actual)==(edge!=0));
+    }
+    provider_io_limit=64u*1024u*1024u;provider_scalar_failures(compiler,linker,scalar_counts);
     CHECK(GetProcessHandleCount(GetCurrentProcess(), &after) && after == handles);
-    printf("provider-only real leases/PE/read OOM/three-axis exact-minus1/bad matches: heap=0 handles=%lu/%lu PASS\n",
+    printf("provider-only real leases/PE/all scalar IO and system OOM/no read allocation/three-axis exact-minus1/decoded-byte exact-minus1-plus1/bad matches: heap=0 handles=%lu/%lu PASS\n",
         (unsigned long)handles, (unsigned long)after);
     return 0;
 }
