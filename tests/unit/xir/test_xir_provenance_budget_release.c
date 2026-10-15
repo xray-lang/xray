@@ -178,6 +178,7 @@ static XrXirStatus scope_valid_control(void *data,XirEffectContextScope *scope) 
     return XR_XIR_OK;
 }
 
+#include "xir_source_scope_cases.h"
 static void scope_owner_control(ProvenanceFixture *f) {
     CHECK(!live && !live_bytes);
     const XrCompileResourceLimits limits={8388608,4194304,4000000};
@@ -220,6 +221,7 @@ static void scope_owner_control(ProvenanceFixture *f) {
         CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
             scope_valid_control,&control)==XR_XIR_OK && control.calls==1);
     }
+    source_scope_controls(&context,effects,&module,entry_ops);
     control.mode=3;control.calls=0;control.expected=XR_XIR_BUDGET;
     CHECK(xir_effects_context_operation(&context,effects,&module,module.types,
         scope_ignored_failure,&control)==XR_XIR_BUDGET && control.calls==1);
@@ -537,6 +539,7 @@ static void origin_hash_resources(void) {
 int main(void) {
     ProvenanceFixture f;fixture(&f);ample_control(&f);precise_rejection(&f);public_work_cuts(&f);
     scope_owner_control(&f);scope_generic_owner_control();
+    source_scope_budget_control(&f);
     origin_hash_keys();origin_hash_collisions();origin_hash_resources();origin_index_scales();
     puts("provenance queue owner released on second work rejection; physical=0/0 PASS");return 0;
 }

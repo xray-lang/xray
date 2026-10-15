@@ -20,7 +20,7 @@ static bool spec_capture_flow(SpecContext *c, uint32_t index) {
     if (!spec_effect_owners(c,index,&owners,&owner_count)) return false;
     XirEffectContextInput input={c->source,&c->types,&origin,UINT32_MAX,owners,owner_count};
     XirEffectContextView selected={0};
-    c->diagnostic.status=xir_effects_context_select(&c->remaining,c->effects,&input,&selected);
+    c->diagnostic.status=spec_effect_select(c,&input,&selected);
     if (c->diagnostic.status!=XR_XIR_OK) return false;
     XrXirFunction *function=&c->functions[index];
     if (selected.declaration!=instance->declaration || selected.parameter_count!=function->parameter_count ||

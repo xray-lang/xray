@@ -144,20 +144,30 @@ struct XirEffectContextScope {
     EffectContextAdmissionState state;
 };
 
-static XrXirStatus effect_context_admission(const XrXirCompileContext *context,
-    const XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types) {
+static XrXirStatus effect_context_source_match(const XrXirEffects *effects,
+    const XrXirModule *source,EffectTerms *terms) {
     XrXirModule normalized=*source;
     if (!normalized.types) normalized.types=&effect_empty_types;
-    if (!types) types=&effect_empty_types;
     const EffectOrdinaryContexts *dense=effects->contexts->dense;
+    const EffectOrdinaryContexts *ordinary=effects->contexts->ordinary;
+    XrXirStatus status=effect_terms_snapshot_match(terms,normalized.types,dense->source_type_count);
+    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,&normalized,terms);
+    return status;
+}
+
+static XrXirStatus effect_context_actual_domain(EffectTerms *terms,const XrXirTypes *types) {
+    if (!types) types=&effect_empty_types;
+    return types->interfaces ? effect_terms_domain_match(terms,types) :
+        effect_terms_projected_domain(terms,types);
+}
+
+static XrXirStatus effect_context_admission(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types) {
     const EffectOrdinaryContexts *ordinary=effects->contexts->ordinary;
     EffectTerms terms={.types=ordinary->terms.types,.remaining=context};
     if (!xir_compile_work(context,sizeof(terms))) return XR_XIR_BUDGET;
-    XrXirStatus status=effect_terms_snapshot_match(&terms,normalized.types,dense->source_type_count);
-    if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,&normalized,&terms);
-    if (status==XR_XIR_OK) status=types->interfaces ?
-        effect_terms_domain_match(&terms,types) :
-        effect_terms_projected_domain(&terms,types);
+    XrXirStatus status=effect_context_source_match(effects,source,&terms);
+    if (status==XR_XIR_OK) status=effect_context_actual_domain(&terms,types);
     effect_terms_free(&terms);
     return status;
 }
@@ -274,6 +284,59 @@ XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *sco
     return effect_context_scope_failure(scope,status);
 }
 
+
+struct XirEffectSourceScope {
+    const XrXirCompileContext *context;
+    const XrXirEffects *effects;
+    const XrXirModule *source;
+    XrXirStatus status;
+};
+
+/* Only Source is borrowed immutable for this operation. Every query admits
+ * its current actual type domain, then the complete origin and actual edge.
+ * The source match and all query scratch expire with this lexical call. */
+XR_FUNC XrXirStatus xir_effects_source_operation(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirModule *source,
+    XirEffectSourceOperation operation,void *data) {
+    if (!xir_compile_context_valid(context) || !effects || effects->resources!=context->resources ||
+        !effects->contexts || !source || !source->functions || !source->function_count ||
+        !operation || effects->count!=source->function_count) return XR_XIR_BAD_STRUCTURE;
+    XirEffectSourceScope scope={context,effects,source,XR_XIR_OK};
+    EffectTerms terms={.types=effects->contexts->ordinary->terms.types,.remaining=context};
+    if (!xir_compile_work(context,sizeof(scope)+sizeof(terms))) return XR_XIR_BUDGET;
+    XrXirStatus status=effect_context_source_match(effects,source,&terms);
+    effect_terms_free(&terms);
+    if (status!=XR_XIR_OK) return status;
+    status=operation(data,&scope);
+    return scope.status!=XR_XIR_OK ? scope.status : status;
+}
+
+XR_FUNC XrXirStatus xir_effects_source_select_scoped(XirEffectSourceScope *scope,
+    const XirEffectContextInput *input,XirEffectContextView *output) {
+    if (!scope) return XR_XIR_BAD_STRUCTURE;
+    if (scope->status!=XR_XIR_OK) return scope->status;
+    if (!xir_compile_context_valid(scope->context) || !scope->effects ||
+        scope->effects->resources!=scope->context->resources || !scope->effects->contexts ||
+        !input || input->source!=scope->source || !input->origin || !output ||
+        input->origin->function>=scope->source->function_count ||
+        !!input->origin->arguments!=!!input->origin->argument_count ||
+        !!input->owners!=!!input->owner_count || input->owner_count>scope->effects->count)
+        return scope->status=XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(scope->context,1)) return scope->status=XR_XIR_BUDGET;
+    scope->status=effect_context_owner_shapes(scope->context,input);
+    if (scope->status!=XR_XIR_OK) return scope->status;
+    EffectTerms terms={.types=scope->effects->contexts->ordinary->terms.types,.remaining=scope->context};
+    if (!xir_compile_work(scope->context,sizeof(terms))) return scope->status=XR_XIR_BUDGET;
+    scope->status=effect_context_actual_domain(&terms,input->types);
+    effect_terms_free(&terms);
+    if (scope->status!=XR_XIR_OK) return scope->status;
+    XrXirModule normalized=*input->source;XirEffectContextInput request=*input;
+    if (!normalized.types) normalized.types=&effect_empty_types;
+    if (!request.types) request.types=&effect_empty_types;
+    request.source=&normalized;
+    return scope->status=effect_context_select_actual(scope->context,scope->effects,&request,output);
+}
+
 /* The base reference API has no instantiated owner vector. It reconstructs
  * only complete nongeneric lexical identities from the authentic declaration
  * chain; generic ancestors require the explicit context request instead. */
@@ -320,9 +383,18 @@ static XrXirStatus effect_context_base_owner_origins(const XrXirCompileContext *
     *output=owners;*output_count=count;return XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
-    const XrXirEffects *effects, const XrXirModule *module,
-    uint32_t function, uint32_t instruction, uint32_t *output) {
+typedef struct EffectReferenceRootRequest {
+    const XrXirCompileContext *context;
+    const XrXirEffects *effects;
+    const XrXirModule *module;
+    XirEffectContextScope *scope;
+} EffectReferenceRootRequest;
+
+static XrXirStatus effect_reference_root(const EffectReferenceRootRequest *request,
+    uint32_t function,uint32_t instruction,uint32_t *output) {
+    const XrXirCompileContext *context=request->context;
+    const XrXirEffects *effects=request->effects;
+    const XrXirModule *module=request->module;
     if (!output || !module || !xir_effects_context_matches(context,effects,module->function_count) ||
         function>=module->function_count || instruction>=module->functions[function].instruction_count)
         return XR_XIR_BAD_STRUCTURE;
@@ -336,7 +408,9 @@ XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *contex
         XrXirStatus status=effect_context_base_owner_origins(context,module,function,&owners,&owner_count);
         XirEffectContextInput input={module,module->types,&origin,instruction,owners,owner_count};
         XirEffectContextView selected={0};
-        if (status==XR_XIR_OK) status=xir_effects_context_select(context,effects,&input,&selected);
+        if (status==XR_XIR_OK) status=request->scope ?
+            xir_effects_context_select_scoped(request->scope,&input,&selected) :
+            xir_effects_context_select(context,effects,&input,&selected);
         xr_compile_resources_free(owners);
         if (status!=XR_XIR_OK) return status;
         mask=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
@@ -352,6 +426,25 @@ XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *contex
     }
     if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
     *output=mask;return XR_XIR_OK;
+}
+
+
+XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirModule *module,
+    uint32_t function,uint32_t instruction,uint32_t *output) {
+    const EffectReferenceRootRequest request={context,effects,module,NULL};
+    return effect_reference_root(&request,function,instruction,output);
+}
+
+XR_FUNC XrXirStatus xir_effects_reference_root_scoped(XirEffectContextScope *scope,
+    const XrXirModule *module,uint32_t function,uint32_t instruction,uint32_t *output) {
+    if (!scope) return XR_XIR_BAD_STRUCTURE;
+    if (scope->status!=XR_XIR_OK) return scope->status;
+    if (!module || module!=scope->source || module->types!=scope->types)
+        return effect_context_scope_failure(scope,XR_XIR_BAD_STRUCTURE);
+    const EffectReferenceRootRequest request={scope->context,scope->effects,module,scope};
+    return effect_context_scope_failure(scope,
+        effect_reference_root(&request,function,instruction,output));
 }
 
 static XrXirStatus effect_context_owner_trace(const XrXirCompileContext *context,

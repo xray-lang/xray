@@ -36,6 +36,7 @@ typedef struct SpecContext {
     const XrXirArtifact *source_artifact;
     XirSourceFacts *source_facts;
     const XrXirEffects *effects;
+    XirEffectSourceScope *source_scope;
     XrXirCompileContext remaining;
     XrXirDiagnostic diagnostic;
     SpecMemory *memory;
@@ -545,6 +546,26 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     xr_compile_resources_free(origins);
     return status;
 }
+static XrXirStatus spec_instances(void *data,XirEffectSourceScope *scope) {
+    SpecContext *c=data;c->source_scope=scope;
+    for (uint32_t f = 0; f < c->source->function_count; ++f) {
+        c->ordinary[f] = UINT32_MAX;
+        if (c->source->declarations && c->source->declarations->functions[f].cleanup_owner) c->has_cleanup = true;
+        bool cleanup=c->source->declarations && c->source->declarations->functions[f].cleanup_owner;
+        if (!cleanup && (!c->source->generics || !c->source->generics[f].parameter_count)) {
+            c->diagnostic.function = f;
+            SpecEffectVector effect={0};
+            if (!spec_effect_vector(c,f,NULL,0,NULL,&effect)) return c->diagnostic.status;
+            c->ordinary[f] = spec_intern(c, f, NULL, 0,effect.arguments,effect.count);
+            c->cleanup_owner=UINT32_MAX;
+            if (c->diagnostic.status != XR_XIR_OK) return c->diagnostic.status;
+        }
+    }
+    if (!c->count) { c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return c->diagnostic.status; }
+    for (uint32_t f = 0; f < c->count; ++f) if (!spec_calls(c, f)) return c->diagnostic.status;
+    return c->diagnostic.status;
+}
+
 XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     if (!checked || !output || *output) {
         if (diagnostic) *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
@@ -596,21 +617,11 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     c.instances = spec_alloc(&c, c.capacity, sizeof(*c.instances));
     c.ordinary = spec_alloc(&c, c.source->function_count, sizeof(*c.ordinary));
     if (c.diagnostic.status != XR_XIR_OK) goto done;
-    for (uint32_t f = 0; f < c.source->function_count; ++f) {
-        c.ordinary[f] = UINT32_MAX;
-        if (c.source->declarations && c.source->declarations->functions[f].cleanup_owner) c.has_cleanup = true;
-        bool cleanup=c.source->declarations && c.source->declarations->functions[f].cleanup_owner;
-        if (!cleanup && (!c.source->generics || !c.source->generics[f].parameter_count)) {
-            c.diagnostic.function = f;
-            SpecEffectVector effect={0};
-            if (!spec_effect_vector(&c,f,NULL,0,NULL,&effect)) goto done;
-            c.ordinary[f] = spec_intern(&c, f, NULL, 0,effect.arguments,effect.count);
-            c.cleanup_owner=UINT32_MAX;
-            if (c.diagnostic.status != XR_XIR_OK) goto done;
-        }
-    }
-    if (!c.count) { c.diagnostic.status = XR_XIR_BAD_STRUCTURE; goto done; }
-    for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
+    c.diagnostic.status=xir_effects_context_available(&c.remaining,c.effects) ?
+        xir_effects_source_operation(&c.remaining,c.effects,c.source,spec_instances,&c) :
+        spec_instances(&c,NULL);
+    c.source_scope=NULL;
+    if (c.diagnostic.status!=XR_XIR_OK) goto done;
     XrXirDeclarations declarations = {0};
     if (!spec_declarations(&c, &declarations)) goto done;
     c.diagnostic.status = spec_nominal_fields(&c);

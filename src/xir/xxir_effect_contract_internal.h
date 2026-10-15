@@ -182,11 +182,27 @@ XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *con
     XirEffectContextOperation operation,void *data);
 XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
     const XirEffectContextInput *input,XirEffectContextView *output);
+/* One specializer operation keeps Source immutable while its private
+ * destination pool grows. Actual-domain admission repeats on every query;
+ * origin, owner and real-edge validation are never memoized. */
+typedef struct XirEffectSourceScope XirEffectSourceScope;
+typedef XrXirStatus (*XirEffectSourceOperation)(void *data,XirEffectSourceScope *scope);
+XR_FUNC XrXirStatus xir_effects_source_operation(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,const XrXirModule *source,
+    XirEffectSourceOperation operation,void *data);
+XR_FUNC XrXirStatus xir_effects_source_select_scoped(XirEffectSourceScope *scope,
+    const XirEffectContextInput *input,XirEffectContextView *output);
 /* The common verifier calls this with its freshly derived owner and the same
  * verified module. It consumes the real reference edge, never a target hint. */
 XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
     const struct XrXirEffects *effects, const XrXirModule *module,
     uint32_t function, uint32_t instruction, uint32_t *output);
+
+/* The read-only declaration verifier shares only its operation's complete
+ * admission. Each reference still reconstructs its authentic lexical owners
+ * and selects the actual edge; a rejected request poisons the operation. */
+XR_FUNC XrXirStatus xir_effects_reference_root_scoped(XirEffectContextScope *scope,
+    const XrXirModule *module,uint32_t function,uint32_t instruction,uint32_t *output);
 
 /* Sealed entry facts borrow only Effects, never the source module or formula.
  * Intrinsic ROOT flags retain every non-Cell unknown; sorted physical Cell

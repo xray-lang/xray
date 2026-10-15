@@ -20,6 +20,12 @@ typedef struct SpecEffectVector {
     uint32_t count;
 } SpecEffectVector;
 
+static XrXirStatus spec_effect_select(SpecContext *c,
+    const XirEffectContextInput *input,XirEffectContextView *output) {
+    return c->source_scope ? xir_effects_source_select_scoped(c->source_scope,input,output) :
+        xir_effects_context_select(&c->remaining,c->effects,input,output);
+}
+
 static bool spec_effect_same(SpecContext *c, const SpecInstance *instance,
     const XrXirEffectArgument *arguments, uint32_t count) {
     if (!spec_work(c,1)) return false;
@@ -134,7 +140,7 @@ static bool spec_effect_vector(SpecContext *c, uint32_t declaration,
         if (!spec_effect_owners(c,input->caller,&owners,&owner_count)) return false;
         XirEffectContextInput request={c->source,&c->types,&origin,input->ordinal,owners,owner_count};
         XirEffectContextView selected={0};
-        c->diagnostic.status=xir_effects_context_select(&c->remaining,c->effects,&request,&selected);
+        c->diagnostic.status=spec_effect_select(c,&request,&selected);
         if (c->diagnostic.status!=XR_XIR_OK || selected.declaration!=declaration ||
             selected.parameter_count!=count || selected.argument_count!=ordinary_count) {
             if (c->diagnostic.status==XR_XIR_OK) c->diagnostic.status=XR_XIR_BAD_STRUCTURE;

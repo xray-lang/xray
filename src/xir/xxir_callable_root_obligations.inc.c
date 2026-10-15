@@ -11,8 +11,19 @@
  *   Constructing a value adds no body-execution edge to its creator.
  */
 #include "xxir_implementation.h"
-static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
-    const XrXirEffects *effects, XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic) {
+typedef struct DeclarationCallableRootContext {
+    const XrXirModule *module;
+    const XrXirEffects *effects;
+    XrXirCompileContext *remaining;
+    XrXirDiagnostic *diagnostic;
+} DeclarationCallableRootContext;
+
+static XrXirStatus declaration_callable_root_references(void *data,XirEffectContextScope *scope) {
+    const DeclarationCallableRootContext *context=data;
+    const XrXirModule *module=context->module;
+    const XrXirEffects *effects=context->effects;
+    XrXirCompileContext *remaining=context->remaining;
+    XrXirDiagnostic *diagnostic=context->diagnostic;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -22,7 +33,8 @@ static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
             const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
             uint32_t mask=0;
             if (!signature) return XR_XIR_BAD_STRUCTURE;
-            XrXirStatus status=xir_effects_reference_root(remaining,effects,module,f,i,&mask);
+            XrXirStatus status=scope ? xir_effects_reference_root_scoped(scope,module,f,i,&mask) :
+                xir_effects_reference_root(remaining,effects,module,f,i,&mask);
             if (status!=XR_XIR_OK) return status;
             if (!xr_xir_callable_root_accepts(!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
                 !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED),signature->flags)) {
@@ -31,6 +43,19 @@ static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
             }
         }
     }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
+    const XrXirEffects *effects,XrXirCompileContext *remaining,XrXirDiagnostic *diagnostic) {
+    DeclarationCallableRootContext context={module,effects,remaining,diagnostic};
+    /* All borrowed bodies and types stay immutable throughout this verifier.
+     * The scope expires here; every independent verification admits them anew. */
+    XrXirStatus status=xir_effects_context_available(remaining,effects) ?
+        xir_effects_context_operation(remaining,effects,module,module->types,
+            declaration_callable_root_references,&context) :
+        declaration_callable_root_references(&context,NULL);
+    if (status!=XR_XIR_OK) return status;
     const XrXirImplementationTable *table = module->declarations->implementations;
     for (uint32_t r = 0; table && r < table->count; ++r) {
         const XrXirImplementation *record = &table->records[r];
