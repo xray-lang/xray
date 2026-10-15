@@ -6,6 +6,55 @@
  *
  * xir_source_terminal_callback_cases.h - Last current Input after receiving callbacks
  */
+static void pc_final_terms_retired(const EffectTerms *terms,const char *name) {
+    fprintf(stderr,"published terms %s remaining%u stack%u capacity%u match%u ledger%u\n",name,
+        terms->remaining!=NULL,terms->stack!=NULL,terms->stack_capacity,
+        terms->match.memory!=NULL,terms->match.resources!=NULL);
+    CHECK(!terms->remaining && !terms->stack && !terms->cache && !terms->stack_capacity &&
+        !terms->stack_claimed && !terms->match.memory && !terms->match.resources);
+}
+static void pc_final_body_terms_retired(const EffectBodyMaterial *body,const char *name) {
+    uint32_t depth=0;
+    for (;body;body=body->backbone) {
+        CHECK(depth++<3);pc_final_terms_retired(&body->terms,name);
+    }
+}
+static void pc_final_all_terms_retired(const XrXirEffects *effects) {
+    CHECK(effect_final_outcomes(effects) && effects->invocations);
+    pc_final_terms_retired(&effects->invocations->terms,"outer-certificate");
+    pc_final_body_terms_retired(effects->invocations->body,"outer-input");
+    const EffectContextOwner *owner=effect_contexts_read(effects);
+    CHECK(owner && owner->ordinary && owner->dense && owner->forest && owner->forest->invocations);
+    pc_final_terms_retired(&owner->ordinary->terms,"ordinary");
+    pc_final_terms_retired(&owner->dense->terms,"dense");
+    pc_final_terms_retired(&owner->forest->terms,"forest");
+    pc_final_terms_retired(&owner->forest->invocations->terms,"forest-certificate");
+    pc_final_body_terms_retired(owner->forest->invocations->body,"forest-input");
+    pc_final_body_terms_retired(owner->ordinary->uses.generation,"ordinary-input");
+}
+
+static void pc_final_retired_terms_rejections(const XrXirCompileContext *context,
+    const XrXirModule *source,XrXirEffects *effects) {
+    EffectTerms *terms=&effects->invocations->final->outcomes->contexts->ordinary->terms;
+    EffectTerms saved=*terms;
+    for (uint32_t mode=0;mode<7;++mode) {
+        switch (mode) {
+        case 0:terms->stack=(EffectTermFrame *)(uintptr_t)1;break;
+        case 1:terms->cache=(XrXirType *)(uintptr_t)1;break;
+        case 2:terms->stack_capacity=1;break;
+        case 3:terms->stack_claimed=true;break;
+        case 4:terms->match.memory=(struct TypeMatchMemory *)(uintptr_t)1;break;
+        case 5:terms->match.resources=(XrCompileResources *)(uintptr_t)1;break;
+        default:terms->remaining=(const XrXirCompileContext *)(uintptr_t)1;break;
+        }
+        XrXirStatus status=xir_effects_source_terminal(context,source,effects);
+        *terms=saved;
+        CHECK(status==XR_XIR_BAD_STRUCTURE);
+    }
+    CHECK(xir_effects_source_terminal(context,source,effects)==XR_XIR_OK);
+    fprintf(stderr,"published constructor scratch resurrection: seven fields rejected and sameowner restored\n");
+}
+
 static XrXirInstruction *pc_source_terminal_row;
 static size_t pc_source_terminal_skip,pc_source_terminal_observed,pc_source_terminal_free_count;
 static uint32_t pc_source_terminal_mutation,pc_source_terminal_calls;
@@ -28,6 +77,7 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
+    pc_final_all_terms_retired(effects);
     const EffectFinalOutcomes *published=effect_final_outcomes(effects);
     CHECK(published && published->contexts && !effects->outcomes_work.contexts &&
         effect_contexts_read(effects)==published->contexts);
@@ -37,6 +87,7 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     CHECK(attempts==calls && pc_stats(context).work==observed_work);
     CHECK(effect_contexts_read(effects)==original);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
+    if (!mutation) pc_final_retired_terms_rejections(context,input,effects);
     XrXirModule current=*input;XrXirFunction functions[5];XrXirInstruction rows[2];
     CHECK(input->function_count==5 && input->functions[2].instruction_count==2);
     memcpy(functions,input->functions,sizeof(functions));memcpy(rows,functions[2].instructions,sizeof(rows));
