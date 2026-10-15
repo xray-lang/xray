@@ -51,6 +51,7 @@ typedef struct EffectFinalOutcomes {
     XrXirRootEffectWitness *root_witnesses, *unresolved_witnesses;
     XrXirFunctionEffectContract *contracts;
     XirEffectEntryRootView *entry_roots;
+    EffectContextOwner *contexts;
 } EffectFinalOutcomes;
 
 /* Formula storage belongs to the canonical summary after ROOT publication.
@@ -72,6 +73,7 @@ static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) 
             xr_compile_resources_free((void *)outcomes->entry_roots[f].parameters);
         xr_compile_resources_free(outcomes->entry_roots);
     }
+    effect_context_owner_free(outcomes->contexts);
     effect_contracts_clear(outcomes->contracts,count,false);
     xr_compile_resources_free(outcomes->functions);xr_compile_resources_free(outcomes->witnesses);
     xr_compile_resources_free(outcomes->atoms);xr_compile_resources_free(outcomes->errors);
@@ -100,7 +102,6 @@ struct XrXirEffects {
     XrXirRootEffectWitness *formula_terminals;
     XrXirRootEffectWitness *constant_witnesses;
     XrXirCellProvenance *cells;
-    EffectContextOwner *contexts;
     EffectRefinementBounds *refinement;
     /* The invocation Final owns every published public effect record. */
     EffectInvocationCertificate *invocations;
@@ -124,6 +125,13 @@ static const EffectFinalOutcomes *effect_roots_read(const XrXirEffects *effects)
 static const XrXirFunctionEffectContract *effect_contracts_read(const XrXirEffects *effects) {
     const EffectFinalOutcomes *records=effect_roots_read(effects);
     return records?records->contracts:NULL;
+}
+
+/* Published readers borrow the actual Final. Only a live constructor has a
+ * mutable context slot; request-only ROOT borrows never own context storage. */
+static const EffectContextOwner *effect_contexts_read(const XrXirEffects *effects) {
+    const EffectFinalOutcomes *records=effect_roots_read(effects);
+    return records?records->contexts:NULL;
 }
 
 /* Ledger identity rejects foreign requests; it is not an admission proof. */
@@ -276,7 +284,6 @@ static void effect_graph_free(EffectGraph *graph) {
 }
 void xr_xir_compile_effects_free(XrXirEffects *effects) {
     if (effects) {
-        effect_context_owner_free(effects->contexts);
         effect_refinement_free(effects->refinement);
         effect_parameters_free(effects);
         effect_outcomes_clear(&effects->outcomes_work,effects->count);
@@ -897,10 +904,10 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
     }
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);
-    if (status==XR_XIR_OK && effects->contexts)
-        status=effect_context_owner_project(remaining,module,effects,effects->contexts);
+    if (status==XR_XIR_OK && effect_contexts_read(effects))
+        status=effect_context_owner_project(remaining,module,effects,effect_contexts_read(effects));
     if (status == XR_XIR_OK) status = effect_errors_analyze(effects, &graph, remaining);
-    if (status == XR_XIR_OK && !effects->contexts)
+    if (status == XR_XIR_OK && !effect_contexts_read(effects))
         status=effect_invocation_public_gate(remaining,effects->invocations);
     if (status == XR_XIR_OK) status = effect_entry_roots_seal(module,effects,remaining);
     effect_graph_free(&graph);

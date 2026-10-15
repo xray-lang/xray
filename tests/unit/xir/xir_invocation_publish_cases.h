@@ -17,7 +17,7 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
     if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_effects_analyze(checked,&effects); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     if (status==XR_XIR_OK && oracle) {
-        CHECK(effects->invocations && !effects->contexts && effect_roots_read(effects)->root[0].requires_root==(mode!=0) &&
+        CHECK(effects->invocations && !effect_contexts_read(effects) && effect_roots_read(effects)->root[0].requires_root==(mode!=0) &&
             !effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[1].requires_root && effect_roots_read(effects)->root[1].unresolved);
         const XrXirRootFormula *formula=&effect_roots_read(effects)->contracts[1].formula;
         CHECK(!formula->constant_mask && formula->term_count==1 &&
@@ -96,10 +96,10 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     if (status==XR_XIR_OK) { phase=2;status=xr_xir_compile_effects_analyze(checked,&effects); }
     if (status==XR_XIR_OK && oracle) {
-        CHECK(effects->contexts && !effects->refinement && effects->invocations &&
-            effects->contexts->forest->invocations && !effects->contexts->dense->uses.invocations);
-        const XrXirEffects *summary=&effects->contexts->dense->uses;
-        const EffectFinalFunctions *borrowed=(&effects->contexts->forest->invocations->final->summary);
+        CHECK(effect_contexts_read(effects) && !effects->refinement && effects->invocations &&
+            effect_contexts_read(effects)->forest->invocations && !effect_contexts_read(effects)->dense->uses.invocations);
+        const XrXirEffects *summary=&effect_contexts_read(effects)->dense->uses;
+        const EffectFinalFunctions *borrowed=(&effect_contexts_read(effects)->forest->invocations->final->summary);
         CHECK(effects->result_borrow==(&effects->invocations->final->summary) && summary->result_borrow==borrowed &&
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
@@ -113,7 +113,7 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
         uint32_t mask=UINT32_MAX;
         CHECK(effect_invocation_bounds_mask(context,effects->invocations->declared,0,1,&mask)==XR_XIR_OK &&
             mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-        CHECK(effect_invocation_bounds_mask(context,effects->contexts->forest->invocations->declared,
+        CHECK(effect_invocation_bounds_mask(context,effect_contexts_read(effects)->forest->invocations->declared,
             0,1,&mask)==XR_XIR_OK && mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
         CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&
             !effect_roots_read(effects)->root[1].requires_root && effect_roots_read(effects)->root[1].unresolved);
@@ -138,7 +138,7 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
         CHECK(count==1 && step && step->function==1 && !step->instruction &&
             step->cause==XR_XIR_ROOT_CAUSE_PARAMETER && !step->slot && step->callee==UINT32_MAX && !step->distance);
         uint32_t mask=UINT32_MAX;
-        CHECK(effect_invocation_bounds_mask(context,effects->contexts->forest->invocations->declared,
+        CHECK(effect_invocation_bounds_mask(context,effect_contexts_read(effects)->forest->invocations->declared,
             0,1,&mask)==XR_XIR_OK && mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     }
     xr_xir_compile_effects_free(effects);xr_xir_compile_root_cause_trace_free(trace);

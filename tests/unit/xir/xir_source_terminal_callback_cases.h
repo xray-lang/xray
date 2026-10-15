@@ -28,6 +28,14 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     CHECK(xir_fixture_check(context,&fixture.module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);
+    const EffectFinalOutcomes *published=effect_final_outcomes(effects);
+    CHECK(published && published->contexts && !effects->outcomes_work.contexts &&
+        effect_contexts_read(effects)==published->contexts);
+    const EffectContextOwner *original=published->contexts;
+    size_t calls=attempts;uint64_t observed_work=pc_stats(context).work;
+    CHECK(xir_effects_context_refresh(context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_BAD_STRUCTURE);
+    CHECK(attempts==calls && pc_stats(context).work==observed_work);
+    CHECK(effect_contexts_read(effects)==original);
     const XrXirModule *input=xr_xir_compile_artifact_module(checked);
     XrXirModule current=*input;XrXirFunction functions[5];XrXirInstruction rows[2];
     CHECK(input->function_count==5 && input->functions[2].instruction_count==2);

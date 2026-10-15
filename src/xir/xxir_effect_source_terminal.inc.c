@@ -40,8 +40,10 @@ XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileConte
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !effects->invocations ||
         !effects->invocations->body || effects->generation || effects->refinement)
         return XR_XIR_BAD_STRUCTURE;
+    const EffectFinalOutcomes *published=effect_final_outcomes(effects);
+    if (!published) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_source_body_retire(work,effects->invocations->body);
-    EffectContextOwner *owner=effects->contexts;
+    EffectContextOwner *owner=published->contexts;
     if (status==XR_XIR_OK && owner) {
         if (!owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
             owner->ordinary->terms.remaining || owner->dense->terms.remaining || owner->forest->terms.remaining ||
@@ -204,7 +206,7 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
 static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
     if (!source->declarations || !source->declarations->functions)
-        return effects->contexts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
+        return effect_contexts_read(effects)?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     /* Context construction uses this same canonical empty type domain.
      * Normalize only the request view; the complete source input was matched
      * independently before this terminal, and every context is still replayed. */
@@ -213,7 +215,7 @@ static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
         if (!xir_compile_work(work,sizeof(normalized)+2*sizeof(void *))) return XR_XIR_BUDGET;
         normalized=*source;normalized.types=&effect_empty_types;source=&normalized;
     }
-    const EffectContextOwner *owner=effects->contexts;
+    const EffectContextOwner *owner=effect_contexts_read(effects);
     if (!owner || !owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
         owner->ordinary->terms.remaining || owner->dense->terms.remaining || owner->forest->terms.remaining)
         return XR_XIR_BAD_STRUCTURE;
@@ -277,7 +279,7 @@ static XrXirStatus effect_source_outcomes_prepare(const XrXirCompileContext *wor
     if (!actual) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(*fresh))) return XR_XIR_BUDGET;
     *fresh=(XrXirEffects){.resources=work->resources,.count=effects->count,.root_input=actual,
-        .contexts=effects->contexts,.invocations=effects->invocations,
+        .invocations=effects->invocations,
         .result_borrow=effects->result_borrow,.generation=effects->invocations->body,
         .cells=effects->cells};
     fresh->outcomes_work.source_type_count=actual->source_type_count;

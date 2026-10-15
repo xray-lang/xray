@@ -17,7 +17,7 @@ static bool effect_outcomes_empty(const EffectFinalOutcomes *outcomes) {
         !outcomes->atoms && !outcomes->errors && !outcomes->task_errors &&
         !outcomes->go_safe && !outcomes->task_creation && !outcomes->root &&
         !outcomes->root_witnesses && !outcomes->unresolved_witnesses &&
-        !outcomes->contracts && !outcomes->entry_roots;
+        !outcomes->contracts && !outcomes->entry_roots && !outcomes->contexts;
 }
 
 /* Shape rejects invalid requests. Fresh receiving verification separately
@@ -69,7 +69,7 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
  * An open generic keeps its original symbolic function namespace. */
 static bool effect_public_root_context(const XrXirEffects *effects,uint32_t function) {
     const EffectBodyMaterial *body=effects->invocations->body;
-    return effects->contexts && (!body->generics || !body->generics[function].parameter_count);
+    return effect_contexts_read(effects) && (!body->generics || !body->generics[function].parameter_count);
 }
 
 /* These public records are a semantic projection of the same immutable ROOT
@@ -89,7 +89,7 @@ static XrXirStatus effect_public_root_match(const XrXirCompileContext *work,cons
         const XrXirRootEffectWitness *root=&summary->witnesses[f];
         const XrXirRootEffectWitness *unknown=&summary->witnesses[summary->count+f];
         if (effect_public_root_context(effects,f)) {
-            const EffectContextForest *forest=effects->contexts->forest;
+            const EffectContextForest *forest=effect_contexts_read(effects)->forest;
             if (!forest || forest->resources!=work->resources || f>=forest->count ||
                 !forest->facts || !forest->witnesses) return XR_XIR_BAD_STRUCTURE;
             facts=&forest->facts[f];root=&forest->witnesses[f];unknown=&forest->witnesses[forest->count+f];
