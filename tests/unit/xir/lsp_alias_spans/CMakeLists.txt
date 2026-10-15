@@ -1,0 +1,17 @@
+if(TARGET test_lsp_source_alias_spans)
+    return()
+endif()
+add_executable(test_lsp_source_alias_spans "${CMAKE_CURRENT_LIST_DIR}/test_alias_spans.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_index.c")
+target_link_libraries(test_lsp_source_alias_spans PRIVATE xray_lsp_source_syntax)
+target_include_directories(test_lsp_source_alias_spans PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+target_compile_features(test_lsp_source_alias_spans PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_lsp_source_alias_spans PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_source_alias_spans PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_lsp_source_alias_spans_normal COMMAND test_lsp_source_alias_spans)
+add_test(NAME test_lsp_source_alias_spans_resources COMMAND test_lsp_source_alias_spans --full)
+set_tests_properties(test_lsp_source_alias_spans_normal test_lsp_source_alias_spans_resources
+    PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership;metadata;allocation")
