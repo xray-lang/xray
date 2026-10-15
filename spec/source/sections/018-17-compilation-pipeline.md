@@ -658,6 +658,8 @@ FIELD_PLACE与INDEX_PLACE可以组合，但根必须是本次compiler Domain内�
 
 Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；跨池接收核完整声明顺序/identity、字段权限/名称、variant范围、native指纹和关闭字段类型，不能只比较局部type ID。元数据和字节比较在访问前计入原账本，最终完整Checker及query继续决定权限与发布。没有外部nominal参数或class准入；缺少有界观察接口的struct动态child和更深Array接收仍明确拒绝，不能无预算预扫描。private拥有结果的独立配方权限与Unit字段Source前置尚需完整资格，不据内部方法成功宣称覆盖。
 
+当前组合已验证普通公开struct/enum结果与内部字段路径；导入模块中闭合泛型拥有结果（含展开）仍在完整nominal身份接收处拒绝，纯构造器返回仍有直接闭包准入缺口，private结果在最终Checker权限处拒绝，Unit直接字段在进入CTFE前即未获Source准入。这些合法用例仍属于未完成要求，不能改为期望拒绝来称整个nominal族完成。接收修复必须保全完整稳定声明及类型实参、原定义处/字段权限与8逻辑字节/原账本上限；不得只比局部ID、擦除泛型/权限或借VM/native/AST回退。
+
 物理OOM及work/step/frame/output拒绝保全空输出和借用输入，全部临时/帧owner释放，费用不退款。真正struct/enum结果在Source、Artifact和ledger调用者死亡后仍有效，最后drop不分配。该范围开发证据不替代函数值/cleanup、foreign接收、P12以及原全部共享/provider/正式安全门，完整P11目标保持开放。
 
 <!-- /xr-spec:cn -->
@@ -1428,6 +1430,8 @@ FIELD_PLACE and INDEX_PLACE may compose only beneath an authentic private Cell i
 Owned export recursively counts active target scalars and String bytes, Array elements, Nullable tags and the actual enum storage tag bytes. Empty structs use zero; single-variant empty enums may use zero, while an empty branch of a multi-variant enum still counts its actual tag. Padding, capacity, ownership headers and pointers do not count. An owned result must not first query an inapplicable standalone nominal storage layout and then accept pointer-sized output. Sole TypeArena storage and logical traversal determine export under the unchanged output8 limit.
 
 Source independently rebuilds ordinary STRUCT_NEW/ENUM_NEW recipes from the same immutable input graph. Cross-pool receiving checks complete declaration order/identity, field permissions/names, variant ranges, native fingerprints and closed field types, never local type IDs alone. Metadata and byte comparisons prepay the original ledger; final complete Checker/query retain permission and publication authority. External nominal arguments and classes remain unadmitted. Struct dynamic children and deeper Array receiving that lack bounded observation fail closed without unpaid preliminary scans. Private owned recipe authority and Unit-field Source prerequisites still need complete qualification; successful internal methods do not establish that coverage.
+
+The current composition verifies ordinary public struct/enum results and internal field paths. Imported closed generic owned results, including spread, still refuse at complete nominal identity receiving; pure constructor returns still have direct-closure admission gaps; private results refuse at final Checker authority; direct Unit fields fail Source admission before CTFE. These valid cases remain unfinished requirements, and turning them into expected refusals cannot qualify the entire nominal family. Receiving fixes must preserve complete stable declarations and type arguments, original definition/field authority and the eight-logical-byte/original ledger limits. Local ID equality, erased generic or permission metadata, and VM/native/AST fallback are not substitutes.
 
 Physical OOM and work/step/frame/output refusal preserve empty output and borrowed inputs, release every temporary/frame owner and retain spent charges. Actual struct/enum results survive Source, Artifact and ledger caller death, and final drop allocates nothing. Scoped development evidence replaces neither function-value/cleanup, foreign receiving, P12 nor original shared/provider/mandatory safety gates; the complete P11 objective remains open.
 
