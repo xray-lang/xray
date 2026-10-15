@@ -7,7 +7,7 @@ import struct
 
 ROOT=Path(__file__).resolve().parent
 
-def frames():
+def frames(value_abi=24, semantic=74):
     # Result/parameter carriers are boxed 16/8. Frame storage is 8/8;
     # Unit has no frame payload and retains its UINT32_MAX slot sentinel.
     functions=[
@@ -15,19 +15,19 @@ def frames():
         [1,0,1,0,16,8,0,0,0,0xffffffff],
         [2,0,2,8,16,8,0,0,0,0,0xffffffff],
     ]
-    words=[1,1,24,29,30,2,3,1]+sum(functions,[])
+    words=[1,1,value_abi,29,30,2,3,1]+sum(functions,[])
     assert len(words)==43
     layout=b'xray:xir-lowered-layout:v1'+struct.pack('<43I',*words)
     result={'xir_source_product_identity.h':{
-        'layout_current24_preimage':layout,
-        'product_layout_value24_digest':hashlib.sha256(layout).digest(),
+        'layout_current'+str(value_abi)+'_preimage':layout,
+        'product_layout_value'+str(value_abi)+'_digest':hashlib.sha256(layout).digest(),
     }}
     policies={}
     for prefix in ('linked','original'):
         text=(prefix+'_source').encode('ascii')
-        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,74,24,29,30,len(text))+text
-        policies[prefix+'_policy_value24_preimage']=frame
-        policies[prefix+'_policy_value24']=hashlib.sha256(frame).digest()
+        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,semantic,value_abi,29,30,len(text))+text
+        policies[prefix+'_policy_value'+str(value_abi)+'_preimage']=frame
+        policies[prefix+'_policy_value'+str(value_abi)]=hashlib.sha256(frame).digest()
     result['xir_native_projection_expectations.h']=policies
     return result
 

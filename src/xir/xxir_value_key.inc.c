@@ -9,10 +9,7 @@
  * KEY CONCEPT:
  *   Normalize IEEE key classes with integer bits, without changing value equality.
  */
-static bool key_builtin(XrXirType type) {
-    return type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_RUNE ||
-        xr_xir_type_is_number(type);
-}
+#include "../base/xhash.h"
 static uint64_t key_scalar_bits(const XrXirValue *value) {
     uint64_t bits = (uint64_t)value->payload;
     if (value->type == XR_XIR_F32) {
@@ -36,7 +33,7 @@ XR_FUNC XrXirValueStatus xr_xir_key_hash(const XrXirValue *value,
     XrXirValueAdmission *admission, uint64_t *output) {
     if (!value || !output || !admission || !xr_xir_domain_current(admission->domain))
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!key_builtin((XrXirType)value->type)) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!xr_xir_key_builtin_type((XrXirType)value->type)) return XR_XIR_VALUE_UNSUPPORTED;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_value_valid(value)) goto done;
@@ -45,13 +42,13 @@ XR_FUNC XrXirValueStatus xr_xir_key_hash(const XrXirValue *value,
     if (length == UINT64_MAX) { status = XR_XIR_VALUE_LIMIT; goto done; }
     status = key_charge(admission, length + 1);
     if (status != XR_XIR_VALUE_OK) goto done;
-    uint64_t hash = (UINT64_C(14695981039346656037) ^ value->type) * UINT64_C(1099511628211);
-    uint64_t bits = string ? 0 : key_scalar_bits(value);
-    for (uint64_t i = 0; i < length; ++i) {
-        uint8_t byte = string ? (uint8_t)string->bytes[i] : (uint8_t)(bits >> (i * 8));
-        hash = (hash ^ byte) * UINT64_C(1099511628211);
+    if (string) *output = xr_hash_bytes64(string->bytes, string->length);
+    else {
+        uint64_t bits = key_scalar_bits(value);
+        uint8_t bytes[8];
+        for (unsigned i = 0; i < 8; ++i) bytes[i] = (uint8_t)(bits >> (i * 8));
+        *output = xr_hash_bytes64(bytes, sizeof(bytes));
     }
-    *output = hash;
 done:
     xr_xir_value_graph_end();
     return status;
@@ -60,7 +57,7 @@ XR_FUNC XrXirValueStatus xr_xir_key_equal(const XrXirValue *left,
     const XrXirValue *right, XrXirValueAdmission *admission, bool *output) {
     if (!left || !right || !output || !admission || !xr_xir_domain_current(admission->domain) ||
         left->type != right->type) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!key_builtin((XrXirType)left->type)) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!xr_xir_key_builtin_type((XrXirType)left->type)) return XR_XIR_VALUE_UNSUPPORTED;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_value_valid(left) || !xr_xir_value_valid(right)) goto done;

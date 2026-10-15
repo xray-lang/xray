@@ -91,6 +91,22 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
         }
         return true;
     }
+    if (object->kind == XR_XIR_TYPE_MAP || object->kind == XR_XIR_TYPE_SET) {
+        XirHash *map = (XirHash *)object;
+        if (!hash_storage_valid(map)) return false;
+        unsigned fields = object->kind == XR_XIR_TYPE_MAP ? 2 : 1;
+        for (size_t i = 0; i < map->length; ++i) for (unsigned field = 0; field < fields; ++field) {
+            if (!graph_edge_work(budget)) return false;
+            StorageSpan span = hash_span(map, i, field != 0);
+            if (span.type == XR_XIR_UNIT) continue;
+            StorageCursor cursor = {0};
+            if (storage_cursor_init(object->arena, span,
+                map->release_capacity ? (StorageFrame *)(map + 1) : NULL,
+                map->release_capacity, true, &cursor) != XR_XIR_VALUE_OK ||
+                !graph_storage_edges(&cursor, visit, context, budget)) return false;
+        }
+        return true;
+    }
     if (object->kind == XR_XIR_TYPE_ARRAY) {
         XirArray *array = (XirArray *)object;
         if (!array_storage_valid(array)) return false;

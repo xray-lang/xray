@@ -13,6 +13,10 @@
 #ifndef XXIR_KEY_H
 #define XXIR_KEY_H
 #include "xxir_value.h"
+static inline bool xr_xir_key_builtin_type(XrXirType type) {
+    return type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_RUNE ||
+        xr_xir_type_is_number(type);
+}
 /* Borrowed, same-typed built-in keys retain no owner and allocate no storage.
  * All NaNs share one key; both signed zeros share one key. Strings use all bytes.
  * Hash work is one plus eight scalar bytes or the String byte length. Equality
