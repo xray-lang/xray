@@ -1,0 +1,12 @@
+struct Narrow { x: i8; state: i64? }
+struct Wide { x: i64; state: i64?? }
+fn classify(value: i64??) -> i64 {
+    if (value == null) { return 0 }
+    if (value == null) { return 1 }
+    return 2
+}
+export fn referenceAnswer() -> i64 {
+    const source = Narrow{x: 7, state: null}
+    const value = Wide{...source}
+    return value.x * 100 + classify(value.state) * 10
+}

@@ -3543,6 +3543,7 @@ b.x = 99.0
 - 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
 - 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
 - struct 字段默认表达式在声明模块和声明类型参数作用域内检查，包括未使用的声明；不能捕获构造调用方的局部变量。字面量先按书写顺序求值显式字段，再按字段声明顺序求值被省略字段的默认表达式；显式提供的字段不执行其默认表达式。默认表达式允许普通已准入函数效应，失败不撤销之前的副作用，但不发布部分结构体值。
+- 具名字面量支持字段简写 `Point{x}`（即 `Point{x: x}`）与展开 `Point{...base, x: value}`。所有显式字段和展开源在其书写位置各求值一次；同名字段由后写条目覆盖，但两个显式条目重复指定同一字段仍是错误。展开只能提供目标已声明的字段，各字段沿普通字段赋值的已检查类型转换接收；源字段读取与目标字段构造分别遵守可见性，不能借展开绕过 `init` 的模块边界。展开已提供的字段不再执行声明默认表达式，容器字段保留普通值复制语义。
 - 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
 - **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
 
@@ -7956,7 +7957,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | SetLit | ObjectLit | NamedStructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -7971,6 +7972,7 @@ MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+NamedStructLit ::= QualifiedIdent TypeArgs? '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 
 ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)

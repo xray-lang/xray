@@ -1,0 +1,28 @@
+var trace: i64 = 0
+struct Pair {
+    x: i64
+    y: i64 = 30
+}
+struct Head { x: i64 }
+struct Box<T> { value: T }
+fn base() -> Pair {
+    trace = trace * 10 + 1
+    return Pair{x: 10, y: 20}
+}
+fn next() -> i64 {
+    trace = trace * 10 + 2
+    return 40
+}
+fn other() -> Head {
+    trace = trace * 10 + 3
+    const x = 50
+    return Head{x}
+}
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    const pair = Pair{...base(), y: next(), ...other()}
+    const boxed = Box<i64>{...Box<i64>{value: 7}}
+    var copied = Pair{...pair}
+    copied.x = 8
+    return pair.x * 1000000 + pair.y * 10000 + trace * 10 + boxed.value + copied.x
+}

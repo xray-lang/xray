@@ -191,6 +191,7 @@ XR_FUNC AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee);
 XR_FUNC AstNode *xr_parse_call_argument(Parser *parser);
 XR_FUNC AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out_access);
 XR_FUNC AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee);
+XR_FUNC bool xr_parse_struct_literal_entry(Parser *parser, char **name, AstNode **value);
 XR_FUNC AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
                                                     XrTypeRef **type_args, int type_arg_count);
 XR_FUNC AstNode *xr_parse_array_literal(Parser *parser);

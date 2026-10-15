@@ -1,0 +1,16 @@
+struct Pair { x: i64; y: i64 }
+var trace: i64 = 0
+fn seed() -> Pair {
+    trace = trace * 10 + 1
+    Coro.yield()
+    trace = trace * 10 + 2
+    return Pair{x: 3, y: 4}
+}
+fn replace() -> i64 {
+    trace = trace * 10 + 3
+    return 5
+}
+export fn referenceAnswer() -> i64 {
+    const value = Pair{...seed(), y: replace()}
+    return value.x * 1000 + value.y * 100 + trace
+}

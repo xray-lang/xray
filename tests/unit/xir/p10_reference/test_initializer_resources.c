@@ -67,12 +67,55 @@ static const char field_place_source[] =
     "struct Generic<T>{items:Array<T>;init(first:T,last:T){this.items=[first];this.items.push(last)}}\n"
     "export fn referenceAnswer()->i64{const a=Batch(19);const b=Batch(23);const c=ObjectBatch(29);const g=Generic<i64>(31,37);"
     "return a.inner.items[0]*10000+a.inner.items[1]*100+a.inner.items[2]+b.inner.items[2]+c.items[0]+c.items[1]+g.items[0]+g.items[1]}\n";
+static const char struct_spread_order_source[] =
+    "var trace: i64 = 0\n"
+    "struct Pair {\n"
+    "    x: i64\n"
+    "    y: i64 = 30\n"
+    "}\n"
+    "struct Head { x: i64 }\n"
+    "struct Box<T> { value: T }\n"
+    "fn base() -> Pair {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return Pair{x: 10, y: 20}\n"
+    "}\n"
+    "fn next() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    return 40\n"
+    "}\n"
+    "fn other() -> Head {\n"
+    "    trace = trace * 10 + 3\n"
+    "    const x = 50\n"
+    "    return Head{x}\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    const pair = Pair{...base(), y: next(), ...other()}\n"
+    "    const boxed = Box<i64>{...Box<i64>{value: 7}}\n"
+    "    var copied = Pair{...pair}\n"
+    "    copied.x = 8\n"
+    "    return pair.x * 1000000 + pair.y * 10000 + trace * 10 + boxed.value + copied.x\n"
+    "}\n";
+static const char struct_spread_cow_source[] =
+    "struct Batch<T> {\n"
+    "    items: Array<T>\n"
+    "    marker: i64 = 5\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const original = Batch<i64>{items: [3, 7]}\n"
+    "    var copied = Batch<i64>{...original}\n"
+    "    copied.items[0] = 11\n"
+    "    copied.items.push(19)\n"
+    "    return original.items[0] * 1000 + copied.items[0] * 100 + len(copied.items) * 10 + copied.marker\n"
+    "}\n";
 typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
 static const InitializerCase cases[] = {
     {"ordinary",source,sizeof(source)-1},
     {"comptime-array",array_source,sizeof(array_source)-1},
     {"comptime-optional-tuple",optional_tuple_source,sizeof(optional_tuple_source)-1},
-    {"field-places",field_place_source,sizeof(field_place_source)-1}
+    {"field-places",field_place_source,sizeof(field_place_source)-1},
+    {"struct-spread-order",struct_spread_order_source,sizeof(struct_spread_order_source)-1},
+    {"struct-spread-cow",struct_spread_cow_source,sizeof(struct_spread_cow_source)-1}
 };
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -143,6 +186,9 @@ int main(int argc,char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--comptime-optional-tuple")) { first=2;last=3; }
     else if (argc==2 && !strcmp(argv[1],"--field-places")) { first=3;last=4; }
     else if (argc==2 && !strcmp(argv[1],"--field-places-baseline")) { first=3;last=4;baseline=true; }
+    else if (argc==2 && !strcmp(argv[1],"--struct-spread-order")) { first=4;last=5; }
+    else if (argc==2 && !strcmp(argv[1],"--struct-spread-cow")) { first=5;last=6; }
+    else if (argc==2 && !strcmp(argv[1],"--struct-spread-baseline")) { first=4;last=6;baseline=true; }
     else CHECK(argc==1);
     for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;

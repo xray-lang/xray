@@ -1,0 +1,11 @@
+struct Batch<T> {
+    items: Array<T>
+    marker: i64 = 5
+}
+export fn referenceAnswer() -> i64 {
+    const original = Batch<i64>{items: [3, 7]}
+    var copied = Batch<i64>{...original}
+    copied.items[0] = 11
+    copied.items.push(19)
+    return original.items[0] * 1000 + copied.items[0] * 100 + len(copied.items) * 10 + copied.marker
+}

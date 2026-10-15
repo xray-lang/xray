@@ -15,6 +15,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef XR_LANGUAGE_RUNTIME_EXPECTED
+#define XR_LANGUAGE_RUNTIME_EXPECTED 131256
+#endif
+#ifndef XR_LANGUAGE_RUNTIME_CROSSINGS
+#define XR_LANGUAGE_RUNTIME_CROSSINGS 4
+#endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 #include "../xir_instance_compile_observer.h"
@@ -27,7 +33,7 @@ static XrXirCallStatus place_answer(XrXirInstance *instance,uint32_t answer) {
     while (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
     if (status==XR_XIR_CALL_RETURNED) {
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==status);
-        CHECK(value.type==XR_XIR_I64 && value.payload==131256);xr_xir_value_drop(&value);
+        CHECK(value.type==XR_XIR_I64 && value.payload==XR_LANGUAGE_RUNTIME_EXPECTED);xr_xir_value_drop(&value);
     }
     return status;
 }
@@ -56,7 +62,8 @@ static void place_faults(XrXirProgram *program,uint32_t answer,unsigned mode,siz
     }
     PlaceRuntimeCost retry={0};CHECK(place_case(program,answer,SIZE_MAX,NULL,&retry));
     CHECK(retry.sites==sites);
-    printf("INIT_PLACES_FI mode=%u sites=%zu all=OOM retry=131256 dual_physical_baselines=1\n",mode,sites);
+    printf("INIT_PLACES_FI mode=%u sites=%zu all=OOM retry=%lld dual_physical_baselines=1\n",
+        mode,sites,(long long)XR_LANGUAGE_RUNTIME_EXPECTED);
 }
 static XrXirInstance *place_open(XrXirProgram *program) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
@@ -68,7 +75,7 @@ static void place_cancel(XrXirProgram *program,uint32_t answer,unsigned mode) {
     size_t ticks=0;XrXirCallStatus status=XR_XIR_CALL_READY;
     while (status==XR_XIR_CALL_READY) { CHECK(++ticks<4096);status=xr_xir_instance_poll_bounded(first,1).outcome.status; }
     CHECK(status==XR_XIR_CALL_RETURNED);XrXirValue result={0};
-    CHECK(xr_xir_instance_take_result(first,&result)==XR_XIR_CALL_RETURNED && result.type==XR_XIR_I64 && result.payload==131256);
+    CHECK(xr_xir_instance_take_result(first,&result)==XR_XIR_CALL_RETURNED && result.type==XR_XIR_I64 && result.payload==XR_LANGUAGE_RUNTIME_EXPECTED);
     xr_xir_value_drop(&result);CHECK(xr_xir_instance_free(first)==XR_XIR_CALL_READY);
     for (size_t prefix=0;prefix<ticks;++prefix) {
         first=place_open(program);XrXirInstance *second=place_open(program);
@@ -83,7 +90,8 @@ static void place_cancel(XrXirProgram *program,uint32_t answer,unsigned mode) {
         CHECK(runtime_live==blocks && runtime_bytes==bytes);
         CHECK(instance_compile_live==compiler_blocks && instance_compile_bytes==compiler_bytes);
     }
-    printf("INIT_PLACES_CANCEL mode=%u prefixes=%zu cancel_allocations=0 same_instance_retry=131256 dual_physical_baselines=1\n",mode,ticks);
+    printf("INIT_PLACES_CANCEL mode=%u prefixes=%zu cancel_allocations=0 same_instance_retry=%lld dual_physical_baselines=1\n",
+        mode,ticks,(long long)XR_LANGUAGE_RUNTIME_EXPECTED);
 }
 static void place_axis_limit(XrXirInstanceConfig *config,unsigned axis,uint64_t cap) {
     switch(axis) {
@@ -150,7 +158,7 @@ static void place_profile(unsigned mode,const char *operation) {
                         crossing+=use_vm!=place_vm_function((uint32_t)body->instructions[i].immediate,answer,mode);
                     }
             }
-            CHECK(native && vm && crossing==4);spec.entries=calls;
+            CHECK(native && vm && crossing==XR_LANGUAGE_RUNTIME_CROSSINGS);spec.entries=calls;
             spec.types=module->types;spec.declarations=module->declarations;
             printf("INIT_PLACES_MIXED mode=%u vm=%u native=%u direct_cross_edges=%u\n",mode,vm,native,crossing);
         }
@@ -160,7 +168,8 @@ static void place_profile(unsigned mode,const char *operation) {
     }
     PlaceRuntimeCost baseline={0};CHECK(place_case(program,answer,SIZE_MAX,NULL,&baseline));
     CHECK(baseline.sites && baseline.sites<20000);
-    printf("INIT_PLACES_BASELINE mode=%u sites=%zu answer=131256 dual_physical_baselines=1\n",mode,baseline.sites);fflush(stdout);
+    printf("INIT_PLACES_BASELINE mode=%u sites=%zu answer=%lld dual_physical_baselines=1\n",
+        mode,baseline.sites,(long long)XR_LANGUAGE_RUNTIME_EXPECTED);fflush(stdout);
     if (!strcmp(operation,"--fi")) place_faults(program,answer,mode,baseline.sites);
     else if (!strcmp(operation,"--cancel")) place_cancel(program,answer,mode);
     else if (!strcmp(operation,"--axes")) place_axes(program,answer,mode);

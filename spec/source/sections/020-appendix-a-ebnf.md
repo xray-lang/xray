@@ -122,7 +122,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | SetLit | ObjectLit | NamedStructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -137,6 +137,7 @@ MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+NamedStructLit ::= QualifiedIdent TypeArgs? '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 
 ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)
@@ -465,7 +466,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | SetLit | ObjectLit | NamedStructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -480,6 +481,7 @@ MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+NamedStructLit ::= QualifiedIdent TypeArgs? '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 
 ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)

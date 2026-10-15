@@ -3560,6 +3560,7 @@ b.x = 99.0
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
 - Struct field defaults are checked in the declaring module and type-parameter scope, including unused declarations; they cannot capture a construction caller's locals. Literals evaluate explicit fields in written order, followed by omitted fields' defaults in declaration order. An explicitly supplied field does not run its default. Defaults permit ordinary admitted function effects; failure preserves earlier side effects but publishes no partial struct value.
+- Named literals support field shorthand `Point{x}` (meaning `Point{x: x}`) and spread `Point{...base, x: value}`. Every explicit field and spread source is evaluated exactly once at its written position. A later entry replaces the same field, but two explicit entries naming the same field are still an error. A spread may supply only fields declared by the target, using the ordinary checked field-assignment conversion for each value. Source-field reads and target-field construction retain their separate visibility checks; spread cannot bypass the module boundary of `init`. Fields supplied by spread do not run declaration defaults, and container fields retain ordinary value-copy semantics.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
 - **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 
@@ -8119,7 +8120,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | SetLit | ObjectLit | NamedStructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -8134,6 +8135,7 @@ MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+NamedStructLit ::= QualifiedIdent TypeArgs? '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 
 ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)
