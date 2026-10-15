@@ -139,6 +139,9 @@ static void prefix_reject_apis(const XrXirValue *value, XrXirValueAdmission *adm
     CHECK(!xr_xir_cell_in_domain(value, admission->domain));
     CHECK(!xr_xir_cell_unborrowed(value) && !xr_xir_cell_is_projection(value));
     CHECK(!xr_xir_cell_canonical_root(value) && !xr_xir_cell_module_storage(value));
+    XrXirValuePath unavailable={(const XrXirValuePathStep *)prefix_unreadable,37};
+    CHECK(xir_cell_path_view(value,&unavailable)==XR_XIR_VALUE_BAD_ARGUMENT && unavailable.count==37 &&
+        unavailable.steps==(const XrXirValuePathStep *)prefix_unreadable);
     CHECK(!xr_xir_cell_same_owner(value, value));
     XrXirCellLoan rejected_loan = {0};
     CHECK(xr_xir_cell_loan_prepare(value, NULL, &rejected_loan) == XR_XIR_VALUE_BAD_ARGUMENT);
@@ -230,6 +233,11 @@ static void prefix_current_factories(XrXirTypeArena *arena, XrXirDomain *domain,
     CHECK(xr_xir_cell_project_authorized((XrXirType)PREFIX_CELL_T, &object, &path,
         &authority, &admission, &projection) == XR_XIR_VALUE_OK);
     CHECK(object_pointer(&projection)->kind == XIR_OBJECT_CELL && xr_xir_cell_is_projection(&projection));
+    XrXirValuePath facts={0};
+    CHECK(xir_cell_path_view(&cell,&facts)==XR_XIR_VALUE_OK && !facts.count && !facts.steps);
+    CHECK(xir_cell_path_view(&projection,&facts)==XR_XIR_VALUE_OK && facts.count==1 && facts.steps!=&step);
+    CHECK(facts.steps[0].kind==step.kind && facts.steps[0].container==step.container && facts.steps[0].selector==0);
+    step.selector=99;CHECK(facts.steps[0].selector==0);step.selector=0;
     prefix_copy_reset(&object); prefix_copy_reset(&cell); prefix_copy_reset(&unit_cell);
     prefix_copy_reset(&function); prefix_copy_reset(&projection);
     XrXirCellLoan loan = {0};

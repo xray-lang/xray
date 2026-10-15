@@ -43,6 +43,10 @@ XR_FUNC bool xr_xir_cell_unborrowed(const XrXirValue *cell);
 /* A projection is scoped even while its canonical root is unborrowed. */
 XR_FUNC bool xr_xir_cell_is_projection(const XrXirValue *cell);
 XR_FUNC const XrXirValue *xr_xir_cell_canonical_root(const XrXirValue *cell);
+/* Immutable selector facts borrow the retained Cell's lifetime, not a frame or
+ * payload address. They grant no access or loan authority. Failure preserves
+ * output; a canonical Cell has an empty path. The caller charges path walks. */
+XR_FUNC XrXirValueStatus xir_cell_path_view(const XrXirValue *cell,XrXirValuePath *output);
 /* Only the immediate live parent authority may authorize a nested loan. */
 /* Output is zero. Prepare owns the root's exclusive reservation until abort or commit;
  * the caller pins the actual scope and prepays all terminal record work. */
