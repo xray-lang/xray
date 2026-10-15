@@ -7,7 +7,8 @@ enum Problem {
     Tuple { value:(i64,string) },
     Enum { value:Choice },
     Atomic { value:Atomic<i64> },
-    TaskArray { value:Array<Task<i64>> }
+    TaskArray { value:Array<Task<i64>> },
+    Task { value:Task<i64> }
 }
 fn leaf()->i64 { Coro.yield(); return 42 }
 fn worker_array()->() { Coro.yield(); throw Problem.Array{value:[10,20]} }
@@ -34,4 +35,7 @@ export fn handle_atomic()->Task<null> { return go worker_atomic() }
 fn worker_task_array()->() { Coro.yield(); const value=go leaf(); throw Problem.TaskArray{value:[value]} }
 export fn await_task_array()->() { const task=go worker_task_array(); await task }
 export fn handle_task_array()->Task<null> { return go worker_task_array() }
+fn worker_task()->() { Coro.yield(); const value=go leaf(); throw Problem.Task{value:value} }
+export fn await_task()->() { const task=go worker_task(); await task }
+export fn handle_task()->Task<null> { return go worker_task() }
 export fn main()->i64 { return 7 }

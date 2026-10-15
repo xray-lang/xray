@@ -109,9 +109,10 @@ static bool closed_error_value(const XrXirValue *error,unsigned family) {
     }
     XrXirEnumBorrow record={0};
     CHECK(xr_xir_enum_borrow(&concrete,&record)==XR_XIR_VALUE_OK);
-    const char *members[]={"Array","Nested","Nullable","NullableArray","Tuple","Enum","Atomic","TaskArray"};
+    const char *members[]={"Array","Nested","Nullable","NullableArray","Tuple","Enum","Atomic","TaskArray","Task"};
     CHECK(family<CLOSED_ERROR_CASES && record.name.length==7 && !memcmp(record.name.bytes,"Problem",7) &&
         record.member.length==strlen(members[family]) && !memcmp(record.member.bytes,members[family],record.member.length) && record.field_count==1);
+    if (family==8) return constructed_value(&record.fields[0],7);
     if (family!=7) return constructed_value(&record.fields[0],family);
     const XirObject *object=(const XirObject *)(uintptr_t)record.fields[0].payload;
     XrXirValueAdmission admission={object->arena,object->domain,NULL,NULL,1000000,16777216};
@@ -142,6 +143,12 @@ int main(int argc, char **argv) {
         CHECK(fixture.program->permissions->entries[f].worker == XR_XIR_OK);
         const XrXirEffects *effects = fixture.program->permissions->effects;
         CHECK(effects && !xr_xir_effects_error_unknown(effects, f) && !xr_xir_effects_error_unidentified(effects, f));
+        uint64_t query_work=0;
+        XrCompileResourceStats before_query={0},after_query={0};
+        CHECK(xr_compile_resources_stats(fixture.program->context.resources,&before_query)==XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_xir_effects_error_query_work(effects,f,&query_work)==XR_XIR_OK && query_work>=2+3*CLOSED_ERROR_CASES);
+        CHECK(xr_compile_resources_stats(fixture.program->context.resources,&after_query)==XR_COMPILE_RESOURCE_OK &&
+            !memcmp(&before_query,&after_query,sizeof(before_query)));
         unsigned family = CLOSED_ERROR_CASES;
         for (unsigned n = 0; n < CLOSED_ERROR_CASES; ++n)
             if (module->functions[f].name_length == 7+strlen(closed_error_names[n]) &&
@@ -184,6 +191,6 @@ int main(int argc, char **argv) {
     }
     CHECK(!fixture.program && fixture.code_releases == 1 && !fixture.lowered);
     effects_source_owners_free(); CHECK(!effects_compile_live && !effects_compile_bytes);
-    printf("TASK_CLOSED_ERROR %s workers=%u rootOperations=16 THROWN typedPayload stickyCopies2 lastCodeLease1 physical=0/0\n",argv[1],workers);
+    printf("TASK_CLOSED_ERROR %s workers=%u rootOperations=%u THROWN typedPayload stickyCopies2 lastCodeLease1 physical=0/0\n",argv[1],workers,2*CLOSED_ERROR_CASES);
     return 0;
 }
