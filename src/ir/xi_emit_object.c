@@ -1765,14 +1765,6 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
     return xr_instruction_unit_add_child(ctx->proto, child_proto);
 }
 
-static uint32_t emit_decl_derive_flags(XrAttribute **attrs, int count) {
-    uint32_t flags = 0;
-    for (int i = 0; i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
-            flags |= attrs[i]->derive_flags;
-    }
-    return flags;
-}
 
 /* Build XrClassDescriptor from AST, emit child method protos,
  * and generate OP_CLASS_CREATE_FROM_DESCRIPTOR. */
@@ -1815,7 +1807,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     if (cd->explicit_final)
         desc->flags |= XR_CLASS_FINAL;
     desc->flags |=
-        xr_class_flags_from_derive(emit_decl_derive_flags(cd->attributes, cd->attr_count));
+        xr_class_flags_from_derive(0);
     if (cdata->is_monomorphized)
         desc->flags |= XR_CLASS_MONOMORPHIZED;
     if (cdata->is_cycle_candidate)

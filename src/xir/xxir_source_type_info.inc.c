@@ -18,12 +18,13 @@ typedef struct SourceInfoRows {
     uint32_t count,capacity;
 } SourceInfoRows;
 typedef struct SourceInfoGraph {
-    SourceContext *ctx;
+    SourceContext *ctx,*facts;
     AstNode *syntax;
     SourceInfoSchema schema;
     XrXirType *types;
     uint32_t *ordinals,count,capacity;
     SourceInfoRows fields,arguments,parameters,variants;
+    const XrXirDerivationPolicy *policy;
 } SourceInfoGraph;
 
 static bool source_info_tuple_type(SourceContext *ctx,const XrXirType *types,
@@ -58,7 +59,7 @@ static bool source_info_schema(SourceContext *ctx,SourceInfoSchema *s) {
 }
 static bool source_info_describe(SourceInfoGraph *g,XrXirType type,
     XrXirTypeDescription *description,XrXirTypeNode *copy) {
-    XrXirStatus status=xr_xir_compile_type_description(&g->ctx->compile,&g->ctx->types,type,description);
+    XrXirStatus status=xr_xir_compile_type_description(&g->facts->compile,&g->facts->types,type,description);
     if (status!=XR_XIR_OK)
         return source_fail(g->ctx,g->syntax,status,"typeInfo requires an admitted closed static type");
     if (description->node) {
@@ -71,7 +72,7 @@ static bool source_info_describe(SourceInfoGraph *g,XrXirType type,
     return true;
 }
 static bool source_info_reserve(SourceInfoGraph *g,uint32_t index) {
-    if (index>=g->ctx->types.count+XR_XIR_CONSTRUCTED_TYPE_BASE)
+    if (index>=g->facts->types.count+XR_XIR_CONSTRUCTED_TYPE_BASE)
         return source_fail(g->ctx,g->syntax,XR_XIR_BAD_TYPE,"typeInfo contains an unresolved type reference");
     if (index<g->capacity) return true;
     uint32_t capacity=g->capacity;
@@ -79,8 +80,8 @@ static bool source_info_reserve(SourceInfoGraph *g,uint32_t index) {
         if (!source_work(g->ctx,g->syntax)) return false;
         capacity=capacity>XR_XIR_CONSTRUCTED_TYPE_LIMIT/2?XR_XIR_CONSTRUCTED_TYPE_LIMIT:capacity*2;
     }
-    XrXirType *types=source_alloc(g->ctx,capacity,sizeof(*types));
-    uint32_t *ordinals=source_alloc(g->ctx,capacity,sizeof(*ordinals));
+    XrXirType *types=source_alloc(g->facts,capacity,sizeof(*types));
+    uint32_t *ordinals=source_alloc(g->facts,capacity,sizeof(*ordinals));
     if (!types || !ordinals || !source_work_units(g->ctx,g->syntax,(uint64_t)capacity*sizeof(*ordinals))) return false;
     for (uint32_t i=0;i<capacity;++i) ordinals[i]=UINT32_MAX;
     if (!source_copy_bytes(g->ctx,g->syntax,types,g->types,(size_t)g->count*sizeof(*types)) ||
@@ -101,21 +102,32 @@ static bool source_info_reference(SourceInfoGraph *g,XrXirType type,uint32_t *ou
 }
 static bool source_info_field(SourceInfoGraph *g,const XrXirTypeDescription *description,
     uint32_t ordinal,XrXirFieldDescription *field,bool *visible) {
-    XrXirStatus status=xr_xir_compile_description_field(&g->ctx->compile,description,ordinal,field);
+    XrXirStatus status=xr_xir_compile_description_field(&g->facts->compile,description,ordinal,field);
     if (status!=XR_XIR_OK)
         return source_fail(g->ctx,g->syntax,status,"typeInfo field description failed");
     if (!field->resolved) {
         if (!description->definition || !description->instance)
             return source_fail(g->ctx,g->syntax,XR_XIR_BAD_TYPE,"typeInfo field has no canonical substitution");
         SourceSubstitution substitution={description->instance->arguments,description->instance->argument_count};
-        if (!source_substitute(g->ctx,&substitution,field->template_type,0,&field->type)) return false;
-        if (xr_xir_type_span(&g->ctx->types,field->type))
+        if (!source_substitute(g->facts,&substitution,field->template_type,0,&field->type))
+            return source_fail(g->ctx,g->syntax,g->facts->diagnostic.status,"typeInfo canonical field substitution failed");
+        if (xr_xir_type_span(&g->facts->types,field->type))
             return source_fail(g->ctx,g->syntax,XR_XIR_BAD_TYPE,"typeInfo field remains an open type");
         field->resolved=true;
     }
     *visible=true;
     if (!(field->flags&(XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED))) return true;
-    const XrXirSourceModule *owner=&g->ctx->modules[g->ctx->module];
+    if (g->policy) {
+        *visible=false;
+        if (!description->instance || description->type!=g->policy->target) return true;
+        for (uint32_t i=0;i<g->policy->member_count;++i) {
+            if (!source_work(g->ctx,g->syntax)) return false;
+            const XrXirDerivationMember *member=&g->policy->members[i];
+            if (member->field==ordinal && (member->operations&XR_XIR_DERIVE_DESCRIBE)) *visible=true;
+        }
+        return true;
+    }
+    const XrXirSourceModule *owner=&g->facts->modules[g->facts->module];
     *visible=owner->name_length==description->module.length &&
         source_span_same(g->ctx,g->syntax,owner->name,description->module.bytes,owner->name_length);
     return g->ctx->diagnostic.status==XR_XIR_OK;
@@ -271,6 +283,49 @@ static bool source_info_query(SourceInfoGraph *g,const XrCoreIntrinsicDesc *desc
     return source_query_target_token_reference(ctx,g->syntax->as.call_expr.callee,
         ctx->type_info_declaration,XR_XIR_SOURCE_CALL);
 }
+/* Fact references belong to the queried Source pool. Recipes belong to the
+ * emitting function's pool; both contexts must retain the original ledger. */
+static bool source_info_prepare(SourceInfoGraph *g,XrXirType target) {
+    SourceContext *ctx=g->ctx;AstNode *node=g->syntax;
+    if (ctx->compile.resources!=g->facts->compile.resources)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"typeInfo contexts do not share the original ledger");
+    if (!source_info_schema(ctx,&g->schema)) return false;
+    if (g->facts->types.count>UINT32_MAX-XR_XIR_CONSTRUCTED_TYPE_BASE)
+        return source_fail(ctx,node,XR_XIR_BUDGET,"typeInfo reference capacity exhausted");
+    g->capacity=g->facts->types.count+XR_XIR_CONSTRUCTED_TYPE_BASE;
+    g->types=source_alloc(g->facts,g->capacity,sizeof(*g->types));
+    g->ordinals=source_alloc(g->facts,g->capacity,sizeof(*g->ordinals));
+    if (!g->types || !g->ordinals ||
+        !source_work_units(ctx,node,(uint64_t)g->capacity*sizeof(*g->ordinals))) return false;
+    for (uint32_t i=0;i<g->capacity;++i) g->ordinals[i]=UINT32_MAX;
+    uint32_t root;
+    return source_info_reference(g,target,&root) && root==0;
+}
+static bool source_info_materialize(SourceInfoGraph *g,XrXirType target,SourceValue *output) {
+    SourceContext *ctx=g->ctx;AstNode *node=g->syntax;
+    if (!g->capacity && !source_info_prepare(g,target)) return false;
+    for (uint32_t i=0;i<g->count;++i) if (!source_info_edges(g,i)) return false;
+    SourceInfoRows *tables[]={&g->fields,&g->arguments,&g->parameters,&g->variants};
+    for (uint32_t i=0;i<4;++i) {
+        if (!tables[i]->capacity) continue;
+        tables[i]->values=source_recipe_storage(ctx,tables[i]->capacity,sizeof(*tables[i]->values));
+        if (!tables[i]->values) return false;
+    }
+    uint32_t count=g->count;
+    SourceValue *nodes=source_recipe_storage(ctx,count,sizeof(*nodes));
+    if (!nodes) return false;
+    for (uint32_t i=0;i<count;++i) if (!source_info_node(g,i,&nodes[i])) return false;
+    if (g->count!=count)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"typeInfo graph changed during materialization");
+    SourceValue fields[6];
+    return source_info_integer(g,0,&fields[0]) &&
+        source_info_array(g,g->schema.nodes,nodes,count,&fields[1]) &&
+        source_info_array(g,g->schema.fields,g->fields.values,g->fields.count,&fields[2]) &&
+        source_info_array(g,g->schema.arguments,g->arguments.values,g->arguments.count,&fields[3]) &&
+        source_info_array(g,g->schema.parameters,g->parameters.values,g->parameters.count,&fields[4]) &&
+        source_info_array(g,g->schema.variants,g->variants.values,g->variants.count,&fields[5]) &&
+        source_info_group(g,g->schema.info,fields,6,output);
+}
 static bool source_type_info(SourceContext *ctx,AstNode *node,
     const XrCoreIntrinsicDesc *descriptor,SourceValue *output) {
     const CallExprNode *call=&node->as.call_expr;
@@ -280,37 +335,6 @@ static bool source_type_info(SourceContext *ctx,AstNode *node,
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"typeInfo requires one explicit closed type and no values");
     XrXirType target=XR_XIR_UNIT;
     if (!source_type(ctx,call->type_args[0],&target)) return false;
-    SourceInfoGraph graph={.ctx=ctx,.syntax=node};
-    if (!source_info_schema(ctx,&graph.schema)) return false;
-    if (ctx->types.count>UINT32_MAX-XR_XIR_CONSTRUCTED_TYPE_BASE)
-        return source_fail(ctx,node,XR_XIR_BUDGET,"typeInfo reference capacity exhausted");
-    graph.capacity=ctx->types.count+XR_XIR_CONSTRUCTED_TYPE_BASE;
-    graph.types=source_alloc(ctx,graph.capacity,sizeof(*graph.types));
-    graph.ordinals=source_alloc(ctx,graph.capacity,sizeof(*graph.ordinals));
-    if (!graph.types || !graph.ordinals ||
-        !source_work_units(ctx,node,(uint64_t)graph.capacity*sizeof(*graph.ordinals))) return false;
-    for (uint32_t i=0;i<graph.capacity;++i) graph.ordinals[i]=UINT32_MAX;
-    uint32_t root;
-    if (!source_info_reference(&graph,target,&root)) return false;
-    for (uint32_t i=0;i<graph.count;++i) if (!source_info_edges(&graph,i)) return false;
-    SourceInfoRows *tables[]={&graph.fields,&graph.arguments,&graph.parameters,&graph.variants};
-    for (uint32_t i=0;i<4;++i) {
-        if (!tables[i]->capacity) continue;
-        tables[i]->values=source_recipe_storage(ctx,tables[i]->capacity,sizeof(*tables[i]->values));
-        if (!tables[i]->values) return false;
-    }
-    uint32_t count=graph.count;
-    SourceValue *nodes=source_recipe_storage(ctx,count,sizeof(*nodes));
-    if (!nodes) return false;
-    for (uint32_t i=0;i<count;++i) if (!source_info_node(&graph,i,&nodes[i])) return false;
-    if (graph.count!=count)
-        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"typeInfo graph changed during materialization");
-    SourceValue fields[6];
-    return source_info_integer(&graph,root,&fields[0]) &&
-        source_info_array(&graph,graph.schema.nodes,nodes,count,&fields[1]) &&
-        source_info_array(&graph,graph.schema.fields,graph.fields.values,graph.fields.count,&fields[2]) &&
-        source_info_array(&graph,graph.schema.arguments,graph.arguments.values,graph.arguments.count,&fields[3]) &&
-        source_info_array(&graph,graph.schema.parameters,graph.parameters.values,graph.parameters.count,&fields[4]) &&
-        source_info_array(&graph,graph.schema.variants,graph.variants.values,graph.variants.count,&fields[5]) &&
-        source_info_group(&graph,graph.schema.info,fields,6,output) && source_info_query(&graph,descriptor);
+    SourceInfoGraph graph={.ctx=ctx,.facts=ctx,.syntax=node};
+    return source_info_materialize(&graph,target,output) && source_info_query(&graph,descriptor);
 }

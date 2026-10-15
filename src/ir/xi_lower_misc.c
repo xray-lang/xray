@@ -203,14 +203,6 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
 
 /* ========== Enum Declaration ========== */
 
-static uint32_t xi_lower_decl_derive_flags(XrAttribute **attrs, int count) {
-    uint32_t flags = 0;
-    for (int i = 0; i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
-            flags |= attrs[i]->derive_flags;
-    }
-    return flags;
-}
 
 static int xi_lower_configure_adt_layout(XiLower *l, XrEnumType *enum_type,
                                          const EnumDeclNode *decl,
@@ -365,7 +357,7 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     if (!et)
         l->had_error = true;
     if (et)
-        et->derive_flags = xi_lower_decl_derive_flags(ed->attributes, ed->attr_count);
+        et->derive_flags = 0;
     for (int i = 0; i < n; i++)
         xr_free(names[i]);
     xr_free(names);

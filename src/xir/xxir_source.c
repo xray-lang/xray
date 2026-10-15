@@ -11,6 +11,8 @@
  */
 #include "xxir_source.h"
 #include "xxir_ctfe.h"
+#include "xxir_derivation_internal.h"
+#include "xxir_generated_data.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
 #include "xxir_operand_roles.h"
@@ -197,6 +199,7 @@ typedef struct SourceRootQuery {
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
 typedef struct SourceComptimeSite SourceComptimeSite;
+typedef struct SourceDeriveJob SourceDeriveJob;
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrXirLinkageKind linkage_kind;
@@ -207,6 +210,8 @@ typedef struct SourceContext {
     SourceMemory *retired_vectors;
     XrXirConstruction *construction;
     SourceLibraryUnit *library_units;
+    XrXirDerivationTable derivations;
+    SourceDeriveJob *derive_jobs; const SourceDeriveJob *derive_input;
     SourceRootQuery *root_queries;
     SourceRootFlow *root_flow;
     XrXirProvenance *effect_evidence;
@@ -241,7 +246,7 @@ typedef struct SourceContext {
     uint32_t flow_alternatives;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
     uint32_t module_count, entry_function;
-    bool core_factory;
+    bool core_factory,derive_present;
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
@@ -271,6 +276,7 @@ static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *dec
         ctx->linkage_kind == XR_XIR_LIBRARY ? UINT32_MAX : (uint32_t)ctx->graph->entry_index,
         ctx->linkage_kind == XR_XIR_LIBRARY ? UINT32_MAX : ctx->entry_function,
         ctx->implementations.count ? &ctx->implementations : NULL, NULL};
+    declarations->derivations=ctx->derivations.policy_count?&ctx->derivations:NULL;
     return (XrXirModule){XR_XIR_BUILT,ctx->functions,ctx->function_count,declarations,
         ctx->has_generics ? ctx->generics : NULL,
         ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL,ctx->effect_evidence,ctx->linkage_kind,

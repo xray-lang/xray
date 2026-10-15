@@ -44,7 +44,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     bool declarations_ready = source_query_modules(ctx) && collect_declarations(ctx);
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
-        source_implementations_bind(ctx) && build_bodies(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx) && source_query_seal_storage(ctx) && source_function_seal_storage(ctx)) {
+        source_derivations_prepare(ctx) && source_derivations_execute(ctx) && source_implementations_bind(ctx) && build_bodies(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx) && source_query_seal_storage(ctx) && source_function_seal_storage(ctx)) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         ctx->locals=NULL;ctx->facts=NULL;ctx->epochs=NULL;
@@ -59,6 +59,9 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         }
         if (status != XR_XIR_OK) {
             xr_xir_compile_artifact_free(output->checked); output->checked=NULL;
+            if (source_derive_check_failure(ctx,&location,status)) {
+                source_vector_retired_free(ctx);return;
+            }
             char message[128] = {0};
             if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
                 source_format(ctx, message, sizeof(message),

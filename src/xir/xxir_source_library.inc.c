@@ -535,6 +535,11 @@ static bool source_library_install(SourceContext *ctx, uint32_t module, uint32_t
     SourceLibraryMap map = {0};
     if (!source_library_map(ctx,library,module,*next_function,*next_slot,&map)) return false;
     bool ok = source_library_copy(ctx,library,&map);
+    if (ok && map.unit && ctx->derive_present) {
+        map.unit->functions=source_library_bytes(ctx,map.functions,map.function_count,sizeof(*map.functions));
+        map.unit->function_count=map.function_count;
+        ok=map.unit->functions!=NULL;
+    }
     if (ok) { *next_function = map.next_function; *next_slot = map.next_slot; }
     source_library_map_free(&map);
     return ok;

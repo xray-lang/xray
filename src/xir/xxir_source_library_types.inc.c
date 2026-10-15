@@ -8,6 +8,7 @@ struct SourceLibraryUnit {
     uint32_t *nominals, *interfaces;
     XrXirType *types;
     uint32_t type_count;
+    uint32_t *functions; uint32_t function_count;
     XrXirImplementationTable implementations;
 };
 static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,

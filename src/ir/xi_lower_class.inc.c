@@ -95,14 +95,6 @@ static bool class_has_complex_instance_initializer(ClassDeclNode *cd) {
     return false;
 }
 
-static uint32_t class_decl_derive_flags(XrAttribute **attrs, int count) {
-    uint32_t flags = 0;
-    for (int i = 0; i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
-            flags |= attrs[i]->derive_flags;
-    }
-    return flags;
-}
 
 static XiClassData *class_find_native_super(XiLower *l, const ClassDeclNode *cd) {
     if (!l || !cd || !cd->super_name || cd->super_module)
@@ -374,7 +366,7 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
         *out_inherited = inherited;
     const bool polymorphic = class_info_is_polymorphic(class_info);
     const bool json_derived =
-        (class_decl_derive_flags(cd->attributes, cd->attr_count) & XR_DERIVE_JSON) != 0;
+        (0 & XR_DERIVE_JSON) != 0;
 
     int instance_fields = 0;
     for (int i = 0; i < cd->field_count; i++) {
@@ -1032,7 +1024,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->ninst = inst_n;
     data->nstat = stat_n;
     data->clinit_child_idx = clinit_idx;
-    data->derive_flags = class_decl_derive_flags(cd->attributes, cd->attr_count);
+    data->derive_flags = 0;
 
     /* Preserve the exact declaration-field identity consumed by derived
      * Hash/Eq/Clone emission.  AOT runs after the analyzer and AST may have

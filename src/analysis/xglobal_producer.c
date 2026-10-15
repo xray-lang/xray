@@ -4053,13 +4053,12 @@ static bool body_is_compiler_owned_native_member(uint32_t type_name_id, const ch
     return false;
 }
 
-static uint32_t attrs_derive_flags(XrAttribute **attrs, int count) {
-    uint32_t flags = 0;
+static bool attrs_have_derivation(XrAttribute **attrs, int count) {
     for (int i = 0; i < count; i++) {
         if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
-            flags |= attrs[i]->derive_flags;
+            return true;
     }
-    return flags;
+    return false;
 }
 
 static bool derive_kind_from_flag(uint32_t flag, uint8_t *out_kind) {
@@ -12328,7 +12327,9 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     uint32_t instance_field_count = 0;
     uint32_t method_start = p->evidence->nmethods + 1;
     uint32_t method_count = 0;
-    uint32_t derive_flags = attrs_derive_flags(cls->attributes, cls->attr_count);
+    if (attrs_have_derivation(cls->attributes, cls->attr_count))
+        return false;
+    uint32_t derive_flags = 0;
     XaSymbolLinks *class_links = producer_class_links(p, cls);
     XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
     XaGenericSpecializationFact mono_fact = {0};
@@ -12764,7 +12765,9 @@ static bool producer_finalize_interface_method_contracts(XgProducer *producer) {
 static bool add_enum_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
     const EnumDeclNode *e = &node->as.enum_decl;
     XgDeclSummary decl;
-    uint32_t derive_flags = attrs_derive_flags(e->attributes, e->attr_count);
+    if (attrs_have_derivation(e->attributes, e->attr_count))
+        return false;
+    uint32_t derive_flags = 0;
     uint32_t type_key = hash_named_type_key32(e->name, NULL, 0);
     XaSymbolLinks *enum_links = producer_enum_links(p, e);
     XrClassInfo *enum_info = enum_links ? enum_links->class_info : NULL;

@@ -378,6 +378,7 @@ static XrXirStatus lsp_symbol(const XlspSourceSnapshot *s, const char *uri, size
     for (uint32_t i = 0; i < view->declaration_count; ++i) {
         status = lsp_work(s, 1); if (status != XR_XIR_OK) return status;
         const XrXirSourceDeclaration *declaration = &view->declarations[i];
+        if(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD)continue;
         XrXirSourceRange selection=syntax->declarations[i].name;if(lsp_absent_selection(selection))continue;
         bool matches=false;status=lsp_text_has_module(s,d,declaration->range.module,&matches);
         if(status!=XR_XIR_OK)return status;
@@ -413,7 +414,8 @@ XrXirStatus xlsp_source_definition(const XlspSourceSnapshot *s, const char *uri,
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(s->query);
     const XrXirSourceSyntaxView *syntax=lsp_syntax(s,view);
     if(!syntax||lsp_absent_selection(syntax->declarations[id-1].name))return XR_XIR_UNRESOLVED;
-    return lsp_location(s, syntax->declarations[id-1].name,view->declarations[id-1].name, output);
+    return lsp_location(s, syntax->declarations[id-1].name,
+        syntax->declarations[id-1].role==XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD?"derive":view->declarations[id-1].name, output);
 }
 void xlsp_source_locations_free(XlspSourceLocations *locations) {
     if (!locations) return;
@@ -445,7 +447,9 @@ XrXirStatus xlsp_source_references(const XlspSourceSnapshot *s, const char *uri,
         if (status != XR_XIR_OK) return status;
     }
     if (declaration_visible) {
-        status = lsp_location(s, syntax->declarations[id-1].name,view->declarations[id-1].name, &locations.items[locations.count]);
+        status = lsp_location(s, syntax->declarations[id-1].name,
+            syntax->declarations[id-1].role==XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD?"derive":view->declarations[id-1].name,
+            &locations.items[locations.count]);
         if (status != XR_XIR_OK) goto done;
         locations.items[locations.count].access = XR_XIR_SOURCE_WRITE;
         ++locations.count;

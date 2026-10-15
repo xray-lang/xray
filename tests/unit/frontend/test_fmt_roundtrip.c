@@ -677,13 +677,13 @@ TEST(attribute_visibility_modifier_order_roundtrip) {
     setup();
     const char *src = "@deprecated(\"use hash64\")\n"
                       "export fn hash() -> i64 { return 1 }\n"
-                      "@derive(Clone)\n"
+                      "@derive(Clone, makers.generate, read: [\"value\"], describe: [\"value\"], construct: true)\n"
                       "export final class Box {}\n"
                       "export packed struct Word { value: u32 }\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "@deprecated(\"use hash64\")\nexport fn hash"));
-    ASSERT_TRUE(contains(fmt1, "@derive(Clone)\nexport final class Box"));
+    ASSERT_TRUE(contains(fmt1, "@derive(Clone, makers.generate, describe: [\"value\"], read: [\"value\"], construct: true)\nexport final class Box"));
     ASSERT_TRUE(contains(fmt1, "export packed struct Word"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);

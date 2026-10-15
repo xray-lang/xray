@@ -146,18 +146,29 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     }
     ctx->type_scope = saved; ctx->module = module; return ok;
 }
+static bool source_nominal_attributes(SourceContext *ctx,AstNode *node,XrAttribute **attributes,int count) {
+    if (count<0 || (count && !attributes))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nominal attributes are malformed");
+    if (count) ctx->derive_present=true;
+    for (int i=0;i<count;++i) {
+        if (!source_work(ctx,node)) return false;
+        if (!attributes[i] || attributes[i]->kind!=ATTR_DERIVE || !attributes[i]->derivation)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"nominal attribute is not admitted");
+    }
+    return true;
+}
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
     if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->super_name ||
-        decl->is_packed || decl->explicit_align || decl->attr_count || decl->field_count < 0)
+        decl->is_packed || decl->explicit_align || decl->field_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct declaration contract is not admitted");
-    return source_nominal_declare(ctx, node, decl->name, decl->type_params,
+    return source_nominal_attributes(ctx,node,decl->attributes,decl->attr_count) && source_nominal_declare(ctx, node, decl->name, decl->type_params,
         (uint32_t) decl->type_param_count, XR_XIR_NOMINAL_STRUCT);
 }
 static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.class_decl;
     if (decl->super_name || decl->super_module || decl->is_packed ||
-        decl->explicit_align || decl->attr_count || decl->type_param_count < 0 ||
+        decl->explicit_align || decl->type_param_count < 0 ||
         decl->type_param_count > 65536 || decl->field_count < 0)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance");
     uint32_t constructors=0;
@@ -166,7 +177,7 @@ static bool source_class_declare(SourceContext *ctx, AstNode *node) {
         if (decl->methods[i]->type == AST_METHOD_DECL && decl->methods[i]->as.method_decl.is_constructor) ++constructors;
     }
     if (constructors>1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"a class has at most one constructor");
-    if (!source_nominal_declare(ctx,node,decl->name,decl->type_params,
+    if (!source_nominal_attributes(ctx,node,decl->attributes,decl->attr_count) || !source_nominal_declare(ctx,node,decl->name,decl->type_params,
         (uint32_t)decl->type_param_count,XR_XIR_NOMINAL_CLASS)) return false;
     ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=
         decl->explicit_final ? XR_XIR_NOMINAL_FINAL : 0;

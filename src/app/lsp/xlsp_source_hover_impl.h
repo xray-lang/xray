@@ -151,9 +151,10 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
     if(!syntax||syntax->declaration_count!=v->declaration_count||!d->id||d->id>syntax->declaration_count){b->status=XR_XIR_UNRESOLVED;return;}
     const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[d->id-1];
     if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED){b->status=XR_XIR_UNSUPPORTED;return;}
-    if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD&&d->kind!=XR_XIR_SOURCE_FUNCTION){b->status=XR_XIR_UNSUPPORTED;return;}
+    bool method=fact->role==XR_XIR_SOURCE_SYNTAX_METHOD||fact->role==XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD;
+    if(method&&d->kind!=XR_XIR_SOURCE_FUNCTION){b->status=XR_XIR_UNSUPPORTED;return;}
     if(d->exported)hover_text(b,"export ");
-    if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD) {
+    if(method) {
         if(fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC)hover_text(b,"static ");
         for(uint32_t i=0;i<syntax->marker_count&&b->status==XR_XIR_OK;++i) {
             b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)break;

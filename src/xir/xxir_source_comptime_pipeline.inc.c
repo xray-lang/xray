@@ -107,6 +107,7 @@ static void source_comptime_values_free(SourceContext *ctx) {
     for (SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) xr_xir_value_drop(&site->value);
 }
 static void source_comptime_context_free(SourceContext *ctx) {
+    source_derivations_free(ctx);
     source_comptime_values_free(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     while (ctx->memory) { SourceMemory *next=ctx->memory->next;xr_compile_resources_free(ctx->memory);ctx->memory=next; }
@@ -120,6 +121,7 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
     received.comptime_output_bytes=ctx->comptime_output_bytes;
     received.comptime_input=ctx->comptime_sites;
+    received.derive_input=ctx->derive_jobs;
     XrXirSourceResult result={0};source_construct(&received,&result);
     if (received.diagnostic.status==XR_XIR_OK &&
         (received.comptime_count!=ctx->comptime_count || received.comptime_matched!=ctx->comptime_count))

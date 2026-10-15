@@ -539,8 +539,20 @@ static void sig_attributes(SigBuf *s, XrAttribute **attrs, int count) {
     sig_add(s, " attrs[%d]", count);
     for (int i = 0; i < count; i++) {
         const XrAttribute *a = attrs ? attrs[i] : NULL;
-        sig_add(s, " (k%u,t%d,d%u,%s)", (unsigned) (a ? a->kind : 0), a ? a->timeout : 0,
-                (unsigned) (a ? a->derive_flags : 0), a && a->str_arg ? a->str_arg : "");
+        sig_add(s, " (k%u,t%d,%s", (unsigned) (a ? a->kind : 0), a ? a->timeout : 0,
+                a && a->str_arg ? a->str_arg : "");
+        const XrDerivationSyntax *derive=a?a->derivation:NULL;
+        if(derive){
+            sig_add(s," derive(");sig_type_ref(s,derive->protocol);
+            sig_add(s,",%s.%s,construct%d,fields%d",derive->generator_module?derive->generator_module:"",
+                derive->generator?derive->generator:"",derive->construct,derive->field_count);
+            for(uint32_t operation=0;operation<3;++operation)
+                for(int field=0;field<derive->field_count;++field)
+                    if(derive->fields[field].operation==operation)
+                        sig_add(s," (%u,%s)",operation,derive->fields[field].name);
+            sig_add(s,")");
+        }
+        sig_add(s,")");
     }
 }
 

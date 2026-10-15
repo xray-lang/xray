@@ -798,6 +798,22 @@ export fn run()->i64 {
 
 该例结果为Array类别2。普通函数可用结构相同的Tuple别名接收完整事实，普通无源码Checked库及其私有helper可以处理之后定义的用户类型。完整TypeInfo也可作为comptime结果，经独立Source重放成为普通拥有式数据，前驱销毁后由正常Program/Instance读取。所有访问、替换、图遍历、物化和接收仍收费到原ledger，服从17.61每请求结果限额及其余原预算。描述不等于生成：Source显式授权、生成声明启动、普通JSON/Regex等完整消费者与全部FI/安全门仍独立承担，不因这些数据或生成器既有Checked状态取得免检资格。
 
+### 17.66 显式普通库派生的 Source 启动与接收
+
+具名 struct、class 或 enum 使用 `@derive(Protocol, generator, describe: ["field"], read: ["field"], write: ["field"], construct: true)` 选择一个普通协议应用和普通可见函数。generator 可为已导入的名字或 `module.name`。选项可省略；construct 默认 false；字段列表中名称必须真实存在，各操作独立，不从 READ 推得 DESCRIBE 或从编码推得构造。相同选项、字段操作或目标上的相同协议应用重复时拒绝。`@derive(JSON)` 等旧固定位集语法不保留；没有编译器专属协议白名单或隐含 Hash→Eq 授权。
+
+Source 在真实声明、字段和签名建立后、普通用户 body 构造前建立并独立验证定义策略，再执行生成器。当前闭合目标首族从完整 Checked 依赖取得 g 及其私有帮助函数；依赖源码移除后仍能处理未来用户类型。启动代码只使用真实依赖 body 和真实结果 thunk，经普通 Built 全检、专用化、Checked 身份、Lowered 与唯一 CTFE；i64 Program 入口真实调用 thunk 并读取结果版本字段。未检查用户 body 不进入假 Checked 模块，也不以空 body 解开生成次序。
+
+生成器是普通 `fn(TypeInfo, DeriveContext)->Generated`。TypeInfo 沿17.65的逻辑图；在派生上下文中，目标私有字段只在显式 DESCRIBE 集合内出现，嵌套类型不会继承目标模块的全部私有可见性。目标事实查询和 g 的 recipe 发射可在不同 canonical 池上，但必须共享原 ledger，跨池只传逻辑引用。
+
+DeriveContext 为 `(Array<MethodInfo>, Array<CalleeInfo>, Array<i64> parameters, i64 constructor)`。MethodInfo 为 `(string name,i64 resultType,i64 parameterBegin,i64 parameterCount,i64 ownParameterCount)`；CalleeInfo 为 `(string module,string name,i64 index,i64 parameterBegin,i64 parameterCount,i64 resultType)`。参数区间引用唯一平面表，类型引用都指向同一 TypeInfo 图。callee index 对应接收方选择的普通可见 public 函数及显式授权的唯一 init；未授权构造时 constructor=-1。g 的私有帮助函数参与编译期计算，不因此成为生成 body 的私有运行期调用许可。
+
+Generated 为版本1普通8元Tuple `(version,functions,parameters,blocks,instructions,operands,literals,typeArguments)`，后七项均为平面 Array。FunctionRow14为 `(name,member,root,resultType,parameterBegin,parameterCount,blockBegin,blockCount,instructionBegin,instructionCount,operandBegin,operandCount,typeArgumentBegin,typeArgumentCount)`；BlockRow4为 `first/count/panic/frontier`；InstructionRow10为 `opcode/type/arg0/arg1/target0/target1/immediate/typeArgumentBegin/typeArgumentCount/originField`。区间精确按序分割对应表；不接受未使用尾部。非负类型引用由接收方当前图解析，负数 `-builtin-1` 只接受唯一服务承认的 builtin；调用非负数索引本输出函数，负数 `-calleeIndex-1` 索引接收方 callee 表；CONST_STRING 只索引本输出 literal。
+
+接收方强制定义模块、目标、export、普通 READ 方法/内部 helper 角色、真实协议 requirement/root、显式策略及每条指令的用户字段 origin。member=-1 为 helper，否则必须对应实际 requirement；root 必须最终绑定该协议方法。新函数不携带 g 的 Checked/NONE 证明；生成内容与完整用户 Built 一起重新检查实现见证、类型、约束、私有访问、借用、所有权、初始化、构造和根效果。失败不发布 Checked 或查询快照，字段错误指向用户字段路径。第二次独立 Source 按原 occurrence/属性/真实库 g 身份接收拥有式结果，在自己的当前池重建逻辑引用，不复用第一次池的整数 ID。
+
+生成方法的查询角色是 DERIVED_METHOD，选区指向真实 derive token；没有伪造的方法名或参数词法选区。LSP 在调用处按普通方法显示，definition 指向触发派生的属性，reference/hover/semantic 消费拥有式快照。这个闭合 Checked 依赖首族不宣称完整泛型模板、同源码依赖启动、JSON/enum/Regex 各库消费者或全部 FI/安全/provider 资格已经完成；这些仍须沿相同边界实现。原8MiB每请求逻辑结果政策和全部其它预算/验证门不变。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1706,5 +1722,21 @@ export fn run()->i64 {
 ```
 
 This returns Array kind2. Ordinary functions may receive complete facts through structurally identical Tuple aliases; a source-free Checked library and its private helper can process subsequently defined user types. A complete TypeInfo may also become a comptime result, replayed through independent Source construction as ordinary owned data and read by a normal Program/Instance after precursor death. Access, substitution, graph traversal, materialization and receiving charge the original ledger, including17.61 request-specific output ceilings and every other original budget. Facts do not constitute generation: Source authorization and generated-declaration startup, complete JSON/Regex consumers and full FI/safety qualification remain separate obligations. Neither these data nor a generator's prior Checked state grants a checking exemption.
+
+### 17.66 Source startup and receiving for explicit ordinary library derivation
+
+A named struct, class or enum selects an ordinary protocol application and visible ordinary function with `@derive(Protocol, generator, describe: ["field"], read: ["field"], write: ["field"], construct: true)`. The generator is an imported name or `module.name`. Options are optional; construct defaults to false. Field names must exist, and each operation is independent: READ does not imply DESCRIBE, and encoding does not imply construction. Duplicate options, field operations or protocol applications on one target reject. Old fixed-bit syntax such as `@derive(JSON)` is removed; there is no compiler-specific protocol whitelist or implicit Hash-to-Eq grant.
+
+After authentic declarations, fields and signatures exist, Source creates and independently validates the definition policy before generator execution and ordinary user-body construction. The current closed-target family obtains complete g/private-helper bodies from a Checked dependency and works after its source has been removed. Actual dependency bodies and a real result thunk pass ordinary Built checking, specialization, Checked identity, Lowered and the sole CTFE. The i64 Program entry actually calls the thunk and reads its result version. Unchecked user bodies never enter a fake Checked module, and empty bodies do not resolve generation order.
+
+The ordinary generator signature is `fn(TypeInfo, DeriveContext)->Generated`. TypeInfo uses17.65's logical graph. In this context, private target fields appear only under explicit DESCRIBE; nested types do not inherit all private visibility of the target module. Fact queries and g recipes may use different canonical pools while retaining the original ledger; only logical references cross pools.
+
+DeriveContext is `(Array<MethodInfo>,Array<CalleeInfo>,Array<i64> parameters,i64 constructor)`. MethodInfo is `(string name,i64 resultType,i64 parameterBegin,i64 parameterCount,i64 ownParameterCount)`. CalleeInfo is `(string module,string name,i64 index,i64 parameterBegin,i64 parameterCount,i64 resultType)`. Parameter spans address the single flat table, and type references address the same TypeInfo graph. Callee indices identify receiver-selected visible public ordinary functions and the explicitly authorized sole init; absent construction authority yields constructor=-1. Private helpers used during CTFE do not thereby become private runtime call permissions for generated bodies.
+
+Generated is the version1 eight-field ordinary Tuple `(version,functions,parameters,blocks,instructions,operands,literals,typeArguments)`, with seven flat Array tables. FunctionRow14 is `(name,member,root,resultType,parameterBegin,parameterCount,blockBegin,blockCount,instructionBegin,instructionCount,operandBegin,operandCount,typeArgumentBegin,typeArgumentCount)`. BlockRow4 is `first/count/panic/frontier`; InstructionRow10 is `opcode/type/arg0/arg1/target0/target1/immediate/typeArgumentBegin/typeArgumentCount/originField`. Ordered spans exactly partition their tables with no unused tail. Nonnegative types resolve in the receiver's current graph; negative `-builtin-1` references must identify an admitted builtin. Nonnegative calls index newly generated functions; negative `-calleeIndex-1` calls use the receiver's callee table. CONST_STRING indexes only newly returned literals.
+
+The receiver forces the defining module, target, export, ordinary READ-method/helper role, authentic requirement/root, explicit policy and owned instruction origins. member=-1 identifies a helper; each other selector names an actual requirement, and its root must bind that method. New bodies inherit no Checked/NONE proof from g. The complete user Built independently rechecks witnesses, types, constraints, visibility, borrowing, ownership, initialization, construction and root effects. Failure publishes neither Checked nor query output; field errors identify the user's field path. Independent second Source receiving binds the original occurrence, attribute and actual library/g identity, reconstructing logical references in its own pool instead of copying integer IDs from the first pool.
+
+DERIVED_METHOD query facts select the actual derive token without invented lexical method or parameter names. LSP shows ordinary method calls, navigates definitions to their triggering attribute, and serves references/hover/semantic tokens from owned snapshots. This closed Checked-dependency family does not claim complete generic templates, same-source dependency startup, JSON/enum/Regex consumers or all FI/safety/provider qualification. Those obligations retain the same boundaries. The original8MiB request-specific logical output policy and every other budget and verification gate remain.
 
 <!-- /xr-spec:en -->

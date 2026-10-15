@@ -67,9 +67,11 @@ static bool source_core_contract(SourceContext *ctx) {
 }
 
 #include "xxir_source_root_refine.inc.c"
+#include "xxir_source_derivation.inc.c"
 #include "xxir_source_construct.inc.c"
 
 static void source_core_dispose(SourceContext *ctx) {
+    source_derivations_free(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     ctx->construction=NULL;
     for (SourceManifest *manifest=ctx->manifests;manifest;manifest=manifest->next)
