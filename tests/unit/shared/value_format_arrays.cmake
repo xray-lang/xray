@@ -26,3 +26,17 @@ else()
 endif()
 add_test(NAME test_xir_value_format_storage COMMAND test_xir_value_format_storage)
 set_tests_properties(test_xir_value_format_storage PROPERTIES LABELS "unit;xir;format;ownership" TIMEOUT 30)
+
+add_executable(test_array_format_public "${PROJECT_SOURCE_DIR}/tests/unit/xir/legacy_consumers/test_array_format_public.c")
+target_link_libraries(test_array_format_public PRIVATE xray_source_api)
+target_compile_definitions(test_array_format_public PRIVATE
+    XR_FORMAT_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_FORMAT_FIXTURE="${PROJECT_SOURCE_DIR}/tests/unit/xir/legacy_consumers/fixtures/array_display_storage/root.xr")
+set_target_properties(test_array_format_public PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_array_format_public PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_array_format_public PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME test_array_format_public COMMAND test_array_format_public)
+set_tests_properties(test_array_format_public PROPERTIES LABELS "unit;source;format;ownership" TIMEOUT 30)
