@@ -9,6 +9,7 @@
 #ifndef XDAP_CURRENT_H
 #define XDAP_CURRENT_H
 #include "../../xir/xxir_vm_debug.h"
+#include "../../xir/xxir_value_place.h"
 typedef struct XdapCurrent XdapCurrent;
 typedef enum XdapCurrentState {
     XDAP_CURRENT_RUNNING, XDAP_CURRENT_STOPPED, XDAP_CURRENT_WAITING, XDAP_CURRENT_ENDED
@@ -36,7 +37,7 @@ XR_FUNC XrXirCallStatus xdap_current_resume(XdapCurrent *,uint64_t epoch,uint64_
 XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t epoch,
     XrXirVmDebugMode mode);
 XR_FUNC XrXirValueStatus xdap_current_continue_filtered(XdapCurrent *,uint64_t epoch);
-XR_FUNC XrXirValueStatus xdap_current_write_begin(XdapCurrent *,uint64_t,uint64_t,uint32_t,const XrXirValue *);
+XR_FUNC XrXirValueStatus xdap_current_write_begin(XdapCurrent *,uint64_t,uint64_t,uint32_t,const XrXirValuePath *,const XrXirValue *);
 XR_FUNC XrXirValueStatus xdap_current_write_finish(XdapCurrent *,bool *,XrXirVmDebugSnapshot **);
 XR_FUNC uint64_t xdap_current_stopped_epoch(const XdapCurrent *);
 XR_FUNC void xdap_current_pause(XdapCurrent *session);

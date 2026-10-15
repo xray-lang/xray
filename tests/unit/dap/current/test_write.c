@@ -11,6 +11,7 @@
 #undef main
 #include "xir/xxir_vm_debug_internal.h"
 #include "app/dap/xdap_dispatch_internal.h"
+static const XrXirValuePath write_whole_path={0};
 typedef struct WriteFixture { XdapAdapter *adapter;XrCompileResources *ledger;XrXirDomain *domain;XrCompileResourceStats baseline; } WriteFixture;
 static XrXirStatus write_write(void *context,const char *bytes,size_t length) {
     Capture *out=context;CHECK(out->count<128 && length<sizeof(out->messages[0].bytes));
@@ -83,20 +84,20 @@ static void write_return(WriteFixture *fixture,uint64_t epoch,const char *expect
 }
 static void write_normal(void) {
     WriteFixture fixture=write_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;XdapCurrent *control=adapter->launch->control;
-    XrXirValue replacement={XR_XIR_I64,0,100};CHECK(xdap_current_write_begin(control,1,1,0,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
+    XrXirValue replacement={XR_XIR_I64,0,100};CHECK(xdap_current_write_begin(control,1,1,0,&write_whole_path,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
     write_pause(&fixture);XrXirVmDebugFrameInfo original=write_frame(adapter->snapshot);
     uint32_t operand=write_operand(adapter,adapter->snapshot,"doubled",40);uint64_t epoch=adapter->stop_epoch;
-    CHECK(xdap_current_write_begin(control,epoch+1,original.id,operand,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(xdap_current_write_begin(control,epoch,UINT64_MAX,operand,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(xdap_current_write_begin(control,epoch,original.id,UINT32_MAX,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
-    CHECK(xdap_current_write_begin(control,epoch,original.id,0,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
-    XrXirValue bad={XR_XIR_BOOL,0,1};CHECK(xdap_current_write_begin(control,epoch,original.id,operand,&bad)==XR_XIR_VALUE_OK);
+    CHECK(xdap_current_write_begin(control,epoch+1,original.id,operand,&write_whole_path,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xdap_current_write_begin(control,epoch,UINT64_MAX,operand,&write_whole_path,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xdap_current_write_begin(control,epoch,original.id,UINT32_MAX,&write_whole_path,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xdap_current_write_begin(control,epoch,original.id,0,&write_whole_path,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
+    XrXirValue bad={XR_XIR_BOOL,0,1};CHECK(xdap_current_write_begin(control,epoch,original.id,operand,&write_whole_path,&bad)==XR_XIR_VALUE_OK);
     XdapCurrentResult result={0};CHECK(xdap_current_poll(control,1,&result)==XR_XIR_VALUE_OK && result.state==XDAP_CURRENT_STOPPED && result.debug_epoch==epoch);
     bool visited=false;XrXirVmDebugSnapshot *fresh=NULL;
     CHECK(xdap_current_write_finish(control,&visited,&fresh)==XR_XIR_VALUE_BAD_ARGUMENT && visited && !fresh);xdap_current_result_drop(&result);
     write_operand(adapter,adapter->snapshot,"doubled",40);
-    CHECK(xdap_current_write_begin(control,epoch,original.id,operand,&replacement)==XR_XIR_VALUE_OK);
-    CHECK(xdap_current_write_begin(control,epoch,original.id,operand,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xdap_current_write_begin(control,epoch,original.id,operand,&write_whole_path,&replacement)==XR_XIR_VALUE_OK);
+    CHECK(xdap_current_write_begin(control,epoch,original.id,operand,&write_whole_path,&replacement)==XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xdap_current_continue(control,epoch,XR_XIR_VM_DEBUG_CONTINUE)==XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xdap_current_poll(control,1,&result)==XR_XIR_VALUE_OK && result.state==XDAP_CURRENT_STOPPED && result.debug_epoch==epoch+1);
     visited=false;CHECK(xdap_current_write_finish(control,&visited,&fresh)==XR_XIR_VALUE_OK && visited && fresh);
@@ -114,7 +115,7 @@ static void write_revoked(void) {
     for (uint32_t cancel=0;cancel<2;++cancel) {
         WriteFixture fixture=write_open(XR_DAP_CALL_FIXTURE);write_pause(&fixture);XdapAdapter *adapter=fixture.adapter;
         XrXirVmDebugFrameInfo frame=write_frame(adapter->snapshot);uint32_t operand=write_operand(adapter,adapter->snapshot,"doubled",40);
-        XrXirValue replacement={XR_XIR_I64,0,100};CHECK(xdap_current_write_begin(adapter->launch->control,adapter->stop_epoch,frame.id,operand,&replacement)==XR_XIR_VALUE_OK);
+        XrXirValue replacement={XR_XIR_I64,0,100};CHECK(xdap_current_write_begin(adapter->launch->control,adapter->stop_epoch,frame.id,operand,&write_whole_path,&replacement)==XR_XIR_VALUE_OK);
         if (cancel) CHECK(xdap_current_cancel(adapter->launch->control)==XR_XIR_CALL_CANCEL_REQUESTED);
         bool visited=true;XrXirVmDebugSnapshot *fresh=NULL;
         CHECK(xdap_current_write_finish(adapter->launch->control,&visited,&fresh)==XR_XIR_VALUE_BAD_ARGUMENT && !visited && !fresh);
@@ -130,7 +131,7 @@ static void write_task(void) {
     CHECK(adapter->snapshot && !adapter->running && adapter->depth>=3);capture.count=0;
     XrXirVmDebugFrameInfo frame=write_frame(adapter->snapshot);CHECK(frame.thread>1);
     uint32_t operand=write_operand(adapter,adapter->snapshot,"left",256);XrXirValue replacement={XR_XIR_I64,0,0};
-    CHECK(xdap_current_write_begin(control,adapter->stop_epoch,frame.id,operand,&replacement)==XR_XIR_VALUE_OK);
+    CHECK(xdap_current_write_begin(control,adapter->stop_epoch,frame.id,operand,&write_whole_path,&replacement)==XR_XIR_VALUE_OK);
     XdapCurrentResult result={0};CHECK(xdap_current_poll(control,1,&result)==XR_XIR_VALUE_OK && result.state==XDAP_CURRENT_STOPPED);
     bool visited=false;XrXirVmDebugSnapshot *fresh=NULL;XrXirValueStatus status=xdap_current_write_finish(control,&visited,&fresh);
     if (status!=XR_XIR_VALUE_OK) fprintf(stderr,"Task paused write status=%u visited=%u depth=%u thread=%llu\n",status,visited,adapter->depth,(unsigned long long)frame.thread);
@@ -149,7 +150,7 @@ static size_t write_fault(size_t fail) {
     WriteFixture fixture=write_open(XR_DAP_CALL_FIXTURE);write_pause(&fixture);XdapAdapter *adapter=fixture.adapter;
     XrXirVmDebugFrameInfo frame=write_frame(adapter->snapshot);uint32_t operand=write_operand(adapter,adapter->snapshot,"doubled",40);
     XrXirValue replacement={XR_XIR_I64,0,100};uint64_t epoch=adapter->stop_epoch;
-    CHECK(xdap_current_write_begin(adapter->launch->control,epoch,frame.id,operand,&replacement)==XR_XIR_VALUE_OK);
+    CHECK(xdap_current_write_begin(adapter->launch->control,epoch,frame.id,operand,&write_whole_path,&replacement)==XR_XIR_VALUE_OK);
     XrXirDomainBudgetStats before=xr_xir_domain_budget_stats(fixture.domain);size_t live=runtime_live,bytes=runtime_bytes,begin=runtime_attempts;
     runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;XdapCurrentResult result={0};
     XrXirValueStatus driver=xdap_current_poll(adapter->launch->control,1,&result);size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
@@ -166,7 +167,10 @@ static size_t write_fault(size_t fail) {
     if (fresh) xr_xir_vm_debug_snapshot_drop(fresh);write_return(&fixture,fail==SIZE_MAX ? epoch+1 : epoch,fail==SIZE_MAX ? "104\n" : "44\n");
     write_dispose(&fixture);return sites;
 }
-int main(int argc,char **argv) {
+#ifndef XR_DAP_WRITE_ENTRY
+#define XR_DAP_WRITE_ENTRY main
+#endif
+int XR_DAP_WRITE_ENTRY(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     write_normal();write_revoked();write_task();size_t sites=write_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) write_fault(i);else { write_fault(0);if (sites>1) write_fault(sites-1); }

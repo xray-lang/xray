@@ -424,3 +424,17 @@ endif()
 add_test(NAME test_dap_set_variable COMMAND test_dap_set_variable)
 add_test(NAME test_dap_set_variable_resources COMMAND test_dap_set_variable --resources)
 set_tests_properties(test_dap_set_variable test_dap_set_variable_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")
+
+add_executable(test_dap_projection_write test_projection_write.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_projection_write PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_projection_write PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_THREADS_FIXTURE="${XR_DAP_FIXTURE_DIR}/threads_fixture.xr" XR_DAP_PROJECTION_FIXTURE="${XR_DAP_FIXTURE_DIR}/write_projection.xr")
+if(MSVC)
+    target_compile_options(test_dap_projection_write PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_projection_write PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_projection_write COMMAND test_dap_projection_write)
+add_test(NAME test_dap_projection_write_resources COMMAND test_dap_projection_write --resources)
+set_tests_properties(test_dap_projection_write test_dap_projection_write_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")

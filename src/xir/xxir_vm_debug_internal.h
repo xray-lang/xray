@@ -10,6 +10,7 @@
 #define XXIR_VM_DEBUG_INTERNAL_H
 #include "xxir_vm_debug.h"
 #include "xxir_source_query.h"
+#include "xxir_value_place.h"
 
 typedef struct XirVmDebugPoint {
     const XrXirVmBinding *binding;
@@ -43,10 +44,11 @@ XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot 
 /* Resume a filtered logical rule visit once, retaining the original step
  * thread/frame/depth/source anchor. Stale or unfiltered stops stay paused. */
 XR_FUNC XrXirValueStatus xir_vm_debug_continue_filtered(XrXirVmDebug *,uint64_t);
-/* Queue an owned replacement for a live stopped Cell operand. Only a fresh
- * authenticated VM callback may apply it through ordinary Instance/Call rules.
+/* Queue an owned replacement and copied typed path for a stopped Cell operand.
+ * An empty path replaces the whole value. A fresh authenticated VM callback
+ * checks declaration writes and ordinary Instance/Call authority before commit.
  * Every begin must be paired with finish, including driver failure/cleanup. */
-XR_FUNC XrXirValueStatus xir_vm_debug_write_begin(XrXirVmDebug *,uint64_t,uint64_t,uint32_t,const XrXirValue *);
+XR_FUNC XrXirValueStatus xir_vm_debug_write_begin(XrXirVmDebug *,uint64_t,uint64_t,uint32_t,const XrXirValuePath *,const XrXirValue *);
 XR_FUNC bool xir_vm_debug_write_pending(const XrXirVmDebug *);
 XR_FUNC XrXirValueStatus xir_vm_debug_write_visit(XrXirVmDebug *);
 /* A successful applied write transfers its prepared snapshot even if the

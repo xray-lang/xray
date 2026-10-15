@@ -73,7 +73,7 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,true,&body,NULL,&success);
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,false,NULL,"The paused write was not admitted",&failure);
     if (status==XR_XIR_OK) {
-        XrXirValueStatus begun=xdap_current_write_begin(s->launch->control,s->stop_epoch,info.id,operand,&value);
+        XrXirValuePath path={0};XrXirValueStatus begun=xdap_current_write_begin(s->launch->control,s->stop_epoch,info.id,operand,&path,&value);
         armed=begun==XR_XIR_VALUE_OK;status=inspect_write_status(begun);
     }
     if (armed) {

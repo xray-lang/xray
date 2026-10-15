@@ -111,8 +111,8 @@ XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t ep
 XR_FUNC XrXirValueStatus xdap_current_continue_filtered(XdapCurrent *session,uint64_t epoch) {
     return session && !session->driving && !session->ended ? xir_vm_debug_continue_filtered(session->debug,epoch) : XR_XIR_VALUE_BAD_ARGUMENT;
 }
-XR_FUNC XrXirValueStatus xdap_current_write_begin(XdapCurrent *session,uint64_t epoch,uint64_t frame,uint32_t operand,const XrXirValue *value) {
-    return session && !session->driving && !session->ended ? xir_vm_debug_write_begin(session->debug,epoch,frame,operand,value) : XR_XIR_VALUE_BAD_ARGUMENT;
+XR_FUNC XrXirValueStatus xdap_current_write_begin(XdapCurrent *session,uint64_t epoch,uint64_t frame,uint32_t operand,const XrXirValuePath *path,const XrXirValue *value) {
+    return session && !session->driving && !session->ended ? xir_vm_debug_write_begin(session->debug,epoch,frame,operand,path,value) : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 XR_FUNC XrXirValueStatus xdap_current_write_finish(XdapCurrent *session,bool *visited,XrXirVmDebugSnapshot **snapshot) {
     return session && !session->driving ? xir_vm_debug_write_finish(session->debug,visited,snapshot) : XR_XIR_VALUE_BAD_ARGUMENT;

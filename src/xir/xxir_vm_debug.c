@@ -17,6 +17,7 @@
 #include "xxir_type_arena.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_instance_debug_internal.h"
+#include "xxir_value_path_internal.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -35,9 +36,10 @@ typedef struct DebugBreakpoint {
 typedef struct DebugSourcePoint { uint32_t module,statement,line,flags; } DebugSourcePoint;
 typedef struct DebugWrite {
     XrXirValue value;
+    XrXirValuePathStep *steps;
     XrXirVmDebugSnapshot *snapshot;
     uint64_t epoch,frame;
-    uint32_t operand,phase;
+    uint32_t operand,phase,count;
     XrXirValueStatus result;
 } DebugWrite;
 typedef struct SnapshotFrame {
@@ -170,6 +172,7 @@ XR_FUNC void xr_xir_vm_debug_drop(XrXirVmDebug *debug) {
     XR_CHECK(debug_valid(debug), "invalid VM debug owner");
     if (!xr_xir_reference_release(&debug->references)) return;
     xr_xir_value_drop(&debug->write.value);xr_xir_vm_debug_snapshot_drop(debug->write.snapshot);
+    debug_deallocate(debug->domain,debug->write.steps,(uint64_t)debug->write.count*sizeof(*debug->write.steps));
     XR_CHECK(!debug->count && !debug->artifact, "VM debug owner still bound");
     clear_snapshot(debug);
     XrXirDomain *domain = debug->domain;
