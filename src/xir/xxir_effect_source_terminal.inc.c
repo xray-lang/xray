@@ -148,9 +148,9 @@ static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
     return effect_invocation_public_gate(work,certificate);
 }
 
-/* Only verification modes consume this shallow request view. The stack owner
- * never owns or changes equation arrays. The original publication removed all
- * raw producer pointers; its sole Material remains the actual input reader. */
+/* Verification borrows the actual Final and its sole immutable Input.
+ * Request scratch contains only the fresh incoming index; no construction
+ * owner, queue or copied semantic inventory participates in this proof. */
 static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
     if (!certificate || !effect_body_material_shape(certificate->body) ||
@@ -168,16 +168,12 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
         if (!effect_body_material_shape(body) || body->resources!=work->resources ||
             body->terms.remaining) return XR_XIR_BAD_STRUCTURE;
     }
-    if (!xir_compile_work(work,sizeof(EffectInvocationWorkspace)+sizeof(EffectGraph)+sizeof(XrXirEffects)+
-        sizeof(EffectInvocationCertificate)+sizeof(EffectBodyRequest)+5*sizeof(void *))) return XR_XIR_BUDGET;
-    XrXirEffects local_summary=*summary;
-    EffectGraph graph={.material=certificate->body,.physical=certificate->body->physical};
-    EffectInvocationWorkspace owner={0};
-    XrXirStatus opening=effect_invocation_read_open(work,&local_summary,certificate->declared,certificate->final,&owner);
+    if (!xir_compile_work(work,sizeof(EffectInvocationRead)+sizeof(EffectInvocationCertificate)+3*sizeof(void *)))
+        return XR_XIR_BUDGET;
+    EffectInvocationRead owner={0};
+    XrXirStatus opening=effect_invocation_read_open(work,summary,certificate->declared,certificate->final,&owner);
     if (opening!=XR_XIR_OK) return opening;
-    owner.graph=&graph;
     EffectInvocationCertificate local=*certificate;local.terms.remaining=work;
-    local.final=&owner.final;
     XrXirStatus status=effect_source_equation_shape(work,certificate);
     if (status==XR_XIR_OK) status=effect_source_result_views(work,certificate,summary);
     for (uint32_t f=0;f<summary->count && status==XR_XIR_OK;++f) {
@@ -193,13 +189,13 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
                 status=XR_XIR_BAD_STRUCTURE;
         }
     }
-    if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final.physical,owner.final.material);
+    if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final->physical,owner.final->material);
     if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
-    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final.physical);
+    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final->physical);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,&local);
     if (status==XR_XIR_OK) status=effect_source_projections(work,&local);
     effect_invocation_read_close(&owner);return status;

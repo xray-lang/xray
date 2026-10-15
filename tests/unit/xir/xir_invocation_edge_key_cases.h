@@ -16,7 +16,7 @@ static void invocation_edge_key_literals(void) {
     uint64_t baseline=rp_stats(&context).live_bytes;
     const EffectInvocationEdgeKey keys[6]={{1,2,3,4,0},{2,2,3,4,0},{1,3,3,4,0},
         {1,2,4,4,0},{1,2,3,5,0},{1,2,3,4,1}};
-    EffectInvocationEdge edges[6];EffectInvocationWorkspace owner={.work=&context,.final={.edges=edges}};
+    EffectInvocationEdge edges[6];EffectInvocationWorkspace owner={.read={.work=&context,.final=&owner.final},.final={.edges=edges}};
     CHECK(effect_invocation_edge_index_reserve(&owner)==XR_XIR_OK && owner.edge_index_capacity==16);
     for (uint32_t e=0;e<6;++e) {
         size_t at=SIZE_MAX;CHECK(effect_invocation_edge_slot(&owner,owner.edge_index,
