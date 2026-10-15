@@ -16,14 +16,20 @@ static const char *const sources[]={
     "import time as t\nimport { sleep } from time\n",
     "// \xf0\x9f\x98\x80\r\nimport \"./util\";\rimport time\n",
     "fn pattern(){var pattern=/import\\{fake\\}/}\nimport \"./util\"\n",
-    "/* \xf0\x9f\x98\x80 */ import \"./util\"\n"
+    "/* \xf0\x9f\x98\x80 */ import \"./util\"\n",
+    "import \"./util\"\nexport * from \"./other\"",
+    "export { value as selected } from time\n",
+    "export * from \"\"\"\n    ./util\n    \"\"\"\n",
+    "/* \xf0\x9f\x98\x80 */ export * from \"./util\";\r\nexport { value as x } from \"./util\";\rexport * from time\n"
 };
 static void span(XrLspRange r,uint32_t line,uint32_t column,uint32_t end_line,uint32_t end_column) {
+    if(r.start.line!=line||r.start.character!=column||r.end.line!=end_line||r.end.character!=end_column)
+        fprintf(stderr,"import range got %u:%u..%u:%u expected %u:%u..%u:%u\n",r.start.line,r.start.character,r.end.line,r.end.character,line,column,end_line,end_column);
     CHECK(r.start.line==line&&r.start.character==column&&r.end.line==end_line&&r.end.character==end_column);
 }
 static void facts(const XlspSourceImports *owner,unsigned mode) {
     size_t count=SIZE_MAX;const XlspSourceImport *items=xlsp_source_imports_items(owner,&count);
-    CHECK(count==(mode==3?0:mode==4||mode==5?2:1));if(!count)return;CHECK(items);
+    CHECK(count==(mode==3?0:mode==4||mode==5||mode==8?2:mode==11?3:1));if(!count)return;CHECK(items);
     if(mode==0){CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,0,7,0,15);}
     else if(mode==1){CHECK(!strcmp(items[0].specifier,"./u\xf0\x9f\x98\x80til")&&items[0].quoted);span(items[0].range,2,27,2,37);}
     else if(mode==2){CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,0,7,2,7);}
@@ -32,7 +38,14 @@ static void facts(const XlspSourceImports *owner,unsigned mode) {
     else if(mode==5){CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,1,7,1,15);
         CHECK(!strcmp(items[1].specifier,"time")&&!items[1].quoted);span(items[1].range,2,7,2,11);}
     else if(mode==6){CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,1,7,1,15);}
-    else {CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,0,16,0,24);}
+    else if(mode==7){CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,0,16,0,24);}
+    else if(mode==8){CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,0,7,0,15);
+        CHECK(!strcmp(items[1].specifier,"./other")&&items[1].quoted);span(items[1].range,1,14,1,23);}
+    else if(mode==9){CHECK(!strcmp(items[0].specifier,"time")&&!items[0].quoted);span(items[0].range,0,34,0,38);}
+    else if(mode==10){CHECK(!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,0,14,2,7);}
+    else {CHECK(mode==11&&!strcmp(items[0].specifier,"./util")&&items[0].quoted);span(items[0].range,0,23,0,31);
+        CHECK(!strcmp(items[1].specifier,"./util")&&items[1].quoted);span(items[1].range,1,27,1,35);
+        CHECK(!strcmp(items[2].specifier,"time")&&!items[2].quoted);span(items[2].range,2,14,2,18);}
 }
 static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileResourceStats *stats) {
     XrCompileResources *r=NULL;XlspSourceImports *owner=NULL;
@@ -50,9 +63,8 @@ static XrXirStatus once(unsigned mode,XrCompileResourceLimits caps,XrCompileReso
 }
 static void rejected(void) {
     XrCompileResources *r=sdk_ledger(&limits);XlspSourceImports *owner=NULL;
-    XlspSourceDocument document={"file:///imports.xr","import \"./util\"\nexport * from \"./other\"",18,40,0};
-    document.uri_length=strlen(document.uri);document.length=strlen(document.text);
-    CHECK(xlsp_source_imports_build(r,&document,&owner)==XR_XIR_UNSUPPORTED&&!owner);
+    XlspSourceDocument document={"file:///imports.xr",NULL,18,0,0};
+    document.uri_length=strlen(document.uri);
     document.text="// \xf0\x9f\x98\x80\r\nimport \"./util\"\rimport time\n";document.length=strlen(document.text);
     CHECK(xlsp_source_imports_build(r,&document,&owner)==XR_XIR_UNRESOLVED&&!owner);
     document.text="import {";document.length=strlen(document.text);
