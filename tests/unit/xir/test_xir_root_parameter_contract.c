@@ -15,6 +15,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "xir_root_parameter_fixture.h"
+#include "xir/xxir_effects.c"
 
 static void rp_direct_use(void) {
     RootParameterMark physical = rp_mark();
@@ -216,6 +217,11 @@ static void rp_terminal_literals(void) {
         uint64_t live=rp_stats(&c).live_bytes;RootParameterFixture f;rp_fixture(&f,&c);
         f.callable.flags=bounds[n];f.module.stage=XR_XIR_BUILT;
         XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;XrXirRootCauseTrace *trace=NULL;
+        if(bounds[n]==XR_XIR_CALLABLE_ROOT_NONE) {
+            CHECK(xir_fixture_check(&c,&f.module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
+            /* A known non-root callable cannot contribute a symbolic root term. */
+            f.contract.formula=(XrXirRootFormula){0};
+        }
         CHECK(xir_fixture_check(&c, &f.module, &checked, NULL)==XR_XIR_OK && checked);
         CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK && effects);
         xr_xir_compile_artifact_free(checked);checked=NULL;memset(&f,0x9c,sizeof(f));
@@ -232,7 +238,12 @@ static void rp_terminal_literals(void) {
                 borrowed->callee==UINT32_MAX && borrowed->slot==0 && borrowed->distance==0);
             XrXirRootEffectWitness original=*borrowed;
             for (unsigned field=0;field<5;++field) {
-                XrXirRootEffectWitness *w=(XrXirRootEffectWitness *)borrowed;
+                /* Numeric reads are independent; corrupt the owning Final witness. */
+                const EffectFinalOutcomes *owned=effect_final_outcomes(effects);
+                CHECK(owned && borrowed_read.status==XR_XIR_OK);
+                XrXirRootEffectWitness *w=unknown?&owned->unresolved_witnesses[0]:
+                    &owned->root_witnesses[0];
+                CHECK(!memcmp(w,&original,sizeof(original)));
                 if (field==0) w->cause=XR_XIR_ROOT_CAUSE_CONTEXT_CALL;
                 if (field==1) w->instruction=1;
                 if (field==2) w->callee=0;
@@ -241,6 +252,7 @@ static void rp_terminal_literals(void) {
                 XrXirRootCauseTrace *rejected=NULL;
                 CHECK(xr_xir_compile_root_cause_trace_copy(&c,effects,0,&rejected)==XR_XIR_BAD_STRUCTURE && !rejected);
                 *w=original;
+                CHECK(!memcmp(borrowed,&original,sizeof(original)));
             }
         }
         xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);memset(&f,0x9c,sizeof(f));
@@ -297,7 +309,14 @@ static void rp_constant_competition(bool slot_first) {
     CHECK(xr_xir_compile_root_cause_trace_copy(&c,effects,1,&callee)==XR_XIR_OK && callee);
     CHECK(xir_effects_contract(effects,0)->formula.constant_mask==4 &&
         xir_effects_contract(effects,0)->formula.term_count==0);
-    XrXirRootFormula *constant=(XrXirRootFormula *)&xir_effects_contract(effects,1)->formula;
+    /* Corrupt the actual owned invocation Final, never its summary projection. */
+    const EffectContextOwner *contexts=effect_contexts_read(effects);
+    CHECK(contexts && contexts->forest && contexts->forest->invocations);
+    EffectContextForest *forest=contexts->forest;uint32_t target=UINT32_MAX;
+    for(uint32_t n=0;n<forest->count;++n)if(forest->nodes[n].declaration==1){target=n;break;}
+    CHECK(target<forest->count && forest->invocations->final && target<forest->invocations->final->summary.count &&
+        forest->invocations->final->summary.functions[target].formula.constant_mask==4);
+    XrXirRootFormula *constant=&forest->invocations->final->summary.functions[target].formula;
     constant->constant_mask=0;XrXirRootCauseTrace *rejected=NULL;
     CHECK(xr_xir_compile_root_cause_trace_copy(&c,effects,0,&rejected)==XR_XIR_BAD_STRUCTURE && !rejected);
     constant->constant_mask=4;
@@ -316,8 +335,7 @@ static void rp_constant_competition(bool slot_first) {
     rp_owner_free(&c,live);rp_balanced(physical);
 }
 
-/* A real Fn4 invocation followed by opaque requirement forwarding is kind2.
- * Lack of a static witness adds UNKNOWN but cannot remove the executed ROOT. */
+/* A real Fn4 invocation contributes ROOT; requirement forwarding keeps its own context term. */
 static void rp_conditional_known(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext c=rp_owner(rp_caps());
     uint64_t live=rp_stats(&c).live_bytes;
@@ -346,24 +364,30 @@ static void rp_conditional_known(void) {
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
     XrXirEffectParameter effect_parameters[2]={{0,0},{2,3}};XrXirRootTerm term={2,1};
     XrXirFunctionEffectContract contracts[3]={0};contracts[1].formula.constant_mask=4;
-    contracts[2]=(XrXirFunctionEffectContract){.parameter_count=2,.parameters=effect_parameters,.formula={12,1,&term}};
+    contracts[2]=(XrXirFunctionEffectContract){.parameter_count=2,.parameters=effect_parameters,.formula={4,1,&term}};
     XrXirProvenance evidence={.kind=1,.contracts=contracts,.contract_count=3};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,.generics=generics,.types=&types,.provenance=&evidence,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;XrXirRootCauseTrace *trace=NULL;
+    /* An unconditional UNKNOWN bit is not the context-dependent forwarding fact. */
+    contracts[2].formula.constant_mask=12;XrXirArtifact *forged=NULL;
+    CHECK(xir_fixture_check(&c,&module,&forged,NULL)==XR_XIR_BAD_TYPE && !forged);
+    contracts[2].formula.constant_mask=4;
     XrXirDiagnostic diagnostic={0};XrXirStatus status=xir_fixture_check(&c, &module, &checked, &diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"conditional status%u f%u b%u i%u\n",status,
         diagnostic.function,diagnostic.block,diagnostic.instruction);
     CHECK(status==XR_XIR_OK && checked);
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK && effects);
     const XrXirFunctionEffectContract *contract=xir_effects_contract(effects,2);
-    CHECK(contract && contract->parameters[1].kind==2 && contract->parameters[1].uses==3);
+    CHECK(contract && contract->parameters[1].kind==2 && contract->parameters[1].uses==3 &&
+        contract->formula.constant_mask==4 && contract->formula.term_count==1 &&
+        contract->formula.terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && contract->formula.terms[0].index==1);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     CHECK(xr_xir_compile_root_cause_trace_copy(&c,effects,2,&trace)==XR_XIR_OK && trace);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_root_cause_trace_facts(trace)->requires_root && xr_xir_root_cause_trace_facts(trace)->unresolved);
     for (unsigned unknown=0;unknown<2;++unknown) {
         uint32_t count=0;const XrXirRootCauseStep *step=xr_xir_root_cause_trace_steps(trace,unknown!=0,&count);
-        CHECK(count==1 && step && step->function==2 && step->instruction==0 &&
+        CHECK(count==1 && step && step->function==2 && step->instruction==(unknown?1u:0u) &&
             step->cause==(unknown?XR_XIR_ROOT_CAUSE_CONTEXT_CALL:XR_XIR_ROOT_CAUSE_INDIRECT) && step->callee==UINT32_MAX && step->slot==UINT32_MAX && !step->distance);
     }
     xr_xir_compile_root_cause_trace_free(trace);rp_owner_free(&c,live);rp_balanced(physical);
