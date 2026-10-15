@@ -375,6 +375,15 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct 
     if (!product->lowered) return XR_XIR_BAD_STAGE;
     return xr_xir_compile_emit_c(product->lowered,prefix,byte_limit,output);
 }
+XR_FUNC XrXirCtfeStatus xr_xir_compile_source_product_scalar(const XrXirSourceProduct *product,uint32_t function,
+    const XrXirValue *arguments,uint32_t count,XrXirCtfeLimits limits,XrXirValue *output) {
+    if (!product || !product->lowered) return XR_XIR_CTFE_BAD_ARGUMENT;
+    if (!xir_compile_work(&product->context,sizeof(XrXirCtfeRequest))) return XR_XIR_CTFE_BUDGET;
+    XrXirCtfeRequest request={.artifact=product->lowered,.function=function,.target=product->facts.target,
+        .arguments=arguments,.argument_count=count,.limits=limits};
+    memcpy(request.checked_identity,product->facts.closed_digest,sizeof(request.checked_identity));
+    return xr_xir_compile_ctfe_leaf(&request,output);
+}
 
 XR_FUNC const XrXirSourceDependencies *xr_xir_compile_source_product_dependencies(
     const XrXirSourceProduct *product) {
