@@ -34,6 +34,7 @@ static void effect_invocation_certificate_free(EffectInvocationCertificate *cert
 static void effect_invocation_bounds_free(EffectInvocationDeclaredBounds *bounds);
 static void effect_refinement_free(EffectRefinementBounds *bounds);
 static void effect_context_owner_free(EffectContextOwner *owner);
+static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *work,XrXirEffects *effects);
 static XrXirStatus effect_context_owner_trace(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, XrXirRootCauseTrace **output);
 

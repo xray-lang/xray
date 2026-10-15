@@ -54,7 +54,8 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
         records->error_rows<effects->count || records->atom_count>records->atom_capacity ||
         !!records->atoms!=!!records->atom_capacity || records->words!=((uint64_t)records->atom_count+65)/64)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_invocation_current_input_match(work,source,effects->invocations->body);
+    XrXirStatus status=effect_final_retire_construction(work,effects);
+    if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,effects->invocations->body);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(work,2*sizeof(*records)+sizeof(records->resources)+sizeof(records->count)))
         return XR_XIR_BUDGET;
