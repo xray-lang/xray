@@ -63,7 +63,15 @@ static void *effect_ordinary_descriptor_alloc(EffectOrdinaryContexts *contexts,
 static XrXirStatus effect_ordinary_capacity(EffectOrdinaryContexts *contexts, uint32_t needed) {
     if (contexts->terms.status!=XR_XIR_OK) return contexts->terms.status;
     if (needed<=contexts->capacity) return XR_XIR_OK;
-    uint32_t maximum=contexts->terms.remaining->limits.functions;
+    /* The source declaration count is bounded separately. Closed analysis
+     * environments add private records, charged to the same finite ledger. */
+    if (contexts->base_count>contexts->terms.remaining->limits.functions) {
+        contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status;
+    }
+    size_t width=sizeof(EffectOrdinaryNode)>sizeof(XrXirFunction) ?
+        sizeof(EffectOrdinaryNode) : sizeof(XrXirFunction);
+    uint64_t slots=SIZE_MAX/width;
+    uint32_t maximum=slots>UINT32_MAX ? UINT32_MAX : (uint32_t)slots;
     if (needed>maximum) { contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status; }
     uint32_t capacity=contexts->capacity<8 ? 8 : contexts->capacity;
     while (capacity<needed) {
