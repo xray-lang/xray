@@ -61,7 +61,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_LOCAL_WRITE: *work = 2; return true;
     case XR_XIR_CELL_PROJECT: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
-    case XR_XIR_CELL_LOCAL_WRITE: *work = 8; return true;
+    case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_CELL_STRING_APPEND: *work = 8; return true;
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP:
     case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_REPEAT: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_LEN:
@@ -100,7 +100,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
 /* Local writes produce Unit but keep ordinary fallthrough control flow. */
 static bool ctfe_unit_result(XrXirOp op) {
     return op == XR_XIR_CLASS_SET || op == XR_XIR_ASSERT_CONDITION || op == XR_XIR_MATCH_FAIL || op == XR_XIR_THROW || op == XR_XIR_CLEANUP_ERROR || op == XR_XIR_INVOKE_DISCARD || op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_STRUCT_SET || op == XR_XIR_RANGE_CHECK || op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
-        op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_CELL_WRITE || op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
+        op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_CELL_STRING_APPEND || op == XR_XIR_CELL_WRITE || op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
 }
 static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t selected) {
     const XrXirModule *module = &artifact->module;

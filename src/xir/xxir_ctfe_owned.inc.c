@@ -16,6 +16,7 @@
 #include "xxir_type_arena.h"
 #include "xxir_operand_roles.h"
 #include "xxir_cell_owner_internal.h"
+#include "xxir_value_place.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_panic.h"
 #include "xxir_class.h"
@@ -81,6 +82,13 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
         op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW ||
         op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN || op->op==XR_XIR_CELL_READ ||
         op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET;
+    if (op->op==XR_XIR_CELL_STRING_APPEND) {
+        XrXirType receiver=xr_xir_operand_type(body,op->args[0]);
+        XrXirType suffix=xr_xir_operand_type(body,op->args[1]);
+        return op->type==XR_XIR_UNIT && ctfe_cell_type(module->types,receiver) &&
+            xr_xir_cell_element(module->types,receiver)==XR_XIR_STRING &&
+            (op->immediate ? ctfe_scalar_type(suffix) : suffix==XR_XIR_STRING);
+    }
     if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         return ctfe_cell_type(module->types,xr_xir_operand_type(body,op->args[0]));
     if (ctfe_scalar_type(op->type) || op->type==XR_XIR_UNIT) return true;
@@ -128,15 +136,18 @@ static void ctfe_owned_frame_clear(const ScalarRun *run) {
         xr_xir_owned_slot_clear(run->frame,run->layout->owned_offsets[i]);
 }
 static bool ctfe_cell_opcode(XrXirOp op) {
-    return op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE;
+    return op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE ||
+        op==XR_XIR_CELL_LOCAL_WRITE || op==XR_XIR_CELL_STRING_APPEND;
 }
 static XrXirCtfeStatus ctfe_validation_work(ScalarRun *run,CtfeOwnedState *state,XrXirType type);
 static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *value,
     CtfeOwnedState *state,uint64_t maximum);
 static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value);
 static XrXirCtfeStatus ctfe_array_scan_work(ScalarRun *run,CtfeOwnedState *state,XrXirType element,uint64_t count);
+static XrXirCtfeStatus ctfe_cell_string_append(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state);
 static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];
+    if (op->op==XR_XIR_CELL_STRING_APPEND) return ctfe_cell_string_append(run,cursor,state);
     uint32_t destination=run->function->parameter_count+*cursor;
     XrXirType type=op->op==XR_XIR_CELL_NEW?op->type:xr_xir_operand_type(run->function,op->args[0]);
     XrXirValue cell={0},value={0},result={0};
@@ -187,6 +198,7 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
 }
 
 #include "xxir_ctfe_string.inc.c"
+#include "xxir_ctfe_string_append.inc.c"
 static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types,const XrXirTypeNode *node,uint32_t variant);
 #include "xxir_ctfe_tuple.inc.c"
 #include "xxir_ctfe_nullable.inc.c"
