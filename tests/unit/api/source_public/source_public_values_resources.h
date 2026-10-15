@@ -166,4 +166,38 @@ static void invoke_values_faults(bool probe) {
     printf("public typed invocation sites=%zu swept=%zu; argument/Program/Compiler death, yield, actual result/value copies, physical=0/0\n",
         count,probe?0:count);
 }
+static void invocation_name_guards(void) {
+    XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.stdlib_path=XR_PUBLIC_STDLIB;InvokeValues owners={0};
+    CHECK(xray_source_compiler_new(&options,&owners.compiler)==XR_SOURCE_OK);
+    static const char source[]="export fn identity<T>(value:T)->T{return value}\n"
+        "export fn force()->i64{return identity<i64>(41)}\n";
+    XrSourceText text={NULL,"invocation-source-names",source,sizeof(source)-1};
+    CHECK(xray_source_compile_text(owners.compiler,&text,&owners.program,NULL)==XR_SOURCE_OK);
+    const XrSourceScalar scalar={.kind=XR_SOURCE_VALUE_I64,.value.signed_value=41};
+    CHECK(xray_source_value_new_scalar(owners.compiler,&scalar,&owners.argument)==XR_SOURCE_OK);
+    XrXirSourceProductPacketView packet={0};XrXirArtifact *closed=NULL;
+    CHECK(xr_xir_compile_source_product_packet(owners.program->product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(xr_xir_compile_source_product_context(owners.program->product),
+        packet.bytes,packet.length,&closed,NULL)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(closed);unsigned matched=0;
+    XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    const XrSourceValue *arguments[]={owners.argument};XrSourceInvocation invocation;
+    CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+    invocation.arguments=arguments;invocation.argument_count=1;
+    for(uint32_t i=0;i<module->function_count;++i) {
+        const XrXirFunction *function=&module->functions[i];
+        if(function->name_length<9 || memcmp(function->name,"identity$",9))continue;
+        CHECK(!module->declarations->functions[i].exported);
+        ++matched;invocation.name=function->name;invocation.name_length=function->name_length;
+        XrSourceStatus status=xray_source_invoke_begin(owners.program,&invocation,&runtime,&owners.call);
+        fprintf(stderr,"actual closed specialization %.*s public begin=%u\n",(int)function->name_length,function->name,(unsigned)status);
+        CHECK(status==XR_SOURCE_NOT_FOUND && !owners.call);
+    }
+    CHECK(matched==1);invocation.name="identity";invocation.name_length=8;
+    CHECK(xray_source_invoke_begin(owners.program,&invocation,&runtime,&owners.call)==XR_SOURCE_NOT_FOUND && !owners.call);
+    xr_xir_compile_artifact_free(closed);xray_source_value_free(owners.argument);
+    xray_source_program_free(owners.program);xray_source_compiler_free(owners.compiler);
+    CHECK(!runtime_live && !runtime_bytes);
+}
 #endif // SOURCE_PUBLIC_VALUES_RESOURCES_H
