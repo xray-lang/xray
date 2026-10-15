@@ -54,12 +54,13 @@ static void default_tuple_case(bool constructor,unsigned mode) {
         {"default",7,NULL,0,XR_XIR_I64,&two,1,helper_ops,2,NULL,0}};
     XrXirFunctionIdentity ids[4]={{0},{0},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},
         {.nominal_owner=1,.method_kind=XR_XIR_MEMBER_HELPER}};
-    XrXirSourceModule source={"root",4,NULL,0,0};
+    XrXirSourceModule source={"root",4,NULL,0,0, 0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=ids,.entry_function=1};
     XrXirGeneric generics[4]={{0},{NULL,0,actual,8, NULL},{owner,4,NULL,0, NULL},{helper,4,NULL,0, NULL}};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,2,1,3};
     XrXirDefaultTable defaults={&binding,1};
     if(constructor){
+        nominal.flags=XR_XIR_NOMINAL_MODULE_LITERAL;
         functions[2].parameters=&parameters[1];functions[2].parameter_count=1;
         functions[2].result=XR_XIR_CONSTRUCTED_TYPE_BASE;ids[2].method_kind=XR_XIR_CONSTRUCTOR;
         owner_ops[0]=(XrXirInstruction){XR_XIR_STRUCT_NEW,XR_XIR_CONSTRUCTED_TYPE_BASE,{0},{0},0,{0}};

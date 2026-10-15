@@ -27,7 +27,7 @@ static void ordinary_material_fixture(OrdinaryMaterialFixture *f) {
         .instructions=f->operations,.instruction_count=2,.blocks=&f->blocks[0],.block_count=1};
     f->functions[1]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=&f->initializer,.instruction_count=1,.blocks=&f->blocks[1],.block_count=1};
-    f->source_module=(XrXirSourceModule){"same",4,NULL,0,1};
+    f->source_module=(XrXirSourceModule){"same",4,NULL,0,1, 0};
     f->declarations=(XrXirDeclarations){.modules=&f->source_module,.module_count=1,.functions=f->identities};
     f->source=(XrXirModule){.stage=XR_XIR_BUILT,.types=&f->types,.functions=f->functions,.function_count=2,
         .declarations=&f->declarations,.linkage_kind=XR_XIR_PROGRAM};
