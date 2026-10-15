@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import gen_native_declarations as schema
 import embed_native_types as embed
+import gen_api_inventory as inventory
 
 
 class NativeDeclarations(unittest.TestCase):
@@ -272,6 +273,27 @@ class NativeDeclarations(unittest.TestCase):
         for header in ('Map<V, K: Hashable>', 'Map<K: Hashable, K>', 'Map<K: Hashable>', 'Map<K, V: Hashable>'):
             with self.subTest(header=header), self.assertRaises(ValueError):
                 schema.parse_source(source.replace('Map<K: Hashable, V>', header), self.prelude)
+
+    def test_inventory_preserves_governed_hash_signatures_and_admission(self):
+        for stem, identity, names, signature in [('array', 1, ['T'], 'Array<T>'),
+                ('string', 2, [], 'string'), ('map', 6, ['K', 'V'], 'Map<K: Hashable, V>'),
+                ('set', 7, ['T'], 'Set<T: Hashable>')]:
+            path = ROOT / f'stdlib/types/{stem}.xr'
+            text = path.read_text(encoding='utf-8')
+            rows = inventory.collect_native_declaration(ROOT, path, text, 'stdlib', stem)
+            declaration = rows[0]
+            self.assertEqual(declaration['signature'], signature)
+            self.assertEqual(declaration['generic_parameter_names'], names)
+            self.assertEqual(declaration['generic_parameter_count'], len(names))
+            self.assertEqual(declaration['native_type_id'], identity)
+            self.assertEqual(declaration['declaration_kind'], 'struct')
+            if stem in ('map', 'set'):
+                self.assertTrue(all(not member['xir_admitted'] for member in rows[1:]))
+            else:
+                self.assertTrue(any(member['xir_admitted'] for member in rows[1:]))
+        with self.assertRaises(ValueError):
+            inventory.collect_native_declaration(ROOT, ROOT / 'stdlib/types/map.xr',
+                (ROOT / 'stdlib/types/set.xr').read_text(encoding='utf-8'), 'stdlib', 'map')
 
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
