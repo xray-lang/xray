@@ -185,7 +185,7 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
     f->modules[2] = (XrXirSourceModule) {"alpha", 5, NULL, 0, 2};
     uint32_t owners[] = {0, 1, 2, 0, 2, 1, 0, 0, 0, 2};
     for (uint32_t i = 0; i < 10; ++i) {
-        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0};
+        f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0};
         f->entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
             sizeof(Frame), initializer, cleanup, &f->env[owners[i]], 0, 0};
     }
@@ -199,7 +199,7 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
     f->entries[8].resume = suspended_string; f->entries[8].result = XR_XIR_STRING;
     f->entries[9].resume = instance_atomic_result; f->entries[9].result = (XrXirType)257;
     if (mode == 5) {
-        f->identities[10] = (XrXirFunctionIdentity){2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0};
+        f->identities[10] = (XrXirFunctionIdentity){2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0};
         f->entries[10] = (XrXirCallEntry){XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
             0, initialization_fault_child, NULL, NULL, 0, 0};
     }
@@ -208,7 +208,7 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
     f->slots[2] = (XrXirSlot) {0, (XrXirType)258, 1};
     f->literals[0] = (XrXirLiteral) {"A\0\xe4\xb8\xad", 5};
     f->literals[1] = (XrXirLiteral) {"independent", 11};
-    f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3, NULL};
+    f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3, NULL, NULL};
     f->spec = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, f->entries, mode == 5 ? 11u : 10u,
         &f->declarations, {&f->witness, release}, NULL, {0}};

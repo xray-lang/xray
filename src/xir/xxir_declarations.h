@@ -38,6 +38,7 @@ typedef enum XrXirTestRole {
     XR_XIR_TEST_ROLE_BEFORE_EACH, XR_XIR_TEST_ROLE_AFTER_EACH
 } XrXirTestRole;
 typedef struct XrXirImplementationTable XrXirImplementationTable;
+typedef struct XrXirDerivationTable XrXirDerivationTable;
 
 typedef struct XrXirFunctionIdentity {
     uint32_t module, exported, nominal_owner, member_access;
@@ -46,6 +47,9 @@ typedef struct XrXirFunctionIdentity {
     uint32_t promises;
     uint32_t method_kind;
     uint32_t test_role, test_timeout_seconds;
+    /* Zero for an ordinary declaration; otherwise one plus its exact grant row.
+     * The index is data, never a private-operation or verification exemption. */
+    uint32_t derivation;
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u
@@ -64,5 +68,6 @@ typedef struct XrXirDeclarations {
     uint32_t literal_count;
     uint32_t root_module, entry_function;
     const XrXirImplementationTable *implementations;
+    const XrXirDerivationTable *derivations;
 } XrXirDeclarations;
 #endif // XXIR_DECLARATIONS_H

@@ -12,6 +12,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_derivation_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"

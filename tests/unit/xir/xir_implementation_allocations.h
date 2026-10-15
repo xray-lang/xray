@@ -6,7 +6,7 @@ static XrXirStatus implementation_copy_operation(const XrXirCompileContext *cont
     (void)opaque;
     XrXirType arguments[]={XR_XIR_I64,XR_XIR_BOOL};
     XrXirImplementationBinding bindings[]={{{0,arguments,1},0,2},{{0,arguments+1,1},0,3}};
-    XrXirImplementation records[]={{0,{1,arguments,1},bindings,2},{1,{2,NULL,0},NULL,0}};
+    XrXirImplementation records[]={{0,{1,arguments,1},bindings,2, 0},{1,{2,NULL,0},NULL,0, 0}};
     XrXirImplementationTable table={records,2},*copy=NULL;
     XrXirStatus status=xr_xir_compile_implementations_copy_verified(context,&table,&copy);
     if(status==XR_XIR_OK) {

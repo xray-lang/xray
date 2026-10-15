@@ -187,11 +187,12 @@ static void checked_implementations(CheckedCursor *c, XrXirDeclarations *d) {
     XrXirImplementationTable *table = checked_array(c, d->implementations, 1, sizeof(*table), 16);
     if (c->reading) d->implementations = table;
     if (!table) return;
-    XrXirImplementation *records = checked_array(c, table->records, count, sizeof(*records), 16);
+    XrXirImplementation *records = checked_array(c, table->records, count, sizeof(*records), 20);
     if (c->reading) { table->records = records; table->count = records ? count : 0; }
     for (uint32_t i = 0; records && i < count && c->status == XR_XIR_OK; ++i) {
         XrXirImplementation record = records[i];
         record.nominal_declaration = checked_u32(c, record.nominal_declaration);
+        record.derivation_policy = checked_u32(c, record.derivation_policy);
         checked_application(c, &record.interface);
         uint32_t bindings_count = checked_u32(c, record.binding_count);
         XrXirImplementationBinding *bindings = checked_array(c, record.bindings,
@@ -207,7 +208,10 @@ static void checked_implementations(CheckedCursor *c, XrXirDeclarations *d) {
         if (c->reading) records[i] = record;
     }
 }
-static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_t functions) {
+#include "xxir_derivation_codec.inc.c"
+
+static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, const XrXirModule *module) {
+    uint32_t functions=module->function_count;
     d->module_count = checked_u32(c, d->module_count);
     d->slot_count = checked_u32(c, d->slot_count);
     d->literal_count = checked_u32(c, d->literal_count);
@@ -228,7 +232,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         m.initializer = checked_u32(c, m.initializer);
         if (c->reading) modules[i] = m;
     }
-    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 36);
+    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 40);
     d->functions = identities;
     for (uint32_t i = 0; i < functions && c->status == XR_XIR_OK; ++i) {
         XrXirFunctionIdentity id = identities[i];
@@ -240,6 +244,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         id.method_kind = checked_u32(c, id.method_kind);
         id.test_role = checked_u32(c, id.test_role);
         id.test_timeout_seconds = checked_u32(c, id.test_timeout_seconds);
+        id.derivation = checked_u32(c, id.derivation);
         if (c->reading) identities[i] = id;
     }
     XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 12);
@@ -259,6 +264,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         if (c->reading) literals[i] = literal;
     }
     checked_implementations(c, d);
+    checked_derivations(c, d, module);
 }
 static XrXirInterfaceApplication *checked_applications(CheckedCursor *c,
     const XrXirInterfaceApplication *source, uint32_t *count) {
@@ -698,7 +704,7 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction *
         m->declarations = owned;
         if (!owned) return;
         XrXirDeclarations d = *owned;
-        checked_declarations(c, &d, count);
+        checked_declarations(c, &d, m);
         if (c->reading) *owned = d;
     }
     checked_generics(c, m);

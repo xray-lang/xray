@@ -12,6 +12,7 @@
 #include "xxir_types.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_compile_memory.h"
+#include "xxir_derivation_internal.h"
 
 XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
     return (XrXirCompileLimits){1024, 65536, 4096, 1048576, UINT64_C(16) * 1024 * 1024};

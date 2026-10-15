@@ -42,9 +42,9 @@ static XrXirArtifact *effect_enum_ops_checked(const XrXirCompileContext *context
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0},
         {"make",4,NULL,0,(XrXirType)256,&block,1,entry,11,operands,6}};
     XrXirSourceModule source = {"alpha",5,NULL,0,0};
-    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0}};
     XrXirLiteral literal = {"constructed",11};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     if (wrong_variant) {
         entry[2].immediate = 0; entry[2].args[1] = 0; entry[8].args[0] = 0;
@@ -111,8 +111,8 @@ static XrXirArtifact *effect_enum_generic_checked(const XrXirCompileContext *con
         {"make",4,&parameter,1,(XrXirType)256,&two,1,make,2,&operand,1},
         {"initB",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0}};
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0},{"beta",4,&dependency,1,3}};
-    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL};
+    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0, 0}};
+    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL, NULL};
     XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1, NULL},{&function_constraint,1,NULL,0, NULL},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     if (mode == 1 || mode == 5) function_constraint.markers = 0;

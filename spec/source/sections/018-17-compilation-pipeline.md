@@ -760,6 +760,18 @@ compiler-private Source请求提供可选XrXirSourceComptimeLimits.output_bytes�
 
 生成者输入和 construction 可在收件后销毁，生成 owner 可在 Checked 发布后销毁；后续 packet、Lowered 和执行不得借用这些存储。失败保全空输出；同一 owner 重试必须重新完整检查并累计原费用，不退款、不重置。该物理 owner 不新增语言宏、任意宿主生成器或另一类型/执行语义；Source 类型化授权、普通库派生接线及其完整资源/安全资格仍须分别完成。
 
+### 17.64 定义策略、精确生成绑定与普通操作复验
+
+内部派生策略先于生成器执行而存在，独立拥有目标的开放规范类型表达式、真实定义模块、普通协议应用及有序实参、真实生成入口、显式字段DESCRIBE/READ/WRITE集合、可选唯一合法init和用户源位置。描述、读取、写入和构造分别验证；WRITE不能授予不可变字段，编码策略不含构造权。生成器必须是可见的普通函数，不能冒充派生函数、成员或cleanup。策略可以尚无生成函数，不能通过预先发布空body解决生成顺序。
+
+生成函数绑定只引用原Source策略，保存当前函数、精确规范目标、原Source行及生成root、逐指令拥有式用户位置。定义模块、目标声明和protocol约束必须由普通类型服务验证；函数的nominal_owner不扩大策略。生成实现仍经过原普通implementation/witness检查，其protocol及有序实参必须与策略一致，各root实际绑定对应要求。手写implementation不能挪用派生函数实现额外协议。派生函数不能占据测试、模块initializer或constructor角色；cleanup与其owner必须属于相同策略/root/目标。
+
+真实字段操作使用当前规范实例，而非仅声明ordinal；交换泛型实参不能命中授权。派生函数访问目标字段逐项证明操作，不能直接按布局构造目标或借同模块身份调用任意私有函数、访问模块存储。唯一显式init授权只适用于真实CALL/INVOKE、对应原声明和精确目标结果。普通要求/default绑定仍独立验证其来源，不因派生标记跳过可见性、借用、效应或root复验。
+
+特化后的绑定保留原Source行/root/策略，通过真实Source provenance验证有序类型替换及全部位置字节；不能丢弃绑定或携带一套新的运行期策略。Lowered重映射当前目标，CGen与Program独立比较完整绑定及位置。Checked线格式29/语义74遍历真实函数绑定、implementation策略及完整策略/生成位置数据；旧28/73包拒绝。函数身份新增绑定索引、声明新增拥有表，Program ABI为31，Value ABI24和Call ABI29未变。SDK身份实际包含459项独立布局观察；版本标签不能代替完整接收检查。
+
+该接点实现内部共同接收与操作约束，不表示语言层TypeInfo、普通生成器、JSON或其他消费者已经接线。生成输入仍从Built进入17.63的普通完整第二检查；所有原编译预算、物理OOM、独立owner及完整FI/安全/provider门保留。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1630,5 +1642,17 @@ Generated receiving accepts only a Built module, an actual construction owner an
 Every request for Checked output invokes the existing ordinary complete Built checker anew, including current types, constraints, visibility, CFG/SSA, ownership, borrow escape, actual calls and captures, cleanup, effects and root bounds. Only success publishes an independent Checked owner. Generated type mismatch, borrowed-carrier escape and no_suspend effect escalation reject. Body diagnostics map to the owning user origin of the actual instruction; declaration failures use the function entry, and global failures use the program entry or a library's first function entry. Diagnostics borrow origins from the generated owner and must be copied before it is freed. Origins grant no private read, write or construction access.
 
 Generating input and construction may die after receiving; the generated owner may die after Checked publication. Subsequent packet, Lowered and execution consumers cannot borrow that storage. Failure preserves empty output. Retrying on the same owner repeats complete checking and accumulates the original charges without refunds or reset. This physical owner adds no language macro, arbitrary host generator or second type/execution semantics. Typed Source grants, ordinary library derivation wiring and their complete resource/safety qualification remain separate obligations.
+
+### 17.64 Definition policies, exact generated bindings and ordinary operation rechecking
+
+An internal derivation policy exists before generator execution. It independently owns the target's open canonical type expression, authentic defining module, ordinary protocol application and ordered arguments, actual generator entry, explicit field DESCRIBE/READ/WRITE set, optional sole legal initializer and user origin. Description, read, write and construction are checked separately. WRITE cannot grant an immutable field; encoding grants no construction right. The generator must be an ordinarily visible function, never a derived function, member or cleanup. Policies may precede all generated functions; publishing empty bodies cannot resolve generation order.
+
+A generated function binding only references the original Source policy and records its current function, exact canonical target, original Source row and generated root, and owned per-instruction user origins. Ordinary type services verify defining module, target declaration and protocol constraints. nominal_owner cannot widen a policy. Generated implementations still pass the original implementation/witness checker: protocol and ordered arguments must equal the policy, and every root must actually bind its corresponding requirement. Manual implementations cannot reuse derived functions for additional protocols. Derived functions cannot take test, module-initializer or constructor roles; cleanup and its owner must share policy, root and target.
+
+Actual field operations use the current canonical instance, not only a declaration ordinal. Swapped generic arguments cannot match a grant. Each target member operation must prove its permission. Derived functions cannot construct the target by layout, call arbitrary private functions through same-module identity or access module storage. Explicit initializer authority applies only to authentic CALL/INVOKE, the corresponding original declaration and exact target result. Ordinary requirement/default bindings still independently prove their origins; a derivation marker never exempts visibility, borrowing, effects or root rechecking.
+
+Specialized bindings retain original Source row/root/policy, using authentic Source provenance to verify ordered type substitution and every origin byte. They cannot lose a binding or carry replacement runtime policies. Lowered remaps the current target; CGen and Program independently compare complete bindings and origins. Checked wire29/semantic74 traverses actual function binding, implementation policy and complete policy/generated-origin data; old28/73 packets reject. The added function index and owned declaration table require Program ABI31; Value ABI24 and Call ABI29 are unchanged. SDK identity includes459 independently observed layout facts. Version labels never substitute complete receiving.
+
+This boundary implements internal common receiving and operation constraints. It does not claim Source TypeInfo, ordinary generators, JSON or other consumers are wired. Generated inputs still enter the ordinary complete second check from Built under17.63. All original compiler budgets, physical OOM, independent owners and complete FI/safety/provider gates remain.
 
 <!-- /xr-spec:en -->

@@ -58,7 +58,7 @@ static XrXirArtifact *effect_fixture(bool suspends) {
         {"entry", 5, NULL, 0, XR_XIR_I64, &pair, 1, entry, 2, NULL, 0}};
     XrXirSourceModule source = {"root", 4, NULL, 0, 6};
     XrXirFunctionIdentity identities[8] = {{0}};
-    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7, NULL};
+    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7, NULL, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL; XrXirDiagnostic diagnostic = {0};
     XrXirStatus status = xir_fixture_check(&effect_context, &module, &artifact, &diagnostic);
@@ -145,7 +145,7 @@ static void effect_long_cycle(void) {
     functions[COUNT]=(XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0};
     functions[COUNT+1]=(XrXirFunction){"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0};
     XrXirSourceModule source={"cycle",5,NULL,0,COUNT}; XrXirFunctionIdentity ids[COUNT+2]={{0}};
-    XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,COUNT+1,NULL};
+    XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,COUNT+1,NULL, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, COUNT+2, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     CHECK(xir_fixture_check(&effect_context, &module, &artifact, NULL) == XR_XIR_OK);
@@ -498,7 +498,7 @@ static void effect_callable_weakening(void) {
     XrXirInstruction init={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT}; XrXirBlock init_block={0,1,0,0};
     XrXirFunction functions[2]={function,{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
     XrXirSourceModule source_module={"weaken",6,NULL,0,1}; XrXirFunctionIdentity ids[2]={{0}};
-    XrXirDeclarations declarations={&source_module,1,ids,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    XrXirDeclarations declarations={&source_module,1,ids,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 2, &declarations, NULL, &types, NULL, XR_XIR_LIBRARY, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(&effect_context, &module, &checked, NULL) == XR_XIR_OK);

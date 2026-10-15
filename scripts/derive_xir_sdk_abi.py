@@ -100,6 +100,30 @@ PUBLIC_STRUCTURES = [
  (4400, 'XrXirAtomicOutcome', [('status','enum'),('permission','enum'),('continuing','bool')]),
  (4500, 'XrXirClassEvent', [('serial','u64'),('type','u32'),('declaration','u32'),
      ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
+ (4600, 'XrXirFunctionIdentity', [(name,'u32') for name in ('module','exported','nominal_owner',
+     'member_access','cleanup_owner','promises','method_kind','test_role','test_timeout_seconds','derivation')]),
+ (4700, 'XrXirSourceModule', [('name','ptr'),('name_length','u32'),('dependencies','ptr'),
+     ('dependency_count','u32'),('initializer','u32')]),
+ (4800, 'XrXirDeclarations', [('modules','ptr'),('module_count','u32'),('functions','ptr'),
+     ('slots','ptr'),('slot_count','u32'),('literals','ptr'),('literal_count','u32'),
+     ('root_module','u32'),('entry_function','u32'),('implementations','ptr'),('derivations','ptr')]),
+ (4900, 'XrXirGeneratedText', [('bytes','ptr'),('length','u32')]),
+ (5000, 'XrXirGeneratedOrigin', [('module','XrXirGeneratedText'),('file','XrXirGeneratedText'),
+     ('field_path','XrXirGeneratedText'),('line','u32'),('column','u32')]),
+ (5100, 'XrXirGeneratedFunctionOrigins', [('entry','XrXirGeneratedOrigin'),('instructions','ptr'),
+     ('instruction_count','u32')]),
+ (5200, 'XrXirDerivationMember', [('field','u32'),('operations','u32')]),
+ (5300, 'XrXirInterfaceApplication', [('declaration','u32'),('arguments','ptr'),('argument_count','u32')]),
+ (5400, 'XrXirDerivationPolicy', [('grantor_module','u32'),('target','enum'),
+     ('protocol','XrXirInterfaceApplication'),('generator','u32'),('constructor','u32'),
+     ('members','ptr'),('member_count','u32'),('origin','XrXirGeneratedOrigin')]),
+ (5500, 'XrXirDerivationGrant', [('function','u32'),('policy','u32'),('source_row','u32'),
+     ('root','u32'),('target','enum'),('origins','XrXirGeneratedFunctionOrigins')]),
+ (5600, 'XrXirDerivationTable', [('policies','ptr'),('policy_count','u32'),('records','ptr'),('count','u32')]),
+ (5700, 'XrXirImplementation', [('nominal_declaration','u32'),('interface','XrXirInterfaceApplication'),
+     ('bindings','ptr'),('binding_count','u32'),('derivation_policy','u32')]),
+ (5800, 'XrXirImplementationBinding', [('requirement','XrXirInterfaceApplication'),('member','u32'),('function','u32')]),
+ (5900, 'XrXirImplementationTable', [('records','ptr'),('count','u32')]),
 ]
 
 PUBLIC_SCALARS = [
@@ -166,7 +190,7 @@ def prepare(output: Path) -> None:
                         'u32/int/enum align4, bool align1; declaration field sequence copied '
                         'from actual versioned runtime headers. Never from a compiler probe output.'}
     (output/'EXPECTED.json').write_text(json.dumps(document,indent=2)+'\n',encoding='utf-8',newline='\n')
-    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS
+    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "xir/xxir_derivation_internal.h"\n#include "xir/xxir_implementation.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS
     for index, row in enumerate(rows):
         tail = ',' if index+1 < len(rows) else ''
         source += f'printf("  {{\\"id\\":{row["id"]},\\"value\\":%u}}{tail}\\n",(unsigned)({row["expression"]}));\n'

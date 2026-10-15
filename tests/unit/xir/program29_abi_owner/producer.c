@@ -21,7 +21,7 @@ int main(int argc,char **argv) {
         {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,code,2,NULL,0}};
     const XrXirSourceModule source={"root",4,NULL,0,0};
     const XrXirFunctionIdentity functions_id[]={{0},{0}};
-    const XrXirDeclarations declarations={&source,1,functions_id,NULL,0,NULL,0,0,1,NULL};
+    const XrXirDeclarations declarations={&source,1,functions_id,NULL,0,NULL,0,0,1,NULL, NULL};
     const XrXirNominalDeclaration nominals[]={
         {.module={"root",4},.name={"First",5},.exported=1,.kind=XR_XIR_NOMINAL_STRUCT},
         {.module={"root",4},.name={"Second",6},.exported=1,.kind=XR_XIR_NOMINAL_STRUCT}};

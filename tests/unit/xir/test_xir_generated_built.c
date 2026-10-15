@@ -66,7 +66,7 @@ static void generated_fixture(GeneratedFixture *f,unsigned kind) {
     f->identities[2].exported=1;
     if(kind==2)f->identities[1].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     f->source_module=(XrXirSourceModule){f->module_name,4,NULL,0,0};
-    f->declarations=(XrXirDeclarations){&f->source_module,1,f->identities,NULL,0,NULL,0,0,2,NULL};
+    f->declarations=(XrXirDeclarations){&f->source_module,1,f->identities,NULL,0,NULL,0,0,2,NULL, NULL};
     f->built=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=3,
         .declarations=&f->declarations,.linkage_kind=XR_XIR_PROGRAM};
     if(kind==3) {

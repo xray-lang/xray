@@ -31,7 +31,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     const XrXirConstraint unconstrained={0};
     const XrXirGeneric generics[4]={{0},{0},{0},{&unconstrained,1,NULL,0,NULL}};
     const XrXirSourceModule source={"root",4,NULL,0,0};
-    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL, NULL};
     XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generics,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xir_fixture_check(context, &module, &checked, NULL)==XR_XIR_OK);
@@ -46,7 +46,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_timeout_seconds==timeout);
     uint8_t current_digest[32];memcpy(current_digest,packet.bytes+32,32);
     /* Rehashed header rejection is separate from the full historical models. */
-    CHECK(packet.bytes[8]==27 && packet.bytes[12]==72);packet.bytes[12]=62;
+    CHECK(packet.bytes[8]==29 && packet.bytes[12]==74);packet.bytes[12]=62;
     XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,packet.bytes,32);
     xr_sha256_update(&hash,packet.bytes+64,packet.length-64);xr_sha256_final(&hash,packet.bytes+32);
     XrCompileResourceStats old_before={0},old_after={0};
@@ -60,7 +60,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_compile_resources_stats(context->resources,&old_after)==XR_COMPILE_RESOURCE_OK);
     CHECK(old_after.allocation_count==old_before.allocation_count && old_after.allocated_bytes==old_before.allocated_bytes &&
         old_after.live_bytes==old_before.live_bytes && old_after.peak_bytes==old_before.peak_bytes);
-    packet.bytes[12]=72;memcpy(packet.bytes+32,current_digest,32);
+    packet.bytes[12]=74;memcpy(packet.bytes+32,current_digest,32);
     for(uint32_t field=0;field<2;++field) {
         size_t offset=field?12:8;uint8_t saved=packet.bytes[offset];packet.bytes[offset]=(uint8_t)(saved-1);
         XrXirArtifact *sentinel=NULL;
@@ -124,7 +124,7 @@ static void invalid(const XrXirCompileContext *context) {
         {"test",4,NULL,0,XR_XIR_UNIT,blocks,1,&unit,1,NULL,0}};
     XrXirFunctionIdentity identities[3]={{0},{0},{0}};
     const XrXirSourceModule source={"root",4,NULL,0,0};
-    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL, NULL};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirFunctionIdentity malformed[]={
         {.test_role=7},{.test_timeout_seconds=1},

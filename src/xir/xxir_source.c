@@ -270,7 +270,7 @@ static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *dec
         ctx->slots,ctx->slot_count,ctx->literals,ctx->literal_count,
         ctx->linkage_kind == XR_XIR_LIBRARY ? UINT32_MAX : (uint32_t)ctx->graph->entry_index,
         ctx->linkage_kind == XR_XIR_LIBRARY ? UINT32_MAX : ctx->entry_function,
-        ctx->implementations.count ? &ctx->implementations : NULL};
+        ctx->implementations.count ? &ctx->implementations : NULL, NULL};
     return (XrXirModule){XR_XIR_BUILT,ctx->functions,ctx->function_count,declarations,
         ctx->has_generics ? ctx->generics : NULL,
         ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL,ctx->effect_evidence,ctx->linkage_kind,

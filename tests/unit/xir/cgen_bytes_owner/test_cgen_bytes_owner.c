@@ -82,7 +82,7 @@ static void public_output(void) {
     const XrXirSourceModule source={"bytes",5,NULL,0,0};
     const XrXirFunctionIdentity identities[2]={{0},{0}};
     const XrXirLiteral literals[]={{payload,sizeof(payload)},{"",0}};
-    const XrXirDeclarations declarations={&source,1,identities,NULL,0,literals,2,0,1,NULL};
+    const XrXirDeclarations declarations={&source,1,identities,NULL,0,literals,2,0,1,NULL, NULL};
     const XrXirModule built={XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);

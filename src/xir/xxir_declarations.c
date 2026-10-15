@@ -12,6 +12,7 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_derivation_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_type_scratch_internal.h"
@@ -170,8 +171,15 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         (kind == XR_XIR_PROGRAM ? (d->root_module >= d->module_count || d->entry_function >= functions) :
          (d->root_module != UINT32_MAX || d->entry_function != UINT32_MAX)) ||
         (d->slot_count && !d->slots) || (d->literal_count && !d->literals)) return XR_XIR_BAD_STRUCTURE;
+    if (d->derivations && ((!d->derivations->count && !d->derivations->policy_count) ||
+        ((d->derivations->count!=0)!=(d->derivations->records!=NULL)) ||
+        ((d->derivations->policy_count!=0)!=(d->derivations->policies!=NULL)) ||
+        d->derivations->count > functions)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
+            (d->functions[i].derivation && (!d->derivations ||
+                d->functions[i].derivation > d->derivations->count ||
+                d->derivations->records[d->functions[i].derivation-1].function != i)) ||
             d->functions[i].method_kind > XR_XIR_MEMBER_HELPER ||
             d->functions[i].test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
             (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_seconds) ||
@@ -179,6 +187,12 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             (d->functions[i].test_role && (d->functions[i].nominal_owner || d->functions[i].cleanup_owner)) ||
             (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
             (d->functions[i].promises & ~XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t r = 0; d->derivations && r < d->derivations->count; ++r) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        uint32_t function=d->derivations->records[r].function;
+        if (function>=functions || d->functions[function].derivation!=r+1)
+            return XR_XIR_BAD_STRUCTURE;
+    }
     if (kind == XR_XIR_PROGRAM && (d->functions[d->entry_function].module != d->root_module ||
         d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions, work);
@@ -246,6 +260,7 @@ static void *declaration_copy(const XrXirCompileContext *compile_context, const 
 }
 void xr_xir_compile_declarations_free(XrXirDeclarations *d) {
     if (!d) return;
+    xir_derivations_free((XrXirDerivationTable *)d->derivations);
     xr_xir_compile_implementations_free((XrXirImplementationTable *)d->implementations);
     if (d->modules) for (uint32_t i = 0; i < d->module_count; ++i) {
         xr_compile_resources_free((void *) d->modules[i].name);
@@ -266,6 +281,7 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     if (!copy) return allocation_status;
     *copy = *source;
     copy->implementations = NULL;
+    copy->derivations = NULL;
     copy->modules = xir_compile_calloc(compile_context, source->module_count, sizeof(*source->modules), &allocation_status);
     copy->functions = declaration_copy(compile_context, source->functions, (size_t) functions * sizeof(*source->functions), &allocation_status);
     copy->slots = declaration_copy(compile_context, source->slots, (size_t) source->slot_count * sizeof(*source->slots), &allocation_status);
@@ -291,6 +307,10 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     XrXirStatus status = xr_xir_compile_implementations_copy_verified(compile_context, source->implementations, &implementations);
     if (status != XR_XIR_OK) { xr_xir_compile_declarations_free(copy); return status; }
     copy->implementations = implementations;
+    XrXirDerivationTable *derivations = NULL;
+    status = xir_derivations_copy(compile_context, source->derivations, &derivations);
+    if (status != XR_XIR_OK) { xr_xir_compile_declarations_free(copy); return status; }
+    copy->derivations = derivations;
     *output = copy;
     return XR_XIR_OK;
  failed:

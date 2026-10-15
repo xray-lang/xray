@@ -68,7 +68,7 @@ static bool source_struct_constructors(SourceContext *ctx, uint32_t *next) {
         ctx->bodies[index].declaration = symbol->declaration;
         if (!source_nominal_function_scope(ctx,index,symbol)) return false;
         ctx->identities[index] = (XrXirFunctionIdentity) {symbol->module, ctx->nominals.declarations[d].exported, d + 1, 0, 0,
-            ctx->nominals.declarations[d].kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0};
+            ctx->nominals.declarations[d].kind == XR_XIR_NOMINAL_CLASS ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_CONSTRUCTOR, 0, 0, 0};
     }
     return true;
 }

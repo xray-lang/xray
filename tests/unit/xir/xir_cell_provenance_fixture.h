@@ -47,7 +47,7 @@ static void cell_proof_fixture(CellProofFixture *f) {
     f->functions[4] = (XrXirFunction){"cleanup",7,&f->parameter,1,XR_XIR_UNIT,&f->three,1,f->cleanup,3,NULL,0};
     f->identities[4].cleanup_owner = 2;
     f->source = (XrXirSourceModule){"root",4,NULL,0,0};
-    f->declarations = (XrXirDeclarations){&f->source,1,f->identities,NULL,0,NULL,0,0,1,NULL};
+    f->declarations = (XrXirDeclarations){&f->source,1,f->identities,NULL,0,NULL,0,0,1,NULL, NULL};
     f->module = (XrXirModule){XR_XIR_BUILT,f->functions,6,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};
 }
 #endif // XIR_CELL_PROVENANCE_FIXTURE_H

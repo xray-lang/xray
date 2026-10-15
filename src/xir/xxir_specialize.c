@@ -11,6 +11,7 @@
  */
 #include "xxir_generic.h"
 #include "xxir_compile_memory.h"
+#include "xxir_derivation_internal.h"
 #include "xxir_operand_roles.h"
 #include "xxir_types.h"
 #include "xxir_internal.h"
@@ -436,6 +437,32 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
     }
     return true;
 }
+static bool spec_derivations(SpecContext *c,XrXirDeclarations *result) {
+    const XrXirDerivationTable *source=c->source->declarations->derivations;
+    result->derivations=NULL;
+    if (!source || !source->count) return true;
+    uint32_t count=0;
+    for (uint32_t f=0; f<c->count; ++f) {
+        if (!spec_work(c,1)) return false;
+        if (c->identities[f].derivation) ++count;
+    }
+    if (!count) return true;
+    XrXirDerivationTable *table=spec_alloc(c,1,sizeof(*table));
+    XrXirDerivationGrant *rows=spec_alloc(c,count,sizeof(*rows));
+    if (!table || !rows) return false;
+    table->records=rows;table->count=count;result->derivations=table;
+    uint32_t at=0;
+    for (uint32_t f=0; f<c->count; ++f) {
+        uint32_t index=c->identities[f].derivation;
+        if (!index) continue;
+        if (!spec_work(c,1)) return false;
+        rows[at]=source->records[index-1];
+        rows[at].function=f;rows[at].source_row=index-1;
+        rows[at].target=spec_type(c,&c->instances[f],rows[at].target);
+        c->identities[f].derivation=++at;
+    }
+    return c->diagnostic.status==XR_XIR_OK;
+}
 static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
     const XrXirDeclarations *source = c->source->declarations;
     if (!source) return true;
@@ -452,7 +479,8 @@ static bool spec_declarations(SpecContext *c, XrXirDeclarations *result) {
     }
     if (c->diagnostic.status != XR_XIR_OK) return false;
     result->slots = slots; result->modules = modules; result->functions = c->identities;
-    result->entry_function = c->ordinary[source->entry_function]; return true;
+    result->entry_function = c->ordinary[source->entry_function];
+    return spec_derivations(c,result);
 }
 static XrXirStatus spec_nominal_projection(SpecContext *c) {
     const XrXirNominalTable *source = c->source->types->nominals;
@@ -460,7 +488,8 @@ static XrXirStatus spec_nominal_projection(SpecContext *c) {
     if (!source) return XR_XIR_OK;
     bool instance = c->effects || c->source->defaults || c->source->generics ||
         c->source->types->interfaces ||
-        (c->source->declarations && c->source->declarations->implementations);
+        (c->source->declarations && (c->source->declarations->implementations ||
+            c->source->declarations->derivations));
     if (!instance) return XR_XIR_OK;
     XrXirNominalTable *table = spec_alloc(c,1,sizeof(*table));
     XrXirNominalDeclaration *declarations = spec_alloc(c,source->count,sizeof(*declarations));
@@ -574,7 +603,8 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
         if (c.diagnostic.status != XR_XIR_OK) goto done;
     }
     if (!c.effects && !c.source->defaults && !c.source->generics && !(c.source->types && c.source->types->interfaces) &&
-        !(c.source->declarations && c.source->declarations->implementations)) {
+        !(c.source->declarations && (c.source->declarations->implementations ||
+            c.source->declarations->derivations))) {
         c.diagnostic.status = spec_nominal_fields(&c);
         if (c.diagnostic.status != XR_XIR_OK) goto done;
         XrXirModule specialized = *c.source;

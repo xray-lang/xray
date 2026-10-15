@@ -198,7 +198,7 @@ static XrXirStatus reader_lower_library(const XrXirCompileContext *context, XrXi
     XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&block,1,&init,1,NULL,0},function};
     const XrXirSourceModule source = {"reader/library",14,NULL,0,0};
     const XrXirFunctionIdentity identities[] = {{0},{.exported=1}};
-    const XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    const XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL, NULL};
     const XrXirModule library = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     return xir_fixture_check(context, &library, output, NULL);
 }

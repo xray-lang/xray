@@ -23,6 +23,9 @@ if(WIN32)
     endif()
     add_test(NAME test_xir_runtime_sdk_owner COMMAND test_xir_runtime_sdk
         ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json)
+    add_test(NAME test_xir_runtime_sdk_known_bytes COMMAND test_xir_runtime_sdk --known-bytes)
+    set_tests_properties(test_xir_runtime_sdk_known_bytes PROPERTIES
+        LABELS "unit;xir;sdk;abi;independent" TIMEOUT 30)
     # Target-only impact gate; SDK loader/parser changes still require the full owner matrix.
     add_test(NAME test_xir_runtime_sdk_shared_resources COMMAND test_xir_runtime_sdk
         ${CMAKE_BINARY_DIR}/xir-runtime-sdk ${CMAKE_BINARY_DIR}/xir-runtime-sdk/sdk_manifest.json --shared-resources)

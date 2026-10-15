@@ -24,7 +24,7 @@ static void task_cross_fixture_new(TaskFixture *fixture) {
     for (unsigned i = 1; i < 6; ++i) functions[i].exported = 1;
     functions[6].cleanup_owner = 6;
     const XrXirSourceModule module = {"task-test", 9, NULL, 0, 0};
-    XrXirDeclarations declarations = {&module, 1, functions, NULL, 0, NULL, 0, 0, 3, NULL};
+    XrXirDeclarations declarations = {&module, 1, functions, NULL, 0, NULL, 0, 0, 3, NULL, NULL};
     const XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING},

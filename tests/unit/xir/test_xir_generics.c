@@ -26,6 +26,7 @@ static void generic_runtime_retiring(void *pointer);
 #include "xir_runtime_allocations.h"
 #undef XIR_RUNTIME_BEFORE_FREE
 #include "xir_generic_fixture.h"
+#include "xir_error_marker74_golden.h"
 #include "xir_error_marker73_golden.h"
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_expression_fixture.h"
@@ -85,10 +86,31 @@ static void nominal_field_closure(void) {
         XrXirCompileContext measured=consumer_context_default();
         XrXirArtifact *prefix=nominal_field_closure_fixture(&measured,mode);
         uint64_t prefix_work=consumer_context_stats(&measured).work;
+        uint64_t verified_prefix_work=prefix_work;
+        if (mode==2) {
+            CHECK(xr_xir_compile_artifact_verify(prefix,NULL)==XR_XIR_OK);
+            verified_prefix_work=consumer_context_stats(&measured).work;
+        }
         xr_xir_compile_artifact_free(prefix);
-        XrXirCompileContext bounded=mode==2?generic_work_context(prefix_work+10000):consumer_context_default();
+        if (mode==2) {
+            /* The original smaller request remains a real refusal. A repeated
+             * verification must pay its whole prefix on the original ledger. */
+            XrXirCompileContext prior=generic_work_context(prefix_work+10000);
+            XrXirArtifact *insufficient=nominal_field_closure_fixture(&prior,mode);
+            CHECK(xr_xir_compile_artifact_verify(insufficient,NULL)==XR_XIR_BUDGET);
+            CHECK(consumer_context_stats(&prior).work<=prefix_work+10000);
+            xr_xir_compile_artifact_free(insufficient);
+        }
+        /* Measure every operation preceding specialization. The independent
+         * specialization allowance and the product ceilings remain unchanged. */
+        XrXirCompileContext bounded=mode==2?generic_work_context(verified_prefix_work+10000):consumer_context_default();
         XrXirArtifact *checked = nominal_field_closure_fixture(&bounded, mode), *closed = NULL;
-        CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
+        XrXirDiagnostic recheck={0};XrXirStatus rechecked=xr_xir_compile_artifact_verify(checked,&recheck);
+        if (rechecked!=XR_XIR_OK) fprintf(stderr,"field closure recheck mode=%u status=%u function=%u instruction=%u prefix=%llu consumed=%llu\n",
+            mode,(unsigned)rechecked,recheck.function,recheck.instruction,(unsigned long long)prefix_work,
+            (unsigned long long)consumer_context_stats(&bounded).work);
+        CHECK(rechecked == XR_XIR_OK);
+        if (mode==2) CHECK(consumer_context_stats(&bounded).work==verified_prefix_work);
         XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == expected);
         xr_xir_compile_artifact_free(checked); checked=NULL;
@@ -292,17 +314,19 @@ static void error_marker_definition(void) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     _Static_assert(XR_XIR_THROW==30 && XR_XIR_TYPE_PARAMETER_BASE==65536u &&
         XR_XIR_CONSTRAINT_ERROR==2u,"independent ERROR definition fields");
-    CHECK(packet.length==sizeof(error_marker73_golden) &&
-        !memcmp(packet.bytes,error_marker73_golden,packet.length));
-    CHECK(!packet.bytes[ERROR_MARKER73_KINDS_PRESENT] &&
-        packet.bytes[ERROR_MARKER73_MARKER]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==sizeof(error_marker74_golden) &&
+        !memcmp(packet.bytes,error_marker74_golden,packet.length));
+    CHECK(!packet.bytes[ERROR_MARKER74_KINDS_PRESENT] &&
+        packet.bytes[ERROR_MARKER74_MARKER]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_compile_checked_read(suite_context,error_marker72_previous,
         sizeof(error_marker72_previous),&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
+    CHECK(xr_xir_compile_checked_read(suite_context,error_marker73_golden,
+        sizeof(error_marker73_golden),&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
     for (unsigned i=0;i<sizeof(forged);++i) {
-        packet.bytes[ERROR_MARKER73_MARKER]=forged[i]; rehash_generic(&packet);
+        packet.bytes[ERROR_MARKER74_MARKER]=forged[i]; rehash_generic(&packet);
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
     xr_xir_compile_checked_packet_free(&packet);

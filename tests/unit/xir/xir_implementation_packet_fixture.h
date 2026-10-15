@@ -28,11 +28,11 @@ static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *cont
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0}};
     XrXirSourceModule module = {"alpha",5,NULL,0,1};
-    XrXirFunctionIdentity identities[] = {{0},{0},{0,1,1,0,0,0,XR_XIR_READ_METHOD, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0},{0},{0,1,1,0,0,0,XR_XIR_READ_METHOD, 0, 0, 0}};
     XrXirImplementationBinding binding = {{0,&argument,1},0,2};
-    XrXirImplementation implementation = {0,{0,&argument,1},&binding,1};
+    XrXirImplementation implementation = {0,{0,&argument,1},&binding,1, 0};
     XrXirImplementationTable table = {&implementation,1};
-    XrXirDeclarations declarations = {&module,1,identities,NULL,0,NULL,0,0,0,&table};
+    XrXirDeclarations declarations = {&module,1,identities,NULL,0,NULL,0,0,0,&table, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     XrXirStatus status=xir_fixture_check(context, &built, &checked, NULL);

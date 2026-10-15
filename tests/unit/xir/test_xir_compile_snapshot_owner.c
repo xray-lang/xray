@@ -105,7 +105,7 @@ static XrXirStatus snapshot_fixture(const XrXirCompileContext *context, XrXirSou
     interface.methods=&method;interface.method_count=1;
     XrXirInterfaceTable interfaces={&interface,1};
     XrXirImplementationBinding binding={application,0,2};
-    XrXirImplementation implementation={0,application,&binding,1};
+    XrXirImplementation implementation={0,application,&binding,1, 0};
     XrXirImplementationTable implementations={&implementation,1};
     XrXirTypes types={&node,1,&nominals,&interfaces};
     XrXirSourceView view={0}; view.complete=true;

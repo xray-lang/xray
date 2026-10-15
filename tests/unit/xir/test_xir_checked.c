@@ -28,7 +28,7 @@
 #include "xir_checked_scalar70_golden.h"
 #include "xir_checked_scalar71_golden.h"
 #include "xir_checked_scalar72_golden.h"
-#include "xir_checked_scalar73_golden.h"
+#include "xir_checked_scalar74_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -152,10 +152,10 @@ static void declaration_attacks(XrXirCheckedPacket *packet) {
         if (!m) initializer = at;
         at += 4;
     }
-    size_t identities = at, slot_data = at + (size_t) functions * 36;
+    size_t identities = at, slot_data = at + (size_t) functions * 40;
     size_t literal_data = slot_data + (size_t) slots * 12;
     const size_t offsets[] = {declarations, declarations + 12, declarations + 16,
-        dependencies + 4, initializer, identities + 4 * 36 + 4, slot_data, literal_data + 4, identities + 4 * 36 + 8};
+        dependencies + 4, initializer, identities + 4 * 40 + 4, slot_data, literal_data + 4, identities + 4 * 40 + 8};
     const uint32_t values[] = {UINT32_MAX, 1, 0, 1, 3, 0, 1, UINT32_MAX, 1};
     for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         CHECK(offsets[i] + 4 <= packet->length);
@@ -185,7 +185,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 73 && XR_XIR_OP_COUNT == 153, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 29 && XR_XIR_CHECKED_CONTRACT == 74 && XR_XIR_OP_COUNT == 153, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -225,8 +225,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[144] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
-    CHECK(!memcmp(packet.bytes + 32, checked_scalar73_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar73_golden) && !memcmp(packet.bytes,checked_scalar73_golden,packet.length));
+    CHECK(!memcmp(packet.bytes + 32, checked_scalar74_digest, 32));
+    CHECK(packet.length==sizeof(checked_scalar74_golden) && !memcmp(packet.bytes,checked_scalar74_golden,packet.length));
     checked_previous_identity_rejected(checked_scalar72_golden,sizeof(checked_scalar72_golden));
     checked_previous_identity_rejected(checked_scalar71_golden,sizeof(checked_scalar71_golden));
     checked_previous_identity_rejected(checked_scalar70_golden,sizeof(checked_scalar70_golden));

@@ -22,6 +22,7 @@
 #include "xxir_value_place.h"
 #include "xxir_scalar.h"
 #include "xxir_compile_memory.h"
+#include "xxir_derivation_internal.h"
 #include "../aot/xi_cgen_verify_output.h"
 #include <stdarg.h>
 #include <limits.h>
@@ -1539,12 +1540,43 @@ static void emit_proof(CBuffer *buffer, const XrXirArtifact *artifact, const cha
     EMIT_LITERAL(buffer, "};\n");
 }
 
+static void emit_derivation_origin(CBuffer *buffer,const XrXirGeneratedOrigin *origin) {
+    EMIT_LITERAL(buffer,"{{");emit_bytes(buffer,origin->module.bytes,origin->module.length);
+    append(buffer,",%uu},{",origin->module.length);
+    emit_bytes(buffer,origin->file.bytes,origin->file.length);
+    append(buffer,",%uu},{",origin->file.length);
+    emit_bytes(buffer,origin->field_path.bytes,origin->field_path.length);
+    append(buffer,",%uu},%uu,%uu}",origin->field_path.length,origin->line,origin->column);
+}
+static void emit_program_derivations(CBuffer *buffer,const XrXirDerivationTable *table,const char *prefix) {
+    if (!table) return;
+    if (table->policy_count) {emit_reject(buffer,XR_XIR_BAD_STAGE);return;}
+    for (uint32_t i=0; i<table->count && emit_work(buffer,1); ++i) {
+        const XrXirGeneratedFunctionOrigins *origins=&table->records[i].origins;
+        append(buffer,"static const XrXirGeneratedOrigin %s_derivation_sites_%u[] = {\n",prefix,i);
+        for (uint32_t n=0; n<origins->instruction_count && emit_work(buffer,1); ++n) {
+            emit_derivation_origin(buffer,&origins->instructions[n]);EMIT_LITERAL(buffer,",\n");
+        }
+        EMIT_LITERAL(buffer,"};\n");
+    }
+    append(buffer,"static const XrXirDerivationGrant %s_derivation_rows[] = {\n",prefix);
+    for (uint32_t i=0; i<table->count && emit_work(buffer,1); ++i) {
+        const XrXirDerivationGrant *row=&table->records[i];
+        append(buffer,"{%uu,%uu,%uu,%uu,(XrXirType)%u,{",row->function,row->policy,
+            row->source_row,row->root,(uint32_t)row->target);
+        emit_derivation_origin(buffer,&row->origins.entry);
+        append(buffer,",%s_derivation_sites_%u,%uu}},\n",prefix,i,row->origins.instruction_count);
+    }
+    append(buffer,"};\nstatic const XrXirDerivationTable %s_derivations = {NULL,0u,%s_derivation_rows,%uu};\n",
+        prefix,prefix,table->count);
+}
 static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const char *prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     const XrXirDeclarations *d = module->declarations;
     if (!d) return;
     emit_types(buffer, module->types, prefix);
     emit_proof(buffer, artifact, prefix);
+    emit_program_derivations(buffer,d->derivations,prefix);
     for (uint32_t m = 0; m < d->module_count && emit_work(buffer, 1); ++m) {
         const XrXirSourceModule *source = &d->modules[m];
         if (!source->dependency_count) continue;
@@ -1564,7 +1596,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     }
     EMIT_FORMAT(buffer, et_69a1907ec586c822, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)
-        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds);
+        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds,d->functions[f].derivation);
     EMIT_LITERAL(buffer, "};\n");
     if (d->slot_count) {
         EMIT_FORMAT(buffer, et_f16c13d386d8e11f, "static const XrXirSlot %s_slots[] = {\n", prefix);
@@ -1586,13 +1618,17 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     if (d->slot_count) append(buffer, "%s_slots", prefix); else EMIT_LITERAL(buffer, "NULL");
     EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else EMIT_LITERAL(buffer, "NULL");
-    append(buffer, ", %uu, %uu, %uu, NULL};\n", d->literal_count, d->root_module, d->entry_function);
-    EMIT_FORMAT(buffer, et_8b67e06edccf604b, "_Static_assert(sizeof(XrXirFunctionIdentity) == 36, \"XIR function identity stride\");\n"
+    append(buffer, ", %uu, %uu, %uu, NULL,", d->literal_count, d->root_module, d->entry_function);
+    if (d->derivations) append(buffer,"&%s_derivations};\n",prefix);
+    else EMIT_LITERAL(buffer,"NULL};\n");
+    append(buffer, "_Static_assert(sizeof(XrXirFunctionIdentity) == 40, \"XIR function identity stride\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, method_kind) == 24, \"XIR method role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_role) == 28, \"XIR test role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_timeout_seconds) == 32, \"XIR test timeout offset\");\n"
         "_Static_assert(offsetof(XrXirDeclarations, implementations) == 64, \"XIR implementation table offset\");\n"
-        "_Static_assert(sizeof(XrXirDeclarations) == 72, \"XIR declaration stride\");\n"
+        "_Static_assert(offsetof(XrXirFunctionIdentity, derivation) == 36, \"XIR derivation binding offset\");\n"
+        "_Static_assert(offsetof(XrXirDeclarations, derivations) == 72, \"XIR derivation table offset\");\n"
+        "_Static_assert(sizeof(XrXirDeclarations) == 80, \"XIR declaration stride\");\n"
         "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == %uu, \"XIR program ABI\");\n"
         "XR_DATADEF const XrXirProgramSpec %s_program = {XR_XIR_PROGRAM_ABI_VERSION, "
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
@@ -1607,7 +1643,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
-    EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+    append(buffer, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n#include \"xir/xxir_derivation_internal.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"

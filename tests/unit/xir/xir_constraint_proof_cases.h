@@ -331,7 +331,7 @@ static void constraint_proof_scalar_slot_sharing(void) {
     XrXirSourceModule modules[] = {{"provider",8,NULL,0,0},{"root",4,&dependency,1,1}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{.module=1}};
     XrXirSlot slot = {1,XR_XIR_ERROR,0};
-    XrXirDeclarations declarations = {modules,2,identities,&slot,1,NULL,0,1,2,NULL};
+    XrXirDeclarations declarations = {modules,2,identities,&slot,1,NULL,0,1,2,NULL, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL, XR_XIR_PROGRAM, NULL};
     /* Declaration obligations precede initializer execution. Error and PanicInfo
      * are valid owned slot types, but neither can be shared from another module. */

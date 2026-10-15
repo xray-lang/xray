@@ -50,7 +50,7 @@ static void implementation_semantic_fixture(ImplementationSemanticFixture *f) {
         f->functions[n].parameter_count = 1; f->functions[n].result = XR_XIR_I64;
         f->identities[n].exported = 1; f->identities[n].nominal_owner = n+1; f->identities[n].method_kind = XR_XIR_READ_METHOD;
         f->bindings[n] = (XrXirImplementationBinding){f->application,0,n};
-        f->records[n] = (XrXirImplementation){n,f->application,&f->bindings[n],1};
+        f->records[n] = (XrXirImplementation){n,f->application,&f->bindings[n],1, 0};
     }
     f->nominals[0].name = (XrXirLiteral){"Meter",5};
     f->nominals[1].name = (XrXirLiteral){"Box",3}; f->nominals[1].constraints = &f->bound;

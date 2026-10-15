@@ -59,7 +59,7 @@ static void description_authority(XrXirCompileContext *context, XrXirTypes *type
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0},{"beta",4,&dependency,1,1}};
     XrXirFunctionIdentity callers[] = {{.module=0},{.module=1}};
-    XrXirDeclarations declarations = {modules,2,callers,NULL,0,NULL,0,1,1,NULL};
+    XrXirDeclarations declarations = {modules,2,callers,NULL,0,NULL,0,1,1,NULL, NULL};
     XrXirModule module = {.function_count=2,.declarations=&declarations,.types=types};
     XrXirTypeDescription view = {0}; fixture->declaration.exported = 0;
     CHECK(xr_xir_compile_type_description(context,types,(XrXirType)256,&view) == XR_XIR_OK);

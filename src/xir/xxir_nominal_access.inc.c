@@ -45,6 +45,11 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
         if (!xr_xir_module_imports(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
     }
     if (access == XR_XIR_NOMINAL_TYPE) return XR_XIR_OK;
+    bool derived_authorized=false;
+    XrXirDerivationAccess derived={function,field,access==XR_XIR_NOMINAL_READ?
+        XR_XIR_DERIVE_READ:access==XR_XIR_NOMINAL_WRITE?XR_XIR_DERIVE_WRITE:0,type};
+    XrXirStatus derived_status=xir_derivation_access(work,module,&derived,&derived_authorized);
+    if (derived_status!=XR_XIR_OK) return derived_status;
     if (access == XR_XIR_NOMINAL_CONSTRUCT && identity.kind == XR_XIR_NOMINAL_STRUCT &&
         (identity.flags & XR_XIR_NOMINAL_MODULE_LITERAL) && declaring_module != caller->module)
         return XR_XIR_BAD_TYPE;
@@ -54,7 +59,8 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
     for (uint32_t f = first; f < end; ++f) {
         if (!nominal_access_work(work, 1)) return XR_XIR_BUDGET;
         uint32_t flags = table->declarations ? table->declarations[declaration].fields[f].flags : identity.fields[f].flags;
-        if ((flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) && caller->nominal_owner != declaration + 1)
+        if ((flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) && !derived_authorized &&
+            (caller->derivation || caller->nominal_owner != declaration + 1))
             return XR_XIR_BAD_TYPE;
         if (access == XR_XIR_NOMINAL_WRITE && !(flags & XR_XIR_FIELD_MUTABLE)) return XR_XIR_BAD_TYPE;
     }

@@ -45,6 +45,7 @@ static XrXirStatus implementation_record_copy(const XrXirCompileContext *compile
     uint64_t bytes = (uint64_t)source->binding_count * sizeof(*source->bindings);
     if (bytes > SIZE_MAX) return XR_XIR_BUDGET;
     output->nominal_declaration = source->nominal_declaration;
+    output->derivation_policy = source->derivation_policy;
     XrXirStatus status = implementation_application_copy(compile_context, &source->interface, &output->interface);
     if (status != XR_XIR_OK) return status;
     if (!xir_compile_work(compile_context, source->binding_count + UINT64_C(1))) return XR_XIR_BUDGET;

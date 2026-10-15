@@ -107,6 +107,15 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
         XrXirSlot *slots = (XrXirSlot *) module->declarations->slots;
         for (uint32_t s = 0; s < module->declarations->slot_count; ++s)
             if (!lower_type_id(&slots[s].type, map, count)) return XR_XIR_BAD_TYPE;
+        const XrXirDerivationTable *derivations=module->declarations->derivations;
+        if (derivations) {
+            if (derivations->policy_count) return XR_XIR_BAD_STAGE;
+            XrXirDerivationGrant *rows=(XrXirDerivationGrant *)derivations->records;
+            for (uint32_t i=0; i<derivations->count; ++i) {
+                if (!lower_type_work(budget,1)) return XR_XIR_BUDGET;
+                if (!lower_type_id(&rows[i].target,map,count)) return XR_XIR_BAD_TYPE;
+            }
+        }
     }
     return lower_provenance(module, map, count, budget);
 }

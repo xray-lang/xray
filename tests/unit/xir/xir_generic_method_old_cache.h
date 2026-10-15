@@ -40,10 +40,10 @@ static void generic_method_old_cache(const XrXirCompileContext *context,const Xr
     }
     xr_compile_resources_free(bytes);
 }
-_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 29,"runtime program metadata ABI");
+_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 31,"runtime program metadata ABI");
 _Static_assert(sizeof(void *) != 8 || sizeof(XrXirNominalIdentity) == 112,"runtime nominal identity stride");
 _Static_assert(sizeof(void *) != 8 || offsetof(XrXirNominalIdentity,flags) == 68,"runtime nominal final fact offset");
-_Static_assert(sizeof(XrXirFunctionIdentity) == 36,"runtime test role identity stride");
-_Static_assert(sizeof(void *) != 8 || sizeof(XrXirDeclarations) == 72,"runtime declaration stride remains unchanged");
+_Static_assert(sizeof(XrXirFunctionIdentity) == 40,"runtime test role identity stride");
+_Static_assert(sizeof(void *) != 8 || sizeof(XrXirDeclarations) == 80,"runtime declaration stride remains unchanged");
 _Static_assert(sizeof(void *) != 8 || offsetof(XrXirDeclarations,implementations) == 64,"runtime implementation pointer offset");
 #endif // XIR_GENERIC_METHOD_OLD_CACHE_H

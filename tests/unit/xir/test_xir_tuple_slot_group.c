@@ -171,7 +171,7 @@ static XrXirArtifact *group_lower(const XrXirCompileContext *context,bool unit) 
     XrXirFunctionIdentity identities[]={{.module=0},{.module=0,.exported=true}};
     XrXirSlot slots[]={{0,unit?XR_XIR_UNIT:(XrXirType)256,false},{0,XR_XIR_UNIT,false},
                       {0,unit?XR_XIR_UNIT:(XrXirType)256,false}};
-    XrXirDeclarations declarations={&source_module,1,identities,slots,3,NULL,0,0,1,NULL};
+    XrXirDeclarations declarations={&source_module,1,identities,slots,3,NULL,0,0,1,NULL, NULL};
     XrXirModule module={XR_XIR_BUILT,functions,2,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*read=NULL,*closed=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     CHECK(xir_fixture_check(context, &module, &checked, NULL)==XR_XIR_OK);

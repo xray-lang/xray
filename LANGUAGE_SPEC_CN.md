@@ -7801,6 +7801,18 @@ compiler-private Source请求提供可选XrXirSourceComptimeLimits.output_bytes�
 
 生成者输入和 construction 可在收件后销毁，生成 owner 可在 Checked 发布后销毁；后续 packet、Lowered 和执行不得借用这些存储。失败保全空输出；同一 owner 重试必须重新完整检查并累计原费用，不退款、不重置。该物理 owner 不新增语言宏、任意宿主生成器或另一类型/执行语义；Source 类型化授权、普通库派生接线及其完整资源/安全资格仍须分别完成。
 
+### 17.64 定义策略、精确生成绑定与普通操作复验
+
+内部派生策略先于生成器执行而存在，独立拥有目标的开放规范类型表达式、真实定义模块、普通协议应用及有序实参、真实生成入口、显式字段DESCRIBE/READ/WRITE集合、可选唯一合法init和用户源位置。描述、读取、写入和构造分别验证；WRITE不能授予不可变字段，编码策略不含构造权。生成器必须是可见的普通函数，不能冒充派生函数、成员或cleanup。策略可以尚无生成函数，不能通过预先发布空body解决生成顺序。
+
+生成函数绑定只引用原Source策略，保存当前函数、精确规范目标、原Source行及生成root、逐指令拥有式用户位置。定义模块、目标声明和protocol约束必须由普通类型服务验证；函数的nominal_owner不扩大策略。生成实现仍经过原普通implementation/witness检查，其protocol及有序实参必须与策略一致，各root实际绑定对应要求。手写implementation不能挪用派生函数实现额外协议。派生函数不能占据测试、模块initializer或constructor角色；cleanup与其owner必须属于相同策略/root/目标。
+
+真实字段操作使用当前规范实例，而非仅声明ordinal；交换泛型实参不能命中授权。派生函数访问目标字段逐项证明操作，不能直接按布局构造目标或借同模块身份调用任意私有函数、访问模块存储。唯一显式init授权只适用于真实CALL/INVOKE、对应原声明和精确目标结果。普通要求/default绑定仍独立验证其来源，不因派生标记跳过可见性、借用、效应或root复验。
+
+特化后的绑定保留原Source行/root/策略，通过真实Source provenance验证有序类型替换及全部位置字节；不能丢弃绑定或携带一套新的运行期策略。Lowered重映射当前目标，CGen与Program独立比较完整绑定及位置。Checked线格式29/语义74遍历真实函数绑定、implementation策略及完整策略/生成位置数据；旧28/73包拒绝。函数身份新增绑定索引、声明新增拥有表，Program ABI为31，Value ABI24和Call ABI29未变。SDK身份实际包含459项独立布局观察；版本标签不能代替完整接收检查。
+
+该接点实现内部共同接收与操作约束，不表示语言层TypeInfo、普通生成器、JSON或其他消费者已经接线。生成输入仍从Built进入17.63的普通完整第二检查；所有原编译预算、物理OOM、独立owner及完整FI/安全/provider门保留。
+
 ---
 
 ## 18. 错误码 (Error Codes)

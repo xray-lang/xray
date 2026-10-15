@@ -17,6 +17,7 @@
 #include "xxir_constraint_proof.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_contract_internal.h"
+#include "xxir_derivation_internal.h"
 #include "../base/xsha256.h"
 
 #define MATCH(a, b) do { \
@@ -83,6 +84,34 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
     }
     return XR_XIR_OK;
 }
+static XrXirStatus match_derivation_origin(const XrXirGeneratedOrigin *a,
+    const XrXirGeneratedOrigin *b,const XrXirCompileContext *context) {
+    MATCH(a->line,b->line);MATCH(a->column,b->column);
+    TRY(match_literal((XrXirLiteral){a->module.bytes,a->module.length},
+        (XrXirLiteral){b->module.bytes,b->module.length},context));
+    TRY(match_literal((XrXirLiteral){a->file.bytes,a->file.length},
+        (XrXirLiteral){b->file.bytes,b->file.length},context));
+    return match_literal((XrXirLiteral){a->field_path.bytes,a->field_path.length},
+        (XrXirLiteral){b->field_path.bytes,b->field_path.length},context);
+}
+static XrXirStatus match_derivations(const XrXirDerivationTable *a,
+    const XrXirDerivationTable *b,const XrXirCompileContext *context) {
+    MATCH(!!a,!!b);
+    if (!a) return XR_XIR_OK;
+    TRY(xir_derivations_structure_verify(context,b));
+    if (a->policy_count || b->policy_count) return XR_XIR_BAD_STAGE;
+    MATCH(a->count,b->count);
+    for (uint32_t i=0; i<a->count; ++i) {
+        const XrXirDerivationGrant *x=&a->records[i],*y=&b->records[i];
+        MATCH(x->function,y->function);MATCH(x->policy,y->policy);
+        MATCH(x->source_row,y->source_row);MATCH(x->root,y->root);MATCH(x->target,y->target);
+        MATCH(x->origins.instruction_count,y->origins.instruction_count);
+        TRY(match_derivation_origin(&x->origins.entry,&y->origins.entry,context));
+        for (uint32_t n=0; n<x->origins.instruction_count; ++n)
+            TRY(match_derivation_origin(&x->origins.instructions[n],&y->origins.instructions[n],context));
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus match_declarations(const XrXirDeclarations *a,
     const XrXirDeclarations *b, uint32_t functions, const XrXirCompileContext *context) {
     if (!a || !b) return XR_XIR_BAD_STRUCTURE;
@@ -107,6 +136,7 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
         MATCH(a->functions[i].method_kind, b->functions[i].method_kind);
         MATCH(a->functions[i].test_role, b->functions[i].test_role);
         MATCH(a->functions[i].test_timeout_seconds, b->functions[i].test_timeout_seconds);
+        MATCH(a->functions[i].derivation,b->functions[i].derivation);
     }
     for (uint32_t i = 0; i < a->slot_count; ++i) {
         MATCH(a->slots[i].module, b->slots[i].module);
@@ -115,7 +145,7 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
     }
     for (uint32_t i = 0; i < a->literal_count; ++i)
         TRY(match_literal(a->literals[i], b->literals[i], context));
-    return XR_XIR_OK;
+    return match_derivations(a->derivations,b->derivations,context);
 }
 static XrXirStatus match_layout(const XrXirFunctionLayout *a,
     const XrXirFunctionLayout *b, uint32_t parameters, const XrXirCompileContext *context) {

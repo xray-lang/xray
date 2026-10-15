@@ -26,6 +26,7 @@
 #include "xxir_constraint_proof_internal.h"
 #include "xxir_type_scratch_internal.h"
 #include "xxir_implementation_verify.h"
+#include "xxir_derivation_internal.h"
 #include "../base/xmalloc.h"
 #include <limits.h>
 
@@ -113,6 +114,11 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     if (op->op == XR_XIR_CONST_STRING)
         return d && op->immediate >= 0 && (uint64_t) op->immediate < d->literal_count ?
             XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    bool module_storage=op->op==XR_XIR_SLOT_LOAD || op->op==XR_XIR_SLOT_INIT ||
+        op->op==XR_XIR_SLOT_STORE || op->op==XR_XIR_SLOT_PLACE || op->op==XR_XIR_SLOT_GROUP_INIT;
+    /* A nominal member policy grants no direct module-state authority. */
+    if (module_storage && d && d->functions[function-module->functions].derivation)
+        return XR_XIR_BAD_TYPE;
     if (op->op != XR_XIR_SLOT_LOAD && op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE &&
         op->op != XR_XIR_SLOT_PLACE)
         return XR_XIR_OK;
@@ -193,6 +199,11 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus generic_status = xr_xir_compile_generic_call(remaining, module, caller_id, op);
         if (generic_status != XR_XIR_OK) return generic_status;
+        bool requirement_authorized=requirement_origin(module,caller_id,(uint32_t)(op-function->instructions));
+        bool derived_constructor_authorized=false;
+        generic_status=xir_derivation_call(remaining,module,caller_id,op,
+            default_authorized || requirement_authorized,&derived_constructor_authorized);
+        if (generic_status!=XR_XIR_OK) return generic_status;
         if (registration && module->generics) {
             const XrXirGeneric *owner = &module->generics[caller_id];
             if (op->type_arguments[1] != owner->parameter_count) return XR_XIR_BAD_TYPE;
@@ -227,12 +238,12 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type);
             if (generic_status != XR_XIR_OK) return generic_status;
         }
-        if (module->declarations && !requirement_origin(module,caller_id,(uint32_t)(op - function->instructions)) &&
+        if (module->declarations && !requirement_authorized &&
             !default_authorized) {
             const XrXirDeclarations *d = module->declarations;
             uint32_t caller_module = d->functions[caller_id].module;
             uint32_t callee_module = d->functions[op->immediate].module;
-            if ((d->functions[op->immediate].member_access &&
+            if ((d->functions[op->immediate].member_access && !derived_constructor_authorized &&
                     d->functions[caller_id].nominal_owner != d->functions[op->immediate].nominal_owner) ||
                 (uint32_t) op->immediate == d->modules[callee_module].initializer ||
                 !xr_xir_module_imports(d, caller_module, callee_module))
@@ -1181,6 +1192,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     if (status == XR_XIR_OK && module->stage == XR_XIR_LOWERED && module->declarations &&
         module->declarations->implementations) status = XR_XIR_BAD_STAGE;
     if (status == XR_XIR_OK) status = xr_xir_compile_implementations_verify(&context.remaining, module);
+    if (status == XR_XIR_OK) status = xir_derivations_verify(&context.remaining,module);
     if (status == XR_XIR_OK) status = xr_xir_compile_defaults_verify(&context.remaining, module);
     if (status == XR_XIR_OK) status = xir_construction_verify(&context.remaining, module, construction);
     if (status == XR_XIR_OK) status = xr_xir_compile_result_binders_verify(&context.remaining, module);
