@@ -26,7 +26,10 @@ static XrXirCtfeStatus ctfe_nominal_owner_admit(const XrXirArtifact *artifact,ui
     const XrXirNominalTable *table=artifact->module.types?artifact->module.types->nominals:NULL;
     if (!table || owner>table->count) return XR_XIR_CTFE_BAD_ARTIFACT;
     uint32_t kind=table->declarations?table->declarations[owner-1].kind:table->identities[owner-1].kind;
-    return kind==XR_XIR_NOMINAL_STRUCT || kind==XR_XIR_NOMINAL_ENUM?XR_XIR_CTFE_OK:XR_XIR_CTFE_NOT_SUPPORTED;
+    /* A lexical declaration owner is not a class value or an effect grant.
+     * Every reachable body and value family still requires separate admission. */
+    return kind==XR_XIR_NOMINAL_STRUCT || kind==XR_XIR_NOMINAL_ENUM || kind==XR_XIR_NOMINAL_CLASS?
+        XR_XIR_CTFE_OK:XR_XIR_CTFE_NOT_SUPPORTED;
 }
 static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type,XrXirCtfeTypeShape *output) {
