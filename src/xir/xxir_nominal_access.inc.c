@@ -36,7 +36,7 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
     }
     if (declaring_module == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     if (declaring_module != caller->module) {
-        if (!identity.exported) return XR_XIR_BAD_TYPE;
+        if (!identity.exported && !xr_xir_module_same_scope(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
         if (!nominal_access_work(work, scope->modules[caller->module].dependency_count)) return XR_XIR_BUDGET;
         if (!xr_xir_module_imports(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
     }

@@ -28,7 +28,7 @@ static XrXirStatus interface_parent_access(const XrXirModule *module,
     XrXirStatus status = interface_access_owner(scope, parent->module, remaining, &parent_owner);
     if (status != XR_XIR_OK) return status;
     if (owner != parent_owner) {
-        if (!parent->exported) return XR_XIR_BAD_TYPE;
+        if (!parent->exported && !xr_xir_module_same_scope(scope, owner, parent_owner)) return XR_XIR_BAD_TYPE;
         if (!xir_compile_work(remaining, scope->modules[owner].dependency_count)) return XR_XIR_BUDGET;
         if (!xr_xir_module_imports(scope, owner, parent_owner)) return XR_XIR_BAD_TYPE;
     }

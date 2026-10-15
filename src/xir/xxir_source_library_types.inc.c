@@ -5,6 +5,7 @@ struct SourceLibraryUnit {
     const XrXirModule *library;
     const XrXirArtifact *artifact;
     const XrXirConstruction *construction;
+    const SourceHistoryUnit *history;
     uint32_t *nominals, *interfaces;
     XrXirType *types;
     uint32_t type_count;
@@ -18,8 +19,7 @@ static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,
 static bool source_library_declaration_inventory(SourceContext *ctx, uint32_t module,
     const XrXirModule *library, uint32_t *nominals, uint32_t *interfaces) {
     if (!library->types) return true;
-    const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
-    const XrXirSourceModule *owner=&library->declarations->modules[resource->checked_module];
+    const XrXirSourceModule *owner=&library->declarations->modules[source_owned_module(&ctx->graph->specs[module])];
     const XrXirNominalTable *nt=library->types->nominals;
     const XrXirInterfaceTable *it=library->types->interfaces;
     for (uint32_t n=0; nt && n<nt->count; ++n) {
@@ -48,9 +48,8 @@ static uint32_t source_library_declaration_module(SourceContext *ctx,
     for (uint32_t m=0; m<(uint32_t)ctx->graph->spec_count; ++m) {
         if (!source_work(ctx,NULL)) return UINT32_MAX;
         const XrModuleSpec *spec=&ctx->graph->specs[m];
-        const XrModuleResourceBinding *r=spec->resource;
-        if (spec->representation!=XR_MODULE_CHECKED_LIBRARY || !r || r->checked!=unit->artifact) continue;
-        const XrXirSourceModule *owner=&unit->library->declarations->modules[r->checked_module];
+        if (!source_owned_checked(spec) || source_owned_artifact(spec)!=unit->artifact) continue;
+        const XrXirSourceModule *owner=&unit->library->declarations->modules[source_owned_module(spec)];
         if (source_library_literal_same(ctx,module,owner->name,owner->name_length)) return m;
     }
     return UINT32_MAX;
@@ -61,12 +60,13 @@ static char *source_library_name(SourceContext *ctx, XrXirLiteral literal) {
     s[literal.length]=0; return s;
 }
 static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
-    const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
-    const XrXirModule *library=xr_xir_compile_artifact_module(resource->checked);
+    const XrModuleSpec *spec=&ctx->graph->specs[module];
+    const XrXirArtifact *artifact=source_owned_artifact(spec);
+    const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
     if (!library->types) return true;
     SourceLibraryUnit *unit=source_alloc(ctx,1,sizeof(*unit));
     if (!unit) return false;
-    unit->library=library; unit->artifact=resource->checked;
+    unit->library=library;unit->artifact=artifact;unit->history=spec->history;
     unit->construction=xr_xir_compile_artifact_construction(unit->artifact);
     const XrXirNominalTable *source_nominals=library->types->nominals;
     uint32_t source_count=source_nominals ? source_nominals->count : 0;

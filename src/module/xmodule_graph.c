@@ -16,7 +16,6 @@
 #include "../toolchain/xcompiler_session.h"
 #include "../os/os_file_read.h"
 #define GRAPH_INITIAL_CAP 16
-#define GRAPH_MAX_MODULES 1024
 #define GRAPH_EMBEDDED_STDLIB_PREFIX "<embedded stdlib>/"
 extern void xr_program_destroy(struct AstNode *ast);
 static XrModuleStatus graph_failure(XrModuleGraph *graph, XrModuleStatus status) {
@@ -114,7 +113,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_find_named_dependency(const XrMod
 }
 static int graph_add_spec(ModuleWork *work, XrModuleGraph *graph, const char *canonical, const char *logical,
     const char *path, XrModuleKind kind, const XrModuleIdentityAuthority *authority) {
-    if (graph->spec_count >= GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return -1; }
+    if (graph->spec_count >= XR_MODULE_GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return -1; }
     if (graph->spec_count >= graph->spec_capacity) {
         int capacity = graph->spec_capacity*2; void *memory = graph->specs;
         if (!module_resize(work,&memory,(size_t)capacity*sizeof(*graph->specs))) return -1;
@@ -132,7 +131,7 @@ static int graph_add_spec(ModuleWork *work, XrModuleGraph *graph, const char *ca
 static void spec_add_dep(ModuleWork *work, XrModuleSpec *spec, int index) {
     for (int i = 0; i < spec->dep_count && module_work(work,1); ++i) if (spec->dep_indices[i] == index) return;
     if (spec->dep_count == spec->dep_capacity) {
-        if (spec->dep_capacity >= GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return; }
+        if (spec->dep_capacity >= XR_MODULE_GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return; }
         int capacity = spec->dep_capacity ? spec->dep_capacity*2 : 4; void *memory = spec->dep_indices;
         if (!module_resize(work,&memory,(size_t)capacity*sizeof(int))) return;
         spec->dep_indices = memory; spec->dep_capacity = capacity;

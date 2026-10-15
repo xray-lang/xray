@@ -210,8 +210,8 @@ static void array_instance_cases(void) {
             {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}}};
         XrXirTypes types = {nodes,3, NULL, NULL};
         uint32_t dependency = 1;
-        XrXirSourceModule modules[] = {{"array",5,mode ? NULL : &dependency,mode ? 0 : 1,0},
-            {"library",7,NULL,0,2}};
+        XrXirSourceModule modules[] = {{"array",5,mode ? NULL : &dependency,mode ? 0 : 1,0, 0},
+            {"library",7,NULL,0,2, 0}};
         XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
         XrXirSlot slots[] = {{0,(XrXirType)257,1},{0,(XrXirType)256,0},{1,(XrXirType)256,0}};
         XrXirDeclarations declarations = {modules,mode ? 1 : 2,identities,slots,mode ? 0 : 3,NULL,0,0,1, NULL};

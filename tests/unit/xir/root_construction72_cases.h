@@ -17,7 +17,7 @@ _Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_ADD_INT == 25 && XR_XIR_CALL == 2
     XR_XIR_RETURN == 33 && XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83,
     "Independent construction vector opcode identities changed");
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 29u && XR_XIR_CHECKED_CONTRACT == 75u &&
     XR_XIR_CALLABLE_ROOT_REQUIRED == 4u, "Independent construction wire facts changed");
 
 static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
@@ -46,7 +46,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
         {"make",4,NULL,0,(XrXirType)256,&blocks[2],1,make,4,operands,2},
         {"a",1,NULL,0,XR_XIR_I64,&blocks[3],1,a,2,NULL,0},
         {"b",1,NULL,0,XR_XIR_I64,&blocks[3],1,b,2,NULL,0}};
-    XrXirSourceModule construction_source_module = {"alpha",5,NULL,0,0};
+    XrXirSourceModule construction_source_module = {"alpha",5,NULL,0,0, 0};
     XrXirFunctionIdentity identities[] = {
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
         {0,1,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
@@ -154,6 +154,9 @@ static void root_construction72_attacks(void) {
     CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous,
         sizeof(root_construction71_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(decoded == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
+    CHECK(xr_xir_compile_checked_read(&context,root_construction74_previous,
+        sizeof(root_construction74_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!decoded);
     /* A valid digest cannot hide a wrong dense denominator or helper identity. */
     static const unsigned offsets[] = {0,4,8,16};
     static const uint32_t values[] = {0,1,1,4};

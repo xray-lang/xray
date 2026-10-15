@@ -16,7 +16,7 @@
 #include "xxir_call.h"
 #include "xxir_class_observation.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 30u
+#define XR_XIR_PROGRAM_ABI_VERSION 31u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
@@ -125,6 +125,11 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_read_at(XrXirCallView *view,uint32_
     const XrXirValue *cell,XrXirValue *output,XrXirFaultDetail *fault);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_write_at(XrXirCallView *view,uint32_t instruction,
     const XrXirValue *cell,const XrXirValue *value,XrXirFaultDetail *fault);
+/* Owned/module String Cells only; projected Class storage is not admitted. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *suffix);
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append_scalar(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *scalar);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_read(XrXirCallView *view, const XrXirValue *cell, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const XrXirValue *cell, const XrXirValue *value);
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, XrXirValue *output);

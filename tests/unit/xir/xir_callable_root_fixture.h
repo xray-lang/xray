@@ -61,7 +61,7 @@ static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t ad
     XrXirTypes types={nodes,5,NULL,NULL};
     XrXirFunctionIdentity identities[13]={{0}};
     identities[12].promises=XR_XIR_FUNCTION_NO_SUSPEND;
-    XrXirSourceModule source={"root",4,NULL,0,0};
+    XrXirSourceModule source={"root",4,NULL,0,0, 0};
     XrXirSlot slot={0,XR_XIR_I64,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};

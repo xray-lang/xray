@@ -103,8 +103,8 @@ static void remaining_fixture(RemainingFixture *f,uint32_t scenario,uint32_t rej
     f->identities[6].nominal_owner=1;f->identities[6].method_kind=XR_XIR_READ_METHOD;
     f->functions[7]=(XrXirFunction){"cause",5,&f->class_type,1,f->error_type,&f->blocks[4],1,f->cause,2,&f->cause_operand,1};
     f->identities[7].nominal_owner=2;f->identities[7].method_kind=XR_XIR_CONSTRUCTOR;
-    f->modules[0]=(XrXirSourceModule){"base",4,NULL,0,0};f->modules[1]=(XrXirSourceModule){"left",4,&f->base,1,1};
-    f->modules[2]=(XrXirSourceModule){"right",5,&f->base,1,2};f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3};
+    f->modules[0]=(XrXirSourceModule){"base",4,NULL,0,0, 0};f->modules[1]=(XrXirSourceModule){"left",4,&f->base,1,1, 0};
+    f->modules[2]=(XrXirSourceModule){"right",5,&f->base,1,2, 0};f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3, 0};
     /* The rejected initializer belongs to base; its Cell slots belong to left. */
     for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected==1?1:rejected==2?0:3,rejected==2?f->class_type:f->cell_type,rejected==2?0:1};
     f->literals[0]=(XrXirLiteral){"x",1};f->literals[1]=(XrXirLiteral){"module initializer assertion",28};f->literals[2]=(XrXirLiteral){"",0};

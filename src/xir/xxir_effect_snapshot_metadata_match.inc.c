@@ -88,7 +88,7 @@ static XrXirStatus effect_body_declarations_match(const XrXirCompileContext *wor
             (a->dependency_count && !a->dependencies) || (b->dependency_count && !b->dependencies))
             return XR_XIR_BAD_STRUCTURE;
         if (a->name_length!=b->name_length || a->dependency_count!=b->dependency_count ||
-            a->initializer!=b->initializer) return effect_body_difference(same);
+            a->initializer!=b->initializer || a->lexical_scope!=b->lexical_scope) return effect_body_difference(same);
         status=effect_body_bytes_match(work,a->name,b->name,a->name_length,1,same);
         if (status==XR_XIR_OK) status=effect_body_bytes_match(work,a->dependencies,b->dependencies,
             a->dependency_count,sizeof(*a->dependencies),same);

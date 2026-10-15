@@ -66,8 +66,8 @@ static void fixture(AccessFixture *f,uint32_t count) {
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.nominal={.declaration=0}};
     for (uint32_t i=1;i<count;++i) f->nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NULLABLE,.element=constructed(i-1)};
     f->types=(XrXirTypes){f->nodes,count,&f->nominals,NULL};f->root=constructed(count-1);
-    f->modules[0]=(XrXirSourceModule){"home",4,NULL,0,0};
-    f->modules[1]=(XrXirSourceModule){"away",4,NULL,0,1};
+    f->modules[0]=(XrXirSourceModule){"home",4,NULL,0,0, 0};
+    f->modules[1]=(XrXirSourceModule){"away",4,NULL,0,1, 0};
     f->identities[0].module=0;f->identities[1].module=1;
     f->declarations=(XrXirDeclarations){.modules=f->modules,.module_count=2,.functions=f->identities,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};

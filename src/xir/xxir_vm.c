@@ -82,6 +82,14 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
         }
         break;
     }
+    case XR_XIR_CELL_STRING_APPEND: {
+        XrXirValue cell = {(uint32_t)xr_xir_operand_type(run->function, op->args[0]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        XrXirValue suffix = {(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+        status = op->immediate ? xr_xir_instance_cell_string_append_scalar(run->view, &cell, &suffix) :
+            xr_xir_instance_cell_string_append(run->view, &cell, &suffix); break;
+    }
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
         XrXirType cell = op->op == XR_XIR_CELL_NEW ? op->type : xr_xir_operand_type(run->function, op->args[0]);
         uint32_t count = xr_xir_cell_payload_operands(run->module->types, cell, op->op);
@@ -582,7 +590,8 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING ||
-        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
+        op->op == XR_XIR_CELL_STRING_APPEND) {
         state->instruction = next;
         return instance_step(run, state, op, run->layout->offsets[result_id], action);
     }

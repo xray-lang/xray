@@ -264,7 +264,7 @@ static XrXirStatus visibility(const XrXirCompileContext *c) {
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_NOMINAL},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=2}};
     XrXirTypes types={nodes,2,&nominals,NULL};
-    XrXirSourceModule modules[2]={{"home",4,NULL,0,0},{"away",4,NULL,0,1}};
+    XrXirSourceModule modules[2]={{"home",4,NULL,0,0, 0},{"away",4,NULL,0,1, 0}};
     XrXirFunctionIdentity identities[2]={{.module=0},{.module=1}};
     XrXirDeclarations declarations={.modules=modules,.module_count=2,.functions=identities,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
@@ -305,7 +305,7 @@ static XrXirStatus all_kinds(const XrXirCompileContext *c) {
         {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_NULLABLE,.element=XR_XIR_I64},{.kind=XR_XIR_TYPE_NOMINAL},
         {.kind=XR_XIR_TYPE_TUPLE,.parameters=fields,.parameter_count=6}};
-    XrXirTypes types={nodes,6,&nominals,NULL};XrXirSourceModule source={"m",1,NULL,0,0};
+    XrXirTypes types={nodes,6,&nominals,NULL};XrXirSourceModule source={"m",1,NULL,0,0, 0};
     XrXirFunctionIdentity identity={0};XrXirDeclarations declarations={.modules=&source,.module_count=1,
         .functions=&identity,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirInstruction op={.op=XR_XIR_RETURN};XrXirBlock block={.first=0,.count=1};

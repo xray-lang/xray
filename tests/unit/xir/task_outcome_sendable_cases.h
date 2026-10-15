@@ -137,7 +137,7 @@ static XrXirStatus task_error_effects(const XrXirCompileContext *c) {
     XrXirInstruction initializer = {.op = XR_XIR_RETURN};
     functions[7] = (XrXirFunction){.name = "init", .name_length = 4, .blocks = &parameter_block,
         .block_count = 1, .instructions = &initializer, .instruction_count = 1};
-    XrXirSourceModule source = {"m", 1, NULL, 0, 7};
+    XrXirSourceModule source = {"m", 1, NULL, 0, 7, 0};
     XrXirFunctionIdentity identities[8] = {0};
     XrXirDeclarations declarations = {.modules = &source, .module_count = 1, .functions = identities,
         .root_module = UINT32_MAX, .entry_function = UINT32_MAX};

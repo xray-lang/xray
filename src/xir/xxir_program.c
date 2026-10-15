@@ -152,6 +152,11 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     program->permissions = permissions;
     atomic_init(&program->references, 1);
     program->context = *context;
+    if (!xir_compile_work(context, sizeof(program->target) + sizeof(program->checked_identity))) {
+        status = XR_XIR_BUDGET; goto failed;
+    }
+    program->target = spec->target;
+    memcpy(program->checked_identity, spec->proof.identity, sizeof(program->checked_identity));
     program->entry_count = spec->entry_count;
     status = program_copy_entries(program, spec);
     program->order = xir_compile_calloc(context, spec->declarations->module_count, sizeof(*program->order), &status);

@@ -4565,3 +4565,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/instance_bindings.cmake)
 add_subdirectory(xir/p10_reference)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_probe.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_performance.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake")

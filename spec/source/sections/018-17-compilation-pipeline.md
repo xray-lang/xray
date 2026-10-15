@@ -528,6 +528,18 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+### 17.50 已发布Source定义的历史接收
+
+持续Source拥有者只向下一候选输入提供本拥有者已发布的真实Checked Program和实际注册绑定。历史输入使用独立于Catalog Library的内部模块表示；不重新解析或拼接旧Source，不修改Program的linkage，也不以查询名称构造函数、泛型或名义类型身份。接收复制并重定位完整Checked声明闭包，仍进入唯一Built→Checked→特化复验→Lowered管线。
+
+词法作用域与模块出生身份独立：模块的`lexical_scope=0`表示独立作用域，非零值为同一作用域规范模块编号加一；引用必须在界内，不能指向自身或另一条引用。当前会话输入与准确接收的历史会话根共享词法作用域，普通导入模块继续独立。该关系只替代跨输入的模块私有可见性检查，不授予缺失依赖、私有成员、initializer调用或运行时存储权限。函数、名义类型、slot和初始化归属仍保留准确模块。
+
+作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用Checked schema29、语义75和Program ABI31，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
+
+运行时接收须先把准备中的Source记录绑定到真实封装Program：普通编译器重新推导准确特化/Lowered证明，并核对已验证Program保存的证明摘要及目标。记录拥有接收时产生的模块、函数、slot和类型映射；Checked函数编号不直接作为特化后函数编号。随后同一Source拥有者保留首个实际运行域，只接受该域的后继Instance事务。Program相同不授权另一个运行域。
+
+接收事务在运行域预算内拥有模块与slot路由，直接指向实际出生代；多代路由展平。仅实际出生模块已完成初始化时，接收代才继承其就绪状态并跳过旧initializer；不复制旧值或制造空initializer。读取须继续通过当前静态模块权限、实际出生槽发布状态和普通值准入，收到的槽不能再次发布。I64及String等不依赖构造类型池的值可使用该路径。Cell、Class、闭包及其他构造值的跨类型池对应仍须实现，普通准入继续拒绝不兼容身份；完整G2/G3、成对REPL协调和全部资源/安全门尚未完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1176,5 +1188,17 @@ This flags meaning uses the sole Checked semantic70; schema25 retains its existi
 Prepared ordinary reference refinement records owned INFERRED/FIXED value identities before region recipes are released. Ordinary direct references and closure sites close against authentic targets on the existing effects owner. Explicit callable parameters, annotations, results and conversion contexts remain fixed upper bounds; equal provisional UNKNOWN identities do not erase a boundary. A private COPY preserves it and becomes the sole ordinary FUNCTION_WEAKEN when closed identities differ. Private structure/SSA/constraint/access preparation publishes no Checked. The common complete Checker verifies all effects and permissions on both construction memory and its independent owned copy before publishing only that copy.
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
+
+### 17.50 Receiving published Source definitions
+
+A persistent Source owner supplies a candidate with only that owner's published, actual Checked Program and registered bindings. History uses an internal module representation distinct from Catalog Libraries. Receiving neither reparses nor concatenates prior Source, changes Program linkage, nor constructs function, generic or nominal identities from query names. It copies and relocates the complete Checked declaration closure through the single Built → Checked → specialization recheck → Lowered pipeline.
+
+Lexical scope is separate from module birth identity. A zero `lexical_scope` owns an independent scope; a nonzero value is one plus its canonical module ordinal. References must remain in bounds and cannot refer to themselves or another reference. Current and accurately received historical session roots share a lexical scope; ordinary imports remain separate. This relation replaces only module-private visibility across inputs. It grants no missing dependency, private-member, initializer-call or runtime-storage permission. Functions, nominal types, slots and initialization keep their exact owning modules.
+
+Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
+
+Runtime receiving first binds a prepared Source record to an actual sealed Program. The ordinary compiler derives its exact specialized/Lowered proof again and compares the verified Program's retained proof digest and target. The record owns the actual receiving module, function, slot and type maps; Checked function ordinals are not assumed to be specialized function ordinals. The Source owner then retains its first actual runtime Domain and accepts subsequent Instance transactions only in that Domain. Sharing a Program does not authorize another Domain.
+
+The receiving transaction owns budgeted module and slot routes to actual birth generations and flattens routes across generations. It inherits readiness only from an actually initialized birth module and skips that completed initializer; it neither copies old values nor substitutes empty initializers. Reads still require current static module permission, actual birth-slot publication and ordinary value admission. Received slots cannot be published again. Values such as I64 and String that do not depend on a constructed-type arena can use this path. Cross-arena correspondence for Cell, Class, closures and other constructed values remains unfinished; ordinary admission continues to reject incompatible identities. Complete G2/G3, paired REPL coordination and all resource and safety gates remain required.
 
 <!-- /xr-spec:en -->
