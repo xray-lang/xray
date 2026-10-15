@@ -830,12 +830,12 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
     if (!instance->ready[module] && instance->current_module != module) return XR_XIR_CALL_BAD_STATE;
     if (!child) return XR_XIR_CALL_READY;
     if (!function) return XR_XIR_CALL_BAD_STATE;
-    uint32_t instruction=UINT32_MAX;
-    if (xr_xir_call_invocation_pending(view,&instruction)) {
+    XrXirCallFrontier frontier={0};
+    if (xr_xir_call_invocation_pending(view,&frontier)) {
         XirEffectInvocationSelection selection={0};
         XrXirCallStatus selected=function->type!=XR_XIR_UNIT ?
-            instance_invocation_select(view,instruction,function,arguments,count,&selection) :
-            instance_invocation_direct(view,instruction,entry,arguments,count,&selection);
+            instance_invocation_select(view,frontier.instruction,function,arguments,count,&selection) :
+            instance_invocation_direct(view,frontier.instruction,entry,arguments,count,&selection);
         if (selected!=XR_XIR_CALL_READY) return selected;
         if (selection.target!=entry) return XR_XIR_CALL_BAD_STATE;
         if (prepared) {
@@ -1273,7 +1273,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if (!view_is_child(instance,view)) return XR_XIR_CALL_READY;
     XirEffectInvocationSelection selected={0};
     XrXirCallStatus status=instance_invocation_direct(view,instruction,entry,arguments,count,&selected);
-    return status==XR_XIR_CALL_READY?xr_xir_call_invocation_stage(view,instruction):status;
+    return status==XR_XIR_CALL_READY?xr_xir_call_invocation_stage(view,&selected):status;
 }
 XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function_at(XrXirCallView *view,
     uint32_t instruction,const XrXirValue *function,const XrXirValue *arguments,
@@ -1286,7 +1286,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function_at(XrXirCallView *view,
     XirEffectInvocationSelection selected={0};
     XrXirCallStatus status=instance_invocation_select(view,instruction,function,arguments,count,&selected);
     if (status!=XR_XIR_CALL_READY) return status;
-    status=xr_xir_call_invocation_stage(view,instruction);
+    status=xr_xir_call_invocation_stage(view,&selected);
     if (status!=XR_XIR_CALL_READY) return status;
     *entry=selected.target;return XR_XIR_CALL_READY;
 }

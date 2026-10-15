@@ -21,18 +21,28 @@ XR_FUNC const XirEffectInvocationSelection *xr_xir_call_invocation(const XrXirCa
     return xr_xir_call_admission(view) && view->activation->top->invocation.owner?
         &view->activation->top->invocation:NULL;
 }
-XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *instruction) {
+XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,XrXirCallFrontier *frontier) {
     if (!(!view || call_owner_current(view->activation))) return false;
-    if (!instruction || !xr_xir_call_admission(view) || !view->activation->top->effect_pending) return false;
-    *instruction=view->activation->top->effect_instruction;return true;
+    if (!frontier || !xr_xir_call_admission(view) || !view->activation->top->effect_pending) return false;
+    const CallFrame *frame=view->activation->top;
+    *frontier=(XrXirCallFrontier){frame->effect_instruction,
+        frame->pending_invocation.target,frame->pending_invocation.producer};return true;
 }
-XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction) {
+XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,
+    const XirEffectInvocationSelection *selection) {
     if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (!xr_xir_call_admission(view) || instruction==UINT32_MAX) return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_call_admission(view) || !selection || !selection->owner ||
+        selection->instruction==UINT32_MAX || selection->target>=view->activation->config.entry_count)
+        return XR_XIR_CALL_BAD_STATE;
     CallFrame *frame=view->activation->top;
-    if (frame->effect_pending || frame->pending_invocation.owner) return XR_XIR_CALL_BAD_STATE;
-    if (!call_invocation_work(view,2)) return XR_XIR_CALL_LIMIT;
-    frame->effect_instruction=instruction;frame->effect_pending=true;return XR_XIR_CALL_READY;
+    if (frame->effect_pending || frame->pending_invocation.owner ||
+        selection->caller!=(uint32_t)(frame->entry-view->activation->config.entries) ||
+        (frame->invocation.owner && selection->owner!=frame->invocation.owner)) return XR_XIR_CALL_BAD_STATE;
+    if (!call_invocation_work(view,sizeof(XrXirCallFrontier)+2)) return XR_XIR_CALL_LIMIT;
+    /* A null owner keeps these IDs distinct from an accepted permission. */
+    frame->pending_invocation=(XirEffectInvocationSelection){
+        .target=selection->target,.producer=selection->producer};
+    frame->effect_instruction=selection->instruction;frame->effect_pending=true;return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection) {
@@ -41,6 +51,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     CallFrame *frame=view->activation->top;
     if (!frame->effect_pending || frame->pending_invocation.owner ||
         frame->effect_instruction!=selection->instruction ||
+        frame->pending_invocation.target!=selection->target ||
+        frame->pending_invocation.producer!=selection->producer ||
         selection->caller!=(uint32_t)(frame->entry-view->activation->config.entries))
         return XR_XIR_CALL_BAD_STATE;
     if (!call_invocation_work(view,sizeof(*selection)+4)) return XR_XIR_CALL_LIMIT;
