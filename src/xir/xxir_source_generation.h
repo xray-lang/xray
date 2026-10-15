@@ -43,7 +43,7 @@ typedef enum XrXirSourceDefinitionKind {
 typedef struct XrXirSourceGenerationDefinition {
     uint64_t generation;
     XrXirSourceDefinitionKind kind;
-    uint32_t module, ordinal, dependency;
+    uint32_t module, ordinal, dependency, reader;
     XrXirType logical_type, stored_type;
     bool mutable;
     const char *name, *imported;
@@ -63,6 +63,12 @@ XR_FUNC void xr_xir_compile_source_generations_free(XrXirSourceGenerations *owne
  * MEMORY logical_path must be empty. This entry does not yet seed historical
  * declarations into semantic checking; cross-input compilation remains separate. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare(XrXirSourceGenerations *owner,
+    const XrXirSourceText *text, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
+/* Adds ordinary root-slot reader functions to this real input before complete
+ * Built checking. Each reader performs actual SLOT_LOAD/Cell read/return under
+ * its authentic module and is checked for no suspension. Reader ordinals are
+ * exact Checked observations, not runtime authority or historical receiving. */
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceText *text, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
 /* Source publication allocates and charges nothing. The execution coordinator
  * calls this only after the corresponding Instance candidate returned normally.

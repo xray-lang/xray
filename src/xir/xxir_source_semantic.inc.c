@@ -14,6 +14,8 @@ typedef struct SourceSemanticEnvironment {
     XrModuleGraph *graph;
     SourceName **names, *symbols;
     uint32_t module_count, symbol_count;
+    uint32_t *binding_reads;
+    uint32_t slot_count;
 } SourceSemanticEnvironment;
 
 static void source_semantic_free(SourceSemanticEnvironment *environment) {
@@ -25,6 +27,7 @@ static void source_semantic_free(SourceSemanticEnvironment *environment) {
     xr_compile_module_graph_free(environment->graph);
     xr_compile_resources_free(environment->symbols);
     xr_compile_resources_free(environment->names);
+    xr_compile_resources_free(environment->binding_reads);
     xr_compile_resources_free(environment);
 }
 static void *source_semantic_alloc(SourceContext *ctx,size_t count,size_t size) {
@@ -60,6 +63,12 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
         }
     }
     environment->module_count=modules;
+    if(ctx->binding_reads && ctx->slot_count) {
+        environment->slot_count=ctx->slot_count;
+        environment->binding_reads=source_semantic_alloc(ctx,ctx->slot_count,sizeof(*environment->binding_reads));
+        if(!environment->binding_reads || !source_copy_bytes(ctx,NULL,environment->binding_reads,ctx->binding_reads,
+            (size_t)ctx->slot_count*sizeof(*ctx->binding_reads)))goto failed;
+    }
     environment->names=source_semantic_alloc(ctx,modules,sizeof(*environment->names));
     environment->symbols=count ? source_semantic_alloc(ctx,count,sizeof(*environment->symbols)) : NULL;
     if (!environment->names || (count && !environment->symbols)) goto failed;

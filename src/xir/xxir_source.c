@@ -242,7 +242,8 @@ typedef struct SourceContext {
     uint32_t flow_alternatives;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
     uint32_t module_count, entry_function;
-    bool core_factory;
+    bool core_factory, binding_readers;
+    uint32_t *binding_reads;
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
@@ -2256,6 +2257,7 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
 
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
+    uint32_t readers = 0;
     SourceClosureCount closures = {ctx,0,0,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
@@ -2302,6 +2304,7 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
                 if (slots==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                 ++slots;
+                if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) ++readers;
             }
             if(node->type==AST_DESTRUCTURE_DECL) {
                 uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
@@ -2310,6 +2313,7 @@ static bool collect_declarations(SourceContext *ctx) {
                     if(node->as.destructure_decl.pattern->as.array.elements[f]->type==PATTERN_SKIP)continue;
                     if(slots==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                     ++slots;
+                    if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) ++readers;
                 }
             }
         }
@@ -2330,6 +2334,8 @@ static bool collect_declarations(SourceContext *ctx) {
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"member helper capacity exhausted");
     capacity += closures.members;
     if (!ctx->core_factory && capacity <= UINT32_MAX - 7) capacity += 7;
+    if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
+    capacity+=readers;
     if (capacity > ctx->compile.limits.functions) capacity = ctx->compile.limits.functions;
     ctx->function_capacity = capacity;
     if (!source_declaration_storage(ctx,nominals,interfaces)) return false;

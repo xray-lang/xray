@@ -225,10 +225,49 @@ static void mutable_definitions(void) {
     CHECK(xr_xir_compile_source_generation_abort(owner,serial)==XR_XIR_OK);
     xr_xir_compile_source_generations_free(owner);source_fixture_owner_free(&compiler);
 }
+static void inspection_definitions(void) {
+    SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
+    XrXirSourceGenerationConfig config={compiler.context,"checked-reader-test",NULL,NULL,NULL};
+    XrXirSourceGenerations *owner=NULL;CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
+    const char source[]="var root:i64=42\nvar empty=()\nconst unit=()\nconst text=\"owned\"\n"
+        "const values=[11,42]\nconst callback=fn()->i64{return root}\n";
+    const char *names[]={"root","empty","unit","text","values","callback"};
+    uint64_t ordinary=prepare(owner,source);
+    for(unsigned i=0;i<sizeof(names)/sizeof(*names);++i) {
+        XrXirSourceGenerationDefinition definition={0};
+        CHECK(xr_xir_compile_source_generation_definition(owner,ordinary,names[i],&definition)==XR_XIR_OK && definition.reader==UINT32_MAX);
+    }
+    CHECK(xr_xir_compile_source_generation_abort(owner,ordinary)==XR_XIR_OK);
+    uint64_t serial=0;XrXirSourceText text={NULL,source,sizeof(source)-1};
+    CHECK(xr_xir_compile_source_generation_prepare_bindings(owner,&text,&serial,NULL)==XR_XIR_OK && serial);
+    XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(view.result->checked);
+    for(unsigned i=0;i<sizeof(names)/sizeof(*names);++i) {
+        XrXirSourceGenerationDefinition definition={0};
+        XrXirStatus status=xr_xir_compile_source_generation_definition(owner,serial,names[i],&definition);
+        if(status!=XR_XIR_OK)fprintf(stderr,"actual reader definition %s status=%u\n",names[i],status);
+        CHECK(status==XR_XIR_OK && definition.reader<module->function_count);
+        const XrXirFunction *reader=&module->functions[definition.reader];
+        CHECK(!reader->parameter_count && reader->result==definition.logical_type &&
+            module->declarations->functions[definition.reader].module==definition.module &&
+            module->declarations->functions[definition.reader].exported &&
+            (module->declarations->functions[definition.reader].promises&XR_XIR_FUNCTION_NO_SUSPEND));
+        CHECK(reader->instructions[reader->instruction_count-1].op==XR_XIR_RETURN);
+    }
+    const XrXirSourceGenerationBinding *bindings=NULL;size_t count=0;
+    CHECK(xr_xir_compile_source_generation_candidate_bindings(owner,serial,&bindings,&count)==XR_XIR_OK && count==6);
+    for(size_t i=0;i<count;++i) {
+        XrXirSourceGenerationDefinition definition={0};
+        CHECK(xr_xir_compile_source_generation_definition(owner,serial,bindings[i].declaration->name,&definition)==XR_XIR_OK);
+    }
+    CHECK(xr_xir_compile_source_generation_abort(owner,serial)==XR_XIR_OK);
+    xr_xir_compile_source_generations_free(owner);source_fixture_owner_free(&compiler);
+}
 int main(int argc,char **argv) {
     if (argc==2) return history_check(argv[1]);
     CHECK(argc==1);
     mutable_definitions();
+    inspection_definitions();
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     char namespace_id[]="source-generation-test";
     XrXirSourceGenerationConfig config={compiler.context,namespace_id,NULL,NULL,NULL};
