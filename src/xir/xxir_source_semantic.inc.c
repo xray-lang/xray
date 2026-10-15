@@ -21,6 +21,10 @@ static void source_semantic_free(SourceSemanticEnvironment *environment) {
     xr_compile_resources_free(environment->latest);
     xr_compile_resources_free(environment->symbols);
     xr_compile_resources_free(environment->names);
+    xr_compile_resources_free(environment->history.modules);
+    xr_compile_resources_free(environment->history.functions);
+    xr_compile_resources_free(environment->history.slots);
+    xr_compile_resources_free(environment->history.types);
     xr_compile_resources_free(environment);
 }
 static void *source_semantic_alloc(SourceContext *ctx,size_t count,size_t size) {
@@ -37,6 +41,33 @@ static const char *source_semantic_text(SourceContext *ctx,const char *text) {
     if (!owned) return NULL;
     if (!source_copy_bytes(ctx,NULL,owned,text,length+1)) {xr_compile_resources_free(owned);return NULL;}
     return owned;
+}
+static bool source_semantic_history(SourceContext *ctx,SourceSemanticEnvironment *environment) {
+    if (!ctx->history) return true;
+    const SourceLibraryMap *map=ctx->history->map;
+    if (!map) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history receiving correspondence is missing");
+    SourceHistoryCorrespondence *owned=&environment->history;
+    owned->unit=ctx->history->unit;
+    owned->module_count=map->module_count;owned->function_count=map->function_count;
+    owned->slot_count=map->slot_count;owned->type_count=map->unit ? map->unit->type_count : 0;
+    const void *inputs[]={map->modules,map->functions,map->slots,map->unit ? map->unit->types : NULL};
+    const uint32_t counts[]={owned->module_count,owned->function_count,owned->slot_count,owned->type_count};
+    _Static_assert(sizeof(XrXirType)==sizeof(uint32_t),"history type ordinals use exact wire integers");
+    for (unsigned i=0;i<4;++i) {
+        if (!source_work(ctx,NULL)) return false;
+        if (!counts[i]) continue;
+        if (!inputs[i]) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history receiving array is absent");
+        void *copy=source_semantic_alloc(ctx,counts[i],sizeof(uint32_t));
+        if (!copy) return false;
+        switch (i) {
+        case 0:owned->modules=copy;break;
+        case 1:owned->functions=copy;break;
+        case 2:owned->slots=copy;break;
+        default:owned->types=copy;break;
+        }
+        if (!source_copy_bytes(ctx,NULL,copy,inputs[i],(size_t)counts[i]*sizeof(uint32_t))) return false;
+    }
+    return true;
 }
 static SourceName *source_semantic_binding(SourceContext *ctx,const SourceSemanticEnvironment *environment,
     const SourceName *source) {
@@ -118,6 +149,7 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
         }
         environment->latest[environment->latest_count++]=owned;
     }
+    if (!source_semantic_history(ctx,environment)) goto failed;
     /* The input owner transfers the complete syntax graph only after this
      * final semantic construction and query publication have succeeded. */
     *output=environment;return true;

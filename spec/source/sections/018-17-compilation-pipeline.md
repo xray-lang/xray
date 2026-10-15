@@ -800,6 +800,10 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用Checked schema29、语义75和Program ABI31，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
 
+运行时接收须先把准备中的Source记录绑定到真实封装Program：普通编译器重新推导准确特化/Lowered证明，并核对已验证Program保存的证明摘要及目标。记录拥有接收时产生的模块、函数、slot和类型映射；Checked函数编号不直接作为特化后函数编号。随后同一Source拥有者保留首个实际运行域，只接受该域的后继Instance事务。Program相同不授权另一个运行域。
+
+接收事务在运行域预算内拥有模块与slot路由，直接指向实际出生代；多代路由展平。仅实际出生模块已完成初始化时，接收代才继承其就绪状态并跳过旧initializer；不复制旧值或制造空initializer。读取须继续通过当前静态模块权限、实际出生槽发布状态和普通值准入，收到的槽不能再次发布。I64及String等不依赖构造类型池的值可使用该路径。Cell、Class、闭包及其他构造值的跨类型池对应仍须实现，普通准入继续拒绝不兼容身份；完整G2/G3、成对REPL协调和全部资源/安全门尚未完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1710,5 +1714,9 @@ A persistent Source owner supplies a candidate with only that owner's published,
 Lexical scope is separate from module birth identity. A zero `lexical_scope` owns an independent scope; a nonzero value is one plus its canonical module ordinal. References must remain in bounds and cannot refer to themselves or another reference. Current and accurately received historical session roots share a lexical scope; ordinary imports remain separate. This relation replaces only module-private visibility across inputs. It grants no missing dependency, private-member, initializer-call or runtime-storage permission. Functions, nominal types, slots and initialization keep their exact owning modules.
 
 Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
+
+Runtime receiving first binds a prepared Source record to an actual sealed Program. The ordinary compiler derives its exact specialized/Lowered proof again and compares the verified Program's retained proof digest and target. The record owns the actual receiving module, function, slot and type maps; Checked function ordinals are not assumed to be specialized function ordinals. The Source owner then retains its first actual runtime Domain and accepts subsequent Instance transactions only in that Domain. Sharing a Program does not authorize another Domain.
+
+The receiving transaction owns budgeted module and slot routes to actual birth generations and flattens routes across generations. It inherits readiness only from an actually initialized birth module and skips that completed initializer; it neither copies old values nor substitutes empty initializers. Reads still require current static module permission, actual birth-slot publication and ordinary value admission. Received slots cannot be published again. Values such as I64 and String that do not depend on a constructed-type arena can use this path. Cross-arena correspondence for Cell, Class, closures and other constructed values remains unfinished; ordinary admission continues to reject incompatible identities. Complete G2/G3, paired REPL coordination and all resource and safety gates remain required.
 
 <!-- /xr-spec:en -->
