@@ -24,7 +24,9 @@ add_executable(test_xir_mixed_task_pending_resources xir/test_xir_mixed_task_pen
 target_link_libraries(test_xir_mixed_task_pending_resources PRIVATE xray_xir_vm xray_xir_scalar)
 add_executable(test_xir_mixed_task_cancel_prefix xir/test_xir_mixed_task_cancel_prefix.c "${XIR_MIXED_TASK_RESULT_C}")
 target_link_libraries(test_xir_mixed_task_cancel_prefix PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(task_result_target IN ITEMS test_xir_mixed_task_result_producer test_xir_mixed_task_result_lifetime test_xir_mixed_task_result_resources test_xir_mixed_task_source_compiler test_xir_mixed_task_result_pending test_xir_mixed_task_pending_resources test_xir_mixed_task_cancel_prefix)
+add_executable(test_xir_mixed_task_prefix_resources xir/test_xir_mixed_task_prefix_resources.c "${XIR_MIXED_TASK_RESULT_C}")
+target_link_libraries(test_xir_mixed_task_prefix_resources PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(task_result_target IN ITEMS test_xir_mixed_task_result_producer test_xir_mixed_task_result_lifetime test_xir_mixed_task_result_resources test_xir_mixed_task_source_compiler test_xir_mixed_task_result_pending test_xir_mixed_task_pending_resources test_xir_mixed_task_cancel_prefix test_xir_mixed_task_prefix_resources)
     set_target_properties(${task_result_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${task_result_target} PRIVATE /W4 /WX /utf-8)
@@ -53,6 +55,25 @@ foreach(task_compiler_backend IN ITEMS 0 1 vm native)
     endforeach()
 endforeach()
 foreach(task_result_backend IN ITEMS 0 1 vm native)
+    set(task_prefix_cancel_sites 35 35 44 44 48 48 48 48 48 48 49 49 49 51 53 53 53 53 53 53 53 53 53)
+    set(task_prefix_stop_sites 35 35 38 38 38 40 42 44 44 48 49 49 49 51 53 53 53 53 53 53 53 53 53)
+    foreach(task_prefix_mode RANGE 1 3)
+        add_test(NAME test_xir_mixed_task_prefix_resources_${task_result_backend}_${task_prefix_mode}_axes
+            COMMAND test_xir_mixed_task_prefix_resources ${task_result_backend} ${task_prefix_mode})
+        set_tests_properties(test_xir_mixed_task_prefix_resources_${task_result_backend}_${task_prefix_mode}_axes PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;ownership;generated-c;lifecycle;compound;cancel;prefix;resource")
+        foreach(task_prefix RANGE 0 22)
+            if(task_prefix_mode EQUAL 1)
+                list(GET task_prefix_cancel_sites ${task_prefix} task_prefix_sites)
+            else()
+                list(GET task_prefix_stop_sites ${task_prefix} task_prefix_sites)
+            endif()
+            add_test(NAME test_xir_mixed_task_prefix_resources_${task_result_backend}_${task_prefix_mode}_${task_prefix}_fi
+                COMMAND test_xir_mixed_task_prefix_resources ${task_result_backend} fi ${task_prefix_mode} ${task_prefix} ${task_prefix_sites})
+            set_tests_properties(test_xir_mixed_task_prefix_resources_${task_result_backend}_${task_prefix_mode}_${task_prefix}_fi PROPERTIES
+                TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;ownership;generated-c;lifecycle;compound;cancel;prefix;resource;fault-injection")
+        endforeach()
+    endforeach()
     add_test(NAME test_xir_mixed_task_cancel_prefix_${task_result_backend}
         COMMAND test_xir_mixed_task_cancel_prefix ${task_result_backend})
     set_tests_properties(test_xir_mixed_task_cancel_prefix_${task_result_backend} PROPERTIES
