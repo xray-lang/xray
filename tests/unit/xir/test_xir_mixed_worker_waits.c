@@ -23,6 +23,10 @@ static void worker_wait_bytes(const XrXirValue *value) {
     CHECK(value->type == XR_XIR_STRING && xr_xir_string_view(value, &text, &length));
     CHECK(length == 8 && !memcmp(text, "A\0B!tail", 8));
 }
+static void worker_wait_expect_pending(const XrXirValue *task) {
+    XrXirCallResult unavailable = {0};
+    CHECK(xr_xir_task_copy_outcome(task, &unavailable) == XR_XIR_CALL_BAD_STATE && xr_xir_call_result_empty(&unavailable));
+}
 static void worker_wait_observe(XrXirCallView *view, const XrXirAction *action) {
     if (view->instance == worker_wait_instance && action->kind == XR_XIR_ACTION_SUSPEND) ++worker_wait_yields;
     if (view->instance != worker_wait_instance || !worker_wait_task || worker_wait_task->type || action->kind != XR_XIR_ACTION_AWAIT_TASK) return;
@@ -41,8 +45,7 @@ static WorkerWaitToken worker_wait_capture(XrXirInstance *instance, const Worker
     while (event.outcome.status == XR_XIR_CALL_READY);
     worker_wait_instance = NULL; worker_wait_task = NULL;
     CHECK(event.outcome.status == XR_XIR_CALL_SUSPENDED && event.epoch && event.outcome.wake && task->type);
-    XrXirCallResult unavailable = {0};
-    CHECK(xr_xir_task_copy_outcome(task, &unavailable) == XR_XIR_CALL_BAD_STATE && xr_xir_call_result_empty(&unavailable));
+    worker_wait_expect_pending(task);
     WorkerWaitToken token = {event.epoch, event.outcome.wake, {0}};
     CHECK(xr_xir_instance_wait_request(instance, token.epoch, token.wake, &token.request) == XR_XIR_CALL_READY);
     bool timer = !strcmp(oracle->name, "timer");
@@ -144,8 +147,7 @@ static void worker_yield_mode(XrXirProgram *program, const WorkerControlCase *or
     while (!task->type) {
         CHECK(xr_xir_instance_poll_bounded(instance, 1).outcome.status == XR_XIR_CALL_READY && ++polls < 32768);
     }
-    XrXirCallResult unavailable = {0};
-    CHECK(xr_xir_task_copy_outcome(task, &unavailable) == XR_XIR_CALL_BAD_STATE && xr_xir_call_result_empty(&unavailable));
+    worker_wait_expect_pending(task);
     worker_wait_reject(instance, instance->epoch, 1);
     if (mode == 1) CHECK(xr_xir_instance_cancel_current(instance) == XR_XIR_CALL_CANCEL_REQUESTED);
     if (mode == 2) CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
@@ -191,4 +193,6 @@ static int worker_wait_main(int argc, char **argv) {
         "actual child yield automatically resumes inside executor, no host wake advertised, pending Task owned and no issued external signal");
     return 0;
 }
+#ifndef XR_WORKER_WAIT_RESOURCE_MAIN
 int main(int argc, char **argv) { return worker_wait_main(argc, argv); }
+#endif

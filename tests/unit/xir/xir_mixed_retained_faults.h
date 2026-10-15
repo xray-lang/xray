@@ -14,6 +14,7 @@ typedef struct RetainedFaultOracle {
     XrXirValue **observed_task;
     void (*expect_pending)(const XrXirValue *task);
     void (*check_value)(const XrXirValue *value);
+    void (*external_wait)(XrXirInstance *instance, const XrXirInstanceResult *event, bool resume);
 } RetainedFaultOracle;
 typedef struct RetainedFaultRun {
     const RetainedFaultOracle *oracle;
@@ -28,9 +29,14 @@ typedef struct RetainedFaultRun {
 static XrXirCallStatus retained_fault_poll(RetainedFaultRun *run, bool capture) {
     unsigned polls = 0; XrXirCallStatus status;
     do {
-        status = xr_xir_instance_poll_bounded(run->instance, 1).outcome.status;
+        XrXirInstanceResult event = xr_xir_instance_poll_bounded(run->instance, 1);
+        status = event.outcome.status;
+        if (status == XR_XIR_CALL_SUSPENDED && run->oracle->external_wait) {
+            run->oracle->external_wait(run->instance, &event, !capture);
+            if (!capture) status = XR_XIR_CALL_READY;
+        }
         CHECK(++polls < 32768);
-    } while (status == XR_XIR_CALL_READY && (!capture || !run->tasks[run->round].type));
+    } while (status == XR_XIR_CALL_READY && (!capture || !run->tasks[run->round].type || run->oracle->external_wait));
     return status;
 }
 static void retained_fault_result(RetainedFaultRun *run, XrXirCallStatus expected) {
@@ -49,7 +55,7 @@ static void retained_fault_round(RetainedFaultRun *run) {
     status = retained_fault_poll(run, true);
     *run->oracle->observed_instance = NULL; *run->oracle->observed_task = NULL;
     if (status == run->fault) { run->complete = false; run->driven = true; return; }
-    CHECK(status == XR_XIR_CALL_READY && run->tasks[run->round].type);
+    CHECK(status == (run->oracle->external_wait ? XR_XIR_CALL_SUSPENDED : XR_XIR_CALL_READY) && run->tasks[run->round].type);
     run->oracle->expect_pending(&run->tasks[run->round]);
     unsigned mode = run->round ? run->mode : 0;
     if (mode == 1) CHECK(xr_xir_instance_cancel_current(run->instance) == XR_XIR_CALL_CANCEL_REQUESTED);
