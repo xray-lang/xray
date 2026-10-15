@@ -97,4 +97,6 @@ static int counter_producer_main(int argc, char **argv) {
     xr_xir_compile_c_source_free(&source); xr_xir_compile_artifact_free(lowered);
     effects_source_owners_free(); return 0;
 }
+#ifndef XR_LIBRARY_COUNTER_PRODUCER_CUSTOM_MAIN
 int main(int argc, char **argv) { return counter_producer_main(argc, argv); }
+#endif
