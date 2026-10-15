@@ -120,7 +120,14 @@ static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,co
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     source_fixture_compile_phase="Source check";
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
-    if(status!=XR_XIR_OK)fprintf(stderr,"source %u:%d:%d: %s (%u)\n",diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message,(unsigned)status);
+    if(status!=XR_XIR_OK){
+        XrCompileResourceStats stats={0};
+        CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"source %s %u:%d:%d: %s (%u); allocated=%llu peak=%llu live=%llu work=%llu\n",
+            request.entry_path,diagnostic.module,diagnostic.line,diagnostic.column,diagnostic.message,(unsigned)status,
+            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,
+            (unsigned long long)stats.live_bytes,(unsigned long long)stats.work);
+    }
     CHECK(status==XR_XIR_OK && result.checked && result.snapshot);
     XrXirArtifact *checked=result.checked;result.checked=NULL;
     xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);

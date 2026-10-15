@@ -9,6 +9,7 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,7 +114,9 @@ static void source_array_reordering(const char *checked_output) {
         CHECK(decl->signature && decl->range.module < view->module_count && decl->range.line > 0); ++members;
         if (!strcmp(decl->name, "reverse")) {
             CHECK(decl->native_identity == 18 && decl->mutable && decl->exported && !decl->parameter_count);
-            CHECK(!strcmp(decl->signature, "() -> Array<T>") && !decl->type.known); ++reverse;
+            CHECK(!strcmp(decl->signature, "() -> Array<T>") && decl->type.known);
+            CHECK(decl->type.generic_owner == decl->parent);
+            CHECK(xr_xir_array_element(view->types, decl->type.type) == XR_XIR_TYPE_PARAMETER_BASE); ++reverse;
         } else if (!strcmp(decl->name, "unshift")) {
             CHECK(decl->native_identity == 10 && decl->mutable && decl->exported && decl->parameter_count == 1);
             CHECK(!strcmp(decl->signature, "(value: T)") && decl->type.known && decl->type.type == XR_XIR_UNIT);

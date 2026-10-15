@@ -200,7 +200,19 @@ static void source_array_runtime_failures(XrXirProgram *program, uint32_t entry,
             CHECK(runtime_attempts > runtime_fail_at && status == expected);
         }
         runtime_fail_at = SIZE_MAX;
-        if (instance) CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+        if (instance) {
+            /* A driven allocation failure remains the executor's completion
+             * outcome after all prepaid cleanup has released its ownership. */
+            XrXirCallStatus expected_release = !strcmp(phase, "poll") && status == XR_XIR_CALL_OOM ?
+                XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+            size_t before_release = runtime_attempts;
+            XrXirCallStatus released = xr_xir_instance_free(instance);
+            if (released != expected_release) fprintf(stderr,
+                "Array runtime cleanup site=%zu/%zu attempts=%zu phase=%s status=%u free=%u live=%zu/%zu bytes=%zu/%zu\n",
+                site, sites, runtime_attempts, phase, (unsigned) status, (unsigned) released,
+                runtime_live, baseline_live, runtime_bytes, baseline_bytes);
+            CHECK(released == expected_release && runtime_attempts == before_release);
+        }
         CHECK(runtime_live == baseline_live && runtime_bytes == baseline_bytes);
     }
     printf("Source Array runtime: %zu allocation failure sites leave no live instance ownership\n", sites);
