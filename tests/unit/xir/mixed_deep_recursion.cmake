@@ -12,9 +12,13 @@ add_executable(test_xir_mixed_deep_resources xir/test_xir_mixed_deep_resources.c
 target_link_libraries(test_xir_mixed_deep_resources PRIVATE xray_xir_vm xray_xir_scalar)
 add_executable(test_xir_mixed_deep_compiler xir/test_xir_mixed_deep_compiler.c "${deep_source}")
 target_link_libraries(test_xir_mixed_deep_compiler PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm xray_xir_scalar)
-target_compile_definitions(test_xir_mixed_deep_compiler PRIVATE
-    XR_DEEP_FIXTURES="${CMAKE_SOURCE_DIR}/tests/unit/xir/fixtures/p20_worker_deep" XR_DEEP_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
-foreach(deep_target IN ITEMS test_xir_mixed_deep_producer test_xir_mixed_deep_recursion test_xir_mixed_deep_resources test_xir_mixed_deep_compiler)
+add_executable(test_xir_mixed_deep_source_lifetime xir/test_xir_mixed_deep_source_lifetime.c "${deep_source}")
+target_link_libraries(test_xir_mixed_deep_source_lifetime PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm xray_xir_scalar)
+foreach(deep_source_target IN ITEMS test_xir_mixed_deep_compiler test_xir_mixed_deep_source_lifetime)
+    target_compile_definitions(${deep_source_target} PRIVATE
+        XR_DEEP_FIXTURES="${CMAKE_SOURCE_DIR}/tests/unit/xir/fixtures/p20_worker_deep" XR_DEEP_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
+endforeach()
+foreach(deep_target IN ITEMS test_xir_mixed_deep_producer test_xir_mixed_deep_recursion test_xir_mixed_deep_resources test_xir_mixed_deep_compiler test_xir_mixed_deep_source_lifetime)
     set_target_properties(${deep_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${deep_target} PRIVATE /W4 /WX /utf-8)
@@ -44,6 +48,9 @@ endforeach()
 # The frozen normal census bounds every shard; the executable rejects count drift.
 set(deep_resource_site_counts 22 312 312 312 312 29)
 foreach(deep_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_deep_source_lifetime_${deep_backend} COMMAND test_xir_mixed_deep_source_lifetime ${deep_backend})
+    set_tests_properties(test_xir_mixed_deep_source_lifetime_${deep_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;execution;ownership;root;worker;generated-c;lifecycle;recursion;stack;source;compiler")
     add_test(NAME test_xir_mixed_deep_${deep_backend} COMMAND test_xir_mixed_deep_recursion ${deep_backend})
     set_tests_properties(test_xir_mixed_deep_${deep_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
         LABELS "unit;xir;mixed;execution;ownership;root;worker;generated-c;lifecycle;recursion;stack")
