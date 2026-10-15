@@ -45,7 +45,7 @@ static void source_generic_effects(const XrXirModule *module, const XrXirEffects
         bool parameter=fn->name_length>=10 && !memcmp(fn->name,"throwParam",10);
         if (!use && !missing && !parameter) continue;
         ++found;
-        CHECK(xr_xir_effects_function(effects,f)->throws==XR_XIR_EFFECT_MAY);
+        CHECK(xr_xir_effects_read(effects,f).control.throws==XR_XIR_EFFECT_MAY);
         CHECK(!xr_xir_effects_error_unknown(effects,f));
         CHECK(!xr_xir_effects_error_unidentified(effects,f));
         if (parameter) CHECK(xr_xir_effects_error(effects,f,(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,
@@ -66,7 +66,7 @@ static void source_generic_effects(const XrXirModule *module, const XrXirEffects
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *fn=&module->functions[f];
         if (fn->name_length==19 && !memcmp(fn->name,"closureHandledCycle",19))
-            CHECK(xr_xir_effects_function(effects,f)->throws==XR_XIR_EFFECT_NONE);
+            CHECK(xr_xir_effects_read(effects,f).control.throws==XR_XIR_EFFECT_NONE);
     }
 
     const char *names[]={"closureCaught","closureDeepCaught","closureWrong","closureUnion","closureCallbackCaught"};
@@ -76,7 +76,7 @@ static void source_generic_effects(const XrXirModule *module, const XrXirEffects
             const XrXirFunction *fn=&module->functions[f];
             if (fn->name_length!=strlen(names[n]) || memcmp(fn->name,names[n],fn->name_length)) continue;
             seen=true;
-            CHECK(xr_xir_effects_function(effects,f)->throws==(n==2 ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
+            CHECK(xr_xir_effects_read(effects,f).control.throws==(n==2 ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
             CHECK(!xr_xir_effects_error_unknown(effects,f) && !xr_xir_effects_error_unidentified(effects,f));
         }
         CHECK(seen);
@@ -136,7 +136,8 @@ static void source_effects(const XrXirArtifact *artifact) {
             size_t length = strlen(expected[e].name);
             if (function->name_length < length || memcmp(function->name, expected[e].name, length) ||
                 (function->name_length != length && function->name[length] != '$')) continue;
-            const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
+            XrXirEffectFacts fact_read=xr_xir_effects_read(effects, f);
+            const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);
             CHECK(fact);
             if (fact->suspend != expected[e].suspend || fact->throws != expected[e].throws)
                 fprintf(stderr, "effect %s: suspend=%u throws=%u\n", expected[e].name, fact->suspend, fact->throws);

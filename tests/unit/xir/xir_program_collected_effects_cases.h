@@ -63,8 +63,12 @@ static void program_collected_effects_cases(void) {
     XrXirEffects *independent=NULL;
     CHECK(xr_xir_compile_effects_infer_verified(&context,module,&independent)==XR_XIR_OK);
     for (uint32_t f=0;f<8;++f) {
-        const XrXirFunctionEffects *a=xr_xir_effects_function(actual.effects,f),*b=xr_xir_effects_function(independent,f);
-        const XrXirRootEffects *x=xr_xir_effects_root(actual.effects,f),*y=xr_xir_effects_root(independent,f);
+        XrXirEffectFacts a_read=xr_xir_effects_read(actual.effects,f);
+        const XrXirFunctionEffects *a=(a_read.status==XR_XIR_OK?&a_read.control:NULL);XrXirEffectFacts b_read=xr_xir_effects_read(independent,f);
+        const XrXirFunctionEffects *b=(b_read.status==XR_XIR_OK?&b_read.control:NULL);
+        XrXirEffectFacts x_read=xr_xir_effects_read(actual.effects,f);
+        const XrXirRootEffects *x=(x_read.status==XR_XIR_OK?&x_read.root:NULL);XrXirEffectFacts y_read=xr_xir_effects_read(independent,f);
+        const XrXirRootEffects *y=(y_read.status==XR_XIR_OK?&y_read.root:NULL);
         CHECK(a && b && a->throws==b->throws && a->suspend==b->suspend);
         CHECK(x && y && x->requires_root==y->requires_root && x->unresolved==y->unresolved);
     }
@@ -72,9 +76,10 @@ static void program_collected_effects_cases(void) {
     xr_xir_compile_artifact_free(source);source=NULL;
     xr_xir_compile_artifact_free(actual.artifact);actual.artifact=NULL;
     CHECK(xir_effects_context_matches(&context,actual.effects,8));
-    const XrXirRootEffects *root=xr_xir_effects_root(actual.effects,3);
+    XrXirEffectFacts root_read=xr_xir_effects_read(actual.effects,3);
+    const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
     CHECK(root && root->requires_root && !root->unresolved);
-    CHECK(xr_xir_effects_root(actual.effects,6)->requires_root);
+    CHECK(xr_xir_effects_read(actual.effects,6).root.requires_root);
     for (uint32_t f=0;f<8;++f) {
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(&context,actual.effects,f,&entry)==XR_XIR_OK && !entry.parameter_count);
