@@ -111,6 +111,11 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
     if (xr_xir_type_span(flow->body.domain.types,value->type)) {
         sources->mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;return XR_XIR_OK;
     }
+    /* Await returns a retained identity but does not prove its complete
+     * publication history. Keep unknown authority on the common graph. */
+    if (op->op==XR_XIR_TASK_AWAIT) {
+        sources->mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;return XR_XIR_OK;
+    }
     if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) {
         sources->mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;return XR_XIR_OK;
     }
