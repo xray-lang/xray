@@ -628,7 +628,11 @@ Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullab
 
 运行时接收须先把准备中的Source记录绑定到真实封装Program：普通编译器重新推导准确特化/Lowered证明，并核对已验证Program保存的证明摘要及目标。记录拥有接收时产生的模块、函数、slot和类型映射；Checked函数编号不直接作为特化后函数编号。随后同一Source拥有者保留首个实际运行域，只接受该域的后继Instance事务。Program相同不授权另一个运行域。
 
-接收事务在运行域预算内拥有模块与slot路由，直接指向实际出生代；多代路由展平。仅实际出生模块已完成初始化时，接收代才继承其就绪状态并跳过旧initializer；不复制旧值或制造空initializer。读取须继续通过当前静态模块权限、实际出生槽发布状态和普通值准入，收到的槽不能再次发布。I64及String等不依赖构造类型池的值可使用该路径。Cell、Class、闭包及其他构造值的跨类型池对应仍须实现，普通准入继续拒绝不兼容身份；完整G2/G3、成对REPL协调和全部资源/安全门尚未完成。
+接收事务在运行域预算内拥有模块与slot路由，直接指向实际出生代；多代路由展平。仅实际出生模块已完成初始化时，接收代才继承其就绪状态并跳过旧initializer；不复制旧值或制造空initializer。读取须继续通过当前静态模块权限、实际出生槽发布状态和普通值准入，收到的槽不能再次发布。
+
+实际Source接收映射与已封装Program证明共同确定准确存储类型根；只有这些根及其组成类型可接收已有类型身份。类型图检查核对这种真实对应，不以同名、相同外形或相同编号建立身份。接收类型池保留出生类型池，形成无环拥有链；共享或已使用的目标不能修改，失败不发布半成品。值及紧凑存储恢复保留对象的实际出生类型和类型池，不把旧句柄改标为当前类型。身份对应不授予Domain、模块发布、borrow、构造或调用权限。
+
+Cell读取与写入使用实际出生存储；跨池写入的身份查找在原工作量账本内有界计费，实际存储操作仍检查原Domain和借用权限。普通旧Cell副作用在后继候选失败后保留；只撤销候选的新绑定和拥有存储。I64/String与Cell<i64>历史、嵌套Cell/Array身份和写回已验证；真实Source的旧Cell读写也覆盖VM、native及两个混合方向。Class/Array全部操作、闭包/调用绑定、其他历史类型根与完整G2/G3、P14协调及全部资源/安全门仍未完成。
 
 <!-- /xr-spec:cn -->
 
@@ -1369,6 +1373,10 @@ Owned declarations, Checked packets, specialization provenance matching, effect 
 
 Runtime receiving first binds a prepared Source record to an actual sealed Program. The ordinary compiler derives its exact specialized/Lowered proof again and compares the verified Program's retained proof digest and target. The record owns the actual receiving module, function, slot and type maps; Checked function ordinals are not assumed to be specialized function ordinals. The Source owner then retains its first actual runtime Domain and accepts subsequent Instance transactions only in that Domain. Sharing a Program does not authorize another Domain.
 
-The receiving transaction owns budgeted module and slot routes to actual birth generations and flattens routes across generations. It inherits readiness only from an actually initialized birth module and skips that completed initializer; it neither copies old values nor substitutes empty initializers. Reads still require current static module permission, actual birth-slot publication and ordinary value admission. Received slots cannot be published again. Values such as I64 and String that do not depend on a constructed-type arena can use this path. Cross-arena correspondence for Cell, Class, closures and other constructed values remains unfinished; ordinary admission continues to reject incompatible identities. Complete G2/G3, paired REPL coordination and all resource and safety gates remain required.
+The receiving transaction owns budgeted module and slot routes to actual birth generations and flattens routes across generations. It inherits readiness only from an actually initialized birth module and skips that completed initializer; it neither copies old values nor substitutes empty initializers. Reads still require current static module permission, actual birth-slot publication and ordinary value admission. Received slots cannot be published again.
+
+The actual Source receiving map and sealed Program proofs establish exact stored-type roots. Only those roots and their component types receive existing type identities. Type-graph checks validate this real correspondence; equal names, shapes or numeric identifiers never establish identity. A receiving type arena retains its birth arena in an acyclic ownership chain. Shared or already used targets cannot be changed, and failure publishes no partial binding. Values and compact-storage recovery retain the object's actual birth type and arena rather than relabeling old handles. Type identity grants no Domain, module-publication, borrow, construction or call permission.
+
+Cell reads and writes use actual birth storage. Cross-arena write lookup charges a bounded walk on the original work ledger; the storage operation still checks its actual Domain and loan authority. Ordinary old-Cell side effects survive a later candidate failure; only new candidate bindings and owned storage are revoked. I64/String and Cell<i64> history, nested Cell/Array identities and writeback have been verified. Real Source Cell reads and writes cover VM, native and both mixed directions. Complete Class/Array operations, closure/call binding, other historical type roots, full G2/G3, P14 coordination and all resource and safety gates remain unfinished.
 
 <!-- /xr-spec:en -->
