@@ -34,6 +34,22 @@ typedef struct XrXirSourceGenerationBinding {
     uint64_t generation;
     const XrXirSourceDeclaration *declaration;
 } XrXirSourceGenerationBinding;
+typedef enum XrXirSourceDefinitionKind {
+    XR_XIR_SOURCE_DEFINITION_BINDING, XR_XIR_SOURCE_DEFINITION_UNIT,
+    XR_XIR_SOURCE_DEFINITION_FUNCTION, XR_XIR_SOURCE_DEFINITION_NOMINAL,
+    XR_XIR_SOURCE_DEFINITION_INTERFACE, XR_XIR_SOURCE_DEFINITION_MODULE,
+    XR_XIR_SOURCE_DEFINITION_IMPORT
+} XrXirSourceDefinitionKind;
+typedef struct XrXirSourceGenerationDefinition {
+    uint64_t generation;
+    XrXirSourceDefinitionKind kind;
+    uint32_t module, ordinal, dependency;
+    XrXirType stored_type;
+    bool mutable;
+    const char *name, *imported;
+    const struct AstNode *syntax, *dependency_syntax;
+    const XrXirArtifact *checked;
+} XrXirSourceGenerationDefinition;
 /* Copies configuration strings and pins the supplied cumulative ledger.
  * Catalog and lockfile are borrowed and must outlive preparation calls.
  * All operations require caller exclusion; namespace distinguishes sessions. */
@@ -61,4 +77,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_view(const XrXirSourceGener
     uint64_t serial, XrXirSourceGenerationView *output);
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_lookup(const XrXirSourceGenerations *owner,
     const char *name, XrXirSourceGenerationBinding *output);
+/* Observes actual semantic registration in one exact prepared/published record.
+ * Ordinals and stored types belong only to the returned Checked owner; they
+ * are not Lowered/Program ordinals or a runtime storage correspondence. Syntax
+ * borrows the record's complete AST closure. Failure preserves the output.
+ * This observation does not yet receive history into subsequent checking. */
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourceGenerations *owner,
+    uint64_t serial, const char *name, XrXirSourceGenerationDefinition *output);
 #endif // XXIR_SOURCE_GENERATION_H

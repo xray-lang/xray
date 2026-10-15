@@ -48,7 +48,7 @@ static XrXirStatus generation_string(const XrXirCompileContext *context,
 }
 static void generation_record_free(SourceGenerationRecord *record) {
     if (!record) return;
-    xr_program_destroy(record->capture.ast);
+    source_semantic_free(record->capture.semantic);
     xr_xir_compile_source_result_free(&record->result);
     xr_compile_resources_free(record->bindings);
     xr_compile_resources_free(record->namespace_id);
@@ -234,4 +234,61 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_lookup(const XrXirSourceGen
         if (compare.diagnostic.status!=XR_XIR_OK) return compare.diagnostic.status;
     }
     return XR_XIR_BAD_STRUCTURE;
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourceGenerations *owner,
+    uint64_t serial,const char *name,XrXirSourceGenerationDefinition *output) {
+    if (!owner || !serial || !name || !output) return XR_XIR_BAD_STRUCTURE;
+    const SourceGenerationRecord *record=owner->pending;
+    if (!record || record->view.serial!=serial) {
+        record=owner->published;
+        while (record && record->view.serial!=serial) {
+            if (!xir_compile_work(&owner->config.context,1)) return XR_XIR_BUDGET;
+            record=record->previous;
+        }
+    }
+    if (!record) return XR_XIR_BAD_STAGE;
+    const SourceSemanticEnvironment *environment=record->capture.semantic;
+    uint32_t module=record->capture.module;
+    if (!environment || module>=environment->module_count) return XR_XIR_BAD_STRUCTURE;
+    SourceContext search={0};search.compile=owner->config.context;
+    const SourceName *symbol=find_name(&search,environment->names[module],name);
+    if (search.diagnostic.status!=XR_XIR_OK) return search.diagnostic.status;
+    if (!symbol) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *checked=xr_xir_compile_artifact_module(record->result.checked);
+    if (!checked || !checked->declarations || module>=checked->declarations->module_count)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirSourceGenerationDefinition definition={.generation=serial,.module=module,
+        .ordinal=symbol->index,.dependency=UINT32_MAX,.name=symbol->name,.syntax=symbol->node,
+        .checked=record->result.checked,.mutable=symbol->mutable};
+    switch (symbol->kind) {
+    case SOURCE_SLOT:
+        if (symbol->index>=checked->declarations->slot_count ||
+            checked->declarations->slots[symbol->index].module!=module ||
+            checked->declarations->slots[symbol->index].type!=symbol->type ||
+            checked->declarations->slots[symbol->index].mutable!=(uint32_t)symbol->mutable) return XR_XIR_BAD_STRUCTURE;
+        definition.kind=XR_XIR_SOURCE_DEFINITION_BINDING;definition.stored_type=symbol->type;break;
+    case SOURCE_UNIT_SLOT:
+        definition.kind=XR_XIR_SOURCE_DEFINITION_UNIT;definition.ordinal=UINT32_MAX;break;
+    case SOURCE_FUNCTION:
+        if (symbol->index>=checked->function_count || checked->declarations->functions[symbol->index].module!=module)
+            return XR_XIR_BAD_STRUCTURE;
+        definition.kind=XR_XIR_SOURCE_DEFINITION_FUNCTION;break;
+    case SOURCE_NOMINAL:
+        if (!checked->types || !checked->types->nominals || symbol->index>=checked->types->nominals->count)
+            return XR_XIR_BAD_STRUCTURE;
+        definition.kind=XR_XIR_SOURCE_DEFINITION_NOMINAL;break;
+    case SOURCE_INTERFACE:
+        if (!checked->types || !checked->types->interfaces || symbol->index>=checked->types->interfaces->count)
+            return XR_XIR_BAD_STRUCTURE;
+        definition.kind=XR_XIR_SOURCE_DEFINITION_INTERFACE;break;
+    case SOURCE_MODULE:case SOURCE_IMPORT:
+        if (symbol->module>=checked->declarations->module_count) return XR_XIR_BAD_STRUCTURE;
+        definition.kind=symbol->kind==SOURCE_MODULE ? XR_XIR_SOURCE_DEFINITION_MODULE : XR_XIR_SOURCE_DEFINITION_IMPORT;
+        definition.ordinal=UINT32_MAX;definition.dependency=symbol->module;definition.imported=symbol->imported;
+        if (symbol->module<(uint32_t)environment->graph->spec_count)
+            definition.dependency_syntax=environment->graph->specs[symbol->module].ast;
+        break;
+    default:return XR_XIR_BAD_STRUCTURE;
+    }
+    *output=definition;return XR_XIR_OK;
 }

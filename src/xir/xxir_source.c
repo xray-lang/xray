@@ -198,6 +198,7 @@ typedef struct SourceRootQuery {
     bool expression, cell;
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
+typedef struct SourceSemanticEnvironment SourceSemanticEnvironment;
 typedef struct SourceComptimeSite SourceComptimeSite;
 typedef struct SourceContext {
     XrModuleGraph *graph;
@@ -210,6 +211,7 @@ typedef struct SourceContext {
     SourceOwnedTextEntry *owned_texts;
     uint32_t owned_text_count, owned_text_capacity;
     XrXirConstruction *construction;
+    SourceSemanticEnvironment **semantic_output;
     SourceLibraryUnit *library_units;
     SourceRootQuery *root_queries;
     SourceRootFlow *root_flow;
@@ -267,6 +269,7 @@ typedef struct SourceContext {
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
+static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment **output);
 
 static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
     *declarations = (XrXirDeclarations){ctx->modules,ctx->module_count,ctx->identities,
@@ -2957,6 +2960,9 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         failure = "source dependency snapshot publication failed";
         status = source_dependencies_publish(ctx, output->snapshot);
     }
+    if (status==XR_XIR_OK && ctx->semantic_output && !source_semantic_capture(ctx,ctx->semantic_output)) {
+        xr_xir_compile_source_result_free(output);return;
+    }
     if (status != XR_XIR_OK) {
         xr_xir_compile_source_result_free(output); memset(&ctx->diagnostic, 0, sizeof(ctx->diagnostic));
         source_fail(ctx, NULL, status, failure);
@@ -2964,5 +2970,6 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 }
 #include "xxir_core_source.inc.c"
 #include "xxir_source_comptime_pipeline.inc.c"
+#include "xxir_source_semantic.inc.c"
 #include "xxir_source_input.inc.c"
 #include "xxir_source_generation.inc.c"
