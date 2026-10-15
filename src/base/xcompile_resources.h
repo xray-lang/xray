@@ -53,7 +53,8 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *re
  * dereferencing the candidate address or its prefix. Each live allocation
  * examined consumes one work unit; no allocation or payload access occurs.
  * Headers, foreign and freed storage do not qualify. Success is a current
- * extent observation, not a pin or semantic authority; the caller must exclude
+ * extent observation, not a pin, allocation generation or semantic authority;
+ * the caller must exclude
  * payload mutation, resize and free throughout the subsequent read. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
     const void *memory, size_t bytes);

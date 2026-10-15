@@ -42,7 +42,9 @@ XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *con
 XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects);
 /* These borrows are compare-only metadata of the same owned semantic input;
- * callers must compare every current field before publishing a Program. */
+ * current same-ledger payload bounds precede canonical metadata traversal.
+ * Bounds grant no effect proof. Callers must compare every current field
+ * before publishing a Program. */
 XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
     const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations);
 XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
