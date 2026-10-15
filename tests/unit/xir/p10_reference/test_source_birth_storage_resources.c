@@ -72,6 +72,8 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
         "const value=41\nfn old()->i64{return value+1}\nprint(17)\nexport fn seed()->i64{return old()}";
     if (storage_kind==2) source="var value:Array<i64> = [41]\nfn old()->i64{return value[0]+1}\nprint(17)\nexport fn seed()->i64{return old()}";
     if (storage_kind==3) source="const value:Array<i64> = [41]\nfn old()->i64{return value[0]+1}\nprint(17)\nexport fn seed()->i64{return old()}";
+    if (storage_kind==4) source="var cell:Box=Box(41)\nfn old()->i64{return cell.value+1}\nclass Box{value:i64 init(first:i64){this.value=first}}\nprint(17)\nexport fn seed()->i64{return old()}";
+    if (storage_kind==5) source="var cell:Box=Box(41)\nfn old()->i64{return cell.value[0]+1}\nclass Box{value:Array<i64> init(first:i64){this.value=[first]}}\nprint(17)\nexport fn seed()->i64{return old()}";
     uint64_t first=birth_source(owner,source,
         "seed",&first_program,&first_entry);
     XrXirInstanceConfig runtime;CHECK(xr_xir_instance_config_init(&runtime,sizeof(runtime))==XR_XIR_CALL_READY);
@@ -84,9 +86,11 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
     CHECK(birth_drive(instance,first_entry)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_generation_publish(instance,generation)==XR_XIR_CALL_READY);
     CHECK(xr_xir_compile_source_generation_publish(owner,first)==XR_XIR_OK);
-    uint64_t next=birth_source(owner,text_value ? "const value=99\nexport fn answer()->i64{return old()}" :
-        "const value=\"shadow\"\nexport fn answer()->i64{return old()}",
-        "answer",&next_program,&next_entry);
+    const char *next_source=text_value ? "const value=99\nexport fn answer()->i64{return old()}" :
+        "const value=\"shadow\"\nexport fn answer()->i64{return old()}";
+    if (storage_kind==4) next_source="const value=\"shadow\"\nexport fn answer()->i64{return cell.value+1}";
+    if (storage_kind==5) next_source="const value=\"shadow\"\nexport fn answer()->i64{return cell.value[0]+1}";
+    uint64_t next=birth_source(owner,next_source,"answer",&next_program,&next_entry);
     size_t before_blocks=runtime_live,before_bytes=runtime_bytes;
     runtime_attempts=0;runtime_fail_at=ordinal;generation=0;
     XrXirCallStatus status=xr_xir_source_generation_prepare_instance(owner,next,instance,&generation);
@@ -117,9 +121,9 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
 int main(int argc,char **argv) {
     bool baseline=argc==2;
     CHECK(argc==1 || (baseline && !strcmp(argv[1],"--baseline")));
-    for (unsigned mode=0;mode<10;++mode) {
+    for (unsigned mode=0;mode<14;++mode) {
         bool publish=(mode&1)!=0,text_value=mode<4 && (mode&2)!=0;
-        unsigned storage_kind=mode<4 ? 0 : mode<6 ? 1 : mode<8 ? 2 : 3;
+        unsigned storage_kind=mode<4 ? 0 : mode<6 ? 1 : mode<8 ? 2 : mode<10 ? 3 : mode<12 ? 4 : 5;
         bool cell_value=storage_kind==1 || storage_kind==2;
         BirthCost normal={0};CHECK(birth_trial(SIZE_MAX,publish,text_value,storage_kind,&normal));
         CHECK(normal.sites && normal.sites<20000);

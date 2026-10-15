@@ -139,7 +139,7 @@ static void failed_runtime(XrXirSourceGenerations *owner,XrXirInstance *instance
     xr_xir_compile_program_drop(candidate);
 }
 static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
-    const XrXirSourceGenerationView *view,bool has_value,bool mutable_value,bool array_value) {
+    const XrXirSourceGenerationView *view,bool has_value,bool mutable_value,unsigned value_kind) {
     const XrXirModule *module=xr_xir_compile_artifact_module(view->result->checked);
     XrXirSourceGenerationDefinition definition={0},sentinel;
     bool imported=view->ast->as.program.statements[0]->type==AST_IMPORT_STMT;
@@ -158,11 +158,13 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
     CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_NOMINAL && module->types && module->types->nominals &&
         definition.ordinal<module->types->nominals->count && definition.syntax==view->ast->as.program.statements[shift+2]);
     const XrXirNominalDeclaration *item=&module->types->nominals->declarations[definition.ordinal];
-    CHECK(item->field_count==1 && item->fields[0].type==XR_XIR_I64);
+    CHECK(item->field_count==1 && (value_kind==5 ? xr_xir_type_is_array(module->types,item->fields[0].type) &&
+        xr_xir_array_element(module->types,item->fields[0].type)==XR_XIR_I64 : item->fields[0].type==XR_XIR_I64));
     if (has_value) {
         CHECK(xr_xir_compile_source_generation_definition(owner,serial,"value",&definition)==XR_XIR_OK);
         XrXirType element=mutable_value ? xr_xir_cell_element(module->types,definition.stored_type) : definition.stored_type;
-        CHECK(array_value ? xr_xir_type_is_array(module->types,element) &&
+        CHECK(value_kind>=4 ? xr_xir_type_is_class(module->types,element) :
+            value_kind==2 || value_kind==3 ? xr_xir_type_is_array(module->types,element) &&
             xr_xir_array_element(module->types,element)==XR_XIR_I64 : element==XR_XIR_I64);
         CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_BINDING && definition.mutable==mutable_value &&
             definition.ordinal<module->declarations->slot_count &&
@@ -188,10 +190,12 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
 }
 static int history_check(const char *mode) {
     bool definition_cell=!strcmp(mode,"--definitions-cell");
+    bool class_array=!strcmp(mode,"--history-class-array");
+    bool class_value=class_array || !strcmp(mode,"--history-class");
     bool array_const=!strcmp(mode,"--history-array-const");
     bool array_value=array_const || !strcmp(mode,"--history-array");
-    bool mutating=(array_value && !array_const) || !strcmp(mode,"--history-cell-write");
-    unsigned storage_kind=array_const ? 3u : array_value ? 2u : mutating ? 1u : 0u;
+    bool mutating=class_value || (array_value && !array_const) || !strcmp(mode,"--history-cell-write");
+    unsigned storage_kind=class_array ? 5u : class_value ? 4u : array_const ? 3u : array_value ? 2u : mutating ? 1u : 0u;
     bool definitions=definition_cell || !strcmp(mode,"--definitions") || !strcmp(mode,"--definitions-comptime") || !strcmp(mode,"--definitions-import");
     bool folded=!strcmp(mode,"--definitions-comptime");
     bool imported=!strcmp(mode,"--definitions-import");
@@ -217,7 +221,7 @@ static int history_check(const char *mode) {
     uint64_t first=prepare(owner,source);
     XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK);
     const struct AstNode *original=view.ast;
-    definition_checks(owner,first,&view,folded || stateful,cell,array_value);
+    definition_checks(owner,first,&view,folded || stateful,cell,storage_kind);
     uint32_t entry=0;XrXirProgram *initial=program(&view,"seed",&entry);
     bind_program(&compiler,owner,first,initial);
     XrXirInstanceConfig runtime_config;CHECK(xr_xir_instance_config_init(&runtime_config,sizeof(runtime_config))==XR_XIR_CALL_READY);
@@ -240,7 +244,7 @@ static int history_check(const char *mode) {
     XrXirSourceGenerationBinding binding={0};
     CHECK(xr_xir_compile_source_generation_lookup(owner,"old",&binding)==XR_XIR_OK && binding.generation==first);
     CHECK(xr_xir_compile_source_generation_view(owner,first,&view)==XR_XIR_OK && view.published && view.ast==original);
-    definition_checks(owner,first,&view,folded || stateful,cell,array_value);
+    definition_checks(owner,first,&view,folded || stateful,cell,storage_kind);
     if (next && status==XR_XIR_OK) {
         CHECK(serial>first && xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK && view.parent==first);
         const XrXirDeclarations *declarations=xr_xir_compile_artifact_module(view.result->checked)->declarations;

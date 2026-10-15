@@ -22,7 +22,7 @@ static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group
     ++*calls;return XR_XIR_OUTPUT_OK;
 }
 static void produce_mode(const char *directory,FILE *header,unsigned kind) {
-    bool mutating=kind==1 || kind==2;
+    bool mutating=kind==1 || kind==2 || kind==4 || kind==5;
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,"history-check-test",NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;
@@ -42,7 +42,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
         const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(closed);
-        char prefix[80],path[4096];const char *mode=kind==3 ? "array_const" : kind==2 ? "array" : mutating ? "write" : "read";
+        char prefix[80],path[4096];const char *mode=kind==5 ? "class_array" : kind==4 ? "class" : kind==3 ? "array_const" : kind==2 ? "array" : mutating ? "write" : "read";
         int n=snprintf(prefix,sizeof(prefix),"source_history_%s_%u",mode,generation);CHECK(n>0 && (size_t)n<sizeof(prefix));
         n=snprintf(path,sizeof(path),"%s/%s.c",directory,prefix);CHECK(n>0 && (size_t)n<sizeof(path));
         XrXirCSource emitted={0};
@@ -87,13 +87,13 @@ int main(int argc,char **argv) {
     CHECK(argc==2);char path[4096];int n=snprintf(path,sizeof(path),"%s/source_history_native_generated.h",argv[1]);
     CHECK(n>0 && (size_t)n<sizeof(path));FILE *header=fopen(path,"wb");CHECK(header);
     CHECK(fputs("#ifndef SOURCE_HISTORY_NATIVE_GENERATED_H\n#define SOURCE_HISTORY_NATIVE_GENERATED_H\n#include \"xir/xxir_program.h\"\n",header)>=0);
-    for (unsigned mode=0;mode<4;++mode) produce_mode(argv[1],header,mode);
-    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[4][4]={\n",header)>=0);
-    for (unsigned mode=0;mode<4;++mode) {
+    for (unsigned mode=0;mode<6;++mode) produce_mode(argv[1],header,mode);
+    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[6][4]={\n",header)>=0);
+    for (unsigned mode=0;mode<6;++mode) {
         CHECK(fputs("{",header)>=0);
         for (unsigned generation=1;generation<=4;++generation)
-            CHECK(fprintf(header,"%s&source_history_%s_%u_program",generation==1 ? "" : ",",mode==3 ? "array_const" : mode==2 ? "array" : mode ? "write" : "read",generation)>0);
-        CHECK(fputs(mode==3 ? "}\n" : "},\n",header)>=0);
+            CHECK(fprintf(header,"%s&source_history_%s_%u_program",generation==1 ? "" : ",",mode==5 ? "class_array" : mode==4 ? "class" : mode==3 ? "array_const" : mode==2 ? "array" : mode ? "write" : "read",generation)>0);
+        CHECK(fputs(mode==5 ? "}\n" : "},\n",header)>=0);
     }
     CHECK(fputs("};\n#endif\n",header)>=0 && !fclose(header));
     return 0;
