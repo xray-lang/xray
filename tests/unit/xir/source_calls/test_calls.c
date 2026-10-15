@@ -70,6 +70,8 @@ static int run(int argc,char **argv) {
     CHECK(status==XR_XIR_OK&&owner);XrCompileResourceStats stats=sdk_stats(resources);
     memset(text,'?',length);memset(uri,'?',uri_length);sdk_fixture_free(text);sdk_fixture_free(uri);xr_compile_resources_release(resources);
     inspect(xlsp_source_bindings_view(owner,0),xlsp_source_bindings_syntax(owner,0),xlsp_source_bindings_calls(owner,0),mode);
+    const XrXirSourceTypeFacts *facts=xlsp_source_bindings_types(owner,0);CHECK(facts&&facts->declaration_count==xlsp_source_bindings_view(owner,0)->declaration_count);
+    if(mode==4||mode==5){unsigned found=0;for(uint32_t i=0;i<facts->declaration_count;++i)if(facts->declarations[i].kind==(mode==4?XR_XIR_SOURCE_TYPE_STRUCT:XR_XIR_SOURCE_TYPE_CLASS)){CHECK(facts->declarations[i].range_known);++found;}CHECK(found==1);}
     xlsp_source_bindings_free(owner);CHECK(!runtime_live&&!runtime_bytes);
     printf("Source calls resources allocated=%llu peak=%llu work=%llu physical=0/0\n",(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
     return 0;
