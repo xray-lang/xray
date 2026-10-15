@@ -164,6 +164,8 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *co
     const XrXirModule *source, const struct XrXirEffects *effects);
 XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
     const struct XrXirEffects *effects);
+/* Only a genuine unpublished Source constructor can refresh contexts.
+ * A completed Final rejects the call without work or output changes. */
 XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
     const XrXirModule *source, const struct XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *context,

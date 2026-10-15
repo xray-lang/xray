@@ -52,7 +52,7 @@ static XrXirStatus conditional_invocation_captured_prefix(const XrXirCompileCont
     if (status==XR_XIR_OK) status=xir_effects_execution_edge(effects,&request,&selected);
     if (status==XR_XIR_OK && oracle) {
         CHECK(producer.capture_count==1 && selected.owner==effects && selected.target==2 &&
-            selected.producer==producer.site && !effects->root[0].requires_root && !effects->root[0].unresolved);
+            selected.producer==producer.site && !effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved);
         XirEffectInvocationSelection masked=selected;
         request.captures=0;
         CHECK(xir_effects_execution_edge(effects,&request,&masked)==XR_XIR_BAD_STRUCTURE &&

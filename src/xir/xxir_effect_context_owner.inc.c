@@ -31,9 +31,9 @@ static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
     effect_parameters_free(&contexts->uses);
     xr_compile_resources_free(contexts->uses.outcomes_work.functions);
     xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
-    xr_compile_resources_free(contexts->uses.root);
-    xr_compile_resources_free(contexts->uses.root_witnesses);
-    xr_compile_resources_free(contexts->uses.unresolved_witnesses);
+    xr_compile_resources_free(contexts->uses.outcomes_work.root);
+    xr_compile_resources_free(contexts->uses.outcomes_work.root_witnesses);
+    xr_compile_resources_free(contexts->uses.outcomes_work.unresolved_witnesses);
     contexts->uses=(XrXirEffects){.resources=contexts->terms.remaining->resources,.count=contexts->count};
 }
 
@@ -424,7 +424,7 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
             fixed[v]=(uint8_t)(owner->ordinary->uses.contracts[dense->nodes[index].ordinary].parameters[v].kind!=
                 XR_XIR_EFFECT_PARAMETER_VARIABLE);
     }
-    if (dense->uses.root && index<dense->uses.count) {
+    if (dense->uses.outcomes_work.root && index<dense->uses.count) {
         EffectScalarFlow flow={&dense->terms,function,dense,declared,values,fixed,(uint32_t)count,false,source->declarations};
         XrXirStatus status=effect_scalar_flow(&flow);
         if (status!=XR_XIR_OK) return status;

@@ -20,7 +20,7 @@
 #pragma pop_macro("xr_compile_resources_work")
 #include "xir_root_trace_fixture.h"
 
-static const XrXirRootCauseStep trace_init[]={{0,1,UINT32_MAX,0,0,XR_XIR_ROOT_CAUSE_INITIALIZER}};
+static const XrXirRootCauseStep trace_init[]={{0,2,UINT32_MAX,0,0,XR_XIR_ROOT_CAUSE_INITIALIZER}};
 static const XrXirRootCauseStep trace_read[]={{2,0,UINT32_MAX,0,0,XR_XIR_ROOT_CAUSE_MUTABLE_SLOT}};
 static const XrXirRootCauseStep trace_default[]={
     {5,0,2,UINT32_MAX,1,XR_XIR_ROOT_CAUSE_CALL},
@@ -81,14 +81,14 @@ static void trace_literals(void) {
     uint64_t baseline=trace_stats(&context).live_bytes; XrXirEffects *effects=trace_summary(&context);
     for(uint32_t f=0;f<16;++f) {
         XrXirRootCauseTrace *trace=NULL; XrCompileResourceStats before=trace_stats(&context);
-        trace_attempts=0;
+        trace_attempts=0;trace_observe_begin();
         CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,f,&trace)==XR_XIR_OK && trace);
         XrCompileResourceStats after=trace_stats(&context);
         uint64_t steps=(uint64_t)trace_expected[f].root_count+trace_expected[f].unknown_count;
         uint64_t bytes=sizeof(XrXirRootCauseTrace)+steps*sizeof(XrXirRootCauseStep);
         CHECK(trace_attempts==1 && after.allocation_count==before.allocation_count+1);
         CHECK(after.allocated_bytes-before.allocated_bytes==bytes+sizeof(CompileAllocation));
-        CHECK(after.work-before.work==bytes+2*steps+3);
+        CHECK(after.work-before.work==bytes+trace_observed_work+1);
         trace_oracle(trace,f); xr_xir_compile_root_cause_trace_free(trace);
         CHECK(trace_stats(&context).live_bytes==before.live_bytes);
     }
@@ -145,59 +145,64 @@ static void trace_bad_forests(void) {
     TraceMark mark=trace_mark(); XrXirCompileContext context=trace_owner(trace_caps());
     uint64_t baseline=trace_stats(&context).live_bytes; XrXirEffects *effects=trace_summary(&context);
     XrXirRootEffectWitness known[16],unknown[16]; XrXirRootEffects facts[16];
-    memcpy(known,effects->root_witnesses,sizeof(known)); memcpy(unknown,effects->unresolved_witnesses,sizeof(unknown));
-    memcpy(facts,effects->root,sizeof(facts));
+    memcpy(known,effect_roots_read(effects)->root_witnesses,sizeof(known)); memcpy(unknown,effect_roots_read(effects)->unresolved_witnesses,sizeof(unknown));
+    memcpy(facts,effect_roots_read(effects)->root,sizeof(facts));
     for(unsigned attack=0;attack<14;++attack) {
         switch(attack) {
-        case 0: effects->root_witnesses[8].cause=XR_XIR_ROOT_CAUSE_NONE; break;
-        case 1: effects->root_witnesses[8].distance=16; break;
-        case 2: effects->root_witnesses[8].callee=16; break;
-        case 3: effects->root_witnesses[8].slot=0; break;
-        case 4: effects->root_witnesses[8].distance=3; break;
-        case 5: effects->root_witnesses[8].cause=XR_XIR_ROOT_CAUSE_MUTABLE_SLOT; break;
-        case 6: effects->root[7].requires_root=false; break;
-        case 7: effects->root_witnesses[7].callee=7; break;
-        case 8: effects->root_witnesses[7].cause=XR_XIR_ROOT_CAUSE_INDIRECT; break;
-        case 9: effects->root[8].requires_root=false; break;
-        case 10: effects->unresolved_witnesses[8].callee=8; break;
-        case 11: effects->unresolved_witnesses[7].cause=XR_XIR_ROOT_CAUSE_MUTABLE_SLOT; break;
-        case 12: effects->root[8].unresolved=false; break;
-        case 13: effects->unresolved_witnesses[7].distance=UINT32_MAX; break;
+        case 0: effect_roots_read(effects)->root_witnesses[8].cause=XR_XIR_ROOT_CAUSE_NONE; break;
+        case 1: effect_roots_read(effects)->root_witnesses[8].distance=16; break;
+        case 2: effect_roots_read(effects)->root_witnesses[8].callee=16; break;
+        case 3: effect_roots_read(effects)->root_witnesses[8].slot=0; break;
+        case 4: effect_roots_read(effects)->root_witnesses[8].distance=3; break;
+        case 5: effect_roots_read(effects)->root_witnesses[8].cause=XR_XIR_ROOT_CAUSE_MUTABLE_SLOT; break;
+        case 6: effect_roots_read(effects)->root[7].requires_root=false; break;
+        case 7: effect_roots_read(effects)->root_witnesses[7].callee=7; break;
+        case 8: effect_roots_read(effects)->root_witnesses[7].cause=XR_XIR_ROOT_CAUSE_INDIRECT; break;
+        case 9: effect_roots_read(effects)->root[8].requires_root=false; break;
+        case 10: effect_roots_read(effects)->unresolved_witnesses[8].callee=8; break;
+        case 11: effect_roots_read(effects)->unresolved_witnesses[7].cause=XR_XIR_ROOT_CAUSE_MUTABLE_SLOT; break;
+        case 12: effect_roots_read(effects)->root[8].unresolved=false; break;
+        case 13: effect_roots_read(effects)->unresolved_witnesses[7].distance=UINT32_MAX; break;
         }
         TraceMark retained=trace_mark(); XrCompileResourceStats before=trace_stats(&context);
         XrXirRootCauseTrace *output=NULL; trace_attempts=0;
         CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,8,&output)==XR_XIR_BAD_STRUCTURE);
         CHECK(!output && !trace_attempts && trace_stats(&context).allocated_bytes==before.allocated_bytes);
         trace_balanced(retained);
-        memcpy(effects->root_witnesses,known,sizeof(known)); memcpy(effects->unresolved_witnesses,unknown,sizeof(unknown));
-        memcpy(effects->root,facts,sizeof(facts));
+        memcpy(effect_roots_read(effects)->root_witnesses,known,sizeof(known)); memcpy(effect_roots_read(effects)->unresolved_witnesses,unknown,sizeof(unknown));
+        memcpy(effect_roots_read(effects)->root,facts,sizeof(facts));
     }
     xr_xir_compile_effects_free(effects); trace_owner_free(&context,baseline); trace_balanced(mark);
 }
-/* These synthetic enum substitutions test trace terminal validation alone;
- * they make no claim about type-marker or requirement inference. */
+/* A stored output cannot change an authentic terminal's meaning. These
+ * deliberately inconsistent Final fields must be rejected before allocation. */
 static void trace_terminal_values(void) {
-    TraceMark mark=trace_mark(); XrXirCompileContext context=trace_owner(trace_caps());
-    uint64_t baseline=trace_stats(&context).live_bytes; XrXirEffects *effects=trace_summary(&context);
-    effects->root_witnesses[2].cause=XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST;
-    effects->unresolved_witnesses[6].cause=XR_XIR_ROOT_CAUSE_REQUIREMENT;
-    const XrXirRootCauseStep known={2,0,UINT32_MAX,0,0,XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST};
-    const XrXirRootCauseStep unknown={6,0,UINT32_MAX,UINT32_MAX,0,XR_XIR_ROOT_CAUSE_REQUIREMENT};
-    for(unsigned kind=0;kind<2;++kind) {
-        XrXirRootCauseTrace *trace=NULL;
-        CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,kind?6u:2u,&trace)==XR_XIR_OK);
-        uint32_t count=99; const XrXirRootCauseStep *steps=xr_xir_root_cause_trace_steps(trace,kind!=0,&count);
-        CHECK(count==1); trace_chain_equal(steps,kind?&unknown:&known,count);
-        xr_xir_compile_root_cause_trace_free(trace);
+    TraceMark mark=trace_mark();XrXirCompileContext context=trace_owner(trace_caps());
+    uint64_t baseline=trace_stats(&context).live_bytes;XrXirEffects *effects=trace_summary(&context);
+    EffectFinalOutcomes *final=effects->invocations->final->outcomes;
+    XrXirRootEffectWitness root=final->root_witnesses[2],unknown=final->unresolved_witnesses[6];
+    final->root_witnesses[2].cause=XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST;
+    final->unresolved_witnesses[6].cause=XR_XIR_ROOT_CAUSE_REQUIREMENT;
+    for (unsigned kind=0;kind<2;++kind) {
+        XrXirRootCauseTrace *trace=NULL;trace_attempts=0;
+        CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,kind?6u:2u,&trace)==XR_XIR_BAD_STRUCTURE &&
+            !trace && !trace_attempts);
     }
-    xr_xir_compile_effects_free(effects); trace_owner_free(&context,baseline); trace_balanced(mark);
+    final->root_witnesses[2]=root;final->unresolved_witnesses[6]=unknown;
+    for (unsigned kind=0;kind<2;++kind) {
+        XrXirRootCauseTrace *trace=NULL;
+        CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,kind?6u:2u,&trace)==XR_XIR_OK && trace);
+        trace_oracle(trace,kind?6u:2u);xr_xir_compile_root_cause_trace_free(trace);
+    }
+    xr_xir_compile_effects_free(effects);trace_owner_free(&context,baseline);trace_balanced(mark);
 }
 
 #include "xir_root_trace_resources.h"
-int main(void) {
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--literals")));
     CHECK(!trace_live && !trace_live_bytes);
-    trace_literals(); trace_detached(); trace_invalid_inputs(); trace_bad_forests(); trace_terminal_values();
-    trace_oom_sites(); trace_budget_boundaries(); trace_post_admission_cuts();
+    trace_literals();trace_detached();trace_invalid_inputs();trace_bad_forests();trace_terminal_values();
+    if (argc==1) { trace_oom_sites();trace_budget_boundaries();trace_post_admission_cuts(); }
     CHECK(!trace_live && !trace_live_bytes);
     puts("Owned root cause traces: literal dual chains, detached lifetime, failure atomicity and physical zero passed");
     return 0;

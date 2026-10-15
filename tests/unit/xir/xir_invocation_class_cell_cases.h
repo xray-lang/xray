@@ -121,7 +121,7 @@ static XrXirStatus conditional_class_cell_case(const XrXirCompileContext *contex
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     if (status==XR_XIR_OK) { phase=3;status=conditional_class_rows_replay(context,effects); }
     if (status==XR_XIR_OK && oracle) {
-        CHECK(!effects->root[3].requires_root && effects->root[3].unresolved==(mode>=3));
+        CHECK(!effect_roots_read(effects)->root[3].requires_root && effect_roots_read(effects)->root[3].unresolved==(mode>=3));
         conditional_class_cell_controls(context,effects,place,project,mode);
         CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_OK);
     }

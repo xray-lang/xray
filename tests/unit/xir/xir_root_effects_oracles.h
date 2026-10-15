@@ -124,6 +124,21 @@ static void root_source_facts(const XrXirModule *module,const XrXirEffects *effe
     const XrXirRootEffectWitness *chosen=(chosen_read.status==XR_XIR_OK && chosen_read.root_witness.cause!=0?&chosen_read.root_witness:NULL);
     CHECK(chosen->cause==XR_XIR_ROOT_CAUSE_CALL&&chosen->instruction==0&&chosen->callee==right&&chosen->distance==2);
     root_paths(module,effects);
+    const char *trace_names[]={"constBoxRead","requirement"};
+    for (uint32_t kind=0;kind<2;++kind) {
+        if (closed && kind) continue;
+        uint32_t function=root_find(module,trace_names[kind]);CHECK(function<module->function_count);
+        XrXirRootCauseTrace *trace=NULL;
+        XrXirStatus status=xr_xir_compile_root_cause_trace_copy(&effect_context,effects,function,&trace);
+        if (status!=XR_XIR_OK) fprintf(stderr,"source owned terminal %s status%u\n",trace_names[kind],status);
+        CHECK(status==XR_XIR_OK && trace);
+        const XrXirRootEffects *facts=xr_xir_root_cause_trace_facts(trace);
+        CHECK(facts && facts->requires_root==!kind && facts->unresolved==(kind!=0));
+        uint32_t count=0;const XrXirRootCauseStep *steps=xr_xir_root_cause_trace_steps(trace,kind!=0,&count);
+        CHECK(count==1 && steps && steps[0].function==function && !steps[0].distance &&
+            steps[0].cause==(kind?XR_XIR_ROOT_CAUSE_CONTEXT_CALL:XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST));
+        xr_xir_compile_root_cause_trace_free(trace);
+    }
     CHECK(!(xr_xir_effects_read(NULL,0).status==XR_XIR_OK)&&!(xr_xir_effects_read(effects,module->function_count).status==XR_XIR_OK));
     CHECK(!(xr_xir_effects_read(NULL,0).status==XR_XIR_OK && xr_xir_effects_read(NULL,0).root_witness.cause!=0)&&!(xr_xir_effects_read(effects,UINT32_MAX).status==XR_XIR_OK && xr_xir_effects_read(effects,UINT32_MAX).unresolved_witness.cause!=0));
 }
@@ -139,7 +154,7 @@ static void root_permutation(void) {
         {XR_XIR_ROOT_CAUSE_MUTABLE_SLOT,0,UINT32_MAX,0,0}};
     for(unsigned reverse=0;reverse<2;++reverse){
         XrXirRootEffectWitness witnesses[4]={{0}};witnesses[3]=expected[3];
-        XrXirEffects effects={.count=4,.root=facts,.root_witnesses=witnesses};
+        XrXirEffects effects={.count=4,.outcomes_work={.root=facts,.root_witnesses=witnesses}};
         uint32_t heads[]={UINT32_MAX,2,3,reverse?1u:0u},queue[4]={0};
         EffectEdge edges[]={{1,reverse?UINT32_MAX:1u,0,false},{2,reverse?0u:UINT32_MAX,0,false},
             {0,UINT32_MAX,8,false},{0,UINT32_MAX,2,false}};
