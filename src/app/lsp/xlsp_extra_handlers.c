@@ -10,7 +10,7 @@
  */
 
 #include "xlsp_extra_handlers.h"
-#include "xlsp_imports.h"
+#include "xlsp_links.h"
 #include "xlsp_source_index_store.h"
 #include "xlsp_index_json.h"
 #include "xlsp_source_selection.h"
@@ -97,62 +97,6 @@ XrJsonValue *xlsp_handle_selection_range(XrLspServer *server,XrJsonValue *params
 // Document Link
 // ============================================================================
 
-XrJsonValue *xlsp_handle_document_link(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    if (!textDocument)
-        return xjson_new_array();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content)
-        return xjson_new_array();
-
-    XrJsonValue *links = xjson_new_array();
-    const char *content = doc->content;
-
-    const char *p = content;
-    while ((p = strstr(p, "import")) != NULL) {
-        p += 6;
-
-        while (*p == ' ' || *p == '\t')
-            p++;
-
-        if (*p == '"' || *p == '\'') {
-            char quote = *p++;
-            const char *path_start = p;
-            while (*p && *p != quote && *p != '\n')
-                p++;
-
-            if (*p == quote) {
-                size_t path_len = p - path_start;
-                char *path = xr_malloc(path_len + 1);
-                memcpy(path, path_start, path_len);
-                path[path_len] = '\0';
-
-                char *resolved = xlsp_resolve_import_path(doc->uri, path);
-                if (resolved) {
-                    XrJsonValue *link = xjson_new_object();
-
-                    size_t quote_offset = path_start - content - 1;
-                    XrLspPosition link_start = xlsp_offset_to_position(doc, quote_offset);
-                    XrLspPosition link_end =
-                        xlsp_offset_to_position(doc, quote_offset + path_len + 2);
-
-                    xjson_object_set(link, "range",
-                                     xjson_make_range(link_start.line, link_start.character,
-                                                      link_end.line, link_end.character));
-
-                    char target_uri[512];
-                    snprintf(target_uri, sizeof(target_uri), "file://%s", resolved);
-                    xjson_object_set(link, "target", xjson_new_string(target_uri));
-
-                    xjson_array_push(links, link);
-                    xr_free(resolved);
-                }
-                xr_free(path);
-            }
-        }
-    }
-
-    return links;
+XrJsonValue *xlsp_handle_document_link(XrLspServer *server,XrJsonValue *params) {
+    return xlsp_links_handle(server,params);
 }
