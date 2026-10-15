@@ -535,9 +535,18 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
     if (provenance && provenance->kind==XR_XIR_EVIDENCE_INSTANCE && provenance->source &&
         provenance->source->module.provenance &&
         provenance->source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-        XrXirStatus status=source_facts_match(&limits,provenance->source,diagnostic);
+        const XrXirArtifact *source=provenance->source;
+        const XirSourceFacts *facts=source->source_facts;
+        /* Common provenance verification below checks this same Source body,
+         * effects and permissions on every request. Bind its retained owner,
+         * terminal and layout here without running those full checks twice.
+         * A separately supplied derivation cannot stand in for stored facts. */
+        XrXirStatus status=source_effects && facts && source_effects!=facts->effects?
+            source_facts_match(&limits,source,diagnostic):source_facts_input_match(&limits,source,facts);
+        if (status==XR_XIR_OK) status=xir_effects_source_terminal(&limits,&source->module,facts->effects);
+        if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(source);
         if (status!=XR_XIR_OK) return transition_error(status,diagnostic);
-        if (!source_effects) source_effects=provenance->source->source_facts->effects;
+        if (!source_effects) source_effects=facts->effects;
     }
     XrXirEffects *owned=NULL;
     XrXirStatus status = output ? xr_xir_compile_verify_receiving_effects_v2(&limits,
