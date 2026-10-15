@@ -493,6 +493,7 @@ set_tests_properties(test_xir_p10_reference_reject_init_field_place_uninitialize
     test_xir_p10_reference_reject_init_field_place_ref PROPERTIES
     TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ownership;reject")
 add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
+include("${CMAKE_CURRENT_LIST_DIR}/initializer_places_runtime.cmake")
 
 add_executable(test_xir_p10_initializer_lifecycle "${CMAKE_CURRENT_LIST_DIR}/test_initializer_lifecycle.c")
 target_link_libraries(test_xir_p10_initializer_lifecycle PRIVATE xray_xir_source xray_xir_vm)
