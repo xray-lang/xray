@@ -17,3 +17,6 @@ add_test(NAME test_xir_p09_hash_contains COMMAND test_xir_p09_hash_contains)
 add_test(NAME test_xir_p09_hash_contains_limits COMMAND test_xir_p09_hash_contains full)
 set_tests_properties(test_xir_p09_hash_contains test_xir_p09_hash_contains_limits
     PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;ownership;memory;budget")
+add_test(NAME test_xir_nullable75_vectors COMMAND ${XRAY_PYTHON}
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_nullable75_vectors.py")
+set_tests_properties(test_xir_nullable75_vectors PROPERTIES TIMEOUT 30 LABELS "unit;xir;nullable;abi")
