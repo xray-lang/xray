@@ -309,11 +309,8 @@ XR_FUNC XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc, const XrJson
 XR_FUNC void xlsp_document_close(XrLspServer *server, const char *uri);
 XR_FUNC XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri);
 
-// On-demand document loading (for unopened files)
-XR_FUNC XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri);
-XR_FUNC void xlsp_document_free_temp(XrLspDocument *doc);
-
-// Position utilities
+/* Display positions clamp to complete scalar boundaries within a line.
+ * Semantic query and editor-edit positions use strict Source conversion. */
 XR_FUNC uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos);
 XR_FUNC XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset);
 
