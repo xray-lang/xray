@@ -1,0 +1,4 @@
+class Node{value:i64;next:Array<Node>;constructor(value:i64,next:Array<Node>){this.value=value;this.next=next}}
+fn inc(x:ref i64){x=x+2}
+fn answer()->i64{const b=Node(40,[]);inc(ref b.value);return b.value}
+export fn run()->i64{return comptime answer()}

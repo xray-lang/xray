@@ -31,6 +31,28 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"array_identity_projected_root_refused", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"array_identity_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_repeat", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function_set_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"array_identity_function_path_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_identity_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_empty_ref", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_identity_basic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_mutate", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_field", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"array_identity_export", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 3},
     {"class_inactive_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_inactive_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_inactive_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
@@ -834,8 +856,11 @@ int main(int argc, char **argv) {
         if (!strncmp(selected->name,"output_",7)) reference_output(&context,&source,selected);
         else if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
         else if (!strcmp(selected->name,"class_direct")) reference_class_direct(&context,&source);
-        else if (!strcmp(selected->name,"class_ref_dynamic_direct") || !strcmp(selected->name,"class_inactive_direct")) reference_dynamic_direct(&context,&source,false);
-        else if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct")) reference_dynamic_direct(&context,&source,true);
+        else if (!strcmp(selected->name,"array_identity_direct")) reference_dynamic_direct(&context,&source,false,false);
+        else if (!strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
+        else if (!strcmp(selected->name,"array_identity_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"class_ref_dynamic_direct") || !strcmp(selected->name,"class_inactive_direct")) reference_dynamic_direct(&context,&source,false,true);
+        else if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct")) reference_dynamic_direct(&context,&source,true,true);
         else if (!strcmp(selected->name,"class_owning_direct")) reference_class_owning(&context,&source);
         else if (!strcmp(selected->name,"class_ref_dynamic_owning") || !strcmp(selected->name,"class_inactive_owning")) reference_dynamic_source_string(&context,&source);
         else if (!strcmp(selected->name,"class_cycle_direct")) reference_class_cycle(&context,&source);
@@ -909,7 +934,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
     if (!strcmp(selected->name,"class_owning_direct")) reference_class_last_owner();
-    if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct")) reference_dynamic_last_owner(selected->name);
+    if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct") || !strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_last_owner(selected->name);
     if (!strcmp(selected->name,"output_fibonacci_direct") || !strcmp(selected->name,"output_pair_direct")) reference_output_last_owner(selected);
     if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();
     if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_last_owner();

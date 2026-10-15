@@ -95,6 +95,13 @@ static XrXirCtfeStatus ctfe_projection_loan_bound(CtfeCallExecution *execution,C
     if (identity) {
         XrXirType leaf=xr_xir_cell_element(run->module->types,(XrXirType)record->value.type);
         status=ctfe_class_projection_type(run,state,root,leaf,&record->variable_receiving);if (status!=XR_XIR_CTFE_OK) return status;
+    } else {
+        /* A narrow data-root loan cannot observe identity descendants changed
+         * through another alias. Its receiving reserve therefore requires an
+         * externally admissible data type, independent of internal execution. */
+        XrXirCtfeTypeShape shape={0};
+        status=ctfe_type_info(state->context,run->module->types,type,false,&shape);
+        if (status!=XR_XIR_CTFE_OK) return status;
     }
     XrXirValue value={0};status=ctfe_value_status(identity?xr_xir_value_copy(root,&value):xr_xir_cell_authorized_read(root,&state->authority,&value));
     if (status!=XR_XIR_CTFE_OK) return status;

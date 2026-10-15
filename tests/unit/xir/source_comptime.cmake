@@ -141,3 +141,10 @@ set_tests_properties(test_xir_source_comptime_inactive_loan PROPERTIES
 add_test(NAME test_xir_source_comptime_inactive_loan_resources COMMAND test_xir_source_comptime --inactive-loan-resources)
 set_tests_properties(test_xir_source_comptime_inactive_loan_resources PROPERTIES
     TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources")
+
+add_test(NAME test_xir_source_comptime_array_identity COMMAND test_xir_source_comptime --array-identity)
+set_tests_properties(test_xir_source_comptime_array_identity PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;ctfe;source;ownership")
+add_test(NAME test_xir_source_comptime_array_identity_resources COMMAND test_xir_source_comptime --array-identity-resources)
+set_tests_properties(test_xir_source_comptime_array_identity_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources")

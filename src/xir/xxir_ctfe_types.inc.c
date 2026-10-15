@@ -77,7 +77,7 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
                 (node->nominal.field_count && !node->nominal.fields)) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
         }
         if (frame->next==ctfe_type_fields(node)) {
-            if (node->kind==XR_XIR_TYPE_ARRAY && frame->dynamic) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+            if (!internal && node->kind==XR_XIR_TYPE_ARRAY && frame->dynamic) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
             if (nominal && xr_xir_type_is_struct(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+frame->index)) && frame->dynamic) {
                 status=XR_XIR_CTFE_NOT_SUPPORTED;break;
             }

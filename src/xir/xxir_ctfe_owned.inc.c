@@ -70,7 +70,7 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
     const XrXirInstruction *op) {
     if (op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT || op->op==XR_XIR_INVOKE_RESULT) return true;
     if (xr_xir_type_is_class(module->types,op->type)) return op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_OBJECT_PLACE ||
-        op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD ||
+        op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_ARRAY_GET ||
         op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PHI ||
         op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
     if (op->type==XR_XIR_PANIC_INFO) return op->op==XR_XIR_PANIC_CATCH || op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT ||
@@ -80,7 +80,7 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
     if (op->type==XR_XIR_ERROR) return op->op==XR_XIR_ERROR_ERASE || op->op==XR_XIR_INVOKE_ERROR || op->op==XR_XIR_CALL ||
         op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW ||
         op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN || op->op==XR_XIR_CELL_READ ||
-        op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET;
+        op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ARRAY_GET;
     if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         return ctfe_cell_type(module->types,xr_xir_operand_type(body,op->args[0]));
     if (ctfe_scalar_type(op->type) || op->type==XR_XIR_UNIT) return true;

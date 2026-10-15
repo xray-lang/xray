@@ -97,7 +97,7 @@ static void reference_dynamic_source_string(const XrXirCompileContext *context,X
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_checked_packet_free(&wire);
     fprintf(stderr,"CTFE dynamic Class loan Source owning String literal ab, complete FI=%zu per-job same-owner retry, exact2/minus1 physical0\n",sites);
 }
-static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSourceResult *source,bool owning) {
+static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSourceResult *source,bool owning,bool require_projection) {
     XrXirArtifact *closed=NULL;XrXirCheckedPacket wire={0};
     CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(closed,&wire,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
@@ -106,7 +106,7 @@ static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSou
     for (uint32_t f=0;f<module->function_count;++f)
         for (uint32_t i=0;i<module->functions[f].instruction_count;++i)
             if (module->functions[f].instructions[i].op==XR_XIR_CELL_PROJECT) ++projects;
-    CHECK(projects);XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(module),
+    CHECK(projects || !require_projection);XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(module),
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
     memcpy(request.checked_identity,identity,32);XrCompileResourceStats baseline=reference_stats(context);
