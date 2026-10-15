@@ -18,7 +18,14 @@ with tempfile.TemporaryDirectory(prefix="call-resources-",dir=os.getcwd()) as fo
         row=json.loads(result.stdout.splitlines()[-1]);assert row["method"]==method and row["ledgers"]==1
         assert all(not row[k] for k in ("physical_live","physical_bytes","json_live","json_bytes"))
         return row
-    baselines=[run(i) for i in range(3)];jobs=[]
+    baselines=[run(i) for i in range(3)];jobs=[];axes=[]
+    for baseline in baselines:
+        remaining=deadline-time.monotonic();assert remaining>0
+        result=subprocess.run([*command,"--axes",str(baseline["method"]),*[str(baseline[k]) for k in ("allocated","peak","work")]],env=environment,capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=min(290,remaining),creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+        if result.returncode:
+            sys.stdout.write(result.stdout);sys.stderr.write(result.stderr);raise RuntimeError(("axes",baseline["method"],result.returncode))
+        row=json.loads(result.stdout.splitlines()[-1]);assert row["method"]==baseline["method"] and row["axes"]==3 and row["checked"]==9
+        assert all(not row[k] for k in ("physical_live","physical_bytes","json_live","json_bytes"));axes.append(row)
     def chunk(job):
         method,domain,start,count,total=job;remaining=deadline-time.monotonic();assert remaining>0
         result=subprocess.run([*command,"--chunk",str(method),domain,str(start),str(count),str(total)],env=environment,capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=min(290,remaining),creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
@@ -45,4 +52,4 @@ with tempfile.TemporaryDirectory(prefix="call-resources-",dir=os.getcwd()) as fo
             for domain in ("source","json"):
                 chunk_probe.append(chunk((baseline["method"],domain,0,min(2,baseline[domain]),baseline[domain])))
     assert hashlib.sha256(exe.read_bytes()).hexdigest()==image
-    print(json.dumps({"full":full,"scope":"Three actual handler pipelines over one valid complete corpus; required non-Sendable module-callable positive is a separate unresolved gate; no input decoder/process qualification","baselines":baselines,"checked":checked,"chunk_probe":chunk_probe,"workers":8 if full else 1,"global_deadline":290,"image_sha256":image,"elapsed":time.monotonic()-started}))
+    print(json.dumps({"full":full,"scope":"Three actual handler pipelines over one valid complete corpus; 27 cumulative limit boundaries; normal cases are a separate gate; no input decoder/process qualification","baselines":baselines,"axes":axes,"checked":checked,"chunk_probe":chunk_probe,"workers":8 if full else 1,"global_deadline":290,"image_sha256":image,"elapsed":time.monotonic()-started}))

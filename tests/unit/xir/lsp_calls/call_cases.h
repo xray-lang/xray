@@ -69,3 +69,18 @@ static void local_closure_case(char **argv) {
     xjson_free(prepared);xjson_free(incoming);xjson_free(outgoing);CHECK(!lsp_json_live&&!lsp_json_bytes);
     puts("Actual local closure: Source body identity across root closures, exact item round trip, no module-slot substitution");
 }
+static void binding_roots_case(char **argv) {
+    char text[]="fn target(v:i64)->i64{return v}\nfn outer()->fn(i64)->i64{return fn(v:i64)->i64{return target(v)}}\nconst cb=outer()\n";
+    char closed[]="import \"./root\"\nfn external()->i64{return 1}\n";
+    XlspSourceDocument documents[]={{argv[1],text,strlen(argv[1]),sizeof(text)-1,1},{argv[3],closed,strlen(argv[3]),sizeof(closed)-1,1}};
+    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResources *r=sdk_ledger(&limits);XrXirCompileContext context={r,xr_xir_compile_default_limits()};XlspSourceBindings *owner=NULL;
+    CHECK(xlsp_source_bindings_build(&context,documents,2,&owner)==XR_XIR_OK&&owner&&xlsp_source_bindings_count(owner)==2);
+    CHECK(xlsp_source_bindings_view(owner,0)==xlsp_source_bindings_view(owner,1));
+    CHECK(xlsp_source_bindings_syntax(owner,0)==xlsp_source_bindings_syntax(owner,1)&&xlsp_source_bindings_calls(owner,0)==xlsp_source_bindings_calls(owner,1));
+    CHECK(strcmp(xlsp_source_bindings_path(owner,0),xlsp_source_bindings_path(owner,1)));
+    memset(text,'?',sizeof(text));memset(closed,'?',sizeof(closed));xr_compile_resources_release(r);
+    CHECK(xlsp_source_bindings_view(owner,1)->complete&&xlsp_source_bindings_view(owner,1)->module_count>=2&&xlsp_source_bindings_calls(owner,1)->count==2);
+    xlsp_source_bindings_free(owner);CHECK(!runtime_live&&!runtime_bytes);
+    puts("Source binding roots: one shared immutable program snapshot, distinct document paths, producer death and exactly-once release physical0/0");
+}

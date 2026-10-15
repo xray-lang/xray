@@ -7,6 +7,7 @@
  * test_calls.c - Actual call handlers use canonical identity and own their results
  */
 #include "app/lsp/xlsp_call_hierarchy.h"
+#include "app/lsp/xlsp_source_bindings.h"
 #include "base/xwindows_utf8.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,8 +20,11 @@
 #undef xr_compile_resources_release
 static XrCompileResourceStats call_last_stats;
 static size_t call_ledgers;
+static const XrCompileResourceLimits *call_axis_limits;
+static bool call_axis_active,call_axis_budget;
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(const XrCompileResourceLimits *limits,XrCompileResources **out) {
-    ++call_ledgers;return call_resource_new_impl(limits,out);
+    CHECK(limits&&limits->allocated_bytes==UINT64_C(64)*1024*1024&&limits->live_bytes==UINT64_C(8)*1024*1024&&limits->work==UINT64_C(128000000));
+    ++call_ledgers;return call_resource_new_impl(call_axis_active?call_axis_limits:limits,out);
 }
 XR_FUNC void xr_compile_resources_release(XrCompileResources *resources) {
     if(resources)call_last_stats=sdk_stats(resources);call_resource_release_impl(resources);
@@ -86,10 +90,11 @@ static void normal(char **argv) {
 #include "call_cases.h"
 #include "call_resources.h"
 #include "call_protocol.h"
-static int run(int argc,char **argv){CHECK(argc==5||argc==8||argc==10);(void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;(void)sdk_stats;
+static int run(int argc,char **argv){CHECK(argc==5||argc==8||argc==9||argc==10);(void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;(void)sdk_stats;
+    if(argc==9){CHECK(!strcmp(argv[4],"--axes"));return resource_axes(argv);}
     if(argc==10){CHECK(!strcmp(argv[4],"--chunk"));return resource_chunk(argc,argv);}
     if(argc==8){CHECK(!strcmp(argv[4],"--resource"));return resource_once(argv,(unsigned)strtoul(argv[5],NULL,10),(size_t)strtoull(argv[6],NULL,10),(size_t)strtoull(argv[7],NULL,10),true);}
-    unsigned mode=(unsigned)strtoul(argv[4],NULL,10);CHECK(mode<8);
-    switch(mode){case 0:normal(argv);break;case 1:closure_case(argv);break;case 2:recursion_case(argv);break;case 3:method_case(argv);break;case 4:utf16_case(argv);break;case 5:indirect_case(argv);break;case 6:local_closure_case(argv);break;case 7:protocol_case(argv);break;}
+    unsigned mode=(unsigned)strtoul(argv[4],NULL,10);CHECK(mode<9);
+    switch(mode){case 0:normal(argv);break;case 1:closure_case(argv);break;case 2:recursion_case(argv);break;case 3:method_case(argv);break;case 4:utf16_case(argv);break;case 5:indirect_case(argv);break;case 6:local_closure_case(argv);break;case 7:protocol_case(argv);break;case 8:binding_roots_case(argv);break;}
     return 0;}
 int wmain(int argc,wchar_t **wide){XrWinPathStatus s;char **argv=xr_win_utf16_arguments(argc,wide,&s);CHECK(argv);int result=run(argc,argv);xr_win_utf8_arguments_free(argc,argv);return result;}

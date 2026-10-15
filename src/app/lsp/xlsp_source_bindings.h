@@ -21,6 +21,13 @@ typedef struct XlspSourceBindings XlspSourceBindings;
  * overlay checker owns every semantic decision. No alternate inference runs.
  * Views and canonical input paths outlive all parser/Catalog/authority/input
  * producers and pin the original supplied cumulative ledger. */
+/* A manifest main remains the actual program entry while the checking graph
+ * includes every captured document governed by that nearest project. A project
+ * without a main, or a standalone script, keeps the explicit source entry.
+ * Captured documents never become synthetic imports or initialization edges. */
+/* Within this owner, documents sharing an explicit project main borrow the same
+ * immutable snapshot. Each materialized snapshot is released exactly once;
+ * the owner never retains facts across separate build requests. */
 XR_FUNC XrXirStatus xlsp_source_bindings_build(const XrXirCompileContext *,const XlspSourceDocument *,size_t,XlspSourceBindings **);
 XR_FUNC void xlsp_source_bindings_free(XlspSourceBindings *);
 XR_FUNC size_t xlsp_source_bindings_count(const XlspSourceBindings *);

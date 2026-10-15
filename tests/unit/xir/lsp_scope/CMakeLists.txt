@@ -31,10 +31,17 @@ add_test(NAME test_lsp_source_scope COMMAND "${Python3_EXECUTABLE}" -X utf8
 set_tests_properties(test_lsp_source_scope PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
 add_test(NAME test_lsp_source_scope_rename COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_scope.py" "$<TARGET_FILE:test_lsp_source_scope>" "${PROJECT_SOURCE_DIR}/stdlib" --rename)
-set_tests_properties(test_lsp_source_scope_rename PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;source;required;allocation")
+set_tests_properties(test_lsp_source_scope_rename PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 290 LABELS "unit;lsp;source;required;allocation")
 add_test(NAME test_lsp_source_scope_code_lens COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_scope.py" "$<TARGET_FILE:test_lsp_source_scope>" "${PROJECT_SOURCE_DIR}/stdlib" --lens)
-set_tests_properties(test_lsp_source_scope_code_lens PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;source;required;allocation")
+set_tests_properties(test_lsp_source_scope_code_lens PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 290 LABELS "unit;lsp;source;required;allocation")
 add_test(NAME test_lsp_source_binding_lenses COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_scope.py" "$<TARGET_FILE:test_lsp_source_scope>" "${PROJECT_SOURCE_DIR}/stdlib" --binding-lenses)
-set_tests_properties(test_lsp_source_binding_lenses PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;source;required;allocation")
+set_tests_properties(test_lsp_source_binding_lenses PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 290 LABELS "unit;lsp;source;required;allocation")
+set(scope_normal_modes normal rename-normal lens-normal binding-lenses-normal)
+foreach(mode IN LISTS scope_normal_modes)
+    add_test(NAME test_lsp_source_scope_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_scope.py" "$<TARGET_FILE:test_lsp_source_scope>"
+        "${PROJECT_SOURCE_DIR}/stdlib" --${mode})
+    set_tests_properties(test_lsp_source_scope_${mode} PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership;metadata")
+endforeach()

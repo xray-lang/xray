@@ -9,7 +9,6 @@
 #include "xlsp_call_hierarchy.h"
 #include "xlsp_source_call_hierarchy.h"
 #include "xlsp_source_scope.h"
-#include "../../api/xsource_compile.h"
 #include <string.h>
 static XrXirStatus call_capture_resource(XrCompileResourceStatus s) {
     return s==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:s==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -40,7 +39,7 @@ static XrJsonValue *call_handle(XrLspServer *server,XrJsonValue *params,unsigned
     if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len)||server->shutdown_received)return NULL;
     if(server->workspace_folder_count<0||server->workspace_folder_count>MAX_WORKSPACE_FOLDERS)return NULL;
     uint64_t revision=server->source_revision,generation=server->doc_table?server->doc_table->generation:0;
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *r=NULL;
+    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};XrCompileResources *r=NULL;
     XrXirStatus status=call_capture_resource(xr_compile_resources_new(&limits,&r));
     XlspSourceDocument *documents=NULL;XlspSourceScope *scope=NULL;XrJsonValue *result=NULL;size_t count=0,entry=SIZE_MAX;
     if(status!=XR_XIR_OK)goto done;
