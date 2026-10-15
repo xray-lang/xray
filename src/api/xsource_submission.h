@@ -12,6 +12,7 @@
 #include "../base/xcompile_state.h"
 #include "../xir/xxir_source_generation.h"
 #include "../xir/xxir_instance_generation.h"
+#include "../xir/xxir_instance_binding.h"
 
 typedef struct XrSourceSubmission XrSourceSubmission;
 typedef struct XrSourceSubmissionConfig {
@@ -39,5 +40,12 @@ XR_FUNC XrSourceStatus xr_source_submission_take(XrSourceSubmission *, XrXirCall
 XR_FUNC XrSourceStatus xr_source_submission_publish(XrSourceSubmission *);
 XR_FUNC XrSourceStatus xr_source_submission_abort(XrSourceSubmission *, XrXirCallStatus *cleanup);
 XR_FUNC XrSourceStatus xr_source_submission_lookup(const XrSourceSubmission *, const char *, XrXirSourceGenerationBinding *);
+/* Selects the latest published lexical definition and its exact paired birth
+ * Program/storage handle. Unit, templates and other nonphysical declarations
+ * do not fall through to an older physical definition. Handles borrow the
+ * coordinator; actual runtime access still requires its ordinary birth view.
+ * Output must be empty and is preserved on failure. */
+XR_FUNC XrSourceStatus xr_source_submission_lookup_runtime(const XrSourceSubmission *, const char *,
+    const XrXirInstanceBinding **output);
 XR_FUNC XrSourceStatus xr_source_submission_drop(XrSourceSubmission **, XrXirCallStatus *cleanup);
 #endif // XSOURCE_SUBMISSION_H
