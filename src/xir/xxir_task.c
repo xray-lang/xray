@@ -573,7 +573,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
     }
     return final;
 }
-XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, XrXirCallBudget *accounting) {
+XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor) return XR_XIR_CALL_READY;
     if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
@@ -592,8 +592,14 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, X
         --remaining;
         (void)xr_xir_task_executor_poll(executor, 1);
     }
+    return task_core_completion_status(executor);
+}
+XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, XrXirCallBudget *accounting) {
+    if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!executor) return XR_XIR_CALL_READY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
+    XrXirCallStatus status = xr_xir_task_executor_drain(executor);
     XrXirTaskExecutorConfig config = executor->config;
-    XrXirCallStatus status = task_core_completion_status(executor);
     if (accounting) *accounting = *executor->budget;
     xr_xir_domain_metadata_deallocate(config.domain, executor, sizeof(*executor));
     xr_xir_compile_type_arena_drop(config.task_arena);

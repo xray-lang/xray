@@ -12,13 +12,15 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
+#include "xir/xxir_task_budget.c"
+#include "xir/xxir_task.c"
 #include "execution/xr_xir_host_execution.c"
 #include "xir_host_call_cases.h"
 #include "xir_bounded_instance_cases.h"
 XR_DATA const XrXirProgramSpec host_call_source_program;
 XR_DATA const uint32_t host_call_entries[3];
 XR_DATA const uint32_t host_call_fatal_entry;
-XR_DATA const uint32_t host_call_bounded_entries[3];
+XR_DATA const uint32_t host_call_bounded_entries[4];
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--fatal-drop")));
     XrXirProgram *program = NULL;
@@ -29,7 +31,8 @@ int main(int argc, char **argv) {
     CHECK(xr_xir_compile_program_seal(&context,&host_call_source_program,&program) == XR_XIR_OK);
     xr_compile_resources_release(resources);
     if (argc == 2) host_fatal_cleanup(program, host_call_fatal_entry);
-    bounded_instances(program,host_call_entries[0],host_call_bounded_entries[0],host_call_bounded_entries[1],host_call_bounded_entries[2]);
+    activation_cleanup_failure(program,host_call_entries[2]);
+    bounded_instances(program,host_call_entries[0],host_call_bounded_entries[0],host_call_bounded_entries[1],host_call_bounded_entries[2],host_call_bounded_entries[3]);
     host_cases(program, host_call_entries);
     return 0;
 }

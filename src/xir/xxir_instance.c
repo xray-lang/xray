@@ -539,7 +539,7 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     if (!instance->program) return XR_XIR_CALL_BAD_STATE;
     if (instance->state == XR_XIR_INSTANCE_FAILED) return instance->failure.status;
     if (instance->stopping) return XR_XIR_CALL_BAD_STATE;
-    if (!xr_xir_task_executor_root_idle(instance->executor)) return XR_XIR_CALL_BUSY;
+    if (instance->executor && !xr_xir_task_executor_root_idle(instance->executor)) return XR_XIR_CALL_BUSY;
     if (instance->call) {
         XrXirCallStatus state = xr_xir_call_state(instance->call);
         if (state == XR_XIR_CALL_READY || state == XR_XIR_CALL_SUSPENDED) return XR_XIR_CALL_BUSY;
@@ -626,13 +626,18 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
         (void)xr_xir_task_executor_free(previous_replacement, NULL);
         xr_xir_value_drop(&prepared_function); return status;
     }
-    status = xr_xir_task_executor_attach_root(instance->executor, replacement, epoch + 1);
+    XrXirTaskExecutor *executor = instance->executor;
+    if (!executor) status = instance_executor_new(instance, &executor);
+    if (status == XR_XIR_CALL_READY)
+        status = xr_xir_task_executor_attach_root(executor, replacement, epoch + 1);
     if (status != XR_XIR_CALL_READY) {
         xr_xir_call_free(replacement);
+        if (!instance->executor) (void)xr_xir_task_executor_free(executor, NULL);
         (void)xr_xir_task_executor_free(previous_replacement, NULL);
         xr_xir_value_drop(&prepared_function); return status;
     }
     if (previous_replacement) instance_retire_call(previous, previous_replacement);
+    instance->executor = executor;
     xr_xir_call_free(instance->call);
     xr_xir_value_drop(&instance->pending_function);
     instance->pending_function = prepared_function;
@@ -720,6 +725,34 @@ XrXirCallStatus xr_xir_instance_cancel_current(XrXirInstance *instance) {
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
     if (instance->stopping || !instance->call) return XR_XIR_CALL_BAD_STATE;
     return xr_xir_task_executor_cancel_root(instance->executor);
+}
+XrXirCallStatus xr_xir_instance_close_activation(XrXirInstance *instance) {
+    if (!instance_owner_current(instance) || !instance) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
+    XrXirInstance *root = instance_root(instance);
+    if (root->prepared_generation) return XR_XIR_CALL_BAD_STATE;
+    instance = instance_current(instance);
+    if (!instance->executor) return XR_XIR_CALL_READY;
+    instance_driving(instance, true);
+    XrXirCallStatus status = xr_xir_task_executor_drain(instance->executor);
+    XR_CHECK(xr_xir_task_executor_root_idle(instance->executor),
+        "an exclusively owned current activation drains every runnable task");
+    if (instance->call && instance->state == XR_XIR_INSTANCE_INITIALIZING) {
+        XrXirCallResult result = xr_xir_task_executor_poll_root(instance->executor, 1);
+        XR_CHECK(result.status != XR_XIR_CALL_READY && result.status != XR_XIR_CALL_SUSPENDED,
+            "drain leaves the actual initialization outcome terminal");
+        fail_initialization(instance, result);
+    }
+    (void)xr_xir_task_executor_free(instance->executor, NULL);
+    instance->executor = NULL;
+    XrXirCallStatus released = xr_xir_call_free(instance->call);
+    instance->call = NULL;
+    xr_xir_value_drop(&instance->pending_function);
+    instance->metadata_bytes = xr_xir_domain_budget_stats(instance->domain).metadata_live;
+    instance_driving(instance, false);
+    if (status == XR_XIR_CALL_READY) status = released;
+    if (status != XR_XIR_CALL_READY) (void)xr_xir_instance_stop(root);
+    return status;
 }
 XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;

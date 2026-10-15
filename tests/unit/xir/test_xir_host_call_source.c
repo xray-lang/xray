@@ -17,6 +17,8 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_runtime_allocations.h"
+#include "xir/xxir_task_budget.c"
+#include "xir/xxir_task.c"
 #include "xir/xxir_vm.c"
 #include "execution/xr_xir_host_execution.c"
 #include "xir_host_call_cases.h"
@@ -52,9 +54,9 @@ int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 2);
     XrXirArtifact *lowered = host_source();
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
-    const char *names[] = {"normal", "failed", "cleanupAllocated", "cleanupFatal", "current", "spin", "reader"};
-    uint32_t entries[7];
-    for (unsigned n = 0; n < 7; ++n) {
+    const char *names[] = {"normal", "failed", "cleanupAllocated", "cleanupFatal", "current", "spin", "reader", "children"};
+    uint32_t entries[8];
+    for (unsigned n = 0; n < 8; ++n) {
         entries[n] = UINT32_MAX;
         for (uint32_t f = 0; f < module->function_count; ++f)
             if (module->functions[f].name_length == strlen(names[n]) &&
@@ -71,14 +73,15 @@ int main(int argc, char **argv) {
         CHECK(fprintf(file, "\nconst uint32_t host_call_entries[3]={%uu,%uu,%uu};\n",
             entries[0], entries[1], entries[2]) > 0);
         CHECK(fprintf(file, "const uint32_t host_call_fatal_entry=%uu;\n", entries[3]) > 0);
-        CHECK(fprintf(file, "const uint32_t host_call_bounded_entries[3]={%uu,%uu,%uu};\n",entries[4],entries[5],entries[6]) > 0);
+        CHECK(fprintf(file, "const uint32_t host_call_bounded_entries[4]={%uu,%uu,%uu,%uu};\n",entries[4],entries[5],entries[6],entries[7]) > 0);
         CHECK(fclose(file) == 0); xr_xir_compile_c_source_free(&source);
     }
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK);
     CHECK(!lowered);
     if (fatal) host_fatal_cleanup(program, entries[3]);
-    bounded_instances(program,entries[0],entries[4],entries[5],entries[6]);
+    activation_cleanup_failure(program,entries[2]);
+    bounded_instances(program,entries[0],entries[4],entries[5],entries[6],entries[7]);
     host_cases(program, entries);
     return 0;
 }
