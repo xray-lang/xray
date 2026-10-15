@@ -33,7 +33,7 @@ XR_FUNC XrManifestStatus xr_source_authority_open(
     const struct XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
     XrSourceAuthority **output, XrManifestDiagnostic *diagnostic);
 typedef enum XrSourceEntryKind {
-    XR_SOURCE_ENTRY_FILE, XR_SOURCE_ENTRY_TEXT
+    XR_SOURCE_ENTRY_FILE, XR_SOURCE_ENTRY_TEXT, XR_SOURCE_ENTRY_AST
 } XrSourceEntryKind;
 typedef struct XrSourceEntryInput {
     XrSourceEntryKind kind;
@@ -41,10 +41,11 @@ typedef struct XrSourceEntryInput {
     const char *text; /* TEXT only: length bytes, no terminator required. */
     size_t length;
 } XrSourceEntryInput;
-/* Same authority discovery as the file entry. TEXT may be absent on disk;
+/* Same authority discovery as the file entry. TEXT and AST may be absent on disk;
  * its nearest existing parent is canonicalized and missing path components
  * are validated, never normalized into a different authority. The owner
- * retains the canonical entry path and a real immutable overlay entry.
+ * retains the canonical entry path. TEXT additionally owns an immutable
+ * overlay; AST owns the exact logical locator without manufacturing bytes.
  * Invalid nearer projects/lockfiles are errors; no SCRIPT fallback on errors.
  * Catalog remains borrowed under the original authority lifetime contract. */
 XR_FUNC XrManifestStatus xr_source_authority_open_input(
@@ -52,6 +53,8 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(
     const struct XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
     XrSourceAuthority **output, XrManifestDiagnostic *diagnostic);
 XR_FUNC const char *xr_source_authority_source_path(const XrSourceAuthority *);
+/* AST's exact authority-relative locator; NULL for other input kinds. */
+XR_FUNC const char *xr_source_authority_logical_path(const XrSourceAuthority *);
 /* NULL for FILE input; an immutable owner-backed entry for TEXT input. */
 XR_FUNC const XrModuleOverlayInput *xr_source_authority_overlay(const XrSourceAuthority *);
 XR_FUNC void xr_source_authority_close(XrSourceAuthority *authority);
