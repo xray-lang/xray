@@ -20,6 +20,9 @@
 #include "xlsp_utils.h"
 #include "xlsp_source_index_store.h"
 #include "xlsp_source_settings.h"
+#include "xlsp_source_watch.h"
+#include "xlsp_source_workspace.h"
+#include "xlsp_document_store.h"
 #include "../../api/xsource_compile.h"
 #include "xlsp_index_pool.h"
 #include "../../base/xmalloc.h"
@@ -31,83 +34,38 @@
 #define FILE_CHANGE_DELETED 3
 
 XR_FUNC void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *changes = xjson_get_array(params, "changes");
-    if (!changes)
-        return;
-
-    int change_count = xjson_array_len(changes);
-    lsp_log("Received %d file change events", change_count);
-
-    for (int i = 0; i < change_count; i++) {
-        XrJsonValue *change = xjson_array_get(changes, i);
-        const char *uri = xjson_get_string(change, "uri");
-        int type = (int) xjson_get_int(change, "type");
-
-        if (!uri)
-            continue;
-
-        if(type>=FILE_CHANGE_CREATED&&type<=FILE_CHANGE_DELETED&&server->source_revision!=UINT64_MAX)
-            ++server->source_revision;
-
-        lsp_log("File change: %s (type=%d)", uri, type);
-
-        // Get document if it's open
-        XrLspDocument *doc = xlsp_document_get(server, uri);
-
-        char *index_path=NULL,*index_uri=NULL;XrXirStatus index_status=xlsp_source_uri_path(server->index_resources,uri,strlen(uri),&index_path);
-        if(index_status==XR_XIR_OK){xlsp_index_pool_cancel_file(server->index_pool,index_path);index_status=xlsp_index_file_uri(server->index_resources,index_path,&index_uri);}
-        if(index_status==XR_XIR_OK)index_status=xlsp_source_index_store_remove(server->source_index,index_uri);
-        if(index_status!=XR_XIR_OK)xlsp_index_record_failure(server,index_status);
-        xr_compile_resources_free(index_uri);xr_compile_resources_free(index_path);
-
-        switch (type) {
-            case FILE_CHANGE_CREATED:
-            case FILE_CHANGE_CHANGED: {
-                const char *path = xlsp_uri_to_path(uri);
-
-                // Invalidate exports cache for this file
-                xlsp_exports_cache_remove(server, path);
-
-                // Re-index the file in workspace analyzer (for unopened files)
-                if (!doc) {
-                    xlsp_workspace_index_file(server, uri, path);
-                }
-
-                // If document is open, re-parse and publish diagnostics
-                if (doc) {
-                    doc->dirty = true;
-                    xlsp_parse_document(doc, server);
-                    xlsp_publish_diagnostics(server, doc);
-                }
-                break;
+    if (!server) return;
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResources *resources = NULL; XlspSourceWatch *batch = NULL;
+    XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
+    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    if (status == XR_XIR_OK) status = xlsp_source_watch_read(resources, params, &batch);
+    if (status == XR_XIR_OK) status = xlsp_source_watch_commit(batch, server);
+    if (status != XR_XIR_OK) {
+        server->source_failure.stage = 14; server->source_failure.status = (unsigned)status;
+        lsp_log("File change notification rejected (status=%u)", (unsigned)status); goto done;
+    }
+    server->source_failure.stage = server->source_failure.status = 0;
+    size_t count = 0; const XlspSourceWatchEvent *events = xlsp_source_watch_items(batch, &count);
+    for (size_t i = 0; i < count; ++i) {
+        const XlspSourceWatchEvent *event = &events[i];
+        XrLspDocument *doc = xlsp_document_store_get(server->doc_table, event->uri);
+        xlsp_index_pool_cancel_file(server->index_pool, event->path);
+        XrXirStatus removed = xlsp_source_index_store_remove(server->source_index, event->index_uri);
+        if (removed != XR_XIR_OK) xlsp_index_record_failure(server, removed);
+        xlsp_exports_cache_remove(server, event->path);
+        if (event->kind == FILE_CHANGE_CREATED || event->kind == FILE_CHANGE_CHANGED) {
+            if (!doc) xlsp_workspace_index_file(server, event->uri, event->path);
+            else {
+                doc->dirty = true; xlsp_parse_document(doc, server); xlsp_publish_diagnostics(server, doc);
             }
-
-            case FILE_CHANGE_DELETED: {
-                const char *del_path = xlsp_uri_to_path(uri);
-
-                // Remove from exports cache
-                xlsp_exports_cache_remove(server, del_path);
-
-                // Remove from analyzer so stale symbols don't linger
-                if (server->workspace_analyzer) {
-                    xa_analyzer_remove_file(server->workspace_analyzer, del_path);
-                }
-
-                // Drop the file from the shallow workspace symbol index too.
-                if (server->source_index) {
-                    {XrXirStatus status=xlsp_source_index_store_remove(server->source_index,uri);
-                     if(status!=XR_XIR_OK){xlsp_index_record_failure(server,status);lsp_log("Deleted-file syntax index removal failed");}}
-                }
-
-                lsp_log("Purged state for deleted file: %s", del_path);
-                break;
-            }
+        } else if (event->kind == FILE_CHANGE_DELETED && server->workspace_analyzer) {
+            xa_analyzer_remove_file(server->workspace_analyzer, event->path);
         }
     }
-
-    // Re-publish diagnostics for all open documents that import changed files
-    // This ensures cross-file errors are updated
-    // (For simplicity, we don't track import dependencies here)
+done:
+    xlsp_source_watch_free(batch); xr_compile_resources_release(resources);
 }
 
 // ============================================================================
