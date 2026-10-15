@@ -109,8 +109,9 @@ static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack 
         if (b_span->type != type || !xr_xir_compile_type_arena_layout(admission->arena,type,&layout) ||
             !layout.size || layout.size > sizeof(uint64_t) || !a_span->bytes || !b_span->bytes)
             return XR_XIR_VALUE_BAD_ARGUMENT;
-        *left = storage_leaf_value(type,a_span->bytes,layout.size);
-        *right = storage_leaf_value(type,b_span->bytes,layout.size);
+        if (!storage_leaf_value(admission->arena,type,a_span->bytes,layout.size,left) ||
+            !storage_leaf_value(admission->arena,type,b_span->bytes,layout.size,right))
+            return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     if (right->type != left->type || !xr_xir_value_argument(left, admission->arena, type) ||
         !xr_xir_value_argument(right, admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;

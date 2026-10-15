@@ -8,7 +8,12 @@
  */
 #ifndef SOURCE_HISTORY_CELL_FIXTURE_H
 #define SOURCE_HISTORY_CELL_FIXTURE_H
-static inline const char *source_history_cell_input(unsigned generation,bool mutating) {
+static inline const char *source_history_cell_input(unsigned generation,unsigned kind) {
+    bool mutating=kind==1 || kind==2;
+    if (generation==1 && kind==2) return
+        "var value:Array<i64> = [41]\nfn old()->i64{value[0]=value[0]+1;return value[0]}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}";
+    if (generation==1 && kind==3) return
+        "const value:Array<i64> = [41]\nfn old()->i64{return value[0]+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}";
     switch(generation) {
     case 1:return mutating ?
         "var value:i64=41\nfn old()->i64{value+=1;return value}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :

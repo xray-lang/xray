@@ -4572,3 +4572,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_compile_domain.cmake")
+
+include(xir/source_history_class.cmake)

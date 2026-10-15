@@ -102,10 +102,13 @@ static XrXirValueStatus xr_xir_class_get_graph_operation(const XrXirValue *recei
 XR_FUNC XrXirValueStatus xr_xir_class_get(const XrXirValue *receiver, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local={0};
+    XrXirValueStatus status=storage_admission_begin(receiver,admission,&local);
+    if (status != XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_class_get_graph_operation(receiver, field, admission, output);
+    XrXirValueStatus graph_outcome = xr_xir_class_get_graph_operation(receiver, field, &local, output);
     xr_xir_value_graph_end();
-    return graph_outcome;
+    return storage_admission_end(admission,&local,graph_outcome);
 }
 static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *receiver, uint32_t field,
     const XrXirValue *replacement, XrXirValueAdmission *admission) {
@@ -125,7 +128,7 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     if (!xr_xir_compile_type_arena_layout(object->arena,node->nominal.fields[field],&physical))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     StoragePrepared prepared={0};
-    status=storage_prepared_begin(&prepared,replacement,physical.size,admission);
+    status=storage_prepared_begin(&prepared,node->nominal.fields[field],replacement,physical.size,admission);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirClassPublication publication = {0};
     if (xr_xir_class_module_storage(receiver)) {
@@ -150,8 +153,11 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
 XR_FUNC XrXirValueStatus xr_xir_class_set(const XrXirValue *receiver, uint32_t field,
     const XrXirValue *replacement, XrXirValueAdmission *admission) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local={0};
+    XrXirValueStatus status=storage_admission_begin(receiver,admission,&local);
+    if (status != XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_class_set_graph_operation(receiver, field, replacement, admission);
+    XrXirValueStatus graph_outcome = xr_xir_class_set_graph_operation(receiver, field, replacement, &local);
     xr_xir_value_graph_end();
-    return graph_outcome;
+    return storage_admission_end(admission,&local,graph_outcome);
 }

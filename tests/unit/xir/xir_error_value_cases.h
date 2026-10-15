@@ -28,6 +28,9 @@ static void error_deep_value_cases(void) {
     XrXirValue concrete = {0}, error = {0}, array = {0};
     CHECK(xr_xir_enum_new((XrXirType)256, 0, NULL, 0, &admission, &concrete) == XR_XIR_VALUE_OK);
     CHECK(xr_xir_error_erase(&concrete, &admission, &error) == XR_XIR_VALUE_OK);
+    XrXirValue recovered={0};
+    CHECK(xr_xir_value_from_payload(arena,XR_XIR_ERROR,error.payload,&recovered) &&
+        recovered.type==XR_XIR_ERROR && recovered.payload==error.payload && object_pointer(&error)->type==(XrXirType)256);
     xr_xir_value_drop(&concrete);
     for (uint32_t i = 0; i < DEPTH; ++i) {
         CHECK(xr_xir_enum_new((XrXirType)256, 1, &error, 1, &admission, &concrete) == XR_XIR_VALUE_OK);
@@ -39,7 +42,11 @@ static void error_deep_value_cases(void) {
     CHECK(xr_xir_array_new((XrXirType)257, &error, 1, &admission, &array) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&error); xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     size_t baseline = live, begin = calls; uint64_t bytes = xr_xir_domain_stats(domain).live_bytes;
-    CHECK(xr_xir_value_admit(&array, (XrXirType)257, &admission) == XR_XIR_VALUE_OK);
+    XrXirValueStatus admitted=xr_xir_value_admit(&array,(XrXirType)257,&admission);
+    if (admitted!=XR_XIR_VALUE_OK) fprintf(stderr,"deep Error admission status=%u frame=%zu scratch=%llu work=%llu\n",
+        (unsigned)admitted,sizeof(ValueAdmissionFrame),(unsigned long long)admission.scratch_bytes,
+        (unsigned long long)admission.work);
+    CHECK(admitted==XR_XIR_VALUE_OK);
     size_t sites = calls - begin; CHECK(sites > 1);
     for (size_t i = 0; i < sites; ++i) {
         admission.work = 10000000; fail_at = calls + i;
