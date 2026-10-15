@@ -61,6 +61,36 @@ endif()
 add_test(NAME test_xir_mixed_library_pure_permissions COMMAND test_xir_mixed_library_pure_permissions)
 set_tests_properties(test_xir_mixed_library_pure_permissions PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
     LABELS "unit;xir;mixed;source;ownership;root;worker;library;permissions")
+add_executable(test_xir_mixed_library_permission_resources xir/test_xir_mixed_library_permission_resources.c)
+target_link_libraries(test_xir_mixed_library_permission_resources PRIVATE xray_xir_source xray_xir_cgen)
+target_compile_definitions(test_xir_mixed_library_permission_resources PRIVATE
+    XR_COUNTER_FIXTURES="${CMAKE_SOURCE_DIR}/tests/unit/xir/fixtures/p20_library_pure_worker"
+    XR_COUNTER_LOGICAL_ROOT="${CMAKE_CURRENT_BINARY_DIR}/generated/p20-library-permissions-absent")
+set_target_properties(test_xir_mixed_library_permission_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_library_permission_resources PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_library_permission_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(permission_mode IN ITEMS baseline axes)
+    add_test(NAME test_xir_mixed_library_permission_resources_${permission_mode}
+        COMMAND test_xir_mixed_library_permission_resources ${permission_mode})
+    set_tests_properties(test_xir_mixed_library_permission_resources_${permission_mode} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;source;ownership;root;worker;library;permissions;${permission_mode}")
+endforeach()
+set(permission_fi_begin 0)
+while(permission_fi_begin LESS 4586)
+    math(EXPR permission_fi_end "${permission_fi_begin} + 64")
+    if(permission_fi_end GREATER 4586)
+        set(permission_fi_end 4586)
+    endif()
+    add_test(NAME test_xir_mixed_library_permission_resources_fi_${permission_fi_begin}_${permission_fi_end}
+        COMMAND test_xir_mixed_library_permission_resources fi ${permission_fi_begin} ${permission_fi_end} 4586)
+    set_tests_properties(test_xir_mixed_library_permission_resources_fi_${permission_fi_begin}_${permission_fi_end}
+        PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;source;ownership;root;worker;library;permissions;fi")
+    set(permission_fi_begin ${permission_fi_end})
+endwhile()
 foreach(counter_backend IN ITEMS 0 1 vm native)
     add_test(NAME test_xir_mixed_library_counter_${counter_backend} COMMAND test_xir_mixed_library_counter ${counter_backend})
     set_tests_properties(test_xir_mixed_library_counter_${counter_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
