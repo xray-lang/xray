@@ -67,10 +67,8 @@ static void text_facts(const XrXirSourceResult *result, const char *path) {
         const XrXirSourceReference *reference = &view->references[i];
         if (reference->declaration != parameter->id) continue;
         CHECK(reference->target == parameter->id && reference->access == XR_XIR_SOURCE_READ);
-        if (reference->range.line != 1 || reference->range.column != 44 || reference->range.end_column != 49)
-            fprintf(stderr,"parameter read span: line=%u column=%u end_line=%u end_column=%u\n",
-                reference->range.line,reference->range.column,reference->range.end_line,reference->range.end_column);
-        CHECK(reference->range.line == 1 && reference->range.column == 44 && reference->range.end_column == 49);
+        CHECK(reference->range.line == 1 && reference->range.column == 44 &&
+            reference->range.end_line == 1 && reference->range.end_column == 49);
         ++references;
     }
     CHECK(references == 1);
