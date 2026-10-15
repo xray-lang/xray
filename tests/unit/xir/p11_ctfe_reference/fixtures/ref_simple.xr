@@ -1,0 +1,3 @@
+fn inc(x:ref i64)->i64 { x=x+2; return x }
+fn value()->i64 { var x=40; inc(ref x); return x }
+export fn run()->i64 { return comptime value() }

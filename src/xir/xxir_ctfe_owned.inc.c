@@ -30,6 +30,7 @@ typedef struct CtfeOwnedState {
     CtfeFunctionLease *functions;
     XrXirCellProvenance *cells;
     XrXirValue forbidden_cell;
+    XrXirCellAuthority authority;
     void *closure;
     uint8_t *reachable;
 } CtfeOwnedState;
@@ -134,7 +135,8 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
     bool composite=ctfe_execution_node(run->module->types,xr_xir_cell_element(run->module->types,type),true)!=NULL;
     XrXirValueAdmission admission=ctfe_value_admission(state);admission.work=composite?UINT64_MAX:8;
     XrXirValueStatus status=create?xr_xir_cell_new(state->domain,state->arena,type,&value,&admission,&result):
-        op->op==XR_XIR_CELL_READ?xr_xir_cell_read(&cell,&result):xr_xir_cell_write(&cell,&value,&admission);
+        op->op==XR_XIR_CELL_READ?xr_xir_cell_authorized_read(&cell,&state->authority,&result):
+        xr_xir_cell_authorized_write(&cell,&state->authority,&value,&admission);
     if (status!=XR_XIR_VALUE_OK) { xr_xir_value_drop(&result);return ctfe_value_status(status); }
     if (create) xr_xir_owned_slot_move(run->frame,
         run->layout->offsets[local?op->args[0]:destination],&result);

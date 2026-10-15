@@ -78,7 +78,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     XrXirValuePlace place={0};XrXirFaultDetail fault={0};
     if (!xr_xir_cell_in_domain(&cell,state->domain)) { status=XR_XIR_CTFE_BAD_ARTIFACT;goto done; }
     status=ctfe_validation_work(run,&bounded,root_op->type);if (status!=XR_XIR_CTFE_OK) goto done;
-    status=ctfe_value_status(xr_xir_cell_value_place(&cell,&admission,&place));if (status!=XR_XIR_CTFE_OK) goto done;
+    status=ctfe_value_status(xr_xir_cell_authorized_place(&cell,&state->authority,&admission,&place));if (status!=XR_XIR_CTFE_OK) goto done;
     root.type=(uint32_t)place.type;memcpy(&root.payload,place.payload,sizeof(root.payload));
     bool mutate=op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_STRUCT_SET;
     status=ctfe_index_path_preflight(run,&bounded,&root,&path,mutate,&target);if (status!=XR_XIR_CTFE_OK) goto done;

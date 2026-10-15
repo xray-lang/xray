@@ -45,7 +45,7 @@ static void reference_function_foreign(const XrXirCompileContext *context,XrXirC
     size_t attempts=source_fixture_compile_attempts;source_fixture_compile_fail_at=attempts;xr_xir_value_drop(&input);
     source_fixture_compile_fail_at=SIZE_MAX;CHECK(owner.releases==1 && source_fixture_compile_attempts==attempts);
 }
-static void reference_function_fault(const XrXirCheckedPacket *wire,const uint8_t *identity,size_t fault,size_t sites) {
+static void reference_calls_fault(const XrXirCheckedPacket *wire,const uint8_t *identity,size_t fault,size_t sites,const char *text) {
     size_t held=source_fixture_compile_live,bytes=source_fixture_compile_bytes;
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
@@ -66,7 +66,11 @@ static void reference_function_fault(const XrXirCheckedPacket *wire,const uint8_
     CHECK(source_fixture_compile_injected && source_fixture_compile_attempts==start+fault+1 && !output.type && !output.payload);
     CHECK(reference_stats(&context).live_bytes==baseline.live_bytes);source_fixture_compile_fail_at=SIZE_MAX;
     XrCompileResourceStats failed=reference_stats(&context);start=source_fixture_compile_attempts;
-    CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OK && output.type==XR_XIR_I64 && output.payload==42);
+    CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OK);
+    if (text) {
+        const char *observed=NULL;size_t length=0;
+        CHECK(xr_xir_string_view(&output,&observed,&length) && length==strlen(text) && !memcmp(observed,text,length));
+    } else CHECK(output.type==XR_XIR_I64 && output.payload==42);
     CHECK(source_fixture_compile_attempts-start==sites);xr_xir_value_drop(&output);
     XrCompileResourceStats after=reference_stats(&context);
     CHECK(context.resources==same && after.live_bytes==baseline.live_bytes && after.work>=failed.work && after.allocated_bytes>=failed.allocated_bytes);
@@ -104,7 +108,7 @@ static void reference_function_direct(const XrXirCompileContext *context,XrXirSo
     CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
     /* Fault scenarios are independent jobs, exactly as whole-producer trials.
      * Each failed evaluation and retry retain that job's original finite owner. */
-    for (size_t fault=0;fault<sites;++fault) reference_function_fault(&wire,identity,fault,sites);
+    for (size_t fault=0;fault<sites;++fault) reference_calls_fault(&wire,identity,fault,sites,NULL);
     CHECK(context->resources==same && reference_stats(context).live_bytes==baseline.live_bytes);
     request.limits.output_bytes=7;
     CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OUTPUT_LIMIT && !output.type && !output.payload);

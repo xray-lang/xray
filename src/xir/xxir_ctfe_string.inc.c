@@ -17,9 +17,10 @@ static XrXirCtfeStatus ctfe_argument_store(ScalarRun *run,uint32_t offset,
     }
     XrXirCtfeStatus validation=ctfe_validation_work(run,state,(XrXirType)value->type);
     if (validation!=XR_XIR_CTFE_OK) return validation;
-    if (xr_xir_type_is_cell(run->module->types,(XrXirType)value->type) &&
-        (!xr_xir_cell_in_domain(value,state->domain) || !xr_xir_cell_unborrowed(value) ||
-         xr_xir_cell_is_projection(value) || xr_xir_cell_module_storage(value))) return XR_XIR_CTFE_NOT_SUPPORTED;
+    if (xr_xir_type_is_cell(run->module->types,(XrXirType)value->type)) {
+        XrXirCtfeStatus access=ctfe_admission_work(run,state,value);
+        if (access!=XR_XIR_CTFE_OK) return access;
+    }
     if (!snapshot) return ctfe_value_status(xr_xir_owned_slot_copy(run->frame,offset,
         state->arena,(XrXirType)value->type,value->payload));
     if (value->type!=XR_XIR_STRING) return XR_XIR_CTFE_NOT_SUPPORTED;

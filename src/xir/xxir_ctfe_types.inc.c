@@ -87,11 +87,17 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             if (types->nodes[parent->index].kind==XR_XIR_TYPE_ARRAY) parent->pure_arrays=costs[frame->index].pure_arrays;continue;
         }
         if (!xir_compile_work(context,sizeof(XrXirCallableParameter)+2)) { status=XR_XIR_CTFE_BUDGET;break; }
-        const XrXirCallableParameter field=single?(XrXirCallableParameter){node->element,0}:
+        XrXirCallableParameter field=single?(XrXirCallableParameter){node->element,0}:
             nominal?(XrXirCallableParameter){node->nominal.fields[frame->next],0}:
             callable && frame->next==node->parameter_count?(XrXirCallableParameter){node->result,0}:node->parameters[frame->next];
         ++frame->next;
-        if (field.mode || (single && field.type==XR_XIR_UNIT)) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+        if (field.mode) {
+            if (!internal || !callable || field.mode!=XR_PARAM_REF || !xr_xir_type_is_cell(types,field.type)) {
+                status=XR_XIR_CTFE_NOT_SUPPORTED;break;
+            }
+            field.type=xr_xir_cell_element(types,field.type);
+        }
+        if (single && field.type==XR_XIR_UNIT) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
         if (ctfe_result_type(field.type)) {
             if (frame->work==UINT64_MAX) { status=XR_XIR_CTFE_BUDGET;break; }
             ++frame->work;if (node->kind==XR_XIR_TYPE_ARRAY) frame->pure_arrays=field.type!=XR_XIR_UNIT;continue;

@@ -1,0 +1,4 @@
+fn inc(x:ref i64) { x=x+1 }
+fn twice(x:ref i64) { inc(ref x); inc(ref x) }
+fn work(x:ref i64) { defer { twice(ref x) } }
+export fn run()->i64 { var x=40; work(ref x); return x }

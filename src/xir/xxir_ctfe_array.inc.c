@@ -33,7 +33,7 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
         uint32_t count=cell?1:node?ctfe_composite_fields(node):0;const XrXirFunctionBinding *function=NULL;
         if (cell) {
             if (!scalar_compile_work(run,64)) { status=XR_XIR_CTFE_BUDGET;break; }
-            if (!xr_xir_cell_in_domain(&current,state->domain) || !xr_xir_cell_unborrowed(&current) ||
+            if (!xr_xir_cell_in_domain(&current,state->domain) ||
                 xr_xir_cell_is_projection(&current) || xr_xir_cell_module_storage(&current)) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
             if (state->forbidden_cell.type && xr_xir_cell_same_owner(&current,&state->forbidden_cell)) {
                 status=XR_XIR_CTFE_NOT_SUPPORTED;break;
@@ -80,7 +80,7 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
                 status=ctfe_validation_work(run,state,(XrXirType)child->type);if (status!=XR_XIR_CTFE_OK) goto done;
                 status=ctfe_value_status(xr_xir_value_copy(child,&current));++frame->next;
             }
-            else if (!node) { status=ctfe_value_status(xr_xir_cell_read(&frame->value,&current));++frame->next; }
+            else if (!node) { status=ctfe_value_status(xr_xir_cell_authorized_read(&frame->value,&state->authority,&current));++frame->next; }
             else if (node->kind==XR_XIR_TYPE_TUPLE) status=ctfe_value_status(xr_xir_tuple_get(&frame->value,frame->next++,&current));
             else if (node->kind==XR_XIR_TYPE_NOMINAL) {
                 XrXirEnumBorrow borrowed={0};status=ctfe_value_status(xr_xir_enum_borrow(&frame->value,&borrowed));
@@ -134,7 +134,7 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
             const XrXirInstruction *root=&run->function->instructions[ids[0]-run->function->parameter_count];
             XrXirValue cell=ctfe_array_operand(run,root->args[0]);
             if (!xr_xir_cell_in_domain(&cell,state->domain)) return XR_XIR_CTFE_BAD_ARTIFACT;
-            value_status=xr_xir_cell_value_place(&cell,&admission,&place);
+            value_status=xr_xir_cell_authorized_place(&cell,&state->authority,&admission,&place);
             if (value_status!=XR_XIR_VALUE_OK) return ctfe_value_status(value_status);
             receiver.type=(uint32_t)place.type;memcpy(&receiver.payload,place.payload,sizeof(receiver.payload));
         } else receiver=ctfe_array_operand(run,ids[0]);

@@ -31,6 +31,27 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"cleanup_infinite", XR_XIR_I64, 0, XR_XIR_BUDGET, NULL, 2},
+    {"cleanup_generic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_owning_direct", XR_XIR_STRING, 1, XR_XIR_OK, NULL, 0},
+    {"ref_alias_source", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "ref arguments of one call must not alias", 2},
+    {"cleanup_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_return_string", XR_XIR_I64, 1, XR_XIR_OK, NULL, 0},
+    {"cleanup_path", XR_XIR_I64, 2, XR_XIR_OK, NULL, 0},
+    {"ref_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_array", XR_XIR_I64, 2, XR_XIR_OK, NULL, 0},
+    {"cleanup_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"cleanup_scope", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_lifo", XR_XIR_I64, 21, XR_XIR_OK, NULL, 0},
+    {"cleanup_loop", XR_XIR_I64, 31, XR_XIR_OK, NULL, 0},
+    {"cleanup_return", XR_XIR_I64, 40, XR_XIR_OK, NULL, 0},
+    {"cleanup_owned", XR_XIR_I64, 2, XR_XIR_OK, NULL, 0},
+    {"cleanup_nested", XR_XIR_I64, 11, XR_XIR_OK, NULL, 0},
+    {"cleanup_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_simple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"function_cycle_direct", XR_XIR_I64, 0, XR_XIR_OK, NULL, 0},
     {"function_cell_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"function_cell_acyclic", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
@@ -640,6 +661,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_text_cases.h"
 #include "xir_ctfe_nominal_cases.h"
 #include "xir_ctfe_function_cases.h"
+#include "xir_ctfe_cleanup_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -660,6 +682,8 @@ int main(int argc, char **argv) {
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
         if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
+        else if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_owning(&context,&source);
+        else if (!strcmp(selected->name,"cleanup_direct")) reference_cleanup_direct(&context,&source);
         else if (!strcmp(selected->name,"function_cycle_direct")) reference_function_cycle(&context,&source);
         else if (!strcmp(selected->name,"function_direct")) reference_function_direct(&context,&source);
         else if (!strcmp(selected->name,"text_direct")) reference_text_direct(&context,&source);
@@ -711,6 +735,7 @@ int main(int argc, char **argv) {
         spent.peak_bytes <= reference_limits.live_bytes && spent.work <= reference_limits.work);
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+    if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
