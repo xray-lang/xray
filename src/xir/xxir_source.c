@@ -1084,6 +1084,7 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 #include "xxir_source_call_plan.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
 #include "xxir_source_indirect_call.inc.c"
+#include "xxir_source_native_read_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 typedef enum SourceArrayRecipe {
     SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,

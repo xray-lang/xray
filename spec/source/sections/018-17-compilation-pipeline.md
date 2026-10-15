@@ -698,6 +698,14 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 末轮整型余数与根比较决定唯一舍入；整数被开方数不可能落在相邻整数根的平方中点。最终精确可表示的整数尾数除以2的幂，复用共同 IEEE 位内核，不调用宿主 FPU/libm、AST/native缓存或新增 opcode。循环只携带标量 PHI，不创建运行期 Cell 或托管对象。完整 Source/Checked/Lowered 复验、CTFE闭包/步骤/帧/输出限制及原累计分配/live/work账本仍适用；该单方法不授予 `pow`、解析、BigInt或完整标准库资格。
 
+### 17.58 治理库配方的普通READ参数展开
+
+已准入的整数、Float/Bool/Rune、String方法及Array的contains/indexOf/join/clear、get/set/push/reserve和withCapacity沿同一真实SourceCallSyntax、静态Tuple展开及有序参数worker接收READ实参。固定声明身份、接收者权限、签名与操作契约仍先核实；调用者池中的具体参数类型不被重解释成被调用者泛型参数。共用indirect参数作用域只保留该类型归属，不生成间接调用或授予Function/借用权限。所有值仍沿原普通转换、类型/权限检查和配方进入XIR，不改写AST或制造语法替身。
+
+接收者先求值，展开源各求值一次，普通字段保持静态顺序，零字段展开仍在原位置执行。普通Unit实参仍占一个逻辑参数，不能因零宽SSA而擦除。Tuple字段只提供READ值，不能满足ref参数；可写Array接收者仍经原真实place/权限检查。get在展开参数可能重绑根时保留原接收者快照；reserve仍在参数完成后读取已绑定place的当前值。已有COW、UTF-8/NUL、nullable和调用者泛型类型语义不变。
+
+全部观察、计划存储及转换消耗原Source账本，Checked/Lowered和CTFE闭包、类型/identity、steps/frame/output与原预算继续完整复验。普通Array回调可按17.55/17.56使用真实内部Function和cleanup；这不代表其参数展开、其余Array修改配方、core intrinsic、普通Unit形参、完整库模板或P12已经完成。脚本根的运行期顺序验证不开放编译期外部状态或库私有var。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1506,5 +1514,13 @@ Parameter types, element shapes, alias checks, frontier lookup/transitions and v
 The fixed governed `i64.sqrt() -> f64` first rounds its input to binary64 through the common numeric conversion, then rounds that value's square root to nearest, ties to even. Negative inputs return canonical NaN and zero returns positive zero. The positive binary64 integer representation is at most 2^63. A 53-round restoring algorithm consumes two bits per round using existing unsigned integer, comparison, PHI, shift and conversion operations. Every dynamic shift count is reduced to 0..63 before evaluation; out-of-range input bits yield zero. Roots, remainders and intermediates fit in 64 bits.
 
 Comparing the final integer remainder with the root determines the sole rounding step; an integral radicand cannot equal the squared midpoint between adjacent integer roots. Dividing the exactly representable integer significand by a power of two uses the common IEEE bit kernel, without host FPU/libm, AST/native-cache fallback or a new opcode. Only scalar PHIs cross the loop; no runtime Cell or managed object is created. Complete Source/Checked/Lowered reverification, CTFE closure/step/frame/output limits and the original cumulative allocated/live/work ledger still apply. This single method grants no admission for `pow`, parsing, BigInt or the complete standard library.
+
+### 17.58 Ordinary READ argument expansion for governed library recipes
+
+Admitted integer, Float/Bool/Rune and String methods, plus Array contains/indexOf/join/clear, get/set/push/reserve and withCapacity, receive READ arguments through the same authentic SourceCallSyntax, static Tuple expansion and ordered argument worker. Fixed declaration identity, receiver authority, signature and operation contracts remain mandatory. Concrete parameter types in the caller's pool are not reinterpreted as callee generic parameters. The shared indirect argument scope preserves that type ownership only; it emits no indirect call and grants no Function or loan authority. Original conversions, type/access checks and ordinary recipes produce XIR without AST rewriting or synthetic syntax.
+
+The receiver evaluates first, each spread source evaluates once, ordinary fields preserve static order and zero-field spreads still execute in place. An ordinary Unit argument retains one logical parameter and is never erased because it lacks an SSA payload. Tuple fields provide READ values rather than ref arguments; writable Array receivers retain authentic place/access checks. get preserves its original receiver snapshot when spread arguments may rebind the root; reserve still reads the current bound place after arguments complete. Existing COW, UTF-8/NUL, nullable and caller-generic semantics remain.
+
+All observation, plan storage and conversion consume the original Source ledger. Complete Checked/Lowered and CTFE closure/type/identity, steps/frame/output and original-budget verification remain. Ordinary Array callbacks may use authentic internal Functions and cleanup under 17.55/17.56; this does not complete callback argument expansion, remaining Array mutation recipes, core intrinsics, ordinary Unit formals, complete library templates or P12. Runtime ordering in a script root grants neither compiler external-state access nor library private variables.
 
 <!-- /xr-spec:en -->

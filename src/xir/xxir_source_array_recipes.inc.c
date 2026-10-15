@@ -115,18 +115,13 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
     const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
-    int most = recipe == SOURCE_ARRAY_CLEAR ? 0 : 1, fewest = recipe == SOURCE_ARRAY_JOIN || recipe == SOURCE_ARRAY_CLEAR ? 0 : 1;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < fewest || call->arg_count > most ||
-        (call->arg_count && !call->arguments))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method arguments use ordinary READ values");
     if (recipe == SOURCE_ARRAY_CLEAR) {
-        SourceValue place, empty;
+        SourceValue place, empty;uint32_t supplied;
         if (!source_value_place(ctx, access->object, &place)) return false;
         if (!xr_xir_type_is_array(&ctx->types, place.type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "clear requires an Array place");
+        if (!source_native_read_arguments(ctx,node,NULL,0,0,NULL,&supplied,
+            "Array method requires its declared arguments")) return false;
         if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, place.type, {0}, {0}, 0, {0}}, NULL, 0, &empty) ||
             !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {place.id, empty.id}, {0}, 0, {0}}, NULL))
             return false;
@@ -140,15 +135,18 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method receiver is not an Array");
     XrXirType element_type = xr_xir_array_element(&ctx->types, array.type);
     SourceValue argument = {0}, separator = {0};
+    XrXirType parameter=recipe==SOURCE_ARRAY_JOIN ? XR_XIR_STRING : element_type;
+    uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,&parameter,recipe==SOURCE_ARRAY_JOIN ? 0u : 1u,
+        1,&argument,&supplied,"Array method requires its declared arguments")) return false;
     if (recipe == SOURCE_ARRAY_JOIN) {
-        if (call->arg_count) {
-            if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_STRING, false, false}, &separator)) return false;
+        if (supplied) {
+            separator=argument;
             if (separator.type != XR_XIR_STRING) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join separator must be a string");
         } else if (!source_string_literal(ctx, node, "", 0, &separator)) return false;
         if (element_type != XR_XIR_STRING && element_type != XR_XIR_BOOL && element_type != XR_XIR_RUNE && !xr_xir_type_is_number(element_type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join requires string, number, bool or rune elements");
     } else {
-        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false, false}, &argument)) return false;
         if (argument.type != element_type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "searched value must have the element type");
         if (!source_equal_admitted(ctx, node, element_type)) return false;
