@@ -1,0 +1,36 @@
+add_executable(test_xir_mixed_worker_wait_producer xir/test_xir_mixed_worker_wait_producer.c)
+target_link_libraries(test_xir_mixed_worker_wait_producer PRIVATE xray_xir_source xray_xir_cgen)
+target_compile_definitions(test_xir_mixed_worker_wait_producer PRIVATE
+    XR_WORKER_WAIT_FIXTURES="${CMAKE_SOURCE_DIR}/tests/unit/xir/fixtures/p20_worker_waits"
+    XR_WORKER_WAIT_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
+set(XIR_WORKER_WAIT_GENERATED)
+foreach(wait_index RANGE 0 1)
+    if(wait_index EQUAL 0)
+        set(wait_case yield)
+    else()
+        set(wait_case timer)
+    endif()
+    set(wait_source "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_worker_wait_${wait_index}.c")
+    add_custom_command(OUTPUT "${wait_source}"
+        COMMAND $<TARGET_FILE:test_xir_mixed_worker_wait_producer> ${wait_index} "${wait_source}"
+        DEPENDS test_xir_mixed_worker_wait_producer xir/fixtures/p20_worker_waits/${wait_case}/root.xr
+            xir/fixtures/p20_worker_waits/${wait_case}/callee.xr VERBATIM)
+    list(APPEND XIR_WORKER_WAIT_GENERATED "${wait_source}")
+endforeach()
+add_executable(test_xir_mixed_worker_waits xir/test_xir_mixed_worker_waits.c ${XIR_WORKER_WAIT_GENERATED})
+target_link_libraries(test_xir_mixed_worker_waits PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(wait_target IN ITEMS test_xir_mixed_worker_wait_producer test_xir_mixed_worker_waits)
+    set_target_properties(${wait_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${wait_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${wait_target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endforeach()
+foreach(wait_case IN ITEMS yield timer)
+    foreach(wait_backend IN ITEMS 0 1 vm native)
+        add_test(NAME test_xir_mixed_worker_wait_${wait_case}_${wait_backend} COMMAND test_xir_mixed_worker_waits ${wait_case} ${wait_backend})
+        set_tests_properties(test_xir_mixed_worker_wait_${wait_case}_${wait_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+            LABELS "unit;xir;mixed;execution;ownership;root;worker;generated-c;lifecycle;wait;${wait_case}")
+    endforeach()
+endforeach()
