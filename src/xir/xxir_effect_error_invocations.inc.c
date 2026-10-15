@@ -287,10 +287,13 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
             if (e>=owner.final->edge_count || ++walked>owner.final->edge_count) { status=XR_XIR_BAD_STRUCTURE;break; }
             status=error_invocation_link(flow,contexts,certificate,&replay,e);
         }
+        EffectBodyRecordCursor cursor;
+        if (status==XR_XIR_OK) status=effect_body_request_sequence_begin(&replay.body,&cursor);
         for (uint32_t i=0;status==XR_XIR_OK && i<replay.function->instruction_count;++i) {
             if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
             XrXirInstruction op_storage;const XrXirInstruction *instruction=NULL;
-            status=effect_invocation_flow_instruction(&replay,i,&op_storage,&instruction);
+            status=effect_body_request_sequence_instruction(&replay.body,
+                owner.final->nodes[n].body,i,&cursor,&op_storage,&instruction);
             if (status!=XR_XIR_OK) break;
             XrXirOp op=instruction->op;
             ErrorInvocationCall *call=&contexts->calls[contexts->nodes[n].calls+i];
@@ -302,6 +305,8 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
             status=error_invocation_indirect_check(&replay,contexts,&coverage,i,instruction,&call->unknown);
             call->handled=true;
         }
+        if (status==XR_XIR_OK) status=effect_body_request_sequence_finish(&replay.body,
+            owner.final->nodes[n].body,&cursor);
         xr_compile_resources_free(coverage.memory);
         xr_compile_resources_free(replay.memory);
     }

@@ -172,10 +172,14 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
 
 static XrXirStatus effect_invocation_class_writes(EffectInvocationFlow *flow,
     uint32_t source,EffectInvocationClassSources *sources) {
+    EffectBodyRecordCursor cursor;
+    XrXirStatus sequence=effect_body_request_sequence_begin(&flow->body,&cursor);
+    if (sequence!=XR_XIR_OK) return sequence;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_3;const XrXirInstruction *write=NULL;
-        XrXirStatus body_read_3=effect_invocation_flow_instruction(flow,i,&body_op_3,&write);
+        XrXirStatus body_read_3=effect_body_request_sequence_instruction(&flow->body,
+            flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_3,&write);
         if (body_read_3!=XR_XIR_OK) return body_read_3;
         if (write->op!=XR_XIR_LOCAL_WRITE && write->op!=XR_XIR_SCALAR_LOCAL_WRITE &&
             write->op!=XR_XIR_OWNED_LOCAL_WRITE) continue;
@@ -183,7 +187,7 @@ static XrXirStatus effect_invocation_class_writes(EffectInvocationFlow *flow,
         XrXirStatus status=effect_invocation_class_source(flow,write->args[1],sources);
         if (status!=XR_XIR_OK) return status;
     }
-    return XR_XIR_OK;
+    return effect_body_request_sequence_finish(&flow->body,flow->read->final->nodes[flow->node].body,&cursor);
 }
 
 static XrXirStatus effect_invocation_class_value(EffectInvocationFlow *flow,
@@ -238,15 +242,21 @@ static XrXirStatus effect_invocation_class_return(EffectInvocationFlow *flow,
     const EffectInvocationRead *owner=flow->read;
     if (!xr_xir_type_is_class(flow->body.domain.types,flow->function->result)) return XR_XIR_OK;
     EffectInvocationClassSources sources={.complete=true};uint32_t count=0;
+    EffectBodyRecordCursor cursor;
+    XrXirStatus sequence=effect_body_request_sequence_begin(&flow->body,&cursor);
+    if (sequence!=XR_XIR_OK) return sequence;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_5;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_5=effect_invocation_flow_instruction(flow,i,&body_op_5,&op);
+        XrXirStatus body_read_5=effect_body_request_sequence_instruction(&flow->body,
+            flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_5,&op);
         if (body_read_5!=XR_XIR_OK) return body_read_5;
         if (op->op!=XR_XIR_RETURN) continue;
         ++count;XrXirStatus status=effect_invocation_class_source(flow,op->args[0],&sources);
         if (status!=XR_XIR_OK) return status;
     }
+    sequence=effect_body_request_sequence_finish(&flow->body,flow->read->final->nodes[flow->node].body,&cursor);
+    if (sequence!=XR_XIR_OK) return sequence;
     if (!count) sources.mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;
     if (!sources.complete) return XR_XIR_OK;
     uint64_t rank=sources.mask==EFFECT_CLASS_KNOWN ? sources.maximum+1 : 0;
