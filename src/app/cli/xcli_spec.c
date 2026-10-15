@@ -129,6 +129,13 @@ static const XrCliOptionSpec deps_options[] = {
     {"list", 'l', XR_CLI_VALUE_NONE, false, false, NULL, "Simple list format"},
     XR_CLI_OPT_END};
 
+static const XrCliOptionSpec toolchain_options[] = {
+    {"target", 0, XR_CLI_VALUE_STRING, false, false, "TARGET", "Preference target"},
+    {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Explicit C compiler preference"},
+    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Explicit Zig preference"},
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit machine-readable JSON"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec info_options[] = {
@@ -163,6 +170,9 @@ static XrCliCommandSpec cli_commands[] = {
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
     /* Artifact commands */
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
+
+    {"toolchain", "Read or update persistent native toolchain preferences", NULL,
+     toolchain_options, 1, 2, false, false, NULL, NULL, 0},
 
     /* Utility commands */
     {"deps", "Analyze source dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},

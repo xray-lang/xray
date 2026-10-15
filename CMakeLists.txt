@@ -2498,6 +2498,7 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
     ${XRAY_CLI_ROOT}/xcmd_deps.c
+    ${XRAY_CLI_ROOT}/xcmd_toolchain.c
     ${XRAY_CLI_ROOT}/xcmd_check.c
     ${XRAY_CLI_ROOT}/xcmd_fmt.c
     ${XRAY_CLI_ROOT}/xcmd_test.c
@@ -2649,7 +2650,7 @@ target_link_libraries(xray PRIVATE xray_source_api xray_xir_runtime_host xray_fr
     xray_compile_resources)
 if(WIN32)
     target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
-        xray_xir_publication xray_toolchain_dependencies)
+        xray_xir_publication xray_toolchain_dependencies xray_cli_toolchain_update)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})
