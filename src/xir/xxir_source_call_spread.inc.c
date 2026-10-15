@@ -71,6 +71,15 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
     }
     SourceExpectedType ground;
     if (!source_ground_type(ctx,node,depth,&ground)) return false;
+    if (ground.present && node->type==AST_VARIABLE) {
+        SourceName *binding=visible_name(ctx,node->as.variable.name);
+        uint32_t claims=source_fact_depth(ctx,binding);
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+        for (uint32_t c=0;c<claims && xr_xir_type_is_nullable(&ctx->types,ground.type);++c) {
+            if (!source_work(ctx,node)) return false;
+            ground.type=xr_xir_nullable_element(&ctx->types,ground.type);
+        }
+    }
     if (!ground.present && node->type==AST_CALL_EXPR) {
         const CallExprNode *call=&node->as.call_expr;
         SourceName *binding=source_call_spread_function(ctx,call->callee);
@@ -269,7 +278,7 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
                 if (!known.known) {complete=false;break;}
                 substitution=(SourceSubstitution){known.arguments,known.argument_count};
             }
-            if (formal->family==SOURCE_CALL_INDIRECT) fields[f].type=wanted;
+            if (formal->family==SOURCE_CALL_INDIRECT || formal->family==SOURCE_CALL_NATIVE) fields[f].type=wanted;
             else if (!source_substitute(ctx,&substitution,wanted,0,&fields[f].type)) return false;
         }
         if (complete) {

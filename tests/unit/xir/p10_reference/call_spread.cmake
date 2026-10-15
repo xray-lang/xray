@@ -97,7 +97,7 @@ endforeach()
 add_test(NAME test_xir_p10_reference_call_spread_native
     COMMAND test_xir_p10_reference --accept call_spread_native 1 0)
 set_tests_properties(test_xir_p10_reference_call_spread_native PROPERTIES
-    TIMEOUT 30 LABELS "unit;xir;p10;reference;call;spread;native-gap")
+    TIMEOUT 30 LABELS "unit;xir;p10;reference;call;spread;native")
 foreach(case IN ITEMS order generic dispatch empty ref task suspend failure inferred_result)
     set(target test_xir_p10_call_spread_${case}_runtime)
     add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_initializer_places_runtime.c"

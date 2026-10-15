@@ -39,7 +39,7 @@ static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call arity or type arguments are not admitted");
     return true;
 }
-typedef enum SourceCallFamily { SOURCE_CALL_FUNCTION, SOURCE_CALL_REQUIREMENT, SOURCE_CALL_CONSTRUCTOR, SOURCE_CALL_INDIRECT } SourceCallFamily;
+typedef enum SourceCallFamily { SOURCE_CALL_FUNCTION, SOURCE_CALL_REQUIREMENT, SOURCE_CALL_CONSTRUCTOR, SOURCE_CALL_INDIRECT, SOURCE_CALL_NATIVE } SourceCallFamily;
 typedef struct SourceCallStorage {
     XrXirType *types;
     SourceValue *values;
@@ -276,7 +276,7 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
             }
         } else {
             expected.present=true;
-            if (plan->family==SOURCE_CALL_INDIRECT) expected.type=formal;
+            if (plan->family==SOURCE_CALL_INDIRECT || plan->family==SOURCE_CALL_NATIVE) expected.type=formal;
             else if (!source_substitute(ctx,&plan->substitution,formal,0,&expected.type)) goto done;
         }
         SourceValue *value=&plan->values[a+plan->value_offset];

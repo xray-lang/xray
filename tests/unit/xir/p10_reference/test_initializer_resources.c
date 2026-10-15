@@ -540,6 +540,130 @@ static const char call_spread_inferred_result_source[] =
     "    return first * 10000 + second * 100 + third\n"
     "}\n";
 
+static const char native_spread_mutation_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn replacement() -> (i64,) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    source = [11, 13]\n"
+    "    return (17,)\n"
+    "}\n"
+    "fn fillArgs() -> (i64, i64, i64) {\n"
+    "    trace = trace * 10 + 2\n"
+    "    return (19, 0, 2)\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    source.push(...replacement())\n"
+    "    const pushed = source[0] * 100 + source[2]\n"
+    "    source.fill(...fillArgs())\n"
+    "    source.set(...(1, 23))\n"
+    "    source.unshift(...(29,))\n"
+    "    source.reverse(...())\n"
+    "    const removed = source.pop(...())\n"
+    "    if (removed == null) { return 0 }\n"
+    "    source.resize(...(5, 31))\n"
+    "    source.reserve(...(9,))\n"
+    "    return trace * 100000000 + pushed * 100000 + source.get(...(0,)) * 1000 + source[1] * 100 + source[4] + (removed as i64)\n"
+    "}\n";
+
+static const char native_spread_query_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn searched() -> (i64,) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    source = [11]\n"
+    "    return (7,)\n"
+    "}\n"
+    "fn empty() { trace = trace * 10 + 2 }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    const found = source.contains(...searched())\n"
+    "    const index = source.indexOf(...(11,))\n"
+    "    const joined = [\"a\\0b\", \"x\"].join(...(\"|\",))\n"
+    "    const indexed = source.entries(...empty())\n"
+    "    const combined = source.concat(...([13], [17, 19]), ...())\n"
+    "    var copied = combined\n"
+    "    copied.clear(...empty())\n"
+    "    if (!found || joined != \"a\\0b|x\") { return 0 }\n"
+    "    return trace * 1000000 + index * 100000 + indexed[0].1 * 1000 + len(combined) * 100 + combined[3] * 10 + len(copied)\n"
+    "}\n";
+
+static const char native_spread_generic_source[] =
+    "fn appended<T>(values: Array<T>, item: T) -> Array<T> {\n"
+    "    var copy = values\n"
+    "    copy.push(...(item,))\n"
+    "    copy.unshift(...(item,))\n"
+    "    return copy\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const original: Array<i8> = [3]\n"
+    "    const copied: Array<i8> = appended<i8>(original, 7)\n"
+    "    const joined = [\"a\\0b\", \"x\"].join(...(\"|\",))\n"
+    "    return len(original) * 10000 + len(copied) * 1000 + (copied[0] as i64) * 100 + (copied[1] as i64) * 10 + (copied[2] as i64) + len(joined)\n"
+    "}\n";
+
+static const char native_spread_suspend_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn arguments() -> (i64, i64) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    Coro.yield()\n"
+    "    source = [11, 13]\n"
+    "    return (1, 17)\n"
+    "}\n"
+    "fn empty() { trace = trace * 10 + 2 }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    source.set(...arguments(), ...empty())\n"
+    "    return trace * 10000 + source[0] * 100 + source[1]\n"
+    "}\n";
+
+static const char native_spread_failure_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn index() -> (i64,) { trace = trace * 10 + 1; return (0,) }\n"
+    "fn failing() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    assert(false, \"native-spread-argument-failure\")\n"
+    "    return 0\n"
+    "}\n"
+    "fn late() { trace = trace * 10 + 3 }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    try {\n"
+    "        source.set(...index(), failing(), ...late())\n"
+    "        return 0\n"
+    "    } catch panic (panic: PanicInfo) {\n"
+    "        return panic.code * 10000 + trace * 100 + source[0]\n"
+    "    }\n"
+    "}\n";
+
+static const char native_spread_shape_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn index() -> (i64,) { trace = trace * 10 + 1; source = [11]; return (1,) }\n"
+    "fn empty() { trace = trace * 10 + 2 }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    const saved = source.get(...index())\n"
+    "    const maybe: (Array<i64>,)? = ([13],)\n"
+    "    if (maybe == null) { return 0 }\n"
+    "    const combined = source.concat(...maybe)\n"
+    "    var reserved = Array<i64>.withCapacity(...(4,))\n"
+    "    reserved.push(...(17,))\n"
+    "    reserved.unshift(...(19,))\n"
+    "    const first = reserved.shift(...empty())\n"
+    "    const last = reserved.pop(...())\n"
+    "    if (first == null || last == null) { return 0 }\n"
+    "    return trace * 1000000 + saved * 10000 + combined[0] * 100 + combined[1] * 10 + (first as i64) + (last as i64)\n"
+    "}\n";
+
 typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
 static const InitializerCase cases[] = {
     {"ordinary",source,sizeof(source)-1},
@@ -568,7 +692,13 @@ static const InitializerCase cases[] = {
     {"call-spread-task",call_spread_task_source,sizeof(call_spread_task_source)-1},
     {"call-spread-suspend",call_spread_suspend_source,sizeof(call_spread_suspend_source)-1},
     {"call-spread-failure",call_spread_failure_source,sizeof(call_spread_failure_source)-1},
-    {"call-spread-inferred_result",call_spread_inferred_result_source,sizeof(call_spread_inferred_result_source)-1}
+    {"call-spread-inferred_result",call_spread_inferred_result_source,sizeof(call_spread_inferred_result_source)-1},
+    {"native-spread-mutation",native_spread_mutation_source,sizeof(native_spread_mutation_source)-1},
+    {"native-spread-query",native_spread_query_source,sizeof(native_spread_query_source)-1},
+    {"native-spread-generic",native_spread_generic_source,sizeof(native_spread_generic_source)-1},
+    {"native-spread-suspend",native_spread_suspend_source,sizeof(native_spread_suspend_source)-1},
+    {"native-spread-failure",native_spread_failure_source,sizeof(native_spread_failure_source)-1},
+    {"native-spread-shape",native_spread_shape_source,sizeof(native_spread_shape_source)-1}
 };
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -666,6 +796,13 @@ int main(int argc,char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--call-spread-failure")) { first=25;last=26; }
     else if (argc==2 && !strcmp(argv[1],"--call-spread-inferred_result")) { first=26;last=27; }
     else if (argc==2 && !strcmp(argv[1],"--call-spread-baseline")) { first=18;last=27;baseline=true; }
+    else if (argc==2 && !strcmp(argv[1],"--native-spread-mutation")) { first=27;last=28; }
+    else if (argc==2 && !strcmp(argv[1],"--native-spread-query")) { first=28;last=29; }
+    else if (argc==2 && !strcmp(argv[1],"--native-spread-generic")) { first=29;last=30; }
+    else if (argc==2 && !strcmp(argv[1],"--native-spread-suspend")) { first=30;last=31; }
+    else if (argc==2 && !strcmp(argv[1],"--native-spread-failure")) { first=31;last=32; }
+    else if (argc==2 && !strcmp(argv[1],"--native-spread-shape")) { first=32;last=33; }
+    else if (argc==2 && !strcmp(argv[1],"--native-spread-baseline")) { first=27;last=33;baseline=true; }
     else CHECK(argc==1);
     for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;

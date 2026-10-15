@@ -1,0 +1,15 @@
+var trace: i64 = 0
+var source: Array<i64> = [3, 7]
+fn arguments() -> (i64, i64) {
+    trace = trace * 10 + 1
+    Coro.yield()
+    source = [11, 13]
+    return (1, 17)
+}
+fn empty() { trace = trace * 10 + 2 }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3, 7]
+    source.set(...arguments(), ...empty())
+    return trace * 10000 + source[0] * 100 + source[1]
+}
