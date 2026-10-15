@@ -17,13 +17,24 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         const XrXirSourceDebugFunction *function=&debug->functions[f];
         if (function->function!=f || function->declaration>snapshot->view.declaration_count ||
             function->parameter_count!=module->functions[f].parameter_count ||
-            function->instruction_count!=module->functions[f].instruction_count) return XR_XIR_BAD_STRUCTURE;
+            function->instruction_count!=module->functions[f].instruction_count ||
+            (function->binding_count && !function->bindings)) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t b=0;b<function->binding_count;++b) {
+            if (!query_work(&copy,1)) return copy.status;
+            const XrXirSourceDebugBinding *binding=&function->bindings[b];
+            if (!binding->declaration || binding->declaration>snapshot->view.declaration_count || binding->parent>b ||
+                (binding->flags & ~(XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_CELL)) ||
+                binding->flags==(XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_CELL) ||
+                ((binding->flags & XR_XIR_SOURCE_DEBUG_UNIT) ? binding->value!=UINT32_MAX :
+                 (uint64_t)binding->value>=(uint64_t)function->parameter_count+function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
+        }
         if (!function->points) continue;
         for (uint32_t i=0;i<function->instruction_count;++i) {
             if (!query_work(&copy,1)) return copy.status;
             const XrXirSourceDebugPoint *point=&function->points[i];
             const XrXirSourceRange *range=&point->range;
-            if ((point->flags & ~XR_XIR_SOURCE_DEBUG_ENTRY) || (point->flags && !point->statement)) return XR_XIR_BAD_STRUCTURE;
+            if ((point->flags & ~XR_XIR_SOURCE_DEBUG_ENTRY) || (point->flags && !point->statement) ||
+                point->environment>function->binding_count) return XR_XIR_BAD_STRUCTURE;
             if (point->statement && (range->module>=snapshot->view.module_count || range->line<=0 || range->column<=0 ||
                 (range->end_line && (range->end_line<range->line || range->end_column<=0 ||
                  (range->end_line==range->line && range->end_column<range->column))))) return XR_XIR_BAD_STRUCTURE;
@@ -35,6 +46,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         if (debug->functions[f].points)
             functions[f].points=query_copy(&copy,debug->functions[f].points,
                 debug->functions[f].instruction_count,sizeof(*functions[f].points));
+        if (debug->functions[f].binding_count)
+            functions[f].bindings=query_copy(&copy,debug->functions[f].bindings,
+                debug->functions[f].binding_count,sizeof(*functions[f].bindings));
     }
     if (!query_work(&copy,sizeof(snapshot->debug)+sizeof(snapshot->debug_ready))) {
         while (snapshot->memory!=previous) {

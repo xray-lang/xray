@@ -236,6 +236,16 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     output->blocks=emitted_blocks;output->block_count=body->block_count;
     output->operands=operands;output->operand_count=body->operand_count;
     if (seal) {
+        for (uint32_t i=0;i<body->debug_binding_count;++i) {
+            if (!source_work_units(ctx,NULL,sizeof(*body->debug_bindings))) goto done;
+            XrXirSourceDebugBinding *binding=&body->debug_bindings[i];
+            if (!(binding->flags & XR_XIR_SOURCE_DEBUG_UNIT) &&
+                !source_region_id(map,value_count,binding->value,&binding->value)) {
+                char message[128];
+                source_format(ctx,message,sizeof(message),"source debug function %u binding %u has invalid value %u",ctx->function,i,binding->value);
+                source_fail(ctx,body->node,XR_XIR_BAD_STRUCTURE,message);goto done;
+            }
+        }
         for (SourceRootQuery *query = ctx->root_queries; query; query = query->next) {
             if (!source_work(ctx,NULL)) goto done;
             if (query->function == ctx->function && !source_region_id(map,value_count,query->value,&query->value)) goto invalid;

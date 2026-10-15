@@ -114,7 +114,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
             ctx->debug_entry=entry;ctx->debug_jump_entry=jump_entry;
             return source_fail(ctx,node,XR_XIR_BUDGET,"source statement identity exhausted");
         }
-        ctx->debug_point=(XrXirSourceDebugPoint){range,node->node_id+1,0};
+        ctx->debug_point=(XrXirSourceDebugPoint){range,node->node_id+1,0,0};
         ctx->debug_entry=true;
         ctx->debug_jump_entry=node->type==AST_BREAK_STMT || node->type==AST_CONTINUE_STMT || node->type==AST_THROW_STMT;
     }

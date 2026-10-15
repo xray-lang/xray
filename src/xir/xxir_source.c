@@ -66,6 +66,7 @@ typedef struct SourceName {
     uint32_t declaration;
     bool inferred;
     bool checked_library;
+    uint32_t debug_function, debug_binding;
 } SourceName;
 /* SOURCE_UNIT_LOCAL is an initialized logical declaration with no runtime
  * payload. Its index is never an executable value or a capture ordinal.
@@ -164,6 +165,8 @@ typedef struct SourceFunction {
     SourceRecipeStorage *recipe_storage;
     bool region_sealed;
     const XrXirSourceDebugPoint *debug_points;
+    XrXirSourceDebugBinding *debug_bindings;
+    uint32_t debug_binding_count, debug_binding_capacity;
     SourceRootValue *root_values;
     bool *root_captures; uint32_t root_capture_count;
     XrXirEffectParameter *effect_parameters;
@@ -257,6 +260,8 @@ typedef struct SourceContext {
     XrXirSourceDebugPoint debug_point;
     uint32_t debug_function;
     bool debug_entry, debug_jump_entry;
+    SourceName **debug_names;
+    uint32_t debug_name_capacity;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
     SourceLoop *loop;
@@ -743,6 +748,7 @@ static bool begin_block(SourceContext *ctx) {
     ++body->block_count;
     --ctx->remaining_blocks; ctx->returned = false; return true;
 }
+#include "xxir_source_debug_bindings.inc.c"
 static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (body->count>UINT32_MAX-ctx->functions[ctx->function].parameter_count)
@@ -765,9 +771,12 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
         body->recipes = ops; body->capacity = capacity;
     }
     if (result) *result = (SourceValue) {ctx->functions[ctx->function].parameter_count + body->count, op.type};
+    uint32_t environment=0;
+    if (!source_debug_environment(ctx,&environment)) return false;
     body->recipes[body->count] = (SourceInstructionRecipe){op,ctx->function,
         ctx->functions[ctx->function].parameter_count+body->count,{0,op.type,UINT32_MAX},
         ctx->debug_function==ctx->function ? ctx->debug_point : (XrXirSourceDebugPoint){0}};
+    body->recipes[body->count].debug.environment=environment;
     if (ctx->debug_function==ctx->function && ctx->debug_entry && (op.op!=XR_XIR_JUMP || ctx->debug_jump_entry)) {
         body->recipes[body->count].debug.flags=XR_XIR_SOURCE_DEBUG_ENTRY;
         ctx->debug_entry=false;
@@ -1813,10 +1822,10 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     }
     if (!decl->is_const && decl->type_annotation && initial.type != XR_XIR_UNIT)
         ctx->bodies[ctx->function].recipes[initial.id - ctx->functions[ctx->function].parameter_count].root.kind = 1;
-    *symbol = (SourceName) {ctx->locals, decl->name, NULL, node,
+    *symbol = (SourceName){ctx->locals, decl->name, NULL, node,
         logical_type == XR_XIR_UNIT && decl->is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
         logical_type == XR_XIR_UNIT && decl->is_const ? UINT32_MAX : initial.id,
-        ctx->module, logical_type, !decl->is_const, false, 0, false, false};
+        ctx->module, logical_type, !decl->is_const, false, 0, false, false,0,0};
     symbol->inferred = !decl->type_annotation;
     ctx->locals = symbol;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
@@ -1839,7 +1848,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     if (!symbol) {
         symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
-        *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_PENDING, UINT32_MAX, ctx->module, XR_XIR_UNIT, false, false, 0, false, false};
+        *symbol = (SourceName){ctx->locals, decl->name, NULL, node, SOURCE_PENDING, UINT32_MAX, ctx->module, XR_XIR_UNIT, false, false, 0, false, false,0,0};
         ctx->locals = symbol;
     }
     symbol->kind = SOURCE_LOCAL; symbol->index = value.id; symbol->type = value.type;
@@ -1862,8 +1871,8 @@ static bool source_block_functions(SourceContext *ctx, AstNode *block) {
         }
         SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
-        *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_PENDING, UINT32_MAX,
-            ctx->module, XR_XIR_UNIT, false, false, 0, false, false};
+        *symbol = (SourceName){ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_PENDING, UINT32_MAX,
+            ctx->module, XR_XIR_UNIT, false, false, 0, false, false,0,0};
         ctx->locals = symbol;
     }
     return true;
@@ -2643,8 +2652,8 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
     SourceValue self;
     if (!source_type_arguments(ctx, node, types, count, &op) || !source_recipe_group(ctx, op, captures, scan->count, &self))
         return false;
-    *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_LOCAL, self.id,
-        ctx->module, type, false, false, body->declaration, false, false};
+    *symbol = (SourceName){ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_LOCAL, self.id,
+        ctx->module, type, false, false, body->declaration, false, false,0,0};
     ctx->locals = symbol;
     return true;
 }
@@ -2831,6 +2840,7 @@ static bool build_bodies(SourceContext *ctx) {
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"closure declaration was not checked");
     if (ctx->linkage_kind == XR_XIR_LIBRARY) return true;
     ctx->function = ctx->entry_function; ctx->module = (uint32_t) ctx->graph->entry_index;
+    ctx->locals=ctx->scope=NULL;
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,

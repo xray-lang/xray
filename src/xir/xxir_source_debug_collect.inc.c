@@ -14,7 +14,8 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
     for (uint32_t f=0;f<ctx->function_count;++f) {
         if (!source_work_units(ctx,NULL,sizeof(*functions))) return ctx->diagnostic.status;
         functions[f]=(XrXirSourceDebugFunction){f,ctx->bodies[f].declaration,
-            module->functions[f].parameter_count,module->functions[f].instruction_count,ctx->bodies[f].debug_points};
+            module->functions[f].parameter_count,module->functions[f].instruction_count,ctx->bodies[f].debug_points,
+            ctx->bodies[f].debug_bindings,ctx->bodies[f].debug_binding_count};
     }
     XrXirSourceDebugView debug={functions,ctx->function_count};
     return xr_xir_compile_source_snapshot_debug_copy(output->snapshot,&debug,module);

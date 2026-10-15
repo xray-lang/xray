@@ -119,6 +119,7 @@ int main(int argc,char **argv) {
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(launch->source);
     CHECK(debug && debug->function_count==launch->function_count);
     const XrXirSourceDebugFunction *mapped=&debug->functions[leaf];
+    CHECK(!debug->functions[launch->entry].binding_count);
     CHECK(mapped->function==leaf && mapped->parameter_count==function->parameters &&
         mapped->instruction_count==function->instructions && mapped->points);
     bool source_lines[6]={0};uint32_t source_entries[6]={0};
@@ -142,7 +143,24 @@ int main(int argc,char **argv) {
     CHECK(source_entries[2]==1 && source_entries[3]==1 && source_entries[4]==1 && source_entries[5]==1);
     CHECK(mapped->points[at].range.line==5 && mapped->points[at].statement);
     CHECK(mapped->points[string-function->parameters].range.line==3);
-    XrXirSourceDebugPoint copied={{123,4,5,6,7},99,0},preserved=copied;
+    CHECK(mapped->binding_count && mapped->bindings);
+    uint32_t environment=mapped->points[at].environment;bool parameter=false,local=false,constant=false;
+    uint32_t observed_value=UINT32_MAX;
+    for (uint32_t b=environment;b;b=mapped->bindings[b-1].parent) {
+        CHECK(b<=mapped->binding_count);
+        const XrXirSourceDebugBinding *binding=&mapped->bindings[b-1];
+        CHECK(binding->parent<b && binding->declaration && binding->declaration<=view->declaration_count);
+        const char *name=view->declarations[binding->declaration-1].name;
+        if (!strcmp(name,"value")) { CHECK(binding->value==0 && !binding->flags);parameter=true; }
+        else if (!strcmp(name,"observed")) { CHECK(binding->flags==XR_XIR_SOURCE_DEBUG_CELL);observed_value=binding->value;local=true; }
+        else if (!strcmp(name,"text")) { CHECK(binding->value==string && !binding->flags);constant=true; }
+        else CHECK(false);
+    }
+    CHECK(parameter && local && constant);
+    uint32_t first_environment=mapped->points[0].environment;
+    CHECK(first_environment && mapped->bindings[first_environment-1].parent==0 &&
+        mapped->bindings[first_environment-1].value==0);
+    XrXirSourceDebugPoint copied={{123,4,5,6,7},99,0,0},preserved=copied;
     CHECK(xdap_launch_source_point(launch,UINT32_MAX,at,&copied)==XR_XIR_BAD_STRUCTURE);
     CHECK(!memcmp(&copied,&preserved,sizeof(copied)));
     CHECK(xdap_launch_source_point(launch,leaf,at,&copied)==XR_XIR_OK && copied.range.line==5 && copied.range.column==5);
@@ -157,6 +175,8 @@ int main(int argc,char **argv) {
     const char *bytes=NULL;size_t length=0;
     CHECK(xr_xir_string_view(&value,&bytes,&length) && length==11 && !memcmp(bytes,"owned\0value",11));
     xr_xir_value_drop(&value);
+    CHECK(xr_xir_vm_debug_snapshot_cell_value(snapshot,0,observed_value,&value)==XR_XIR_VALUE_OK &&
+        value.type==XR_XIR_I64 && value.payload==41);xr_xir_value_drop(&value);
     CHECK(xdap_current_continue(launch->control,result.debug_epoch,XR_XIR_VM_DEBUG_CONTINUE)==XR_XIR_VALUE_OK);
     xdap_current_result_drop(&result);CHECK(xdap_current_poll(launch->control,1000,&result)==XR_XIR_VALUE_OK);
     CHECK(result.state==XDAP_CURRENT_ENDED && result.outcome.status==XR_XIR_CALL_RETURNED);
