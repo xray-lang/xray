@@ -1,4 +1,15 @@
 add_executable(test_xir_mixed_library_producer xir/test_xir_mixed_library_producer.c)
+add_executable(test_xir_mixed_array_query_types xir/test_xir_mixed_array_query_types.c)
+target_link_libraries(test_xir_mixed_array_query_types PRIVATE xray_xir_source xray_xir_cgen)
+set_target_properties(test_xir_mixed_array_query_types PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_array_query_types PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_array_query_types PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_mixed_array_query_types COMMAND test_xir_mixed_array_query_types)
+set_tests_properties(test_xir_mixed_array_query_types PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+    LABELS "unit;xir;mixed;source;ownership;array;query;generated-c")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/p20-library-counter-absent")
 target_link_libraries(test_xir_mixed_library_producer PRIVATE xray_xir_source xray_xir_cgen)
 target_compile_definitions(test_xir_mixed_library_producer PRIVATE
