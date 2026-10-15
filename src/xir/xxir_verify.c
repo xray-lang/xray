@@ -1018,7 +1018,6 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (id >= function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
                 operand_type = id < function->parameter_count ? function->parameters[id] :
                     function->instructions[id - function->parameter_count].type;
-                if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
                 XrXirStatus display=xir_compile_display_type(&context->remaining,context->module->types,operand_type);
                 if (display!=XR_XIR_OK) return display;
             }

@@ -1289,7 +1289,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (stream) expected = XR_XIR_STRING;
         if (host_time > (uint32_t) XR_XIR_CLOCK_MONOTONIC) expected = XR_XIR_I64;
         if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false, false}, &args[i])) return false;
-        if (args[i].type == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unit argument is not admitted");
+        if (args[i].type == XR_XIR_UNIT) {
+            if (!print) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unit argument is not admitted");
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,XR_XIR_UNIT,{0},{0},0,{0}},&args[i]))
+                return false;
+        }
     }
     if (stream) {
         if (call->arg_count != 1 || args[0].type != XR_XIR_STRING)

@@ -849,10 +849,9 @@ static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
         uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
         for (uint32_t p = 0; p < count && emit_work(buffer, 1); ++p) {
             uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + p] : op->args[p];
-            XrXirType type = id < function->parameter_count ? function->parameters[id] :
-                function->instructions[id - function->parameter_count].type;
-            EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
-                   p, (uint32_t) type, layout->offsets[id]);
+            append(buffer," state->arguments[%u] = ",p);
+            emit_value(buffer,function,layout,id);
+            EMIT_LITERAL(buffer,";\n");
         }
         if (op->op == XR_XIR_WRITE_STREAM)
             EMIT_FORMAT(buffer, et_4db8c9008873f289, " state->waiting = true; state->destination = %uu; state->expected = XR_XIR_BOOL;\n", destination);

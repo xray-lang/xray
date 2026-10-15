@@ -499,10 +499,7 @@ static XrXirRunStatus vm_io_step(ScalarRun *run, VmState *state, XrXirAction *ac
         uint32_t count = op->op == XR_XIR_PRINT ? op->args[1] : 1;
         for (uint32_t p = 0; p < count; ++p) {
             uint32_t id = op->op == XR_XIR_PRINT ? run->function->operands[op->args[0] + p] : op->args[p];
-            XrXirType type = id < run->function->parameter_count ? run->function->parameters[id] :
-                run->function->instructions[id - run->function->parameter_count].type;
-            state->arguments[p] = (XrXirValue) {(uint32_t) type, 0,
-                xr_xir_scalar_load(run->frame, run->layout->offsets[id])};
+            state->arguments[p] = vm_value_operand(run,id);
         }
         if (op->op == XR_XIR_WRITE_STREAM) {
             state->waiting = true; state->destination = run->layout->offsets[result_id]; state->expected = XR_XIR_BOOL;
