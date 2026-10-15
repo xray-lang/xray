@@ -4497,6 +4497,7 @@ if(WIN32)
     add_subdirectory(xir/lsp_source_index_store)
     add_subdirectory(xir/lsp_index_pool)
     add_subdirectory(xir/lsp_code_lens)
+    add_subdirectory(xir/lsp_semantic_consumers)
 endif()
 
 add_executable(test_lsp_document_store xir/test_lsp_document_store.c)

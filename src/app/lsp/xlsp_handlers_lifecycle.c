@@ -18,8 +18,11 @@
 #include "xray_version.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include <string.h>
 
 XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params) {
+    XrJsonValue *semantic_provider=xlsp_semantic_tokens_provider();
+    if(!semantic_provider)return NULL;
     // Collect workspace folders from initialize params.
     // If the client provides workspaceFolders, use them directly.
     // Otherwise, fall back to rootUri / rootPath and create a
@@ -81,6 +84,9 @@ XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params)
     // Build capabilities response
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *capabilities = xjson_new_object();
+    if(!result||!capabilities) {
+        xjson_free(semantic_provider);xjson_free(capabilities);xjson_free(result);return NULL;
+    }
 
     // Text document sync (incremental)
     XrJsonValue *textDocSync = xjson_new_object();
@@ -150,14 +156,20 @@ XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params)
     xjson_object_set_new(sigHelp, "triggerCharacters", sigTriggers);
     xjson_object_set_new(capabilities, "signatureHelpProvider", sigHelp);
 
-    // Semantic tokens
-    XrJsonValue *semTokens = xjson_new_object();
-    xjson_object_set_new(semTokens, "legend", xlsp_semantic_tokens_legend());
-    XrJsonValue *semFull = xjson_new_object();
-    xjson_object_set_new(semFull, "delta", xjson_new_bool(true));
-    xjson_object_set_new(semTokens, "full", semFull);
-    xjson_object_set_new(semTokens, "range", xjson_new_bool(true));
-    xjson_object_set_new(capabilities, "semanticTokensProvider", semTokens);
+    // Adopt the complete semantic capability only after successful construction.
+    if(!capabilities||capabilities->type!=XR_JSON_OBJECT) {
+        xjson_free(semantic_provider);xjson_free(capabilities);xjson_free(result);return NULL;
+    }
+    int semantic_before=capabilities->as.object.count;
+    xjson_object_set_new(capabilities,"semanticTokensProvider",semantic_provider);
+    if(capabilities->as.object.count==semantic_before) {
+        xjson_free(semantic_provider);xjson_free(capabilities);xjson_free(result);return NULL;
+    }
+    XrJsonMember *semantic_member=&capabilities->as.object.members[semantic_before];
+    if(!semantic_member->key||semantic_member->value!=semantic_provider||semantic_member->key_len!=22||
+       memcmp(semantic_member->key,"semanticTokensProvider",22)) {
+        xjson_free(capabilities);xjson_free(result);return NULL;
+    }
 
     // Inlay hints
     xjson_object_set_new(capabilities, "inlayHintProvider", xjson_new_bool(true));
