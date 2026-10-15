@@ -143,6 +143,7 @@ static void task_late_graph(unsigned backend, unsigned order) {
         backend, order, witness[0].root_providers, witness[0].worker_providers,
         (unsigned long long)cost.allocated_bytes, (unsigned long long)cost.peak_bytes, (unsigned long long)cost.work);
 }
+#ifndef XR_TASK_RESULT_RESOURCE_MAIN
 int main(int argc, char **argv) {
     CHECK(argc == 2); static const char *const names[] = {"0", "1", "vm", "native"}; unsigned backend = 0;
     while (backend < 4 && strcmp(argv[1], names[backend])) ++backend;
@@ -150,3 +151,4 @@ int main(int argc, char **argv) {
     for (unsigned order = 0; order < 2; ++order) task_late_graph(backend, order);
     return 0;
 }
+#endif
