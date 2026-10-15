@@ -1,2 +1,2 @@
-class Box{text:string;constructor(text:string){this.text=text}}
+class Box{text:string;init(text:string){this.text=text}}
 export fn run()->string{const b=Box("ab");defer{b.text=b.text+"c"};return b.text}

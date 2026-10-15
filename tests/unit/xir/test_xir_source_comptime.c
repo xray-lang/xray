@@ -34,7 +34,7 @@ static const char source_comptime_output_text[]=
     "fn pair_constant()->(i64,i64){return comptime pair()}\n"
     "export fn run()->i64{return comptime {const xs=table_constant();const p=pair_constant();xs[9] as i64+p.0+p.1-34}}\n";
 static const char source_comptime_class_text[]=
-    "class Box{items:Array<i64>;constructor(items:Array<i64>){this.items=items}}\n"
+    "class Box{items:Array<i64>;init(items:Array<i64>){this.items=items}}\n"
     "fn inc(x:ref i64){defer{x=x+2}}\n"
     "fn answer()->i64{const b=Box([40]);inc(ref b.items[0]);return b.items[0]}\n"
     "export fn run()->i64{return comptime answer()}\n";
