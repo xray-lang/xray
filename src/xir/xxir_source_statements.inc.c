@@ -104,15 +104,21 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
 static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     XrXirSourceDebugPoint saved=ctx->debug_point;
     uint32_t function=ctx->debug_function;
+    bool entry=ctx->debug_entry,jump_entry=ctx->debug_jump_entry;
     ctx->debug_point=(XrXirSourceDebugPoint){0};ctx->debug_function=ctx->function;
+    ctx->debug_entry=false;ctx->debug_jump_entry=false;
     XrXirSourceRange range=source_query_range(ctx,node,NULL);
-    if (node && node->type!=AST_BLOCK && range.line>0 && range.column>0) {
+    if (node && node->type!=AST_BLOCK && node->type!=AST_TRY_CATCH && range.line>0 && range.column>0) {
         if (node->node_id==UINT32_MAX || !source_work_units(ctx,node,sizeof(ctx->debug_point))) {
             ctx->debug_point=saved;ctx->debug_function=function;
+            ctx->debug_entry=entry;ctx->debug_jump_entry=jump_entry;
             return source_fail(ctx,node,XR_XIR_BUDGET,"source statement identity exhausted");
         }
-        ctx->debug_point=(XrXirSourceDebugPoint){range,node->node_id+1};
+        ctx->debug_point=(XrXirSourceDebugPoint){range,node->node_id+1,0};
+        ctx->debug_entry=true;
+        ctx->debug_jump_entry=node->type==AST_BREAK_STMT || node->type==AST_CONTINUE_STMT || node->type==AST_THROW_STMT;
     }
     bool ok=source_statement_body(ctx,node,top);
-    ctx->debug_point=saved;ctx->debug_function=function;return ok;
+    ctx->debug_point=saved;ctx->debug_function=function;
+    ctx->debug_entry=entry;ctx->debug_jump_entry=jump_entry;return ok;
 }

@@ -26,9 +26,10 @@ typedef struct XrXirSourceRange {
 
 /* Source-owned display coordinates use the sealed instruction order. Zero
  * statement means no source execution site; it never grants frame authority. */
+#define XR_XIR_SOURCE_DEBUG_ENTRY 1u
 typedef struct XrXirSourceDebugPoint {
     XrXirSourceRange range;
-    uint32_t statement;
+    uint32_t statement, flags;
 } XrXirSourceDebugPoint;
 
 typedef struct XrXirSourceDebugFunction {

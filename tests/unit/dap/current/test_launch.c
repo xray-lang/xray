@@ -121,7 +121,7 @@ int main(int argc,char **argv) {
     const XrXirSourceDebugFunction *mapped=&debug->functions[leaf];
     CHECK(mapped->function==leaf && mapped->parameter_count==function->parameters &&
         mapped->instruction_count==function->instructions && mapped->points);
-    bool source_lines[6]={0};
+    bool source_lines[6]={0};uint32_t source_entries[6]={0};
     const int source_columns[6]={0,0,9,11,5,5};
     for (uint32_t i=0;i<mapped->instruction_count;++i) {
         const XrXirSourceDebugPoint *point=&mapped->points[i];
@@ -130,6 +130,8 @@ int main(int argc,char **argv) {
         if (point->range.column!=source_columns[point->range.line])
             fprintf(stderr,"Source point i=%u line=%d column=%d\n",i,point->range.line,point->range.column);
         CHECK(point->range.column==source_columns[point->range.line]);source_lines[point->range.line]=true;
+        CHECK(!(point->flags & ~XR_XIR_SOURCE_DEBUG_ENTRY));
+        if (point->flags & XR_XIR_SOURCE_DEBUG_ENTRY) ++source_entries[point->range.line];
     }
     if (!(source_lines[2] && source_lines[3] && source_lines[4] && source_lines[5]))
         for (uint32_t i=0;i<mapped->instruction_count;++i)
@@ -137,9 +139,10 @@ int main(int argc,char **argv) {
                 launch->instructions[function->first+i].op,mapped->points[i].statement,
                 mapped->points[i].range.line,mapped->points[i].range.column);
     CHECK(source_lines[2] && source_lines[3] && source_lines[4] && source_lines[5]);
+    CHECK(source_entries[2]==1 && source_entries[3]==1 && source_entries[4]==1 && source_entries[5]==1);
     CHECK(mapped->points[at].range.line==5 && mapped->points[at].statement);
     CHECK(mapped->points[string-function->parameters].range.line==3);
-    XrXirSourceDebugPoint copied={{123,4,5,6,7},99},preserved=copied;
+    XrXirSourceDebugPoint copied={{123,4,5,6,7},99,0},preserved=copied;
     CHECK(xdap_launch_source_point(launch,UINT32_MAX,at,&copied)==XR_XIR_BAD_STRUCTURE);
     CHECK(!memcmp(&copied,&preserved,sizeof(copied)));
     CHECK(xdap_launch_source_point(launch,leaf,at,&copied)==XR_XIR_OK && copied.range.line==5 && copied.range.column==5);

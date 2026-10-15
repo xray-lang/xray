@@ -55,7 +55,7 @@ static XrXirStatus source_rules(const XdapLaunch *launch,const SourceSelection *
             XrXirSourceDebugPoint point={0};XrXirStatus status=xdap_launch_source_point(launch,f,i,&point);
             if (status==XR_XIR_UNRESOLVED) continue;
             if (status!=XR_XIR_OK) return status;
-            if (!source_point_after(&point,selection)) continue;
+            if (!(point.flags & XR_XIR_SOURCE_DEBUG_ENTRY) || !source_point_after(&point,selection)) continue;
             if (!best.statement || point.range.line<best.range.line ||
                 (point.range.line==best.range.line && point.range.column<best.range.column)) best=point;
         }
@@ -67,11 +67,9 @@ static XrXirStatus source_rules(const XdapLaunch *launch,const SourceSelection *
             XrXirSourceDebugPoint point={0};XrXirStatus status=xdap_launch_source_point(launch,f,i,&point);
             if (status==XR_XIR_UNRESOLVED) continue;
             if (status!=XR_XIR_OK) return status;
-            if (point.statement!=best.statement || point.range.line!=best.range.line || point.range.column!=best.range.column) continue;
-            if (at==UINT32_MAX) at=i;
-            /* A loop's initial transport jump must not hide its repeatedly
-             * executed condition. Jump-only break/continue sites remain valid. */
-            if (launch->instructions[function->first+i].op!=XR_XIR_JUMP) { at=i;break; }
+            if (!(point.flags & XR_XIR_SOURCE_DEBUG_ENTRY) || point.statement!=best.statement ||
+                point.range.line!=best.range.line || point.range.column!=best.range.column) continue;
+            at=i;break;
         }
         if (at==UINT32_MAX) continue;
         if (matches==capacity) return XR_XIR_BUDGET;

@@ -256,6 +256,7 @@ typedef struct SourceContext {
     SourceExpressionPlan *active_expression;
     XrXirSourceDebugPoint debug_point;
     uint32_t debug_function;
+    bool debug_entry, debug_jump_entry;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
     SourceLoop *loop;
@@ -767,6 +768,10 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
     body->recipes[body->count] = (SourceInstructionRecipe){op,ctx->function,
         ctx->functions[ctx->function].parameter_count+body->count,{0,op.type,UINT32_MAX},
         ctx->debug_function==ctx->function ? ctx->debug_point : (XrXirSourceDebugPoint){0}};
+    if (ctx->debug_function==ctx->function && ctx->debug_entry && (op.op!=XR_XIR_JUMP || ctx->debug_jump_entry)) {
+        body->recipes[body->count].debug.flags=XR_XIR_SOURCE_DEBUG_ENTRY;
+        ctx->debug_entry=false;
+    }
     uint32_t own = ctx->functions[ctx->function].parameter_count + body->count;
     if (op.op == XR_XIR_PHI || op.op == XR_XIR_ARRAY_NEW) {
         for (uint32_t a = op.op == XR_XIR_PHI ? 1 : 0; a < op.args[1]; a += op.op == XR_XIR_PHI ? 2 : 1) {
