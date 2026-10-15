@@ -98,7 +98,8 @@ static XrXirCallBudget *instance_budget(XrXirInstance *instance) {
 static bool instance_observing(const XrXirInstance *instance) {
     const XrXirInstance *root = instance && instance->owner ? instance->owner : instance;
     const XrXirInstance *current = root && root->active_generation ? root->active_generation : root;
-    return instance && (instance->observing || root->observing || current->observing || root->budget.notifying);
+    return instance && (instance->observing || instance->budget.notifying || root->observing ||
+                        current->observing || root->budget.notifying);
 }
 static bool instance_busy(const XrXirInstance *instance) {
     const XrXirInstance *root = instance && instance->owner ? instance->owner : instance;
@@ -738,6 +739,8 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
 static XrXirCallStatus instance_free_state(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!instance) return XR_XIR_CALL_READY;
+    /* The caller already excludes mutation of the root. Its driving flag
+     * describes this teardown and must not be mistaken for callback reentry. */
     instance->driving = true;
     instance->stopping = true;
     if (instance->function_gate) instance->function_gate->instance = NULL;
@@ -1430,7 +1433,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     if (!task || task->kind != XR_XIR_TYPE_TASK || task->element != target->result)
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = task->element;
-    if (!xr_xir_task_scalar_result_supported(result))
+    if (!xr_xir_task_result_supported(program->types, result))
         return XR_XIR_CALL_UNSUPPORTED;
     for (uint32_t p = 0; p < count; ++p) {
         if (!xr_xir_task_parameter_supported(program->types, target->parameters[p]))

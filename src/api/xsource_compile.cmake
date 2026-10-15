@@ -16,7 +16,8 @@ else()
 endif()
 
 # The installed header exposes opaque compiler/Program/Call/result owners.
-add_library(xray_source_api STATIC ${CMAKE_CURRENT_LIST_DIR}/xsource_api.c)
+add_library(xray_source_api STATIC ${CMAKE_CURRENT_LIST_DIR}/xsource_api.c
+    ${CMAKE_CURRENT_LIST_DIR}/xsource_submission.c)
 target_link_libraries(xray_source_api PUBLIC xray_source_compile xray_xir_runtime_host)
 target_include_directories(xray_source_api PUBLIC "${PROJECT_SOURCE_DIR}/include")
 target_compile_features(xray_source_api PUBLIC c_std_11)
