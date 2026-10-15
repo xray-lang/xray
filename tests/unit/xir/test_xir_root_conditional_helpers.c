@@ -1775,6 +1775,7 @@ int main(int argc, char **argv) {
         conditional_nonroot_seed_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-literals")) {
+        invocation_seed_range_literals();
         for (uint32_t mode=0;mode<4;++mode) {
             RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
             uint64_t baseline=rp_stats(&context).live_bytes;
