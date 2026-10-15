@@ -15,11 +15,12 @@
 #include "xir_effect_execution_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_task.c"
+typedef struct WorkerControlCase { const char *name; const XrXirProgramSpec *spec; const uint32_t *entry; } WorkerControlCase;
+#ifndef XR_WORKER_CONTROL_CUSTOM_CASE
 #define WORKER_DECLARE(n) XR_DATA const XrXirProgramSpec worker_control_##n##_program; XR_DATA const uint32_t worker_control_##n##_entry;
 WORKER_DECLARE(0) WORKER_DECLARE(1) WORKER_DECLARE(2) WORKER_DECLARE(3)
 WORKER_DECLARE(4) WORKER_DECLARE(5) WORKER_DECLARE(6)
 #undef WORKER_DECLARE
-typedef struct WorkerControlCase { const char *name; const XrXirProgramSpec *spec; const uint32_t *entry; } WorkerControlCase;
 static const WorkerControlCase worker_control_cases[] = {
     {"pure-control", &worker_control_0_program, &worker_control_0_entry},
     {"local-worker-control", &worker_control_1_program, &worker_control_1_entry},
@@ -29,6 +30,9 @@ static const WorkerControlCase worker_control_cases[] = {
     {"cross-control", &worker_control_5_program, &worker_control_5_entry},
     {"mutual-control", &worker_control_6_program, &worker_control_6_entry}
 };
+#else
+static const WorkerControlCase worker_control_cases[] = {XR_WORKER_CONTROL_CUSTOM_CASE};
+#endif
 enum { WORKER_FUNCTIONS = 128 };
 typedef struct WorkerControlCode {
     XrXirProgram *vm; XrXirCallEntry *entries;
@@ -135,7 +139,8 @@ static void worker_control_execute(const WorkerControlCase *oracle, unsigned bac
 }
 static int worker_control_main(int argc, char **argv) {
     CHECK(argc == 3); const WorkerControlCase *oracle = NULL; unsigned backend = 0;
-    for (unsigned i = 0; i < 7; ++i) if (!strcmp(argv[1], worker_control_cases[i].name)) oracle = &worker_control_cases[i];
+    for (unsigned i = 0; i < sizeof(worker_control_cases)/sizeof(*worker_control_cases); ++i)
+        if (!strcmp(argv[1], worker_control_cases[i].name)) oracle = &worker_control_cases[i];
     while (backend < 4 && strcmp(argv[2], worker_backends[backend])) ++backend;
     CHECK(oracle && backend < 4); worker_control_execute(oracle, backend); return 0;
 }

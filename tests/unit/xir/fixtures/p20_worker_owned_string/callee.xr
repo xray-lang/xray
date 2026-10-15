@@ -1,0 +1,1 @@
+export fn worker(seed: string) -> string { return seed + "!tail" }
