@@ -7,7 +7,9 @@
  * xsource_api.c - Public ownership at the ordinary compiler and HostCall boundary
  */
 #include "xsource_api.h"
+#include "../../include/xray_source_ast.h"
 #include "xsource_compiler.h"
+#include "../frontend/parser/xparse.h"
 #include "xsource_paths.h"
 #include "../execution/xr_xir_host_execution.h"
 #include "../execution/xr_xir_host_cli.h"
@@ -20,6 +22,11 @@
 
 struct XrSourceProgram { XrCompileResources *resources; XrXirSourceProduct *product; XrXirProgram *code; XrSourceProgramInfo info; };
 struct XrSourceDiagnostic { XrSourceCompileDiagnostic detail; };
+struct XrSourceAst {
+    XrCompileState *state;
+    AstNode *program;
+    char *source, *path, *namespace_id;
+};
 struct XrSourceResult { XrXirCallResult value; };
 struct XrSourceCall {
     XrCompileResources *resources;
@@ -132,9 +139,10 @@ XRAY_API XrSourceStatus xray_source_compiler_new(const XrSourceCompilerOptions *
     xr_source_stdlib_path_free(&selected);xr_compile_resources_release(resources);return status;
 }
 XRAY_API void xray_source_compiler_free(XrSourceCompiler *compiler) {xr_source_compiler_free(compiler);}
-static XrSourceStatus api_build(XrSourceCompiler *compiler,const char *path,const XrSourceText *text,
+static XrSourceStatus api_build(XrSourceCompiler *compiler,const char *path,const XrSourceText *text,const XrSourceAst *ast,
     XrSourceProgram **output,XrSourceDiagnostic **diagnostic) {
     if(!compiler || !output || *output || (diagnostic && *diagnostic))return XR_SOURCE_BAD_ARGUMENT;
+    if(ast && (ast->state!=xr_source_compiler_state(compiler) || !ast->program))return XR_SOURCE_BAD_ARGUMENT;
     XrSourceStatus available=api_resource(xr_compile_state_status(xr_source_compiler_state(compiler)));
     if(available!=XR_SOURCE_OK)return available;
     XrCompileResources *resources=xr_source_compiler_resources(compiler);
@@ -143,7 +151,10 @@ static XrSourceStatus api_build(XrSourceCompiler *compiler,const char *path,cons
     if(diagnostic)status=api_resource(xr_compile_resources_calloc(resources,1,sizeof(*detail),(void **)&detail));
     if(status==XR_SOURCE_OK) {
         XrSourceCompileStatus built;
-        if(text) {
+        if(ast) {
+            XrSourceCompilerAst input={ast->path,ast->namespace_id,ast->program};
+            built=xr_source_compiler_build_ast(compiler,&input,&product,detail?&detail->detail:NULL);
+        } else if(text) {
             XrSourceCompilerText input={text->absolute_path,text->namespace_id,text->bytes,text->length};
             built=xr_source_compiler_build_text(compiler,&input,&product,detail?&detail->detail:NULL);
         } else built=xr_source_compiler_build_file(compiler,path,&product,detail?&detail->detail:NULL);
@@ -161,12 +172,13 @@ static XrSourceStatus api_build(XrSourceCompiler *compiler,const char *path,cons
     return status;
 }
 XRAY_API XrSourceStatus xray_source_compile_file(XrSourceCompiler *compiler,const char *path,XrSourceProgram **output,XrSourceDiagnostic **diagnostic) {
-    return api_build(compiler,path,NULL,output,diagnostic);
+    return api_build(compiler,path,NULL,NULL,output,diagnostic);
 }
 XRAY_API XrSourceStatus xray_source_compile_text(XrSourceCompiler *compiler,const XrSourceText *text,XrSourceProgram **output,XrSourceDiagnostic **diagnostic) {
     if(!text)return XR_SOURCE_BAD_ARGUMENT;
-    return api_build(compiler,NULL,text,output,diagnostic);
+    return api_build(compiler,NULL,text,NULL,output,diagnostic);
 }
+#include "xsource_ast_api.inc.c"
 XRAY_API XrSourceStatus xray_source_program_info(const XrSourceProgram *program,XrSourceProgramInfo *output) {
     if(!program || !output)return XR_SOURCE_BAD_ARGUMENT;*output=program->info;return XR_SOURCE_OK;
 }
