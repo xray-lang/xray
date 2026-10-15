@@ -91,10 +91,12 @@ probe=55'''
         for name,bad in [('_PROGRAMS',swapped),('_PROGRAMS',{}),('_PORTS',{}),('_INPUTS',{}),('_REQUIRED_INPUTS',())]:
             with self.subTest(attribute=name),mock.patch.object(model,name,bad),self.assertRaises(ValueError):model.expected_rows()
     def test_matching_digest_cannot_hide_an_extra_statement_in_the_port(self):
-        name=model._PORTS['generic_int_format_shared_core'];saved=Path.read_bytes
-        raw=saved(model.ROOT/name)+b'\nprint("extra")\n';inputs=dict(model._INPUTS)
-        inputs[name]=hashlib.sha256(raw.replace(b'\r\n',b'\n')).hexdigest()
-        def changed(path):return raw if path==model.ROOT/name else saved(path)
-        with mock.patch.object(model,'_INPUTS',inputs),mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.expected_rows()
+        saved=Path.read_bytes
+        for name in model._PORTS.values():
+            with self.subTest(source=name):
+                raw=saved(model.ROOT/name)+b'\nprint("extra")\n';inputs=dict(model._INPUTS)
+                inputs[name]=hashlib.sha256(raw.replace(b'\r\n',b'\n')).hexdigest()
+                def changed(path):return raw if path==model.ROOT/name else saved(path)
+                with mock.patch.object(model,'_INPUTS',inputs),mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.expected_rows()
 
 if __name__=='__main__':unittest.main()

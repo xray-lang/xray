@@ -25775,8 +25775,8 @@
     {
       "id": "complete_collection_protocols_map_bool_key",
       "oracle_id": "complete_collection_protocols_map_bool_key",
-      "source": "tests/diff/cases/semantics/collections/map_bool_key.xr",
-      "source_lf_sha256": "8aceac7a024ea4974980d51444c15fa8a458b81fd157cb5b55eb94a80c26b5bd",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/map_bool_key/root.xr",
+      "source_lf_sha256": "fda8eaab490d0408ab89cd2f8af832180ea3a88ea1dc1e8932bbe12435c3f7b6",
       "entry": "run",
       "source_context": "materialized_complete_source",
       "stdout_utf8": "-- insert false then true --\nsize=2\nhas true=true has false=true\npair false=34\npair true=21\nkey false\nkey true\nval 34\nval 21\nget true=21 get false=34\n-- insert true then false --\nsize=2\nhas true=true has false=true\npair true=7\npair false=9\nkey true\nkey false\nval 7\nval 9\n-- update keeps position --\nsize=2\nhas true=true has false=true\npair true=70\npair false=9\nkey true\nkey false\nval 70\nval 9\n-- delete + reinsert moves to end --\nsize=2\nhas true=true has false=true\npair false=9\npair true=700\nkey false\nkey true\nval 9\nval 700\n-- delete to empty --\nsize=0 has true=false\n-- float32 narrowing --\ncsize=2\ncget true=1.5 cget false=2.25\ncf true=1.5\ncf false=2.25\n-- class field --\nfill=2\nprobe=55\n",

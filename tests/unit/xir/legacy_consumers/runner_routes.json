@@ -88607,7 +88607,23 @@
           "prior_lf_sha256": "bab2b341e3eaf356e93a16a38d3918c382b998beedf28e40430b8c0ec9e37ba6",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/map_bool_key/root.xr",
+        "lf_sha256": "fda8eaab490d0408ab89cd2f8af832180ea3a88ea1dc1e8932bbe12435c3f7b6",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Current declaration5.5 class methods do not declare ref/move receivers;ordinary class identity methods retain mutable field access.Only the obsolete receiver marker is removed;all Map operations,class field identity and47 observations remain."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_CLASS_IDENTITY_METHOD_AFTER_FROZEN_READ_RECEIVER_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Current declaration5.5 class methods do not declare ref/move receivers;ordinary class identity methods retain mutable field access.Only the obsolete receiver marker is removed;all Map operations,class field identity and47 observations remain."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/map_build_in_fn.xr",

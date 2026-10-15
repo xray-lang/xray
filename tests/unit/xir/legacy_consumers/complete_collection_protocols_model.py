@@ -21,7 +21,8 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'tests/diff/cases/semantics/collections/map_bool_key.xr': '8aceac7a024ea4974980d51444c15fa8a458b81fd157cb5b55eb94a80c26b5bd',
  'tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr': 'ed37526163e9069a3973a2dd81152437fe286570829b76cf3caf5711591c2e62',
  'tests/unit/xir/legacy_consumers/complete_numeric_model.py': '25cbd5981ce4371670942bb94f8139d4be239e08cddfb7e62fcb6bd102ee27e2',
- 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr': 'e4d29133d335b1b0fda1c8dbcc417b1811e9d8b1c22c95c5e5c1e5bcef664193'}
+ 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr': 'e4d29133d335b1b0fda1c8dbcc417b1811e9d8b1c22c95c5e5c1e5bcef664193',
+ 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/map_bool_key/root.xr': 'fda8eaab490d0408ab89cd2f8af832180ea3a88ea1dc1e8932bbe12435c3f7b6'}
 _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'spec/source/sections/004-3-expressions.md',
  'spec/source/sections/005-4-statements.md',
@@ -39,14 +40,16 @@ _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'tests/diff/cases/semantics/collections/map_bool_key.xr',
  'tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr',
  'tests/unit/xir/legacy_consumers/complete_numeric_model.py',
- 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr')
+ 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr',
+ 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/map_bool_key/root.xr')
 _PROGRAMS = {'array_fill_ref_cross_module': 'tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr',
  'generic_int_format_shared_core': 'tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr',
  'hof_index_param': 'tests/diff/cases/semantics/collections/hof_index_param.xr',
  'map_bool_key': 'tests/diff/cases/semantics/collections/map_bool_key.xr'}
-_PORTS = {'generic_int_format_shared_core': 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr'}
+_PORTS = {'generic_int_format_shared_core': 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr',
+ 'map_bool_key': 'tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/map_bool_key/root.xr'}
 _NAMES=frozenset({'hof_index_param','map_bool_key','array_fill_ref_cross_module','generic_int_format_shared_core'})
-_PORT_NAMES=frozenset({'generic_int_format_shared_core'})
+_PORT_NAMES=frozenset({'generic_int_format_shared_core','map_bool_key'})
 
 def scalar(value):
     if type(value) is bool:return str(value).lower()
@@ -130,6 +133,10 @@ def observations():
         'generic_int_format_shared_core':complete_numeric_model.observations()['int_wrap/generic_int_format_shared_core']}
 
 def port_text(name,text):
+    if name=='map_bool_key':
+        before='    ref fill() -> i64 {'
+        if text.count(before)!=1:raise ValueError('Class identity receiver port lost the exact original method')
+        return text.replace(before,'    fill() -> i64 {')
     if name!='generic_int_format_shared_core':raise ValueError('Unreviewed explicit scalar-text port')
     before='var mixed = ["n", min, null, true, max]'
     after='var mixed: Array<string> = ["n", min.toString(), "null", true.toString(), max.toString()]'

@@ -20,6 +20,7 @@ ROOT = HERE.parents[3]
 
 # Explicit reviewed transitions prevent old negative oracles becoming target truth.
 FROZEN_TARGETS = {}
+FROZEN_TARGETS['tests/diff/cases/semantics/collections/map_bool_key.xr'] = ('POSITIVE_CLASS_IDENTITY_METHOD_AFTER_FROZEN_READ_RECEIVER_PORT', 'P10')
 FROZEN_TARGETS['tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr'] = ('POSITIVE_COMPLETE_EXPLICIT_SCALAR_TEXT_AFTER_HETEROGENEOUS_ARRAY_RETIREMENT', 'P13')
 FROZEN_TARGETS['tests/diff/cases/semantics/slice/array_negative_both.xr'] = ('POSITIVE_BORROWED_VIEW_PERMISSION_AND_EXPLICIT_OWNED_DISPLAY', 'P09')
 FROZEN_TARGETS['tests/diff/cases/semantics/slice/array_negative_end.xr'] = ('POSITIVE_BORROWED_VIEW_PERMISSION_AND_EXPLICIT_OWNED_DISPLAY', 'P09')
@@ -157,6 +158,7 @@ TARGET_PORT_ARGUMENTS = {
 }
 
 TARGET_PORT_IMPORTS = {
+    'tests/diff/cases/semantics/collections/map_bool_key.xr': (),
     'tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr': (),
     'tests/diff/cases/semantics/slice/array_negative_both.xr': (),
     'tests/diff/cases/semantics/slice/array_negative_end.xr': (),
