@@ -7,6 +7,7 @@ import complete_callable_model as model
 class CallableTraces(unittest.TestCase):
     def test_complete_program_traces(self):
         expected = {
+            'unproven_callee_targets':'-10\n14\n0\n2\n',
             'call_through_function_parameter':'42\n6\n',
             'capture_forms':'hi!\n1\n2\n3\n1\n4\n15\n104\n12\n',
             'nested_closure_transitive_capture':'21\n',
@@ -23,7 +24,7 @@ class CallableTraces(unittest.TestCase):
         }
         traces = model.observations()
         self.assertEqual(set(traces),set(expected))
-        self.assertEqual(sum(map(len,traces.values())),73)
+        self.assertEqual(sum(map(len,traces.values())),77)
         for name,text in expected.items():
             with self.subTest(program=name):
                 self.assertEqual(''.join(model.render(value)+'\n' for value in traces[name]),text)

@@ -25805,6 +25805,36 @@
         "Complete original selected VM/C/MSVC and exact independent bytes.",
         "All original applicable FI/resources/lifetime/cancel/physical/safety/provider obligations."
       ]
+    },
+    {
+      "id": "complete_callable_unproven_callee_targets",
+      "oracle_id": "complete_callable_unproven_callee_targets",
+      "source": "tests/diff/cases/semantics/functions/unproven_callee_targets.xr",
+      "source_lf_sha256": "559ec30a96887af5d4e77a632fb9ef66c01fa6422d0ca3c4f50b2e6a8a428511",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "-10\n14\n0\n2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P10"
+      ],
+      "independent_execution_model": "The whole original composes double/negate, retrieves double from Map, and calls two distinct loop-captured closures; all four outputs are independently derived.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/functions/unproven_callee_targets.xr",
+        "source_lf_sha256": "559ec30a96887af5d4e77a632fb9ef66c01fa6422d0ca3c4f50b2e6a8a428511"
+      },
+      "remaining_gates": [
+        "Complete original program CLI/VM/real C projection/native execution against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
     }
   ]
 }

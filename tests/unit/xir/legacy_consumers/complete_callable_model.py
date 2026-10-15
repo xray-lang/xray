@@ -4,7 +4,8 @@ import hashlib
 import math
 
 ROOT = Path(__file__).resolve().parent.parents[3]
-_INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
+_INPUTS = {'tests/diff/cases/semantics/functions/unproven_callee_targets.xr': '559ec30a96887af5d4e77a632fb9ef66c01fa6422d0ca3c4f50b2e6a8a428511',
+ 'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
  'spec/source/sections/004-3-expressions.md': '1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c',
  'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
  'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
@@ -25,7 +26,8 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'tests/diff/cases/semantics/functions/unit_return_expression.xr': '4b81fbb553915041991acedf1aeeb839106aed96534178019fddb0a0a8a6aace',
  'tests/diff/cases/semantics/functions/unit_value_rendering.xr': '124a25aebe1c994719ac358c459883f16bb65f2e7ca40855d68d9458a22c6a33',
  'tests/unit/xir/legacy_consumers/fixtures/callable_explicit_fill/root.xr': '1a26a78e2aca830df18cde987175eb16ae6d0f31e684976a896ce8f0b3d2cb92'}
-_REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
+_REQUIRED_INPUTS = ('tests/diff/cases/semantics/functions/unproven_callee_targets.xr',
+ 'spec/source/sections/003-2-type-system.md',
  'spec/source/sections/004-3-expressions.md',
  'spec/source/sections/005-4-statements.md',
  'spec/source/sections/006-5-declarations.md',
@@ -46,7 +48,8 @@ _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'tests/diff/cases/semantics/functions/unit_return_expression.xr',
  'tests/diff/cases/semantics/functions/unit_value_rendering.xr',
  'tests/unit/xir/legacy_consumers/fixtures/callable_explicit_fill/root.xr')
-_PROGRAMS = {'bare_lambda_expression_positions': 'tests/diff/cases/semantics/functions/bare_lambda_expression_positions.xr',
+_PROGRAMS = {'unproven_callee_targets': 'tests/diff/cases/semantics/functions/unproven_callee_targets.xr',
+ 'bare_lambda_expression_positions': 'tests/diff/cases/semantics/functions/bare_lambda_expression_positions.xr',
  'call_through_function_parameter': 'tests/diff/cases/semantics/closure/call_through_function_parameter.xr',
  'capture_forms': 'tests/diff/cases/semantics/closure/capture_forms.xr',
  'default_param_as_function_value': 'tests/diff/cases/semantics/functions/default_param_as_function_value.xr',
@@ -60,6 +63,7 @@ _PROGRAMS = {'bare_lambda_expression_positions': 'tests/diff/cases/semantics/fun
  'unit_return_expression': 'tests/diff/cases/semantics/functions/unit_return_expression.xr',
  'unit_value_rendering': 'tests/diff/cases/semantics/functions/unit_value_rendering.xr'}
 _NAMES = frozenset({
+    'unproven_callee_targets',
     'call_through_function_parameter', 'capture_forms', 'nested_closure_transitive_capture',
     'bare_lambda_expression_positions', 'default_param_as_function_value', 'function_type_surface',
     'lambda_forms', 'lambda_inference_sources', 'named_function_forms',
@@ -90,6 +94,14 @@ def observations():
     double = lambda value: value * 2
     negate = lambda value: 0 - value
     traces['call_through_function_parameter'] = [apply(21, double), apply(5, lambda n: n + 1)]
+
+    # Each loop iteration owns its capture. Map lookup returns the callable,
+    # and composition applies the inner target before the outer target.
+    compose = lambda first, second: lambda value: second(first(value))
+    table = {'dbl': double}
+    closures = [(lambda captured: lambda: captured)(i) for i in range(3)]
+    traces['unproven_callee_targets'] = [compose(double, negate)(5), table['dbl'](7),
+                                        closures[0](), closures[2]()]
 
     greeting = 'hi'
     say = lambda: greeting + '!'
