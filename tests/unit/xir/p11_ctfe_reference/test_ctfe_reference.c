@@ -31,6 +31,35 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"class_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_cell", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_chain", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"class_self_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"class_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_grow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_gap", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"class_deep_ref_gap", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"class_return_string", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"class_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_export", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 2},
+    {"class_cycle_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_acyclic_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_field_struct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_authority_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_work_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ctor", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_write", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_method", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"panic_projection_recheck", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"panic_abort_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"panic_escape_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -163,7 +192,7 @@ static const CtfeReferenceCase reference_cases[] = {
     {"function_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"lexical_private_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"lexical_nested", XR_XIR_I64, 8, XR_XIR_OK, NULL, 0},
-    {"lexical_class_instance", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 1},
+    {"lexical_class_instance", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"lexical_class_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 1},
     {"lexical_oversize", XR_XIR_I64, 0, XR_XIR_BUDGET, NULL, 1},
     {"lexical_struct_construct", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
@@ -186,7 +215,7 @@ static const CtfeReferenceCase reference_cases[] = {
     {"nominal_field_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_large", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
     {"nominal_dynamic_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
-    {"nominal_class", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"nominal_class", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct_method", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
     {"nominal_struct_generic", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
@@ -669,7 +698,7 @@ static void reference_string(const XrXirCompileContext *context,XrXirSourceResul
     const char *expected=!strcmp(selected->name,"text_bool_false")?"false":!strcmp(selected->name,"text_cell")?"3.5":!strcmp(selected->name,"text_integer")?"-42,7":!strcmp(selected->name,"text_bool")?"true":
         !strcmp(selected->name,"text_rune")?"\0\xf0\x9f\x98\x80":!strcmp(selected->name,"text_float")?"3.5,-0.0":
         !strcmp(selected->name,"array_methods_join")?"a\0b|z":!strcmp(selected->name,"string_nul")?"a\0b":
-        !strcmp(selected->name,"string_empty")?"":!strcmp(selected->name,"panic_owning")?"ab":"abcd";
+        !strcmp(selected->name,"string_empty")?"":(!strcmp(selected->name,"panic_owning") || !strcmp(selected->name,"class_return_string"))?"ab":"abcd";
     size_t length=(size_t)selected->value;
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
     const XrXirFunction *body=&module->functions[reference_run_function(module)];bool literal=false;
@@ -753,6 +782,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_error_abort_cases.h"
 #include "xir_ctfe_panic_cases.h"
 #include "xir_ctfe_panic_abort_cases.h"
+#include "xir_ctfe_class_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -773,6 +803,11 @@ int main(int argc, char **argv) {
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
         if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
+        else if (!strcmp(selected->name,"class_direct")) reference_class_direct(&context,&source);
+        else if (!strcmp(selected->name,"class_owning_direct")) reference_class_owning(&context,&source);
+        else if (!strcmp(selected->name,"class_cycle_direct")) reference_class_cycle(&context,&source);
+        else if (!strcmp(selected->name,"class_work_direct")) reference_class_work(&context,&source);
+        else if (!strcmp(selected->name,"class_authority_direct")) reference_class_authority(&context,&source);
         else if (!strcmp(selected->name,"panic_abort_direct")) reference_panic_abort(&context,&source,false);
         else if (!strcmp(selected->name,"panic_escape_direct")) reference_panic_abort(&context,&source,true);
         else if (!strcmp(selected->name,"panic_work_direct")) reference_panic_work(&context,&source);
@@ -840,6 +875,7 @@ int main(int argc, char **argv) {
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
+    if (!strcmp(selected->name,"class_owning_direct")) reference_class_last_owner();
     if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();
     if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_last_owner();
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();

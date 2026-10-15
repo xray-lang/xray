@@ -628,7 +628,7 @@ Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullab
 
 ### 17.51 私有Array索引路径的有界接收与写入
 
-CTFE在完整Lowered及整个可达闭包准入后支持以真实私有Cell为根的INDEX_PLACE链。每个投影只保存类型和已计算索引；执行读写时重新解析当前根，不持有跨操作内部地址。索引链必须回到已准入、当前compiler Domain内的Cell；字段、模块/对象根、外部Cell及投影Cell权限不会因此获得准入。完整类型族限制不变，尚无有界接收接口的更深变量Array仍明确拒绝。
+CTFE在完整Lowered及整个可达闭包准入后支持以真实私有Cell为根的INDEX_PLACE链。每个投影只保存类型和已计算索引；执行读写时重新解析当前根，不持有跨操作内部地址。索引链必须回到已准入、当前compiler Domain内的Cell；字段路径遵守17.53，私有Class对象根遵守17.60；模块根、外部Cell及投影Cell权限不会因此获得准入。完整类型族限制不变，尚无有界接收接口的更深变量Array仍明确拒绝。
 
 路径计数与构造、每次类型/头观察、完整getter接收跨度、最终公共路径接收以及可能复制的每个祖先capacity字节，均在实际访问前预付原累计账本。push还预付叶Array可能增长的容量。溢出或无法预付先返回BUDGET。路径步骤本身占用原frame剩余额度；观察和最终Value操作的scratch只可使用扣除路径后的余额。所有临时观察owner在共同写入前释放，避免人为制造共享；唯一Value path read/write/push决定普通语义、COW及发布，不能另造CTFE写入算法。
 
@@ -646,13 +646,13 @@ TO_STRING在完整Lowered及整个可达闭包准入后支持bool、整数、Run
 
 ### 17.53 声明绑定的结构体、活动枚举与私有字段路径
 
-CTFE在唯一完整Lowered及整个可达闭包准入之后执行已关闭的普通struct/enum。类型族逐字段检查、拒绝循环及class/身份或未准入native类型；声明owner的lexical准入见17.54；它不代替函数体、效果或权限检查，也不代表class实例。STRUCT_NEW/GET、ENUM_NEW/TAG/GET使用唯一Value构造、接收和拥有slot；普通方法与泛型特化仍经过既有Source/Checker和闭包准入。枚举仅观察实际活动variant，不执行失活payload。
+CTFE在唯一完整Lowered及整个可达闭包准入之后执行已关闭的普通struct/enum。类型族逐字段检查、拒绝循环及未准入native类型；内部Class身份与实际图接收遵守17.60；声明owner的lexical准入见17.54；它不代替函数体、效果或权限检查，也不代表class实例。STRUCT_NEW/GET、ENUM_NEW/TAG/GET使用唯一Value构造、接收和拥有slot；普通方法与泛型特化仍经过既有Source/Checker和闭包准入。枚举仅观察实际活动variant，不执行失活payload。
 
 FIELD_PLACE与INDEX_PLACE可以组合，但根必须是本次compiler Domain内真实私有Cell。STRUCT_SET和普通字段/Array写入、push沿同一Value path实现。每次观察及完整接收前预付原累计ledger费用，可能复制的struct字段向量和Array祖先capacity一并预付。路径、显式遍历栈和同时存在的接收scratch共享剩余frame；观察owner在共同变更前释放，保留正常COW和单次发布。类型形状只用于计费，不是另一种Value表示或权限证明。
 
 拥有结果按活动字段递归计算目标标量与String字节、Array元素、Nullable标签和enum真实storage标签字节；空struct为0，单variant空enum可为0，多variant空分支仍计实际标签。padding、capacity、拥有头和指针不计输出。拥有结果不得先调用不适用的独立nominal storage布局查询再按指针大小放行；唯一TypeArena storage及逻辑遍历决定导出，原output8不变。
 
-Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；跨池接收核完整声明顺序/identity、字段权限/名称、variant范围、native指纹和关闭字段类型，不能只比较局部type ID。元数据和字节比较在访问前计入原账本，最终完整Checker及query继续决定权限与发布。没有外部nominal参数或class准入；缺少有界观察接口的struct动态child和更深Array接收仍明确拒绝，不能无预算预扫描。外部私有拥有结果的物化权限与Unit字段Source前置尚需完整资格，不据内部方法成功宣称覆盖。
+Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；跨池接收核完整声明顺序/identity、字段权限/名称、variant范围、native指纹和关闭字段类型，不能只比较局部type ID。元数据和字节比较在访问前计入原账本，最终完整Checker及query继续决定权限与发布。外部nominal/Class参数仍不准入，内部Class执行遵守17.60；缺少有界观察接口的struct动态child和更深Array接收仍明确拒绝，不能无预算预扫描。外部私有拥有结果的物化权限与Unit字段Source前置尚需完整资格，不据内部方法成功宣称覆盖。
 
 物理OOM及work/step/frame/output拒绝保全空输出和借用输入，全部临时/帧owner释放，费用不退款。真正struct/enum结果在Source、Artifact和ledger调用者死亡后仍有效，最后drop不分配。该范围开发证据不替代函数值/cleanup、foreign接收、P12以及原全部共享/provider/正式安全门，完整P11目标保持开放。
 
@@ -662,7 +662,7 @@ Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；�
 
 Checked特化及完整Lowered接收之后，helper查找须匹配模块、唯一名称、零参数、关闭结果类型、真实nominal owner及member kind，并拒绝cleanup身份变化，不能假定所有helper都是无owner的顶层函数。观察与比较先付原累计work，任何错配失败保全已有结果和临时owner。
 
-声明owner本身不是class值或效果授权。纯class静态普通函数可在完整闭包准入下计算；class值、CLASS_NEW等身份操作、I/O/native/外部状态仍不获准。私有字段构造/调用只在真实声明owner中合法，独立Source重放保留该普通Checker权限。已经得到私有拥有值不授予外部函数私有构造权限；此类结果的完整物化机制仍属原目标，未实现处须拒绝，不能借反射/内存写入或runtime fallback绕过。
+声明owner本身不是class值或效果授权。纯class静态普通函数可在完整闭包准入下计算；内部临时Class与身份操作须满足17.60，Class身份导出及I/O/native/外部状态仍不获准。私有字段构造/调用只在真实声明owner中合法，独立Source重放保留该普通Checker权限。已经得到私有拥有值不授予外部函数私有构造权限；此类结果的完整物化机制仍属原目标，未实现处须拒绝，不能借反射/内存写入或runtime fallback绕过。
 
 ### 17.55 内部真实Function值与有界间接调用
 
@@ -719,6 +719,18 @@ cleanup内部可有完整处理的try/catch与调用，但其定义仍须满足�
 cleanup可在内部完整捕获panic，包括外层已持有返回/Error/panic时；每帧payload防止内层捕获覆盖外层正在展开的消息。panic逃逸cleanup时，CTFE在无分配终态释放本作业全部拥有值和loan，返回compiler-only CLEANUP_PANIC并在原comptime站点报告编译错误，绝不调用运行期fatal/进程终止接口，也不能交给外层语言handler消费。此编译边界不修改运行期cleanup逃逸panic的既有fatal规则。未捕获普通panic完成适用cleanup后返回相应编译失败；无限cleanup先受原step/work上限，不能提前发布未捕获panic。
 
 真实PanicInfo可在已准入族内作内部参数/返回、Cell、PHI、Tuple、Nullable、Array、struct/enum和Function捕获，仍使用共同拥有/接收规则；它不是Sendable，不能由CTFE外部真实PanicInfo参数或含PanicInfo常量导出获得权限。普通Source独立recipe只接已准入可导出结果，不重放PanicInfo。原128M work/64MiB allocated/8MiB live、steps65536、depth128、frame65536及output8保持；失败输出为空，费用不退款/重置，最后拥有值释放不分配。外部私有物化/Unit前置、有界foreign/deep-variable接收、普通Source ref lambda、P12与完整共享/provider/正式安全资格仍独立。本族只追加compiler-only失败状态与私有执行状态，不改公共Value/Call/Instance/SourceContext布局、schema或opcode。
+
+### 17.60 私有临时Class身份与有界实际字段图
+
+在每次完整Lowered/identity/target/profile及整个可达闭包准入后，CLASS_NEW/GET/SET使用现有Class Value工厂与get/set，保持真实Checked声明、构造和字段权限。对象只由本次compiler Domain内可达工厂创建；没有Instance、宿主callback或第二Value表示。内部Class可经普通参数/返回、拥有局部、Cell、PHI、Tuple、Nullable、活动enum/Error和Function capture流动，仍须满足各族限制。外部真实Class输入、Class及包含Class身份的常量导出拒绝；身份句柄不是常量字节。
+
+类型费用将Class句柄的固定header验证计32单元，不递归猜测可能递归的声明图。实际接收在原ledger上的显式拥有栈逐字段访问真实对象；只调用浅层公开class_get，先付根/字段metadata、实际Array接收span与同时存活scratch。它不读取私有对象头，也不先运行完整未付费receiver扫描。每次写入先观察完整当前receiver及输入图，拒绝通向实际目标Class的回边；句柄相同仅用于回边拒绝，真实Domain/arena、存储和借用仍由Value API认证。无环共享、别名可见字段修改和替换保留普通身份语义；不能把抛出的Class身份当不可变字段快照。
+
+OBJECT_PLACE代表完整Class根，FIELD_PLACE才增加字段selector。经已求值selector的字段/Array路径先付接收与可能祖先复制，再使用真实帧authority prepare/commit短整对象loan，通过共同authorized path操作，所有终态allocation-free释放loan。路径不保存内部地址；若路径在首根之外跨另一Class身份，当前入口明确拒绝，须从实际子对象另建合法根。ref投影仍由唯一Cell projection工厂与真实父子loan管理。Class根的初始投影借用要求所有字段为可导出纯数据类型，且leaf接收形状静态；因此窄loan期间原根接收上界不因另一可变身份或leaf变量图增长而失效。scalar/String及受支持纯Array链可借用、重借用和cleanup写回，Array标量leaf可增长；Class-bearing根和动态leaf组合仍明确拒绝，未以扩大预付预算绕过。
+
+字段get返回真实拥有值；返回String快照不受随后Class字段替换影响，并在Source/Artifact/ledger调用者死亡后保持有效。普通返回、Error与panic的LIFO cleanup、真实父loan恢复和资源失败语义继续遵守17.56–17.59。完整物理FI包括构造、字段图接收、投影/cleanup、拥有String和回边拒绝的所有已观测分配点，失败后同一原owner重试，保持空输出及live归零。遍历栈/loan/路径与共同scratch计原frame；work耗尽后重试不能重置费用。
+
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和8字节最大逻辑输出不变。本族不改Value/Call/Instance/SourceContext ABI、schema或opcode。Array<Class>、动态struct child、缺少有界观察的foreign/deep-variable接收、私有外部Source物化、原P12较大输出目标及完整共享/provider/正式安全资格仍有独立未完成项；私有Class通过不代表完整P11或生产发布。
 
 <!-- /xr-spec:cn -->
 
@@ -1459,7 +1471,7 @@ The prepayment stack consumes the original remaining frame limit, including old/
 
 ### 17.51 Bounded receiving and mutation of private Array index paths
 
-After complete Lowered and entire reachable closure admission, CTFE supports INDEX_PLACE chains rooted in authentic private Cells. Each projection carries a type and an already evaluated index; each read or write resolves the current root again, retaining no interior address across operations. The chain must terminate at an admitted Cell in the current compiler Domain. Field, module/object roots, foreign Cells and projected Cell authority gain no admission. Complete family restrictions remain, including explicit refusal of deeper variable Arrays that lack bounded receiving interfaces.
+After complete Lowered and entire reachable closure admission, CTFE supports INDEX_PLACE chains rooted in authentic private Cells. Each projection carries a type and an already evaluated index; each read or write resolves the current root again, retaining no interior address across operations. The chain must terminate at an admitted Cell in the current compiler Domain. Field paths follow17.53 and private Class object roots follow17.60; module roots, foreign Cells and projected Cell authority gain no admission. Complete family restrictions remain, including explicit refusal of deeper variable Arrays that lack bounded receiving interfaces.
 
 Path counting and construction, every type/header observation, complete getter receiving spans, final public path receiving and the capacity bytes of every possibly copied ancestor prepay the original cumulative ledger before access. Push additionally prepays possible leaf growth. Overflow or unpayable work returns BUDGET first. Path steps consume the original remaining frame quota; observation and final Value scratch receive only the balance after those steps. All temporary observation owners are dropped before common mutation to avoid manufacturing sharing. Sole Value path read/write/push operations determine ordinary semantics, COW and publication; CTFE introduces no second mutation algorithm.
 
@@ -1477,13 +1489,13 @@ Logical export still counts complete UTF-8 bytes under the original output8 ceil
 
 ### 17.53 Declaration-bound structs, active enums and private field paths
 
-After sole complete Lowered and entire reachable closure admission, CTFE executes closed ordinary structs/enums. Iterative type-family admission examines all fields and rejects cycles, classes, identity-bearing or unadmitted native types. Lexical declaration-owner admission follows 17.54 and replaces neither body/effect admission nor permission checks; it denotes no class instance. STRUCT_NEW/GET and ENUM_NEW/TAG/GET use sole Value construction, receiving and owned slots. Ordinary methods and generic specialization retain existing Source/Checker and closure admission. Enums observe only the actual active variant, never inactive payloads.
+After sole complete Lowered and entire reachable closure admission, CTFE executes closed ordinary structs/enums. Iterative type-family admission examines all fields and rejects cycles and unadmitted native types; internal Class identities and actual graph receiving follow17.60. Lexical declaration-owner admission follows 17.54 and replaces neither body/effect admission nor permission checks; it denotes no class instance. STRUCT_NEW/GET and ENUM_NEW/TAG/GET use sole Value construction, receiving and owned slots. Ordinary methods and generic specialization retain existing Source/Checker and closure admission. Enums observe only the actual active variant, never inactive payloads.
 
 FIELD_PLACE and INDEX_PLACE may compose only beneath an authentic private Cell in this compiler Domain. STRUCT_SET and ordinary field/Array writes and pushes use the same Value path implementation. Before observation and complete receiving, work prepays the original cumulative ledger, including possibly copied struct field vectors and Array ancestor capacities. Paths, explicit traversal stacks and simultaneous receiving scratch share remaining frame. Observation owners drop before common mutation, preserving normal COW and single publication. Type shapes provide costs, never another Value representation or authority proof.
 
 Owned export recursively counts active target scalars and String bytes, Array elements, Nullable tags and the actual enum storage tag bytes. Empty structs use zero; single-variant empty enums may use zero, while an empty branch of a multi-variant enum still counts its actual tag. Padding, capacity, ownership headers and pointers do not count. An owned result must not first query an inapplicable standalone nominal storage layout and then accept pointer-sized output. Sole TypeArena storage and logical traversal determine export under the unchanged output8 limit.
 
-Source independently rebuilds ordinary STRUCT_NEW/ENUM_NEW recipes from the same immutable input graph. Cross-pool receiving checks complete declaration order/identity, field permissions/names, variant ranges, native fingerprints and closed field types, never local type IDs alone. Metadata and byte comparisons prepay the original ledger; final complete Checker/query retain permission and publication authority. External nominal arguments and classes remain unadmitted. Struct dynamic children and deeper Array receiving that lack bounded observation fail closed without unpaid preliminary scans. External private-owned materialization authority and Unit-field Source prerequisites still need complete qualification; successful internal methods do not establish that coverage.
+Source independently rebuilds ordinary STRUCT_NEW/ENUM_NEW recipes from the same immutable input graph. Cross-pool receiving checks complete declaration order/identity, field permissions/names, variant ranges, native fingerprints and closed field types, never local type IDs alone. Metadata and byte comparisons prepay the original ledger; final complete Checker/query retain permission and publication authority. External nominal/Class arguments remain unadmitted; internal Class execution follows17.60. Struct dynamic children and deeper Array receiving that lack bounded observation fail closed without unpaid preliminary scans. External private-owned materialization authority and Unit-field Source prerequisites still need complete qualification; successful internal methods do not establish that coverage.
 
 Physical OOM and work/step/frame/output refusal preserve empty output and borrowed inputs, release every temporary/frame owner and retain spent charges. Actual struct/enum results survive Source, Artifact and ledger caller death, and final drop allocates nothing. Scoped development evidence replaces neither function-value/cleanup, foreign receiving, P12 nor original shared/provider/mandatory safety gates; the complete P11 objective remains open.
 
@@ -1493,7 +1505,7 @@ A comptime helper inside an ordinary member inherits the actual lexical nominal 
 
 After Checked specialization and complete Lowered receiving, helper lookup matches module, unique name, zero parameters, closed result type, actual nominal owner and member kind, rejecting changed cleanup identity. It must not assume all helpers are ownerless top-level functions. Observation and comparison prepay the original cumulative work; mismatch preserves existing results and releases temporary owners.
 
-A declaration owner is neither a class value nor an effect grant. Pure ordinary class static functions may compute after complete closure admission. Class values, CLASS_NEW and other identity operations, I/O/native/external state remain unadmitted. Private field construction/calls remain legal only under the actual declaration owner, including independent Source replay through the ordinary Checker. Receiving a private owned value grants no external private construction access. Complete materialization of such results remains part of the original objective; missing mechanisms must fail closed without reflection/memory-write or runtime fallback bypasses.
+A declaration owner is neither a class value nor an effect grant. Pure ordinary class static functions may compute after complete closure admission. Internal temporary Class identities and operations require17.60; Class identity export and I/O/native/external state remain unadmitted. Private field construction/calls remain legal only under the actual declaration owner, including independent Source replay through the ordinary Checker. Receiving a private owned value grants no external private construction access. Complete materialization of such results remains part of the original objective; missing mechanisms must fail closed without reflection/memory-write or runtime fallback bypasses.
 
 ### 17.55 Authentic internal Function values and bounded indirect calls
 
@@ -1550,5 +1562,17 @@ A same-frame fault selects the handler of its actual faulting instruction's bloc
 Cleanup may fully handle its own panic while an outer return/Error/panic is pending. Per-frame payloads prevent inner handling from replacing the outer message being unwound. If panic escapes cleanup, CTFE releases every owned value and loan on allocation-free terminal paths and returns compiler-only CLEANUP_PANIC, reported at the original comptime site. It never invokes a runtime fatal/process-abort interface or delivers that escaping panic to an outer language handler. This compiler boundary does not change the runtime fatal rule for escaping cleanup panic. Ordinary uncaught panic reports its corresponding compiler failure after applicable cleanup; infinite cleanup hits the original step/work limit before uncaught publication.
 
 Authentic PanicInfo may occur in internal parameters/returns, Cells, PHI, Tuples, Nullable, Arrays, structs/enums and Function captures within admitted families, using common ownership/receiving. It is not Sendable. Authentic external PanicInfo arguments and PanicInfo-bearing constant exports remain refused. Ordinary independent Source recipes receive only admitted exportable results and do not replay PanicInfo. Original128M work/64MiB allocated/8MiB live, steps65536, depth128, frame65536 and output8 remain. Failure preserves empty output, never refunds/resets charges, and final owned release allocates nothing. External private materialization/Unit prerequisites, bounded foreign/deep-variable receiving, ordinary Source ref lambdas, P12 and complete shared/provider/formal safety qualification remain independent. This family only adds compiler-only failure and private execution state; public Value/Call/Instance/SourceContext layouts, schema and opcodes remain unchanged.
+
+### 17.60 Private temporary Class identities and bounded actual field graphs
+
+After complete Lowered/identity/target/profile and entire reachable closure admission on each request, CLASS_NEW/GET/SET use existing Class Value factories and get/set, retaining authentic Checked declaration, construction and field permissions. Only reachable factories in this compiler Domain create objects; no Instance, host callback or second Value representation executes. Internal Class may flow through ordinary parameters/returns, owned locals, Cells, PHI, Tuple, Nullable, active enum/Error and Function captures within each family's restrictions. Authentic external Class arguments and Class-bearing constant exports reject; identity handles are not constant bytes.
+
+Type costs count fixed Class header validation as32 units without recursively guessing a possibly recursive declaration graph. Actual receiving visits authentic fields through an explicit owning stack on the original ledger. It uses only shallow public class_get after prepaying root/field metadata, actual Array receiving spans and simultaneous scratch. It reads no private object headers and performs no unpaid whole-receiver scan. Before each write, observation visits the complete current receiver and incoming graph, rejecting a backedge to the actual destination Class. Handle equality only rejects backedges; Value APIs still authenticate actual Domain/arena, storage and loans. Acyclic sharing, alias-visible field changes and replacement retain ordinary identity semantics; a thrown Class identity is not an immutable snapshot of its fields.
+
+OBJECT_PLACE denotes the complete Class root; FIELD_PLACE adds the field selector. Paths with evaluated selectors prepay receiving and possible ancestor copies, then prepare/commit a short whole-object loan under real frame authority and use common authorized path operations. Every terminal releases the loan without allocation. Paths retain no interior address. A path crossing another Class identity beyond its first root currently rejects; a legal route must instead start at the actual child object. Ref projections still use the sole Cell projection factory and authentic parent/child loans. Initial projection loans on Class roots require all fields to be exportable data types and the leaf receiving shape to be static. Thus another mutable identity or variable leaf graph cannot invalidate the prepaid root bound during a narrow loan. Scalar/String and supported pure Array chains allow borrowing, reborrowing and cleanup writes; scalar Array leaves may grow. Class-bearing roots and dynamic leaf combinations remain refused without broadening prepayment quotas.
+
+Field getters return real owners. A returned String snapshot survives subsequent Class field replacement and Source/Artifact/ledger caller death. Ordinary returns, Error and panic retain LIFO cleanup, authentic parent loan restoration and resource-failure rules from17.56–17.59. Complete physical FI includes every observed allocation point in construction, field graph receiving, projection/cleanup, owning String and cycle refusal, with retry on the same original owner and empty output/live restoration. Traversal stacks, loans, paths and common scratch share the original frame. Retrying work exhaustion cannot reset charges.
+
+Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and8-byte maximum logical output remain unchanged. This family changes no Value/Call/Instance/SourceContext ABI, schema or opcode. Array<Class>, dynamic struct children, foreign/deep-variable receiving lacking bounded observation, external private Source materialization, the original larger P12 output targets and complete shared/provider/formal safety qualifications retain independent open work. Private Class qualification establishes neither complete P11 nor a production release.
 
 <!-- /xr-spec:en -->

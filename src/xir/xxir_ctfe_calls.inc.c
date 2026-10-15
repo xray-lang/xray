@@ -118,7 +118,7 @@ static XrXirCtfeStatus ctfe_call_cells_admit(const XrXirArtifact *artifact,uint3
     return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_value_header_bound(const XrXirArtifact *artifact,const uint32_t *queue,uint32_t count,uint64_t *work) {
-    /* Every opaque Error originates at a reachable real enum factory. This
+    /* Opaque Error and Class values originate at reachable real factories. This
      * bounds shallow metadata only; complete receiving is charged separately. */
     uint64_t maximum=1;
     for (uint32_t f=0;f<count;++f) {
@@ -126,7 +126,7 @@ static XrXirCtfeStatus ctfe_value_header_bound(const XrXirArtifact *artifact,con
         for (uint32_t i=0;i<body->instruction_count;++i) {
             if (!xir_compile_work(&artifact->context,4)) return XR_XIR_CTFE_BUDGET;
             const XrXirInstruction *op=&body->instructions[i];
-            if (op->op==XR_XIR_ENUM_NEW) {
+            if (op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_CLASS_NEW) {
                 XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(&artifact->context,artifact->module.types,op->type,true,&shape);
                 if (status!=XR_XIR_CTFE_OK) return status;if (shape.work>maximum) maximum=shape.work;continue;
             }
@@ -166,7 +166,7 @@ static XrXirCtfeStatus ctfe_call_closure(const XrXirArtifact *artifact,uint32_t 
         for (uint32_t i=0;i<body->instruction_count;++i) {
             if (!xir_compile_work(&artifact->context,1)) { status=XR_XIR_CTFE_BUDGET;break; }
             const XrXirInstruction *op=&body->instructions[i];
-            if (op->op==XR_XIR_CELL_PROJECT || ctfe_error_operation(op->op)) headers=true;
+            if (op->op==XR_XIR_CELL_PROJECT || ctfe_class_operation(op->op) || ctfe_error_operation(op->op)) headers=true;
             if (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CLEANUP_REGISTER) continue;
             if (op->op==XR_XIR_FUNCTION_REF) functions=true;
             uint32_t target=(uint32_t)op->immediate;

@@ -36,6 +36,7 @@ static XrXirCtfeStatus ctfe_call_step(CtfeCallExecution *execution,XirScalarCore
     if (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_FUNCTION_WEAKEN) return ctfe_function_step(run,&frame->state,&execution->owned,frame->function);
     if (ctfe_float_opcode(run,op)) return ctfe_float_step(run,&frame->state.instruction);
     if (ctfe_owned_equal_opcode(run,op)) return ctfe_owned_equal_step(run,&frame->state.instruction,&execution->owned);
+    if (op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_CLASS_SET) return ctfe_class_step(run,&frame->state,&execution->owned);
     if (ctfe_nominal_opcode(op->op)) return ctfe_nominal_step(run,&frame->state,&execution->owned);
     if (ctfe_array_opcode(op->op)) return ctfe_array_step(run,&frame->state,&execution->owned);
     if (ctfe_nullable_opcode(op)) return ctfe_nullable_step(run,&frame->state.instruction,&execution->owned);

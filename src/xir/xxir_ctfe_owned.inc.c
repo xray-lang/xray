@@ -18,6 +18,8 @@
 #include "xxir_cell_owner_internal.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_panic.h"
+#include "xxir_class.h"
+#include "xxir_class_origin_internal.h"
 typedef struct CtfeFunctionLease CtfeFunctionLease;
 
 typedef struct CtfeOwnedState {
@@ -34,6 +36,7 @@ typedef struct CtfeOwnedState {
     CtfeFunctionLease *functions;
     XrXirCellProvenance *cells;
     XrXirValue forbidden_cell;
+    XrXirValue forbidden_class;
     XrXirCellAuthority authority;
     void *closure;
     uint8_t *reachable;
@@ -65,6 +68,10 @@ static bool ctfe_cell_type(const XrXirTypes *types,XrXirType type) {
 static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFunction *body,
     const XrXirInstruction *op) {
     if (op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT || op->op==XR_XIR_INVOKE_RESULT) return true;
+    if (xr_xir_type_is_class(module->types,op->type)) return op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_OBJECT_PLACE ||
+        op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD ||
+        op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PHI ||
+        op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
     if (op->type==XR_XIR_PANIC_INFO) return op->op==XR_XIR_PANIC_CATCH || op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT ||
         op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ ||
         op->op==XR_XIR_OWNED_RETAIN || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP ||
@@ -81,12 +88,12 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
         op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ARRAY_GET ||
         op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW ||
         op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_OWNED_RETAIN;
-    if (ctfe_composite_node(module->types,op->type)) return op->op==XR_XIR_ERROR_NARROW || op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_TUPLE_NEW ||
+    if (ctfe_composite_node(module->types,op->type)) return op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_ERROR_NARROW || op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_TUPLE_NEW ||
         op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT ||
         op->op==XR_XIR_ARRAY_WITH_CAPACITY || op->op==XR_XIR_ARRAY_RESERVE || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_PLACE_READ ||
         op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
         op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
-    if (op->type==XR_XIR_STRING) return op->op==XR_XIR_PANIC_MESSAGE || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING || op->op==XR_XIR_TO_STRING ||
+    if (op->type==XR_XIR_STRING) return op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_PANIC_MESSAGE || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_CONST_STRING || op->op==XR_XIR_CONCAT_STRING || op->op==XR_XIR_TO_STRING ||
         op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP ||
         op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
         op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
@@ -184,6 +191,7 @@ static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types
 #include "xxir_ctfe_nominal.inc.c"
 #include "xxir_ctfe_error_value.inc.c"
 #include "xxir_ctfe_panic_value.inc.c"
+#include "xxir_ctfe_class.inc.c"
 #include "xxir_ctfe_array.inc.c"
 #include "xxir_ctfe_path.inc.c"
 #include "xxir_ctfe_projection.inc.c"

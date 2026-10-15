@@ -37,6 +37,7 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
         cell=xr_xir_type_is_cell(run->module->types,(XrXirType)current.type);
         const XrXirTypeNode *node=ctfe_execution_node(run->module->types,(XrXirType)current.type,true);
         bool descend=cell || (node && state->tuple_costs[current.type-XR_XIR_CONSTRUCTED_TYPE_BASE].dynamic);
+        bool identity=node && xr_xir_type_is_class(run->module->types,(XrXirType)current.type);
         uint32_t count=cell?1:node?ctfe_composite_fields(node):0;const XrXirFunctionBinding *function=NULL;
         if (cell) {
             if (!scalar_compile_work(run,64+state->value_header_work)) { status=XR_XIR_CTFE_BUDGET;break; }
@@ -50,6 +51,15 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
             status=ctfe_function_binding(state,&current,&function);if (status!=XR_XIR_CTFE_OK) break;
             count=function->capture_count;descend=count!=0;
         }
+        if (identity) {
+            if (!scalar_compile_work(run,512)) { status=XR_XIR_CTFE_BUDGET;break; }
+            if (!xr_xir_value_argument(&current,state->arena,(XrXirType)current.type)) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
+            if (xr_xir_class_module_storage(&current) ||
+                (state->forbidden_class.type==current.type && state->forbidden_class.payload==current.payload)) {
+                status=XR_XIR_CTFE_NOT_SUPPORTED;break;
+            }
+            descend=count!=0;
+        }
         if (descend && node && node->kind==XR_XIR_TYPE_ARRAY) {
             XrXirValueAdmission admission=ctfe_value_admission(state);int64_t length=0;
             status=ctfe_value_status(xr_xir_array_len(&current,&admission,&length));
@@ -61,7 +71,7 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
             if (!xr_xir_nullable_view(&current,&some,&payload)) { status=XR_XIR_CTFE_BAD_ARTIFACT;break; }
             if (!some) descend=false;
         }
-        if (descend && node && node->kind==XR_XIR_TYPE_NOMINAL) {
+        if (descend && node && node->kind==XR_XIR_TYPE_NOMINAL && !identity) {
             XrXirEnumBorrow borrowed={0};status=ctfe_value_status(xr_xir_enum_borrow(&current,&borrowed));
             if (status!=XR_XIR_CTFE_OK) break;count=borrowed.field_count;if (!count) descend=false;
         }
@@ -88,6 +98,10 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
                 status=ctfe_value_status(xr_xir_value_copy(child,&current));++frame->next;
             }
             else if (!node) { status=ctfe_value_status(xr_xir_cell_authorized_read(&frame->value,&state->authority,&current));++frame->next; }
+            else if (xr_xir_type_is_class(run->module->types,(XrXirType)frame->value.type)) {
+                CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)capacity*sizeof(*stack);
+                status=ctfe_class_member_read(run,&bounded,&frame->value,frame->next++,&current);state->tuple_costs=bounded.tuple_costs;
+            }
             else if (node->kind==XR_XIR_TYPE_TUPLE) status=ctfe_value_status(xr_xir_tuple_get(&frame->value,frame->next++,&current));
             else if (node->kind==XR_XIR_TYPE_NOMINAL) {
                 XrXirEnumBorrow borrowed={0};status=ctfe_value_status(xr_xir_enum_borrow(&frame->value,&borrowed));
@@ -108,7 +122,7 @@ done:
 static bool ctfe_array_opcode(XrXirOp op) {
     return op==XR_XIR_CELL_PROJECT || op==XR_XIR_RANGE_CHECK || op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
         op==XR_XIR_ARRAY_SET || op==XR_XIR_ARRAY_PUSH || op==XR_XIR_ARRAY_CAPACITY ||
-        op==XR_XIR_ARRAY_WITH_CAPACITY || op==XR_XIR_ARRAY_RESERVE || op==XR_XIR_CELL_PLACE || op==XR_XIR_INDEX_PLACE || op==XR_XIR_FIELD_PLACE ||
+        op==XR_XIR_ARRAY_WITH_CAPACITY || op==XR_XIR_ARRAY_RESERVE || op==XR_XIR_OBJECT_PLACE || op==XR_XIR_CELL_PLACE || op==XR_XIR_INDEX_PLACE || op==XR_XIR_FIELD_PLACE ||
         op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE;
 }
 static XrXirValue ctfe_array_operand(const ScalarRun *run,uint32_t id) {
@@ -129,13 +143,13 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
                 ctfe_array_operand(run,range[1]).payload,ctfe_array_operand(run,range[2]).payload)) return XR_XIR_CTFE_NUMERIC_RANGE;
         ++vm->instruction;return XR_XIR_CTFE_OK;
     }
-    if (op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE) { ++vm->instruction;return XR_XIR_CTFE_OK; }
+    if (op->op==XR_XIR_OBJECT_PLACE || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE) { ++vm->instruction;return XR_XIR_CTFE_OK; }
     XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValue result={0},receiver={0};XrXirValuePlace place={0};XrXirFaultDetail fault={0};
     XrXirCtfeStatus status=XR_XIR_CTFE_OK;XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&run->function->operands[op->args[0]]:op->args;
     bool create=op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT || op->op==XR_XIR_ARRAY_WITH_CAPACITY;
-    if (!create && (xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_INDEX || xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_FIELD))
+    if (!create && (xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_OBJECT || xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_INDEX || xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_FIELD))
         return ctfe_index_path_step(run,vm,state);
     if (!create) {
         if (xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_CELL) {

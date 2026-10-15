@@ -45,10 +45,12 @@ static XrXirCtfeStatus ctfe_projection_loan_bound(CtfeCallExecution *execution,C
     }
     if (!scalar_compile_work(run,128+state->value_header_work)) return XR_XIR_CTFE_BUDGET;
     const XrXirValue *root=xr_xir_cell_canonical_root(&record->value);if (!root) return XR_XIR_CTFE_BAD_ARTIFACT;
-    XrXirType type=xr_xir_cell_element(run->module->types,(XrXirType)root->type);
-    if (!xr_xir_type_is_array(run->module->types,type) && !xr_xir_type_is_struct(run->module->types,type)) return XR_XIR_CTFE_NOT_SUPPORTED;
+    bool identity=xr_xir_type_is_class(run->module->types,(XrXirType)root->type);
+    XrXirType type=identity?(XrXirType)root->type:xr_xir_cell_element(run->module->types,(XrXirType)root->type);
+    if (!identity && !xr_xir_type_is_array(run->module->types,type) && !xr_xir_type_is_struct(run->module->types,type)) return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus status=ctfe_validation_work(run,state,type);if (status!=XR_XIR_CTFE_OK) return status;
-    XrXirValue value={0};status=ctfe_value_status(xr_xir_cell_authorized_read(root,&state->authority,&value));
+    if (identity) { status=ctfe_class_projection_type(run,state,root,xr_xir_cell_element(run->module->types,(XrXirType)record->value.type));if (status!=XR_XIR_CTFE_OK) return status; }
+    XrXirValue value={0};status=ctfe_value_status(identity?xr_xir_value_copy(root,&value):xr_xir_cell_authorized_read(root,&state->authority,&value));
     if (status!=XR_XIR_CTFE_OK) return status;
     XrCompileResourceStats before={0},after={0};
     if (xr_compile_resources_stats(state->context->resources,&before)!=XR_COMPILE_RESOURCE_OK) status=XR_XIR_CTFE_BAD_ARTIFACT;
