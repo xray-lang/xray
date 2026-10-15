@@ -48,11 +48,12 @@ static XrXirStatus cell_proof_raw_shape(const XrXirCompileContext *context,const
 }
 static XrXirCellProofBodyRead cell_proof_raw_body(const XrXirCompileContext *context,const XrXirModule *module) {
     return (XrXirCellProofBodyRead){xir_metadata_domain_from_module(module),context->resources,module,
-        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape,NULL,NULL};
+        cell_proof_raw_head,cell_proof_raw_instruction,cell_proof_raw_type,cell_proof_raw_shape,NULL,NULL,NULL};
 }
 static bool cell_proof_body_valid(const XrXirCompileContext *context,const XrXirCellProofBodyRead *body) {
     return xir_compile_context_valid(context) && body && body->resources==context->resources && body->owner &&
         body->head && body->instruction && body->type && body->shape &&
+        (!!body->range==!!body->range_row) &&
         (!body->domain.types || !body->domain.types->count || body->domain.types->nodes);
 }
 static bool cell_proof_head(CellProofBuild *build,uint32_t f,XrXirCellProofBodyHead *output) {
@@ -99,14 +100,23 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
         return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
     return true;
 }
-/* The actual first row is already owned by this local request. Other rows
- * retain the original complete getter and its precise failure coordinate. */
-static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,uint32_t f,
+/* The actual first row is already owned by this local request. Later rows
+ * decode all physical words from the same checked numeric range position. */
+static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,const XrXirCellProofRunCursor *cursor,
     const XrXirCellProofRun *run,uint32_t i,XrXirInstruction *storage) {
-    if (!run || i<run->first || i-run->first>=run->count) {
+    uint32_t f=cursor?cursor->function:UINT32_MAX;
+    if (build->status!=XR_XIR_OK) return NULL;
+    if (!cursor || !run || !storage || i<run->first || i-run->first>=run->count ||
+        cursor->next!=run->first+run->count || !build->body->range_row) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }
-    return i==run->first?&run->operation:cell_proof_instruction(build,f,i,storage);
+    if (i==run->first) return &run->operation;
+    XrXirStatus status=build->body->range_row(build->context,build->body,cursor,run->first,i,storage);
+    if (status!=XR_XIR_OK) {cell_proof_error(build,f,i,status);return NULL;}
+    if (storage->op<=XR_XIR_INVALID || storage->op>=XR_XIR_OP_COUNT) {
+        cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
+    }
+    return storage;
 }
 
 static bool cell_proof_shape(CellProofBuild *build,uint32_t f,uint32_t i,
