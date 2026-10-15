@@ -47,6 +47,7 @@ static void observed_free(void *memory) {
 static size_t io_attempts,io_fail_at=SIZE_MAX;
 static size_t owned_handles;
 static DWORD io_error=ERROR_READ_FAULT;
+static bool short_read;
 static bool replace_after_path;
 static const char *replace_source,*replace_saved;
 #ifndef IMAGE_PRODUCTION
@@ -88,6 +89,12 @@ static DWORD observed_path(HANDLE handle,LPWSTR path,DWORD capacity,DWORD flags)
     }
     return result;
 }
+static BOOL observed_read(HANDLE file,LPVOID bytes,DWORD count,LPDWORD actual,LPOVERLAPPED overlapped) {
+    if(fail_io())return FALSE;
+    BOOL ok=ReadFile(file,bytes,count,actual,overlapped);
+    if(ok&&short_read&&*actual)--*actual;
+    return ok;
+}
 #define CreateFileW observed_create
 #define CloseHandle observed_close
 #define GetFileInformationByHandle(...) (fail_io()?FALSE:GetFileInformationByHandle(__VA_ARGS__))
@@ -98,7 +105,7 @@ static DWORD observed_path(HANDLE handle,LPWSTR path,DWORD capacity,DWORD flags)
 #define WideCharToMultiByte(...) (fail_io()?0:WideCharToMultiByte(__VA_ARGS__))
 #define CompareStringOrdinal(...) (fail_io()?0:CompareStringOrdinal(__VA_ARGS__))
 #define GetFileSizeEx(...) (fail_io()?FALSE:GetFileSizeEx(__VA_ARGS__))
-#define ReadFile(...) (fail_io()?FALSE:ReadFile(__VA_ARGS__))
+#define ReadFile observed_read
 #define SetFilePointerEx(...) (fail_io()?FALSE:SetFilePointerEx(__VA_ARGS__))
 #define DuplicateHandle observed_duplicate
 #include "app/toolchain/xtc_xir_target.c"
@@ -204,6 +211,84 @@ static void matrix(const char *path) {
         CHECK(!live&&!bytes_live&&!owned_handles&&handle_count()==baseline);
     }
     CHECK(CloseHandle(event));printf("image owner: %zu malloc, %zu IO/OOM; physical formula, three axes exact/minus1 PASS\n",mallocs,calls);
+}
+static XrXirImageCollector *scalar_images(XrCompileResources *r,HANDLE event) {
+    XrXirImageCollector *images=make_images(r);
+    CHECK(observe(images,event,XR_PROC_IMAGE_EXECUTABLE)==XR_PROC_OK);
+    CHECK(xtc_xir_images_seal(images)==XR_XIR_TARGET_OK);return images;
+}
+static void scalar_stopped(XrXirImageCollector *images,XrCompileResources *r,XrXirTargetStatus status) {
+    uint32_t value=0xfeedface;size_t mallocs=attempts,calls=io_attempts;XrCompileResourceStats before=stats(r);
+    CHECK(xtc_xir_images_read_scalar(images,0,0,4,&value)==status&&value==0xfeedface);
+    CHECK(attempts==mallocs&&io_attempts==calls&&stats(r).work==before.work);
+}
+static void scalar_faults(HANDLE event) {
+#ifndef IMAGE_PRODUCTION
+    for(unsigned error=0;error<3;++error)for(size_t cut=0;cut<(error==2?1u:2u);++cut) {
+        XrCompileResources *r=ledger(&unlimited);XrXirImageCollector *images=scalar_images(r,event);
+        size_t mallocs=attempts,calls=io_attempts;uint32_t value=0xfeedface;
+        io_error=error==1?ERROR_NOT_ENOUGH_MEMORY:ERROR_READ_FAULT;
+        if(error==2)short_read=true;else io_fail_at=calls+cut;
+        XrXirTargetStatus expected=error==1?XR_XIR_TARGET_OUT_OF_MEMORY:XR_XIR_TARGET_IO;
+        CHECK(xtc_xir_images_read_scalar(images,0,0,4,&value)==expected&&value==0xfeedface);
+        io_fail_at=SIZE_MAX;short_read=false;
+        CHECK(attempts==mallocs&&io_attempts==calls+(error==2?2:cut+1));
+        scalar_stopped(images,r,expected);xtc_xir_images_free(images);xr_compile_resources_release(r);
+        CHECK(!live&&!bytes_live&&!owned_handles);
+    }
+#else
+    (void)event;
+#endif
+}
+static void scalar_budgets(HANDLE event,const XrCompileResourceStats *total,uint64_t setup_work) {
+    for(unsigned axis=0;axis<3;++axis)for(unsigned edge=0;edge<3;++edge) {
+        XrCompileResourceLimits limits=unlimited;uint64_t bound=edge==0?0:edge==1?1:2;
+        if(axis==0)limits.allocated_bytes=total->allocated_bytes-1+bound;
+        if(axis==1)limits.live_bytes=total->peak_bytes-1+bound;
+        if(axis==2)limits.work=total->work-1+bound;
+        XrCompileResources *r=ledger(&limits);XrXirImageCollector *images=NULL;
+        XrXirTargetStatus status=xtc_xir_images_new(r,&images);uint32_t value=0xfeedface;
+        if(status==XR_XIR_TARGET_OK&&observe(images,event,XR_PROC_IMAGE_EXECUTABLE)!=XR_PROC_OK)status=xtc_xir_images_status(images);
+        if(status==XR_XIR_TARGET_OK)status=xtc_xir_images_seal(images);
+        if(status==XR_XIR_TARGET_OK)status=xtc_xir_images_read_scalar(images,0,0,4,&value);
+        CHECK(status==(edge?XR_XIR_TARGET_OK:XR_XIR_TARGET_BUDGET));
+        CHECK(value==(edge?0x80636261u:0xfeedfaceu));xtc_xir_images_free(images);xr_compile_resources_release(r);
+        CHECK(!live&&!bytes_live&&!owned_handles);
+    }
+    for(uint64_t work=setup_work;work<total->work;++work) {
+        XrCompileResourceLimits limits=unlimited;limits.work=work;
+        XrCompileResources *r=ledger(&limits);XrXirImageCollector *images=scalar_images(r,event);
+        uint32_t value=0xfeedface;size_t mallocs=attempts;
+        CHECK(xtc_xir_images_read_scalar(images,0,0,4,&value)==XR_XIR_TARGET_BUDGET&&value==0xfeedface);
+        CHECK(attempts==mallocs);scalar_stopped(images,r,XR_XIR_TARGET_BUDGET);
+        xtc_xir_images_free(images);xr_compile_resources_release(r);CHECK(!live&&!bytes_live&&!owned_handles);
+    }
+}
+static void scalar_cases(const char *path) {
+    char name[32768];CHECK(snprintf(name,sizeof(name),"%s.scalar",path)>0);
+    static const unsigned char bytes[]={'a','b','c',0x80};FILE *f=fopen(name,"wb");CHECK(f);
+    CHECK(fwrite(bytes,1,sizeof(bytes),f)==sizeof(bytes)&&!fclose(f));
+    DWORD handles=handle_count();HANDLE event=open_event(name);XrCompileResources *r=ledger(&unlimited);
+    XrXirImageCollector *images=make_images(r);uint32_t value=0xfeedface;
+    XrCompileResourceStats before=stats(r);size_t mallocs=attempts,calls=io_attempts;
+    CHECK(xtc_xir_images_read_scalar(images,0,0,4,&value)==XR_XIR_TARGET_INVALID&&value==0xfeedface);
+    CHECK(stats(r).work==before.work&&attempts==mallocs&&io_attempts==calls);xtc_xir_images_free(images);xr_compile_resources_release(r);
+    r=ledger(&unlimited);images=scalar_images(r,event);uint64_t setup_work=stats(r).work;mallocs=attempts;
+    CHECK(xtc_xir_images_read_scalar(images,0,0,4,&value)==XR_XIR_TARGET_OK&&value==0x80636261u);
+    CHECK(attempts==mallocs);XrCompileResourceStats total=stats(r);
+    before=stats(r);calls=io_attempts;
+    CHECK(xtc_xir_images_read_scalar(images,1,0,1,&value)==XR_XIR_TARGET_INVALID);
+    CHECK(xtc_xir_images_read_scalar(images,0,0,3,&value)==XR_XIR_TARGET_INVALID);
+    CHECK(xtc_xir_images_read_scalar(images,0,4,1,&value)==XR_XIR_TARGET_INVALID);
+    CHECK(xtc_xir_images_read_scalar(images,0,UINT64_MAX,2,&value)==XR_XIR_TARGET_INVALID);
+    CHECK(xtc_xir_images_read_scalar(images,0,0,1,NULL)==XR_XIR_TARGET_INVALID);
+    CHECK(value==0x80636261u&&stats(r).work==before.work&&attempts==mallocs&&io_attempts==calls);
+    xr_compile_resources_release(r);CHECK(CloseHandle(event));blocked_writer(name);
+    CHECK(xtc_xir_images_read_scalar(images,0,1,2,&value)==XR_XIR_TARGET_OK&&value==0x6362);
+    CHECK(xtc_xir_images_read_scalar(images,0,3,1,&value)==XR_XIR_TARGET_OK&&value==0x80);
+    CHECK(attempts==mallocs);xtc_xir_images_free(images);CHECK(!live&&!bytes_live&&!owned_handles);
+    event=open_event(name);scalar_faults(event);scalar_budgets(event,&total,setup_work);CHECK(CloseHandle(event));
+    CHECK(DeleteFileA(name)&&handle_count()==handles);puts("image scalars: same lease, no allocation, all I/O failures and work cuts, three axes exact/minus1/plus1 PASS");
 }
 static void identities(const char *path,const char *alias,const char *saved) {
     DWORD baseline=handle_count();XrCompileResources *r=ledger(&unlimited);XrXirImageCollector *images=make_images(r);
@@ -385,7 +470,7 @@ int main(int argc,char **argv) {
     if(argc==2&&!strcmp(argv[1],"--leaf")) {puts("image-leaf");return 0;}
     if(argc==3&&!strcmp(argv[1],"--child")) {child(argv[0],argv[2]);return 0;}
     bool command=argc>=5&&!strcmp(argv[1],"--observe-command");
-    CHECK(command||argc==6);(void)io_error;(void)io_fail_at;
+    CHECK(command||argc==6);(void)io_error;(void)io_fail_at;(void)short_read;
     if(command||!strcmp(argv[5],"process")) {
         ProcessTest test={argc,argv,command};
         /* Provider diagnostics first measure a native version/help request.
@@ -400,7 +485,7 @@ int main(int argc,char **argv) {
         fprintf(stderr,"image thread scope: handles=%lu baseline=%lu\n",handle_count(),baseline);
         CHECK(handle_count()==baseline);
     }
-    else {identities(argv[2],argv[3],argv[4]);matrix(argv[2]);}
+    else {identities(argv[2],argv[3],argv[4]);matrix(argv[2]);scalar_cases(argv[2]);}
     return 0;
 }
 #endif

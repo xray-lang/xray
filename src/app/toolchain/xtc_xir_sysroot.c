@@ -54,6 +54,13 @@ XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
         return XR_XIR_TARGET_INVALID;
     return XR_XIR_TARGET_UNSUPPORTED;
 }
+XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read_scalar(XrXirTargetSnapshot *storage,
+    XtcXirLock *lock,uint64_t file_length,uint64_t offset,unsigned width,uint32_t *output) {
+    if (!storage || !lock || lock->directory || !output ||
+        (width!=1 && width!=2 && width!=4) || offset>file_length || width>file_length-offset)
+        return XR_XIR_TARGET_INVALID;
+    return XR_XIR_TARGET_UNSUPPORTED;
+}
 #endif
 XR_FUNC XrXirTargetStatus xtc_xir_file_lease_read(XtcXirFileLease *lease, size_t limit,
     void **owned_bytes, size_t *length) {

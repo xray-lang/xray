@@ -39,5 +39,12 @@ XR_FUNC const XrXirImageFile *xtc_xir_images_file(const XrXirImageCollector *ima
  * of this owner; release them with xr_compile_resources_free. */
 XR_FUNC XrXirTargetStatus xtc_xir_images_read(XrXirImageCollector *images,
     uint32_t index, size_t limit, void **owned_bytes, size_t *length);
+/* Read one little-endian scalar of width 1, 2 or 4 from a sealed image's
+ * existing handle. No allocation, reopening or hashing occurs. Bounds are
+ * checked against its leased length before I/O; failures preserve output.
+ * Resource/I/O failure stops subsequent reads on this owner. Calls and free
+ * require caller exclusion, as for full-image reads. */
+XR_FUNC XrXirTargetStatus xtc_xir_images_read_scalar(XrXirImageCollector *images,
+    uint32_t index, uint64_t offset, unsigned width, uint32_t *output);
 XR_FUNC void xtc_xir_images_free(XrXirImageCollector *images);
 #endif // XTC_XIR_IMAGES_H

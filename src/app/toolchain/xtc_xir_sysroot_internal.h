@@ -70,6 +70,8 @@ XR_FUNC bool xtc_xir_sysroot_observe(XrXirImageCollector *images, const XrProcIm
 XR_FUNC bool xtc_xir_sysroot_hash(XrXirTargetSnapshot *snapshot, XtcXirLock *lock, XrXirTargetFile *file);
 XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
     XtcXirLock *lock, uint64_t file_length, size_t limit, void **owned_bytes, size_t *length);
+XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read_scalar(XrXirTargetSnapshot *storage,
+    XtcXirLock *lock, uint64_t file_length, uint64_t offset, unsigned width, uint32_t *output);
 #ifdef XR_OS_WINDOWS
 XR_FUNC XrXirTargetStatus xtc_xir_hash_proof_cache_new(XrCompileResources *resources,
     uint32_t limit,XtcXirHashProofCache **output);

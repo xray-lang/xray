@@ -98,3 +98,23 @@ XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read(XrXirTargetSnapshot *storage,
     if (storage->status != XR_XIR_TARGET_OK) { xr_compile_resources_free(data); return storage->status; }
     *owned_bytes = data; *length = bytes; return XR_XIR_TARGET_OK;
 }
+XR_FUNC XrXirTargetStatus xtc_xir_sysroot_read_scalar(XrXirTargetSnapshot *storage,
+    XtcXirLock *lock,uint64_t file_length,uint64_t offset,unsigned width,uint32_t *output) {
+    if (!storage || !lock || lock->directory || !output ||
+        (width!=1 && width!=2 && width!=4) || offset>file_length ||
+        width>file_length-offset || offset>INT64_MAX) return XR_XIR_TARGET_INVALID;
+    if (storage->status!=XR_XIR_TARGET_OK) return storage->status;
+    uint8_t bytes[4];LARGE_INTEGER position;position.QuadPart=(LONGLONG)offset;
+    if (xtc_xir_target_work(storage,1) && !SetFilePointerEx(lock->handle,position,NULL,FILE_BEGIN))
+        sysroot_error(storage,GetLastError());
+    DWORD actual=0;
+    if (storage->status==XR_XIR_TARGET_OK && xtc_xir_target_work(storage,(uint64_t)width+1)) {
+        if (!ReadFile(lock->handle,bytes,width,&actual,NULL)) sysroot_error(storage,GetLastError());
+        else if (actual!=width) xtc_xir_target_fail(storage,XR_XIR_TARGET_IO);
+    }
+    if (storage->status!=XR_XIR_TARGET_OK || !xtc_xir_target_work(storage,width+sizeof(*output)))
+        return storage->status;
+    uint32_t value=0;
+    for (unsigned i=0;i<width;++i) value|=(uint32_t)bytes[i]<<(8*i);
+    *output=value;return XR_XIR_TARGET_OK;
+}
