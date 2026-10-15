@@ -202,6 +202,7 @@ static size_t task_fault_resource_axes(unsigned backend) {
     printf("Task fault resources backend=%u sites=%zu value=%llu call=%llu work=%llu sameOriginalDomain codeLease1 allTasksDeadBeforeLateReads metadataDeadBeforeInfoString physical0/0\n",
         backend, sites, (unsigned long long)axes[0], (unsigned long long)axes[1], (unsigned long long)axes[2]); return sites;
 }
+#ifndef XR_TASK_FAULT_PREFIX_RESOURCE_MAIN
 int main(int argc, char **argv) {
     CHECK(argc == 3 || argc == 4); (void)task_fault_graph; (void)task_late_graph;
     static const char *const names[] = {"0", "1", "vm", "native"}; unsigned backend = 0;
@@ -217,3 +218,4 @@ int main(int argc, char **argv) {
     } else CHECK(argc == 3 && !strcmp(argv[2], "axes"));
     return 0;
 }
+#endif
