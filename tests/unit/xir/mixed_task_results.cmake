@@ -51,7 +51,10 @@ add_custom_command(OUTPUT "${XIR_MIXED_TASK_FAULT_C}"
 add_executable(test_xir_mixed_task_fault_lifetime xir/test_xir_mixed_task_fault_lifetime.c "${XIR_MIXED_TASK_FAULT_C}")
 target_link_libraries(test_xir_mixed_task_fault_lifetime PRIVATE xray_xir_vm xray_xir_scalar)
 target_compile_definitions(test_xir_mixed_task_fault_lifetime PRIVATE XR_MIXED_TASK_RESULT_MODULES=3)
-foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_mixed_task_fault_lifetime)
+add_executable(test_xir_mixed_task_fault_resources xir/test_xir_mixed_task_fault_resources.c "${XIR_MIXED_TASK_FAULT_C}")
+target_link_libraries(test_xir_mixed_task_fault_resources PRIVATE xray_xir_vm xray_xir_scalar)
+target_compile_definitions(test_xir_mixed_task_fault_resources PRIVATE XR_MIXED_TASK_RESULT_MODULES=3)
+foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_mixed_task_fault_lifetime test_xir_mixed_task_fault_resources)
     set_target_properties(${task_fault_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${task_fault_target} PRIVATE /W4 /WX /utf-8)
@@ -60,6 +63,14 @@ foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_m
     endif()
 endforeach()
 foreach(task_fault_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_task_fault_resources_${task_fault_backend}_axes
+        COMMAND test_xir_mixed_task_fault_resources ${task_fault_backend} axes)
+    set_tests_properties(test_xir_mixed_task_fault_resources_${task_fault_backend}_axes PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;task;ownership;generated-c;lifecycle;throw;panic;resource")
+    add_test(NAME test_xir_mixed_task_fault_resources_${task_fault_backend}_fi
+        COMMAND test_xir_mixed_task_fault_resources ${task_fault_backend} fi 56)
+    set_tests_properties(test_xir_mixed_task_fault_resources_${task_fault_backend}_fi PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;ownership;generated-c;lifecycle;throw;panic;resource;fault-injection")
     add_test(NAME test_xir_mixed_task_fault_lifetime_${task_fault_backend}
         COMMAND test_xir_mixed_task_fault_lifetime ${task_fault_backend})
     set_tests_properties(test_xir_mixed_task_fault_lifetime_${task_fault_backend} PROPERTIES

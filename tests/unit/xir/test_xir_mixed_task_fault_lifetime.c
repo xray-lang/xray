@@ -130,6 +130,7 @@ static void task_fault_graph(unsigned backend, unsigned order) {
     printf("Task fault lifetime backend=%u order=%u instances2 genuineYieldedTasks4 thrown2 assertion2 lateCopies8 panicInfos2 innerOuter peerCold allTasksPhysicallyDeadBeforeLateReads metadataDeadBeforeFinalMessages codeLease1 physical0/0\n",
         backend, order);
 }
+#ifndef XR_TASK_FAULT_RESOURCE_MAIN
 int main(int argc, char **argv) {
     CHECK(argc == 2); (void)task_late_graph;
     static const char *const names[] = {"0", "1", "vm", "native"}; unsigned backend = 0;
@@ -138,3 +139,4 @@ int main(int argc, char **argv) {
     for (unsigned order = 0; order < 2; ++order) task_fault_graph(backend, order);
     return 0;
 }
+#endif
