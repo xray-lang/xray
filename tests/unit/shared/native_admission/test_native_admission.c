@@ -94,15 +94,17 @@ static void lookup_boundaries(void) {
             (limit==12?XR_NATIVE_DECLARATION_OK:XR_NATIVE_DECLARATION_WORK_LIMIT));
         CHECK(limit==12 ? out==xr_native_declaration_by_id(1) : !out);
     }
-    /* Each governed name differs from '?' at its first byte. All nine names
+    /* Each governed name differs from '?' at its first byte. All eleven names
      * must be inspected before absence can be established. */
-    Work ledger={18,0,0};XrNativeDeclarationWork work={&ledger,charge};
+    for (uint64_t limit=0;limit<=22;++limit) {
+        Work ledger={limit,0,0};XrNativeDeclarationWork work={&ledger,charge};
+        const XrNativeTypeDeclaration *out=NULL;
+        CHECK(xr_native_declaration_find(&work,"?",&out)==
+            (limit==22?XR_NATIVE_DECLARATION_NOT_FOUND:XR_NATIVE_DECLARATION_WORK_LIMIT));
+        CHECK(!out && ledger.used==2*(limit/2) && ledger.calls==(limit==22?11:limit/2+1));
+    }
+    Work ledger={0,0,0};XrNativeDeclarationWork work={&ledger,charge};
     const XrNativeTypeDeclaration *out=NULL;
-    CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
-    CHECK(!out && ledger.used==4 && ledger.calls==3);
-    ledger=(Work){14,0,0};
-    CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_NOT_FOUND);
-    CHECK(!out && ledger.used==22 && ledger.calls==11);
     ledger=(Work){0,0,0};
     CHECK(xr_native_declaration_find(&work,(const char *)(uintptr_t)1,&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
     CHECK(!out && !ledger.used && ledger.calls==1);
