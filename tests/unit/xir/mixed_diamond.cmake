@@ -13,7 +13,10 @@ add_executable(test_xir_mixed_diamond_resources xir/test_xir_mixed_diamond_resou
 target_link_libraries(test_xir_mixed_diamond_resources PRIVATE xray_xir_vm xray_xir_scalar)
 add_executable(test_xir_mixed_diamond_cancel xir/test_xir_mixed_diamond_cancel.c "${XIR_DIAMOND_GENERATED}")
 target_link_libraries(test_xir_mixed_diamond_cancel PRIVATE xray_xir_vm xray_xir_scalar)
-foreach(diamond_target IN ITEMS test_xir_mixed_diamond_producer test_xir_mixed_diamond test_xir_mixed_diamond_resources test_xir_mixed_diamond_cancel)
+add_executable(test_xir_mixed_diamond_cancel_resources xir/test_xir_mixed_diamond_cancel_resources.c "${XIR_DIAMOND_GENERATED}")
+target_link_libraries(test_xir_mixed_diamond_cancel_resources PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(diamond_target IN ITEMS test_xir_mixed_diamond_producer test_xir_mixed_diamond test_xir_mixed_diamond_resources
+    test_xir_mixed_diamond_cancel test_xir_mixed_diamond_cancel_resources)
     set_target_properties(${diamond_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${diamond_target} PRIVATE /W4 /WX /utf-8)
@@ -33,5 +36,9 @@ foreach(diamond_backend IN ITEMS 0 1 vm native)
             COMMAND test_xir_mixed_diamond_resources ${diamond_backend} ${diamond_gate})
         set_tests_properties(test_xir_mixed_diamond_${diamond_backend}_${diamond_gate} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
             LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;lifecycle;diamond;initialization;${diamond_gate}")
+        add_test(NAME test_xir_mixed_diamond_cancel_${diamond_backend}_${diamond_gate}
+            COMMAND test_xir_mixed_diamond_cancel_resources ${diamond_backend} ${diamond_gate})
+        set_tests_properties(test_xir_mixed_diamond_cancel_${diamond_backend}_${diamond_gate} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+            LABELS "unit;xir;mixed;execution;ownership;instance;generated-c;lifecycle;diamond;initialization;cancel;${diamond_gate}")
     endforeach()
 endforeach()

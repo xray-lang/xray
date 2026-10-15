@@ -133,4 +133,6 @@ static int diamond_cancel_main(int argc, char **argv) {
     printf("Diamond initializer cancel backend=%s actual prefixes=%u cancel+stop+free=%u, cursorMask15/publishedMask127, root never enters, exact reverse published slots, actual init frames closed,24sticky copies/start/poll, peerSLRT twice, code lease1, physical0/0\n",
         diamond_backends[backend], prefixes, 3*prefixes); return 0;
 }
+#ifndef XR_DIAMOND_CANCEL_RESOURCE_MAIN
 int main(int argc, char **argv) { return diamond_cancel_main(argc, argv); }
+#endif

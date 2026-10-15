@@ -37,6 +37,7 @@ struct DiamondCode {
 static DiamondCode *diamond_code;
 static unsigned diamond_code_releases;
 static XrXirCallStatus diamond_expected_fault;
+static bool diamond_expected_cancellation;
 static const char *diamond_backends[] = {"0", "1", "vm", "native"};
 static void diamond_event(void *owner, const XrXirCallEvent *event) {
     DiamondRecord *record = owner;
@@ -53,8 +54,12 @@ static void diamond_event(void *owner, const XrXirCallEvent *event) {
             ++record->initializer_leaves[i]; CHECK(record->initializer_leaves[i] == record->initializers[i]);
         }
         CHECK(event->status == XR_XIR_CALL_RETURNED ||
-            (diamond_expected_fault != XR_XIR_CALL_READY && event->status == diamond_expected_fault));
-        if (event->code == XR_XIR_CALL_CODE_UNKNOWN) { CHECK(event->status == diamond_expected_fault); return; }
+            (diamond_expected_fault != XR_XIR_CALL_READY && event->status == diamond_expected_fault) ||
+            (diamond_expected_cancellation && event->status == XR_XIR_CALL_CANCELLED));
+        if (event->code == XR_XIR_CALL_CODE_UNKNOWN) {
+            CHECK(event->status == diamond_expected_fault || (diamond_expected_cancellation && event->status == XR_XIR_CALL_CANCELLED));
+            return;
+        }
         CHECK(event->code == (record->code->native[event->entry] ? XR_XIR_CALL_CODE_NATIVE : XR_XIR_CALL_CODE_VM));
         if (event->code == XR_XIR_CALL_CODE_NATIVE) ++record->native_frames; else ++record->vm_frames;
     }
