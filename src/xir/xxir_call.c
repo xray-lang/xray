@@ -656,7 +656,7 @@ static void accept_output_action(XrXirCall *call, XrXirAction action) {
         const XrXirValue *value = &action.arguments[i];
         bool constructed=value->type>=XR_XIR_CONSTRUCTED_TYPE_BASE;
         if ((writing && value->type != XR_XIR_STRING) ||
-            (!constructed && value->type != XR_XIR_BOOL && value->type != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
+            (!constructed && value->type != XR_XIR_UNIT && value->type != XR_XIR_BOOL && value->type != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
             !xr_xir_value_argument(value, call->config.admission.arena, (XrXirType) value->type)) {
             abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
         }

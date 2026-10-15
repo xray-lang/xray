@@ -15,7 +15,7 @@
 typedef struct PrintFixture {
     XrXirDomain *domain; XrXirTypeArena *arena; XrXirValue values[3];
     size_t providers, sinks;
-    bool cancel;
+    bool cancel, unit;
 } PrintFixture;
 typedef struct PrintRun { XrXirCallStatus status; size_t sites; uint64_t work, peak; } PrintRun;
 static XrXirAction print_resume(XrXirCallView *view) {
@@ -30,15 +30,15 @@ static XrXirAction print_resume(XrXirCallView *view) {
 }
 static XrXirOutputStatus print_sink(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
     PrintFixture *fixture=context;
-    static const char expected[]="[1, 2] 9 [3]\n";
-    CHECK(stream==XR_XIR_STDOUT && length==sizeof(expected)-1 && !memcmp(bytes,expected,length));
+    const char *expected=fixture->unit ? "[1, 2] () [3]\n" : "[1, 2] 9 [3]\n";
+    CHECK(stream==XR_XIR_STDOUT && length==strlen(expected) && !memcmp(bytes,expected,length));
     ++fixture->sinks; return XR_XIR_OUTPUT_OK;
 }
 static XrXirOutputStatus print_provider(void *context, const XrXirOutputGroup *group) {
     PrintFixture *fixture=context;
     ++fixture->providers;
     CHECK(group->line && group->count==3 && group->values[0].type==XR_XIR_STRING &&
-        group->values[1].type==XR_XIR_I64 && group->values[2].type==XR_XIR_STRING);
+        group->values[1].type==(fixture->unit ? XR_XIR_UNIT : XR_XIR_I64) && group->values[2].type==XR_XIR_STRING);
     XrXirOutputSink sink={XR_XIR_CALL_ABI_VERSION,0,print_sink,fixture,512};
     return xr_xir_output_render(&sink,group);
 }
@@ -105,6 +105,16 @@ int main(void) {
     fixture.cancel=false;
     printf("Array print transaction: %zu complete allocation cuts, work=%llu call_peak=%llu scratch=%llu exact/minus-one, zero failed publication and physical rollback passed\n",
         baseline.sites,(unsigned long long)baseline.work,(unsigned long long)baseline.peak,(unsigned long long)low);
+    fixture.unit=true; fixture.values[1]=(XrXirValue){0};
+    PrintRun unit=print_run(&fixture,SIZE_MAX,65536,65536,65536);
+    CHECK(unit.status==XR_XIR_CALL_RETURNED && unit.sites);
+    for (size_t site=0;site<unit.sites;++site)
+        CHECK(print_run(&fixture,site,65536,65536,65536).status==XR_XIR_CALL_OOM);
+    fixture.values[1].reserved=1;
+    CHECK(print_run(&fixture,SIZE_MAX,65536,65536,65536).status==XR_XIR_CALL_BAD_STATE && !fixture.providers);
+    fixture.values[1].reserved=0; fixture.values[1].payload=1;
+    CHECK(print_run(&fixture,SIZE_MAX,65536,65536,65536).status==XR_XIR_CALL_BAD_STATE && !fixture.providers);
+    printf("Unit mixed output: %zu complete allocation cuts and malformed zero-value rejection passed\n",unit.sites);
     xr_xir_value_drop(&fixture.values[0]); xr_xir_value_drop(&fixture.values[2]);
     xr_xir_domain_drop(fixture.domain); xr_xir_compile_type_arena_drop(fixture.arena);
     CHECK(!live && !value_compile_live && !value_compile_bytes); return 0;
