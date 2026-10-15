@@ -418,6 +418,12 @@ static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/references"))return 1;
     if(!strcmp(method,"textDocument/documentHighlight"))return 2;
     if(!strcmp(method,"textDocument/hover"))return 3;
+    if(!strcmp(method,"textDocument/prepareCallHierarchy"))return 4;
+    if(!strcmp(method,"callHierarchy/incomingCalls"))return 5;
+    if(!strcmp(method,"callHierarchy/outgoingCalls"))return 6;
+    if(!strcmp(method,"textDocument/prepareTypeHierarchy"))return 7;
+    if(!strcmp(method,"typeHierarchy/supertypes"))return 8;
+    if(!strcmp(method,"typeHierarchy/subtypes"))return 9;
     return -1;
 }
 static bool source_request_submit(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params, unsigned mode) {

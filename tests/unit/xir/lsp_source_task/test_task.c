@@ -101,7 +101,7 @@ static void rejected(XrLspServer *server, const XlspRequestId *id, XrJsonValue *
 static void check_admission(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params) {
     XlspRequestId invalid = {0}, missing = {.kind = XLSP_ID_NUMBER, .as.number = 42};
     rejected(server, &invalid, params, 0, XR_XIR_BAD_STRUCTURE);
-    rejected(server, id, params, 4, XR_XIR_BAD_STRUCTURE);
+    rejected(server, id, params, 10, XR_XIR_BAD_STRUCTURE);
     rejected(server, &missing, params, 0, XR_XIR_BAD_STAGE);
     server->initialized = false; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->initialized = true;
     server->shutdown_received = true; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->shutdown_received = false;
@@ -198,11 +198,20 @@ static int run(int argc, char **argv) {
     if (mode >= 12) return task_cancel_check(mode);
     return 0;
 }
+#ifdef XLSP_HIERARCHY_TASK
+#include "../lsp_hierarchy_task/task_cases.h"
+#endif
+static int dispatch_run(int argc, char **argv) {
+#ifdef XLSP_HIERARCHY_TASK
+    if (argc == 6) return hierarchy_run(argc, argv);
+#endif
+    return run(argc, argv);
+}
 #ifdef XR_OS_WINDOWS
 int wmain(int argc, wchar_t **wide) {
     XrWinPathStatus status; char **argv = xr_win_utf16_arguments(argc, wide, &status); CHECK(argv);
-    int result = run(argc, argv); xr_win_utf8_arguments_free(argc, argv); return result;
+    int result = dispatch_run(argc, argv); xr_win_utf8_arguments_free(argc, argv); return result;
 }
 #else
-int main(int argc, char **argv) {return run(argc, argv);}
+int main(int argc, char **argv) {return dispatch_run(argc, argv);}
 #endif

@@ -11,6 +11,7 @@
 #include "xlsp_pending_requests.h"
 #include "xlsp_source_request.h"
 #include "xlsp_navigation.h"
+#include "xlsp_hierarchy_request.h"
 #include "xlsp_async.h"
 #include "../../base/xmalloc.h"
 
@@ -18,6 +19,7 @@ typedef struct XlspSourceTask {
     XrLspServer *server;
     XlspRequestId id;
     XlspSourceRequest *request;
+    XlspHierarchyRequest *hierarchy;
     XrLspTask *task;
     XlspSourceRequestResult result;
     uint64_t revision;
@@ -25,11 +27,14 @@ typedef struct XlspSourceTask {
 
 static void source_task_free(XlspSourceTask *source) {
     if (!source) return;
-    xlsp_source_request_free(source->request); xlsp_request_id_free(&source->id); xr_free(source);
+    xlsp_source_request_free(source->request); xlsp_hierarchy_request_free(source->hierarchy);
+    xlsp_request_id_free(&source->id); xr_free(source);
 }
 static void source_task_execute(void *data) {
     XlspSourceTask *source = data;
-    XrXirStatus status = xlsp_source_request_run(source->request, &source->task->cancel_requested, &source->result);
+    XrXirStatus status = source->hierarchy ?
+        xlsp_hierarchy_request_run(source->hierarchy, &source->task->cancel_requested, &source->result) :
+        xlsp_source_request_run(source->request, &source->task->cancel_requested, &source->result);
     if (status != XR_XIR_OK) { source->result.status = status; source->result.stage = 1; }
     source->task->result = source;
 }
@@ -44,7 +49,7 @@ static void source_task_complete(void *data, void *result) {
 
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *server, const XlspRequestId *id,
                                            XrJsonValue *params, unsigned mode) {
-    if (!server || !xlsp_request_id_valid(id) || mode > 3) return XR_XIR_BAD_STRUCTURE;
+    if (!server || !xlsp_request_id_valid(id) || mode > 9) return XR_XIR_BAD_STRUCTURE;
     if (!server->async || !server->initialized || server->shutdown_received || server->exit_received)
         return XR_XIR_BAD_STAGE;
     if (server->source_revision == UINT64_MAX) return XR_XIR_BUDGET;
@@ -54,7 +59,9 @@ XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *server, const XlspReque
     source->server = server; source->revision = server->source_revision;
     XrXirStatus status = XR_XIR_OUT_OF_MEMORY;
     if (xlsp_request_id_clone(id, &source->id) != XLSP_PROTOCOL_OK) goto failed;
-    status = xlsp_navigation_capture(server, params, mode, &source->request);
+    status = mode < 4 ? xlsp_navigation_capture(server, params, mode, &source->request) :
+        xlsp_hierarchy_request_capture(server, params, mode < 7 ? mode - 4 : mode - 7,
+            mode >= 7, &source->hierarchy);
     if (status != XR_XIR_OK) goto failed;
     source->task = xlsp_task_new(source_task_execute, source_task_complete, source, XLSP_TASK_NORMAL);
     if (!source->task) { status = XR_XIR_OUT_OF_MEMORY; goto failed; }

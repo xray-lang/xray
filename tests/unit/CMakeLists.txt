@@ -4607,3 +4607,5 @@ include(xir/lsp_alias_spans/CMakeLists.txt)
 include(xir/source_cancel/CMakeLists.txt)
 include(xir/lsp_source_task/CMakeLists.txt)
 include(xir/lsp_json_clone/CMakeLists.txt)
+
+include(xir/lsp_hierarchy_task/CMakeLists.txt)

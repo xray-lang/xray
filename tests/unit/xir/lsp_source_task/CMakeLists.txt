@@ -2,10 +2,15 @@ if(TARGET test_lsp_source_task)
     return()
 endif()
 function(source_task_target target navigation)
-add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_task.c"
-    "${CMAKE_CURRENT_LIST_DIR}/task_owner.c"
-    "${CMAKE_CURRENT_LIST_DIR}/identity_owner.c"
-    "${CMAKE_CURRENT_LIST_DIR}/worker_owner.c"
+if(ARGC GREATER 2)
+    set(task_owner "${ARGV2}")
+else()
+    set(task_owner "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/task_owner.c")
+endif()
+add_executable(${target} "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/test_task.c"
+    "${task_owner}"
+    "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/identity_owner.c"
+    "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/worker_owner.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_completion.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_pending_requests.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_request_cancel.c"
@@ -20,7 +25,7 @@ add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_task.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_ignore.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_index_scan.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_index_pool.c")
-target_link_libraries(${target} PRIVATE xray_lsp_document_open)
+target_link_libraries(${target} PRIVATE xray_lsp_document_open xray_lsp_hierarchy_handlers)
 if(WIN32)
     target_sources(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/thread_win.c"
         "${PROJECT_SOURCE_DIR}/src/os/win/pipe_win.c" "${PROJECT_SOURCE_DIR}/src/os/win/fd_win.c"
