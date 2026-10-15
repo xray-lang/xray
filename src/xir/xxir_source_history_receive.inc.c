@@ -87,13 +87,12 @@ static bool source_history_bindings(SourceContext *ctx,bool types_only) {
                 if (!binding) return false;
                 binding->kind=source->kind;binding->module=module;
                 binding->mutable=source->mutable;binding->inferred=source->inferred;
-                if (source->kind==SOURCE_SLOT) {
+                if (source->kind==SOURCE_SLOT || source->kind==SOURCE_UNIT_SLOT) {
                     if (!ctx->history->map || source->index>=ctx->history->map->slot_count)
                         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history slot binding is not relocated");
                     binding->index=ctx->history->map->slots[source->index];
                     if (!source_library_type(ctx,types,source->type,&binding->type)) return false;
-                } else if (source->kind==SOURCE_UNIT_SLOT) binding->index=UINT32_MAX;
-                else {
+                } else {
                     binding->module=source_history_target(ctx,source->module);
                     if (binding->module==UINT32_MAX) return false;
                     binding->imported=source->imported ? source_owned_text(ctx,source->imported) : NULL;

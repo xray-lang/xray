@@ -41,6 +41,20 @@ int main(void) {
     XrXirArtifact *checked=NULL,*decoded=NULL;
     CHECK(xr_xir_compile_check_v2(&owner.context,&built,construction,&checked,NULL)==XR_XIR_OK);
     CHECK(identities[2].module==0 && !identities[2].exported && xr_xir_module_same_scope(&declarations,0,1));
+    uint32_t order[2]={0},count=0;uint8_t active[2]={0};
+    CHECK(xr_xir_compile_declarations_active(&owner.context,&declarations,order,active,&count)==XR_XIR_OK &&
+        count==2 && order[0]==0 && order[1]==1 && active[0] && active[1]);
+    CHECK(xr_xir_compile_declarations_active(&owner.context,&declarations,order,active,&count)==XR_XIR_BAD_STRUCTURE && count==2);
+    modules[1].dependency_count=0;count=0;memset(active,0,sizeof(active));
+    CHECK(xr_xir_compile_declarations_active(&owner.context,&declarations,order,active,&count)==XR_XIR_OK &&
+        count==1 && order[0]==1 && !active[0] && active[1]);
+    modules[1].dependency_count=1;dependency=2;count=0;memset(active,0,sizeof(active));
+    CHECK(xr_xir_compile_declarations_active(&owner.context,&declarations,order,active,&count)==XR_XIR_BAD_STRUCTURE && !count);
+    dependency=0;modules[1].dependencies=NULL;
+    CHECK(xr_xir_compile_declarations_active(&owner.context,&declarations,order,active,&count)==XR_XIR_BAD_STRUCTURE && !count);
+    modules[1].dependencies=&dependency;declarations.root_module=2;
+    CHECK(xr_xir_compile_declarations_active(&owner.context,&declarations,order,active,&count)==XR_XIR_BAD_STRUCTURE && !count);
+    declarations.root_module=1;
     modules[1].lexical_scope=0;
     CHECK(xr_xir_compile_check_v2(&owner.context,&built,construction,&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
     modules[1].lexical_scope=1;modules[1].dependency_count=0;
@@ -62,6 +76,6 @@ int main(void) {
     xr_xir_compile_artifact_free(decoded);xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_construction_free(construction);
     source_fixture_owner_free(&owner);
-    puts("Explicit scope, private birth identity, dependency, malformed scope and owned packet checks passed");
+    puts("Explicit scope, private birth identity, actual activation closure, malformed dependency/scope and owned packet checks passed");
     return 0;
 }

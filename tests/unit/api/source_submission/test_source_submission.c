@@ -98,7 +98,10 @@ static void submission_normal(void) {
     CHECK(old.generation==1 && old.declaration && old.declaration->type.type==XR_XIR_I64);
     xr_xir_call_result_drop(&owned.result);
     XrXirSourceText bad={NULL,"const value=missing",19};XrXirSourceDiagnostic diagnostic={0};
-    CHECK(xr_source_submission_prepare(owned.owner,&bad,&diagnostic)==XR_SOURCE_REJECTED && diagnostic.line==1);
+    XrSourceStatus rejected=xr_source_submission_prepare(owned.owner,&bad,&diagnostic);
+    if(rejected!=XR_SOURCE_REJECTED || diagnostic.line!=1)
+        fprintf(stderr,"rejected candidate status=%u source=%u line=%d message=%s\n",rejected,diagnostic.status,diagnostic.line,diagnostic.message);
+    CHECK(rejected==XR_SOURCE_REJECTED && diagnostic.line==1);
     XrXirSourceGenerationBinding after={0};CHECK(xr_source_submission_lookup(owned.owner,"value",&after)==XR_SOURCE_OK && after.generation==1);
     CHECK(submission_text(&owned,"const value=\"new\"\nassert(false,\"candidate-owned-panic\")\n")==XR_SOURCE_OK);
     CHECK(xr_xir_call_panic_status(submission_finish(&owned)));

@@ -122,7 +122,46 @@ static void reads_resources(bool faults) {
         printf("Actual birth reader family%u observed=%zu swept=%zu; compiler three axes exact/minus1/plus1; sticky retry; physical0\n",family,sites,faults ? sites : 0);
     }
 }
+static void reads_history_inputs(void) {
+    const char *cases[]={"var number:i64=11\n","const text=\"owned\"\n","const values=[11,42]\n",
+        "var root:i64=11\nconst callback=fn()->i64{return root}\n","print(17)\n","const value:i64=5\nprint(17)\n",
+        "var value:i64=11\nconst text=\"owned\"\nconst values=[11,42]\nconst callback=fn()->i64{return value}\nprint(17)\n",
+        "var empty=()\n","const empty=()\n","const callback=fn()->i64{return 42}\n"};
+    unsigned failures=0;
+    for(unsigned family=0;family<sizeof(cases)/sizeof(*cases);++family) {
+        SubmissionOwners owned={0};CHECK(submission_open(&owned,&generous)==XR_SOURCE_OK);
+        CHECK(reads_publish(&owned,cases[family])==XR_SOURCE_OK);
+        XrXirSourceText text={NULL,"var future:bool=true\n",21};XrXirSourceDiagnostic diagnostic={0};
+        text.length=strlen(text.text);
+        XrSourceStatus status=xr_source_submission_prepare(owned.owner,&text,&diagnostic);
+        fprintf(stderr,"history input family%u status=%u source=%u line=%d message=%s\n",family,status,diagnostic.status,diagnostic.line,diagnostic.message);
+        if(status!=XR_SOURCE_OK)++failures;
+        else {XrXirCallStatus cleanup=XR_XIR_CALL_READY;CHECK(xr_source_submission_abort(owned.owner,&cleanup)==XR_SOURCE_OK);}
+        submission_close(&owned);
+    }
+    CHECK(!failures);
+}
+static void reads_history_admission(void) {
+    SubmissionOwners owned={0};CHECK(submission_open(&owned,&generous)==XR_SOURCE_OK);
+    CHECK(reads_publish(&owned,"var value:i64=11\nexport fn read()->i64{return value}\nprint(17)\n")==XR_SOURCE_OK);
+    CHECK(reads_publish(&owned,"var future:bool=true\n")==XR_SOURCE_OK);
+    CHECK(owned.outputs==1);
+    reads_scalar(&owned,"value",XR_XIR_I64,11);reads_scalar(&owned,"future",XR_XIR_BOOL,1);
+    const char *source="const answer=read()\n";
+    XrXirSourceText text={NULL,source,strlen(source)};XrXirSourceDiagnostic diagnostic={0};
+    XrSourceStatus status=xr_source_submission_prepare(owned.owner,&text,&diagnostic);
+    if(status!=XR_SOURCE_REJECTED || !strstr(diagnostic.message,"library mutable"))
+        fprintf(stderr,"active history status=%u line=%d message=%s\n",status,diagnostic.line,diagnostic.message);
+    CHECK(status==XR_SOURCE_REJECTED && strstr(diagnostic.message,"library mutable"));
+    CHECK(owned.outputs==1);
+    reads_scalar(&owned,"value",XR_XIR_I64,11);reads_scalar(&owned,"future",XR_XIR_BOOL,1);
+    submission_close(&owned);
+    puts("Inactive history retains its actual birth reader without initializer replay; active foreign mutable storage refused; physical0");
+}
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--budget"))));
-    if(argc==1)reads_normal();else reads_resources(!strcmp(argv[1],"--resources"));return 0;
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--budget") ||
+        !strcmp(argv[1],"--history-inputs") || !strcmp(argv[1],"--history-admission"))));
+    if(argc==1)reads_normal();else if(!strcmp(argv[1],"--history-inputs"))reads_history_inputs();
+    else if(!strcmp(argv[1],"--history-admission"))reads_history_admission();
+    else reads_resources(!strcmp(argv[1],"--resources"));return 0;
 }

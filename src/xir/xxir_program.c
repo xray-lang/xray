@@ -95,27 +95,8 @@ static void program_dispose(XrXirProgram *program) {
     xr_compile_resources_free(program);
 }
 static XrXirStatus program_execution_order(XrXirProgram *program) {
-    const XrXirCompileContext *context = &program->context;
-    const XrXirDeclarations *d = program->declarations;
-    XrXirStatus status = xr_xir_compile_declarations_order(context, d, program->order);
-    if (status != XR_XIR_OK) return status;
-    program->active_modules[d->root_module] = 1;
-    for (uint32_t i = d->module_count; i > 0; --i) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
-        uint32_t id = program->order[i - 1];
-        if (!program->active_modules[id]) continue;
-        const XrXirSourceModule *module = &d->modules[id];
-        for (uint32_t dep = 0; dep < module->dependency_count; ++dep) {
-            if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
-            program->active_modules[module->dependencies[dep]] = 1;
-        }
-    }
-    for (uint32_t i = 0; i < d->module_count; ++i) {
-        if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
-        uint32_t id = program->order[i];
-        if (program->active_modules[id]) program->order[program->initialization_count++] = id;
-    }
-    return XR_XIR_OK;
+    return xr_xir_compile_declarations_active(&program->context,program->declarations,
+        program->order,program->active_modules,&program->initialization_count);
 }
 static XrXirStatus program_copy_entries(XrXirProgram *program, const XrXirProgramSpec *spec) {
     const XrXirCompileContext *context = &program->context;

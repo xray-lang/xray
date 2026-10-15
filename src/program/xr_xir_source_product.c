@@ -262,6 +262,8 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
     XrXirStatus status = XR_XIR_BAD_STRUCTURE;
     uint32_t module = 0;
     bool state_rejected = false;
+    uint32_t *order=NULL,active_count=0;
+    uint8_t *active=NULL;
     const XrXirCompileContext *context=xr_xir_compile_artifact_context(lowered);
     const XrXirModule *body=xr_xir_compile_artifact_module(lowered);
     if (!xir_compile_context_valid(context)) goto done;
@@ -280,12 +282,20 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
         if (module >= declarations->module_count || slot->mutable > 1) {
             status = XR_XIR_BAD_STRUCTURE; break;
         }
-        /* Public execution admits mutable state only in its authentic root module. */
+        /* Inactive declarations remain unreachable through the same Program
+         * closure. Active foreign mutable storage still needs its birth owner. */
         if (slot->mutable && module != declarations->root_module) {
-            state_rejected = true; status = XR_XIR_BAD_STRUCTURE; break;
+            if(!active) {
+                order=xir_compile_calloc(context,declarations->module_count,sizeof(*order),&status);
+                active=xir_compile_calloc(context,declarations->module_count,1,&status);
+                if(status==XR_XIR_OK)status=xr_xir_compile_declarations_active(context,declarations,order,active,&active_count);
+                if(status!=XR_XIR_OK)break;
+            }
+            if(active[module]){state_rejected = true; status = XR_XIR_BAD_STRUCTURE; break;}
         }
     }
 done:
+    xr_compile_resources_free(active);xr_compile_resources_free(order);
     if (diagnostic) {
         *diagnostic = (XrXirSourceDiagnostic){.status = status, .module = module};
         if (state_rejected) {

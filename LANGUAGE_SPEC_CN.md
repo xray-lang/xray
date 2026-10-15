@@ -7589,7 +7589,6 @@ Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特�
 
 作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用Checked schema29、语义75和Program ABI31，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
 
-
 ---
 
 ## 18. 错误码 (Error Codes)

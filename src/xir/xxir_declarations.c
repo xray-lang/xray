@@ -81,6 +81,28 @@ XR_FUNC bool xr_xir_module_same_scope(const XrXirDeclarations *d, uint32_t from,
     if (b && d->modules[b - 1].lexical_scope) return false;
     return (a ? a - 1 : from) == (b ? b - 1 : target);
 }
+XR_FUNC XrXirStatus xr_xir_compile_declarations_active(const XrXirCompileContext *context,
+    const XrXirDeclarations *d,uint32_t *order,uint8_t *active,uint32_t *count) {
+    if(!xir_compile_context_valid(context) || !d || !d->module_count || !d->modules || !order || !active || !count || *count ||
+        d->root_module>=d->module_count)return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xr_xir_compile_declarations_order(context,d,order);
+    if(status!=XR_XIR_OK)return status;
+    active[d->root_module]=1;
+    for(uint32_t i=d->module_count;i>0;--i) {
+        if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+        uint32_t id=order[i-1];if(!active[id])continue;
+        const XrXirSourceModule *module=&d->modules[id];
+        for(uint32_t dep=0;dep<module->dependency_count;++dep) {
+            if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+            active[module->dependencies[dep]]=1;
+        }
+    }
+    for(uint32_t i=0;i<d->module_count;++i) {
+        if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+        uint32_t id=order[i];if(active[id])order[(*count)++]=id;
+    }
+    return XR_XIR_OK;
+}
 bool xr_xir_module_imports(const XrXirDeclarations *d, uint32_t from, uint32_t target) {
     if (from == target) return true;
     const XrXirSourceModule *module = &d->modules[from];
@@ -106,9 +128,13 @@ XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile
             if (done[m]) continue;
             bool ready = true;
             const XrXirSourceModule *module = &d->modules[m];
+            if((module->name_length && !module->name) || module->dependency_count>d->module_count ||
+                (module->dependency_count && !module->dependencies)){status=XR_XIR_BAD_STRUCTURE;goto finish;}
             for (uint32_t i = 0; i < module->dependency_count; ++i) {
                 if (!xir_compile_work(work, 1)) { status = XR_XIR_BUDGET; goto finish; }
-                if (!done[module->dependencies[i]]) ready = false;
+                uint32_t dependency=module->dependencies[i];
+                if(dependency>=d->module_count){status=XR_XIR_BAD_STRUCTURE;goto finish;}
+                if (!done[dependency]) ready = false;
             }
             if (ready) {
                 if (!xir_compile_work(work, module->name_length)) { status = XR_XIR_BUDGET; goto finish; }

@@ -63,21 +63,21 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
     const XrModuleSpec *spec=&ctx->graph->specs[module];
     const XrXirArtifact *artifact=source_owned_artifact(spec);
     const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
-    if (!library->types) return true;
+    if (!library->types && spec->representation!=XR_MODULE_CHECKED_HISTORY) return true;
     SourceLibraryUnit *unit=source_alloc(ctx,1,sizeof(*unit));
     if (!unit) return false;
     unit->library=library;unit->artifact=artifact;unit->history=spec->history;
     unit->construction=xr_xir_compile_artifact_construction(unit->artifact);
-    const XrXirNominalTable *source_nominals=library->types->nominals;
+    const XrXirNominalTable *source_nominals=library->types ? library->types->nominals : NULL;
     uint32_t source_count=source_nominals ? source_nominals->count : 0;
     if (!unit->construction || xr_xir_compile_construction_count(unit->construction)!=source_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library construction owner is missing or incomplete");
     unit->next=ctx->library_units; ctx->library_units=unit;
-    const XrXirNominalTable *nt=library->types->nominals;
-    const XrXirInterfaceTable *it=library->types->interfaces;
+    const XrXirNominalTable *nt=library->types ? library->types->nominals : NULL;
+    const XrXirInterfaceTable *it=library->types ? library->types->interfaces : NULL;
     unit->nominals=nt && nt->count ? source_alloc(ctx,nt->count,sizeof(*unit->nominals)) : NULL;
     unit->interfaces=it && it->count ? source_alloc(ctx,it->count,sizeof(*unit->interfaces)) : NULL;
-    unit->type_count=library->types->count;
+    unit->type_count=library->types ? library->types->count : 0;
     unit->types=unit->type_count ? source_alloc(ctx,unit->type_count,sizeof(*unit->types)) : NULL;
     if ((nt && nt->count && !unit->nominals) || (it && it->count && !unit->interfaces) ||
         (unit->type_count && !unit->types)) return false;
@@ -224,6 +224,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
 /* Skeleton IDs exist for all declarations before any application is copied.
  * Type IDs above are canonical intern results, not an arithmetic pool offset. */
 static bool source_library_declaration_constraints(SourceContext *ctx,SourceLibraryUnit *unit) {
+    if (!unit->library->types) return true;
     const XrXirNominalTable *nominals=unit->library->types->nominals;
     const XrXirInterfaceTable *interfaces=unit->library->types->interfaces;
     for (uint32_t n=0; nominals && n<nominals->count; ++n) {
@@ -293,6 +294,7 @@ static bool source_library_enum_query(SourceContext *ctx,SourceName *owner) {
     return true;
 }
 static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
+    if (!unit->library->types) return true;
     const XrXirNominalTable *table=unit->library->types->nominals;
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!source_work(ctx,NULL)) return false;
@@ -354,6 +356,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
     return true;
 }
 static bool source_library_interfaces(SourceContext *ctx, SourceLibraryUnit *unit) {
+    if (!unit->library->types) return true;
     const XrXirInterfaceTable *table=unit->library->types->interfaces;
     for (uint32_t i=0; table && i<table->count; ++i) {
         if (!source_work(ctx,NULL)) return false;
