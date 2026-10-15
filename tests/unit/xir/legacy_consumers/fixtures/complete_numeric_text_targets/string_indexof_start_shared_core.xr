@@ -1,0 +1,24 @@
+// string.indexOf(search, start) must honor the optional start argument.
+var s = "one,two,three"
+print(s.indexOf(","))
+print(s.indexOf(",", 4))
+print(s.indexOf(",", 8))
+try {
+    print(s.indexOf(",", -20))
+} catch panic (p) {
+    assertEqual(p.code, 430)
+    print("bounds-negative")
+}
+try {
+    print(s.indexOf(",", 99))
+} catch panic (p) {
+    assertEqual(p.code, 430)
+    print("bounds-excessive")
+}
+print(s.indexOf("", 4))
+try {
+    print(s.indexOf("", 99))
+} catch panic (p) {
+    assertEqual(p.code, 430)
+    print("bounds-empty-excessive")
+}

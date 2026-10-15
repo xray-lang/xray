@@ -1,0 +1,36 @@
+// copy(x): explicit deep copy is an independent recursive snapshot of the
+// source across VM/JIT/AOT, including promotion of a local value into a
+// `shared` binding and deep copy of nested containers.
+var nums: Array<i64> = [1, 2, 3]
+var dup = nums
+nums.push(4)
+print(len(nums))
+print(len(dup))
+print(dup[0])
+
+var m: Map<string, i64> = #{}
+m.set("a", 1)
+var mcopy = m
+m.set("b", 2)
+print(len(m))
+print(len(mcopy))
+
+const ro = nums
+nums.push(5)
+print(len(nums))
+print(len(ro))
+
+var grid: Array<Array<i64>> = [[1, 2], [3, 4]]
+var gcopy = grid
+grid[0].push(99)
+print(len(grid[0]))
+print(len(gcopy[0]))
+
+var window: Array<Array<i64>> = []
+{
+    const view: Slice<Array<i64>> = grid[0:1]
+    window = copy(view)
+}
+grid[0].push(100)
+print(len(grid[0]))
+print(len(window[0]))

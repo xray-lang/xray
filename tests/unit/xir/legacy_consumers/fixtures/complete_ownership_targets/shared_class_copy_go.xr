@@ -1,0 +1,21 @@
+// 116 boundary: promote a local class instance to a read-only shared instance
+// via copy(), then read it from a goroutine. Exercises copy() type preservation
+// feeding a typed goroutine entry across VM/JIT/AOT.
+class Config implements Sendable {
+    host: string
+    port: i64
+
+    init(h: string, p: i64) {
+        this.host = h
+        this.port = p
+    }
+}
+
+fn serve(c: Config) -> i64 {
+    return c.port
+}
+
+var cfg = Config("localhost", 8080)
+const ro = cfg
+var t = go serve(ro)
+print(await t)

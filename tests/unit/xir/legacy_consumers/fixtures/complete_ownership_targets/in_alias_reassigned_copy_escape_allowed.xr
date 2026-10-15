@@ -1,0 +1,11 @@
+fn stash(data: Array<i64>, out: ref Array<Array<i64>>) {
+    var alias = data
+    alias = data
+    out.push(alias)
+}
+
+var values: Array<i64> = [1, 2, 3, 4, 5, 6]
+var out: Array<Array<i64>> = []
+stash(values, ref out)
+values.push(7)
+print(len(out[0]))

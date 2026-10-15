@@ -1,4 +1,4 @@
-"""Execute every original differential input while keeping unknown independent duties open."""
+"""Execute every original input identity through its reviewed source and exact oracle."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,29 @@ import sys
 import tempfile
 import time
 
+import audit
+import complete_target_selection
 import independent_behavior_models
+import independent_complete_models
+import complete_library_model
+import complete_channel_model
+import complete_resource_model
+import complete_typed_json_model
+import complete_module_model
+import complete_exception_model
+import complete_aggregate_model
+import complete_http_framing_model
+import complete_http_policy_model
+import complete_text_formats_model
+import complete_scalar_events_model
+import complete_async_events_model
+import complete_error_boundaries_model
+import complete_calendar_paths_model
+import complete_collection_values_model
+import complete_cleanup_generator_model
+import complete_callable_model
+import task_rejection_model
+import run_source_rejection_driver
 import independent_scalar_models
 
 HERE = Path(__file__).resolve().parent
@@ -31,6 +53,8 @@ def main() -> int:
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--compiler',type=Path,required=True)
     parser.add_argument('--jobs',type=int,default=2)
+    parser.add_argument('--source-rejection-owner',type=Path)
+    parser.add_argument('--source-rejection-manifest',type=Path)
     args = parser.parse_args()
     if not 1 <= args.jobs <= 2:
         raise ValueError('full original differential lane permits one or two workers')
@@ -60,42 +84,55 @@ def main() -> int:
     version = json.loads(identity.stdout)
     image_sha = sha(binary.read_bytes())
     environment = dict(os.environ,XRAY_STDLIB_PATH=str(ROOT/'stdlib'),NO_COLOR='1')
-    expected_by_source = {}
+    preserved = json.loads((HERE/'oracles.json').read_text(encoding='utf-8'))['cases']
+    audit.validate_oracles({'cases': preserved})
+    route_data = json.loads(manifest_bytes)
+    checked = audit.validate_runner_routes(route_data, audit.read_json(HERE/'responsibilities.json'))
+    audit.require_full_explicit_runner_coverage(checked)
     model_names = ('independent_behavior_models.py', 'independent_behavior_bindings.json',
-                   'independent_scalar_models.py', 'independent_scalar_bindings.json')
+                   'independent_scalar_models.py', 'independent_scalar_bindings.json',
+                   'independent_complete_models.py', 'complete_program_bindings.json',
+                   'complete_numeric_model.py', 'complete_text_range_model.py',
+                   'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'task_rejection_model.py', 'run_source_rejection_driver.py', 'complete_target_selection.py',
+                   'audit.py', 'oracles.json', 'run_full_diff_driver.py')
     model_hashes = {name:sha((HERE/name).read_bytes()) for name in model_names}
-    for r in json.loads((HERE/'oracles.json').read_text(encoding='utf-8'))['cases']:
-        if 'stdout_utf8' in r['expected'] and 'exit_code' in r['expected']:
-            for i in r['inputs']:
-                if i['path'].startswith(('tests/diff/','tests/regression/')):
-                    expected_by_source.setdefault(i['path'],r)
-    # These models derive complete original run traces. Named-body adapters
-    # are intentionally absent because the original run route does not call them.
-    original_sources = {row['case_id'] for row in rows}
-    independent_original_sources = []
-    for model in independent_behavior_models.expected_rows() + independent_scalar_models.expected_rows():
-        source = model['source']
-        if source not in original_sources:
-            continue
-        previous = expected_by_source.get(source)
-        if previous:
-            keys = ('exit_code', 'stdout_utf8', 'stderr_utf8')
-            if any(previous['expected'].get(key, '') != model['expected'][key] for key in keys):
-                raise ValueError('independent original run models disagree: ' + source)
-        expected_by_source[source] = model
-        independent_original_sources.append(source)
+    selections = {row['case_id']: complete_target_selection.select(row, ROOT, runner) for row in rows}
+    if len(selections) != len(rows):
+        raise ValueError('original consumer identity was duplicated during target selection')
+    models = (independent_behavior_models.expected_rows() + independent_scalar_models.expected_rows()
+              + independent_complete_models.expected_rows() + complete_library_model.expected_rows() + complete_channel_model.expected_rows() + complete_resource_model.expected_rows() + complete_callable_model.expected_rows() + complete_cleanup_generator_model.expected_rows() + complete_typed_json_model.expected_rows() + complete_module_model.expected_rows() + complete_exception_model.expected_rows() + complete_aggregate_model.expected_rows() + complete_http_framing_model.expected_rows() + complete_http_policy_model.expected_rows() + complete_text_formats_model.expected_rows() + complete_scalar_events_model.expected_rows() + complete_async_events_model.expected_rows() + complete_error_boundaries_model.expected_rows() + complete_calendar_paths_model.expected_rows() + complete_collection_values_model.expected_rows())
+    for model in models:
+        independent_complete_models.require_target(model, version.get('target'))
+    expected_by_source = {identity:complete_target_selection.expected_for(selected, preserved, models)
+                          for identity,selected in selections.items()}
+    rejection_by_source = {identity:task_rejection_model.for_selection(selection)
+                           for identity,selection in selections.items() if selection['rejection_oracle_required']}
+    independent_original_sources = [identity for identity,selected in selections.items()
+                                    if expected_by_source[identity] is not None
+                                    and not selected['canonical_port_selected']]
+    independent_canonical_sources = [identity for identity,selected in selections.items()
+                                     if expected_by_source[identity] is not None
+                                     and selected['canonical_port_selected']]
 
     def run(row: dict) -> dict:
-        source = ROOT/row['case_id']
-        if sha(source.read_bytes().replace(b'\r\n',b'\n'))!=row['source_lf_sha256']:
-            raise ValueError('original source changed: '+row['case_id'])
-        context = row.get('original_differential_obligation',{'arguments':[],'stdin_hex':''})
-        argv = runner.read_args(source) if 'original_differential_obligation' in row else []
-        stdin = runner.read_stdin(source) if 'original_differential_obligation' in row else b''
-        if context['arguments']!=argv or context['stdin_hex']!=stdin.hex():
-            raise ValueError('original arguments/stdin changed: '+row['case_id'])
+        selected = selections[row['case_id']]
+        if complete_target_selection.select(row, ROOT, runner) != selected:
+            raise ValueError('reviewed consumer selection changed before execution')
+        original_source = ROOT/row['case_id']
+        source = ROOT/selected['selected_source']
+        argv = selected['arguments']
+        stdin = bytes.fromhex(selected['stdin_hex'])
         directory = output/Path(row['case_id']).relative_to('tests')
         directory.mkdir(parents=True,exist_ok=False)
+        if rejection_by_source.get(row['case_id']):
+            result = run_source_rejection_driver.run_group(binary,compiler,args.source_rejection_owner,
+                args.source_rejection_manifest,directory/'checked-rejection',timeout=30)
+            result.update(case_id=row['case_id'],selection=selected,owners=row['producer_packages'],
+                          original_entries=row['original_runner_entries'],arguments=argv,stdin_hex=stdin.hex())
+            if complete_target_selection.select(row,ROOT,runner) != selected:
+                raise ValueError('Controlled rejection source or input context changed')
+            (directory/'result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+            return result
         commands = []
 
         def invoke(label: str,command: list,raw_input: bytes = b''):
@@ -118,35 +155,28 @@ def main() -> int:
                   'owners':row['producer_packages'],'arguments':argv,'stdin_hex':stdin.hex(),
                   'commands':commands,'original_entries':row['original_runner_entries'],
                   'effect_lifetime_resource_provider_fi_qualification':'OPEN_NOT_PROVED_BY_PARITY'}
+        result['selection'] = selected
         if generated.is_file():result['generated_c_sha256']=sha(generated.read_bytes())
         observed = None
         if not build.returncode and not build.timed_out and native.is_file():
             result['native_sha256']=sha(native.read_bytes())
             observed = invoke('native',[native,*argv],stdin)
         oracle = expected_by_source.get(row['case_id'])
-        sidecar = Path(str(source)+'.expected')
+        sidecar = Path(str(original_source)+'.expected')
+        original_stdout = sidecar.read_bytes() if sidecar.is_file() else None
+        if original_stdout is not None:
+            result['original_stdout_sidecar_sha256'] = sha(original_stdout)
+        projection = complete_target_selection.projection_valid(emit, generated)
+        result['actual_current_C_projection_valid'] = projection
+        result['status'] = complete_target_selection.observation_status(
+            selected, oracle, vm, observed, projection, original_stdout)
         if oracle:
-            expected = oracle['expected']
-            result['independent_oracle_id']=oracle['id']
-            def match(r):
-                return (r is not None and not r.timed_out and r.returncode==expected['exit_code']
-                        and r.stdout==expected['stdout_utf8'].encode('utf-8')
-                        and (r.stderr==expected['stderr_utf8'].encode('utf-8') if 'stderr_utf8' in expected else
-                             expected.get('diagnostic_code','').encode('utf-8') in r.stderr
-                             if expected.get('diagnostic_code') else not r.stderr))
-            result['status']='PASS_INDEPENDENT_RUN_BYTE_SCOPE' if match(vm) and match(observed) and not emit.returncode else 'FAIL_INDEPENDENT_ORIGINAL_CONSUMER'
-        elif sidecar.is_file():
-            expected = sidecar.read_bytes()
-            result['original_stdout_sidecar_sha256']=sha(expected)
-            # The old sidecar does not specify independent exit/error/effect duties.
-            result['status']=('OBSERVED_ORIGINAL_STDOUT_MATCH_OTHER_DUTIES_OPEN' if observed is not None
-                              and not vm.timed_out and not observed.timed_out
-                              and vm.stdout==expected and observed.stdout==expected else
-                              'FAIL_ORIGINAL_STDOUT_SCOPE')
+            result['independent_oracle_id'] = oracle['id']
         else:
-            result['status']='EXECUTED_INDEPENDENT_ORACLE_PENDING'
-            result['parity_only']=bool(observed is not None and not vm.timed_out and not observed.timed_out
+            result['parity_only'] = bool(observed is not None and not vm.timed_out and not observed.timed_out
                 and (vm.returncode,vm.stdout,vm.stderr)==(observed.returncode,observed.stdout,observed.stderr))
+        if complete_target_selection.select(row, ROOT, runner) != selected:
+            raise ValueError('reviewed consumer source or input context changed during execution')
         if row.get('original_regression_obligation',{}).get('entry')=='test':
             result['named_body_obligations']='OPEN: original run route does not discover or execute named bodies'
         (directory/'result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -159,15 +189,22 @@ def main() -> int:
             summary={'version':version,'binary_sha256':image_sha,'manifest_sha256':sha(manifest_bytes),
                      'independent_model_sha256':model_hashes,
                      'independent_original_sources':independent_original_sources,
+                     'independent_canonical_sources':independent_canonical_sources,
+                     'independent_checked_rejection_sources':[identity for identity,value in rejection_by_source.items() if value],
+                     'normal_output_and_checked_rejection_scopes_separate':True,
+                     'canonical_selected_inputs':sum(s['canonical_port_selected'] for s in selections.values()),
+                     'scope':'ORIGINAL_INPUT_IDENTITIES_WITH_REVIEWED_EXACT_TARGET_SELECTION',
                      'required_inputs':len(rows),'completed_inputs':len(records),'results':records,
                      'parity_is_qualification':False,'production_release':False}
             (output/'result.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-            if len(records)%25==0:print(f'{len(records)}/{len(rows)} original differential inputs recorded',flush=True)
+            if len(records)%25==0:print(f'{len(records)}/{len(rows)} original input identities recorded',flush=True)
     if sha(binary.read_bytes())!=image_sha:raise ValueError('public image changed during full original execution')
     if any(sha((HERE/name).read_bytes()) != digest for name,digest in model_hashes.items()):
         raise ValueError('independent original run model changed during execution')
+    if sha((HERE/'runner_routes.json').read_bytes()) != sha(manifest_bytes):
+        raise ValueError('consumer routing changed during full execution')
     print('Evidence: '+str(output),flush=True)
-    return 0 if all(r['status']=='PASS_INDEPENDENT_RUN_BYTE_SCOPE' and 'named_body_obligations' not in r for r in records) else 1
+    return 0 if all(r['status'] in ('PASS_INDEPENDENT_SELECTED_RUN_BYTE_SCOPE','PASS_INDEPENDENT_CHECKED_REJECTION_SCOPE') and 'named_body_obligations' not in r for r in records) else 1
 
 
 if __name__=='__main__':

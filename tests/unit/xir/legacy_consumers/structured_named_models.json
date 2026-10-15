@@ -444,6 +444,10 @@
     {
       "path": "tests/unit/xir/product_consumers/fixtures/multi_safepoint/root.xr",
       "lf_sha256": "896bf5280b1e4e132fac8be41d2851052f3b2f3713ed274e4b60c3575befc6df"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/source_projection_targets/tuple_array_complete.xr",
+      "lf_sha256": "d4c9480eeb5ac03d96edac5671e505ffaff6b3a106d100d9306dbb6349a991dc"
     }
   ],
   "cases": [
@@ -2404,7 +2408,7 @@
         "stdout_utf8": "42\n",
         "stderr_utf8": ""
       },
-      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+      "model": "Two independently saved21-byte ordinary string values remain in the tuple/Array after accumulator reset;21+21=42 derives the complete semantic return. Original native harness structural/resource/FI/producer-lifetime/physical/mixed/provider responsibilities remain OPEN."
     },
     {
       "id": "source_projection_scalar_static_method_declarations",

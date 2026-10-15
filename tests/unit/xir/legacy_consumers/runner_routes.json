@@ -7171,6 +7171,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/cleanup_snapshot_binding/root.xr",
+        "lf_sha256": "105fdacc5ac75f8f8b3bcb38f49a20fd4f74b0b3cbd2e09a530aba91d2f4695e",
+        "owner_package": "P07",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Current scalar value-copy and const binding rules. A scalar binding copies its value. Preserve the complete deferred late-binding/saved-snapshot distinction using const saved = x instead of an unadmitted ordinary copy helper."
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_SNAPSHOT_BINDING_PORT",
+        "owner_package": "P07",
+        "qualification": "NOT_RUN",
+        "reason": "A scalar binding copies its value. Preserve the complete deferred late-binding/saved-snapshot distinction using const saved = x instead of an unadmitted ordinary copy helper."
       }
     },
     {
@@ -8286,6 +8301,22 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/enum_explicit_ordinal/root.xr",
+        "lf_sha256": "3983b3d65a20faaeab294d60490e4fd734e4a3a0a8d5f8443217a14cfcce4e1f",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec5.6.4 explicit ordinal supplies i64;Spec2.10 numeric casts operate on that integer,without enum backing casts or aliases."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_EXPLICIT_ENUM_ORDINAL_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec5.6.4 explicit ordinal supplies i64;Spec2.10 numeric casts operate on that integer,without enum backing casts or aliases."
       }
     },
     {
@@ -8788,6 +8819,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/stringbuilder_numeric_shared_core.xr",
+        "lf_sha256": "4668474392945691c33a52fc63ae2f75cd98ab7a5d8ad3157d39d322f2bb4308",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task317/323 frozen StringBuilder retirement: complete original six append expressions evaluated once in order by string +=; original min.abs() retained, no precomputed product replacement."
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_STRING_APPEND_AFTER_FROZEN_TASK317_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Task317/323 frozen StringBuilder retirement: complete original six append expressions evaluated once in order by string +=; original min.abs() retained, no precomputed product replacement."
       }
     },
     {
@@ -12123,7 +12169,23 @@
           "prior_lf_sha256": "993eade0afeb992f974280d291e081b1e1ba8a849b09db3e854d34c06f2cfae2",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/module_class_receiver/_classlib.xr",
+        "lf_sha256": "b92731cd5f776ee021d4f013336b18681e2469cec59be2eabe025d7c38c01657",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_ORDINARY_CLASS_RECEIVER_MODULE_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/modules/_cleanup_init.xr",
@@ -12580,6 +12642,22 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/module_struct_factory/_exported_struct_methods_lib.xr",
+        "lf_sha256": "34f3404454ccc397a51a1a6a2137b6ab20f3951bbc8e61996f13c512cda41d58",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NAMED_STRUCT_FACTORY_MODULE_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
       }
     },
     {
@@ -13581,6 +13659,27 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/module_struct_factory/root.xr",
+        "lf_sha256": "718a91bb475cbb24c2c79b631f33c8efc076f1fa230352ea2923f6beaab86670",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/module_struct_factory/_exported_struct_methods_lib.xr",
+            "lf_sha256": "34f3404454ccc397a51a1a6a2137b6ab20f3951bbc8e61996f13c512cda41d58"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NAMED_STRUCT_FACTORY_MODULE_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
       }
     },
     {
@@ -13924,6 +14023,27 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/module_class_receiver/root.xr",
+        "lf_sha256": "8252b34095ced7380cedc89166a93707c628cdbf621db0c51e9cc53dae9b09de",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/module_class_receiver/_classlib.xr",
+            "lf_sha256": "b92731cd5f776ee021d4f013336b18681e2469cec59be2eabe025d7c38c01657"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_ORDINARY_CLASS_RECEIVER_MODULE_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all module bodies/imports/fields/calls; ordinary class receiver omits ref, and ordinary static struct factory uses make instead of constructor keyword init."
       }
     },
     {
@@ -14614,6 +14734,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/callable_explicit_fill/root.xr",
+        "lf_sha256": "1a26a78e2aca830df18cde987175eb16ae6d0f31e684976a896ce8f0b3d2cb92",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Type system/declaration default-initialization rules, Array explicit-fill constructor and per-iteration closure capture. Current default-initializable types exclude callable values. Preserve all100slots, loop1..100 and all3observations; initialize with an explicit identity callable instead of requesting an invalid callable default."
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_EXPLICIT_CALLABLE_ARRAY_FILL_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Current default-initializable types exclude callable values. Preserve all100slots, loop1..100 and all3observations; initialize with an explicit identity callable instead of requesting an invalid callable default."
       }
     },
     {
@@ -15236,7 +15371,22 @@
           "prior_lf_sha256": "e1e522b5189fde81397d0d6affbfc86ce4e438cfd3ca40b89593179abc4d0b30",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/auto_borrow_class_alias_return_downgrade.xr",
+        "lf_sha256": "38828de6e28a782ea637d6386ff8a144bf713e3a2f5ee6a123a112f3427a26db",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/auto_borrow_class_readonly_param.xr",
@@ -15289,7 +15439,22 @@
           "prior_lf_sha256": "21bdd2ffb274d0c2634a6ef7b8d1e6e238bbf30856bdd782d8e29ac51d6391ed",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/auto_borrow_class_readonly_param.xr",
+        "lf_sha256": "11a93babfc68f9911575160137996e996093ec13536cca3052a7b3116adb1231",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/auto_borrow_heap_readonly_param.xr",
@@ -15476,6 +15641,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization. Current Channel.recv returns Recv<T>; match Value and print actual payload, assert on all non-Value states instead of a success sentinel."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/converged_capability_positive.xr",
+        "lf_sha256": "3d99e41e3eecafa3d5122b4e5811d03c6de8eb4377656ed8dfd6f9688e723178",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization. Current Channel.recv returns Recv<T>; match Value and print actual payload, assert on all non-Value states instead of a success sentinel."
+        ]
       }
     },
     {
@@ -15522,6 +15702,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/copy_deep_independent.xr",
+        "lf_sha256": "ca28292c941e8ded2b67050aecc0a51d45f87d0eb005a0eefb1a53927498488a",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -15628,7 +15823,22 @@
           "prior_lf_sha256": "c832093569d869900f017ba5ce219c8e2ab5e736fb54298c4a586afc428fa840",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/copy_preserves_type.xr",
+        "lf_sha256": "cbf7177251e025e000511e9daf90fae7738698b12dd08b8af412c03e036c01e7",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/in_alias_reassigned_copy_escape_allowed.xr",
@@ -15674,6 +15884,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_alias_reassigned_copy_escape_allowed.xr",
+        "lf_sha256": "7aa16d9e937aef7391be35a4d83d4e6c89e0459c8d5cab01d484d5aa0677ac09",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -15720,6 +15945,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_closure_copy_capture_allowed.xr",
+        "lf_sha256": "073d6f20dba9fa169559de68c1d246cf2c0dab0e5afc9d1b01c442ae0c15d07b",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -15766,6 +16006,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_forward_function_param_copy_escape_allowed.xr",
+        "lf_sha256": "4141eb37e9ffb6a7d6d8498cf9feac7314def276dd80932abfc0382e1a328668",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -15812,6 +16067,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_function_param_copy_escape_allowed.xr",
+        "lf_sha256": "0f0133a1787c41bdc6fc27cc53f604b9171ea47d49e7d9674b4828843ce26993",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -15865,7 +16135,22 @@
           "prior_lf_sha256": "36a9eccdde8487f4c8fdc14be1fde7e943870b288662844fbc95e75b65b5f255",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_function_param_method_copy_escape_allowed.xr",
+        "lf_sha256": "956dca1cc7c1e62d35e7954f4a52f5bf372273312476918eb71312d3713864c6",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr",
@@ -15911,6 +16196,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_go_copy_argument_allowed.xr",
+        "lf_sha256": "fc2be73a9e9547b24de09b210e521d643e38705866e583d2816e914276507c94",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -15964,7 +16264,22 @@
           "prior_lf_sha256": "b275d353b2102992645ee2444035c260875714bcd42a599857163c09717b5dc9",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_method_wrapper_param_copy_escape_allowed.xr",
+        "lf_sha256": "a6603bb2d48bd12d09b8aaf4ba7bbb5680398a8ea83d999a0bea2064e96a9f22",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/in_mutator_scalar_from_borrow.xr",
@@ -16063,7 +16378,22 @@
           "prior_lf_sha256": "6c9db0b0cf183048b516b2ae2bbb79ed80cd3a5857b4de7bec1cd50a6d67b26a",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_readonly_user_method_names.xr",
+        "lf_sha256": "0f403f6921be66b30522503982d863cfa84422f9731b5aa6df1a2609b8be522f",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/in_ref_heap_borrows.xr",
@@ -16116,7 +16446,22 @@
           "prior_lf_sha256": "09e5d4c0368b0af13ad5ab4cd10c7e3ba3e3eb303b0297cff9ebdacd0468c960",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_ref_heap_borrows.xr",
+        "lf_sha256": "bbcd1dd74a5f618cc5dc27c1e3cd5c9d5230c01ab2bd81d4c5a478ea62379f0e",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/in_return_scalar_from_borrow.xr",
@@ -16307,6 +16652,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_into_go.xr",
+        "lf_sha256": "4f8173d119f8dbe6a6f94e00d1df1925f6de2da156ed56f72a7a8ca06652d250",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -16353,6 +16713,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_local_heap.xr",
+        "lf_sha256": "431dd888082fb90e31c6423c56f9d5dead0de208cf4fbf78fd04fb20bf61d42c",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -16399,6 +16774,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_local_in_fn.xr",
+        "lf_sha256": "43e8fb21d7127f0d0ebc8a80d3ea3842bc6f932c86c0f7f2a98f20d11395385f",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -16551,7 +16941,22 @@
           "prior_lf_sha256": "de1e41fd4de8e89a679ef35a7505aa7901ec2f826b99d70e193b3a2e274469cf",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/shared_class_copy_go.xr",
+        "lf_sha256": "56b90519cfd681ec6e0fce8ce9d363e16188a3be30265d5676ff0ffc9d9e299c",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
@@ -16643,6 +17048,21 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_IDENTITY_OWNERSHIP_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/shared_freeze_go.xr",
+        "lf_sha256": "ed73bc827a348387924fbcaf667b0014d6cabe7f7fd94ddb46604dc4631f1282",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313/spec2.14: ordinary logical value copies, class/synchronization identity boundaries, declared READ/ref modes and Sendable worker arguments; keep the complete original operations and output responsibilities. copy(view) remains explicitly legal owned Array materialization."
+        ]
       }
     },
     {
@@ -31936,7 +32356,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule."
+      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec2.14.1/2.14.3: const Array logical copy, binding/value fixed rather than original mutable backing loan"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/002_shared_bare_local_heap.xr",
+        "lf_sha256": "d47151617338114b0c731b892b5696ebf7280fb15be1655df8da5b1810f9b97d",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec2.14.1/2.14.3: const Array logical copy, binding/value fixed rather than original mutable backing loan"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/004_shared_move_alias.xr",
@@ -32437,7 +32872,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule."
+      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec3.0 E2 and2.14.4: READ Array logical copy prepared before ref place activation"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/012_ref_rejects_duplicate_in_arg.xr",
+        "lf_sha256": "51988af2f17814650adbfba875bd93bdfff403be9f42d8f77dea5e392d834670",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec3.0 E2 and2.14.4: READ Array logical copy prepared before ref place activation"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/013_ref_rejects_in_field_projection.xr",
@@ -32491,7 +32941,22 @@
           "prior_lf_sha256": "25d23ff95ea5a5880b09865a8613a9d55d85606de1ced1388a2cc0930adec9ed",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313 2.1(4,6), spec2.14.1/2.14.4: READ class retains identity and mutable field uses dynamic exclusive access"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/013_ref_rejects_in_field_projection.xr",
+        "lf_sha256": "49fc315794249563c926571491119e88d348b20d8060abe3a11b7c037f19e64f",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313 2.1(4,6), spec2.14.1/2.14.4: READ class retains identity and mutable field uses dynamic exclusive access"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/024_in_go_capture_escape.xr",
@@ -32797,7 +33262,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule."
+      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec2.14.3: returning copyable Array obtains owned logical copy rather than escaping a view"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/036_ref_return_escape.xr",
+        "lf_sha256": "d67f642178ee91b3f47f81d9548069c2cc52a82da459a8ae8a5dbd84209ef3a9",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec2.14.3: returning copyable Array obtains owned logical copy rather than escaping a view"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/037_ref_field_store_escape.xr",
@@ -32855,7 +33335,22 @@
           "prior_lf_sha256": "5653ac38091c736f4f01fa85019bf4a4c2f0d086b4053a5c3a3daa5e8bd04b1a",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec2.14.3: class field owns saved logical Array value"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/037_ref_field_store_escape.xr",
+        "lf_sha256": "aaf5fff393c37e460291a8df34c094cac01f6d319e40d6721937de52ce675c60",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec2.14.3: class field owns saved logical Array value"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/038_ref_array_push_escape.xr",
@@ -32902,7 +33397,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule."
+      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec2.14.3 and14.7: outer Array owns copied Array element"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/038_ref_array_push_escape.xr",
+        "lf_sha256": "0c540b4836512977b2c97d8b5f28ce8d274eb01aee18ecb939ed155aeb847262",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec2.14.3 and14.7: outer Array owns copied Array element"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/039_ref_store_closure_capture_escape.xr",
@@ -35060,7 +35570,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule."
+      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec3.0 E2: scalar snapshot evaluated before later ref activation"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/149_in_rejects_ref_alias_arg.xr",
+        "lf_sha256": "c8617da4d7c252f9308cbdcd5fa464dcb00017f93e1f770b43709b70b3957674",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec3.0 E2: scalar snapshot evaluated before later ref activation"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/150_ref_marker_rejects_in_param.xr",
@@ -35798,7 +36323,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule."
+      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec2.14.3/3.0 E11/4.9: returned copy independent of owner observed by deferred cleanup"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/181_defer_cleanup_blocks_return.xr",
+        "lf_sha256": "e5e60f8d78e8b6860866c6f4734d696e2f4d22f3103a6c034c530e26810a1736",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec2.14.3/3.0 E11/4.9: returned copy independent of owner observed by deferred cleanup"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/181_move_rejects_map_stored_root.xr",
@@ -36206,7 +36746,22 @@
           "prior_lf_sha256": "a312f7158eef2bb64d5c5d7f389644db87ee2634e9089a05f5180732fe944e03",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec2.14.1/2.14.4: binding place exclusivity does not deep-freeze class reachable identity"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/188_ref_rejects_alias_root_arg.xr",
+        "lf_sha256": "b2c00d7c0d039eeb34186864d68340970bb6f38465242b41d50a72e4b7d34e0f",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec2.14.1/2.14.4: binding place exclusivity does not deep-freeze class reachable identity"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/189_ref_rejects_receiver_overlap.xr",
@@ -36260,7 +36815,22 @@
           "prior_lf_sha256": "8851c68fd79fe00538ff45b18a0cf1d27d2267d2836fc9eabf1e042c38eab72c",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313 2.1(4), spec3.0 E2: class receiver reference prepared before explicit binding loan"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/189_ref_rejects_receiver_overlap.xr",
+        "lf_sha256": "8cdca0f823dff142313ca300921124d28b99abff689d450153648dc22d334fe1",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313 2.1(4), spec3.0 E2: class receiver reference prepared before explicit binding loan"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/190_channel_send_bare_tuple_rejected.xr",
@@ -36370,7 +36940,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule."
+      "target_contract_review": "REQUIRED; original rejection expectations are evidence, not automatic authorization to retain a superseded language rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_VALUE_OR_IDENTITY_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "spec2.14.4: ordinary var capture shares rebindable cell; original stale comment retained verbatim"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/closure_capture_blocks_rebind.xr",
+        "lf_sha256": "073f7f9ef9ba342d98d547c45f165f20ae67c6cfb1f080a19ec55ee247f70369",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec2.14.4: ordinary var capture shares rebindable cell; original stale comment retained verbatim"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/ownership/read_existential_mutating_receiver.xr",
@@ -61364,7 +61949,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection is historical evidence, not automatic authorization to retain an obsolete value/storage/union capability rule."
+      "target_contract_review": "REQUIRED; original rejection is historical evidence, not automatic authorization to retain an obsolete value/storage/union capability rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_CHECKED_ARRAY_METHOD_AFTER_FROZEN_TASK317_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "spec14.7 and governed Array declaration: checked READ get, no unsafe requirement"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/array_get_unchecked_requires_unsafe.xr",
+        "lf_sha256": "b7fc1d679c73e5ecace3ba324c07da2df5d986bc20c50d71f6ca230eaacb875e",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec14.7 and governed Array declaration: checked READ get, no unsafe requirement"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/type/array_int_byte_methods_unavailable.xr",
@@ -61515,7 +62115,22 @@
           }
         ]
       },
-      "target_contract_review": "REQUIRED; original rejection is historical evidence, not automatic authorization to retain an obsolete value/storage/union capability rule."
+      "target_contract_review": "REQUIRED; original rejection is historical evidence, not automatic authorization to retain an obsolete value/storage/union capability rule.",
+      "target_disposition": {
+        "kind": "POSITIVE_CHECKED_ARRAY_METHOD_AFTER_FROZEN_TASK317_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "spec14.7 and governed Array declaration: checked REF set returning unit, no unsafe requirement"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/array_set_unchecked_requires_unsafe.xr",
+        "lf_sha256": "cacb7bbd5180fff09b82726cea712d9cb366203424ca83d443ace879e1f987ec",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "spec14.7 and governed Array declaration: checked REF set returning unit, no unsafe requirement"
+        ]
+      }
     },
     {
       "case_id": "tests/compile_errors/type/array_to_byte_slice_requires_slice.xr",
@@ -88382,7 +88997,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/method_self_return_ownership/root.xr",
+        "lf_sha256": "971db515ea477d006500a2f1d3ded64eeaf24e9dea13b50a3200caa5595ba0c3",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task317sec7/Task323sec4.3 frozen2026-10-07:public StringBuilder retired;ordinary string+=/join,owned value snapshots,without class alias or fallback."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_OWNED_STRING_ACCUMULATION_AFTER_STRINGBUILDER_RETIREMENT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Task317sec7/Task323sec4.3 frozen2026-10-07:public StringBuilder retired;ordinary string+=/join,owned value snapshots,without class alias or fallback."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/range_to_array_too_large_shared_core.xr",
@@ -89076,7 +89707,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/stringbuilder_append_shared_core/root.xr",
+        "lf_sha256": "e7f0d02f512dea48805717a5c661e210b663fa0457f8f264a1ab65c491a3fac7",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task317sec7/Task323sec4.3 frozen2026-10-07:public StringBuilder retired;ordinary string+=/join,owned value snapshots,without class alias or fallback."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_OWNED_STRING_ACCUMULATION_AFTER_STRINGBUILDER_RETIREMENT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Task317sec7/Task323sec4.3 frozen2026-10-07:public StringBuilder retired;ordinary string+=/join,owned value snapshots,without class alias or fallback."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/stringbuilder_scalar_known_append_shared_core.xr",
@@ -89133,7 +89780,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/stringbuilder_scalar_known_append_shared_core/root.xr",
+        "lf_sha256": "a0a030b6590679d153be469971ec2e7867e748a6a534db3c8dd16766f041bebe",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task317sec7/Task323sec4.3 frozen2026-10-07:public StringBuilder retired;ordinary string+=/join,owned value snapshots,without class alias or fallback."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_OWNED_STRING_ACCUMULATION_AFTER_STRINGBUILDER_RETIREMENT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Task317sec7/Task323sec4.3 frozen2026-10-07:public StringBuilder retired;ordinary string+=/join,owned value snapshots,without class alias or fallback."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/type_names_shared_core.xr",
@@ -109239,7 +109902,22 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve the whole original positive/effect/stress responsibility. Published methods, witness/query metadata, borrow/layout/provider contracts and actual full execution remain unqualified."
+      "target_contract_review": "REQUIRED; preserve the whole original positive/effect/stress responsibility. Published methods, witness/query metadata, borrow/layout/provider contracts and actual full execution remain unqualified.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/string_indexof_start_shared_core.xr",
+        "lf_sha256": "bcf7b6916c0ba6064d9c5702fe5f327858e5cae4e6a9d18cd1d154ab14d20609",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec14.5/Task323: preserve all seven indexOf calls; three invalid starts caught with panic430 asserted, no old clamping."
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_INDEXOF_BOUNDS_AFTER_FROZEN_TASK323_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec14.5/Task323: preserve all seven indexOf calls; three invalid starts caught with panic430 asserted, no old clamping."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/string/string_surface_declared_methods.xr",
@@ -109599,7 +110277,22 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve full original effects, dimensions, callbacks and platforms. Bootstrap intrinsic/readonly-write/erased type/ROOT capture/fake provider verdict remain unqualified."
+      "target_contract_review": "REQUIRED; preserve full original effects, dimensions, callbacks and platforms. Bootstrap intrinsic/readonly-write/erased type/ROOT capture/fake provider verdict remain unqualified.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/arrays.xr",
+        "lf_sha256": "2abb319bf00fab5345f7b47bc7f22221a09d861b47113b92367a34e7aa82f8ea",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Task313 writable view is MutSlice, preserving complete original body/35 observations. Explicit callback index remains optional and is not a reason to reject the old callback form."
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_EXPLICIT_MUTSLICE_AFTER_FROZEN_TASK313_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Task313 writable view is MutSlice, preserving complete original body/35 observations. Explicit callback index remains optional and is not a reason to reject the old callback form."
+      }
     },
     {
       "case_id": "tests/diff/cases/basic/loops.xr",

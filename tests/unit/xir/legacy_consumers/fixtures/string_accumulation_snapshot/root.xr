@@ -2,18 +2,18 @@
 fn answer() -> i64 {
     var text = ""
     assert(text == "")
-    text = text + "A"
-    text = text + "${42}"
-    text = text + "${true}"
-    text = text + "${1.5}"
+    text += "A"
+    text += "${42}"
+    text += "${true}"
+    text += "${1.5}"
     const saved = text
     assert(saved == "A42true1.5")
     text = ""
-    text = text + "new"
+    text += "new"
     assert(text == "new")
     assert(saved == "A42true1.5")
     text = ""
-    for (i in 0..3) { text = text + "x" }
+    for (i in 0..3) { text += "x" }
     assert(text == "xxx")
     assert(make() == "owned")
     assert(make() == "owned")
@@ -22,6 +22,6 @@ fn answer() -> i64 {
 
 fn make() -> string {
     var text = ""
-    text = text + "owned"
+    text += "owned"
     return text
 }

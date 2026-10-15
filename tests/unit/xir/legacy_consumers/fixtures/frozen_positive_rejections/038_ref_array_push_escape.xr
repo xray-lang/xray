@@ -1,0 +1,15 @@
+fn stash(data: ref Array<i64>, out: ref Array<Array<i64>>) {
+    out.push(data)
+}
+
+var values: Array<i64> = [1, 2]
+var out: Array<Array<i64>> = []
+stash(ref values, ref out)
+
+values[0] = 9
+values.push(3)
+print(len(out))
+print(len(out[0]))
+print(out[0][0])
+print(values[0])
+print(len(values))

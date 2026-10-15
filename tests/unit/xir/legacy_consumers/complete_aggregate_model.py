@@ -1,0 +1,191 @@
+"""Full original aggregate programs, with independent place and value models."""
+from pathlib import Path
+import hashlib,math
+import independent_observation_format
+
+ROOT=Path(__file__).resolve().parents[4]
+_INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
+ 'spec/source/sections/004-3-expressions.md': '3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945',
+ 'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
+ 'spec/source/sections/006-5-declarations.md': '4b07469dd5109d4c6d0b99896e72c735e60e1821f716352ffd0e4da4e75d563b',
+ 'spec/source/sections/010-9-generics.md': '246757d531f91e2d19d2cd18353b5ec8addf05d309e5489c10da37e48be81226',
+ 'spec/source/sections/014-13-built-in-functions.md': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380',
+ 'spec/source/sections/015-14-built-in-type-methods.md': '2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b',
+ 'src/shared/xr_float_fmt.h': 'dc3f35e72dd96729e5948f98b8103810d1362bad8cec207aabf93db1352f983b',
+ 'stdlib/types/array.xr': 'ac31595b3801ee1df3c3f3ab6f1903c5f66ef084f0fa016dc19d24a2fa653223',
+ 'stdlib/types/map.xr': 'd03fcc7b6b98019f566ed20639d3485a8618ea55fd0acabc66841d2b6cb4bb75',
+ 'stdlib/types/set.xr': '7a2662595ba94a7c16568861e97a412c7331411765be489fbb0cf4d0394c72e0',
+ 'tests/diff/cases/semantics/collections/enum_payload_equality.xr': '79b7d47e86117c564bd7a3d983d21ede97912f8be3bd56a3e3ba5c9ccdac499d',
+ 'tests/diff/cases/semantics/collections/map_build_in_fn.xr': 'ba5bd40a93ea17bcaa3bcb20996c64f14b88cfed61aa056fab2b5b4aa75dfd62',
+ 'tests/diff/cases/semantics/collections/map_float_key_identity.xr': '40c2e61b4bed6b0b7cbcd09e24a31e485abccca8f49afbe38cc5ed207cfd61e4',
+ 'tests/diff/cases/semantics/collections/map_key_contextual_literal.xr': '0d5432c76859a467f9585fc05322071152f91bb62c87e23e17ced1327591d55d',
+ 'tests/diff/cases/semantics/collections/span_active_borrow_branch_nll_shared_core.xr': '61b5833e1f1788a0ca6e7d6643de29b6ee432f4f8ccc89478be78a94e8498090',
+ 'tests/diff/cases/semantics/collections/span_active_borrow_disjoint_owner_shared_core.xr': '07678352241e846fb01f5ac30e967a3913d95dde223dcd653639c267de444d81',
+ 'tests/diff/cases/semantics/collections/span_active_borrow_nested_owner_shared_core.xr': '369ec6f38f9b306c8557080c0303d15540ae6c890c5b1749c19d045acb34e41b',
+ 'tests/diff/cases/semantics/destructure/object_rename.xr': '156165a34d0e7f59f74ce707aace3b34a6e5ba597cdd88e9c8aa7a3f8bb0a4aa',
+ 'tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr': '4510495f559019208e36689626455b788c63e8b7bd40dbc4b0885a5aecd80dc1',
+ 'tests/diff/cases/semantics/types/object_field_invariance.xr': 'a947df2ec9826427835313a9548f40e05aba1552c26af399780d32c9fa59fe4c',
+ 'tests/diff/cases/semantics/types/object_optional_sparse_fields.xr': '3c7c3d09253223b5bba0c9dae2794434c5e6a3786e463f619bd3b457d3b51d33',
+ 'tests/diff/cases/semantics/types/union_as_conversion.xr': 'b21cb6138b0f39e09af00a9bdc7b58c4c10749e61d9093a8aac1e4603f915bc7',
+ 'tests/diff/cases/semantics/types/union_member_selection.xr': 'e5f4ca0e68250a367053ed5fdab18ae1f6f9b74e9468001a942ccd08e95c29a2',
+ 'tests/unit/xir/legacy_consumers/independent_observation_format.py': '09843df7bf351411b39877696ae17e489ee982062827d3a6ab8e8cad7ab1f68b'}
+_REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
+ 'spec/source/sections/004-3-expressions.md',
+ 'spec/source/sections/005-4-statements.md',
+ 'spec/source/sections/006-5-declarations.md',
+ 'spec/source/sections/010-9-generics.md',
+ 'spec/source/sections/014-13-built-in-functions.md',
+ 'spec/source/sections/015-14-built-in-type-methods.md',
+ 'src/shared/xr_float_fmt.h',
+ 'stdlib/types/array.xr',
+ 'stdlib/types/map.xr',
+ 'stdlib/types/set.xr',
+ 'tests/diff/cases/semantics/collections/enum_payload_equality.xr',
+ 'tests/diff/cases/semantics/collections/map_build_in_fn.xr',
+ 'tests/diff/cases/semantics/collections/map_float_key_identity.xr',
+ 'tests/diff/cases/semantics/collections/map_key_contextual_literal.xr',
+ 'tests/diff/cases/semantics/collections/span_active_borrow_branch_nll_shared_core.xr',
+ 'tests/diff/cases/semantics/collections/span_active_borrow_disjoint_owner_shared_core.xr',
+ 'tests/diff/cases/semantics/collections/span_active_borrow_nested_owner_shared_core.xr',
+ 'tests/diff/cases/semantics/destructure/object_rename.xr',
+ 'tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr',
+ 'tests/diff/cases/semantics/types/object_field_invariance.xr',
+ 'tests/diff/cases/semantics/types/object_optional_sparse_fields.xr',
+ 'tests/diff/cases/semantics/types/union_as_conversion.xr',
+ 'tests/diff/cases/semantics/types/union_member_selection.xr',
+ 'tests/unit/xir/legacy_consumers/independent_observation_format.py')
+_PROGRAMS = {'enum_payload_equality': 'tests/diff/cases/semantics/collections/enum_payload_equality.xr',
+ 'map_build_in_fn': 'tests/diff/cases/semantics/collections/map_build_in_fn.xr',
+ 'map_float_key_identity': 'tests/diff/cases/semantics/collections/map_float_key_identity.xr',
+ 'map_key_contextual_literal': 'tests/diff/cases/semantics/collections/map_key_contextual_literal.xr',
+ 'object_field_invariance': 'tests/diff/cases/semantics/types/object_field_invariance.xr',
+ 'object_optional_sparse_fields': 'tests/diff/cases/semantics/types/object_optional_sparse_fields.xr',
+ 'object_rename': 'tests/diff/cases/semantics/destructure/object_rename.xr',
+ 'span_active_borrow_branch_nll_shared_core': 'tests/diff/cases/semantics/collections/span_active_borrow_branch_nll_shared_core.xr',
+ 'span_active_borrow_disjoint_owner_shared_core': 'tests/diff/cases/semantics/collections/span_active_borrow_disjoint_owner_shared_core.xr',
+ 'span_active_borrow_nested_owner_shared_core': 'tests/diff/cases/semantics/collections/span_active_borrow_nested_owner_shared_core.xr',
+ 'tuple_fixed_width_unsigned': 'tests/diff/cases/semantics/destructure/tuple_fixed_width_unsigned.xr',
+ 'union_as_conversion': 'tests/diff/cases/semantics/types/union_as_conversion.xr',
+ 'union_member_selection': 'tests/diff/cases/semantics/types/union_member_selection.xr'}
+_NAMES=frozenset({'span_active_borrow_branch_nll_shared_core','span_active_borrow_disjoint_owner_shared_core',
+ 'span_active_borrow_nested_owner_shared_core','object_rename','tuple_fixed_width_unsigned',
+ 'object_field_invariance','object_optional_sparse_fields','union_as_conversion','union_member_selection',
+ 'map_build_in_fn','map_float_key_identity','map_key_contextual_literal','enum_payload_equality'})
+
+def render(value):
+    return independent_observation_format.render({'expected':value})
+
+class BorrowLedger:
+    def __init__(self):self.active=set()
+    def begin(self,path):self.active.add(tuple(path));return tuple(path)
+    def end(self,path):self.active.remove(tuple(path))
+    def mutate(self,path):
+        path=tuple(path)
+        if any(path[:len(active)]==active or active[:len(path)]==path for active in self.active):
+            raise ValueError('A live shared borrow prohibits mutation of an overlapping place')
+
+def materialize(schema,fields):
+    if set(fields)-set(schema):raise ValueError('Unexpected structural field')
+    result={}
+    for name,nullable in schema.items():
+        if name not in fields and not nullable:raise ValueError('Missing required structural field')
+        result[name]=fields.get(name)
+    return result
+
+def select_union(members,source_kind,value):
+    if source_kind in members:return source_kind,value
+    integers={'i8','i16','i32','i64','u8','u16','u32','u64'};floats={'f32','f64'}
+    family=integers if source_kind in integers else floats if source_kind in floats else {source_kind}
+    matches=[name for name in members if name in family]
+    if len(matches)!=1:raise ValueError('No unique union member')
+    return matches[0],float(value) if matches[0] in floats else value
+
+def float_key(value):
+    if math.isnan(value):return ('nan',)
+    return ('f64',0.0 if value==0 else value)
+
+def observations():
+    rows={};events=[]
+    for flag in [True,False]:
+        values=[1];ledger=BorrowLedger();view=ledger.begin(('bytes',))
+        if flag:events.append(len(values))
+        ledger.end(view);ledger.mutate(('bytes',));values.append(2 if flag else 3)
+        events.extend([len(values),len(values)])
+    rows['span_active_borrow_branch_nll_shared_core']=events
+    events=[]
+    for root,left,right,replacement in [('box',1,9,10),('chunks',3,7,8)]:
+        values={'left':[left],'right':[right]};ledger=BorrowLedger();view=ledger.begin((root,'left'))
+        ledger.mutate((root,'right'));values['right']=[];values['right'].append(replacement)
+        events.extend([len(values['left']),values['left'][0],len(values['right']),values['right'][0]])
+        ledger.end(view)
+    rows['span_active_borrow_disjoint_owner_shared_core']=events
+    events=[]
+    for path,first,second in [(('box','bytes'),7,9),(('chunks',0),3,4)]:
+        values=[first];ledger=BorrowLedger();view=ledger.begin(path);events.extend([len(values),values[0]])
+        ledger.end(view);ledger.mutate(path);values.append(second);events.append(len(values))
+    rows['span_active_borrow_nested_owner_shared_core']=events
+
+    user={'name':'Alice','age':30,'city':'Shanghai'};local_name,age=user['name'],user['age'];other_name,other_city=user['name'],user['city']
+    rows['object_rename']=[local_name,age,other_name,other_city]
+    product=0xF120000000000000*0x8D7EB76070A08AEC;hi,lo=product>>64,product%(1<<64)
+    triple=(0,10000000000000000,100000000000000000);status,byte=('TupleStatus','Invalid'),7
+    rows['tuple_fixed_width_unsigned']=[hi>>11,lo>>63,triple[1],triple[2],status==('TupleStatus','Invalid'),byte]
+    page={'limit':True,'cursor':True};user_schema={'name':False,'age':True}
+    def describe(fields):
+        value=materialize(page,fields)
+        return str(value['limit'] if value['limit'] is not None else -1)+'/'+(value['cursor'] if value['cursor'] is not None else '<none>')
+    values=[describe({'limit':5,'cursor':None}),describe({'limit':None,'cursor':'abc'}),describe({})]
+    for fields in [{'name':'Alice'},{'name':'Bob','age':3}]:
+        value=materialize(user_schema,fields);values.append(value['name']+'/'+str(value['age'] if value['age'] is not None else -1))
+    rows['object_field_invariance']=values
+    schema={'required':False,'method':True,'headers':True,'timeoutMs':True}
+    late=materialize(schema,{'required':'late','timeoutMs':25});middle=materialize(schema,{'required':'middle','headers':7})
+    rows['object_optional_sparse_fields']=[late['required'],late['method'] is None,late['headers'] is None,late['timeoutMs'],middle['method'] is None,middle['headers'],middle['timeoutMs'] is None]
+    a=select_union(['i64','string'],'i64',7);b=select_union(['i64','string'],'string','q');c=select_union(['i32','f64'],'i64',3)
+    rows['union_as_conversion']=['a='+render(a[1])+' b='+render(b[1]),'c='+render(c[1])]
+    cases=[('a',['i64','f64'],'i64',1),('b',['i64','f64'],'f64',1.0),('c',['i32','string'],'i64',7),
+     ('d',['f32','string'],'f64',1.5),('e',['i32','string'],'string','s'),('widened',['i32','string'],'i16',3),('switched',['i64','f64'],'f64',2.5)]
+    events=[]
+    for name,members,kind,value in cases:
+        selected,payload=select_union(members,kind,value)
+        events.append(name+'='+render(payload)+''.join(' is '+member+'='+render(selected==member) for member in members))
+    events.extend(['m1 '+select_union(['i64','f64'],'i64',3)[0],'m2 '+select_union(['i64','f64'],'f64',3.5)[0]])
+    rows['union_member_selection']=events
+
+    def squares(n):return {index:index*index for index in range(n)}
+    first,second=squares(6),squares(3);rows['map_build_in_fn']=[len(first),first[0],first[3],first[5],sum(first.values()),len(second),second[2]]
+    nan=float('nan');s={float_key(nan),float_key(nan)};events=['nan set size='+str(len(s)),'nan set contains='+render(float_key(nan) in s)]
+    mapping={};mapping[float_key(nan)]='first';mapping[float_key(nan)]='second'
+    events.extend(['nan map size='+str(len(mapping)),'nan map containsKey='+render(float_key(nan) in mapping),'nan map get='+mapping[float_key(nan)]])
+    del mapping[float_key(nan)];events.append('nan map size after delete='+str(len(mapping)))
+    mapping[float_key(0.0)]='pos';mapping[float_key(-0.0)]='neg'
+    events.extend(['zero map size='+str(len(mapping)),'zero get='+mapping[float_key(0.0)],'neg zero get='+mapping[float_key(-0.0)],'0.0 == -0.0 -> '+render(0.0==-0.0),'nan == nan -> '+render(nan==nan)])
+    rows['map_float_key_identity']=events
+    mapping={};mapping[float(1)]='int-literal';events=['size after int literal='+str(len(mapping))]
+    mapping[1.0]='float-literal';events.extend(['size after float literal='+str(len(mapping)),'get via int literal='+mapping[float(1)],'get via float literal='+mapping[1.0]])
+    events.extend('key='+render(key) for key in mapping);wide={1:'one'};sf={float(2),2.0}
+    events.extend(['wide size='+str(len(wide)),'wide get='+wide[1],'set size='+str(len(sf)),'set contains int literal='+render(float(2) in sf)])
+    rows['map_key_contextual_literal']=events
+    enum=lambda declared,variant,payload=():('module',declared,variant,payload)
+    left=enum('E','A',(1,));values=[left==enum('E','A',(1,)),left==enum('E','A',(2,)),enum('E','B',('x',))==enum('E','B',('x',)),enum('E','B',('x',))==enum('E','B',('y',)),left==enum('E','C')]
+    one,two=enum('K','Id',(1,)),enum('K','Id',(2,));mapping={one:'one',two:'two'};values.extend([len(mapping),mapping[one],mapping[two],len({one,two,one})])
+    rows['enum_payload_equality']=values
+    if set(rows)!=_NAMES:raise ValueError('Aggregate model lost a complete original program')
+    return rows
+
+def expected_rows():
+    if set(_INPUTS)!=set(_REQUIRED_INPUTS) or len(_REQUIRED_INPUTS)!=len(set(_REQUIRED_INPUTS)) or set(_PROGRAMS)!=_NAMES or len(set(_PROGRAMS.values()))!=len(_NAMES):
+        raise ValueError('Aggregate model lost exact source identities')
+    for name,digest in _INPUTS.items():
+        path=Path(name)
+        if path.is_absolute() or path.as_posix()!=name or '..' in path.parts or path.parts[0] not in {'tests','spec','src','stdlib'}:
+            raise ValueError('Aggregate input is not a delivered repository identity')
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Aggregate source/authority changed: '+name)
+    values=observations();rows=[]
+    for name,source in sorted(_PROGRAMS.items()):
+        if source not in _INPUTS or Path(source).stem!=name:raise ValueError('Aggregate program lost its original source')
+        rows.append({'id':'complete_aggregate_'+name,'source':source,'original_source':source,'required_target':None,
+            'expected':{'exit_code':0,'stdout_utf8':''.join(render(value)+'\n' for value in values[name]),'stderr_utf8':''},
+            'model':'Complete original body; independent path borrow lifetime, exact object fields, tagged union, unsigned arithmetic, nominal enum payload and key equivalence models. No physical release or backend agreement oracle.',
+            'observation_count':len(values[name])})
+    return rows

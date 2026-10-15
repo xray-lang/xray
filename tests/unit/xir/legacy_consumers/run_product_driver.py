@@ -7,17 +7,39 @@ import json
 import os
 from pathlib import Path
 import re
-import subprocess
+import sys
 import tempfile
 import time
 
 import independent_scalar_models
 import independent_behavior_models
+import independent_complete_models
+import complete_library_model
+import complete_channel_model
+import complete_resource_model
+import complete_typed_json_model
+import complete_module_model
+import complete_exception_model
+import complete_aggregate_model
+import complete_http_framing_model
+import complete_http_policy_model
+import complete_text_formats_model
+import complete_scalar_events_model
+import complete_async_events_model
+import complete_error_boundaries_model
+import complete_calendar_paths_model
+import complete_collection_values_model
+import complete_cleanup_generator_model
+import complete_callable_model
+import task_rejection_model
+import run_source_rejection_driver
 import independent_observation_format
 import extended_named_models
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
+sys.path.insert(0,str(ROOT/'tests/lib'))
+from xraytest import proc
 
 
 def sha(data: bytes) -> str:
@@ -30,6 +52,8 @@ def main() -> int:
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--compiler', type=Path)
     parser.add_argument('--case', action='append', default=[])
+    parser.add_argument('--source-rejection-owner',type=Path)
+    parser.add_argument('--source-rejection-manifest',type=Path)
     args = parser.parse_args()
     binary = args.binary.resolve(strict=True)
     parent = args.output.resolve()
@@ -41,16 +65,22 @@ def main() -> int:
     model_paths = [HERE/name for name in ('independent_scalar_models.py', 'independent_scalar_bindings.json',
                                          'independent_behavior_models.py', 'independent_behavior_bindings.json',
                                          'independent_observation_format.py', 'extended_named_models.py',
-                                         'extended_named_bindings.json', 'structured_named_models.json')]
+                                         'extended_named_bindings.json', 'structured_named_models.json',
+                                         'independent_complete_models.py', 'complete_program_bindings.json',
+                                         'complete_numeric_model.py', 'complete_text_range_model.py',
+                                         'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'task_rejection_model.py', 'run_source_rejection_driver.py')]
     model_digests = {path.name:sha(path.read_bytes()) for path in model_paths}
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
     for row in (independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows()
-                + independent_behavior_models.named_expected_rows() + extended_named_models.expected_rows()):
+                + independent_behavior_models.named_expected_rows() + extended_named_models.expected_rows()
+                + independent_complete_models.expected_rows() + complete_library_model.expected_rows() + complete_channel_model.expected_rows() + complete_resource_model.expected_rows() + complete_callable_model.expected_rows() + complete_cleanup_generator_model.expected_rows() + complete_typed_json_model.expected_rows() + complete_module_model.expected_rows() + complete_exception_model.expected_rows() + complete_aggregate_model.expected_rows() + complete_http_framing_model.expected_rows() + complete_http_policy_model.expected_rows() + complete_text_formats_model.expected_rows() + complete_scalar_events_model.expected_rows() + complete_async_events_model.expected_rows() + complete_error_boundaries_model.expected_rows() + complete_calendar_paths_model.expected_rows() + complete_collection_values_model.expected_rows()):
         if row['id'] in oracles:
             raise ValueError('independent scalar oracle identity collides with a preserved oracle')
         oracles[row['id']] = row
+    if task_rejection_model.IDENTITY in oracles:raise ValueError('Controlled rejection identity collides with a preserved oracle')
+    oracles[task_rejection_model.IDENTITY] = task_rejection_model.expected()
     cases = manifest['cases']
-    if any(row['entry'] not in ('run', 'function', 'test') for row in cases):
+    if any(row['entry'] not in ('run', 'function', 'test', 'source_rejection') for row in cases):
         raise ValueError('consumer entry must name an existing run/function/test route')
     if args.case:
         if len(args.case) != len(set(args.case)) or set(args.case)-{row['id'] for row in cases}:
@@ -75,6 +105,28 @@ def main() -> int:
             'extended_named_model_sha256':model_digests['extended_named_models.py'],
             'extended_named_bindings_sha256':model_digests['extended_named_bindings.json'],
             'structured_named_models_sha256':model_digests['structured_named_models.json'],
+            'complete_program_model_sha256':model_digests['independent_complete_models.py'],
+            'complete_program_bindings_sha256':model_digests['complete_program_bindings.json'],
+            'complete_numeric_model_sha256':model_digests['complete_numeric_model.py'],
+            'complete_text_range_model_sha256':model_digests['complete_text_range_model.py'],
+            'complete_ownership_model_sha256':model_digests['complete_ownership_model.py'],
+            'complete_library_model_sha256':model_digests['complete_library_model.py'],
+            'complete_channel_model_sha256':model_digests['complete_channel_model.py'],
+            'complete_resource_model_sha256':model_digests['complete_resource_model.py'],
+            'complete_typed_json_model_sha256':model_digests['complete_typed_json_model.py'],
+            'complete_module_model_sha256':model_digests['complete_module_model.py'],
+            'complete_exception_model_sha256':model_digests['complete_exception_model.py'],
+            'complete_aggregate_model_sha256':model_digests['complete_aggregate_model.py'],
+            'complete_http_framing_model_sha256':model_digests['complete_http_framing_model.py'],
+            'complete_http_policy_model_sha256':model_digests['complete_http_policy_model.py'],
+            'complete_text_formats_model_sha256':model_digests['complete_text_formats_model.py'],
+            'complete_scalar_events_model_sha256':model_digests['complete_scalar_events_model.py'],
+            'complete_async_events_model_sha256':model_digests['complete_async_events_model.py'],
+            'complete_error_boundaries_model_sha256':model_digests['complete_error_boundaries_model.py'],
+            'complete_calendar_paths_model_sha256':model_digests['complete_calendar_paths_model.py'],
+            'complete_collection_values_model_sha256':model_digests['complete_collection_values_model.py'],
+            'complete_cleanup_generator_model_sha256':model_digests['complete_cleanup_generator_model.py'],
+            'complete_callable_model_sha256':model_digests['complete_callable_model.py'],
             'evidence_directory':str(output),
             'cases':results, 'commands':records,
             'full_fi_lifetime_physical_sanitizer':'NOT_RUN', 'production_release':False,
@@ -82,18 +134,11 @@ def main() -> int:
 
     def invoke(label: str, argv: list[str], stdin: bytes = b'', cwd: Path = ROOT) -> dict:
         started = time.monotonic()
-        process = subprocess.Popen(argv, cwd=cwd, env=environment,
-                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        timed_out = False
-        try:
-            stdout, stderr = process.communicate(stdin, timeout=60)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            process.kill()
-            stdout, stderr = process.communicate()
+        observed = proc.run(argv,cwd=cwd,env=environment,stdin=stdin,timeout=60)
+        stdout,stderr,timed_out = observed.stdout,observed.stderr,observed.timed_out
         (output/(label+'.stdout')).write_bytes(stdout)
         (output/(label+'.stderr')).write_bytes(stderr)
-        row = {'label':label, 'argv':argv, 'cwd':str(cwd), 'pid':process.pid, 'exit_code':process.returncode,
+        row = {'label':label, 'argv':argv, 'cwd':str(cwd), 'exit_code':observed.returncode,
                'timed_out':timed_out, 'seconds':time.monotonic()-started,
                'stdout_hex':stdout.hex(), 'stderr_hex':stderr.hex()}
         records.append(row)
@@ -116,7 +161,16 @@ def main() -> int:
         if version.get('product') != 'xray-lang' or not {'vm','aot'} <= set(version.get('features',[])):
             raise ValueError('binary does not declare the required real product routes')
         for case in cases:
+            if case['entry'] == 'source_rejection':
+                bound = oracles[task_rejection_model.IDENTITY]
+                if (case['id'] != bound['id'] or case['oracle_id'] != bound['id'] or case['source'] != bound['source']
+                        or case['source_lf_sha256'] != bound['source_lf_sha256']):
+                    raise ValueError('Formal rejection entry lost its exact controlled source')
+                row = run_source_rejection_driver.run_group(binary,args.compiler,args.source_rejection_owner,
+                    args.source_rejection_manifest,output/('rejection-'+sha(case['id'].encode())[:16]))
+                results.append(row);save();print(case['id']+': '+row['status'],flush=True);continue
             oracle = oracles[case['oracle_id']]
+            independent_complete_models.require_target(oracle, version.get('target'))
             evidence = output/('case-'+sha(case['id'].encode('utf-8'))[:16])
             evidence.mkdir()
             original = ROOT/case['source']
@@ -258,7 +312,7 @@ def main() -> int:
         if any(sha(path.read_bytes()) != model_digests[path.name] for path in model_paths):
             raise ValueError('independent model inputs changed while consumers ran')
         print('Evidence: '+str(output), flush=True)
-        return 0 if all(row['status']=='PASS_SCOPED_CONSUMER' for row in results) else 1
+        return 0 if all(row['status'] in ('PASS_SCOPED_CONSUMER','PASS_INDEPENDENT_CHECKED_REJECTION_SCOPE') for row in results) else 1
     finally:
         save()
 

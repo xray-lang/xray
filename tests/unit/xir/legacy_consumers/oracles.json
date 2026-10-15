@@ -81,6 +81,11 @@
           "path": "tests/unit/xir/legacy_consumers/fixtures/string_builder_snapshot/original.xr",
           "lf_sha256": "b00bf926577b5282c46087b37ffbeac4ff43ad5e02fc102883420e5abc6a2973",
           "original_literal": "source"
+        },
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_snapshot/root.xr",
+          "lf_sha256": "69a22aa9d86422770b4aef40c459463bd19c90e2d506ad659aa405c34471378f",
+          "migration_target": "COMPLETE_FROZEN_STRING_APPEND_TARGET"
         }
       ],
       "expected": {
@@ -104,8 +109,10 @@
         "Fresh Source/Checked/Program execution on published dependencies; this file is not a product runner.",
         "Independent VM and actual generated-C native observations; P20 owns mixed execution qualification.",
         "All applicable producer lifetime, complete FI, exact resource budgets, cancellation, physical release and sanitizer gates.",
-        "Original spelling is preserved as a migration input. The required StringBuilder replacement/removal needs a separately reviewed semantic port; do not restore the retired API to pass this fixture."
-      ]
+        "Original literal assertions and all compiler/runtime/native resource,lifetime/FI/physical/safety obligations remain; prepared canonical target grants no execution qualification."
+      ],
+      "execution_source": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_snapshot/root.xr",
+      "target_source_status": "COMPLETE_FROZEN_STRING_APPEND_TARGET_PREPARED"
     },
     {
       "id": "text_program",
