@@ -47,6 +47,16 @@ add_test(NAME test_xir_parameter_schedule_oracle
 set_tests_properties(test_xir_parameter_schedule_oracle PROPERTIES
     LABELS "unit;xir;root-effects;compiler;ownership;parameter-schedule" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
 
+add_test(NAME test_xir_single_run_reader
+    COMMAND test_xir_root_conditional_helpers --single-run-reader)
+set_tests_properties(test_xir_single_run_reader PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership;physical-reader" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_root_conditional_new_literals
+    COMMAND test_xir_root_conditional_helpers --new)
+set_tests_properties(test_xir_root_conditional_new_literals PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership;physical-reader" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
 # These literals remain reachable before the complete helper cost gate.
 add_test(NAME test_xir_root_conditional_class_rows
     COMMAND test_xir_root_conditional_helpers --class-rows)

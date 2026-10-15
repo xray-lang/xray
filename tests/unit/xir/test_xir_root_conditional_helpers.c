@@ -53,6 +53,7 @@
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
 #include "xir_parameter_schedule_cases.h"
+#include "xir_single_run_reader_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1757,6 +1758,9 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--single-run-reader")) {
+        single_run_reader_controls();return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--parameter-schedule")) {
         parameter_schedule_controls();return 0;
     }

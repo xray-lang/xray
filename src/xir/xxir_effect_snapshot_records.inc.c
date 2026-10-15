@@ -292,13 +292,30 @@ static XrXirStatus effect_body_record_ref(const EffectBodyRead *read,
     XrXirStatus status=effect_body_run_ref(read,function,0,0,&boundary);
     if (status!=XR_XIR_OK) return status;
     if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
-    if (function->run_count>1) {
+    /* The sole current run already proves both ends of this request. There
+     * is no directory search or adjacent record to read; full value decoding
+     * still validates every selected delta and publishes all physical words. */
+    if (function->run_count==1) {
+        if (boundary->first+boundary->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=boundary;return XR_XIR_OK;
+    }
+    {
         uint32_t last=function->run_count-1;
         if (!effect_body_read_work(read,sizeof(last)+1)) return XR_XIR_BUDGET;
         status=effect_body_run_ref(read,function,last,function->runs[last].first,&boundary);
         if (status!=XR_XIR_OK) return status;
     }
     if (boundary->first+boundary->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    /* With two runs the first and last are also the selected neighbors.
+     * Their current shared boundary locates the row without another search
+     * or a second read of either record. Nothing survives this request. */
+    if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+    if (function->run_count==2) {
+        if (!effect_body_read_work(read,5+sizeof(*output))) return XR_XIR_BUDGET;
+        if (function->runs[0].count!=boundary->first) return XR_XIR_BAD_STRUCTURE;
+        *output=instruction<boundary->first?&function->runs[0]:boundary;return XR_XIR_OK;
+    }
     while (low<high) {
         if (!effect_body_read_work(read,3+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         uint32_t middle=low+(high-low)/2;
