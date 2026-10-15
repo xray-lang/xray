@@ -268,7 +268,7 @@
     },
     {
       "path": "spec/source/sections/018-17-compilation-pipeline.md",
-      "lf_sha256": "bc22c7fac3b5f60e5477776fc5bcb95db75633f57601d6915bb2bc59385442dd"
+      "lf_sha256": "1db2fee5baa4751012795fa7764f40d3b5a3de6274b7cd51a4586a41fe54ed1e"
     },
     {
       "path": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",

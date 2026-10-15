@@ -13,7 +13,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'spec/source/sections/004-3-expressions.md': '1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c',
  'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
  'spec/source/sections/009-8-error-handling.md': '3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b',
- 'spec/source/sections/015-14-built-in-type-methods.md': '2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b',
+ 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
  'spec/source/sections/016-15-standard-library.md': 'c776ecb898f3dfbbac76e6e9eb08da0697041af5b118eb55bfd294a9630ba2fa',
  'stdlib/text/text.xr': '55d2aaa9e524bc1924f6b426b763f9d45e52f926f204ded84c7e8a64289b9aef',
  'stdlib/url/url.xr': 'ed9ff523e0d27db91045e6729d3922675f324f9f4bd95874ed801b0b732625a4',

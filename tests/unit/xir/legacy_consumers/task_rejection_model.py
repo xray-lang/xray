@@ -5,7 +5,7 @@ import hashlib
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
- 'spec/source/sections/015-14-built-in-type-methods.md': '2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b',
+ 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
  'src/api/xsource_compile.h': '502cfdddebfb278ab2b3deaa3e27371aa4ecdb9ccba43b472189aa2036ffaf7e',
  'src/base/xcompile_resources.c': 'fcf26222e273a27348bddbe01381f5e64d3b1cfc2282d65472976bd5c5fa405f',
  'src/base/xcompile_resources.h': 'f837d59bd49fdb1b8630017c1d112af280bcd3d3ba6a34aa15c88a876b50b6b0',
@@ -14,10 +14,10 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'src/xir/xxir.h': 'fb40d22ee53ef7a4366aa7551a514fc23555b1a55161bfcc6915211ba71246bc',
  'src/xir/xxir_checked.h': '59e907be93cb3f7c47ce8ab2a11917ec4cb02a0a2c9fed08b6f95b662b77236c',
  'src/xir/xxir_constraint_proof.h': 'c0f066ec2dd991fa02bdd6f7735b4c85255145e75f821b8a46f33fe7a45536d5',
- 'src/xir/xxir_nominal.h': '15c3df9255b0f728abac6ef3eb89af80fdc6c66b8b2d4331948f11db5e1ce354',
+ 'src/xir/xxir_nominal.h': '8a1d9e940206d3cf35f78d9ac0719ae9bb7b8afed1a00d66baa0770485bd1e38',
  'src/xir/xxir_source_task_type.inc.c': 'b891bd32ab468133012098c50c74f6235da6f3a3e5a5d1d346bcb836ed0421e1',
  'src/xir/xxir_task_verify.inc.c': '1f29133b74148988ccd453f334cdee0847cb67a803e34d5eb0e926f91949990a',
- 'src/xir/xxir_types.h': 'df4955b755bcc4d22171a46b5ad909c45b1faaa58a75e74c5d1c76b95dc8f8de',
+ 'src/xir/xxir_types.h': '9cb358b9604f9298105c845e8dbd6012de147d6517a10cad3a3020042edef7d3',
  'src/xir/xxir_value.h': '156165293bc0c0d2ea44e3279ca1537d00b8e856b879d54288e36bf79d4db44c',
  'tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr': '68952e6c3b9d277b1e6fcb47c5f98e0657638f89fdcc00bdb0843d1c7b2549f7',
  'tests/lib/xraytest/__init__.py': '39d234cb4da7097df911c0a99fdfabe7fcc829beeefc536ab1108503217b640d',

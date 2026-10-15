@@ -21510,7 +21510,7 @@
     },
     {
       "case_id": "tests/regression/03_operators/0332_int_bits_methods.xr",
-      "source_lf_sha256": "048326204e5423b34be177ef93c1ae5b1207581cd8716034124e4c861eddcdc6",
+      "source_lf_sha256": "d238286ed728ad3d6440ab45968366a42e3e81ee105fdc8d317b43b7d478659e",
       "primary_family": "floating-point-and-fixed-width-numeric",
       "secondary_families": [],
       "tasks": [

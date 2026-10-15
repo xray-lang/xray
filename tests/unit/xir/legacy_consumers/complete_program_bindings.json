@@ -550,7 +550,7 @@
     },
     {
       "path": "spec/source/sections/015-14-built-in-type-methods.md",
-      "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b"
+      "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e"
     },
     {
       "path": "src/base/xconstants.h",
@@ -574,7 +574,7 @@
     },
     {
       "path": "src/xir/xxir_source_enum_text.inc.c",
-      "lf_sha256": "e5661bdcd188652fb4f10d7f0d88c6e2de7b71c1c138c23ab8d910dd65aebad9"
+      "lf_sha256": "322fb243ad34e5c53d1440de55f7e7d34e89330abbe651720e35c86453718f68"
     },
     {
       "path": "stdlib/codegen/codegen.xr",
@@ -594,7 +594,7 @@
     },
     {
       "path": "stdlib/types/f64.xr",
-      "lf_sha256": "55386bc3ba0fc47ece902e03343b7b039c6fd2ef75e24882b7a2378522fb977c"
+      "lf_sha256": "16f8b34079a8ef926027abf5a73c12e2e5601e692c027db00aca622a850cf16c"
     },
     {
       "path": "stdlib/types/map.xr",
@@ -606,11 +606,11 @@
     },
     {
       "path": "stdlib/types/rune.xr",
-      "lf_sha256": "c1d8ed8d941b09863dee626535abd04f4b9ba9fb965cecbcf83b446cf1b7cd39"
+      "lf_sha256": "aa54acae8e03100f799aa9869b547e9aecaeb3bea02de4b39890c5f7e4c1e510"
     },
     {
       "path": "stdlib/types/string.xr",
-      "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132"
+      "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7"
     },
     {
       "path": "tests/compile_errors/generics/007_codegen_intrinsic_type_argument.xr",

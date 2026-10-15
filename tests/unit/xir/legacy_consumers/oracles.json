@@ -4089,7 +4089,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -4150,7 +4150,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -19514,7 +19514,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -19597,7 +19597,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -19853,7 +19853,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -19936,7 +19936,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -20088,7 +20088,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -27356,7 +27356,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -27579,7 +27579,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -27846,7 +27846,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -28246,7 +28246,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -28381,7 +28381,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -33517,7 +33517,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -33628,7 +33628,7 @@
         },
         {
           "path": "stdlib/types/string.xr",
-          "lf_sha256": "b18d600b6b3627fcaa6c0801d8798de5fc02e0a45987da65d3e3fdbbd7c55132",
+          "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
           "role": "reviewed_declaration_or_context"
         },
         {
@@ -43774,7 +43774,7 @@
       "inputs": [
         {
           "path": "tests/regression/03_operators/0332_int_bits_methods.xr",
-          "lf_sha256": "048326204e5423b34be177ef93c1ae5b1207581cd8716034124e4c861eddcdc6",
+          "lf_sha256": "d238286ed728ad3d6440ab45968366a42e3e81ee105fdc8d317b43b7d478659e",
           "role": "preserved_source"
         },
         {
@@ -50888,7 +50888,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -51310,7 +51310,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -51570,7 +51570,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -51728,7 +51728,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -51994,7 +51994,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -52316,7 +52316,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -52642,7 +52642,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -52755,7 +52755,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -53227,7 +53227,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -53561,7 +53561,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -53760,7 +53760,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -53872,7 +53872,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -53987,7 +53987,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -54120,7 +54120,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -54248,7 +54248,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -54412,7 +54412,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -54557,7 +54557,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -54917,7 +54917,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -55112,7 +55112,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -55282,7 +55282,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -55578,7 +55578,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -55791,7 +55791,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -55891,7 +55891,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -56070,7 +56070,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -56408,7 +56408,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -57191,7 +57191,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -57529,7 +57529,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -58226,7 +58226,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -58695,7 +58695,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -59413,7 +59413,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -59546,7 +59546,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "frozen_spec"
         }
       ],
@@ -59652,7 +59652,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -59804,7 +59804,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -59929,7 +59929,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -60055,7 +60055,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -60201,7 +60201,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -60316,7 +60316,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -60477,7 +60477,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -60636,7 +60636,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -60770,7 +60770,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -60873,7 +60873,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61009,7 +61009,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61112,7 +61112,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61211,7 +61211,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61317,7 +61317,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61441,7 +61441,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61550,7 +61550,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61656,7 +61656,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61779,7 +61779,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61896,7 +61896,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -61997,7 +61997,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -62122,7 +62122,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -62233,7 +62233,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -62344,7 +62344,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -62646,7 +62646,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -62825,7 +62825,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -62974,7 +62974,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],
@@ -63090,7 +63090,7 @@
         },
         {
           "path": "spec/source/sections/015-14-built-in-type-methods.md",
-          "lf_sha256": "2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b",
+          "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
           "role": "baseline_spec_pending_frozen_target_sync"
         }
       ],

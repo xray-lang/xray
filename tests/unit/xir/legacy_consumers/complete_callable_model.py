@@ -10,7 +10,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
  'spec/source/sections/008-7-scoping-and-name-resolution.md': 'ec46ac53d1f2886e2ff2a5ebf3d5b7bd7e7d99ccf472b8ad64ca4b75f8370fc7',
  'spec/source/sections/014-13-built-in-functions.md': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380',
- 'spec/source/sections/015-14-built-in-type-methods.md': '2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b',
+ 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
  'tests/diff/cases/semantics/closure/call_through_function_parameter.xr': 'fd1d6a3ece85dbcf321f07ae7a37fa36574c90cbf7af6d7a99e5b07a6bea8503',
  'tests/diff/cases/semantics/closure/capture_forms.xr': 'a87b6b956ac33c59f4bc2925356d9fd96d879cdbeaa994ad126363914ec12fd2',
  'tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr': '675041c66eca5eafe298c8baf4162b60b3090e03ef5bb57b7e088e8a36726de3',
