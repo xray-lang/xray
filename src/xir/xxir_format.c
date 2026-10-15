@@ -16,6 +16,7 @@
 #include "xxir_float.h"
 #include "xxir_rune.h"
 #include "xxir_value_internal.h"
+#include "xxir_type_arena_internal.h"
 
 static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
     XrXirValue borrowed = {0};
@@ -101,9 +102,17 @@ static int metered_format_write(void *context, const void *bytes, size_t length)
 }
 XR_FUNC XrXirValueStatus xr_xir_value_format_string(const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirValue *output) {
-    if (!admission || !admission->domain || !value || !output ||
+    if (!admission || !xr_xir_domain_current(admission->domain) || !value || !output ||
         output->type || output->reserved || output->payload) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus status=xr_xir_value_admit(value,(XrXirType)value->type,admission);
+    XrXirType expected=(XrXirType)value->type;
+    const XrXirTypeArena *owner=xr_xir_value_arena(value);
+    if (owner && owner!=admission->arena) {
+        uint64_t work=xir_type_arena_lookup_work(admission->arena);
+        if (work>admission->work || !xr_xir_domain_work(admission->domain,work)) return XR_XIR_VALUE_LIMIT;
+        admission->work-=work;
+        if (!xir_type_arena_local_type(admission->arena,owner,expected,&expected)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    XrXirValueStatus status=xr_xir_value_admit(value,expected,admission);
     if (status!=XR_XIR_VALUE_OK) return status;
     MeteredFormat format={admission,xr_xir_value_format_reader(value),XR_XIR_VALUE_OK,NULL,0,
         admission->scratch_bytes>SIZE_MAX ? SIZE_MAX : (size_t)admission->scratch_bytes};

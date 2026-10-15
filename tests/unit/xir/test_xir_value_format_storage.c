@@ -100,6 +100,37 @@ static void format_received_storage(void) {
     uint32_t source_refs=atomic_load(&source->references), target_refs=atomic_load(&target->references);
     uint32_t inner_refs=atomic_load(&object_pointer(&inner)->references);
     format_exact(&outer,"[[-17]]",7); format_exact(&packed,"[Box.Items([-17])]",18);
+    XrXirValue converted={0};
+    uint64_t scratch=admission.scratch_bytes;
+    CHECK(xr_xir_value_format_string(&inner,&admission,&converted)==XR_XIR_VALUE_OK);
+    CHECK(admission.scratch_bytes==scratch);
+    const char *text=NULL; size_t length=0;
+    CHECK(xr_xir_string_view(&converted,&text,&length) && length==5 && !memcmp(text,"[-17]",5));
+    xr_xir_value_drop(&converted);
+    uint64_t work=admission.work;
+    admission.work=0;
+    CHECK(xr_xir_value_format_string(&inner,&admission,&converted)==XR_XIR_VALUE_LIMIT);
+    CHECK(!converted.type && !converted.reserved && !converted.payload && admission.scratch_bytes==scratch);
+    admission.work=work;
+    XrXirTypeArena *lookalike=NULL;
+    CHECK(xr_xir_compile_type_arena_new(&compiler.context,&pools[1],&lookalike)==XR_XIR_VALUE_OK);
+    admission.arena=lookalike;
+    CHECK(xr_xir_value_format_string(&inner,&admission,&converted)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(!converted.type && !converted.reserved && !converted.payload && admission.scratch_bytes==scratch);
+    xr_xir_compile_type_arena_drop(lookalike); admission.arena=target;
+    size_t baseline_live=live, points=0;
+    for (size_t pass=0; pass<=points; ++pass) {
+        admission.work=1000000;
+        size_t before=calls;
+        fail_at=pass ? calls+pass-1 : SIZE_MAX;
+        XrXirValueStatus status=xr_xir_value_format_string(&inner,&admission,&converted);
+        size_t attempts=calls-before; fail_at=SIZE_MAX;
+        if (!pass) { CHECK(status==XR_XIR_VALUE_OK); points=attempts; CHECK(points && points<32); }
+        else CHECK(attempts>=pass && status==XR_XIR_VALUE_OOM &&
+            !converted.type && !converted.reserved && !converted.payload);
+        xr_xir_value_drop(&converted);
+        CHECK(live==baseline_live && admission.scratch_bytes==scratch);
+    }
     CHECK(inner.type==256 && xr_xir_value_arena(&inner)==source);
     CHECK(atomic_load(&object_pointer(&inner)->references)==inner_refs);
     CHECK(atomic_load(&source->references)==source_refs && atomic_load(&target->references)==target_refs);
