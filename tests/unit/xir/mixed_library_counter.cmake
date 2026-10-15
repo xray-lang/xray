@@ -1,4 +1,5 @@
 add_executable(test_xir_mixed_library_producer xir/test_xir_mixed_library_producer.c)
+include(${CMAKE_CURRENT_LIST_DIR}/mixed_task_results.cmake)
 add_executable(test_xir_effects_callable_bounds xir/test_xir_effects_callable_bounds.c)
 target_link_libraries(test_xir_effects_callable_bounds PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_effects_callable_bounds PRIVATE
