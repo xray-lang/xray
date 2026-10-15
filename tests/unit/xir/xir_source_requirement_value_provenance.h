@@ -73,14 +73,19 @@ static void requirement_value_poison(XrXirArtifact *artifact) {
     CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
     uint32_t member=requirement->targets[1];
     CHECK(member==0); requirement->targets[1]=1;
-    /* Changing map to identically typed other remains a legal original program,
-     * but no longer justifies the already-derived map implementation target. */
-    CHECK(xr_xir_compile_artifact_verify(proof->source, NULL)==XR_XIR_OK);
+    /* The changed raw program remains legal under a fresh full derivation.
+     * Its retained immutable Input and every derived implementation must reject
+     * the changed member until the original physical instruction is restored. */
+    CHECK(xr_xir_compile_verify_v2(&proof->source->context,source,
+        proof->source->construction,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_verify(proof->source, NULL)==XR_XIR_BAD_STRUCTURE);
     witness_reject_derived(artifact); requirement->targets[1]=member;
     CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
     XrXirType own=application[1]; application[1]=application[0];
     /* A and U happen to close to i64, but only U has a definition-site Sendable
      * premise. Concrete equality cannot repair the poisoned symbolic origin. */
+    CHECK(xr_xir_compile_verify_v2(&proof->source->context,source,
+        proof->source->construction,NULL)==XR_XIR_BAD_TYPE);
     CHECK(xr_xir_compile_artifact_verify(proof->source, NULL)==XR_XIR_BAD_TYPE);
     witness_reject_derived(artifact); application[1]=own;
     CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);

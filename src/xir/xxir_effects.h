@@ -44,18 +44,16 @@ typedef struct XrXirRootCauseStep {
 /* Reverification and inference consume one cumulative work allowance.
  * Success publishes into an empty output; every failure preserves it. */
 XR_FUNC XrXirStatus xr_xir_compile_effects_analyze(const XrXirArtifact *artifact, XrXirEffects **output);
-/* The borrowed fact remains valid until its owning summary is freed. */
-XR_FUNC const XrXirFunctionEffects *xr_xir_effects_function(const XrXirEffects *effects, uint32_t function);
-/* NULL for NONE/invalid queries; call steps strictly decrease distance.
- * The summary owns numeric identities, not source locations or input storage. */
-XR_FUNC const XrXirEffectWitness *xr_xir_effects_suspend_witness(const XrXirEffects *effects, uint32_t function);
-/* These independent facts are owned by the same summary, without input borrows.
- * A complete false/false result proves only the admitted direct execution graph. */
-XR_FUNC const XrXirRootEffects *xr_xir_effects_root(const XrXirEffects *effects, uint32_t function);
-/* NULL for an absent fact or invalid query. Local terminals have distance zero;
- * call/cleanup steps strictly decrease distance and use analyzed numeric IDs. */
-XR_FUNC const XrXirRootEffectWitness *xr_xir_effects_root_witness(const XrXirEffects *effects, uint32_t function);
-XR_FUNC const XrXirRootEffectWitness *xr_xir_effects_unresolved_witness(const XrXirEffects *effects, uint32_t function);
+/* Every query returns independent numeric values. Invalid queries carry an
+ * explicit status; NONE witnesses have a zero cause in an admitted result. */
+typedef struct XrXirEffectFacts {
+    XrXirStatus status;
+    XrXirFunctionEffects control;
+    XrXirRootEffects root;
+    XrXirEffectWitness suspend_witness;
+    XrXirRootEffectWitness root_witness,unresolved_witness;
+} XrXirEffectFacts;
+XR_FUNC XrXirEffectFacts xr_xir_effects_read(const XrXirEffects *effects,uint32_t function);
 /* Copy both existing cause chains into one independent owner on the same
  * compiler ledger. Invalid/occupied outputs consume no work and remain intact. */
 XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(

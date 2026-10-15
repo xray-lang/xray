@@ -4542,6 +4542,9 @@ add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
 set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_read.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_ordinary_environment.cmake")
 
 include(xir/cell_owner_source.cmake)
 
@@ -4566,3 +4569,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
+
+add_subdirectory(xir/p10_reference)
+include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")

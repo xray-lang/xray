@@ -1,0 +1,4 @@
+fn layer<T>(value:T)->T?{return value}
+fn none<T>()->T?{return null}
+fn probe(value:i64???)->i64{if(value!=null&&value!=null){return (value! ==null&&value!! ==null&&(value!)! ==null)?14:0};return -1}
+export fn referenceAnswer()->i64{return probe(layer<i64??>(layer<i64?>(none<i64>())))}

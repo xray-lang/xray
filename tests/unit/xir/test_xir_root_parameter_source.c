@@ -83,7 +83,8 @@ static void rps_instance(XrXirArtifact *artifact, const RootParameterSourceOracl
     CHECK(destination!=UINT32_MAX);
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
-    const XrXirRootEffects *root=xr_xir_effects_root(effects,destination);
+    XrXirEffectFacts root_read=xr_xir_effects_read(effects,destination);
+    const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
     CHECK(root && root->requires_root==oracle->root && root->unresolved==oracle->unresolved);
     bool default_bound=false,actual_bound=false;
     uint32_t apply=rps_named(source,"apply");CHECK(apply!=UINT32_MAX);

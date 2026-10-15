@@ -56,17 +56,17 @@ XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileConte
 
 static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
-    const EffectInvocationOwner *owner=certificate->equations;
-    const EffectInvocationResult *result=certificate->result;
+    const EffectInvocationFinal *owner=certificate->final;
+    const EffectFinalFunctions *result=(&certificate->final->summary);
     uint32_t count=effect_body_count(certificate->body);
-    if (!owner->count || owner->count>owner->capacity || owner->capacity>owner->maximum ||
+    if (!owner->count || owner->count>owner->capacity || (uint64_t)owner->capacity>(uint64_t)work->limits.functions*work->limits.instructions ||
         owner->edge_count>owner->edge_capacity || !!owner->edges!=!!owner->edge_capacity ||
-        owner->edge_index || owner->edge_index_capacity || owner->pending || !owner->nodes ||
+        !owner->nodes ||
         !owner->roots || !owner->root_spaces || !!owner->sites!=!!owner->site_count ||
         owner->deferred_count>owner->deferred_capacity ||
         !!owner->deferred_calls!=!!owner->deferred_capacity ||
         result->resources!=work->resources || result->count!=count || result->capacity!=count ||
-        !result->functions || !result->facts || !result->witnesses || !certificate->projection_atoms ||
+        !result->functions || !result->facts || !result->witnesses ||
         certificate->declarations!=certificate->body->declarations ||
         certificate->generics!=certificate->body->generics ||
         certificate->defaults.count!=certificate->body->defaults.count ||
@@ -96,14 +96,14 @@ static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
  * independently enumerated from the closed current equations below. */
 static XrXirStatus effect_source_result_views(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
-    const EffectInvocationResult *result=certificate->result;
+    const EffectFinalFunctions *result=(&certificate->final->summary);
     if (summary->result_borrow!=result || summary->formula_terminals!=result->witnesses ||
         summary->constant_witnesses!=result->witnesses+(size_t)result->count*2)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<result->count;++f) {
         if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
         const XrXirRootFormula *actual=&summary->contracts[f].formula;
-        const EffectInvocationResultFunction *record=&result->functions[f];
+        const EffectFinalFunction *record=&result->functions[f];
         if (actual->constant_mask!=record->formula.constant_mask ||
             actual->term_count!=record->formula.term_count || actual->terms!=record->storage ||
             record->formula.terms!=record->storage || record->capacity!=actual->term_count)
@@ -114,7 +114,7 @@ static XrXirStatus effect_source_result_views(const XrXirCompileContext *work,
 
 static XrXirStatus effect_source_atoms(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
-    const EffectInvocationOwner *owner=certificate->equations;
+    const EffectInvocationFinal *owner=certificate->final;
     for (uint32_t n=0;n<owner->count;++n) {
         const EffectInvocationNode *node=&owner->nodes[n];
         if (node->root>=effect_body_count(certificate->body) ||
@@ -140,37 +140,26 @@ static XrXirStatus effect_source_atoms(const XrXirCompileContext *work,
 
 static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
-    uint32_t count=effect_body_count(certificate->body);
-    const EffectInvocationResult *result=certificate->result;
+    const EffectFinalFunctions *result=(&certificate->final->summary);
     /* This same independent receiving core checks all canonical terms,
      * selected atoms, current causes and final transformed witnesses. */
     XrXirStatus status=effect_invocation_publication_match(work,certificate,result);
     if (status!=XR_XIR_OK) return status;
-    for (uint32_t f=0;f<count;++f) for (uint32_t d=2;d<4;++d) {
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-        uint32_t bit=(d&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
-        if ((certificate->projection_atoms[(size_t)d*count+f]!=UINT32_MAX)!=
-            !!(result->functions[f].formula.constant_mask&bit)) return XR_XIR_BAD_STRUCTURE;
-    }
-    return effect_invocation_public_gate(work,certificate,count);
+    return effect_invocation_public_gate(work,certificate);
 }
 
-/* Only verification modes consume this shallow request view. The stack owner
- * never owns or changes equation arrays. The original publication removed all
- * raw producer pointers; its sole Material remains the actual input reader. */
+/* Verification borrows the actual Final and its sole immutable Input.
+ * Request scratch contains only the fresh incoming index; no construction
+ * owner, queue or copied semantic inventory participates in this proof. */
 static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->resources!=work->resources || certificate->body->resources!=work->resources ||
-        !certificate->equations || !certificate->result || !certificate->declared ||
+        !certificate->final || !certificate->final || !certificate->declared ||
         certificate->terms.remaining || certificate->body->terms.remaining ||
-        certificate->equations->work || certificate->equations->effects ||
-        certificate->equations->graph || certificate->equations->declared ||
-        certificate->equations->body.read.owner || certificate->equations->body.read.consume ||
-        certificate->equations->body.owner!=certificate->body ||
-        certificate->equations->material!=certificate->body ||
-        certificate->equations->physical!=certificate->body->physical ||
-        certificate->equations->cells!=certificate->body->cells ||
+        certificate->final->material!=certificate->body ||
+        certificate->final->physical!=certificate->body->physical ||
+        certificate->final->cells!=certificate->body->cells ||
         !summary || summary->count!=effect_body_count(certificate->body) ||
         !summary->contracts || !certificate->origins || !certificate->owners || !certificate->parameter_kinds)
         return XR_XIR_BAD_STRUCTURE;
@@ -179,15 +168,12 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
         if (!effect_body_material_shape(body) || body->resources!=work->resources ||
             body->terms.remaining) return XR_XIR_BAD_STRUCTURE;
     }
-    if (!xir_compile_work(work,sizeof(EffectInvocationOwner)+sizeof(EffectGraph)+sizeof(XrXirEffects)+
-        sizeof(EffectInvocationCertificate)+sizeof(EffectBodyRequest)+5*sizeof(void *))) return XR_XIR_BUDGET;
-    XrXirEffects local_summary=*summary;
-    EffectGraph graph={.material=certificate->body,.physical=certificate->body->physical};
-    EffectInvocationOwner owner=*certificate->equations;
-    owner.work=work;owner.effects=&local_summary;owner.graph=&graph;owner.declared=certificate->declared;
-    owner.body=effect_body_owned_request(work,certificate->body);
+    if (!xir_compile_work(work,sizeof(EffectInvocationRead)+sizeof(EffectInvocationCertificate)+3*sizeof(void *)))
+        return XR_XIR_BUDGET;
+    EffectInvocationRead owner={0};
+    XrXirStatus opening=effect_invocation_read_open(work,summary,certificate->declared,certificate->final,&owner);
+    if (opening!=XR_XIR_OK) return opening;
     EffectInvocationCertificate local=*certificate;local.terms.remaining=work;
-    local.equations=&owner;
     XrXirStatus status=effect_source_equation_shape(work,certificate);
     if (status==XR_XIR_OK) status=effect_source_result_views(work,certificate,summary);
     for (uint32_t f=0;f<summary->count && status==XR_XIR_OK;++f) {
@@ -203,16 +189,16 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
                 status=XR_XIR_BAD_STRUCTURE;
         }
     }
-    if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.physical,owner.material);
+    if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final->physical,owner.final->material);
     if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
-    if (status==XR_XIR_OK) status=effect_invocation_closed(&owner);
+    if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
-    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.physical);
+    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final->physical);
     if (status==XR_XIR_OK) status=effect_source_atoms(work,&local);
     if (status==XR_XIR_OK) status=effect_source_projections(work,&local);
-    return status;
+    effect_invocation_read_close(&owner);return status;
 }
 
 static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
@@ -254,7 +240,7 @@ static XrXirStatus effect_source_publication_match(const XrXirCompileContext *wo
         if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
         if (origin->function!=f || origin->argument_count || origin->arguments ||
             certificate->owners[f]!=parent) return XR_XIR_BAD_STRUCTURE;
-        const EffectInvocationResult *result=certificate->result;
+        const EffectFinalFunctions *result=(&certificate->final->summary);
         const XrXirRootFormula *a=&effects->contracts[f].formula,*b=&result->functions[f].formula;
         if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
         if (a->constant_mask!=b->constant_mask || a->term_count!=b->term_count ||
@@ -303,40 +289,45 @@ static void effect_source_outcomes_free(XrXirEffects *fresh) {
             xr_compile_resources_free((void *)fresh->entry_roots[f].parameters);
         xr_compile_resources_free(fresh->entry_roots);
     }
-    xr_compile_resources_free(fresh->functions);xr_compile_resources_free(fresh->witnesses);
-    xr_compile_resources_free(fresh->task_errors);xr_compile_resources_free(fresh->go_safe);
-    xr_compile_resources_free(fresh->task_creation);xr_compile_resources_free(fresh->atoms);
-    xr_compile_resources_free(fresh->errors);
+    xr_compile_resources_free(fresh->outcomes_work.functions);xr_compile_resources_free(fresh->outcomes_work.witnesses);
+    xr_compile_resources_free(fresh->outcomes_work.task_errors);xr_compile_resources_free(fresh->outcomes_work.go_safe);
+    xr_compile_resources_free(fresh->outcomes_work.task_creation);xr_compile_resources_free(fresh->outcomes_work.atoms);
+    xr_compile_resources_free(fresh->outcomes_work.errors);
 }
 
 static XrXirStatus effect_source_outcomes_prepare(const XrXirCompileContext *work,
     const XrXirEffects *effects,XrXirEffects *fresh) {
+    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
+    if (!actual) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(*fresh))) return XR_XIR_BUDGET;
     *fresh=(XrXirEffects){.resources=work->resources,.count=effects->count,.root=effects->root,
         .contexts=effects->contexts,.contracts=effects->contracts,.invocations=effects->invocations,
         .result_borrow=effects->result_borrow,.generation=effects->invocations->body,
-        .cells=effects->cells,.source_type_count=effects->source_type_count};
+        .cells=effects->cells};
+    fresh->outcomes_work.source_type_count=actual->source_type_count;
     XrXirStatus status=XR_XIR_OK;
-    fresh->functions=xir_compile_calloc(work,fresh->count,sizeof(*fresh->functions),&status);
-    if (status==XR_XIR_OK) fresh->witnesses=xir_compile_calloc(work,fresh->count,sizeof(*fresh->witnesses),&status);
-    if (status==XR_XIR_OK) fresh->task_errors=xir_compile_calloc(work,fresh->count,sizeof(*fresh->task_errors),&status);
-    if (status==XR_XIR_OK) fresh->go_safe=xir_compile_calloc(work,fresh->count,sizeof(*fresh->go_safe),&status);
-    if (status==XR_XIR_OK) fresh->task_creation=xir_compile_calloc(work,fresh->count,sizeof(*fresh->task_creation),&status);
+    fresh->outcomes_work.functions=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.functions),&status);
+    if (status==XR_XIR_OK) fresh->outcomes_work.witnesses=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.witnesses),&status);
+    if (status==XR_XIR_OK) fresh->outcomes_work.task_errors=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.task_errors),&status);
+    if (status==XR_XIR_OK) fresh->outcomes_work.go_safe=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.go_safe),&status);
+    if (status==XR_XIR_OK) fresh->outcomes_work.task_creation=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.task_creation),&status);
     return status;
 }
 
 static XrXirStatus effect_source_outcomes_match(const XrXirCompileContext *work,
     const XrXirEffects *effects,const XrXirEffects *fresh) {
-    if (!effects->functions || !effects->witnesses || !effects->task_errors || !effects->go_safe ||
-        !effects->task_creation || !effects->entry_roots || !fresh->entry_roots) return XR_XIR_BAD_STRUCTURE;
+    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
+    if (!actual) return XR_XIR_BAD_STRUCTURE;
+    if (!actual->functions || !actual->witnesses || !actual->task_errors || !actual->go_safe ||
+        !actual->task_creation || !effects->entry_roots || !fresh->entry_roots) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<effects->count;++f) {
         if (!xir_compile_work(work,18)) return XR_XIR_BUDGET;
-        const XrXirFunctionEffects *a=&effects->functions[f],*b=&fresh->functions[f];
-        const XrXirEffectWitness *wa=&effects->witnesses[f],*wb=&fresh->witnesses[f];
+        const XrXirFunctionEffects *a=&actual->functions[f],*b=&fresh->outcomes_work.functions[f];
+        const XrXirEffectWitness *wa=&actual->witnesses[f],*wb=&fresh->outcomes_work.witnesses[f];
         const XirEffectEntryRootView *ea=&effects->entry_roots[f],*eb=&fresh->entry_roots[f];
         if (a->suspend!=b->suspend || a->throws!=b->throws ||
-            effects->task_errors[f]!=fresh->task_errors[f] || effects->go_safe[f]!=fresh->go_safe[f] ||
-            effects->task_creation[f]!=fresh->task_creation[f] || wa->cause!=wb->cause ||
+            actual->task_errors[f]!=fresh->outcomes_work.task_errors[f] || actual->go_safe[f]!=fresh->outcomes_work.go_safe[f] ||
+            actual->task_creation[f]!=fresh->outcomes_work.task_creation[f] || wa->cause!=wb->cause ||
             wa->instruction!=wb->instruction || wa->callee!=wb->callee || wa->distance!=wb->distance ||
             ea->intrinsic_mask!=eb->intrinsic_mask || ea->parameter_count!=eb->parameter_count ||
             !!ea->parameters!=!!ea->parameter_count) return XR_XIR_BAD_STRUCTURE;
@@ -350,18 +341,21 @@ static XrXirStatus effect_source_outcomes_match(const XrXirCompileContext *work,
 
 static XrXirStatus effect_source_errors_match(const XrXirCompileContext *work,
     const XrXirEffects *effects,const XrXirEffects *fresh) {
-    if (effects->atom_count!=fresh->atom_count || effects->words!=fresh->words ||
-        effects->atom_count>effects->atom_capacity || !!effects->atoms!=!!effects->atom_capacity ||
-        !effects->errors || !fresh->errors) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t a=0;a<effects->atom_count;++a) {
+    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
+    if (!actual) return XR_XIR_BAD_STRUCTURE;
+    if (actual->error_rows!=fresh->outcomes_work.error_rows ||
+        actual->atom_count!=fresh->outcomes_work.atom_count || actual->words!=fresh->outcomes_work.words ||
+        actual->atom_count>actual->atom_capacity || !!actual->atoms!=!!actual->atom_capacity ||
+        !actual->errors || !fresh->outcomes_work.errors) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t a=0;a<actual->atom_count;++a) {
         if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
-        if (effects->atoms[a].type!=fresh->atoms[a].type || effects->atoms[a].variant!=fresh->atoms[a].variant)
+        if (actual->atoms[a].type!=fresh->outcomes_work.atoms[a].type || actual->atoms[a].variant!=fresh->outcomes_work.atoms[a].variant)
             return XR_XIR_BAD_STRUCTURE;
     }
-    uint64_t words=(uint64_t)effects->count*effects->words;
+    uint64_t words=(uint64_t)actual->error_rows*actual->words;
     for (uint64_t w=0;w<words;++w) {
         if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-        if (effects->errors[w]!=fresh->errors[w]) return XR_XIR_BAD_STRUCTURE;
+        if (actual->errors[w]!=fresh->outcomes_work.errors[w]) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }

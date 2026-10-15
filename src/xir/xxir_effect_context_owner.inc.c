@@ -29,8 +29,8 @@ static void effect_context_owner_free(EffectContextOwner *owner) {
 
 static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
     effect_parameters_free(&contexts->uses);
-    xr_compile_resources_free(contexts->uses.functions);
-    xr_compile_resources_free(contexts->uses.task_creation);
+    xr_compile_resources_free(contexts->uses.outcomes_work.functions);
+    xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
     xr_compile_resources_free(contexts->uses.root);
     xr_compile_resources_free(contexts->uses.root_witnesses);
     xr_compile_resources_free(contexts->uses.unresolved_witnesses);
@@ -455,6 +455,9 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
         if (ordinary>=owner->ordinary->count) { status=XR_XIR_BAD_STRUCTURE;break; }
         const XrXirFunction *caller=&dense->functions[index];
         XrXirInstruction actual=caller->instructions[i];actual.op=original.op;
+        /* Default identity fields are metadata, not physical operands. The
+         * resolved initializer receives no caller arguments. */
+        if (original.op==XR_XIR_INVOKE_DEFAULT) actual.args[0]=actual.args[1]=0;
         EffectDenseRequest request={.contexts=owner->ordinary,.execution=dense,.selected=ordinary,
             .caller_index=index,.actual_types=&dense->terms.types,.caller=caller,.instruction=&actual,
             .fixed=fixed,.value_count=caller->parameter_count+caller->instruction_count};

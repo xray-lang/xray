@@ -42,12 +42,12 @@ static void invocation_parameter_fixture(InvocationParameterFixture *f,uint32_t 
     f->returned.module.functions=f->functions;f->returned.module.function_count=6;
 }
 
-static uint32_t invocation_parameter_actual(EffectInvocationOwner *owner) {
+static uint32_t invocation_parameter_actual(EffectInvocationWorkspace *owner) {
     uint32_t found=UINT32_MAX;
-    for (uint32_t e=0;e<owner->edge_count;++e) {
-        const EffectInvocationEdge *edge=&owner->edges[e];
-        if (owner->nodes[edge->caller].body!=0 || owner->nodes[edge->target].body!=5) continue;
-        EffectInvocationFlow flow={.owner=owner,.node=edge->caller,.instruction=UINT32_MAX};
+    for (uint32_t e=0;e<owner->final.edge_count;++e) {
+        const EffectInvocationEdge *edge=&owner->final.edges[e];
+        if (owner->final.nodes[edge->caller].body!=0 || owner->final.nodes[edge->target].body!=5) continue;
+        EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=edge->caller,.instruction=UINT32_MAX};
         XrXirStatus status=effect_invocation_origins(&flow);bool matched=false;
         if (status==XR_XIR_OK) status=effect_invocation_coverage_input(&flow,e,&matched);
         xr_compile_resources_free(flow.memory);CHECK(status==XR_XIR_OK);
@@ -58,14 +58,14 @@ static uint32_t invocation_parameter_actual(EffectInvocationOwner *owner) {
 }
 
 /* A mismatch records the actual first status without adding another proof. */
-static void invocation_parameter_expect_rejection(EffectInvocationOwner *owner,
+static void invocation_parameter_expect_rejection(EffectInvocationWorkspace *owner,
     uint32_t mode,const char *mutation) {
     XrXirStatus actual=effect_invocation_coverage_verify(owner);
     if (actual!=XR_XIR_BAD_STRUCTURE) {
-        XrCompileResourceStats stats=rp_stats(owner->work);
+        XrCompileResourceStats stats=rp_stats(owner->read.work);
         fprintf(stderr,"PARAMETER_REJECTION mode=%u mutation=%s actual=%u expected=%u producer=%u nodes=%u pending=%u allocated=%llu live=%llu peak=%llu work=%llu\n",
             mode,mutation,(unsigned)actual,(unsigned)XR_XIR_BAD_STRUCTURE,
-            (unsigned)owner->producer_enabled,owner->count,owner->pending,
+            (unsigned)owner->read.producer_enabled,owner->final.count,owner->pending,
             (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes,
             (unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
         fflush(stderr);
@@ -74,9 +74,9 @@ static void invocation_parameter_expect_rejection(EffectInvocationOwner *owner,
 }
 
 /* Disabled coverage still owns real zero facts and exact root storage. */
-static void invocation_parameter_disabled_rejections(EffectInvocationOwner *owner,uint32_t mode) {
-    if (owner->producer_enabled) return;
-    uint32_t formal=owner->roots[5];EffectInvocationNode *node=&owner->nodes[formal];
+static void invocation_parameter_disabled_rejections(EffectInvocationWorkspace *owner,uint32_t mode) {
+    if (owner->read.producer_enabled) return;
+    uint32_t formal=owner->final.roots[5];EffectInvocationNode *node=&owner->final.nodes[formal];
     CHECK(!node->return_coverage && node->parameter_count==1 && node->parameter_coverage);
     node->return_coverage=1;
     invocation_parameter_expect_rejection(owner,mode,"disabled-return");
@@ -87,26 +87,26 @@ static void invocation_parameter_disabled_rejections(EffectInvocationOwner *owne
     uint64_t *stored=node->parameter_coverage;node->parameter_coverage=NULL;
     invocation_parameter_expect_rejection(owner,mode,"disabled-storage");
     node->parameter_coverage=stored;
-    owner->roots[5]=owner->count;
+    owner->final.roots[5]=owner->final.count;
     invocation_parameter_expect_rejection(owner,mode,"disabled-root");
-    owner->roots[5]=formal;
+    owner->final.roots[5]=formal;
     CHECK(effect_invocation_coverage_verify(owner)==XR_XIR_OK);
 }
 
 /* Each altered private fact is restored before the actual seal. These
  * controls supply neither a prepared source clause nor a permission bit. */
-static void invocation_parameter_rejections(EffectInvocationOwner *owner,uint32_t mode) {
-    uint32_t n=invocation_parameter_actual(owner),formal=owner->roots[5];
-    EffectInvocationNode *node=&owner->nodes[n];
+static void invocation_parameter_rejections(EffectInvocationWorkspace *owner,uint32_t mode) {
+    uint32_t n=invocation_parameter_actual(owner),formal=owner->final.roots[5];
+    EffectInvocationNode *node=&owner->final.nodes[n];
     CHECK(node->parameter_count==1 && node->parameter_coverage &&
-        !owner->nodes[formal].parameter_coverage[0]);
+        !owner->final.nodes[formal].parameter_coverage[0]);
     uint64_t original=node->parameter_coverage[0];
     if (mode<2) CHECK(n!=formal);
     CHECK((original!=0)==(mode<2));
     CHECK(effect_invocation_coverage_verify(owner)==XR_XIR_OK);
-    owner->nodes[formal].parameter_coverage[0]=1;
+    owner->final.nodes[formal].parameter_coverage[0]=1;
     invocation_parameter_expect_rejection(owner,mode,"formal-rank");
-    owner->nodes[formal].parameter_coverage[0]=0;
+    owner->final.nodes[formal].parameter_coverage[0]=0;
     invocation_parameter_disabled_rejections(owner,mode);
     node->parameter_coverage[0]=original?0:1;
     invocation_parameter_expect_rejection(owner,mode,"actual-rank");
@@ -115,25 +115,25 @@ static void invocation_parameter_rejections(EffectInvocationOwner *owner,uint32_
     invocation_parameter_expect_rejection(owner,mode,"rank-overflow");
     node->parameter_coverage[0]=original;
     if (mode<2) {
-        uint32_t head=owner->consumers[n];CHECK(head!=UINT32_MAX);
-        owner->consumers[n]=UINT32_MAX;
+        uint32_t head=owner->read.consumers[n];CHECK(head!=UINT32_MAX);
+        owner->read.consumers[n]=UINT32_MAX;
         invocation_parameter_expect_rejection(owner,mode,"missing-incoming");
-        owner->consumers[n]=head;
+        owner->read.consumers[n]=head;
         uint64_t input=node->input[0];node->input[0]^=UINT64_C(1);
         invocation_parameter_expect_rejection(owner,mode,"changed-key");
         node->input[0]=input;
-        const EffectInvocationEdge *edge=&owner->edges[head];
-        uint32_t caller=edge->caller;uint64_t returned=owner->nodes[caller].return_coverage;
+        const EffectInvocationEdge *edge=&owner->final.edges[head];
+        uint32_t caller=edge->caller;uint64_t returned=owner->final.nodes[caller].return_coverage;
         /* The real caller returns I64, so coverage must come from its CALL
          * result rather than a fabricated caller-wide returned certificate. */
-        CHECK(!returned && owner->nodes[caller].body==0);
+        CHECK(!returned && owner->final.nodes[caller].body==0);
         uint32_t factory=UINT32_MAX;
-        for (uint32_t e=owner->nodes[caller].edge_head;e!=UINT32_MAX;e=owner->edges[e].next)
-            if (owner->nodes[owner->edges[e].target].body==1) factory=owner->edges[e].target;
-        CHECK(factory!=UINT32_MAX && owner->nodes[factory].return_coverage);
-        returned=owner->nodes[factory].return_coverage;owner->nodes[factory].return_coverage=0;
+        for (uint32_t e=owner->final.nodes[caller].edge_head;e!=UINT32_MAX;e=owner->final.edges[e].next)
+            if (owner->final.nodes[owner->final.edges[e].target].body==1) factory=owner->final.edges[e].target;
+        CHECK(factory!=UINT32_MAX && owner->final.nodes[factory].return_coverage);
+        returned=owner->final.nodes[factory].return_coverage;owner->final.nodes[factory].return_coverage=0;
         invocation_parameter_expect_rejection(owner,mode,"removed-return");
-        owner->nodes[factory].return_coverage=returned;
+        owner->final.nodes[factory].return_coverage=returned;
     }
     CHECK(effect_invocation_coverage_verify(owner)==XR_XIR_OK);
 }
@@ -147,7 +147,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&published);
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
+    EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) status=invocation_core_storage(context,module,&effects);
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
@@ -167,18 +167,20 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) {
-        EffectInvocationOwner replay=*certificate->equations;
+        EffectInvocationRead replay={0};
+        status=effect_invocation_read_open(context,published,certificate->declared,certificate->final,&replay);
         replay.work=context;replay.effects=published;
         replay.declared=certificate->declared;
         EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
-        status=effect_invocation_coverage_verify_read(&replay,&request);
+        if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&replay,&request);
+        effect_invocation_read_close(&replay);
     }
     if (status==XR_XIR_OK && oracle) {
         CHECK(xr_xir_effects_error_unknown(published,0)==(mode>=2));
         CHECK(xr_xir_effects_error_unknown(published,5));
-        const EffectInvocationNode *formal=&certificate->equations->nodes[certificate->equations->roots[5]];
+        const EffectInvocationNode *formal=&certificate->final->nodes[certificate->final->roots[5]];
         CHECK(!formal->parameter_coverage[0]);
-        CHECK(!certificate->equations->body.read.owner && !certificate->equations->work);
+        CHECK((certificate->final->material!=NULL));
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,"INVOCATION_PARAMETER mode=%u status=%u f=%u b=%u i=%u\n",
         mode,(unsigned)status,diagnostic.function,diagnostic.block,diagnostic.instruction);

@@ -80,11 +80,11 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
     if (status == XR_XIR_OK) {
         CHECK(xr_xir_effects_go_safe(effects, 0) == XR_XIR_OK);
         CHECK(xr_xir_effects_go_safe(effects, 5) == XR_XIR_BAD_TYPE);
-        CHECK(xr_xir_effects_function(effects, 2)->suspend == XR_XIR_EFFECT_NONE &&
-            xr_xir_effects_function(effects, 2)->throws == XR_XIR_EFFECT_NONE);
-        CHECK(xr_xir_effects_function(effects, 1)->suspend == XR_XIR_EFFECT_MAY &&
-            xr_xir_effects_function(effects, 1)->throws == XR_XIR_EFFECT_NONE);
-        CHECK(xr_xir_effects_function(effects, 4)->throws == XR_XIR_EFFECT_MAY &&
+        CHECK(xr_xir_effects_read(effects, 2).control.suspend == XR_XIR_EFFECT_NONE &&
+            xr_xir_effects_read(effects, 2).control.throws == XR_XIR_EFFECT_NONE);
+        CHECK(xr_xir_effects_read(effects, 1).control.suspend == XR_XIR_EFFECT_MAY &&
+            xr_xir_effects_read(effects, 1).control.throws == XR_XIR_EFFECT_NONE);
+        CHECK(xr_xir_effects_read(effects, 4).control.throws == XR_XIR_EFFECT_MAY &&
             xr_xir_effects_error_unidentified(effects, 4));
         CHECK(xr_xir_effects_task_creation(effects, 2) == XR_XIR_EFFECT_MAY &&
             xr_xir_effects_task_creation(effects, 3) == XR_XIR_EFFECT_MAY &&
@@ -238,8 +238,8 @@ static void task_go_outcomes(void) {
             XrXirEffects *effects = NULL;
             CHECK(xr_xir_compile_effects_analyze(checked, &effects) == XR_XIR_OK);
             CHECK(xr_xir_effects_go_safe(effects, 0) == XR_XIR_OK);
-            CHECK(xr_xir_effects_function(effects, 2)->throws == XR_XIR_EFFECT_NONE &&
-                xr_xir_effects_function(effects, 2)->suspend == XR_XIR_EFFECT_NONE);
+            CHECK(xr_xir_effects_read(effects, 2).control.throws == XR_XIR_EFFECT_NONE &&
+                xr_xir_effects_read(effects, 2).control.suspend == XR_XIR_EFFECT_NONE);
             CHECK(xr_xir_effects_error(effects, 1, (XrXirType)257, 0) == !mode &&
                 !xr_xir_effects_error(effects, 1, (XrXirType)257, 1) &&
                 !xr_xir_effects_error_unidentified(effects, 1));
@@ -265,7 +265,7 @@ static void task_go_caught(void) {
     XrXirEffects *effects = NULL; CHECK(xr_xir_compile_effects_analyze(checked, &effects) == XR_XIR_OK);
     CHECK(xr_xir_effects_task_errors(effects, 3) == XR_XIR_BAD_TYPE &&
         xr_xir_effects_task_errors(effects, 0) == XR_XIR_OK &&
-        xr_xir_effects_function(effects, 0)->throws == XR_XIR_EFFECT_NONE);
+        xr_xir_effects_read(effects, 0).control.throws == XR_XIR_EFFECT_NONE);
     xr_xir_compile_effects_free(effects); xr_xir_compile_artifact_free(checked); owner_free(&c, baseline);
 }
 static void task_go_cleanup(void) {
