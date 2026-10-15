@@ -659,6 +659,18 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
     if (!instance->ready[module] && instance->current_module != module) return XR_XIR_CALL_BAD_STATE;
     if (!child) return XR_XIR_CALL_READY;
     if (!function) return XR_XIR_CALL_BAD_STATE;
+    /* A body without physical parameters has no actual-dependent permission
+     * to refine. Reject its closed facts and callable advertisement before
+     * charged equation selection; this check never grants a call. */
+    if (!program->entries[entry].parameter_count) {
+        const XrXirProgramPermission *permission = &program->permissions->entries[entry];
+        if (permission->requires_root || permission->unresolved) return XR_XIR_CALL_BAD_STATE;
+        if (function->type != XR_XIR_UNIT) {
+            const XrXirTypeNode *signature = xr_xir_callable_signature(program->types, (XrXirType)function->type);
+            if (!signature || (signature->flags & XR_XIR_CALLABLE_ROOT_MASK) != XR_XIR_CALLABLE_ROOT_NONE)
+                return XR_XIR_CALL_BAD_STATE;
+        }
+    }
     uint32_t instruction=UINT32_MAX;
     if (xr_xir_call_invocation_pending(view,&instruction)) {
         XirEffectInvocationSelection selection={0};
