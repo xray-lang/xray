@@ -20,12 +20,12 @@ XR_FUNC XrXirStatus xdap_dispatch_send_prepared(XdapAdapter *s,XdapJsonWriter *m
     if (status==XR_XIR_OK) ++s->seq;
     return status;
 }
-XR_FUNC XrXirStatus xdap_dispatch_prepare_response(XdapAdapter *s,const XdapRequest *request,bool success,
-    const XdapJsonWriter *body,const char *error,XdapJsonWriter *output) {
+static XrXirStatus dispatch_prepare_sequence(XdapAdapter *s,const XdapRequest *request,bool success,
+    const XdapJsonWriter *body,const char *error,uint32_t sequence,XdapJsonWriter *output) {
     if (!output || output->resources || output->bytes) return XR_XIR_BAD_STRUCTURE;
     if (body && body->status!=XR_XIR_OK) return body->status;
     XdapJsonWriter message=xdap_json_writer(s->resources,s->config.message_limit);
-    XDAP_TEXT(&message,"{\"seq\":");xdap_json_unsigned(&message,s->seq);
+    XDAP_TEXT(&message,"{\"seq\":");xdap_json_unsigned(&message,sequence);
     XDAP_TEXT(&message,",\"type\":\"response\",\"request_seq\":");xdap_json_unsigned(&message,request->seq);
     XDAP_TEXT(&message,",\"command\":");
     const XdapJsonNode *command=&request->document.nodes[request->command];
@@ -36,6 +36,25 @@ XR_FUNC XrXirStatus xdap_dispatch_prepare_response(XdapAdapter *s,const XdapRequ
     XDAP_TEXT(&message,"}");
     if (message.status!=XR_XIR_OK) { XrXirStatus status=message.status;xdap_json_writer_free(&message);return status; }
     *output=message;return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xdap_dispatch_prepare_response(XdapAdapter *s,const XdapRequest *request,bool success,
+    const XdapJsonWriter *body,const char *error,XdapJsonWriter *output) {
+    return dispatch_prepare_sequence(s,request,success,body,error,s->seq,output);
+}
+XR_FUNC XrXirStatus xdap_dispatch_stage_response(XdapAdapter *s,const XdapRequest *request,bool success,
+    const XdapJsonWriter *body,const char *error,XdapJsonWriter *output) {
+    if (xr_compile_resources_work(s->resources,11)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    return dispatch_prepare_sequence(s,request,success,body,error,INT32_MAX,output);
+}
+XR_FUNC XrXirStatus xdap_dispatch_send_staged(XdapAdapter *s,XdapJsonWriter *message) {
+    const char prefix[]="{\"seq\":2147483647";
+    if (!message || message->status!=XR_XIR_OK || message->length<sizeof(prefix)-1 ||
+        memcmp(message->bytes,prefix,sizeof(prefix)-1)) return message && message->status!=XR_XIR_OK ? message->status : XR_XIR_BAD_STRUCTURE;
+    char digits[10];uint32_t number=s->seq;size_t used=0;
+    do { digits[used++]=(char)('0'+number%10);number/=10; } while (number);
+    memset(message->bytes+7,' ',10);
+    for (size_t i=0;i<used;++i) message->bytes[7+i]=digits[used-i-1];
+    return xdap_dispatch_send_prepared(s,message);
 }
 XR_FUNC XrXirStatus xdap_dispatch_response(XdapAdapter *s,const XdapRequest *request,bool success,
     const XdapJsonWriter *body,const char *error) {
@@ -145,6 +164,7 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
         "\"supportsTerminateRequest\":true,\"supportsRestartRequest\":true,\"supportsSteppingGranularity\":true,\"supportsDisassembleRequest\":true,"
         "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,\"supportsHitConditionalBreakpoints\":true,"
         "\"supportsConditionalBreakpoints\":true,\"supportsLogPoints\":true,"
+        "\"supportsSetVariable\":true,"
         "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false}]}");
     XrXirStatus status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }

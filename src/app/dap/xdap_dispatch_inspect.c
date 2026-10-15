@@ -335,6 +335,7 @@ static XrXirStatus inspect_evaluate(XdapAdapter *s,const XdapRequest *r) {
     XDAP_TEXT(&body,"}");xr_xir_value_drop(&value);status=inspect_finish(s,r,&body);
     if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
 }
+#include "xdap_dispatch_write.inc.c"
 XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,const char *command) {
     if (!s->initialized) return xdap_dispatch_response(s,r,false,NULL,"Initialize first");
     if (!strcmp(command,"threads")) return inspect_threads(s,r);
@@ -344,8 +345,7 @@ XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,co
     if (!strcmp(command,"setFunctionBreakpoints")) return xdap_dispatch_function_breakpoints(s,r);
     if (!strcmp(command,"setBreakpoints")) return xdap_dispatch_source_breakpoints(s,r);
     if (!strcmp(command,"evaluate")) return inspect_evaluate(s,r);
-    if (!strcmp(command,"setVariable"))
-        return xdap_dispatch_response(s,r,false,NULL,"Paused lexical expression admission is not yet available");
+    if (!strcmp(command,"setVariable")) return inspect_set_variable(s,r);
     if (!strcmp(command,"restart")) return xdap_dispatch_response(s,r,false,NULL,"Restart construction is not yet available");
     if (!strcmp(command,"disassemble")) return inspect_disassemble(s,r);
     return xdap_dispatch_response(s,r,false,NULL,"Unknown request");

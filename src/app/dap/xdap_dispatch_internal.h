@@ -66,6 +66,10 @@ XR_FUNC XrXirStatus xdap_dispatch_response(XdapAdapter *,const XdapRequest *,boo
 XR_FUNC XrXirStatus xdap_dispatch_prepare_response(XdapAdapter *,const XdapRequest *,bool,
     const XdapJsonWriter *,const char *,XdapJsonWriter *);
 XR_FUNC XrXirStatus xdap_dispatch_send_prepared(XdapAdapter *,XdapJsonWriter *);
+/* Reserve the widest sequence before target mutation. Sending rewrites only
+ * that prepaid numeric field, without allocation or additional ledger work. */
+XR_FUNC XrXirStatus xdap_dispatch_stage_response(XdapAdapter *,const XdapRequest *,bool,const XdapJsonWriter *,const char *,XdapJsonWriter *);
+XR_FUNC XrXirStatus xdap_dispatch_send_staged(XdapAdapter *,XdapJsonWriter *);
 XR_FUNC XrXirStatus xdap_dispatch_event(XdapAdapter *,const char *,const XdapJsonWriter *);
 XR_FUNC XrXirStatus xdap_dispatch_argument(const XdapRequest *,const char *,uint32_t *);
 XR_FUNC XrXirStatus xdap_dispatch_number(const XdapRequest *,const char *,uint64_t,uint64_t *);
