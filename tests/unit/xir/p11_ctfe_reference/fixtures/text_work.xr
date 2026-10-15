@@ -1,0 +1,2 @@
+fn answer()->bool { var i=0; while(i<2000){ const a:Array<f64>=[3.5]; if(a.join("")!="3.5"){return false}; i=i+1 };return true }
+export fn run()->bool { return comptime answer() }

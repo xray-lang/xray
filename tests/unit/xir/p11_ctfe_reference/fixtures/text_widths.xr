@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<i8>=[-128]; const b:Array<u8>=[255]; const c:Array<i16>=[-32768]; const d:Array<u16>=[65535]; const e:Array<i32>=[-2147483648]; const f:Array<u32>=[4294967295]; return a.join("")=="-128" && b.join("")=="255" && c.join("")=="-32768" && d.join("")=="65535" && e.join("")=="-2147483648" && f.join("")=="4294967295" }
+export fn run()->bool { return comptime answer() }
