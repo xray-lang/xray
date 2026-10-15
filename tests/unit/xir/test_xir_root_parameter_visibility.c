@@ -34,6 +34,7 @@ typedef struct VisibilityFixture {
     XrXirTypeNode callable;
     XrXirTypes types;
     XrXirEffectParameter scalar_parameter;
+    XrXirRootTerm context_call;
     XrXirRootValueIdentity reference_value;
     XrXirFunctionEffectContract contracts[5];
     XrXirProvenance evidence;
@@ -81,6 +82,10 @@ static void visibility_fixture(VisibilityFixture *f, const XrXirCompileContext *
     f->contracts[3].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
     f->evidence=(XrXirProvenance){.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=f->contracts,.contract_count=4};
     f->module.provenance=&f->evidence;
+    if (mode==0 || mode==2) {
+        f->context_call=(XrXirRootTerm){XR_XIR_ROOT_TERM_CONTEXT_CALL,1};
+        f->contracts[0].formula=(XrXirRootFormula){.terms=&f->context_call,.term_count=1};
+    }
     if (mode==1) {
         f->callable_parameter=(XrXirCallableParameter){.type=XR_XIR_I64};
         f->callable=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&f->callable_parameter,
@@ -125,6 +130,11 @@ static uint32_t visibility_shape(const XrXirArtifact *artifact, unsigned mode) {
     const XrXirModule *source=xr_xir_compile_artifact_module(p->source);
     CHECK(source && source->stage==XR_XIR_CHECKED && source->declarations->module_count==2 &&
         source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE);
+    if (mode==0 || mode==2) {
+        const XrXirRootFormula *formula=&source->provenance->contracts[0].formula;
+        CHECK(!formula->constant_mask && formula->term_count==1 && formula->terms &&
+            formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && formula->terms[0].index==1);
+    }
     const XrXirInstruction *edge=&m->functions[0].instructions[mode==3?2:1];
     CHECK(edge->op==(mode==1?XR_XIR_FUNCTION_REF:mode==2?XR_XIR_INVOKE:XR_XIR_CALL));
     CHECK(edge->immediate>=0 && (uint64_t)edge->immediate<m->function_count);
