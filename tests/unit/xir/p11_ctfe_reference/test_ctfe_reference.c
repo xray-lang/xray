@@ -31,6 +31,58 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"equal_array_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"equal_array_int", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_float", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_string", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nested", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nullable", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_nullable_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_deep_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 1},
+    {"array_repeat", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_reserve", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_empty", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_nested", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_string", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_tuple", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_nullable", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_capacity", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_cell", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_internal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_bounds", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 2},
+    {"array_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"nullable_units", XR_XIR_UNIT, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_phi", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_tuple_field", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_string_equal", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"nullable_some", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_none", XR_XIR_UNIT, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_nested", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nullable_some_none", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_string", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nullable_tuple", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nullable_cell", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_internal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"nullable_equal", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_unwrap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime null unwrap", 2},
+    {"nullable_oversize", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 1},
+    {"nullable_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"nullable_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"float_tuple", XR_XIR_UNIT, 8, XR_XIR_OK, NULL, 0},
+    {"float_f64", XR_XIR_F64, INT64_C(0x400a000000000000), XR_XIR_OK, NULL, 0},
+    {"float_f32", XR_XIR_F32, INT64_C(0x3fe00000), XR_XIR_OK, NULL, 0},
+    {"float_ieee", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"float_convert", XR_XIR_I64, -42, XR_XIR_OK, NULL, 0},
+    {"float_round", XR_XIR_F32, INT64_C(0x4b800000), XR_XIR_OK, NULL, 0},
+    {"float_cell", XR_XIR_F64, INT64_C(0x4022000000000000), XR_XIR_OK, NULL, 0},
+    {"float_zero", XR_XIR_F64, INT64_MIN, XR_XIR_OK, NULL, 0},
+    {"float_range", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"float_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"float_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
     {"tuple_generic", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"tuple_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"tuple_nested", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
@@ -176,7 +228,7 @@ static void reference_accept(const XrXirCompileContext *context, XrXirSourceResu
         const XrXirInstruction *op = &body->instructions[i];
         CHECK(op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INDIRECT &&
             op->op != XR_XIR_FUNCTION_REF);
-        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : selected->type == XR_XIR_RUNE ? XR_XIR_CONST_RUNE : XR_XIR_CONST_INT) &&
+        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : selected->type == XR_XIR_RUNE ? XR_XIR_CONST_RUNE : xr_xir_float_bits(selected->type) ? XR_XIR_CONST_FLOAT : XR_XIR_CONST_INT) &&
             op->type == selected->type && op->immediate == selected->value) constant = true;
     }
     CHECK(constant);
@@ -486,6 +538,10 @@ static void reference_string_late_owner(void) {
 
 #include "xir_ctfe_string_read_cases.h"
 #include "xir_ctfe_tuple_cases.h"
+#include "xir_ctfe_float_cases.h"
+#include "xir_ctfe_nullable_cases.h"
+#include "xir_ctfe_array_cases.h"
+#include "xir_ctfe_equal_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -505,8 +561,14 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strncmp(selected->name,"tuple_",6) && selected->type==XR_XIR_UNIT) reference_tuple(&context,&source,selected);
+        if (!strcmp(selected->name,"equal_array_direct")) reference_owned_equal(&context,&source);
+        else if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
+        else if (!strcmp(selected->name,"nullable_direct")) reference_nullable_direct(&context,&source);
+        else if (!strncmp(selected->name,"nullable_",9) && selected->type==XR_XIR_UNIT) reference_nullable(&context,&source,selected);
+        else if (!strcmp(selected->name,"float_tuple")) reference_tuple(&context,&source,selected);
+        else if (!strncmp(selected->name,"tuple_",6) && selected->type==XR_XIR_UNIT) reference_tuple(&context,&source,selected);
         else if (selected->type==XR_XIR_STRING) reference_string(&context,&source,selected);
+        else if (!strcmp(selected->name, "float_direct")) reference_float_direct(&context,&source);
         else if (!strcmp(selected->name, "string_read_direct")) reference_string_read_direct(&context,&source);
         else if (!strcmp(selected->name, "cell_leaf")) reference_cell_leaf(&context,&source);
         else if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);
@@ -526,12 +588,19 @@ int main(int argc, char **argv) {
     XrCompileResourceStats spent = reference_stats(&context);
     CHECK(spent.live_bytes == before.live_bytes && spent.work >= before.work &&
         spent.allocated_bytes >= before.allocated_bytes);
+    if ((!strcmp(selected->name,"nullable_work") || !strcmp(selected->name,"equal_array_work"))) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(131072));
+        fprintf(stderr,"CTFE %s String comparison scan paid original ledger: work=%llu/128000000; failure releases every owner\n",
+            !strcmp(selected->name,"nullable_work")?"Nullable":"Array",(unsigned long long)spent.work);
+    }
     CHECK(spent.allocated_bytes <= reference_limits.allocated_bytes &&
         spent.peak_bytes <= reference_limits.live_bytes && spent.work <= reference_limits.work);
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
+    if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
+    if (!strcmp(selected->name,"array_string")) reference_array_late_owner();
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,

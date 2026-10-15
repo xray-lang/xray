@@ -62,7 +62,7 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpecte
     if (ctx->diagnostic.status!=XR_XIR_OK) return false;
     if (!unit_block && !source_plan_expression(ctx,child,expected,&value)) return false;
     if (!source_comptime_result_type(ctx,child,value.type))
-        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must be a closed primitive, String, Unit or immutable Tuple in this execution domain");
+        return source_fail(ctx,child,XR_XIR_BAD_TYPE,"comptime result must belong to an admitted closed value family");
     if (!source_work_units(ctx,child,sizeof(value.type)+sizeof(ctx->returned))) return false;
     ctx->functions[ctx->function].result=value.type;
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;

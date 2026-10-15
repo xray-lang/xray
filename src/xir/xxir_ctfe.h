@@ -24,7 +24,7 @@ typedef enum XrXirCtfeStatus {
     XR_XIR_CTFE_BUDGET, XR_XIR_CTFE_OUT_OF_MEMORY, XR_XIR_CTFE_STEP_LIMIT,
     XR_XIR_CTFE_FRAME_LIMIT, XR_XIR_CTFE_OUTPUT_LIMIT,
     XR_XIR_CTFE_DIVIDE_BY_ZERO, XR_XIR_CTFE_NUMERIC_RANGE,
-    XR_XIR_CTFE_DEPTH_LIMIT, XR_XIR_CTFE_NOT_SUPPORTED
+    XR_XIR_CTFE_DEPTH_LIMIT, XR_XIR_CTFE_NOT_SUPPORTED, XR_XIR_CTFE_NULL_UNWRAP, XR_XIR_CTFE_BOUNDS
 } XrXirCtfeStatus;
 typedef struct XrXirCtfeLimits { uint64_t steps, frame_bytes, output_bytes; } XrXirCtfeLimits;
 typedef struct XrXirCtfeRequest {
@@ -38,23 +38,34 @@ typedef struct XrXirCtfeRequest {
     XrXirCtfeLimits limits;
 } XrXirCtfeRequest;
 
+/* Dynamic marks a variable Array admission span. Pure arrays are primitive/
+ * String leaves or only Array wrappers, for which Value skips deep admission. */
+typedef struct XrXirCtfeTypeShape { uint64_t work;bool dynamic,pure_arrays; } XrXirCtfeTypeShape;
+/* Metadata cost only: no Value borrow, identity or execution authority. */
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_shape(const XrXirCompileContext *context,
+    const XrXirTypes *types,XrXirType type,XrXirCtfeTypeShape *output);
+
 /* Receive a closed compiler value family from its structurally verified pool.
  * This ledger-owned iterative admission accepts primitive/String/Unit and
- * immutable Tuples, rejects cycles and authority-bearing fields, and grants no
+ * immutable Tuples and Nullable values, rejects cycles and authority-bearing fields, and grants no
  * execution permission. Failure preserves all caller metadata. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirType type);
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function must have bool/integer/Rune/String inputs and results or Unit results, with
+ * ordinary function must have bool/integer/Float/Rune/String inputs and results or Unit results, with
  * frame-owned locals and private Cells of admitted value families. Immutable
- * Tuples of these values can be constructed/projected and exported by logical
- * field-byte sum; Unit fields occupy zero output bytes. External Tuple parameters
+ * Tuples and Nullable values can be constructed/projected and exported by logical
+ * active field-byte sum and canonical discriminants; Unit fields occupy zero
+ * output bytes. Nullable unwrap of None returns NULL_UNWRAP. External composite parameters
  * require bounded cross-arena receiving and currently reject. Private storage
  * in a bounded admitted opcode graph. Local
  * writes produce Unit without a result slot. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant
  * purity. Limits may deny all resources and must not exceed the fixed ceilings.
+ * Float operations use the existing integer-only IEEE kernel and prepay a
+ * fixed-width work reserve on the original ledger. Canonical f32/f64 values
+ * export four/eight target bytes; numeric conversion range errors preserve output.
  * Output must be canonical Unit. Failure preserves it, and consumed compiler
  * allocation/work is never refunded. Output bytes measure target logical storage,
  * not the host carrier size. No source syntax, calls or runtime fallback is implied. */

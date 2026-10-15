@@ -1,0 +1,3 @@
+fn same(a:f64?,b:f64?)->bool { return a==b }
+fn answer()->bool { const nan:f64?=0.0/0.0; const empty:f64?=null; const zero:f64?=0.0; const negative:f64?=-0.0; return !same(nan,nan) && same(empty,empty) && !same(empty,zero) && same(zero,negative) }
+export fn run()->bool { return comptime answer() }
