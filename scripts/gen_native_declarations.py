@@ -387,8 +387,12 @@ def render_type(root, stem):
                   'XR_NATIVE_TERM_' + simple_term(member.result, binder)]
         lines.append('    {' + ', '.join(fields) + '},')
     digest = hashlib.sha256(source.encode()).digest()
-    lines += ['};', f'static const XrNativeTypeDeclaration xr_native_{stem} = {{',
-              f'    {identity}, XR_NATIVE_DECLARATION_VALUE, {c_string(name)}, {c_string(binder)}, {int(bool(binder))},',
+    lines.append('};')
+    if binder:
+        lines.append(f'static const char *const xr_native_{stem}_type_parameters[] = {{{c_string(binder)}}};')
+    type_parameters = f'xr_native_{stem}_type_parameters' if binder else 'NULL'
+    lines += [f'static const XrNativeTypeDeclaration xr_native_{stem} = {{',
+              f'    {identity}, XR_NATIVE_DECLARATION_VALUE, {c_string(name)}, {type_parameters}, {int(bool(binder))},',
               f'    "stdlib/types/{stem}.xr", "xray-native:prelude/{name}", {{{{{", ".join(str(b) for b in digest)}}}}},',
               f'    {line}, {column}, xr_native_{stem}_members, {len(members)}', '};', '']
     return lines, header, members
@@ -445,8 +449,9 @@ def render_atomic_identities(root):
             'XR_NATIVE_RESULT_OWNERSHIP_' + ('UNIT' if index in (1,2,3) else 'OWNED'), params, str(len(parameters)),
             'XR_NATIVE_TERM_' + simple_term(result, 'T')]) + '},')
     digest = hashlib.sha256(source.encode()).digest()
-    output += ['};', 'static const XrNativeTypeDeclaration xr_native_atomic = {',
-        '    3, XR_NATIVE_DECLARATION_IDENTITY, "Atomic", "T", 1,',
+    output += ['};', 'static const char *const xr_native_atomic_type_parameters[] = {"T"};',
+        'static const XrNativeTypeDeclaration xr_native_atomic = {',
+        '    3, XR_NATIVE_DECLARATION_IDENTITY, "Atomic", xr_native_atomic_type_parameters, 1,',
         '    "stdlib/types/atomic.xr", "xray-native:prelude/Atomic", {{' + ', '.join(str(b) for b in digest) + '}},',
         '    2, 7, xr_native_atomic_members, 10', '};']
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8').replace('\r\n', '\n')
@@ -468,7 +473,7 @@ def render_atomic_identities(root):
             'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN','NULL','0','XR_NATIVE_TERM_UNADMITTED']) + '},')
     digest = hashlib.sha256(prelude.encode()).digest()
     output += ['};','static const XrNativeTypeDeclaration xr_native_ordering = {',
-        '    4, XR_NATIVE_DECLARATION_VALUE, "Ordering", "", 0,',
+        '    4, XR_NATIVE_DECLARATION_VALUE, "Ordering", NULL, 0,',
         '    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{' + ', '.join(str(b) for b in digest) + '}},',
         f'    {ordering_line}, {ordering_raw.index("Ordering")+1}, xr_native_ordering_members, 5', '};']
     return output
@@ -536,8 +541,9 @@ def render_task_identity(root):
             'XR_NATIVE_TERM_UNADMITTED']) + '},')
     number, raw = rows[14]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
-    output += ['};', 'static const XrNativeTypeDeclaration xr_native_task = {',
-        '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", "T", 1,',
+    output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T"};',
+        'static const XrNativeTypeDeclaration xr_native_task = {',
+        '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 1,',
         '    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
         f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, 6', '};']

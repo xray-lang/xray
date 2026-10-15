@@ -101,8 +101,9 @@ static const XrNativeMemberDeclaration xr_native_array_members[] = {
     {31, "entriesIterator", "() -> Iterator<(i64, T)>", "Iterator < ( i64 , T ) >", 69, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {32, "entries", "() -> Array<(i64, T)>", "Array < ( i64 , T ) >", 71, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_ARRAY_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT},
 };
+static const char *const xr_native_array_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_array = {
-    1, XR_NATIVE_DECLARATION_VALUE, "Array", "T", 1,
+    1, XR_NATIVE_DECLARATION_VALUE, "Array", xr_native_array_type_parameters, 1,
     "stdlib/types/array.xr", "xray-native:prelude/Array", {{172, 49, 89, 91, 56, 1, 238, 29, 243, 195, 243, 171, 111, 25, 3, 197, 246, 110, 240, 132, 240, 250, 1, 109, 193, 157, 36, 162, 250, 101, 50, 35}},
     3, 8, xr_native_array_members, 32
 };
@@ -180,7 +181,7 @@ static const XrNativeMemberDeclaration xr_native_string_members[] = {
     {19, "runes", "() -> Iterator<rune>", "Iterator < rune >", 36, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
 static const XrNativeTypeDeclaration xr_native_string = {
-    2, XR_NATIVE_DECLARATION_VALUE, "string", "", 0,
+    2, XR_NATIVE_DECLARATION_VALUE, "string", NULL, 0,
     "stdlib/types/string.xr", "xray-native:prelude/string", {{217, 102, 71, 112, 63, 93, 178, 223, 123, 60, 84, 208, 66, 45, 71, 183, 95, 187, 101, 170, 223, 80, 71, 137, 75, 202, 40, 37, 224, 104, 218, 87}},
     9, 8, xr_native_string_members, 19
 };
@@ -232,8 +233,9 @@ static const XrNativeMemberDeclaration xr_native_atomic_members[] = {
     {9, "toggle", "toggle(ordering?: Ordering) -> bool where T: AtomicBoolean", "bool", 11, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ATOMIC_TOGGLE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,unsupported,atomic_argument", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_atomic_parameters_8, 1, XR_NATIVE_TERM_BOOL},
     {10, "toString", "toString() -> string", "string", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ATOMIC_TO_STRING, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,unsupported", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING},
 };
+static const char *const xr_native_atomic_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_atomic = {
-    3, XR_NATIVE_DECLARATION_IDENTITY, "Atomic", "T", 1,
+    3, XR_NATIVE_DECLARATION_IDENTITY, "Atomic", xr_native_atomic_type_parameters, 1,
     "stdlib/types/atomic.xr", "xray-native:prelude/Atomic", {{77, 160, 232, 53, 95, 219, 185, 226, 42, 44, 197, 85, 47, 35, 77, 23, 27, 56, 147, 2, 206, 41, 105, 138, 25, 57, 158, 196, 11, 47, 103, 228}},
     2, 7, xr_native_atomic_members, 10
 };
@@ -245,7 +247,7 @@ static const XrNativeMemberDeclaration xr_native_ordering_members[] = {
     {5, "SeqCst", "SeqCst", "Ordering", 185, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_NO_HEAP, "none", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
 static const XrNativeTypeDeclaration xr_native_ordering = {
-    4, XR_NATIVE_DECLARATION_VALUE, "Ordering", "", 0,
+    4, XR_NATIVE_DECLARATION_VALUE, "Ordering", NULL, 0,
     "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140}},
     180, 18, xr_native_ordering_members, 5
 };
@@ -260,8 +262,9 @@ static const XrNativeMemberDeclaration xr_native_task_members[] = {
     {5, "awaitResult", "() -> TaskResult<T>", "TaskResult<T>", 24, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {6, "awaitTimeout", "(timeout: i64) -> TaskResult<T>", "TaskResult<T>", 25, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_task_parameters_5, 1, XR_NATIVE_TERM_UNADMITTED},
 };
+static const char *const xr_native_task_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_task = {
-    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", "T", 1,
+    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 1,
     "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{248, 92, 134, 139, 241, 43, 43, 144, 152, 142, 173, 92, 247, 70, 253, 142, 82, 45, 92, 45, 99, 152, 166, 72, 130, 180, 118, 55, 199, 45, 199, 166}},
     18, 7, xr_native_task_members, 6
 };

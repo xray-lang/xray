@@ -83,7 +83,8 @@ static bool native_declaration_validate(NativeDeclarationAdmission *admission,
     const XrNativeTypeDeclaration *declaration) {
     if (!native_work(admission, 1)) return false;
     if (!declaration ||
-        !declaration->name || !declaration->parameter_name || !declaration->source_path ||
+        !declaration->name || !declaration->source_path ||
+        (!!declaration->parameter_count != !!declaration->parameter_names) ||
         !declaration->identity || !declaration->members || !declaration->member_count ||
         declaration->member_count > 64) return false;
     const XrNativeTypeDeclaration *canonical = xr_native_declaration_by_id(declaration->id);
@@ -92,8 +93,11 @@ static bool native_declaration_validate(NativeDeclarationAdmission *admission,
         declaration->line != canonical->line || declaration->column != canonical->column ||
         !native_text_equal(admission, declaration->identity, canonical->identity) ||
         !native_text_equal(admission, declaration->source_path, canonical->source_path) ||
-        !native_text_equal(admission, declaration->name, canonical->name) ||
-        !native_text_equal(admission, declaration->parameter_name, canonical->parameter_name)) return false;
+        !native_text_equal(admission, declaration->name, canonical->name)) return false;
+    for (uint32_t p = 0; p < declaration->parameter_count; ++p) {
+        if (!native_work(admission, 1) || !native_text_equal(admission,
+            declaration->parameter_names[p], canonical->parameter_names[p])) return false;
+    }
     if (!native_fingerprint_equal(admission, &declaration->source_fingerprint, &canonical->source_fingerprint) ||
         declaration->member_count != canonical->member_count)
         return false;

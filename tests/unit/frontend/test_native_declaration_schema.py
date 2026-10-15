@@ -27,7 +27,8 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(header[:3], (1, 'Array', 'T'))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
-                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(schema.array_recipe_contracts('T')))
+                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY',
+                          'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
 
@@ -74,9 +75,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr',
-                          'reserve', 'concat', 'sort', 'fill', 'toString',
-                          'iterator', 'entriesIterator'})
+                         {'ptr', 'mutPtr', 'sort', 'toString', 'iterator', 'entriesIterator'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
         with self.assertRaises(ValueError):
@@ -253,7 +252,8 @@ class NativeDeclarations(unittest.TestCase):
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr',
+                             'stdlib/types/coroutine.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())

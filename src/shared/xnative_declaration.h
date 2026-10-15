@@ -99,7 +99,8 @@ typedef struct XrNativeMemberDeclaration {
 typedef struct XrNativeTypeDeclaration {
     uint32_t id;
     XrNativeDeclarationKind kind;
-    const char *name, *parameter_name;
+    const char *name;
+    const char *const *parameter_names;
     uint32_t parameter_count;
     const char *source_path, *identity;
     XrFingerprint source_fingerprint;

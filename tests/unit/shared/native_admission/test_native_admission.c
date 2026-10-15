@@ -21,7 +21,9 @@ static uint64_t expected_text(const char *text) { return 2*(strlen(text)+1); }
 static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
     uint64_t units=1+64;
     units+=expected_text(declaration->identity)+expected_text(declaration->source_path)+
-        expected_text(declaration->name)+expected_text(declaration->parameter_name);
+        expected_text(declaration->name);
+    for (uint32_t p=0;p<declaration->parameter_count;++p)
+        units+=1+expected_text(declaration->parameter_names[p]);
     for (uint32_t i=0;i<declaration->member_count;++i) {
         const XrNativeMemberDeclaration *member=&declaration->members[i];
         units+=1+expected_text(member->name)+expected_text(member->signature)+
@@ -32,11 +34,16 @@ static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
     return units;
 }
 static void complete_declarations(void) {
-    for (uint32_t id=1;id<=2;++id) {
+    static const char *const names[]={"Array","string","Atomic","Ordering","Task"};
+    const uint32_t members[]={32,19,10,5,6};
+    const uint32_t parameters[]={1,0,1,0,1};
+    for (uint32_t id=1;id<=5;++id) {
         const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(id);
         CHECK(declaration && xr_native_declaration_validate(declaration));
-        CHECK(!strcmp(declaration->name,id==1?"Array":"string"));
-        CHECK(declaration->member_count==(id==1?32u:19u));
+        CHECK(!strcmp(declaration->name,names[id-1]));
+        CHECK(declaration->member_count==members[id-1] && declaration->parameter_count==parameters[id-1]);
+        CHECK(parameters[id-1] ? declaration->parameter_names && !strcmp(declaration->parameter_names[0],"T") :
+            !declaration->parameter_names);
         uint64_t needed=expected_admission(declaration);
         for (uint64_t limit=0;limit<=needed;++limit) {
             Work ledger={limit,0,0};XrNativeDeclarationWork work={&ledger,charge};
@@ -52,8 +59,17 @@ static void complete_declarations(void) {
         ((unsigned char *)&mutation.source_fingerprint)[0]^=1;
         ledger=(Work){UINT64_MAX,0,0};
         CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
-        CHECK(ledger.used==3+expected_text(declaration->identity)+expected_text(declaration->source_path)+
-            expected_text(declaration->name)+expected_text(declaration->parameter_name));
+        uint64_t prefix=3+expected_text(declaration->identity)+expected_text(declaration->source_path)+expected_text(declaration->name);
+        for (uint32_t p=0;p<declaration->parameter_count;++p) prefix+=1+expected_text(declaration->parameter_names[p]);
+        CHECK(ledger.used==prefix);
+        mutation=*declaration; mutation.parameter_count=parameters[id-1]+1;
+        CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+        if (declaration->parameter_count) {
+            const char *wrong[]={"U"}; mutation=*declaration; mutation.parameter_names=wrong;
+            CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+            mutation=*declaration; mutation.parameter_names=NULL;
+            CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+        }
         printf("Native %s independently expected work %llu, every lower limit rejected\n",declaration->name,(unsigned long long)needed);
     }
 }
@@ -67,8 +83,11 @@ static void lookup_boundaries(void) {
     }
     Work ledger={4,0,0};XrNativeDeclarationWork work={&ledger,charge};
     const XrNativeTypeDeclaration *out=NULL;
+    CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
+    CHECK(!out && ledger.used==4 && ledger.calls==3);
+    ledger=(Work){10,0,0};
     CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_NOT_FOUND);
-    CHECK(!out && ledger.used==4 && ledger.calls==2);
+    CHECK(!out && ledger.used==10 && ledger.calls==5);
     ledger=(Work){0,0,0};
     CHECK(xr_native_declaration_find(&work,(const char *)(uintptr_t)1,&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
     CHECK(!out && !ledger.used && ledger.calls==1);
