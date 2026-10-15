@@ -62,6 +62,18 @@ add_test(NAME test_xir_cell_zero_edge_literals
 set_tests_properties(test_xir_cell_zero_edge_literals PROPERTIES
     LABELS "unit;xir;root-effects;compiler;ownership;cell-provenance" TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
 
+add_executable(test_xir_cell_raw_pass ${CMAKE_CURRENT_LIST_DIR}/test_xir_cell_raw_pass.c)
+target_include_directories(test_xir_cell_raw_pass PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_cell_raw_pass PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_cell_raw_pass PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_cell_raw_pass PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_cell_raw_pass COMMAND test_xir_cell_raw_pass)
+set_tests_properties(test_xir_cell_raw_pass PROPERTIES
+    LABELS "unit;xir;compiler;ownership;cell-provenance;physical-reader" TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
 # These literals remain reachable before the complete helper cost gate.
 add_test(NAME test_xir_root_conditional_class_rows
     COMMAND test_xir_root_conditional_helpers --class-rows)

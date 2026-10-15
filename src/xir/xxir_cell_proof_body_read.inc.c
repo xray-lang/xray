@@ -181,3 +181,55 @@ static XrXirStatus cell_proof_matches(const XrXirCompileContext *context,
     }
     return XR_XIR_OK;
 }
+
+/* The physical borrow ends with this function walk. Only the exact raw
+ * adapter family can select it; custom callbacks retain every original read.
+ * Each walk binds the current head anew and retains no decoded fact. */
+static bool cell_proof_raw_pass(CellProofBuild *build,uint32_t f,
+    const XrXirCellProofBodyHead *head,const XrXirInstruction **output) {
+    *output=NULL;
+    if (!cell_proof_work(build,1)) return false;
+    const XrXirCellProofBodyRead *read=build->body;
+    if (read->head!=cell_proof_raw_head || read->instruction!=cell_proof_raw_instruction ||
+        read->type!=cell_proof_raw_type || read->shape!=cell_proof_raw_shape || read->span || read->range)
+        return true;
+    const XrXirModule *module=read->owner;
+    if (!module || !head || f>=module->function_count || !module->functions)
+        return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    XirMetadataDomain actual=xir_metadata_domain_from_module(module);
+    if (!cell_proof_work(build,20+sizeof(*output))) return false;
+    if (actual.types!=read->domain.types || actual.declarations!=read->domain.declarations ||
+        actual.generics!=read->domain.generics || actual.defaults!=read->domain.defaults ||
+        actual.function_count!=read->domain.function_count || read->resources!=build->context->resources)
+        return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    const XrXirFunction *body=&module->functions[f];
+    if (body->parameters!=head->parameters || body->parameter_count!=head->parameter_count ||
+        body->result!=head->result || body->instruction_count!=head->instruction_count ||
+        body->operands!=head->operands || body->operand_count!=head->operand_count ||
+        (body->instruction_count && !body->instructions))
+        return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    *output=body->instructions;return true;
+}
+/* Callers use only the current head's ascending bounded loop. No allocation
+ * or source mutation can grow its physical instruction array in that walk. */
+static const XrXirInstruction *cell_proof_pass_instruction(CellProofBuild *build,
+    uint32_t f,uint32_t i,const XrXirInstruction *raw,XrXirInstruction *storage) {
+    if (!cell_proof_work(build,1)) return NULL;
+    if (!raw) return cell_proof_instruction(build,f,i,storage);
+    if (!cell_proof_work(build,sizeof(const XrXirInstruction *))) return NULL;
+    const XrXirInstruction *op=&raw[i];
+    if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) {
+        cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
+    }
+    return op;
+}
+static bool cell_proof_pass_shape(CellProofBuild *build,uint32_t f,uint32_t i,
+    const XrXirInstruction *raw,XrXirCellProofInstructionShape *output) {
+    if (!cell_proof_work(build,1)) return false;
+    if (!raw) return cell_proof_shape(build,f,i,output);
+    if (!cell_proof_work(build,2+sizeof(XrXirOp)+sizeof(*output))) return false;
+    XrXirOp opcode=raw[i].op;
+    if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT)
+        return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    *output=(XrXirCellProofInstructionShape){opcode,raw[i].type};return true;
+}

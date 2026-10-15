@@ -299,6 +299,8 @@ static bool cell_proof_inventory(CellProofBuild *build) {
                     !cell_proof_inventory_run(build,f,function,&run,&tracked)) return false;
             }
         } else {
+            const XrXirInstruction *raw=NULL;
+            if (!cell_proof_raw_pass(build,f,&head,&raw)) return false;
             for (uint32_t v = 0; v < (uint32_t)count; ++v) {
                 if (!cell_proof_work(build,3)) return false;
                 XrXirType type=cell_proof_type(build,f,v);
@@ -307,7 +309,7 @@ static bool cell_proof_inventory(CellProofBuild *build) {
                 const XrXirCellProofInstructionShape *instruction=NULL;
                 if (v>=function->parameter_count) {
                     if (!cell_proof_work(build,sizeof(shape))) return false;
-                    if (!cell_proof_shape(build,f,v-function->parameter_count,&shape)) return false;
+                    if (!cell_proof_pass_shape(build,f,v-function->parameter_count,raw,&shape)) return false;
                     XrXirType independent=cell_proof_type(build,f,v);
                     if (build->status!=XR_XIR_OK) return false;
                     if (type!=independent)
@@ -393,9 +395,11 @@ static bool cell_proof_roles(CellProofBuild *build) {
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
         const XrXirCellProofBodyHead *function=&head;
         if (!build->body->range) {
+            const XrXirInstruction *raw=NULL;
+            if (!cell_proof_raw_pass(build,f,&head,&raw)) return false;
             for (uint32_t i=0;i<function->instruction_count;++i) {
                 if (!cell_proof_work(build,1)) return false;
-                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_instruction(build,f,i,&operation);
+                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_pass_instruction(build,f,i,raw,&operation);
                 if (!op || !cell_proof_role_row(build,f,i,op)) return false;
             }
             continue;
@@ -715,9 +719,11 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
     for (uint32_t f=0;f<build->body->domain.function_count;++f) {
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
         if (!build->body->range) {
+            const XrXirInstruction *raw=NULL;
+            if (!cell_proof_raw_pass(build,f,&head,&raw)) return false;
             for (uint32_t i=0;i<head.instruction_count;++i) {
                 if (!cell_proof_work(build,3)) return false;
-                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_instruction(build,f,i,&operation);
+                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_pass_instruction(build,f,i,raw,&operation);
                 if (!op || !cell_proof_edge_row(build,f,i,&head,op)) return false;
             }
             continue;
@@ -890,9 +896,11 @@ static bool cell_proof_validate(CellProofBuild *build) {
                 return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_VALUE);
         }
         if (!build->body->range) {
+            const XrXirInstruction *raw=NULL;
+            if (!cell_proof_raw_pass(build,f,&head,&raw)) return false;
             for (uint32_t i=0;i<function->instruction_count;++i) {
                 if (!cell_proof_work(build,1)) return false;
-                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_instruction(build,f,i,&operation);
+                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_pass_instruction(build,f,i,raw,&operation);
                 if (!op || !cell_proof_validate_row(build,f,i,function,op)) return false;
             }
             continue;
