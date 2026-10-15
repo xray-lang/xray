@@ -550,6 +550,8 @@ Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特�
 
 实际Source接收映射与已封装Program证明共同确定准确存储类型根；只有这些根及其组成类型可接收已有类型身份。类型图检查核对这种真实对应，不以同名、相同外形或相同编号建立身份。接收类型池保留出生类型池，形成无环拥有链；共享或已使用的目标不能修改，失败不发布半成品。值及紧凑存储恢复保留对象的实际出生类型和类型池，不把旧句柄改标为当前类型。身份对应不授予Domain、模块发布、borrow、构造或调用权限。
 
+Array的长度、容量、索引读取、reserve、索引写入与追加在接收身份核对后，使用实际数据拥有类型池中的元素类型和布局。只读ROOT_SLOT路径继续指向真实出生槽，并检查原发布状态。路径保存每条数据边的类型池，用准确身份核对静态container与实际container；紧凑叶的打包、解包、图扫描和释放均恢复真实对象头。已有Error抹除视图继续保留Error标签与实际enum拥有者，不能恢复成具体enum标签。接收类型池中新建的Array可以存入出生池的紧凑元素，共享子树的写入仍先复制，副本保持独立。上述类型坐标转换不改变对象头，也不代替Domain或借用权限。
+
 Cell读取与写入使用实际出生存储；跨池写入的身份查找在原工作量账本内有界计费，实际存储操作仍检查原Domain和借用权限。普通旧Cell副作用在后继候选失败后保留；只撤销候选的新绑定和拥有存储。I64/String与Cell<i64>历史、嵌套Cell/Array身份和写回已验证；真实Source的旧Cell读写也覆盖VM、native及两个混合方向。Class/Array全部操作、闭包/调用绑定、其他历史类型根与完整G2/G3、P14协调及全部资源/安全门仍未完成。
 
 <!-- /xr-spec:cn -->
@@ -1212,6 +1214,8 @@ Runtime receiving first binds a prepared Source record to an actual sealed Progr
 The receiving transaction owns budgeted module and slot routes to actual birth generations and flattens routes across generations. It inherits readiness only from an actually initialized birth module and skips that completed initializer; it neither copies old values nor substitutes empty initializers. Reads still require current static module permission, actual birth-slot publication and ordinary value admission. Received slots cannot be published again.
 
 The actual Source receiving map and sealed Program proofs establish exact stored-type roots. Only those roots and their component types receive existing type identities. Type-graph checks validate this real correspondence; equal names, shapes or numeric identifiers never establish identity. A receiving type arena retains its birth arena in an acyclic ownership chain. Shared or already used targets cannot be changed, and failure publishes no partial binding. Values and compact-storage recovery retain the object's actual birth type and arena rather than relabeling old handles. Type identity grants no Domain, module-publication, borrow, construction or call permission.
+
+Array length, capacity, indexed reads, reserve, indexed writes and push use the actual data owner arena for element types and layouts after receiving-identity validation. Read-only ROOT_SLOT paths still refer to actual birth slots and check their original publication state. Paths retain the arena of each data edge and match static and actual container types by exact identity. Compact-leaf packing, unpacking, graph scans and destruction recover actual object headers. Existing erased Error views keep their Error tag and actual enum owner rather than becoming concrete enum handles. An Array allocated in the receiving arena can occupy a birth-arena compact element; writes to shared subtrees still copy before mutation and preserve independent copies. These type-coordinate changes never alter object headers or replace Domain or loan authority.
 
 Cell reads and writes use actual birth storage. Cross-arena write lookup charges a bounded walk on the original work ledger; the storage operation still checks its actual Domain and loan authority. Ordinary old-Cell side effects survive a later candidate failure; only new candidate bindings and owned storage are revoked. I64/String and Cell<i64> history, nested Cell/Array identities and writeback have been verified. Real Source Cell reads and writes cover VM, native and both mixed directions. Complete Class/Array operations, closure/call binding, other historical type roots, full G2/G3, P14 coordination and all resource and safety gates remain unfinished.
 
