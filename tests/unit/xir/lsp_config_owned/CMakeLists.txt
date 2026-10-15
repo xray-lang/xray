@@ -1,0 +1,21 @@
+if(TARGET test_lsp_source_config)
+    return()
+endif()
+add_executable(test_lsp_source_config "${CMAKE_CURRENT_LIST_DIR}/test_config.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_ignore.c")
+target_link_libraries(test_lsp_source_config PRIVATE xray_lsp_document_open)
+if(WIN32)
+    target_link_libraries(test_lsp_source_config PRIVATE bcrypt)
+endif()
+target_include_directories(test_lsp_source_config PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+target_compile_features(test_lsp_source_config PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_lsp_source_config PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_source_config PRIVATE -Wall -Wextra -Werror)
+endif()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_lsp_source_config COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_config.py" "$<TARGET_FILE:test_lsp_source_config>")
+set_tests_properties(test_lsp_source_config PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE
+    LABELS "unit;lsp;ownership;metadata;allocation")

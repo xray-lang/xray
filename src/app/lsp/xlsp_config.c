@@ -12,188 +12,66 @@
  *   and managing workspace ignore patterns for file scanning.
  */
 
-#include "xlsp_server.h"
-#include "xlsp_utils.h"
+#include "xlsp_source_config.h"
+#include "../../api/xsource_compile.h"
 #include "../../base/xmalloc.h"
-#include "../../base/xtoml.h"
-#include "../../base/xfileio.h"
-#include <stdlib.h>
+#include <limits.h>
 #include <string.h>
-#include <stdio.h>
 
 // Check if pattern contains glob wildcards
 static bool pattern_is_glob(const char *pattern) {
     return strchr(pattern, '*') != NULL || strchr(pattern, '?') != NULL;
 }
 
-// Add an ignore pattern to config
-void xlsp_config_add_ignore(XlspConfig *config, const char *pattern, bool is_dir_only) {
-    if (!config || !pattern)
+XR_FUNC void xlsp_config_add_ignore(XlspConfig *config, const char *pattern, bool is_dir_only) {
+    if (!config || !pattern || config->ignore_pattern_count < 0 ||
+        config->ignore_pattern_capacity < config->ignore_pattern_count ||
+        (config->ignore_pattern_count && !config->ignore_patterns) ||
+        config->ignore_pattern_count == INT_MAX)
         return;
-
-    // Expand capacity if needed
-    if (config->ignore_pattern_count >= config->ignore_pattern_capacity) {
-        int new_cap =
-            config->ignore_pattern_capacity == 0 ? 16 : config->ignore_pattern_capacity * 2;
-        XlspIgnorePattern *new_patterns =
-            xr_realloc(config->ignore_patterns, new_cap * sizeof(XlspIgnorePattern));
-        if (!new_patterns)
-            return;
-        config->ignore_patterns = new_patterns;
-        config->ignore_pattern_capacity = new_cap;
+    char *copy = xr_strdup(pattern);
+    if (!copy) return;
+    if (config->ignore_pattern_count == config->ignore_pattern_capacity) {
+        int capacity = config->ignore_pattern_capacity;
+        int new_capacity = !capacity ? 16 : capacity > INT_MAX / 2 ? INT_MAX : capacity * 2;
+        if ((size_t)new_capacity > SIZE_MAX / sizeof(XlspIgnorePattern)) {
+            xr_free(copy); return;
+        }
+        XlspIgnorePattern *patterns = xr_realloc(config->ignore_patterns,
+            (size_t)new_capacity * sizeof(*patterns));
+        if (!patterns) { xr_free(copy); return; }
+        config->ignore_patterns = patterns;
+        config->ignore_pattern_capacity = new_capacity;
     }
-
-    XlspIgnorePattern *p = &config->ignore_patterns[config->ignore_pattern_count++];
-    p->pattern = xr_strdup(pattern);
-    p->is_glob = pattern_is_glob(pattern);
-    p->is_dir_only = is_dir_only;
+    config->ignore_patterns[config->ignore_pattern_count++] =
+        (XlspIgnorePattern){copy, pattern_is_glob(pattern), is_dir_only};
 }
 
-// Free all ignore patterns
-void xlsp_config_free_ignores(XlspConfig *config) {
-    if (!config || !config->ignore_patterns)
-        return;
-
-    for (int i = 0; i < config->ignore_pattern_count; i++) {
+XR_FUNC void xlsp_config_free_ignores(XlspConfig *config) {
+    if (!config) return;
+    for (int i = 0; i < config->ignore_pattern_count; ++i)
         xr_free(config->ignore_patterns[i].pattern);
-    }
     xr_free(config->ignore_patterns);
     config->ignore_patterns = NULL;
-    config->ignore_pattern_count = 0;
-    config->ignore_pattern_capacity = 0;
+    config->ignore_pattern_count = config->ignore_pattern_capacity = 0;
 }
 
-// Load default ignore patterns (currently empty - user controls all ignore rules)
-// Note: Hidden files/dirs (starting with '.') are always ignored in xlsp_config_should_ignore()
-void xlsp_config_load_defaults(XlspConfig *config) {
-    if (!config)
-        return;
-    // No default patterns - user has full control via xray.toml [lsp] section
+// Hidden names are handled by the shared ignore matcher; other rules are explicit.
+XR_FUNC void xlsp_config_load_defaults(XlspConfig *config) {
+    (void)config;
 }
 
-// ============================================================================
-
-// Load configuration from xray.toml [lsp] section
-bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
-    if (!config || !root_path)
+XR_FUNC bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
+    if (!config || !root_path) return false;
+    XrCompileResourceLimits resources_limits = xr_source_compile_default_resource_limits();
+    XrTomlParseLimits parse_limits = xr_source_compile_default_manifest_limits();
+    XrCompileResources *resources = NULL;
+    if (xr_compile_resources_new(&resources_limits, &resources) != XR_COMPILE_RESOURCE_OK)
         return false;
-
-    // Build path to xray.toml
-    char toml_path[XLSP_MAX_PATH];
-    snprintf(toml_path, sizeof(toml_path), "%s/xray.toml", root_path);
-
-    size_t content_size;
-    char *content = xr_file_read_all(toml_path, "r", &content_size);
-    if (!content)
-        return false;
-
-    XrTomlValue *root = xtoml_parse(content, content_size);
-    xr_free(content);
-    if (!root)
-        return false;
-
-    XrTomlValue *lsp = xtoml_get_table(root, "lsp");
-    if (!lsp) {
-        xtoml_free(root);
-        return false;
-    }
-
-    // --- ignore = [...] array ---
-    XrTomlValue *ignore_arr = xtoml_get_array(lsp, "ignore");
-    if (ignore_arr) {
-        int n = xtoml_array_len(ignore_arr);
-        for (int i = 0; i < n; i++) {
-            XrTomlValue *elem = xtoml_array_get(ignore_arr, i);
-            if (!elem || !xtoml_is_string(elem))
-                continue;
-            const char *pat = elem->as.string;
-            size_t len = strlen(pat);
-            if (len == 0)
-                continue;
-
-            // Determine if pattern is directory-only
-            bool is_dir =
-                (strchr(pat, '.') == NULL && strchr(pat, '*') == NULL) || (pat[len - 1] == '/');
-
-            if (is_dir && pat[len - 1] == '/') {
-                // Strip trailing '/'
-                char *trimmed = xr_strdup(pat);
-                if (trimmed) {
-                    trimmed[len - 1] = '\0';
-                    xlsp_config_add_ignore(config, trimmed, true);
-                    xr_free(trimmed);
-                }
-            } else {
-                xlsp_config_add_ignore(config, pat, is_dir);
-            }
-        }
-    }
-
-    // --- Scalar config values ---
-    const char *sval;
-
-    // Logging
-    sval = xtoml_get_string(lsp, "log_path");
-    if (sval) {
-        if (config->log_path)
-            xr_free(config->log_path);
-        config->log_path = xr_strdup(sval);
-    }
-    XrTomlValue *v;
-    v = xtoml_get(lsp, "log_to_stderr");
-    if (v && xtoml_is_bool(v))
-        config->log_to_stderr = v->as.boolean;
-
-    // Diagnostics
-    v = xtoml_get(lsp, "diagnostics_enabled");
-    if (v && xtoml_is_bool(v))
-        config->diagnostics_enabled = v->as.boolean;
-    v = xtoml_get(lsp, "diagnostic_debounce_ms");
-    if (v && xtoml_is_integer(v))
-        config->diagnostic_debounce_ms = (int) v->as.integer;
-
-    // Completion
-    v = xtoml_get(lsp, "completion_max_items");
-    if (v && xtoml_is_integer(v))
-        config->completion_max_items = (int) v->as.integer;
-
-    // Formatting
-    v = xtoml_get(lsp, "format_tab_size");
-    if (v && xtoml_is_integer(v))
-        config->format_tab_size = (int) v->as.integer;
-    v = xtoml_get(lsp, "format_insert_spaces");
-    if (v && xtoml_is_bool(v))
-        config->format_insert_spaces = v->as.boolean;
-    v = xtoml_get(lsp, "format_align_branch_arrows");
-    if (v && xtoml_is_bool(v))
-        config->format_align_branch_arrows = v->as.boolean;
-    v = xtoml_get(lsp, "format_max_line_length");
-    if (v && xtoml_is_integer(v))
-        config->format_max_line_length = (int) v->as.integer;
-    v = xtoml_get(lsp, "format_align_enum_values");
-    if (v && xtoml_is_bool(v))
-        config->format_align_enum_values = v->as.boolean;
-    v = xtoml_get(lsp, "format_align_struct_fields");
-    if (v && xtoml_is_bool(v))
-        config->format_align_struct_fields = v->as.boolean;
-    v = xtoml_get(lsp, "format_align_trailing_comments");
-    if (v && xtoml_is_bool(v))
-        config->format_align_trailing_comments = v->as.boolean;
-    v = xtoml_get(lsp, "format_wrap_long_lines");
-    if (v && xtoml_is_bool(v))
-        config->format_wrap_long_lines = v->as.boolean;
-    v = xtoml_get(lsp, "format_multiline_trailing_comma");
-    if (v && xtoml_is_bool(v))
-        config->format_multiline_trailing_comma = v->as.boolean;
-
-    // Inlay hints
-    v = xtoml_get(lsp, "inlay_hints_type_annotations");
-    if (v && xtoml_is_bool(v))
-        config->inlay_hints_type_annotations = v->as.boolean;
-    v = xtoml_get(lsp, "inlay_hints_parameter_names");
-    if (v && xtoml_is_bool(v))
-        config->inlay_hints_parameter_names = v->as.boolean;
-
-    xtoml_free(root);
-    return true;
+    XlspSourceConfig *owner = NULL;
+    XrXirStatus status = xlsp_source_config_read(resources, root_path, config, &parse_limits, &owner);
+    if (status == XR_XIR_OK) status = xlsp_source_config_apply(owner, config);
+    xlsp_source_config_free(owner);
+    xr_compile_resources_release(resources);
+    return status == XR_XIR_OK;
 }
