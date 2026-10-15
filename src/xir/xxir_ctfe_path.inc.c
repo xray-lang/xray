@@ -107,7 +107,8 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
         const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&run->function->operands[op->args[0]]:op->args;
         XrXirValue incoming=ctfe_array_operand(run,ids[op->op==XR_XIR_ARRAY_SET?2:1]);
         if (object) bounded.forbidden_class=cell;else bounded.forbidden_cell=cell;
-        status=ctfe_admission_work(run,&bounded,&incoming);if (status!=XR_XIR_CTFE_OK) goto done;
+        status=projected?ctfe_projection_incoming_work(run,&bounded,&cell,&incoming):ctfe_admission_work(run,&bounded,&incoming);
+        if (status!=XR_XIR_CTFE_OK) goto done;
         if (op->op==XR_XIR_ARRAY_PUSH) {
             int64_t capacity=0;status=ctfe_value_status(xr_xir_array_capacity(&target,&admission,&capacity));
             if (status!=XR_XIR_CTFE_OK) goto done;

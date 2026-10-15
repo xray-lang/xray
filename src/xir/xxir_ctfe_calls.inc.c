@@ -12,7 +12,7 @@
  */
 typedef struct CtfeCellLoan {
     XrXirValue value;XrXirCellLoan loan;
-    uint64_t root_work,root_shape;bool projected;
+    uint64_t root_work,root_shape;bool projected,variable_receiving;
 } CtfeCellLoan;
 typedef struct CtfeCallFrame {
     struct CtfeCallFrame *parent;

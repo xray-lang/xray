@@ -38,6 +38,12 @@ static const char source_comptime_class_text[]=
     "fn inc(x:ref i64){defer{x=x+2}}\n"
     "fn answer()->i64{const b=Box([40]);inc(ref b.items[0]);return b.items[0]}\n"
     "export fn run()->i64{return comptime answer()}\n";
+static const char source_comptime_dynamic_loan_text[]=
+    "class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}\n"
+    "fn add(xs:ref Array<(i64,i64)>){xs.push((1,1))}\n"
+    "fn middle(xs:ref Array<(i64,i64)>){add(ref xs);xs[1]=(20,20);add(ref xs)}\n"
+    "fn answer()->i64{const b=Box([(0,0)]);middle(ref b.items);return b.items[1].0+b.items[1].1+b.items[2].0+b.items[2].1}\n"
+    "export fn run()->i64{return comptime answer()}\n";
 static const char source_comptime_panic_text[]=
     "fn fail(x:ref i64)->i64{defer{x=x+2};assert(false,\"ab\");return 0}\n"
     "fn answer()->i64{var xs=[40];try{return fail(ref xs[0])}catch panic(p){return p.code==445 && p.message==\"ab\" ? xs[0] : 0}}\n"
@@ -177,6 +183,10 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--dynamic-loan")) {
+        source_comptime_test_answer(source_comptime_dynamic_loan_text,XR_XIR_I64,42);
+        fprintf(stderr,"Source growing Class data loan/independent recipe complete Checked/query normal physical0\n");return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--output")) {
         source_comptime_test_answer(source_comptime_output_text,XR_XIR_I64,42);
         fprintf(stderr,"Source original Fibonacci10/pair16 output policy2 independent recipes complete Checked/query normal physical0\n");return 0;
@@ -212,7 +222,7 @@ int main(int argc,char **argv) {
         source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&report);CHECK(report.status==XR_XIR_OK);
         fprintf(stderr,"Source nominal independent recipe complete Checked/query producer normal physical0\n");return 0;
     }
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources") || !strcmp(argv[1],"--lexical-resources") || !strcmp(argv[1],"--function-resources") || !strcmp(argv[1],"--cleanup-resources") || !strcmp(argv[1],"--projection-resources") || !strcmp(argv[1],"--error-resources") || !strcmp(argv[1],"--panic-resources") || !strcmp(argv[1],"--class-resources") || !strcmp(argv[1],"--output-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources") || !strcmp(argv[1],"--lexical-resources") || !strcmp(argv[1],"--function-resources") || !strcmp(argv[1],"--cleanup-resources") || !strcmp(argv[1],"--projection-resources") || !strcmp(argv[1],"--error-resources") || !strcmp(argv[1],"--panic-resources") || !strcmp(argv[1],"--class-resources") || !strcmp(argv[1],"--output-resources") || !strcmp(argv[1],"--dynamic-loan-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -300,6 +310,10 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--panic-resources")) {
             source_comptime_resource_text=source_comptime_panic_text;
             fprintf(stderr,"Source panic/PanicInfo/assertion message/projected-ref cleanup whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--dynamic-loan-resources")) {
+            source_comptime_resource_text=source_comptime_dynamic_loan_text;
+            fprintf(stderr,"Source growing Class data loan whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }

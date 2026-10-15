@@ -36,7 +36,7 @@ static XrXirCtfeStatus ctfe_class_loan_begin(ScalarRun *run,CtfeOwnedState *stat
     return status;
 }
 static XrXirCtfeStatus ctfe_class_projection_type(ScalarRun *run,CtfeOwnedState *state,
-    const XrXirValue *root,XrXirType leaf) {
+    const XrXirValue *root,XrXirType leaf,bool *variable) {
     const XrXirTypeNode *node=xr_xir_type_node(run->module->types,(XrXirType)root->type);
     if (!node || !xr_xir_type_is_class(run->module->types,(XrXirType)root->type)) return XR_XIR_CTFE_BAD_ARTIFACT;
     for (uint32_t i=0;i<node->nominal.field_count;++i) {
@@ -47,8 +47,8 @@ static XrXirCtfeStatus ctfe_class_projection_type(ScalarRun *run,CtfeOwnedState 
     XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(state->context,run->module->types,leaf,true,&shape);
     if (status!=XR_XIR_CTFE_OK) return status;
     /* A narrow loan cannot observe a mutable identity elsewhere in its root.
-     * Static leaf receiving also keeps the prepaid root bound stable. */
-    return shape.dynamic?XR_XIR_CTFE_NOT_SUPPORTED:XR_XIR_CTFE_OK;
+     * Data-only dynamic leaves instead update every live parent reserve. */
+    *variable=shape.dynamic;return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_class_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];

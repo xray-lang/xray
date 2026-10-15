@@ -1,0 +1,5 @@
+class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}
+fn add(xs:ref Array<(i64,i64)>){xs.push((1,1))}
+fn middle(xs:ref Array<(i64,i64)>){add(ref xs);xs[1]=(20,20);add(ref xs)}
+fn answer()->i64{const b=Box([(0,0)]);middle(ref b.items);return b.items[1].0+b.items[1].1+b.items[2].0+b.items[2].1}
+export fn run()->i64{return comptime answer()}

@@ -127,3 +127,10 @@ set_tests_properties(test_xir_source_comptime_output PROPERTIES
 add_test(NAME test_xir_source_comptime_output_resources COMMAND test_xir_source_comptime --output-resources)
 set_tests_properties(test_xir_source_comptime_output_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;output" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_dynamic_loan COMMAND test_xir_source_comptime --dynamic-loan)
+set_tests_properties(test_xir_source_comptime_dynamic_loan PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;class" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_dynamic_loan_resources COMMAND test_xir_source_comptime --dynamic-loan-resources)
+set_tests_properties(test_xir_source_comptime_dynamic_loan_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;class" TIMEOUT 600 RUN_SERIAL TRUE)

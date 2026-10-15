@@ -31,6 +31,18 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"class_ref_dynamic_fields", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
     {"class_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -43,7 +55,7 @@ static const CtfeReferenceCase reference_cases[] = {
     {"class_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_grow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
-    {"class_ref_dynamic_gap", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"class_ref_dynamic_gap", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_deep_ref_gap", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
     {"class_return_string", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
     {"class_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -703,7 +715,7 @@ static void reference_string(const XrXirCompileContext *context,XrXirSourceResul
     const char *expected=!strcmp(selected->name,"string_overflow")?"123456789":!strcmp(selected->name,"text_oversize")?"false,false":!strcmp(selected->name,"text_bool_false")?"false":!strcmp(selected->name,"text_cell")?"3.5":!strcmp(selected->name,"text_integer")?"-42,7":!strcmp(selected->name,"text_bool")?"true":
         !strcmp(selected->name,"text_rune")?"\0\xf0\x9f\x98\x80":!strcmp(selected->name,"text_float")?"3.5,-0.0":
         !strcmp(selected->name,"array_methods_join")?"a\0b|z":!strcmp(selected->name,"string_nul")?"a\0b":
-        !strcmp(selected->name,"string_empty")?"":(!strcmp(selected->name,"panic_owning") || !strcmp(selected->name,"class_return_string"))?"ab":"abcd";
+        !strcmp(selected->name,"string_empty")?"":(!strcmp(selected->name,"panic_owning") || !strcmp(selected->name,"class_return_string") || !strcmp(selected->name,"class_ref_dynamic_owning"))?"ab":"abcd";
     size_t length=(size_t)selected->value;
     const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
     const XrXirFunction *body=&module->functions[reference_run_function(module)];bool literal=false;
@@ -788,6 +800,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_panic_cases.h"
 #include "xir_ctfe_panic_abort_cases.h"
 #include "xir_ctfe_class_cases.h"
+#include "xir_ctfe_dynamic_loan_cases.h"
 #include "xir_ctfe_output_cases.h"
 
 int main(int argc, char **argv) {
@@ -811,7 +824,10 @@ int main(int argc, char **argv) {
         if (!strncmp(selected->name,"output_",7)) reference_output(&context,&source,selected);
         else if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
         else if (!strcmp(selected->name,"class_direct")) reference_class_direct(&context,&source);
+        else if (!strcmp(selected->name,"class_ref_dynamic_direct")) reference_dynamic_direct(&context,&source,false);
+        else if (!strcmp(selected->name,"class_ref_dynamic_owning_direct")) reference_dynamic_direct(&context,&source,true);
         else if (!strcmp(selected->name,"class_owning_direct")) reference_class_owning(&context,&source);
+        else if (!strcmp(selected->name,"class_ref_dynamic_owning")) reference_dynamic_source_string(&context,&source);
         else if (!strcmp(selected->name,"class_cycle_direct")) reference_class_cycle(&context,&source);
         else if (!strcmp(selected->name,"class_work_direct")) reference_class_work(&context,&source);
         else if (!strcmp(selected->name,"class_authority_direct")) reference_class_authority(&context,&source);
@@ -883,6 +899,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
     if (!strcmp(selected->name,"class_owning_direct")) reference_class_last_owner();
+    if (!strcmp(selected->name,"class_ref_dynamic_owning_direct")) reference_dynamic_last_owner();
     if (!strcmp(selected->name,"output_fibonacci_direct") || !strcmp(selected->name,"output_pair_direct")) reference_output_last_owner(selected);
     if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();
     if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_last_owner();
