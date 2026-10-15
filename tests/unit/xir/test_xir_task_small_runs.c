@@ -11,6 +11,7 @@
 #undef main
 #include "xir_primitive_root_run_cases.h"
 #include "xir_integer_error_run_cases.h"
+#include "xir_error_indirect_run_cases.h"
 
 static void small_runs_reject(const EffectBodyRead *read,const EffectBodyFunction *function,uint32_t damaged) {
     for (uint32_t i=0;i<function->instruction_count;++i) {
@@ -105,9 +106,10 @@ int main(void) {
     for (uint32_t mode=0;mode<2;++mode) {
         primitive_root_case(mode,false);primitive_root_case(mode,true);
     }
-    integer_owned_case();
+    integer_owned_case();error_indirect_run_cases();
     puts("DIRECTORY_ROWS owned runs1..5, every endpoint/interior/neighbor, EOF and failed outputs, physical0 PASS");
     puts("PRIMITIVE_ROOT owned ranges, real slots and initializer, unknown/varying opcode, all columns, EOF and physical0 PASS");
     puts("INTEGER_ERROR owned ranges, scalar comparison, physical fields and refused malformed storage, physical0 PASS");
+    puts("ERROR_INDIRECT_CENSUS actual first/second/constant opcode, empty/late EOF, raw/delegated/scalar parity, all10 deltas, exact/minus1, physical0 PASS");
     return 0;
 }
