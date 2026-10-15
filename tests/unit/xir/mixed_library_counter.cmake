@@ -1,4 +1,17 @@
 add_executable(test_xir_mixed_library_producer xir/test_xir_mixed_library_producer.c)
+add_executable(test_xir_effects_callable_bounds xir/test_xir_effects_callable_bounds.c)
+target_link_libraries(test_xir_effects_callable_bounds PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_effects_callable_bounds PRIVATE
+    XR_EFFECT_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures/xir_effect_source")
+set_target_properties(test_xir_effects_callable_bounds PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_effects_callable_bounds PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_effects_callable_bounds PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_effects_callable_bounds COMMAND test_xir_effects_callable_bounds)
+set_tests_properties(test_xir_effects_callable_bounds PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+    LABELS "unit;xir;mixed;source;ownership;effects;callable;generated-c")
 add_executable(test_xir_source_array_packets xir/test_xir_source_array_packets.c)
 target_link_libraries(test_xir_source_array_packets PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_source_array_packets PRIVATE

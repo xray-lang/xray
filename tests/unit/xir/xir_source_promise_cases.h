@@ -8,6 +8,7 @@
  */
 #ifndef XIR_SOURCE_PROMISE_CASES_H
 #define XIR_SOURCE_PROMISE_CASES_H
+#include "xir_source_callable_bounds.h"
 static void source_synthetic_promise_case(const XrXirSourceRequest *request) {
     XrXirSourceRequest probe = *request; char path[8192];
     source_fixture_path(request, "default_selector.xr", path); probe.entry_path = path;
@@ -24,31 +25,11 @@ static void source_synthetic_promise_case(const XrXirSourceRequest *request) {
 }
 static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     const XrXirCompileContext context=*xr_xir_compile_artifact_context(checked);
-    const XrXirModule *input = xr_xir_compile_artifact_module(checked);
-    uint32_t weakenings = 0, root_only = 0;
-    for (uint32_t f = 0; f < input->function_count; ++f) {
-        const XrXirFunction *function = &input->functions[f];
-        for (uint32_t i = 0; i < function->instruction_count; ++i) {
-            const XrXirInstruction *instruction = &function->instructions[i];
-            if (instruction->op != XR_XIR_FUNCTION_WEAKEN) continue;
-            uint32_t value = instruction->args[0];
-            CHECK(value < function->parameter_count + function->instruction_count);
-            XrXirType type = value < function->parameter_count ? function->parameters[value] :
-                function->instructions[value - function->parameter_count].type;
-            const XrXirTypeNode *from = xr_xir_callable_signature(input->types, type);
-            const XrXirTypeNode *to = xr_xir_callable_signature(input->types, instruction->type);
-            CHECK(from && to);
-            if ((from->flags & XR_XIR_CALLABLE_NO_SUSPEND) && !(to->flags & XR_XIR_CALLABLE_NO_SUSPEND))
-                ++weakenings;
-            else {
-                CHECK((from->flags & XR_XIR_CALLABLE_NO_SUSPEND) == (to->flags & XR_XIR_CALLABLE_NO_SUSPEND));
-                CHECK((from->flags & XR_XIR_CALLABLE_ROOT_MASK) == XR_XIR_CALLABLE_ROOT_NONE);
-                CHECK((to->flags & XR_XIR_CALLABLE_ROOT_MASK) == XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-                ++root_only;
-            }
-        }
-    }
-    CHECK(weakenings == 1 && root_only > 0);
+    SourceCallableWeakenings counts = source_callable_weakenings(checked);
+    CHECK(!counts.suspend && counts.identity > 0 && counts.root > 0);
+    source_callable_promise_bindings(checked);
+    fprintf(stderr, "qualified callable bounds: identity=%u root=%u suspend=%u variableEdges=2\n",
+        counts.identity, counts.root, counts.suspend);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked = NULL;
@@ -58,7 +39,15 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    XrXirStatus lower_status = xr_xir_compile_lower(closed, &target, &lowered, NULL);
+    if (lower_status != XR_XIR_OK) {
+        XrCompileResourceStats stats = {0};
+        CHECK(xr_compile_resources_stats(context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr, "qualified callable lower: status=%u output=%u allocated=%llu peak=%llu work=%llu\n",
+            lower_status, (unsigned)(lowered != NULL), (unsigned long long)stats.allocated_bytes,
+            (unsigned long long)stats.peak_bytes, (unsigned long long)stats.work);
+    }
+    CHECK(lower_status == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     uint32_t entry = UINT32_MAX, captured = UINT32_MAX;
