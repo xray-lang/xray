@@ -93,12 +93,13 @@ static void rw_previous_parameter_literal(void) {
     rw_word(bytes,2,27);rw_word(bytes,3,72);rw_hash(bytes);
     RootParameterMark mark=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     XrCompileResourceStats before=rp_stats(&context);size_t attempts=rp_attempts;
+    /* The first read charges the 32-byte header; occupied output is rejected before reading. */
     for (unsigned occupied=0;occupied<2;++occupied) {
         XrXirArtifact *sentinel=occupied?(XrXirArtifact *)(uintptr_t)1:NULL,*out=sentinel;
         CHECK(xr_xir_compile_checked_read(&context,bytes,sizeof(bytes),&out,NULL)==XR_XIR_BAD_STRUCTURE && out==sentinel);
         XrCompileResourceStats after=rp_stats(&context);
         CHECK(rp_attempts==attempts && after.live_bytes==before.live_bytes &&
-            after.allocated_bytes==before.allocated_bytes && after.work==before.work);
+            after.allocated_bytes==before.allocated_bytes && after.work==before.work+32);
     }
     rp_owner_free(&context,before.live_bytes);rp_balanced(mark);
 }
@@ -112,7 +113,8 @@ static void rw_rejections(void) {
         {16+43,0,XR_XIR_BAD_TYPE},{16+43,1,XR_XIR_BAD_TYPE},
         {16+48,0,XR_XIR_BAD_STRUCTURE},{16+49,0,XR_XIR_BAD_STRUCTURE},
         {16+50,0,XR_XIR_BAD_TYPE},{16+51,4,XR_XIR_BAD_TYPE},
-        {16+53,2,XR_XIR_BAD_STRUCTURE},{16+54,1,XR_XIR_BAD_STRUCTURE},
+        /* CONTEXT_CALL0 names a real call; its forged derivation is a type mismatch. */
+        {16+53,2,XR_XIR_BAD_TYPE},{16+54,1,XR_XIR_BAD_STRUCTURE},
         {16+47,2,XR_XIR_BAD_STRUCTURE},{16+46,2,XR_XIR_BAD_STRUCTURE},
         {16+46,0,XR_XIR_BAD_STRUCTURE}
     };
@@ -126,6 +128,19 @@ static void rw_rejections(void) {
         CHECK(status==cases[i].status && !read && d.status==status && rp_stats(&context).live_bytes==live);
     }
     rp_owner_free(&context,live);rp_balanced(physical);
+}
+static void rw_formula_category(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t live=rp_stats(&context).live_bytes;RootParameterFixture f;rp_fixture(&f,&context);
+    f.module.stage=XR_XIR_BUILT;f.term.kind=XR_XIR_ROOT_TERM_CONTEXT_CALL;
+    CHECK(xir_effect_contract_shape_verify(&context,&f.module)==XR_XIR_OK);
+    XrXirArtifact *out=NULL;
+    CHECK(xir_fixture_check(&context,&f.module,&out,NULL)==XR_XIR_BAD_TYPE && !out);
+    f.term.kind=XR_XIR_ROOT_TERM_PARAMETER;f.term.index=1;
+    CHECK(xir_effect_contract_shape_verify(&context,&f.module)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xir_fixture_check(&context,&f.module,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
+    rp_owner_free(&context,live);rp_balanced(physical);
+    puts("wire raw CONTEXT_CALL0 semantic BAD_TYPE; out-of-range parameter BAD_STRUCTURE; physical0");
 }
 static void rw_resources(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext normal=rp_owner(rp_caps());
@@ -156,5 +171,5 @@ static void rw_resources(void) {
 }
 int main(void) {
     rw_roundtrip();rw_previous_literal();rw_previous_parameter_literal();
-    rw_rejections();rw_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    rw_rejections();rw_formula_category();rw_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
 }
