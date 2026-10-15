@@ -32,10 +32,10 @@ static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
     XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,edge.instruction,&body_op_1,&op);
     if (body_read_1!=XR_XIR_OK) return body_read_1;
-    EffectBodyFunctionHead target_head={0};
-    status=effect_invocation_flow_head(flow,target->body,&target_head);
+    EffectBodyFunctionDimensions target_dimensions={0};
+    status=effect_body_request_dimensions(&flow->body,target->body,&target_dimensions);
     if (status!=XR_XIR_OK) return status;
-    if (target->parameter_count!=target_head.parameter_count) return XR_XIR_BAD_STRUCTURE;
+    if (target->parameter_count!=target_dimensions.parameter_count) return XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         if (target->parameter_count || target->input) return XR_XIR_BAD_STRUCTURE;
         *matched=true;return XR_XIR_OK;
