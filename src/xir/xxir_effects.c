@@ -967,11 +967,14 @@ XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *co
     return status==XR_XIR_OK ? effect_body_rows_match(context,body,source) : status;
 }
 
+#include "xxir_effect_program_storage.inc.c"
+
 XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
     const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations) {
-    if (!xir_compile_context_valid(context) || !effects || !types || !declarations ||
-        effects->resources!=context->resources || !effects->invocations ||
-        !effect_body_material_shape(effects->invocations->body)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(context) || !effects || !types || !declarations)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = effect_program_metadata_storage(context, effects);
+    if (status != XR_XIR_OK) return status;
     const EffectBodyMaterial *body=effects->invocations->body;
     if (body->resources!=context->resources || body->stage!=XR_XIR_LOWERED ||
         !body->domain.types || !body->domain.declarations || effect_body_count(body)!=effects->count)
@@ -984,12 +987,14 @@ XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *cont
 XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
     uint32_t parameter_count, XrXirType result) {
-    const XrXirTypes *types=NULL;
-    const XrXirDeclarations *declarations=NULL;
-    XrXirStatus status=xir_effects_program_metadata(context,effects,&types,&declarations);
+    if (!xir_compile_context_valid(context) || !effects) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *input = NULL;
+    XrXirStatus status = effect_program_body_storage(context, effects, &input);
     if (status!=XR_XIR_OK) return status;
     if (function>=effects->count || (parameter_count && !parameters)) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyFunction *body=&effects->invocations->body->functions[function];
+    const EffectBodyFunction *body=&input->functions[function];
+    status = effect_program_range(context, body->parameters, body->parameter_count, sizeof(*body->parameters));
+    if (status != XR_XIR_OK) return status;
     if (!xir_compile_work(context,(uint64_t)parameter_count+2)) return XR_XIR_BUDGET;
     if (parameter_count!=body->parameter_count || result!=body->result) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p=0;p<parameter_count;++p)

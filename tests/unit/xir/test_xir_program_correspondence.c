@@ -236,6 +236,56 @@ static void seal_callback_refusal(const XrXirCompileContext *context,bool alloca
     puts("Public seal rejects valid metadata drift after its final allocator callback");
 }
 
+static void metadata_storage_refusal(const XrXirCompileContext *context) {
+    const XrXirTypes *types = NULL;
+    const XrXirDeclarations *declarations = NULL;
+    CHECK(xir_effects_program_metadata(context, (const XrXirEffects *)(uintptr_t)1,
+        &types, &declarations) == XR_XIR_BAD_STRUCTURE && !types && !declarations);
+    XrXirArtifact *artifact = constant_program(context, 42);
+    XrXirEffects *effects = NULL;
+    CHECK(xr_xir_compile_effects_analyze(artifact, &effects) == XR_XIR_OK);
+    CHECK(xir_effects_program_metadata(context, effects, &types, &declarations) == XR_XIR_OK);
+    XrXirTypes *mutable_types = (XrXirTypes *)types;
+    XrXirDeclarations *mutable_declarations = (XrXirDeclarations *)declarations;
+    XrXirTypes saved_types = *types;
+    XrXirDeclarations saved_declarations = *declarations;
+    XrXirSourceModule *module = (XrXirSourceModule *)declarations->modules;
+    XrXirSourceModule saved_module = *module;
+    for (unsigned attack = 0; attack < 7; ++attack) {
+        if (attack == 0) mutable_declarations->modules = (const XrXirSourceModule *)(uintptr_t)1;
+        if (attack == 1) mutable_declarations->functions = (const XrXirFunctionIdentity *)(uintptr_t)1;
+        if (attack == 2) module->name = (const char *)(uintptr_t)1;
+        if (attack == 3) {
+            mutable_declarations->slots = (const XrXirSlot *)(uintptr_t)1;
+            mutable_declarations->slot_count = 1;
+        }
+        if (attack == 4) {
+            mutable_declarations->literals = (const XrXirLiteral *)(uintptr_t)1;
+            mutable_declarations->literal_count = 1;
+        }
+        if (attack == 5) {
+            mutable_types->nodes = (const XrXirTypeNode *)(uintptr_t)1;
+            mutable_types->count = 1;
+        }
+        if (attack == 6) mutable_types->nominals = (const XrXirNominalTable *)(uintptr_t)1;
+        const XrXirTypes *rejected_types = NULL;
+        const XrXirDeclarations *rejected_declarations = NULL;
+        CHECK(xir_effects_program_metadata(context, effects, &rejected_types, &rejected_declarations)
+            == XR_XIR_BAD_STRUCTURE && !rejected_types && !rejected_declarations);
+        *mutable_types = saved_types;
+        *mutable_declarations = saved_declarations;
+        *module = saved_module;
+        CHECK(xir_effects_program_metadata(context, effects, &rejected_types, &rejected_declarations) == XR_XIR_OK);
+        CHECK(rejected_types == types && rejected_declarations == declarations);
+    }
+    xr_xir_compile_effects_free(effects);
+    XrXirProgram *program = NULL;
+    CHECK(xr_xir_compile_vm_program_take(&artifact, &program) == XR_XIR_OK && !artifact);
+    CHECK(execute(program) == 42);
+    xr_xir_compile_program_drop(program);
+    puts("Owned metadata storage rejects forged addresses without reading them; recovery returns42");
+}
+
 int main(void) {
     const XrCompileResourceLimits caps={67108864,8388608,128000000};
     XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
@@ -243,6 +293,7 @@ int main(void) {
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
     normal(&context,42,false);normal(&context,43,true);body_refusal(&context);joint_refusal(&context);
+    metadata_storage_refusal(&context);
     for(unsigned attack=0;attack<4;++attack) {
         callback_refusal(&context,attack,false);
         callback_refusal(&context,attack,true);
