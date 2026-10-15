@@ -56,7 +56,7 @@ static XrXirStatus effect_context_forest_node(EffectContextForest *forest,
         sizeof(EffectOrdinaryNode)+sizeof(EffectForestNode)+sizeof(XrXirRootEffects))) return XR_XIR_BUDGET;
     EffectOrdinaryNode origin=contexts->nodes[index];
     const XrXirFunction *function=&contexts->functions[index];
-    const XrXirFunctionEffectContract *contract=&contexts->uses.contracts[index];
+    const XrXirFunctionEffectContract *contract=&contexts->uses.outcomes_work.contracts[index];
     XrXirType *arguments=origin.argument_count ?
         effect_terms_alloc(&forest->terms,origin.argument_count,sizeof(*arguments)) : NULL;
     XrXirType *physical=function->parameter_count ?

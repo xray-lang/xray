@@ -169,7 +169,7 @@ static XrXirStatus effect_invocation_copy_origins(EffectInvocationCertificate *c
         if (terms->status!=XR_XIR_OK || (parent!=UINT32_MAX && parent>=count))
             return terms->status!=XR_XIR_OK?terms->status:XR_XIR_BAD_STRUCTURE;
         certificate->origins[f]=origin;certificate->owners[f]=parent;
-        const XrXirFunctionEffectContract *contract=&equations->effects->contracts[f];
+        const XrXirFunctionEffectContract *contract=&effect_contracts_read(equations->effects)[f];
         uint32_t parameters=certificate->body->functions[f].parameter_count;
         if (contract->parameter_count!=parameters || (parameters && !contract->parameters)) return XR_XIR_BAD_STRUCTURE;
         uint8_t *kinds=effect_terms_alloc(terms,parameters,sizeof(*kinds));

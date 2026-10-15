@@ -110,7 +110,7 @@ static void parameter_schedule_functions(void) {
                 order,split,count,(uint32_t)status,(unsigned long long)rp_stats(&context).work);
             CHECK(status==XR_XIR_OK);
             for (uint32_t f=0;f<count;++f) {
-                XrXirEffectParameter actual=effects.contracts[f].parameters[0];
+                XrXirEffectParameter actual=effects.outcomes_work.contracts[f].parameters[0];
                 uint32_t kind=fixed[f]?XR_XIR_EFFECT_PARAMETER_FIXED:XR_XIR_EFFECT_PARAMETER_VARIABLE;
                 CHECK(actual.kind==kind);
                 uint32_t expected=fixed[targets[f]]?XR_XIR_EFFECT_USE_FIXED:XR_XIR_EFFECT_USE_FORWARD;

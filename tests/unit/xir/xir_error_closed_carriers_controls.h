@@ -318,7 +318,7 @@ static XrXirStatus cc_whole(const XrXirCompileContext *c,unsigned mode) {
         CHECK(e && effect_final_outcomes(e)->words==1 && effect_final_outcomes(e)->atom_count==2 && effect_final_outcomes(e)->errors[1]==bits && effect_final_outcomes(e)->errors[2]==8);
         CHECK(effect_final_outcomes(e)->functions[1].throws==((mode==6 || mode==7) ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_MAY));
         if (effect_roots_read(e)->root[1].requires_root || effect_roots_read(e)->root[1].unresolved!=(mode==7 || mode>=8)) {
-            const XrXirRootFormula *formula=&e->contracts[1].formula;
+            const XrXirRootFormula *formula=&effect_roots_read(e)->contracts[1].formula;
             fprintf(stderr,"closed CONDITIONAL_EXPECTATION_MISMATCH mode=%u requires=%u unresolved=%u constant=%u terms=%u cell_role=%u cell_origin=%u root_cause=%u unknown_cause=%u\n",
                 mode,(unsigned)effect_roots_read(e)->root[1].requires_root,(unsigned)effect_roots_read(e)->root[1].unresolved,
                 formula->constant_mask,formula->term_count,
@@ -333,7 +333,7 @@ static XrXirStatus cc_whole(const XrXirCompileContext *c,unsigned mode) {
         if (mode>=8) {
             /* An open physical Cell parameter remains conditional regardless
              * of whether authentic incoming local/module callers also exist. */
-            const XrXirRootFormula *formula=&e->contracts[1].formula;
+            const XrXirRootFormula *formula=&effect_roots_read(e)->contracts[1].formula;
             CHECK(!formula->constant_mask && formula->term_count==1 &&
                 formula->terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && formula->terms[0].index==0);
             CHECK(xr_xir_cell_provenance_origin(e->cells,1,0)==XR_XIR_CELL_ORIGIN_SCOPED);

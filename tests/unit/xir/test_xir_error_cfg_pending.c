@@ -74,12 +74,12 @@ static void pc_release(XrXirCompileContext *c, uint64_t baseline) {
 /* A lexical Cell formal stays conditional. Each authenticated REGISTER
  * supplies its actual owner; this fixture supplies an owned local Cell. */
 static void pc_lexical_cleanup_root(const XrXirEffects *e) {
-    CHECK(e && e->count==4 && e->contracts && e->cells);
+    CHECK(e && e->count==4 && effect_roots_read(e)->contracts && e->cells);
     CHECK(!effect_roots_read(e)->root[3].requires_root && effect_roots_read(e)->root[3].unresolved);
-    const XrXirRootFormula *child=&e->contracts[3].formula;
+    const XrXirRootFormula *child=&effect_roots_read(e)->contracts[3].formula;
     CHECK(!child->constant_mask && child->term_count==1 && child->terms);
     CHECK(child->terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && child->terms[0].index==0);
-    CHECK(e->contracts[3].parameter_count==1);
+    CHECK(effect_roots_read(e)->contracts[3].parameter_count==1);
     CHECK(xr_xir_cell_provenance_role(e->cells,3,0)==XR_XIR_CELL_PROOF_LEXICAL_CLEANUP);
     CHECK(xr_xir_cell_provenance_origin(e->cells,3,0)==XR_XIR_CELL_ORIGIN_SCOPED);
     CHECK(effect_roots_read(e)->root_witnesses[3].cause==XR_XIR_ROOT_CAUSE_NONE);
@@ -87,7 +87,7 @@ static void pc_lexical_cleanup_root(const XrXirEffects *e) {
         effect_roots_read(e)->unresolved_witnesses[3].callee==UINT32_MAX &&
         effect_roots_read(e)->unresolved_witnesses[3].slot==0 && !effect_roots_read(e)->unresolved_witnesses[3].distance);
     CHECK(!effect_roots_read(e)->root[1].requires_root && !effect_roots_read(e)->root[1].unresolved);
-    CHECK(!e->contracts[1].formula.constant_mask && !e->contracts[1].formula.term_count);
+    CHECK(!effect_roots_read(e)->contracts[1].formula.constant_mask && !effect_roots_read(e)->contracts[1].formula.term_count);
 }
 static void pc_golden(const XrXirEffects *e,PendingCase mode,bool snapshot) {
     uint64_t bits=pc_expected(mode,snapshot);
@@ -672,11 +672,11 @@ static void pc_empty_cost(void) {
         uint64_t before=pc_stats(&c).work;
         CHECK(xr_xir_compile_effects_infer_verified(&c,owned,&e)==XR_XIR_OK);
         pc_empty_golden(e,reverse);uint64_t cost=pc_stats(&c).work-before;
-        printf("empty inference actual reverse%u work%llu development_limit65000 optimization_target20000 target_met%u\n",
-            reverse,(unsigned long long)cost,(unsigned)(cost<UINT64_C(20000)));
+        printf("empty inference actual reverse%u work%llu current_limit65000 target20000 current_met%u target_met%u\n",
+            reverse,(unsigned long long)cost,(unsigned)(cost<UINT64_C(65000)),(unsigned)(cost<UINT64_C(20000)));
         fflush(stdout);
         CHECK(cost<UINT64_C(65000));
-        printf("empty complete sameowner inference scalar512/block32 reverse%u work%llu below development65000\n",reverse,(unsigned long long)cost);
+        printf("empty complete sameowner inference scalar512/block32 reverse%u work%llu below current65000\n",reverse,(unsigned long long)cost);
         xr_xir_compile_effects_free(e);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
     }
 }
@@ -726,14 +726,15 @@ static void pc_empty_nonempty_summary(void) {
     CHECK(effect_errors_seed(&e->invocations->body->domain,&replay,&c)==XR_XIR_OK);
     replay.outcomes_work.errors[1]=4;
     EffectGraph graph={.material=e->invocations->body,.physical=e->invocations->body->physical};
-    CHECK(effect_graph_build_material(owned,&replay,&graph,&c)==XR_XIR_OK);
+    EffectControlCheck input={0};CHECK(effect_final_control_prepare(&c,e,&input)==XR_XIR_OK);
+    CHECK(effect_control_dependencies_move(&c,&input,&graph)==XR_XIR_OK);
     EffectTerms terms={0};terms.remaining=&c;terms.types=*owned->types;
     ErrorFlow flow={0};flow.body=effect_body_owned_request(&c,graph.material);
     flow.effects=&replay;flow.remaining=&c;flow.terms=&terms;
     CHECK(error_functions(&replay,&graph,&flow)==XR_XIR_OK);
     CHECK(replay.outcomes_work.errors[1]==4 && flow.storage_capacity==pc_cfg_storage_extent(4684,EE_BLOCKS) &&
         effect_final_outcomes(e)->errors[1]==0);
-    error_storage_free(&flow);effect_terms_free(&terms);effect_graph_free(&graph);
+    error_storage_free(&flow);effect_terms_free(&terms);effect_graph_free(&graph);effect_control_check_free(&input);
     effect_source_outcomes_free(&replay);
     xr_xir_compile_effects_free(e);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
 }
@@ -768,6 +769,9 @@ static void pc_empty_limits(void) {
 #include "xir_error_cfg_pending_resources.h"
 #include "xir_error_compact_rows_controls.h"
 #include "xir_error_closed_carriers_controls.h"
+#include "xir_final_metadata_cases.h"
+#include "xir_final_control_proof_cases.h"
+#include "xir_source_terminal_callback_cases.h"
 #include "xir_error_callee_first_controls.h"
 #include "xir_error_unit_cell_controls.h"
 #include "xir_error_invocation_controls.h"
@@ -815,8 +819,10 @@ static void pc_resources(void) {
     pc_limits(PC_PHI_SELF);pc_limits(PC_LATE_JOIN);
 }
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--control-proof-literals")) { pc_control_proof_literals();return 0; }
+    if (argc==2 && !strcmp(argv[1],"--source-terminal-callback")) { pc_source_terminal_literals();return 0; }
     if (argc==2 && !strcmp(argv[1],"--outcomes-literals")) {
-        pc_outcome_late_literals();pc_outcome_owner_literals();pc_outcome_error_rows_literals();return 0;
+        pc_outcome_late_literals();pc_outcome_owner_literals();pc_outcome_metadata_literals();pc_outcome_error_rows_literals();return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--outcomes-resources")) {
         pc_outcome_resources();return 0;

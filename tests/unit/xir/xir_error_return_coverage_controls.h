@@ -102,7 +102,7 @@ static void er_golden(const XrXirEffects *effects,unsigned mode) {
     CHECK(owner->site_count);
     CHECK((owner->nodes[owner->roots[4]].return_coverage!=0)==(mode!=3 && mode!=5));
     /* Coverage must not erase the original opaque NONE advertisement. */
-    CHECK(effects->contracts[1].formula.constant_mask==0);
+    CHECK(effect_roots_read(effects)->contracts[1].formula.constant_mask==0);
 }
 
 static XrXirStatus er_whole(const XrXirCompileContext *context,unsigned mode) {

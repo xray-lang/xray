@@ -180,7 +180,7 @@ static XrXirStatus effect_invocation_result_match_source(const EffectInvocationT
 static XrXirStatus effect_invocation_result_match(EffectInvocationWorkspace *owner,
     const EffectFinalFunctions *result) {
     if (!owner || !xir_compile_context_valid(owner->read.work) || !owner->effects ||
-        !owner->effects->contracts) return XR_XIR_BAD_STRUCTURE;
+        !effect_contracts_read(owner->effects)) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->read.work,sizeof(EffectInvocationTermSource))) return XR_XIR_BUDGET;
     const EffectInvocationTermSource source={owner->read.work,&owner->final,NULL,owner->effects};
     return effect_invocation_result_match_source(&source,result);

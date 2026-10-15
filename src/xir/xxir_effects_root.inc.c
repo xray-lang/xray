@@ -222,12 +222,12 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
             EffectEdge edge = graph->edges[e];
             if (constant) {
                 if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-                if (!(effects->contracts[callee].formula.constant_mask&bit)) continue;
+                if (!(effect_contracts_read(effects)[callee].formula.constant_mask&bit)) continue;
             }
             bool fact = unresolved ? effects->outcomes_work.root[edge.caller].unresolved : effects->outcomes_work.root[edge.caller].requires_root;
             if (constant) {
                 if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-                fact=!!(effects->contracts[edge.caller].formula.constant_mask&bit);
+                fact=!!(effect_contracts_read(effects)[edge.caller].formula.constant_mask&bit);
             }
             if (!fact) return XR_XIR_BAD_STRUCTURE;
             XrXirRootEffectWitness candidate = {edge.cleanup ? XR_XIR_ROOT_CAUSE_CLEANUP : XR_XIR_ROOT_CAUSE_CALL,
@@ -250,7 +250,7 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
         bool fact = unresolved ? effects->outcomes_work.root[f].unresolved : effects->outcomes_work.root[f].requires_root;
         if (constant) {
             if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-            fact=!!(effects->contracts[f].formula.constant_mask&bit);
+            fact=!!(effect_contracts_read(effects)[f].formula.constant_mask&bit);
         }
         if (fact != (witnesses[f].cause != XR_XIR_ROOT_CAUSE_NONE)) return XR_XIR_BAD_STRUCTURE;
     }
@@ -261,7 +261,7 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
  * public choice still uses the original ordering across both domains. */
 static inline XrXirStatus effect_root_witnesses(XrXirEffects *effects, EffectGraph *graph,
     const XrXirCompileContext *work, bool unresolved) {
-    if (!effects->contracts) return effect_root_forest(effects,graph,work,unresolved,false);
+    if (!effect_contracts_read(effects)) return effect_root_forest(effects,graph,work,unresolved,false);
     if (!effects->constant_witnesses || !effects->formula_terminals) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_root_forest(effects,graph,work,unresolved,true);
     if (status!=XR_XIR_OK) return status;
