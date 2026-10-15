@@ -15,7 +15,12 @@ static void task_class_metadata(const XrXirCompileContext *context,const XrXirAr
     CHECK(table && table->count && table->count<=128);
     XrXirNominalTable bad_table=*table;XrXirTypes bad_types=*module->types;
     XrXirNominalDeclaration declarations[128];XrXirNominalIdentity identities[128];
-    XrXirNominalField fields[2];XrXirNominalFieldIdentity identity_fields[2];
+#ifdef XR_TASK_RECURSIVE_CLASS_FIXTURE
+    enum { CLASS_FIELDS=3 };
+#else
+    enum { CLASS_FIELDS=2 };
+#endif
+    XrXirNominalField fields[CLASS_FIELDS];XrXirNominalFieldIdentity identity_fields[CLASS_FIELDS];
     uint32_t payload=UINT32_MAX;
     for (uint32_t n=0;n<table->count;++n) {
         XrXirLiteral name=table->declarations?table->declarations[n].name:table->identities[n].name;
@@ -25,17 +30,17 @@ static void task_class_metadata(const XrXirCompileContext *context,const XrXirAr
     if (table->declarations) {
         memcpy(declarations,table->declarations,table->count*sizeof(*declarations));
         CHECK(declarations[payload].flags & XR_XIR_NOMINAL_SENDABLE);
-        CHECK(declarations[payload].field_count==2);
+        CHECK(declarations[payload].field_count==CLASS_FIELDS);
         memcpy(fields,declarations[payload].fields,sizeof(fields));
-        CHECK(!(fields[0].flags & XR_XIR_FIELD_MUTABLE) && !(fields[1].flags & XR_XIR_FIELD_MUTABLE));
+        for (unsigned f=0;f<CLASS_FIELDS;++f) CHECK(!(fields[f].flags & XR_XIR_FIELD_MUTABLE));
         fields[0].flags|=XR_XIR_FIELD_MUTABLE;declarations[payload].fields=fields;
         bad_table.declarations=declarations;
     } else {
         memcpy(identities,table->identities,table->count*sizeof(*identities));
         CHECK(identities[payload].flags & XR_XIR_NOMINAL_SENDABLE);
-        CHECK(identities[payload].field_count==2);
+        CHECK(identities[payload].field_count==CLASS_FIELDS);
         memcpy(identity_fields,identities[payload].fields,sizeof(identity_fields));
-        CHECK(!(identity_fields[0].flags & XR_XIR_FIELD_MUTABLE) && !(identity_fields[1].flags & XR_XIR_FIELD_MUTABLE));
+        for (unsigned f=0;f<CLASS_FIELDS;++f) CHECK(!(identity_fields[f].flags & XR_XIR_FIELD_MUTABLE));
         identity_fields[0].flags|=XR_XIR_FIELD_MUTABLE;identities[payload].fields=identity_fields;
         bad_table.identities=identities;
     }

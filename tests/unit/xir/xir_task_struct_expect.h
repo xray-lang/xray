@@ -12,6 +12,9 @@
 #include "xir/xxir_array.h"
 #include "xir/xxir_atomic.h"
 #include "xir/xxir_class.h"
+#ifdef XR_TASK_RECURSIVE_CLASS_FIXTURE
+#include "xir_task_recursive_class_expect.h"
+#endif
 static bool constructed_value(const XrXirValue *value,unsigned family) {
     CHECK(!family && xr_xir_value_valid(value));
     const XirObject *object=(const XirObject *)(uintptr_t)value->payload;
@@ -50,7 +53,13 @@ static bool constructed_value(const XrXirValue *value,unsigned family) {
         CHECK(loaded.status==XR_XIR_RUN_STEP_LIMIT || loaded.status==XR_XIR_RUN_FRAME_LIMIT ||
             loaded.status==XR_XIR_RUN_OUT_OF_MEMORY || loaded.permission==XR_XIR_CALL_LIMIT);goto done;
     }
-    CHECK(!loaded.continuing && element.type==XR_XIR_I64 && element.payload==42);completed=true;goto done;
+    CHECK(!loaded.continuing && element.type==XR_XIR_I64 && element.payload==42);
+#ifdef XR_TASK_RECURSIVE_CLASS_FIXTURE
+    completed=constructed_recursive_class_value(value,&admission);
+#else
+    completed=true;
+#endif
+    goto done;
 failed:
     CHECK(status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_OOM);
 done:
