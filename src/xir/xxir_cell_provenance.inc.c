@@ -713,6 +713,10 @@ static bool cell_proof_edges_range(CellProofBuild *build,uint32_t f,
 
 static bool cell_proof_build_edges(CellProofBuild *build) {
     for (uint32_t f=0;f<build->body->domain.function_count;++f) {
+        /* Complete inventory found no Cell or access-place node in this body.
+         * Global call-role checks still visit it before edge construction. */
+        if (!cell_proof_work(build,1)) return false;
+        if (!build->proof->functions[f].stored) continue;
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
         if (!build->body->range) {
             for (uint32_t i=0;i<head.instruction_count;++i) {
@@ -876,6 +880,8 @@ static bool cell_proof_validate_row(CellProofBuild *build,uint32_t f,uint32_t i,
 static bool cell_proof_validate(CellProofBuild *build) {
     XrXirCellProvenance *proof = build->proof;
     for (uint32_t f = 0; f < build->body->domain.function_count; ++f) {
+        if (!cell_proof_work(build,1)) return false;
+        if (!proof->functions[f].stored) continue;
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
         const XrXirCellProofBodyHead *function=&head;
         uint32_t begin = proof->functions[f].begin;

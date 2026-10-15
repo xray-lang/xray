@@ -97,6 +97,30 @@ static void cell_zero_verified_boundary(XrCompileResourceLimits caps) {
     CHECK(value_compile_live==physical && value_compile_bytes==bytes);
     xr_xir_compile_cell_provenance_free(proof);cell_proof_close(&context,baseline);
 }
+/* A body without Cell values still assigns the real unbound REF role in a
+ * different body. Empty graph walks cannot omit this global call obligation. */
+static void cell_zero_mixed_reference_roles(XrCompileResourceLimits caps) {
+    for(unsigned mode=0;mode<3;++mode) {
+        XrXirCompileContext context=cell_active_context(caps);
+        uint64_t baseline=value_compile_stats(&context).live_bytes;
+        CellInterleavedFixture f;cell_interleaved_fixture(&f);
+        XrXirTypeNode nodes[3];memcpy(nodes,f.nodes,sizeof(f.nodes));
+        XrXirCallableParameter parameter={f.cell,mode==2?XR_PARAM_READ:XR_PARAM_REF};
+        nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&parameter,
+            .parameter_count=1,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED};
+        f.types.nodes=nodes;f.types.count=3;
+        f.constants[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)258,
+            .immediate=mode==1?5:4};
+        XrXirCellProvenance *proof=NULL;
+        XrXirStatus expected=mode==1?XR_XIR_BAD_STRUCTURE:mode==2?XR_XIR_BAD_TYPE:XR_XIR_OK;
+        CHECK(xr_xir_compile_cell_provenance_verified(&context,&f.module,&proof,NULL)==expected);
+        if(!mode) {
+            CHECK(proof && xr_xir_cell_provenance_role(proof,4,0)==XR_XIR_CELL_PROOF_SCOPED_REF);
+            CHECK(!xr_xir_cell_provenance_origin(proof,1,0));
+        } else CHECK(!proof);
+        xr_xir_compile_cell_provenance_free(proof);cell_proof_close(&context,baseline);
+    }
+}
 static void cell_zero_tracked_cases(void) {
     const XrCompileResourceLimits caps={33554432,33554432,33554432};
     for(unsigned mode=0;mode<2;++mode) {
@@ -130,5 +154,6 @@ static void cell_zero_tracked_cases(void) {
         }
     }
     cell_zero_verified_boundary(caps);
+    cell_zero_mixed_reference_roles(caps);
 }
 #endif // XIR_CELL_ZERO_TRACKED_CASES_H
