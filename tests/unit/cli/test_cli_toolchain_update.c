@@ -101,10 +101,24 @@ static XrCliToolchainUpdateStatus run(const XrCliToolchainUpdateRequest *request
         CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
         if(status==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY||status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET){
             XrCompileResourceStats before=*stats,after;
-            if(!owner)CHECK(xr_cli_toolchain_update_new(resources,request,&owner)==status&&!owner);
-            else CHECK(xr_cli_toolchain_update_execute(owner)==status);
-            CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
-            CHECK(before.allocated_bytes==after.allocated_bytes&&before.work==after.work);
+            if(!owner){
+                /* Failed construction leaves no transaction to replay. A new
+                 * owner consumes the original ledger without refunding it. */
+                XrCliToolchainUpdateStatus retry=xr_cli_toolchain_update_new(resources,request,&owner);
+                CHECK(retry==(status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET ?
+                    XR_CLI_TOOLCHAIN_UPDATE_BUDGET : XR_CLI_TOOLCHAIN_UPDATE_OK));
+                CHECK((retry==XR_CLI_TOOLCHAIN_UPDATE_OK)==(owner!=NULL));
+                CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
+                CHECK(after.allocated_bytes>=before.allocated_bytes&&after.work>=before.work);
+                CHECK(after.allocated_bytes<=limits->allocated_bytes&&after.peak_bytes<=limits->live_bytes&&
+                    after.work<=limits->work);
+                if(retry==XR_CLI_TOOLCHAIN_UPDATE_OK)
+                    CHECK(after.allocated_bytes>before.allocated_bytes&&after.work>before.work);
+            }else{
+                CHECK(xr_cli_toolchain_update_execute(owner)==status);
+                CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
+                CHECK(before.allocated_bytes==after.allocated_bytes&&before.work==after.work);
+            }
         }
     }
     XrCliToolchainUpdateStatus close=XR_CLI_TOOLCHAIN_UPDATE_PENDING;

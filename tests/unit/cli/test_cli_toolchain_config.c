@@ -67,9 +67,18 @@ static XrCliToolchainConfigStatus run(const char *path,size_t fault,
         CHECK(!owner);
         XrCompileResourceStats before=*stats, after;
         if(status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET || status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY) {
-            CHECK(xr_cli_toolchain_config_open(resources,path,&owner)==status && !owner);
+            /* No snapshot survived, so another open is a new operation on the
+             * same cumulative ledger. A single injected OOM is recoverable. */
+            XrCliToolchainConfigStatus retry=xr_cli_toolchain_config_open(resources,path,&owner);
+            CHECK(retry==(status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET ?
+                XR_CLI_TOOLCHAIN_CONFIG_BUDGET : XR_CLI_TOOLCHAIN_CONFIG_OK));
+            CHECK((retry==XR_CLI_TOOLCHAIN_CONFIG_OK)==(owner!=NULL));
             CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
-            CHECK(before.allocated_bytes==after.allocated_bytes && before.work==after.work);
+            CHECK(after.allocated_bytes>=before.allocated_bytes && after.work>=before.work);
+            CHECK(after.allocated_bytes<=limits->allocated_bytes && after.peak_bytes<=limits->live_bytes &&
+                after.work<=limits->work);
+            if(retry==XR_CLI_TOOLCHAIN_CONFIG_OK)
+                CHECK(after.allocated_bytes>before.allocated_bytes && after.work>before.work);
         }
     }
     xr_cli_toolchain_config_free(owner);xr_compile_resources_release(resources);
