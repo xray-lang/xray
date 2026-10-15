@@ -28,7 +28,7 @@ foreach(fact IN ITEMS function generic type stateful cell)
         TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept")
 endforeach()
 
-foreach(kind IN ITEMS definitions definitions-comptime definitions-import)
+foreach(kind IN ITEMS definitions definitions-comptime definitions-import definitions-cell)
     string(REPLACE "-" "_" suffix "${kind}")
     add_test(NAME test_xir_p10_source_${suffix} COMMAND test_xir_p10_source_generations --${kind})
     set_tests_properties(test_xir_p10_source_${suffix} PROPERTIES

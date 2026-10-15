@@ -169,12 +169,13 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
         !memcmp(&definition,&sentinel,sizeof(definition)));
 }
 static int history_check(const char *mode) {
-    bool definitions=!strcmp(mode,"--definitions") || !strcmp(mode,"--definitions-comptime") || !strcmp(mode,"--definitions-import");
+    bool definition_cell=!strcmp(mode,"--definitions-cell");
+    bool definitions=definition_cell || !strcmp(mode,"--definitions") || !strcmp(mode,"--definitions-comptime") || !strcmp(mode,"--definitions-import");
     bool folded=!strcmp(mode,"--definitions-comptime");
     bool imported=!strcmp(mode,"--definitions-import");
-    bool cell=!strcmp(mode,"--history-cell");
+    bool cell=definition_cell || !strcmp(mode,"--history-cell");
     bool stateful=!strcmp(mode,"--history-stateful") || cell;
-    const char *next=!strcmp(mode,"--history-function") ?
+    const char *next=definition_cell ? NULL : !strcmp(mode,"--history-function") ?
         "export fn answer()->i64{return old()+1}" : !strcmp(mode,"--history-generic") ?
         "export fn answer()->i64{return identity<i64>(42)}" : !strcmp(mode,"--history-type") ?
         "export fn answer()->i64{const item=Item{value:42};return item.value}" : stateful ?
