@@ -1,0 +1,38 @@
+add_executable(test_xir_derived_pairs "${CMAKE_CURRENT_LIST_DIR}/test_xir_derived_pairs.c")
+target_link_libraries(test_xir_derived_pairs PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+set_target_properties(test_xir_derived_pairs PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_derived_pairs PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_derived_pairs PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_derived_pairs COMMAND test_xir_derived_pairs)
+set_tests_properties(test_xir_derived_pairs PROPERTIES TIMEOUT 30 LABELS "unit;xir;metadata;ownership;ctfe;pairs")
+add_test(NAME test_xir_derived_pairs_resources COMMAND test_xir_derived_pairs --resources)
+set_tests_properties(test_xir_derived_pairs_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;metadata;ownership;ctfe;pairs;compiler-fault;resources")
+
+add_test(NAME test_xir_derived_pairs_runtime_resources COMMAND test_xir_derived_pairs --runtime-resources)
+set_tests_properties(test_xir_derived_pairs_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;pairs;ownership;runtime-fault;resources")
+set(XIR_PAIRS_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_derived_pairs.c)
+add_custom_command(OUTPUT ${XIR_PAIRS_GENERATED}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND $<TARGET_FILE:test_xir_derived_pairs> --emit-native ${XIR_PAIRS_GENERATED}
+    DEPENDS test_xir_derived_pairs
+    VERBATIM)
+add_executable(test_xir_derived_pairs_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_derived_pairs_native.c" ${XIR_PAIRS_GENERATED})
+target_link_libraries(test_xir_derived_pairs_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_derived_pairs_mixed "${CMAKE_CURRENT_LIST_DIR}/test_xir_derived_pairs_mixed.c" ${XIR_PAIRS_GENERATED})
+target_link_libraries(test_xir_derived_pairs_mixed PRIVATE xray_xir_source xray_xir_vm)
+foreach(derived_pairs_test IN ITEMS test_xir_derived_pairs_native test_xir_derived_pairs_mixed)
+    set_target_properties(${derived_pairs_test} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${derived_pairs_test} PRIVATE /utf-8 /W4 /WX)
+    else()
+        target_compile_options(${derived_pairs_test} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${derived_pairs_test} COMMAND ${derived_pairs_test})
+    set_tests_properties(${derived_pairs_test} PROPERTIES TIMEOUT 30 LABELS "unit;xir;ctfe;pairs;ownership;execution;abi")
+    add_test(NAME ${derived_pairs_test}_runtime_resources COMMAND ${derived_pairs_test} --runtime-resources)
+    set_tests_properties(${derived_pairs_test}_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;pairs;ownership;runtime-fault;resources")
+endforeach()
+

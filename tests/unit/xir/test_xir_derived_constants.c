@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include "xir_derived_constants_source.h"
 #include "xir/xxir_emit_c.h"
+#include "xir_derived_output_policy.h"
 static void constant_table(void) {
     XrXirCompileContext context={0};XrXirArtifact *lowered=constant_lower(&context);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
@@ -36,11 +37,11 @@ static void constant_table(void) {
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 static void constant_refusals(void) {
+    derived_policy_receiving(constant_source,&constant_limits,true);
     const char *cases[]={
-        "fn large()->(i64,i64){return (2,3)}\nexport fn table()->(i64,i64){return comptime large()}\n",
         "fn effectful()->(i16,i16){print(1);return (2,3)}\nexport fn table()->(i16,i16){return comptime effectful()}\n"};
-    const XrXirStatus expected[]={XR_XIR_BUDGET,XR_XIR_BAD_TYPE};
-    for(unsigned i=0;i<2;++i) {
+    const XrXirStatus expected[]={XR_XIR_BAD_TYPE};
+    for(unsigned i=0;i<1;++i) {
         XrXirCompileContext context={0};
         CHECK(xr_compile_resources_new(&constant_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
         context.limits=xr_xir_compile_default_limits();
@@ -134,5 +135,5 @@ int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--runtime-resources")){constant_runtime_resources();return 0;}
     if(argc==3 && !strcmp(argv[1],"--emit-native")){constant_emit(argv[2]);return 0;}
     CHECK(argc==1);constant_table();constant_refusals();source_fixture_source_owners_free();
-    puts("Ordinary eight-byte constant table: ordered description, independent recipe, packet, VM7532, producer death and original output/effect refusals");return 0;
+    puts("Ordinary eight-byte constant table: ordered description, independent recipe, packet, VM7532, producer death and caller output limits and effect refusal");return 0;
 }

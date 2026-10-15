@@ -61,3 +61,6 @@ endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/derived_arrays.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/derived_squares.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/derived_records.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/derived_fibonacci.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/derived_pairs.cmake")

@@ -14,6 +14,7 @@
 #include <ctype.h>
 #include "xir_derived_arrays_source.h"
 #include "xir/xxir_emit_c.h"
+#include "xir_derived_output_policy.h"
 static void derived_array_table(void) {
     XrXirCompileContext context={0};XrXirArtifact *lowered=derived_array_lower(&context);
     XrXirDomain *reader=NULL;CHECK(xr_xir_compile_domain_new(context.resources,UINT64_MAX,&reader)==XR_XIR_VALUE_OK);
@@ -37,11 +38,11 @@ static void derived_array_table(void) {
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 static void derived_array_refusals(void) {
+    derived_policy_receiving(derived_array_source,&derived_array_limits,false);
     const char *cases[]={
-        "fn large()->Array<i8>{return [1,2,3,4,5,6,7,8,9]}\nexport fn table()->Array<i8>{return comptime large()}\n",
         "fn effectful()->Array<i8>{print(1);return [1,2]}\nexport fn table()->Array<i8>{return comptime effectful()}\n"};
-    const XrXirStatus expected[]={XR_XIR_BUDGET,XR_XIR_BAD_TYPE};
-    for(unsigned i=0;i<2;++i) {
+    const XrXirStatus expected[]={XR_XIR_BAD_TYPE};
+    for(unsigned i=0;i<1;++i) {
         XrXirCompileContext context={0};
         CHECK(xr_compile_resources_new(&derived_array_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
         context.limits=xr_xir_compile_default_limits();
@@ -136,5 +137,5 @@ int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--runtime-resources")){derived_array_runtime_resources();return 0;}
     if(argc==3 && !strcmp(argv[1],"--emit-native")){derived_array_emit(argv[2]);return 0;}
     CHECK(argc==1);derived_array_table();derived_array_refusals();source_fixture_source_owners_free();
-    puts("Ordinary nullable Array: independent loop recipe, capacity6, Some1/None/Some9/None, packet, VM9001, producer death and output/effect refusals");return 0;
+    puts("Ordinary nullable Array: independent loop recipe, capacity6, Some1/None/Some9/None, packet, VM9001, producer death and caller output limits and effect refusal");return 0;
 }
