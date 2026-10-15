@@ -36,7 +36,7 @@ static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
     const EffectInvocationDeclaredBounds *declared,EffectBodyRequest *output) {
     if (!xir_compile_context_valid(work) || !module || !module->functions || !graph || !effects ||
         !effect_body_request_empty(output) || !xir_effects_context_matches(work,effects,module->function_count) ||
-        !effects->contracts || !declared || declared->resources!=work->resources ||
+        !effect_contracts_read(effects) || !declared || declared->resources!=work->resources ||
         declared->count!=module->function_count || !declared->functions) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,3+sizeof(bool))) return XR_XIR_BUDGET;
     bool local_bounds=graph->material && declared==graph->material->declared;

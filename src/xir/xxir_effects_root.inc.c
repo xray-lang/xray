@@ -62,127 +62,16 @@ XR_FUNC const XrXirRootCauseStep *xr_xir_root_cause_trace_steps(
 XR_FUNC void xr_xir_compile_root_cause_trace_free(XrXirRootCauseTrace *trace) {
     xr_compile_resources_free(trace);
 }
-static bool effect_root_trace_terminal(const XrXirEffects *effects, uint32_t function,
-    const XrXirRootEffectWitness *witness, bool unresolved) {
-    XrXirRootEffectCause cause = witness->cause;
-    if (cause==XR_XIR_ROOT_CAUSE_PARAMETER) {
-        uint32_t owner=witness->callee==UINT32_MAX ? function : witness->callee;
-        return effects->contracts && effects->formula_terminals && owner<effects->count &&
-            witness->instruction!=UINT32_MAX && effects->contracts[owner].parameters &&
-            witness->slot<effects->contracts[owner].parameter_count &&
-            effects->contracts[owner].parameters[witness->slot].kind==XR_XIR_EFFECT_PARAMETER_VARIABLE;
-    }
-    if (cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL)
-        return effects->contracts && effects->formula_terminals && unresolved &&
-            witness->callee==UINT32_MAX && witness->slot==UINT32_MAX &&
-            witness->instruction!=UINT32_MAX;
-    if (cause==XR_XIR_ROOT_CAUSE_CELL_ACCESS || cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER)
-        return effects->cells && effects->contracts && effects->formula_terminals &&
-            witness->callee==UINT32_MAX && witness->instruction!=UINT32_MAX &&
-            (cause==XR_XIR_ROOT_CAUSE_CELL_ACCESS || witness->slot<effects->contracts[function].parameter_count);
-    if (cause == XR_XIR_ROOT_CAUSE_INDIRECT || cause == XR_XIR_ROOT_CAUSE_REQUIREMENT)
-        return witness->slot == UINT32_MAX && witness->instruction != UINT32_MAX;
-    if (unresolved) return false;
-    return cause == XR_XIR_ROOT_CAUSE_MUTABLE_SLOT || cause == XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST ||
-        cause == XR_XIR_ROOT_CAUSE_INITIALIZER;
-}
-/* The existing forest supplies the only path. A finite distance and exact
- * descent reject cycles without another graph, recursion, or input borrows. */
-static XrXirStatus effect_root_trace_length(const XrXirCompileContext *context,
-    const XrXirEffects *effects, uint32_t function, bool unresolved, uint32_t *length) {
-    const XrXirRootEffectWitness *forest = unresolved ? effects->unresolved_witnesses : effects->root_witnesses;
-    uint32_t current = function, count = 0;
-    bool constant=false;
-    bool fact = unresolved ? effects->root[current].unresolved : effects->root[current].requires_root;
-    if (!fact) {
-        if (forest[current].cause != XR_XIR_ROOT_CAUSE_NONE) return XR_XIR_BAD_STRUCTURE;
-        *length = 0; return XR_XIR_OK;
-    }
-    for (;;) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        const XrXirRootEffectWitness *witness = &forest[current];
-        fact = unresolved ? effects->root[current].unresolved : effects->root[current].requires_root;
-        if (constant) {
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
-            fact=!!(effects->contracts[current].formula.constant_mask&
-                (unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED));
-        }
-        if (!fact || count >= effects->count || witness->distance >= effects->count) return XR_XIR_BAD_STRUCTURE;
-        ++count;
-        if (!witness->distance) {
-            if ((witness->cause!=XR_XIR_ROOT_CAUSE_PARAMETER && witness->callee!=UINT32_MAX) ||
-                !effect_root_trace_terminal(effects,current,witness,unresolved))
-                return XR_XIR_BAD_STRUCTURE;
-            if (witness->cause==XR_XIR_ROOT_CAUSE_PARAMETER ||
-                witness->cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL ||
-                witness->cause==XR_XIR_ROOT_CAUSE_CELL_ACCESS || witness->cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER) {
-                if (!xir_compile_work(context,5)) return XR_XIR_BUDGET;
-                const XrXirRootEffectWitness *certificate=
-                    &effects->formula_terminals[((size_t)constant*2+unresolved)*effects->count+current];
-                if (certificate->cause!=witness->cause || certificate->instruction!=witness->instruction ||
-                    certificate->callee!=witness->callee || certificate->slot!=witness->slot ||
-                    certificate->distance!=witness->distance) return XR_XIR_BAD_STRUCTURE;
-            }
-            *length = count; return XR_XIR_OK;
-        }
-        if ((witness->cause != XR_XIR_ROOT_CAUSE_CALL && witness->cause != XR_XIR_ROOT_CAUSE_CLEANUP) ||
-            witness->callee >= effects->count || witness->slot != UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-        if (effects->contracts) {
-            if (!effects->constant_witnesses || !effects->formula_terminals) return XR_XIR_BAD_STRUCTURE;
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
-            forest=effects->constant_witnesses+(size_t)unresolved*effects->count;constant=true;
-        }
-        if (forest[witness->callee].distance!=witness->distance-1) return XR_XIR_BAD_STRUCTURE;
-        current = witness->callee;
-    }
-}
-static XrXirStatus effect_root_trace_fill(const XrXirCompileContext *context,
-    const XrXirEffects *effects, bool unresolved, uint32_t function, uint32_t count, XrXirRootCauseStep *steps) {
-    const XrXirRootEffectWitness *forest=unresolved?effects->unresolved_witnesses:effects->root_witnesses;
-    for (uint32_t i = 0; i < count; ++i) {
-        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        XrXirRootEffectWitness witness = forest[function];
-        steps[i] = (XrXirRootCauseStep){function,witness.instruction,witness.callee,
-            witness.slot,witness.distance,witness.cause};
-        if (witness.distance && effects->contracts) {
-            if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
-            forest=effects->constant_witnesses+(size_t)unresolved*effects->count;
-        }
-        function = witness.callee;
-    }
-    return XR_XIR_OK;
-}
 XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(const XrXirCompileContext *context,
-    const XrXirEffects *effects, uint32_t function, XrXirRootCauseTrace **output) {
-    if (effects && effects->contexts)
+    const XrXirEffects *effects,uint32_t function,XrXirRootCauseTrace **output) {
+    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
+    if (!output || *output || !final || function>=final->count ||
+        !xir_effects_context_matches(context,effects,final->count)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_public_root_match(context,effects);
+    if (status!=XR_XIR_OK) return status;
+    if (effect_public_root_context(effects,function))
         return effect_context_owner_trace(context,effects,function,output);
-    if (effects && effects->invocations)
-        return effect_invocation_public_trace(context,effects->invocations,function,
-            function<effects->count?&effects->root[function]:NULL,output);
-    if (!xir_compile_context_valid(context) || !effects || effects->resources != context->resources ||
-        function >= effects->count || !effects->root || !effects->root_witnesses ||
-        !effects->unresolved_witnesses || !output || *output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-    uint32_t counts[2] = {0};
-    XrXirStatus status = effect_root_trace_length(context,effects,function,false,&counts[0]);
-    if (status == XR_XIR_OK) status = effect_root_trace_length(context,effects,function,true,&counts[1]);
-    if (status != XR_XIR_OK) return status;
-    uint64_t count = (uint64_t)counts[0] + counts[1];
-    if (count > (SIZE_MAX - sizeof(XrXirRootCauseTrace)) / sizeof(XrXirRootCauseStep)) return XR_XIR_BUDGET;
-    size_t bytes = sizeof(XrXirRootCauseTrace) + (size_t)count * sizeof(XrXirRootCauseStep);
-    if (count >= UINT64_MAX - bytes) return XR_XIR_BUDGET;
-    status = xir_compile_resource_status(xr_compile_resources_admit(context->resources,bytes,bytes + count + 1));
-    if (status != XR_XIR_OK) return status;
-    XrXirRootCauseTrace *trace = xir_compile_calloc(context,1,bytes,&status);
-    if (!trace) return status;
-    XrXirRootCauseStep *steps = effect_root_trace_storage(trace);
-    status = effect_root_trace_fill(context,effects,false,function,counts[0],steps);
-    if (status == XR_XIR_OK) status = effect_root_trace_fill(context,effects,true,
-        function,counts[1],steps + counts[0]);
-    if (status == XR_XIR_OK && !xir_compile_work(context,1)) status = XR_XIR_BUDGET;
-    if (status != XR_XIR_OK) { xr_xir_compile_root_cause_trace_free(trace); return status; }
-    trace->facts = effects->root[function]; trace->counts[0] = counts[0]; trace->counts[1] = counts[1];
-    *output = trace; return XR_XIR_OK;
+    return effect_invocation_public_trace(context,effects->invocations,function,&final->root[function],output);
 }
 static XrXirStatus effect_root_callable(const EffectRootSeedRecord *request,XrXirRootEffects *facts,
     XrXirRootEffectWitness *required,XrXirRootEffectWitness *unresolved,
@@ -294,10 +183,10 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
  * constructors and independent replay use the same exhaustive authority rule. */
 static XrXirStatus effect_root_seed_record(const EffectRootSeedRecord *request,XrXirEffects *effects,
     const XrXirCompileContext *work) {
-    if (!request || !effects || request->function>=effects->count || !effects->root ||
-        !effects->root_witnesses || !effects->unresolved_witnesses) return XR_XIR_BAD_STRUCTURE;
-    return effect_root_seed_output(request,&effects->root[request->function],
-        &effects->root_witnesses[request->function],&effects->unresolved_witnesses[request->function],work);
+    if (!request || !effects || request->function>=effects->count || !effects->outcomes_work.root ||
+        !effects->outcomes_work.root_witnesses || !effects->outcomes_work.unresolved_witnesses) return XR_XIR_BAD_STRUCTURE;
+    return effect_root_seed_output(request,&effects->outcomes_work.root[request->function],
+        &effects->outcomes_work.root_witnesses[request->function],&effects->outcomes_work.unresolved_witnesses[request->function],work);
 }
 
 static inline XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
@@ -318,7 +207,7 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
     const XrXirCompileContext *work, bool unresolved, bool constant) {
     XrXirRootEffectWitness *witnesses = constant ?
         effects->constant_witnesses+(size_t)unresolved*effects->count :
-        unresolved ? effects->unresolved_witnesses : effects->root_witnesses;
+        unresolved ? effects->outcomes_work.unresolved_witnesses : effects->outcomes_work.root_witnesses;
     uint32_t bit=unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
     uint32_t front = 0, back = 0;
     for (uint32_t f = 0; f < effects->count; ++f) {
@@ -333,12 +222,12 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
             EffectEdge edge = graph->edges[e];
             if (constant) {
                 if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-                if (!(effects->contracts[callee].formula.constant_mask&bit)) continue;
+                if (!(effect_contracts_read(effects)[callee].formula.constant_mask&bit)) continue;
             }
-            bool fact = unresolved ? effects->root[edge.caller].unresolved : effects->root[edge.caller].requires_root;
+            bool fact = unresolved ? effects->outcomes_work.root[edge.caller].unresolved : effects->outcomes_work.root[edge.caller].requires_root;
             if (constant) {
                 if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-                fact=!!(effects->contracts[edge.caller].formula.constant_mask&bit);
+                fact=!!(effect_contracts_read(effects)[edge.caller].formula.constant_mask&bit);
             }
             if (!fact) return XR_XIR_BAD_STRUCTURE;
             XrXirRootEffectWitness candidate = {edge.cleanup ? XR_XIR_ROOT_CAUSE_CLEANUP : XR_XIR_ROOT_CAUSE_CALL,
@@ -358,10 +247,10 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
     }
     for (uint32_t f = 0; f < effects->count; ++f) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        bool fact = unresolved ? effects->root[f].unresolved : effects->root[f].requires_root;
+        bool fact = unresolved ? effects->outcomes_work.root[f].unresolved : effects->outcomes_work.root[f].requires_root;
         if (constant) {
             if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-            fact=!!(effects->contracts[f].formula.constant_mask&bit);
+            fact=!!(effect_contracts_read(effects)[f].formula.constant_mask&bit);
         }
         if (fact != (witnesses[f].cause != XR_XIR_ROOT_CAUSE_NONE)) return XR_XIR_BAD_STRUCTURE;
     }
@@ -372,11 +261,11 @@ static XrXirStatus effect_root_forest(XrXirEffects *effects, EffectGraph *graph,
  * public choice still uses the original ordering across both domains. */
 static inline XrXirStatus effect_root_witnesses(XrXirEffects *effects, EffectGraph *graph,
     const XrXirCompileContext *work, bool unresolved) {
-    if (!effects->contracts) return effect_root_forest(effects,graph,work,unresolved,false);
+    if (!effect_contracts_read(effects)) return effect_root_forest(effects,graph,work,unresolved,false);
     if (!effects->constant_witnesses || !effects->formula_terminals) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_root_forest(effects,graph,work,unresolved,true);
     if (status!=XR_XIR_OK) return status;
-    XrXirRootEffectWitness *projected=unresolved?effects->unresolved_witnesses:effects->root_witnesses;
+    XrXirRootEffectWitness *projected=unresolved?effects->outcomes_work.unresolved_witnesses:effects->outcomes_work.root_witnesses;
     const XrXirRootEffectWitness *constant=effects->constant_witnesses+(size_t)unresolved*effects->count;
     for (uint32_t f=0;f<effects->count;++f) {
         if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
@@ -395,7 +284,7 @@ static inline XrXirStatus effect_root_witnesses(XrXirEffects *effects, EffectGra
             }
         }
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        bool fact=unresolved?effects->root[f].unresolved:effects->root[f].requires_root;
+        bool fact=unresolved?effects->outcomes_work.root[f].unresolved:effects->outcomes_work.root[f].requires_root;
         if (fact!=(to->cause!=XR_XIR_ROOT_CAUSE_NONE)) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;

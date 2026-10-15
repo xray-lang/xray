@@ -15,6 +15,13 @@ typedef struct TraceMark { size_t blocks, bytes; } TraceMark;
 static TraceAllocation trace_blocks[32768];
 static size_t trace_live, trace_live_bytes, trace_attempts, trace_fail_at = SIZE_MAX;
 static bool trace_injected;
+static bool trace_competing_charge;
+static size_t trace_work_position,trace_work_cut_at=SIZE_MAX,trace_last_allocation_work_position=SIZE_MAX;
+static uint64_t trace_observed_work;
+static void trace_observe_begin(void) {
+    trace_work_position=0;trace_observed_work=0;trace_last_allocation_work_position=SIZE_MAX;
+}
+
 static TraceMark trace_mark(void) { return (TraceMark){trace_live,trace_live_bytes}; }
 static void trace_balanced(TraceMark mark) {
     CHECK(trace_live == mark.blocks && trace_live_bytes == mark.bytes);
@@ -25,6 +32,7 @@ static void *trace_malloc(size_t bytes) {
     if (memory) {
         CHECK(trace_live < 32768 && bytes <= SIZE_MAX - trace_live_bytes);
         trace_blocks[trace_live++] = (TraceAllocation){memory,bytes}; trace_live_bytes += bytes;
+        trace_last_allocation_work_position=trace_work_position;
     }
     return memory;
 }
@@ -42,7 +50,10 @@ static void trace_free(void *memory) {
 #undef xr_free
 #define xr_malloc(bytes) trace_malloc(bytes)
 #define xr_free(memory) trace_free(memory)
+#pragma push_macro("xr_compile_resources_work")
+#define xr_compile_resources_work trace_resource_work
 #include "base/xcompile_resources.c"
+#pragma pop_macro("xr_compile_resources_work")
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 static XrCompileResourceLimits trace_caps(void) {
@@ -68,17 +79,24 @@ static void trace_stats_equal(XrCompileResourceStats actual, XrCompileResourceSt
     CHECK(actual.allocation_count == expected.allocation_count && actual.allocated_bytes == expected.allocated_bytes &&
         actual.live_bytes == expected.live_bytes && actual.peak_bytes == expected.peak_bytes && actual.work == expected.work);
 }
-static bool trace_competing_charge;
-static size_t trace_work_position, trace_work_cut_at=SIZE_MAX;
-/* Admission does not reserve the shared ledger. A deterministic competing
- * owner spends its remaining allowance through the real resource API. */
-static XrCompileResourceStatus trace_charged_work(XrCompileResources *resources, uint64_t units) {
-    if(trace_competing_charge && trace_work_position++==trace_work_cut_at) {
+/* Observe the real ledger API, including calls from linked compiler code.
+ * Allocator attempt/zeroing charges remain in the unmodified allocator. The
+ * observer changes no units or result and never refunds a rejected request. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources,uint64_t units) {
+    size_t position=trace_work_position++;
+    if (trace_competing_charge && position==trace_work_cut_at) {
         XrCompileResourceStats stats={0};
         CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        CHECK(xr_compile_resources_work(resources,resources->limits.work-stats.work)==XR_COMPILE_RESOURCE_OK);
+        CHECK(trace_resource_work(resources,resources->limits.work-stats.work)==XR_COMPILE_RESOURCE_OK);
         trace_competing_charge=false;
     }
+    XrCompileResourceStatus status=trace_resource_work(resources,units);
+    if (status==XR_COMPILE_RESOURCE_OK) {
+        CHECK(units<=UINT64_MAX-trace_observed_work);trace_observed_work+=units;
+    }
+    return status;
+}
+static XrCompileResourceStatus trace_charged_work(XrCompileResources *resources,uint64_t units) {
     return xr_compile_resources_work(resources,units);
 }
 #endif // XIR_ROOT_TRACE_OWNER_H

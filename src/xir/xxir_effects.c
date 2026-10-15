@@ -47,17 +47,46 @@ typedef struct EffectFinalOutcomes {
     uint64_t *errors;
     XrXirStatus *task_errors,*go_safe;
     XrXirEffect *task_creation;
+    XrXirRootEffects *root;
+    XrXirRootEffectWitness *root_witnesses, *unresolved_witnesses;
+    XrXirFunctionEffectContract *contracts;
+    XirEffectEntryRootView *entry_roots;
+    EffectContextOwner *contexts;
 } EffectFinalOutcomes;
 
-static void effect_outcomes_clear(EffectFinalOutcomes *outcomes) {
+/* Formula storage belongs to the canonical summary after ROOT publication.
+ * Partial constructors alone own their provisional formula allocations. */
+static void effect_contracts_clear(XrXirFunctionEffectContract *contracts,uint32_t count,bool formulas) {
+    if (!contracts) return;
+    for (uint32_t f=0;f<count;++f) {
+        xr_compile_resources_free((void *)contracts[f].parameters);
+        if (formulas) xr_compile_resources_free((void *)contracts[f].formula.terms);
+        xr_compile_resources_free((void *)contracts[f].values);
+        xr_compile_resources_free((void *)contracts[f].bindings);
+    }
+    xr_compile_resources_free(contracts);
+}
+
+static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) {
+    if (outcomes->entry_roots) {
+        for (uint32_t f=0;f<count;++f)
+            xr_compile_resources_free((void *)outcomes->entry_roots[f].parameters);
+        xr_compile_resources_free(outcomes->entry_roots);
+    }
+    effect_context_owner_free(outcomes->contexts);
+    effect_contracts_clear(outcomes->contracts,count,false);
     xr_compile_resources_free(outcomes->functions);xr_compile_resources_free(outcomes->witnesses);
     xr_compile_resources_free(outcomes->atoms);xr_compile_resources_free(outcomes->errors);
     xr_compile_resources_free(outcomes->task_errors);xr_compile_resources_free(outcomes->go_safe);
     xr_compile_resources_free(outcomes->task_creation);
+    xr_compile_resources_free(outcomes->root);xr_compile_resources_free(outcomes->root_witnesses);
+    xr_compile_resources_free(outcomes->unresolved_witnesses);
     *outcomes=(EffectFinalOutcomes){0};
 }
 
 static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effects);
+static bool effect_public_root_context(const XrXirEffects *effects,uint32_t function);
+static XrXirStatus effect_public_root_match(const XrXirCompileContext *work,const XrXirEffects *effects);
 
 struct XrXirEffects {
     /* Each charged allocation independently retains this ledger. */
@@ -67,17 +96,14 @@ struct XrXirEffects {
      * moves every allocation into the actual Final and empties this staging. */
     EffectFinalOutcomes outcomes_work;
     EffectFinalOutcomes *outcomes_owner;
-    XrXirRootEffects *root;
-    XrXirRootEffectWitness *root_witnesses, *unresolved_witnesses;
+    /* Only a private receiving request borrows these actual Final records. */
+    const EffectFinalOutcomes *root_input;
     /* Symbolic views borrow the unique Result after successful publication. */
     XrXirRootEffectWitness *formula_terminals;
     XrXirRootEffectWitness *constant_witnesses;
-    XrXirFunctionEffectContract *contracts;
     XrXirCellProvenance *cells;
-    XirEffectEntryRootView *entry_roots;
-    EffectContextOwner *contexts;
     EffectRefinementBounds *refinement;
-    /* One sealed ROOT owner; control and error analyses remain independent. */
+    /* The invocation Final owns every published public effect record. */
     EffectInvocationCertificate *invocations;
     /* Destruction provenance survives transfer of the certificate to a
      * forest. This borrowed storage identity grants no permission. */
@@ -85,6 +111,28 @@ struct XrXirEffects {
     /* Construction-only owner; seal transfers this same generation. */
     struct EffectBodyMaterial *generation;
 };
+
+/* Public queries require the complete Final. Private construction and the
+ * request-owned Source replay have explicit, disjoint read inputs. */
+static const EffectFinalOutcomes *effect_roots_read(const XrXirEffects *effects) {
+    if (!effects) return NULL;
+    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
+    if (final) return final;
+    if (effects->root_input) return effects->root_input;
+    return &effects->outcomes_work;
+}
+
+static const XrXirFunctionEffectContract *effect_contracts_read(const XrXirEffects *effects) {
+    const EffectFinalOutcomes *records=effect_roots_read(effects);
+    return records?records->contracts:NULL;
+}
+
+/* Published readers borrow the actual Final. Only a live constructor has a
+ * mutable context slot; request-only ROOT borrows never own context storage. */
+static const EffectContextOwner *effect_contexts_read(const XrXirEffects *effects) {
+    const EffectFinalOutcomes *records=effect_roots_read(effects);
+    return records?records->contexts:NULL;
+}
 
 /* Ledger identity rejects foreign requests; it is not an admission proof. */
 XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
@@ -236,38 +284,29 @@ static void effect_graph_free(EffectGraph *graph) {
 }
 void xr_xir_compile_effects_free(XrXirEffects *effects) {
     if (effects) {
-        if (effects->entry_roots) {
-            for (uint32_t f=0;f<effects->count;++f)
-                xr_compile_resources_free((void *)effects->entry_roots[f].parameters);
-            xr_compile_resources_free(effects->entry_roots);
-        }
-        effect_context_owner_free(effects->contexts);
         effect_refinement_free(effects->refinement);
         effect_parameters_free(effects);
-        effect_outcomes_clear(&effects->outcomes_work);
+        effect_outcomes_clear(&effects->outcomes_work,effects->count);
         xr_compile_resources_free(effects->outcomes_owner);
-        xr_compile_resources_free(effects->root); xr_compile_resources_free(effects->root_witnesses);
-        xr_compile_resources_free(effects->unresolved_witnesses);
         xr_compile_resources_free(effects);
     }
 }
 XR_FUNC XrXirEffectFacts xr_xir_effects_read(const XrXirEffects *effects,uint32_t function) {
     XrXirEffectFacts read={.status=XR_XIR_BAD_STRUCTURE};
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
-    if (!final || function>=final->count || !effects->root ||
-        !effects->root_witnesses || !effects->unresolved_witnesses) return read;
-    read.status=XR_XIR_OK;read.control=final->functions[function];read.root=effects->root[function];
-    read.suspend_witness=final->witnesses[function];read.root_witness=effects->root_witnesses[function];
-    read.unresolved_witness=effects->unresolved_witnesses[function];return read;
+    if (!final || function>=final->count) return read;
+    read.status=XR_XIR_OK;read.control=final->functions[function];read.root=final->root[function];
+    read.suspend_witness=final->witnesses[function];read.root_witness=final->root_witnesses[function];
+    read.unresolved_witness=final->unresolved_witnesses[function];return read;
 }
 /* Source refinement reads only its genuine unpublished constructor. This
  * capability cannot recover provisional values through a public query. */
 XR_FUNC XrXirStatus xir_effects_construction_root(const XrXirCompileContext *context,
     const XrXirEffects *effects,uint32_t function,XrXirRootEffects *output) {
     if (!output || !xir_effects_context_matches(context,effects,effects?effects->count:0) ||
-        !effects->outcomes_owner || !effects->root || function>=effects->count)
+        !effects->outcomes_owner || !effects->outcomes_work.root || function>=effects->count)
         return XR_XIR_BAD_STRUCTURE;
-    *output=effects->root[function];return XR_XIR_OK;
+    *output=effects->outcomes_work.root[function];return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_effects_task_errors(const XrXirEffects *effects, uint32_t function) {
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
@@ -282,35 +321,21 @@ XR_FUNC XrXirEffect xr_xir_effects_task_creation(const XrXirEffects *effects, ui
     return final && function<final->count?final->task_creation[function]:XR_XIR_EFFECT_UNKNOWN;
 }
 /* An unclassified opcode must not acquire an accidental no-effect proof. */
-static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,
-    const XrXirInstruction *instruction,XrXirFunctionEffects *effect) {
-    XrXirOp op = instruction->op;
+typedef enum EffectSeedProjection {
+    EFFECT_SEED_INVALID,EFFECT_SEED_LOCAL,EFFECT_SEED_FIELDS
+} EffectSeedProjection;
+
+/* Opcode-only control terminals are shared by construction and receiving.
+ * Metadata-dependent calls require their actual operand/signature fields. */
+static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *effect) {
     switch (op) {
     case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT:
-        effect->suspend = XR_XIR_EFFECT_MAY; return true;
-    case XR_XIR_GO: return true;
+        effect->suspend = XR_XIR_EFFECT_MAY; return EFFECT_SEED_LOCAL;
+    case XR_XIR_GO: return EFFECT_SEED_LOCAL;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
-    case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return true;
-    case XR_XIR_CALL_REQUIREMENT: {
-        const XrXirInterfaceTable *table = types ? types->interfaces : NULL;
-        if (!table || instruction->targets[0] >= table->count) return false;
-        const XrXirInterfaceDeclaration *declaration = &table->declarations[instruction->targets[0]];
-        if (instruction->targets[1] >= declaration->method_count) return false;
-        const XrXirTypeNode *signature = xr_xir_callable_signature(types,
-            declaration->methods[instruction->targets[1]].signature);
-        if (!signature) return false;
-        if (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) && effect->suspend < XR_XIR_EFFECT_UNKNOWN)
-            effect->suspend = XR_XIR_EFFECT_UNKNOWN;
-        return true;
-    }
-    case XR_XIR_CALL_INDIRECT:
-    case XR_XIR_INVOKE_INDIRECT: {
-        const XrXirTypeNode *signature=xr_xir_callable_signature(types,callable);
-        if (!signature) return false;
-        if (signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) return true;
-        if (effect->suspend < XR_XIR_EFFECT_UNKNOWN) effect->suspend = XR_XIR_EFFECT_UNKNOWN;
-        return true;
-    }
+    case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return EFFECT_SEED_LOCAL;
+    case XR_XIR_CALL_REQUIREMENT: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
+        return EFFECT_SEED_FIELDS;
     case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL: case XR_XIR_INVOKE:
     case XR_XIR_CONST_RUNE: case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
@@ -356,7 +381,37 @@ static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,
     case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
+        return EFFECT_SEED_LOCAL;
+    default: return EFFECT_SEED_INVALID;
+    }
+}
+
+static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,
+    const XrXirInstruction *instruction,XrXirFunctionEffects *effect) {
+    XrXirOp op=instruction->op;EffectSeedProjection projection=effect_seed_opcode(op,effect);
+    if (projection==EFFECT_SEED_LOCAL) return true;
+    if (projection==EFFECT_SEED_INVALID) return false;
+    switch (op) {
+    case XR_XIR_CALL_REQUIREMENT: {
+        const XrXirInterfaceTable *table = types ? types->interfaces : NULL;
+        if (!table || instruction->targets[0] >= table->count) return false;
+        const XrXirInterfaceDeclaration *declaration = &table->declarations[instruction->targets[0]];
+        if (instruction->targets[1] >= declaration->method_count) return false;
+        const XrXirTypeNode *signature = xr_xir_callable_signature(types,
+            declaration->methods[instruction->targets[1]].signature);
+        if (!signature) return false;
+        if (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) && effect->suspend < XR_XIR_EFFECT_UNKNOWN)
+            effect->suspend = XR_XIR_EFFECT_UNKNOWN;
         return true;
+    }
+    case XR_XIR_CALL_INDIRECT:
+    case XR_XIR_INVOKE_INDIRECT: {
+        const XrXirTypeNode *signature=xr_xir_callable_signature(types,callable);
+        if (!signature) return false;
+        if (signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) return true;
+        if (effect->suspend < XR_XIR_EFFECT_UNKNOWN) effect->suspend = XR_XIR_EFFECT_UNKNOWN;
+        return true;
+    }
     default: return false;
     }
 }
@@ -708,26 +763,27 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
  * The sealed result owns the sole canonical vectors and final witness inventory. */
 static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
     XrXirEffects *effects, const XrXirCompileContext *work) {
-    if (effects->entry_roots || effects->count!=module->function_count)
+    if (effects->outcomes_work.entry_roots || effects->count!=module->function_count)
         return XR_XIR_BAD_STRUCTURE;
     if (!effects->invocations || !effect_body_material_shape(effects->invocations->body) ||
         effects->invocations->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
     EffectBodyRequest body=effect_body_owned_request(work,effects->invocations->body);
     XrXirStatus status=XR_XIR_OK;
-    effects->entry_roots=xir_compile_calloc(work,effects->count,
-        sizeof(*effects->entry_roots),&status);
-    if (!effects->entry_roots) return status;
+    effects->outcomes_work.entry_roots=xir_compile_calloc(work,effects->count,
+        sizeof(*effects->outcomes_work.entry_roots),&status);
+    if (!effects->outcomes_work.entry_roots) return status;
     for (uint32_t f=0;f<effects->count;++f) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         EffectBodyFunctionHead function={0};status=effect_body_request_head(&body,f,&function);
         if (status!=XR_XIR_OK) return status;
-        XirEffectEntryRootView *view=&effects->entry_roots[f];
-        if (!effects->contracts) {
-            view->intrinsic_mask=(effects->root[f].requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
-                (effects->root[f].unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
+        XirEffectEntryRootView *view=&effects->outcomes_work.entry_roots[f];
+        if (!effect_contracts_read(effects)) {
+            const XrXirRootEffects *root=&effect_roots_read(effects)->root[f];
+            view->intrinsic_mask=(root->requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+                (root->unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
             continue;
         }
-        const XrXirRootFormula *formula=&effects->contracts[f].formula;
+        const XrXirRootFormula *formula=&effect_contracts_read(effects)[f].formula;
         view->intrinsic_mask=formula->constant_mask;
         for (uint32_t t=0;t<formula->term_count;++t) {
             if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
@@ -741,7 +797,7 @@ static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
                 view->intrinsic_mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
             } else if (term->kind==XR_XIR_ROOT_TERM_PARAMETER) {
                 if (term->index>=function.parameter_count ||
-                    effects->contracts[f].parameters[term->index].kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
+                    effect_contracts_read(effects)[f].parameters[term->index].kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
                     return XR_XIR_BAD_STRUCTURE;
                 const XrXirTypeNode *signature=xr_xir_callable_signature(body.domain.types,
                     function.parameters[term->index]);
@@ -773,13 +829,15 @@ static XrXirStatus effect_entry_roots_seal(const XrXirModule *module,
 
 XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, XirEffectEntryRootView *output) {
-    if (!output || !xir_effects_context_matches(context,effects,effects?effects->count:0) ||
-        !effects->entry_roots || function>=effects->count) return XR_XIR_BAD_STRUCTURE;
+    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
+    if (!output || !final || !xir_effects_context_matches(context,effects,final->count) ||
+        !final->entry_roots || function>=final->count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-    *output=effects->entry_roots[function];return XR_XIR_OK;
+    *output=final->entry_roots[function];return XR_XIR_OK;
 }
 
 #include "xxir_effect_outcomes.inc.c"
+#include "xxir_effect_control_verify.inc.c"
 #include "xxir_effect_source_terminal.inc.c"
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_context,
@@ -798,19 +856,21 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
     if (!effects) return allocation_status;
     effects->resources = compile_context->resources;
     effects->count = module->function_count;
-    effects->outcomes_owner=xir_compile_calloc(compile_context,1,sizeof(*effects->outcomes_owner),&allocation_status);
+    /* The receiving object is overwritten in full at the only publication.
+     * No constructor or failure path may read its uninitialized payload. */
+    effects->outcomes_owner=xir_compile_alloc(compile_context,sizeof(*effects->outcomes_owner),&allocation_status);
     if (!effects->outcomes_owner) { xr_xir_compile_effects_free(effects);return allocation_status; }
     effects->outcomes_work.functions = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.functions), &allocation_status);
     effects->outcomes_work.witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.witnesses), &allocation_status);
     effects->outcomes_work.task_errors = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.task_errors), &allocation_status);
     effects->outcomes_work.go_safe = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.go_safe), &allocation_status);
     effects->outcomes_work.task_creation = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.task_creation), &allocation_status);
-    effects->root = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->root), &allocation_status);
-    effects->root_witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->root_witnesses), &allocation_status);
-    effects->unresolved_witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->unresolved_witnesses), &allocation_status);
+    effects->outcomes_work.root = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.root), &allocation_status);
+    effects->outcomes_work.root_witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.root_witnesses), &allocation_status);
+    effects->outcomes_work.unresolved_witnesses = xir_compile_calloc(compile_context, effects->count, sizeof(*effects->outcomes_work.unresolved_witnesses), &allocation_status);
     if (!effects->outcomes_work.functions || !effects->outcomes_work.witnesses || !effects->outcomes_work.task_errors || !effects->outcomes_work.go_safe ||
-        !effects->outcomes_work.task_creation || !effects->root || !effects->root_witnesses ||
-        !effects->unresolved_witnesses) { xr_xir_compile_effects_free(effects); return allocation_status; }
+        !effects->outcomes_work.task_creation || !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses ||
+        !effects->outcomes_work.unresolved_witnesses) { xr_xir_compile_effects_free(effects); return allocation_status; }
     EffectGraph graph = {0};
     bool changed = false;
     XrXirStatus status = refiner ? refiner->update(refiner->context,effects,&changed) : XR_XIR_OK;
@@ -844,10 +904,10 @@ static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_con
     }
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);
-    if (status==XR_XIR_OK && effects->contexts)
-        status=effect_context_owner_project(remaining,module,effects,effects->contexts);
+    if (status==XR_XIR_OK && effect_contexts_read(effects))
+        status=effect_context_owner_project(remaining,module,effects,effect_contexts_read(effects));
     if (status == XR_XIR_OK) status = effect_errors_analyze(effects, &graph, remaining);
-    if (status == XR_XIR_OK && !effects->contexts)
+    if (status == XR_XIR_OK && !effect_contexts_read(effects))
         status=effect_invocation_public_gate(remaining,effects->invocations);
     if (status == XR_XIR_OK) status = effect_entry_roots_seal(module,effects,remaining);
     effect_graph_free(&graph);
