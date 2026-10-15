@@ -21,6 +21,7 @@
 #include "xlsp_source_index_store.h"
 #include "xlsp_source_settings.h"
 #include "xlsp_source_watch.h"
+#include "xlsp_source_folders.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_document_store.h"
 #include "../../api/xsource_compile.h"
@@ -72,92 +73,46 @@ done:
 // Workspace Folders
 // ============================================================================
 
-// Add a workspace folder
-XR_FUNC void xlsp_handle_ws_add_folder(XrLspServer *server, const char *uri, const char *name) {
-    if (server->workspace_folder_count >= MAX_WORKSPACE_FOLDERS) {
-        lsp_log("Warning: Maximum workspace folders reached");
-        return;
+static void workspace_folders_apply(XrLspServer *server, const XrJsonValue *params,
+    const char *uri, const char *name, bool add) {
+    if (!server) return;
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResources *resources = NULL; XlspSourceFolders *owner = NULL; bool changed = false;
+    XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
+    XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        opened == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    if (status == XR_XIR_OK) status = params ? xlsp_source_folders_read(resources, server, params, &owner) :
+        xlsp_source_folders_single(resources, server, uri, name, add, &owner);
+    if (status == XR_XIR_OK) status = xlsp_source_folders_commit(owner, server, &changed);
+    if (status != XR_XIR_OK) {
+        server->source_failure.stage = 15; server->source_failure.status = (unsigned)status;
+        lsp_log("Workspace folders rejected (status=%u)", (unsigned)status); goto done;
     }
-
-    int idx = server->workspace_folder_count++;
-    server->workspace_folders[idx].uri = xr_strdup(uri);
-    server->workspace_folders[idx].name = name ? xr_strdup(name) : xr_strdup("");
-
-    const char *path = xlsp_uri_to_path(uri);
-    server->workspace_folders[idx].path = xr_strdup(path);
-    server->workspace_folders[idx].config_loaded = false;
-    server->workspace_folders[idx].index_requested = true;
-    server->workspace_folders[idx].index_completed = false;
-
-    lsp_log("Added workspace folder: %s (%s)", name ? name : uri, path);
-
-    // Start indexing this folder
-    xlsp_workspace_start_background_index(server, path);
-}
-
-// Remove a workspace folder and purge related state
-XR_FUNC void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri) {
-    for (int i = 0; i < server->workspace_folder_count; i++) {
-        if (strcmp(server->workspace_folders[i].uri, uri) == 0) {
-            lsp_log("Removed workspace folder: %s", server->workspace_folders[i].name);
-
-            // Purge analyzer and cache state for files under this folder
-            if (server->workspace_folders[i].path) {
-                xlsp_workspace_purge_prefix(server, server->workspace_folders[i].path);
-            }
-
-            xr_free(server->workspace_folders[i].uri);
-            xr_free(server->workspace_folders[i].name);
-            xr_free(server->workspace_folders[i].path);
-
-            // Shift remaining folders
-            for (int j = i; j < server->workspace_folder_count - 1; j++) {
-                server->workspace_folders[j] = server->workspace_folders[j + 1];
-            }
-            server->workspace_folder_count--;
-            if(server->workspace_folder_count) {
-                const char *roots[MAX_WORKSPACE_FOLDERS];int count=server->workspace_folder_count;
-                for(int root=0;root<count;++root)roots[root]=server->workspace_folders[root].path;
-                xlsp_workspace_start_background_index_roots(server,roots,count);
-            }
-            return;
-        }
+    server->source_failure.stage = server->source_failure.status = 0;
+    if (!changed) goto done;
+    xlsp_free_exports_cache(server);
+    if (server->index_progress_token) {
+        xlsp_progress_end(server, server->index_progress_token, "Workspace folders changed");
+        xr_free(server->index_progress_token); server->index_progress_token = NULL;
     }
-}
-
-XR_FUNC void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *event = xjson_get_object(params, "event");
-    if (!event)
-        return;
-
-    // Handle removed folders
-    XrJsonValue *removed = xjson_get_array(event, "removed");
-    if (removed) {
-        int count = xjson_array_len(removed);
-        for (int i = 0; i < count; i++) {
-            XrJsonValue *folder = xjson_array_get(removed, i);
-            const char *uri = xjson_get_string(folder, "uri");
-            if (uri) {
-                xlsp_handle_ws_remove_folder(server, uri);
-            }
-        }
+    if (server->workspace_folder_count) {
+        const char *roots[MAX_WORKSPACE_FOLDERS];
+        for (int i = 0; i < server->workspace_folder_count; ++i) roots[i] = server->workspace_folders[i].path;
+        xlsp_workspace_start_background_index_roots(server, roots, server->workspace_folder_count);
     }
-
-    // Handle added folders
-    XrJsonValue *added = xjson_get_array(event, "added");
-    if (added) {
-        int count = xjson_array_len(added);
-        for (int i = 0; i < count; i++) {
-            XrJsonValue *folder = xjson_array_get(added, i);
-            const char *uri = xjson_get_string(folder, "uri");
-            const char *name = xjson_get_string(folder, "name");
-            if (uri) {
-                xlsp_handle_ws_add_folder(server, uri, name);
-            }
-        }
-    }
-
     lsp_log("Workspace folders updated: %d total", server->workspace_folder_count);
+done:
+    xlsp_source_folders_free(owner); xr_compile_resources_release(resources);
+}
+XR_FUNC void xlsp_handle_ws_add_folder(XrLspServer *server, const char *uri, const char *name) {
+    workspace_folders_apply(server, NULL, uri, name ? name : "", true);
+}
+XR_FUNC void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri) {
+    workspace_folders_apply(server, NULL, uri, "", false);
+}
+XR_FUNC void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, XrJsonValue *params) {
+    if (!params) return;
+    workspace_folders_apply(server, params, NULL, NULL, false);
 }
 
 // ============================================================================
