@@ -78,6 +78,12 @@ static const char source_comptime_text_text[]=
     "fn make()->string { const a:Array<f64>=[3.5,-0.0]; return a.join(\",\") }\n"
     "fn answer()->i64 { const n:Array<u64>=[18446744073709551615]; const b:Array<bool>=[true]; const r:Array<rune>=['\\0','A']; return n.join(\"\")==\"18446744073709551615\" && b.join(\"\")==\"true\" && len(r.join(\"\"))==2 ? 42 : 0 }\n"
     "export fn run()->i64 { comptime make(); return comptime answer() }\n";
+static const char source_comptime_nominal_text[]=
+    "struct Pair { x:i8; text:string }\n"
+    "enum Choice { Empty, Some { pair:Pair } }\n"
+    "fn make()->Choice { var p=Pair{x:1,text:\"ab\"}; const old=p; p.x=7; return Choice.Some{pair:p} }\n"
+    "fn answer()->i64 { var p=Pair{x:1,text:\"ab\"}; const old=p; p.x=7; return old.x==1 && p.x==7 ? 42 : 0 }\n"
+    "export fn run()->i64 { comptime make(); return comptime answer() }\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -132,7 +138,12 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources"))) {
+    if (argc==2 && !strcmp(argv[1],"--nominal")) {
+        source_comptime_resource_text=source_comptime_nominal_text;SourceComptimeTestReport report={0};
+        source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&report);CHECK(report.status==XR_XIR_OK);
+        fprintf(stderr,"Source nominal independent recipe complete Checked/query producer normal physical0\n");return 0;
+    }
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -184,6 +195,10 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--text-resources")) {
             source_comptime_resource_text=source_comptime_text_text;
             fprintf(stderr,"Source comptime common scalar text/integer IEEE bool Rune/independent String recipe whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--nominal-resources")) {
+            source_comptime_resource_text=source_comptime_nominal_text;
+            fprintf(stderr,"Source comptime Struct/Enum/field COW/independent nominal recipe whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }

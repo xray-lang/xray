@@ -1,0 +1,3 @@
+struct Pair { x:i8; text:string }
+export fn run()->Pair { var p=Pair{x:1,text:"ab"}; const old=p; p.x=7; return p }
+fn echo(x:Pair)->Pair { return x }

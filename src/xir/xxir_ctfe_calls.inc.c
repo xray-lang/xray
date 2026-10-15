@@ -36,7 +36,9 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     if (!xir_compile_work(work,8)) return XR_XIR_CTFE_BUDGET;
     if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_SUPPORTED;
     const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
-    if (identity->cleanup_owner || identity->nominal_owner ||
+    XrXirCtfeStatus owner=ctfe_nominal_owner_admit(artifact,identity->nominal_owner);
+    if (owner!=XR_XIR_CTFE_OK) return owner;
+    if (identity->cleanup_owner ||
         (module->generics && (module->generics[f].parameter_count || module->generics[f].argument_count)))
         return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus admitted=ctfe_body_type_admit(artifact,body->result,false);
@@ -150,10 +152,12 @@ static XrXirCtfeStatus ctfe_call_prepare(const XrXirCtfeCallRequest *request,boo
         if (ctfe_composite_node(artifact->module.types,body->parameters[a])) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (!xr_xir_value_argument(&input->arguments[a],NULL,body->parameters[a])) return XR_XIR_CTFE_BAD_ARGUMENT;
     }
-    XrXirLayout storage={0};
-    status=ctfe_compile_status(xr_xir_compile_layout(work,artifact->module.types,
-        body->result,target,XR_XIR_LAYOUT_STORAGE,&storage));
-    if (status==XR_XIR_CTFE_OK && !xr_xir_type_is_owned(artifact->module.types,body->result) && storage.size>input->limits.output_bytes) return XR_XIR_CTFE_OUTPUT_LIMIT;
+    if (!xr_xir_type_is_owned(artifact->module.types,body->result)) {
+        XrXirLayout storage={0};
+        status=ctfe_compile_status(xr_xir_compile_layout(work,artifact->module.types,
+            body->result,target,XR_XIR_LAYOUT_STORAGE,&storage));
+        if (status==XR_XIR_CTFE_OK && storage.size>input->limits.output_bytes) return XR_XIR_CTFE_OUTPUT_LIMIT;
+    }
     return status;
 }
 
@@ -291,6 +295,10 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         }
         if (ctfe_owned_equal_opcode(run,op)) {
             XrXirCtfeStatus status=ctfe_owned_equal_step(run,&frame->state.instruction,&execution->owned);
+            if (status!=XR_XIR_CTFE_OK) return status;continue;
+        }
+        if (ctfe_nominal_opcode(op->op)) {
+            XrXirCtfeStatus status=ctfe_nominal_step(run,&frame->state,&execution->owned);
             if (status!=XR_XIR_CTFE_OK) return status;continue;
         }
         if (ctfe_array_opcode(op->op)) {

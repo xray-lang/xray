@@ -7685,6 +7685,18 @@ TO_STRING在完整Lowered及整个可达闭包准入后支持bool、整数、Run
 
 逻辑输出仍按完整UTF-8字节数遵守原output8；内部较长文本可用于比较，不能把内部长度误当导出权限。独立Source重放普通String/Bool常量并经过完整Checker/query。物理OOM、work/step/frame/output拒绝保全空输出与借用参数，费用不退款，释放全部帧/临时owner。真正格式化得到的最后String在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。其余nominal、函数值/cleanup、foreign接收及正式完整安全资格仍按原P11责任推进。
 
+### 17.53 声明绑定的结构体、活动枚举与私有字段路径
+
+CTFE在唯一完整Lowered及整个可达闭包准入之后执行已关闭的普通struct/enum。类型族逐字段检查、拒绝循环及class/身份或未准入native类型；声明owner只允许普通struct/enum，不代替函数体、效果或权限检查。STRUCT_NEW/GET、ENUM_NEW/TAG/GET使用唯一Value构造、接收和拥有slot；普通方法与泛型特化仍经过既有Source/Checker和闭包准入。枚举仅观察实际活动variant，不执行失活payload。
+
+FIELD_PLACE与INDEX_PLACE可以组合，但根必须是本次compiler Domain内真实私有Cell。STRUCT_SET和普通字段/Array写入、push沿同一Value path实现。每次观察及完整接收前预付原累计ledger费用，可能复制的struct字段向量和Array祖先capacity一并预付。路径、显式遍历栈和同时存在的接收scratch共享剩余frame；观察owner在共同变更前释放，保留正常COW和单次发布。类型形状只用于计费，不是另一种Value表示或权限证明。
+
+拥有结果按活动字段递归计算目标标量与String字节、Array元素、Nullable标签和enum真实storage标签字节；空struct为0，单variant空enum可为0，多variant空分支仍计实际标签。padding、capacity、拥有头和指针不计输出。拥有结果不得先调用不适用的独立nominal storage布局查询再按指针大小放行；唯一TypeArena storage及逻辑遍历决定导出，原output8不变。
+
+Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；跨池接收核完整声明顺序/identity、字段权限/名称、variant范围、native指纹和关闭字段类型，不能只比较局部type ID。元数据和字节比较在访问前计入原账本，最终完整Checker及query继续决定权限与发布。没有外部nominal参数或class准入；缺少有界观察接口的struct动态child和更深Array接收仍明确拒绝，不能无预算预扫描。private拥有结果的独立配方权限与Unit字段Source前置尚需完整资格，不据内部方法成功宣称覆盖。
+
+物理OOM及work/step/frame/output拒绝保全空输出和借用输入，全部临时/帧owner释放，费用不退款。真正struct/enum结果在Source、Artifact和ledger调用者死亡后仍有效，最后drop不分配。该范围开发证据不替代函数值/cleanup、foreign接收、P12以及原全部共享/provider/正式安全门，完整P11目标保持开放。
+
 ---
 
 ## 18. 错误码 (Error Codes)

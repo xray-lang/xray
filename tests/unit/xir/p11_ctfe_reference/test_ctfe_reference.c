@@ -31,6 +31,30 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"nominal_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
+    {"nominal_private", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_array_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_empty_export", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_empty_export", XR_XIR_UNIT, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_single_export", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"nominal_nested_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_field_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_large", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
+    {"nominal_dynamic_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"nominal_class", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"nominal_struct", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_method", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_generic", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_cow", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_enum", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"nominal_nested", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
     {"text_bool_false", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
     {"text_widths", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"text_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
@@ -580,6 +604,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_array_cases.h"
 #include "xir_ctfe_equal_cases.h"
 #include "xir_ctfe_text_cases.h"
+#include "xir_ctfe_nominal_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -599,7 +624,8 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name,"text_direct")) reference_text_direct(&context,&source);
+        if (!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) reference_nominal(&context,&source,selected);
+        else if (!strcmp(selected->name,"text_direct")) reference_text_direct(&context,&source);
         else if (!strcmp(selected->name,"equal_array_direct")) reference_owned_equal(&context,&source);
         else if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
         else if (!strcmp(selected->name,"nullable_direct")) reference_nullable_direct(&context,&source);
@@ -636,6 +662,10 @@ int main(int argc, char **argv) {
         CHECK(spent.work>=reference_limits.work-UINT64_C(65536));
         fprintf(stderr,"CTFE private path ancestor copy paid original ledger: work=%llu/128000000; unpayable capacity65536; physical0\n",(unsigned long long)spent.work);
     }
+    if (!strcmp(selected->name,"nominal_work")) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(65536));
+        fprintf(stderr,"CTFE nominal field ancestor copy paid original ledger: work=%llu/128000000; unpayable capacity65536; physical0\n",(unsigned long long)spent.work);
+    }
     if (!strcmp(selected->name,"text_work")) {
         CHECK(spent.work>=reference_limits.work-UINT64_C(137216));
         fprintf(stderr,"CTFE finite scalar text paid original ledger: work=%llu/128000000; unpayable format137216; physical0\n",(unsigned long long)spent.work);
@@ -649,6 +679,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
     if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) reference_array_late_owner(selected->name);
     if (!strcmp(selected->name,"text_direct")) reference_text_last_owner();
+    if (!strcmp(selected->name,"nominal_struct_direct") || !strcmp(selected->name,"nominal_enum_direct")) reference_nominal_last_owner(selected);
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,
