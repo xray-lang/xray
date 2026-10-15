@@ -269,7 +269,7 @@ static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *c
     const EffectOrdinaryContexts *dense=owner->dense,*ordinary=owner->ordinary;
     if (!xir_compile_context_valid(context) || !dense->dense ||
         !ordinary || ordinary->dense || ordinary->base_count!=source->function_count ||
-        dense->base_count!=source->function_count || ordinary->uses.resources!=context->resources ||
+        dense->base_count!=source->function_count || ordinary->resources!=context->resources ||
         dense->uses.resources!=context->resources || dense->uses.count!=dense->count || !dense->uses.outcomes_work.root ||
         !certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->final ||
