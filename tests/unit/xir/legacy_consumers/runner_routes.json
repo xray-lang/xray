@@ -89186,7 +89186,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/slice_window_shared_core/root.xr",
+        "lf_sha256": "b90361090193126049ba7e6f105c11c62fc852da41d18b0628d20261cab18c1c",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_BORROWED_VIEW_PERMISSION_AND_EXPLICIT_OWNED_DISPLAY",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/span_active_borrow_branch_nll_shared_core.xr",
@@ -91272,7 +91288,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/array_negative_both/root.xr",
+        "lf_sha256": "0840998d27bb6ef69e77648cdb8fac96f329ad3155f42262716aee0b6f1d5879",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_BORROWED_VIEW_PERMISSION_AND_EXPLICIT_OWNED_DISPLAY",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/slice/array_negative_end.xr",
@@ -91329,7 +91361,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/array_negative_end/root.xr",
+        "lf_sha256": "6fe03628f32ab2d56dbdf6cad3d1f524b88ea3f2202e98cdf8bbccff756bccd9",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_BORROWED_VIEW_PERMISSION_AND_EXPLICIT_OWNED_DISPLAY",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/slice/array_negative_start.xr",
@@ -91386,7 +91434,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/array_negative_start/root.xr",
+        "lf_sha256": "fcc0c217fc0e85de9cd08a96bcaff117ef7b20b564d4486b6cc0a002b33a522a",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_BORROWED_VIEW_PERMISSION_AND_EXPLICIT_OWNED_DISPLAY",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Current type2.4.2 and expression3.11 require shared Slice/exclusive MutSlice, explicit view contexts, no view methods/implicit display, and an independent owner-write check after last-use borrow end."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/slice/ref_range_place.xr",

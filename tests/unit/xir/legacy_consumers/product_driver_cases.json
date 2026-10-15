@@ -25430,6 +25430,246 @@
         "Complete selected source VM/C/native with exact independent results.",
         "All applicable fullFI/resources/lifetime/cancellation/physical/sanitizer/generated-C/provider gates."
       ]
+    },
+    {
+      "id": "complete_borrowed_views_array_expression_view",
+      "oracle_id": "complete_borrowed_views_array_expression_view",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/explicit_read_and_mutable_view/root.xr",
+      "source_lf_sha256": "c945520f65120a36de44b6016774ab9c4ae6153f175aa5a2a69c45f232d9a308",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "21\n31\n21\n31\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original program under explicit shared/exclusive views, last-use reborrowing and independent owned snapshots. Full original owner-write assertion retained after borrow end; no physical lifetime/provider qualification.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/array_expression_view.xr",
+        "source_lf_sha256": "bdb0b1b5e544b76184b16f6e2a859bc044ffad42aa9f4694015a85f064029198"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and independent exact bytes.",
+        "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_borrowed_views_array_negative_both",
+      "oracle_id": "complete_borrowed_views_array_negative_both",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/array_negative_both/root.xr",
+      "source_lf_sha256": "0840998d27bb6ef69e77648cdb8fac96f329ad3155f42262716aee0b6f1d5879",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "[2, 3]\n[2, 3]\n[1, 2, 3]\n[]\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original program under explicit shared/exclusive views, last-use reborrowing and independent owned snapshots. Full original owner-write assertion retained after borrow end; no physical lifetime/provider qualification.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/array_negative_both.xr",
+        "source_lf_sha256": "8dc8d8fa56369020bf48d3a54f7e45620a9871d10701024907ad64c4b01abfa3"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and independent exact bytes.",
+        "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_borrowed_views_array_negative_end",
+      "oracle_id": "complete_borrowed_views_array_negative_end",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/array_negative_end/root.xr",
+      "source_lf_sha256": "6fe03628f32ab2d56dbdf6cad3d1f524b88ea3f2202e98cdf8bbccff756bccd9",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "[1, 2, 3]\n[1, 2, 3]\n[]\n[]\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original program under explicit shared/exclusive views, last-use reborrowing and independent owned snapshots. Full original owner-write assertion retained after borrow end; no physical lifetime/provider qualification.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/array_negative_end.xr",
+        "source_lf_sha256": "04099e778a548b71f84d888653193948a2c64b4021f112cea04e3260fbabce09"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and independent exact bytes.",
+        "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_borrowed_views_array_negative_start",
+      "oracle_id": "complete_borrowed_views_array_negative_start",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/array_negative_start/root.xr",
+      "source_lf_sha256": "fcc0c217fc0e85de9cd08a96bcaff117ef7b20b564d4486b6cc0a002b33a522a",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "[3, 4]\n[3, 4]\n[1, 2, 3, 4]\n[]\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original program under explicit shared/exclusive views, last-use reborrowing and independent owned snapshots. Full original owner-write assertion retained after borrow end; no physical lifetime/provider qualification.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/array_negative_start.xr",
+        "source_lf_sha256": "107736cb4308076e6880190c9ff1dbf91f0fd890bd2e9c149ada8aa47ab21020"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and independent exact bytes.",
+        "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_borrowed_views_slice_window_shared_core",
+      "oracle_id": "complete_borrowed_views_slice_window_shared_core",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/borrowed_views_complete/slice_window_shared_core/root.xr",
+      "source_lf_sha256": "b90361090193126049ba7e6f105c11c62fc852da41d18b0628d20261cab18c1c",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "3\n10\n30\n99\n2\n99\n30\n0\n0\n6\n50\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original program under explicit shared/exclusive views, last-use reborrowing and independent owned snapshots. Full original owner-write assertion retained after borrow end; no physical lifetime/provider qualification.",
+      "independent_observation_count": 11,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/slice_window_shared_core.xr",
+        "source_lf_sha256": "f83700a58dbffbf9711b1683773d07b5ba2e99ce3d1eb02b3b764185a7387535"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and independent exact bytes.",
+        "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_borrowed_views_string_byte_slice_receiver_nll",
+      "oracle_id": "complete_borrowed_views_string_byte_slice_receiver_nll",
+      "source": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
+      "source_lf_sha256": "3dff41d162190ec42b23f2adde719faadad5b2b180f0a39262ed05af554d4446",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "5\n3\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original program under explicit shared/exclusive views, last-use reborrowing and independent owned snapshots. Full original owner-write assertion retained after borrow end; no physical lifetime/provider qualification.",
+      "independent_observation_count": 2,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
+        "source_lf_sha256": "3dff41d162190ec42b23f2adde719faadad5b2b180f0a39262ed05af554d4446"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and independent exact bytes.",
+        "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_borrowed_views_string_byte_slice_view",
+      "oracle_id": "complete_borrowed_views_string_byte_slice_view",
+      "source": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
+      "source_lf_sha256": "305af8ac6a4c351040ae69ad981561a80864ac04a76081748175407518f215d8",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "4\n65\n66\n2\n66\n67\n66\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original program under explicit shared/exclusive views, last-use reborrowing and independent owned snapshots. Full original owner-write assertion retained after borrow end; no physical lifetime/provider qualification.",
+      "independent_observation_count": 7,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
+        "source_lf_sha256": "305af8ac6a4c351040ae69ad981561a80864ac04a76081748175407518f215d8"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and independent exact bytes.",
+        "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
+      ]
     }
   ]
 }

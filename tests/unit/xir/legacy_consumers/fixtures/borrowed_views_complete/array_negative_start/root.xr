@@ -1,0 +1,14 @@
+// anchor: slice-array-negative-start
+fn main() {
+    var arr = [1, 2, 3, 4]
+    var tail: Slice<i64> = arr[-2:]
+    print(copy(tail))
+    var explicitCopyView: Slice<i64> = arr[-2:]
+    print(copy(explicitCopyView))
+    var hugeTail: Slice<i64> = arr[-999:]
+    print(copy(hugeTail))
+    var pastEnd: Slice<i64> = arr[999:]
+    print(copy(pastEnd))
+}
+
+main()
