@@ -18,7 +18,8 @@ typedef struct XrXirValuePlace {
     void *payload;
 } XrXirValuePlace;
 /* The caller pins a real writable root and authenticates its complete loan.
- * Failure preserves the root. Derived storage uses the admission Domain. */
+ * Failure preserves the root. A current admission Domain is required; missing
+ * admission or owner is rejected before charging work or changing storage. */
 XR_FUNC XrXirValueStatus xr_xir_string_place_append(const XrXirValuePlace *place,
     const XrXirValue *suffix, XrXirValueAdmission *admission);
 /* A caller-owned UTF-8 span is consumed synchronously, with no suffix object.

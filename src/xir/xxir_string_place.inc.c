@@ -12,7 +12,7 @@
 static XrXirValueStatus string_place_append_bytes(const XrXirValuePlace *place,
     const char *bytes, size_t length, size_t runes, XrXirValueAdmission *admission) {
     if (!place || place->type != XR_XIR_STRING || !place->payload || (!bytes && length) ||
-        !admission_domain_current(admission))
+        !admission || !xr_xir_domain_current(admission->domain))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue owned = {XR_XIR_STRING, 0, 0};
     memcpy(&owned.payload, place->payload, sizeof(owned.payload));
@@ -75,7 +75,8 @@ XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8(const XrXirValuePlace *
     const char *bytes, size_t length, XrXirValueAdmission *admission) {
     xr_xir_value_graph_begin();
     XrXirValueStatus status = XR_XIR_VALUE_BAD_ARGUMENT;
-    if ((!bytes && length) || length == SIZE_MAX || !admission_domain_current(admission)) goto done;
+    if ((!bytes && length) || length == SIZE_MAX || !admission ||
+        !xr_xir_domain_current(admission->domain)) goto done;
     if (length + 1 > admission->work) { status = XR_XIR_VALUE_LIMIT; goto done; }
     admission->work -= length + 1;
     if (!xr_xir_domain_work(admission->domain, length + 1)) { status = XR_XIR_VALUE_LIMIT; goto done; }

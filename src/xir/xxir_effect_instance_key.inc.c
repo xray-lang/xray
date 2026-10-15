@@ -77,7 +77,10 @@ static const XrXirType *spec_effect_import(SpecContext *c, const XrXirTypes *typ
             for (uint32_t a=0;a<node.nominal.argument_count;++a)
                 arguments[a]=spec_effect_child(c,cache,i,node.nominal.arguments[a]);
             node.nominal.arguments=arguments;node.nominal.fields=NULL;node.nominal.field_count=0;
-        } else node.element=spec_effect_child(c,cache,i,node.element);
+        } else {
+            node.element=spec_effect_child(c,cache,i,node.element);
+            if (node.kind==XR_XIR_TYPE_MAP) node.result=spec_effect_child(c,cache,i,node.result);
+        }
         if (c->diagnostic.status!=XR_XIR_OK) return NULL;
         cache[i]=spec_node(c,node);
         if (c->diagnostic.status!=XR_XIR_OK) return NULL;

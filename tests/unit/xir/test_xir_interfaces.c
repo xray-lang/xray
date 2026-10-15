@@ -113,7 +113,7 @@ static void rejection_and_budget(void) {
         if (attack == 7) f.declarations[1].name = f.declarations[0].name;
         if (attack == 8) f.parameter = XR_XIR_UNIT;
         if (attack == 9) f.declarations[0].parents = f.parents, f.declarations[0].parent_count = 1;
-        if (attack == 10) f.constraint.markers = 64;
+        if (attack == 10) f.constraint.markers = 128;
         XrXirCompileContext context = interface_context_default();
         XrXirInterfaceTable *copy = NULL;
         XrXirStatus status = xr_xir_compile_interfaces_clone(&context,&f.table,&f.types,&copy);

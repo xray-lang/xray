@@ -27,6 +27,7 @@ bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirT
     uint32_t count = module->generics ? module->generics[function].parameter_count : 0;
     const XrXirTypeNode *node = xr_xir_type_node(module->types, type);
     if (node) return (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
+        node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
         node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
         node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
         node->kind == XR_XIR_TYPE_TASK) && node->parameter_span <= count;

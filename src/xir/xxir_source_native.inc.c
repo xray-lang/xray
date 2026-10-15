@@ -51,7 +51,7 @@ static bool source_native_array_declaration(SourceContext *ctx) {
     record->generic_parameter_count = 1;
     record->generic_constraints = source_alloc(ctx, 1, sizeof(*record->generic_constraints));
     if (!record->generic_constraints) return false;
-    symbol = (SourceName) {0}; symbol.name = source_owned_text(ctx, native->parameter_name);
+    symbol = (SourceName) {0}; symbol.name = source_owned_text(ctx, native->parameter_names[0]);
     if (!symbol.name) return false;
     if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE_PARAMETER, ctx->array_declaration,
         (XrXirSourceRange) {ctx->array_module, 0, 0, 0, 0})) return false;

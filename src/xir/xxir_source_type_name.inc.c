@@ -51,6 +51,21 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
     const XrXirTypeNode *shape = xr_xir_type_node(&ctx->types, type);
     if (!shape) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "typeName operand has no proved type");
     switch (shape->kind) {
+    case XR_XIR_TYPE_MAP:
+    case XR_XIR_TYPE_SET: {
+        const char *container = shape->kind == XR_XIR_TYPE_MAP ? TYPE_NAME_MAP : TYPE_NAME_SET;
+        source_type_name_append(name, container, strlen(container));
+        if (!top) {
+            source_type_name_append(name, "<", 1);
+            if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
+            if (shape->kind == XR_XIR_TYPE_MAP) {
+                source_type_name_append(name, ", ", 2);
+                if (!source_type_name_collect(ctx, node, shape->result, false, depth + 1, name)) return false;
+            }
+            source_type_name_append(name, ">", 1);
+        }
+        return true;
+    }
     case XR_XIR_TYPE_TASK:
         source_type_name_append(name, TYPE_NAME_TASK, strlen(TYPE_NAME_TASK));
         if (!top) {
