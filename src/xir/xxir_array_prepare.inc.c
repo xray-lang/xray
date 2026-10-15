@@ -6,7 +6,7 @@
  *
  * xxir_array_prepare.inc.c - Private replacement storage before Array publication
  */
-static unsigned char *array_slot(XirArray *array, size_t index) {
+static unsigned char *array_slot(const XirArray *array, size_t index) {
     XR_CHECK(index < array->capacity, "array slot requires reserved capacity");
     return array->data ? array->data + index * array->stride : NULL;
 }

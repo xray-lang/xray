@@ -355,7 +355,7 @@ XRAY_API XrSourceStatus xray_source_result_bytes(const XrSourceResult *result,co
     if(!result || !bytes || !length)return XR_SOURCE_BAD_ARGUMENT;
     const XrXirValue *value=result->value.value.type==XR_XIR_STRING?&result->value.value:&result->value.panic.message;
     if(value->type!=XR_XIR_STRING)return XR_SOURCE_INVALID;
-    XrValueFormatReader reader=xr_xir_value_format_reader();XrValueFormatView view={0};
+    XrXirFormatContext format={0};XrValueFormatReader reader=xr_xir_value_format_reader(&format);XrValueFormatView view={0};
     if(!reader.read(reader.context,(XrValueFormatNode){value,0},&view) || view.kind!=XR_VALUE_FORMAT_BYTES)return XR_SOURCE_INVALID;
     *bytes=(const char *)view.bytes;*length=view.size;return XR_SOURCE_OK;
 }
@@ -367,7 +367,8 @@ XRAY_API XrSourceStatus xray_source_result_format(const XrSourceResult *result,X
     if(!result)return XR_SOURCE_BAD_ARGUMENT;
     bool failure=result->value.status!=XR_XIR_CALL_RETURNED;
     ApiFormat out={write?write:api_stdio,context,failure?XR_SOURCE_STDERR:XR_SOURCE_STDOUT,XR_SOURCE_WRITE_OK};
-    XrValueFormatSink sink={&out,api_format_write};XrValueFormatReader reader=xr_xir_value_format_reader();
+    XrXirFormatContext format={0};
+    XrValueFormatSink sink={&out,api_format_write};XrValueFormatReader reader=xr_xir_value_format_reader(&format);
     const XrXirValue *value=&result->value.value;
     int formatted;
     if(result->value.status==XR_XIR_CALL_THROWN || xr_xir_call_panic_status(result->value.status))

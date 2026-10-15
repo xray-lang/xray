@@ -24,6 +24,7 @@
 #include "xxir_error.h"
 #include "xxir_panic.h"
 #include "xxir_equal.h"
+#include "xxir_format.h"
 #include "xxir_nullable.h"
 #include "xxir_tuple.h"
 #include "xxir_float.h"
@@ -1793,3 +1794,90 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_error_value.inc.c"
 #include "xxir_panic_value.inc.c"
 #include "xxir_value_equal.inc.c"
+
+/* A compact cursor borrows a verified parent's exact storage span. It never
+ * materializes an aggregate, retains a handle, or grants mutation authority. */
+XR_FUNC bool xr_xir_value_format_cursor(const XrXirValue *value,XrXirFormatCursor *output) {
+    if (!output || !xr_xir_value_valid(value)) return false;
+    *output=(XrXirFormatCursor){value,xr_xir_value_arena(value),(XrXirType)value->type,false};
+    return true;
+}
+XR_FUNC bool xr_xir_value_format_leaf(const XrXirFormatCursor *cursor,XrXirValue *output) {
+    if (!cursor || !output) return false;
+    XrXirValue value={0};
+    if (!cursor->compact) {
+        if (!cursor->storage) return false;
+        value=*(const XrXirValue *)cursor->storage;
+        if (value.type!=(uint32_t)cursor->type || !xr_xir_value_valid(&value) ||
+            cursor->arena!=xr_xir_value_arena(&value)) return false;
+    } else {
+        const XrXirTypes *types=xr_xir_compile_type_arena_types(cursor->arena);
+        XrXirLayout layout={0};
+        if (!cursor->arena || inline_nominal_type(types,cursor->type) ||
+            !xr_xir_compile_type_arena_layout(cursor->arena,cursor->type,&layout) ||
+            !layout.size || layout.size>sizeof(uint64_t) || !cursor->storage) return false;
+        value=storage_leaf_value(cursor->type,cursor->storage,layout.size);
+        if (!xr_xir_value_argument(&value,cursor->arena,cursor->type)) return false;
+    }
+    *output=value;return true;
+}
+typedef struct FormatEnumStorage {
+    const XrXirTypeNode *node;
+    const XrXirNominalIdentity *identity;
+    const XrXirStorageLayout *layout;
+    const XrXirValue *fields;
+    uint32_t variant, begin, count;
+} FormatEnumStorage;
+static bool format_enum_storage(const XrXirFormatCursor *cursor,FormatEnumStorage *output) {
+    if (!cursor || !cursor->arena || !output) return false;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(cursor->arena);
+    if (!xr_xir_type_is_enum(types,cursor->type)) return false;
+    const XrXirTypeNode *node=xr_xir_type_node(types,cursor->type);
+    const XrXirNominalIdentity *identity=&types->nominals->identities[node->nominal.declaration];
+    FormatEnumStorage result={.node=node,.identity=identity};
+    if (cursor->compact) {
+        result.layout=xr_xir_compile_type_arena_storage(cursor->arena,cursor->type);
+        if (!result.layout || (result.layout->value.size && !cursor->storage)) return false;
+        if (result.layout->tag_bytes) memcpy(&result.variant,cursor->storage,result.layout->tag_bytes);
+    } else {
+        XrXirValue value={0};
+        if (!xr_xir_value_format_leaf(cursor,&value)) return false;
+        const XirNominalValue *record=(const XirNominalValue *)object_pointer(&value);
+        result.variant=record->variant;result.fields=record->fields;
+    }
+    if (result.variant>=identity->variant_count) return false;
+    result.begin=identity->variants[result.variant].field_begin;
+    result.count=identity->variants[result.variant].field_count;
+    *output=result;return true;
+}
+XR_FUNC bool xr_xir_value_format_aggregate(const XrXirFormatCursor *cursor,XrXirFormatAggregate *output) {
+    if (!cursor || !output) return false;
+    XrXirValue value={0};
+    if (xr_xir_value_format_leaf(cursor,&value) &&
+        xr_xir_type_is_array(xr_xir_compile_type_arena_types(cursor->arena),cursor->type)) {
+        const XirArray *array=(const XirArray *)object_pointer(&value);
+        *output=(XrXirFormatAggregate){.count=array->length,.array=true};return true;
+    }
+    FormatEnumStorage storage={0};
+    if (!format_enum_storage(cursor,&storage)) return false;
+    *output=(XrXirFormatAggregate){storage.identity->name,storage.identity->variants[storage.variant].name,
+        storage.count,false};return true;
+}
+XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *cursor,uint32_t index,XrXirFormatCursor *output) {
+    if (!cursor || !output) return false;
+    XrXirValue value={0};
+    if (xr_xir_value_format_leaf(cursor,&value) &&
+        xr_xir_type_is_array(xr_xir_compile_type_arena_types(cursor->arena),cursor->type)) {
+        const XirArray *array=(const XirArray *)object_pointer(&value);
+        if (index>=array->length) return false;
+        *output=(XrXirFormatCursor){array_slot(array,index),cursor->arena,array->element,true};return true;
+    }
+    FormatEnumStorage storage={0};
+    if (!format_enum_storage(cursor,&storage) || index>=storage.count) return false;
+    if (!cursor->compact && !storage.fields) return false;
+    if (!cursor->compact) return xr_xir_value_format_cursor(&storage.fields[index],output);
+    XrXirType type=storage.node->nominal.fields[storage.begin+index];
+    const void *field=storage.fields ? (const void *)&storage.fields[index] :
+        cursor->storage ? (const unsigned char *)cursor->storage+storage.layout->field_offsets[storage.begin+index] : NULL;
+    *output=(XrXirFormatCursor){field,cursor->arena,type,cursor->compact};return true;
+}
