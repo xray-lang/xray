@@ -42,7 +42,7 @@
     },
     {
       "heading": "Published Source definitions",
-      "body": "Persistent Source checking receives only its owner's published Checked Program and registered bindings. Session inputs share an explicit lexical scope while definitions retain their birth modules and private visibility. Runtime receiving requires the actual Source map, exact specialized/Lowered Program proof and the same retained runtime Domain. Budgeted routes preserve actual birth slots and skip only completed birth initialization; reads retain ordinary permissions, publication checks and value admission. I64 and String birth storage can use this path. Cross-arena constructed values, full G2/G3 and paired REPL publication remain unfinished. See compilation pipeline section17.50."
+      "markdown": "Persistent Source checking receives only its owner's published Checked Program and registered bindings. Session inputs share a lexical scope while definitions retain birth modules and private visibility. Runtime receiving requires the actual Source map, exact specialized/Lowered Program proof and the same retained runtime Domain. Budgeted routes preserve birth slots and completed initialization. Actual stored-type roots receive existing type identities through acyclic arena ownership; equal shapes grant nothing, and values retain their birth type. Domain, publication, borrow and call checks remain separate. Old Cell reads/writes work in VM, native and mixed directions; ordinary Cell side effects survive candidate abort. Complete Class/Array operations, closures, full G2/G3 and P14 coordination remain unfinished. See compilation pipeline section17.50."
     }
   ]
 }
