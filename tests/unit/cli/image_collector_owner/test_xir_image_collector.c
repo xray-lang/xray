@@ -398,12 +398,29 @@ static void child(const char *self,const char *library) {
     }
     char command[32768];CHECK(snprintf(command,sizeof(command),"\"%s\" --leaf",self)>0);
     STARTUPINFOA startup={0};startup.cb=sizeof(startup);PROCESS_INFORMATION process={0};
-    CHECK(CreateProcessA(self,command,NULL,NULL,TRUE,0,NULL,NULL,&startup,&process));
+    startup.dwFlags=STARTF_USESTDHANDLES;
+    startup.hStdInput=GetStdHandle(STD_INPUT_HANDLE);startup.hStdOutput=GetStdHandle(STD_OUTPUT_HANDLE);
+    startup.hStdError=GetStdHandle(STD_ERROR_HANDLE);
+    /* Keep the real descendant headless; allocating a new desktop console can
+     * activate the host's packaged terminal COM server outside this fixture. */
+    CHECK(CreateProcessA(self,command,NULL,NULL,TRUE,CREATE_NO_WINDOW,NULL,NULL,&startup,&process));
     CHECK(WaitForSingleObject(process.hProcess,10000)==WAIT_OBJECT_0);DWORD code=1;
     CHECK(GetExitCodeProcess(process.hProcess,&code)&&!code);CHECK(CloseHandle(process.hThread));CHECK(CloseHandle(process.hProcess));
     puts("image-child 42");
 }
 typedef struct ProcessTest { int argc; char **argv; bool command; } ProcessTest;
+static XrOsProcStatus process_image_diagnostic(void *context,const XrProcImageEvent *event) {
+    XrProcImageObserver *inner=context;
+    XrOsProcStatus status=inner->observe(inner->context,event);
+    if(status!=XR_PROC_OK) {
+        DWORD error=GetLastError();wchar_t path[32768];
+        DWORD length=GetFinalPathNameByHandleW((HANDLE)event->file_handle,path,32768,FILE_NAME_NORMALIZED|VOLUME_NAME_DOS);
+        fprintf(stderr,"image rejection pid=%lld kind=%u status=%u error=%lu path=%ls\n",
+            (long long)event->pid,(unsigned)event->kind,(unsigned)status,error,length&&length<32768?path:L"<unavailable>");
+        SetLastError(error);
+    }
+    return status;
+}
 static void real_process(const ProcessTest *test) {
     char **argv=test->argv;
     DWORD baseline=handle_count();XrCompileResources *r=ledger(&unlimited);XrXirImageCollector *images=make_images(r);
@@ -413,7 +430,8 @@ static void real_process(const ProcessTest *test) {
         for(int i=4;i<test->argc;++i)spec.argv[i-4]=argv[i];spec.cwd=argv[3];
     } else {spec.argv[1]="--child";spec.argv[2]=argv[4];spec.cwd=argv[1];}
     spec.environment_source=XTC_PROCESS_ENV_SNAPSHOT;spec.image_mode=XR_PROC_IMAGES_WINDOWS_TREE;
-    spec.image_observer=xtc_xir_images_observer(images);XrToolchainProcess *process=NULL;
+    XrProcImageObserver inner=xtc_xir_images_observer(images);
+    spec.image_observer=(XrProcImageObserver){&inner,process_image_diagnostic};XrToolchainProcess *process=NULL;
     CHECK(xtc_process_prepare(r,&spec,&process)==XTC_PROCESS_OK);XrProcessResult result={0};
     XrProcessStatus status=xtc_process_run(process,NULL,NULL,&result);
     if(status!=XTC_PROCESS_OK)fprintf(stderr,"real run %s collector %d\n",xtc_process_status_name(status),xtc_xir_images_status(images));
