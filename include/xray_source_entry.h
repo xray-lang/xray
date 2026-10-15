@@ -8,21 +8,32 @@
  */
 #ifndef XRAY_SOURCE_ENTRY_H
 #define XRAY_SOURCE_ENTRY_H
-#include "xray_source.h"
+#include "xray_source_value.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* Select an ordinary exported, nongeneric, zero-parameter root function by its
- * exact UTF-8 name bytes, without a trailing NUL. Each call owns a fresh
+#define XRAY_SOURCE_INVOCATION_VERSION 1u
+typedef struct XrSourceInvocation {
+    uint32_t api_version, struct_size;
+    const char *name;
+    size_t name_length;
+    const XrSourceValue *const *arguments;
+    size_t argument_count;
+} XrSourceInvocation;
+XRAY_API XrSourceStatus xray_source_invocation_init(XrSourceInvocation *, size_t);
+/* Select an ordinary exported, nongeneric root function by its exact UTF-8
+ * name span, without a trailing NUL. Arguments borrow through begin/execute;
+ * begin retains their real data before returning. Each call owns a fresh
  * Instance and runs ordinary initialization. Names do not confer access to
- * private/library functions, methods or templates. Parameterized entries
- * return UNSUPPORTED. Lookup and packet validation spend the Program's original
+ * private/library functions, methods or templates. Exact parameter types and
+ * Domain/call permissions are checked by that Instance. Lookup, packet
+ * validation and temporary argument storage spend the Program's original
  * cumulative compiler ledger; all runtime limits and wait/cancel rules remain.
  * The Program may die after begin succeeds. Failure preserves the output. */
-XRAY_API XrSourceStatus xray_source_call_begin_named(XrSourceProgram *, const char *name,
-    size_t length, const XrSourceCallOptions *, XrSourceCall **);
-XRAY_API XrSourceStatus xray_source_execute_named(XrSourceProgram *, const char *name,
-    size_t length, const XrSourceCallOptions *, XrSourceResult **, XrSourceEvent *failure);
+XRAY_API XrSourceStatus xray_source_invoke_begin(XrSourceProgram *, const XrSourceInvocation *,
+    const XrSourceCallOptions *, XrSourceCall **);
+XRAY_API XrSourceStatus xray_source_invoke(XrSourceProgram *, const XrSourceInvocation *,
+    const XrSourceCallOptions *, XrSourceResult **, XrSourceEvent *failure);
 /* Copies the real outcome, including Error/Panic and every owned value/arena.
  * Copying data grants no callable, Task or Instance execution permission.
  * The source and its producer may be freed after success. Output must be NULL;

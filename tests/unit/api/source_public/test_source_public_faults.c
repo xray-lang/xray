@@ -40,7 +40,10 @@ static XrSourceStatus drive(unsigned mode,XrSourceCompiler **compiler,XrSourcePr
     XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);runtime.write=discard;
     if(mode==5 || mode==6) {
         XrSourceResult *original=NULL;
-        status=xray_source_execute_named(*program,"answer",6,&runtime,&original,NULL);
+        XrSourceInvocation invocation;
+        CHECK(xray_source_invocation_init(&invocation,sizeof(invocation))==XR_SOURCE_OK);
+        invocation.name="answer";invocation.name_length=6;
+        status=xray_source_invoke(*program,&invocation,&runtime,&original,NULL);
         xray_source_program_free(*program);*program=NULL;
         if(status==XR_SOURCE_OK)status=xray_source_result_copy(original,result);
         if(status==XR_SOURCE_OK && mode==6 && (*result)->value.status==XR_XIR_CALL_RETURNED) {
@@ -119,13 +122,21 @@ static void named_copy_guards(void) {
     CHECK(xray_source_result_copy(NULL,&result)==XR_SOURCE_BAD_ARGUMENT && !result && !runtime_attempts);
     xray_source_result_free(copy);CHECK(!runtime_live && !runtime_bytes);
 }
+#include "source_public_values_resources.h"
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--scalar-task") || !strcmp(argv[1],"--constructed-task") ||
         !strcmp(argv[1],"--named") || !strcmp(argv[1],"--named-probe") || !strcmp(argv[1],"--named-copy-guards") ||
-        !strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe"))));
+        !strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe") ||
+        !strcmp(argv[1],"--values") || !strcmp(argv[1],"--values-probe") ||
+        !strcmp(argv[1],"--invoke-values") || !strcmp(argv[1],"--invoke-values-probe"))));
     if(argc==1)allocation_faults(0,3,false);
     else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4,false);
     else if(!strcmp(argv[1],"--constructed-task"))allocation_faults(4,5,false);
+    else if(!strcmp(argv[1],"--values") || !strcmp(argv[1],"--values-probe")) {
+        value_faults(!strcmp(argv[1],"--values-probe"));value_budgets();value_sticky();
+    }
+    else if(!strcmp(argv[1],"--invoke-values") || !strcmp(argv[1],"--invoke-values-probe"))
+        invoke_values_faults(!strcmp(argv[1],"--invoke-values-probe"));
     else if(!strcmp(argv[1],"--named-copy-guards"))named_copy_guards();
     else if(!strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe"))allocation_faults(6,7,!strcmp(argv[1],"--array-probe"));
     else allocation_faults(5,6,!strcmp(argv[1],"--named-probe"));

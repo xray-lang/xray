@@ -66,28 +66,33 @@ static XrSourceWriteStatus named_reentry(void *context,XrSourceOutputStream stre
     }
     return named_write(&state->output,stream,bytes,length);
 }
+static XrSourceInvocation named_request(const char *name,size_t length) {
+    XrSourceInvocation request;
+    CHECK(xray_source_invocation_init(&request,sizeof(request))==XR_SOURCE_OK);
+    request.name=name;request.name_length=length;return request;
+}
 static XrSourceResult *named_execute(XrSourceProgram *program,const char *name,const XrSourceCallOptions *options) {
-    XrSourceResult *result=NULL;
-    XrSourceStatus status=xray_source_execute_named(program,name,strlen(name),options,&result,NULL);
+    XrSourceResult *result=NULL;XrSourceInvocation request=named_request(name,strlen(name));
+    XrSourceStatus status=xray_source_invoke(program,&request,options,&result,NULL);
     if(status!=XR_SOURCE_OK)fprintf(stderr,"named %s status=%u\n",name,(unsigned)status);
     CHECK(status==XR_SOURCE_OK && result);return result;
 }
 static void named_refusals(XrSourceProgram *program,const XrSourceCallOptions *options,NamedOutput *output) {
     XrSourceCall *call=NULL;XrSourceResult *result=NULL;
     XrSourceEvent failure={XR_SOURCE_RUN_THROWN,37,38,39},saved=failure;
-    CHECK(xray_source_call_begin_named(program,"hidden",6,options,&call)==XR_SOURCE_NOT_FOUND && !call);
-    CHECK(xray_source_call_begin_named(program,"missing",7,options,&call)==XR_SOURCE_NOT_FOUND && !call);
-    CHECK(xray_source_call_begin_named(program,"parameter",9,options,&call)==XR_SOURCE_UNSUPPORTED && !call);
-    CHECK(xray_source_call_begin_named(program,"answer-extra",6,options,&call)==XR_SOURCE_OK && call);
+    CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"hidden",6,NULL,0},options,&call)==XR_SOURCE_NOT_FOUND && !call);
+    CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"missing",7,NULL,0},options,&call)==XR_SOURCE_NOT_FOUND && !call);
+    CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"parameter",9,NULL,0},options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
+    CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer-extra",6,NULL,0},options,&call)==XR_SOURCE_OK && call);
     CHECK(xray_source_call_drop(&call,NULL)==XR_SOURCE_OK && !call);
-    CHECK(xray_source_call_begin_named(program,NULL,6,options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
-    CHECK(xray_source_call_begin_named(program,"answer",0,options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
-    CHECK(xray_source_execute_named(program,"answer\0x",8,options,&result,&failure)==XR_SOURCE_BAD_ARGUMENT && !result);
-    CHECK(xray_source_execute_named(program,"hidden",6,options,&result,&failure)==XR_SOURCE_NOT_FOUND && !result);
+    CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),NULL,6,NULL,0},options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
+    CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer",0,NULL,0},options,&call)==XR_SOURCE_BAD_ARGUMENT && !call);
+    CHECK(xray_source_invoke(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer\0x",8,NULL,0},options,&result,&failure)==XR_SOURCE_BAD_ARGUMENT && !result);
+    CHECK(xray_source_invoke(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"hidden",6,NULL,0},options,&result,&failure)==XR_SOURCE_NOT_FOUND && !result);
     CHECK(!memcmp(&failure,&saved,sizeof(saved)) && !output->length);
     result=named_execute(program,"answer",options);
     XrSourceResult *occupied=result;
-    CHECK(xray_source_execute_named(program,"answer",6,options,&occupied,&failure)==XR_SOURCE_BAD_ARGUMENT && occupied==result);
+    CHECK(xray_source_invoke(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"answer",6,NULL,0},options,&occupied,&failure)==XR_SOURCE_BAD_ARGUMENT && occupied==result);
     CHECK(xray_source_result_copy(result,&occupied)==XR_SOURCE_BAD_ARGUMENT && occupied==result);
     int64_t integer=-1;int boolean=37;double floating=9.0;
     CHECK(xray_source_result_i64(result,&integer)==XR_SOURCE_OK && integer==42);
@@ -131,7 +136,7 @@ static void named_outcomes(int array_display) {
 static void named_producer_death(void) {
     XrSourceCompiler *compiler=NULL;XrSourceProgram *program=named_program(&compiler);
     NamedOutput output={0};XrSourceCallOptions options=named_options(&output);XrSourceCall *call=NULL;
-    CHECK(xray_source_call_begin_named(program,"paused",6,&options,&call)==XR_SOURCE_OK && call);
+    CHECK(xray_source_invoke_begin(program,&(XrSourceInvocation){XRAY_SOURCE_INVOCATION_VERSION,sizeof(XrSourceInvocation),"paused",6,NULL,0},&options,&call)==XR_SOURCE_OK && call);
     xray_source_program_free(program);xray_source_compiler_free(compiler);
     for(unsigned count=0;count<4096;++count) {
         XrSourceEvent event;CHECK(xray_source_call_poll(call,8,&event)==XR_SOURCE_OK);
