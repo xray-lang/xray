@@ -48,7 +48,7 @@ static void source_case(const char *source, const char *expected, size_t length,
 }
 int main(void) {
     static const char order[]="[1, 2] 7 [9, 2]\n[9, 2]\n";
-    source_case("var a: Array<i64> = [1, 2]\nfn later():i64 { a[0]=9; return 7 }\nprint(a,later(),a)\nprint(a)\n",
+    source_case("var a: Array<i64> = [1, 2]\nfn later() -> i64 { a[0]=9; return 7 }\nprint(a,later(),a)\nprint(a)\n",
         order,sizeof(order)-1,2);
     static const char quoted[]="[\"A\0\xE4\xB8\xAD\", \"Z\"]\n[[[[...]]]]\n";
     source_case("print([\"A\\0中\",\"Z\"])\nvar a:Array<Array<Array<Array<Array<i64>>>>> = [[[[[5]]]]]\nprint(a)\n",
@@ -57,7 +57,7 @@ int main(void) {
     source_case("print(Array<i64>(33,7))\n",clipped,sizeof(clipped)-1,1);
     static const char leaves[]="[true, false]\n[1.5, -0.0]\n['\xE4\xB8\xAD', 'A']\n[DisplayCase.Empty, DisplayCase.Payload(-32768, [1, 2])]\n[null, 5]\n";
     source_case("print([true,false])\nvar f:Array<f32>=[1.5,-0.0]\nprint(f)\nprint(['中','A'])\n"
-        "enum DisplayCase { Empty\nPayload { n:i16, values:Array<i64> } }\n"
+        "enum DisplayCase { Empty,\nPayload { n:i16, values:Array<i64> } }\n"
         "var e:Array<DisplayCase>=[DisplayCase.Empty,DisplayCase.Payload { n:-32768,values:[1,2] }]\nprint(e)\n"
         "var o:Array<i64?>=[null,5]\nprint(o)\n",leaves,sizeof(leaves)-1,5);
     source_case("fn f() {}\nprint([f])\n",NULL,0,0);

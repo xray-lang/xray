@@ -22,7 +22,7 @@ static XrXirAction print_resume(XrXirCallView *view) {
     const PrintFixture *fixture=view->environment;
     uint32_t *pc=view->state;
     if (!(*pc)++) {
-        if (fixture->cancel) CHECK(xr_xir_call_request_cancel(view->activation)==XR_XIR_CALL_READY);
+        if (fixture->cancel) CHECK(xr_xir_call_request_cancel(view->activation)==XR_XIR_CALL_CANCEL_REQUESTED);
         return (XrXirAction){.kind=XR_XIR_ACTION_OUTPUT,.callee=XR_XIR_OUTPUT_LINE,
             .arguments=fixture->values,.argument_count=3};
     }
