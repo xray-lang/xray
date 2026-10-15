@@ -37,7 +37,8 @@ static void toolchain_probe_report(const XrCliInvocation *inv,const ToolchainPro
     fputs(",\"sdkDigest\":",stdout);toolchain_string(report->runtime);
     fputs("},\"request\":{\"target\":",stdout);toolchain_string(report->requested);
     fputs(",\"normalizedTarget\":",stdout);toolchain_string(report->normalized);
-    fputs(",\"profile\":\"hosted\",\"provider\":",stdout);
+    fputs(",\"profile\":",stdout);toolchain_string(xr_cli_opt_string(&inv->options,"profile","hosted"));
+    fputs(",\"provider\":",stdout);
     toolchain_string(xr_cli_opt_string(&inv->options,"provider","auto"));
     fputs("},\"selection\":{\"provider\":",stdout);toolchain_string(report->provider);
     fputs(",\"ownership\":\"external\",\"compiler\":",stdout);toolchain_string(report->compiler ? report->compiler : "");

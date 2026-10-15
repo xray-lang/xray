@@ -42,6 +42,7 @@ with tempfile.TemporaryDirectory(prefix="probe-中-", dir=parent) as directory:
         assert set(row["probe"]) == {"id", "fingerprint", "cache", "durationMs"}
         assert row["selection"]["ready"] is ready and row["probe"]["cache"] == "disabled"
         assert row["request"]["normalizedTarget"] == row["selection"]["targetAbi"] == "x86_64-windows-msvc"
+        assert row["request"]["profile"] == ("freestanding" if "--profile" in arguments else "hosted")
         if ready:
             assert row["selection"]["provider"] == "msvc" and row["selection"]["ownership"] == "external"
             assert Path(row["selection"]["compiler"]) == compiler
@@ -61,6 +62,7 @@ with tempfile.TemporaryDirectory(prefix="probe-中-", dir=parent) as directory:
     probe("actual-auto", ["--provider", "auto"])
     probe("missing-explicit-compiler", ["--provider", "msvc", "--cc", root / "missing-cl.exe"], False)
     probe("unsupported-provider", ["--provider", "zig"], False)
+    probe("unsupported-profile", ["--profile", "freestanding"], False)
     command("invalid-target", exe, ["probe", "--target", "invented-target"], 2)
     moved = root / "isolated"
     moved.mkdir()
