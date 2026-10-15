@@ -10,6 +10,7 @@
 
 #include "xlsp_server.h"
 #include "xlsp_protocol_output.h"
+#include "xlsp_method_table.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_request.h"
 #include "xlsp_navigation.h"
@@ -63,8 +64,6 @@ static uint64_t get_monotonic_ms(void) {
 #include "xlsp_handlers_lifecycle.h"
 #include "xlsp_handlers_workspace.h"
 #include "xlsp_handlers_textdoc.h"
-
-static void free_method_table(XrLspServer *server);
 
 // Thread-local server pointer for logging (set before each operation)
 static _Thread_local XrLspServer *tls_server = NULL;
@@ -313,7 +312,7 @@ void xlsp_server_free(XrLspServer *server) {
     }
 
     // Free method dispatch table
-    free_method_table(server);
+    xlsp_method_table_free(server);
 
     // Close log file
     if (server->log_file) {
@@ -1063,15 +1062,6 @@ static void flush_pending_diagnostics(XrLspServer *server) {
 // Method Dispatch Table (O(1) lookup instead of if-else chain)
 // ============================================================================
 
-typedef XrJsonValue *(*LspRequestHandler)(XrLspServer *, XrJsonValue *);
-typedef void (*LspNotificationHandler)(XrLspServer *, XrJsonValue *);
-
-typedef struct {
-    const char *method;
-    LspRequestHandler request_handler;
-    LspNotificationHandler notification_handler;
-} LspMethodEntry;
-
 // Method dispatch table (sorted by frequency for cache locality)
 static const LspMethodEntry lsp_methods[] = {
     // High-frequency methods first
@@ -1121,59 +1111,13 @@ static const LspMethodEntry lsp_methods[] = {
 
 #define LSP_METHOD_COUNT (sizeof(lsp_methods) / sizeof(lsp_methods[0]))
 
-// Hash table for O(1) method lookup (definition moved to xlsp_server.h)
-
-struct MethodHashEntry {
-    const LspMethodEntry *entry;
-    struct MethodHashEntry *next;
-};
-
-static uint32_t method_hash(const char *s) {
-    return xr_hash_bytes(s, strlen(s)) % METHOD_HASH_SIZE;
-}
-
-static void init_method_table(XrLspServer *server) {
-    if (server->method_table_initialized)
-        return;
-    for (size_t i = 0; i < LSP_METHOD_COUNT; i++) {
-        uint32_t h = method_hash(lsp_methods[i].method);
-        MethodHashEntry *e = xr_malloc(sizeof(MethodHashEntry));
-        if (!e) {
-            // Under OOM we bail on partial initialisation — find_method will
-            // return NULL for any method not yet linked, which handle_message
-            // reports to the client as -32601 (MethodNotFound). Leaving
-            // method_table_initialized = false lets a future successful call
-            // retry once memory pressure clears.
-            lsp_log("[fatal] init_method_table: xr_malloc failed at i=%zu\n", i);
-            return;
-        }
-        e->entry = &lsp_methods[i];
-        e->next = server->method_hash_table[h];
-        server->method_hash_table[h] = e;
-    }
-    server->method_table_initialized = true;
-}
-
-static void free_method_table(XrLspServer *server) {
-    for (int i = 0; i < METHOD_HASH_SIZE; i++) {
-        MethodHashEntry *e = server->method_hash_table[i];
-        while (e) {
-            MethodHashEntry *next = e->next;
-            xr_free(e);
-            e = next;
-        }
-        server->method_hash_table[i] = NULL;
-    }
-    server->method_table_initialized = false;
-}
-
-static const LspMethodEntry *find_method(XrLspServer *server, const char *method) {
-    uint32_t h = method_hash(method);
-    for (MethodHashEntry *e = server->method_hash_table[h]; e; e = e->next) {
-        if (strcmp(e->entry->method, method) == 0)
-            return e->entry;
-    }
-    return NULL;
+static bool ensure_method_table(XrLspServer *server, const XlspRequestId *id) {
+    if (server->method_table_initialized) return true;
+    XrXirStatus status = xlsp_method_table_initialize(server, lsp_methods, LSP_METHOD_COUNT);
+    if (status == XR_XIR_OK) return true;
+    if (xlsp_request_id_valid(id)) send_error(server, id, -32603, "Method table initialization failed");
+    lsp_log("Method table initialization failed (status=%u)", (unsigned)status);
+    return false;
 }
 
 // Handle incoming message.
@@ -1223,7 +1167,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     if (!is_request && !strcmp(method, "exit")) {
         xlsp_handle_lc_exit(server, params); xlsp_request_id_free(&id); return;
     }
-    init_method_table(server);
+    if (!ensure_method_table(server, &id)) { xlsp_request_id_free(&id); return; }
 
     // Handle $/cancelRequest specially (it's a notification)
     if (strcmp(method, "$/cancelRequest") == 0) {
@@ -1257,7 +1201,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     // a cloned copy here so we can still identify the slot when the
     // call returns.
     XlspRequestId id_for_slot = {.kind = XLSP_ID_NONE, .as.number = 0};
-    const LspMethodEntry *entry = find_method(server, method);
+    const LspMethodEntry *entry = xlsp_method_table_find(server, method);
     if(entry&&((entry->request_handler&&!is_request)||(entry->notification_handler&&is_request))) {
         if(is_request)send_error(server,&id,-32600,"Method requires a notification");
         xlsp_request_id_free(&id);return;
