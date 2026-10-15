@@ -14,6 +14,7 @@
 #ifndef XLSP_SOURCE_BINDINGS_H
 #define XLSP_SOURCE_BINDINGS_H
 #include "xlsp_source_query.h"
+#include "../../xir/xxir_source_calls.h"
 typedef struct XlspSourceBindings XlspSourceBindings;
 /* Complete immutable Source views for consumers that must distinguish the
  * syntactic binding from its navigation/call target. The canonical Source
@@ -25,5 +26,6 @@ XR_FUNC void xlsp_source_bindings_free(XlspSourceBindings *);
 XR_FUNC size_t xlsp_source_bindings_count(const XlspSourceBindings *);
 XR_FUNC const XrXirSourceView *xlsp_source_bindings_view(const XlspSourceBindings *,size_t);
 XR_FUNC const XrXirSourceSyntaxView *xlsp_source_bindings_syntax(const XlspSourceBindings *,size_t);
+XR_FUNC const XrXirSourceCalls *xlsp_source_bindings_calls(const XlspSourceBindings *,size_t);
 XR_FUNC const char *xlsp_source_bindings_path(const XlspSourceBindings *,size_t);
 #endif // XLSP_SOURCE_BINDINGS_H

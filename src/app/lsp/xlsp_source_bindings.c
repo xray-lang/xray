@@ -31,6 +31,7 @@ XR_FUNC void xlsp_source_bindings_free(XlspSourceBindings *owner) {
 XR_FUNC size_t xlsp_source_bindings_count(const XlspSourceBindings *owner){return owner?owner->count:0;}
 XR_FUNC const XrXirSourceView *xlsp_source_bindings_view(const XlspSourceBindings *owner,size_t index){return owner&&index<owner->count?xr_xir_compile_source_snapshot_view(owner->snapshots[index]):NULL;}
 XR_FUNC const XrXirSourceSyntaxView *xlsp_source_bindings_syntax(const XlspSourceBindings *owner,size_t index){return owner&&index<owner->count?xr_xir_compile_source_snapshot_syntax(owner->snapshots[index]):NULL;}
+XR_FUNC const XrXirSourceCalls *xlsp_source_bindings_calls(const XlspSourceBindings *owner,size_t index){return owner&&index<owner->count?xr_xir_compile_source_snapshot_calls(owner->snapshots[index]):NULL;}
 XR_FUNC const char *xlsp_source_bindings_path(const XlspSourceBindings *owner,size_t index){return owner&&index<owner->count?owner->paths[index]:NULL;}
 static XrXirStatus bindings_manifest(XrManifestStatus s) {
     return s==XR_MANIFEST_OK?XR_XIR_OK:s==XR_MANIFEST_BUDGET?XR_XIR_BUDGET:s==XR_MANIFEST_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
