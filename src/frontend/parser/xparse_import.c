@@ -452,6 +452,175 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
     return node;
 }
 
+/* The caller has consumed the export keyword and the star or opening brace.
+ * Preserve that keyword position while each path consumes its own grammar. */
+static AstNode *parse_reexport_all(Parser *parser, int line, int column) {
+    // export * from "./file"
+    if (!xr_parser_match_name(parser, "from")) {
+        do {
+            xr_parser_error(parser, "expected 'from' after 'export *'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        return NULL;
+}
+bool from_is_quoted = xr_parser_match(parser, TK_LITERAL_STRING);
+if (!xr_parser_healthy(parser)) return NULL;
+if (!from_is_quoted && !xr_parser_match(parser, TK_NAME)) {
+    do {
+        xr_parser_error(parser, "expected module name or string path after 'from'");
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
+    return NULL;
+}
+
+char *from_path;
+if (from_is_quoted) {
+    do {
+        from_path = extract_quoted_path(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
+    if (!from_path)
+        return NULL;
+} else {
+    size_t from_len = parser->previous.length;
+    do {
+        from_path = (char *) ast_alloc(parser->compiler_session, from_len + 1);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
+    do { if (!ast_copy(parser->compiler_session, from_path, parser->previous.start, from_len)) return NULL; } while (0);
+    do { if (!ast_work(parser->compiler_session, 1)) return NULL; from_path[from_len] = '\0'; } while (0);
+}
+
+// xr_ast_export_reexport strdups from_path; release our copy.
+AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path, from_is_quoted,
+                                       NULL, 0, true, line);
+if (!xr_parser_healthy(parser)) return NULL;
+if (node) node->column = column;
+return node;
+}
+
+static AstNode *parse_reexport_members(Parser *parser, int line, int column) {
+    // Parse member list
+    int capacity = 4;
+    int count = 0;
+    ReexportMember *members = (ReexportMember *) ast_alloc_array(
+        parser->compiler_session, sizeof(ReexportMember), (size_t) capacity);
+    if (!xr_parser_healthy(parser)) return NULL;
+
+    do {
+        if (xr_parser_check(parser, TK_RBRACE))
+            break;
+        if (!xr_parser_match(parser, TK_NAME)) {
+            do {
+                xr_parser_error_expected_name(parser, "expected member name in export { }");
+                if (!xr_parser_healthy(parser)) return NULL;
+            } while (0);
+
+            return NULL;
+        }
+
+        // Expand capacity
+        if (count >= capacity) {
+            capacity *= 2;
+            ReexportMember *new_members = (ReexportMember *) ast_alloc_array(
+                parser->compiler_session, sizeof(ReexportMember), (size_t) capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
+            do { if (!ast_copy(parser->compiler_session, new_members, members, count * sizeof(ReexportMember))) return NULL; } while (0);
+            members = new_members;
+        }
+
+        // Copy member name
+        size_t len = parser->previous.length;
+        char *name = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
+        if (!xr_parser_healthy(parser)) return NULL;
+        do { if (!ast_copy(parser->compiler_session, name, parser->previous.start, len)) return NULL; } while (0);
+        do { if (!ast_work(parser->compiler_session, 1)) return NULL; name[len] = '\0'; } while (0);
+        members[count].name = name;
+        members[count].alias = NULL;
+
+        // Check alias
+        if (xr_parser_match(parser, TK_AS)) {
+            if (!xr_parser_match(parser, TK_NAME)) {
+                do {
+                    xr_parser_error_expected_name(parser, "expected alias after 'as'");
+                    if (!xr_parser_healthy(parser)) return NULL;
+                } while (0);
+
+                return NULL;
+            }
+            len = parser->previous.length;
+            char *alias = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
+            if (!xr_parser_healthy(parser)) return NULL;
+            do { if (!ast_copy(parser->compiler_session, alias, parser->previous.start, len)) return NULL; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return NULL; alias[len] = '\0'; } while (0);
+            members[count].alias = alias;
+        }
+
+        count++;
+    } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA));
+
+    if (!xr_parser_match(parser, TK_RBRACE)) {
+        do {
+            xr_parser_error(parser, "expected '}' in export { }");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+
+        return NULL;
+}
+
+/* A braced export is exclusively a cross-module re-export. */
+if (xr_parser_check_name(parser, "from")) {
+    /* Re-export: export { a, b as c } from module / "..." */
+    do {
+        xr_parser_advance(parser);
+        if (!xr_parser_healthy(parser)) return NULL;
+    } while (0);
+    bool from_is_quoted = xr_parser_match(parser, TK_LITERAL_STRING);
+    if (!xr_parser_healthy(parser)) return NULL;
+    if (!from_is_quoted && !xr_parser_match(parser, TK_NAME)) {
+        do {
+            xr_parser_error(parser, "expected module name or string path after 'from'");
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+
+        return NULL;
+    }
+    char *from_path;
+    if (from_is_quoted) {
+        do {
+            from_path = extract_quoted_path(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        if (!from_path) {
+
+            return NULL;
+        }
+    } else {
+        size_t path_len = parser->previous.length;
+        do {
+            from_path = (char *) ast_alloc(parser->compiler_session, path_len + 1);
+            if (!xr_parser_healthy(parser)) return NULL;
+        } while (0);
+        do { if (!ast_copy(parser->compiler_session, from_path, parser->previous.start, path_len)) return NULL; } while (0);
+        do { if (!ast_work(parser->compiler_session, 1)) return NULL; from_path[path_len] = '\0'; } while (0);
+    }
+    AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path,
+                                           from_is_quoted, members, count, false, line);
+    if (!xr_parser_healthy(parser)) return NULL;
+    if (node) node->column = column;
+    return node;
+}
+
+do {
+    xr_parser_error(parser,
+                "post-hoc export was removed; put 'export' on the declaration or add "
+                "'from' for a re-export");
+    if (!xr_parser_healthy(parser)) return NULL;
+} while (0);
+return NULL;
+}
+
+
 /*
  * Parse export declaration
  * Supported syntax:
@@ -465,172 +634,15 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_export_declaration: NULL parser");
     int line = parser->previous.line;  // export keyword already consumed
+    int column = parser->previous.column;
 
     // Check re-export: export * from module / "..."
-    if (xr_parser_match(parser, TK_STAR)) {
-        // export * from "./file"
-        if (!xr_parser_match_name(parser, "from")) {
-            do {
-                xr_parser_error(parser, "expected 'from' after 'export *'");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-        bool from_is_quoted = xr_parser_match(parser, TK_LITERAL_STRING);
-        if (!xr_parser_healthy(parser)) return NULL;
-        if (!from_is_quoted && !xr_parser_match(parser, TK_NAME)) {
-            do {
-                xr_parser_error(parser, "expected module name or string path after 'from'");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-
-        char *from_path;
-        if (from_is_quoted) {
-            do {
-                from_path = extract_quoted_path(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            if (!from_path)
-                return NULL;
-        } else {
-            size_t from_len = parser->previous.length;
-            do {
-                from_path = (char *) ast_alloc(parser->compiler_session, from_len + 1);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do { if (!ast_copy(parser->compiler_session, from_path, parser->previous.start, from_len)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; from_path[from_len] = '\0'; } while (0);
-        }
-
-        // xr_ast_export_reexport strdups from_path; release our copy.
-        AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path, from_is_quoted,
-                                               NULL, 0, true, line);
-        if (!xr_parser_healthy(parser)) return NULL;
-        return node;
-    }
+    if (xr_parser_match(parser, TK_STAR))
+        return parse_reexport_all(parser, line, column);
 
     // Check re-export: export { a, b as c } from "..."
-    if (xr_parser_match(parser, TK_LBRACE)) {
-        // Parse member list
-        int capacity = 4;
-        int count = 0;
-        ReexportMember *members = (ReexportMember *) ast_alloc_array(
-            parser->compiler_session, sizeof(ReexportMember), (size_t) capacity);
-        if (!xr_parser_healthy(parser)) return NULL;
-
-        do {
-            if (xr_parser_check(parser, TK_RBRACE))
-                break;
-            if (!xr_parser_match(parser, TK_NAME)) {
-                do {
-                    xr_parser_error_expected_name(parser, "expected member name in export { }");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-
-                return NULL;
-            }
-
-            // Expand capacity
-            if (count >= capacity) {
-                capacity *= 2;
-                ReexportMember *new_members = (ReexportMember *) ast_alloc_array(
-                    parser->compiler_session, sizeof(ReexportMember), (size_t) capacity);
-                if (!xr_parser_healthy(parser)) return NULL;
-                do { if (!ast_copy(parser->compiler_session, new_members, members, count * sizeof(ReexportMember))) return NULL; } while (0);
-                members = new_members;
-            }
-
-            // Copy member name
-            size_t len = parser->previous.length;
-            char *name = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do { if (!ast_copy(parser->compiler_session, name, parser->previous.start, len)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; name[len] = '\0'; } while (0);
-            members[count].name = name;
-            members[count].alias = NULL;
-
-            // Check alias
-            if (xr_parser_match(parser, TK_AS)) {
-                if (!xr_parser_match(parser, TK_NAME)) {
-                    do {
-                        xr_parser_error_expected_name(parser, "expected alias after 'as'");
-                        if (!xr_parser_healthy(parser)) return NULL;
-                    } while (0);
-
-                    return NULL;
-                }
-                len = parser->previous.length;
-                char *alias = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
-                if (!xr_parser_healthy(parser)) return NULL;
-                do { if (!ast_copy(parser->compiler_session, alias, parser->previous.start, len)) return NULL; } while (0);
-                do { if (!ast_work(parser->compiler_session, 1)) return NULL; alias[len] = '\0'; } while (0);
-                members[count].alias = alias;
-            }
-
-            count++;
-        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA));
-
-        if (!xr_parser_match(parser, TK_RBRACE)) {
-            do {
-                xr_parser_error(parser, "expected '}' in export { }");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-
-            return NULL;
-        }
-
-        /* A braced export is exclusively a cross-module re-export. */
-        if (xr_parser_check_name(parser, "from")) {
-            /* Re-export: export { a, b as c } from module / "..." */
-            do {
-                xr_parser_advance(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            bool from_is_quoted = xr_parser_match(parser, TK_LITERAL_STRING);
-            if (!xr_parser_healthy(parser)) return NULL;
-            if (!from_is_quoted && !xr_parser_match(parser, TK_NAME)) {
-                do {
-                    xr_parser_error(parser, "expected module name or string path after 'from'");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-
-                return NULL;
-            }
-            char *from_path;
-            if (from_is_quoted) {
-                do {
-                    from_path = extract_quoted_path(parser);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                if (!from_path) {
-
-                    return NULL;
-                }
-            } else {
-                size_t path_len = parser->previous.length;
-                do {
-                    from_path = (char *) ast_alloc(parser->compiler_session, path_len + 1);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                do { if (!ast_copy(parser->compiler_session, from_path, parser->previous.start, path_len)) return NULL; } while (0);
-                do { if (!ast_work(parser->compiler_session, 1)) return NULL; from_path[path_len] = '\0'; } while (0);
-            }
-            AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path,
-                                                   from_is_quoted, members, count, false, line);
-            if (!xr_parser_healthy(parser)) return NULL;
-            return node;
-        }
-
-        do {
-            xr_parser_error(parser,
-                        "post-hoc export was removed; put 'export' on the declaration or add "
-                        "'from' for a re-export");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        return NULL;
-    }
+    if (xr_parser_match(parser, TK_LBRACE))
+        return parse_reexport_members(parser, line, column);
 
     if (xr_parser_check(parser, TK_VAR)) {
         do {
