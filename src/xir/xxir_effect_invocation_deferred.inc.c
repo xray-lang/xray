@@ -15,7 +15,7 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
     uint32_t instruction,const XrXirTypeNode *signature,uint64_t **output) {
     if (!output || *output || !signature || instruction>=flow->function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationOwner *owner=flow->owner;
+    const EffectInvocationRead *owner=flow->read;
     XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
     XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,instruction,&body_op_1,&op);
     if (body_read_1!=XR_XIR_OK) return body_read_1;
@@ -58,13 +58,13 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
             if (fixed) {
                 uint32_t mask=0;
                 status=effect_invocation_bounds_mask(owner->work,owner->declared,
-                    owner->nodes[flow->node].body,actual,&mask);
+                    owner->final->nodes[flow->node].body,actual,&mask);
                 if (status!=XR_XIR_OK) break;
                 if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row)+3)) {
                     status=XR_XIR_BUDGET;break;
                 }
                 memset(row,0,(size_t)flow->basis.fn_words*sizeof(*row));
-                uint32_t opaque=owner->site_count+flow->basis.parameters;
+                uint32_t opaque=owner->final->site_count+flow->basis.parameters;
                 row[opaque/64]|=UINT64_C(1)<<(opaque%64);
                 if (mask&XR_XIR_CALLABLE_ROOT_REQUIRED)
                     row[(opaque+1)/64]|=UINT64_C(1)<<((opaque+1)%64);
@@ -80,17 +80,17 @@ static XrXirStatus effect_invocation_deferred_arguments(EffectInvocationFlow *fl
 
 static XrXirStatus effect_invocation_deferred_record(EffectInvocationFlow *flow,
     uint32_t instruction,uint32_t parameter,const XrXirTypeNode *signature) {
-    EffectInvocationOwner *owner=flow->owner;
-    if (flow->node>=owner->count || parameter>=flow->basis.parameters ||
+    const EffectInvocationRead *owner=flow->read;
+    if (flow->node>=owner->final->count || parameter>=flow->basis.parameters ||
         instruction>=flow->function->instruction_count || !signature) return XR_XIR_BAD_STRUCTURE;
     uint64_t *input=NULL;
     XrXirStatus status=effect_invocation_deferred_arguments(flow,instruction,signature,&input);
     if (status==XR_XIR_UNRESOLVED) return XR_XIR_OK;
     if (status!=XR_XIR_OK) return status;
     uint64_t words=(uint64_t)signature->parameter_count*flow->basis.row_words;
-    for (uint32_t d=0;d<owner->deferred_count;++d) {
+    for (uint32_t d=0;d<owner->final->deferred_count;++d) {
         if (!xir_compile_work(owner->work,3)) { status=XR_XIR_BUDGET;break; }
-        EffectInvocationDeferred *record=&owner->deferred_calls[d];
+        EffectInvocationDeferred *record=&owner->final->deferred_calls[d];
         if (record->node!=flow->node || record->instruction!=instruction || record->parameter!=parameter)
             continue;
         if (record->count!=signature->parameter_count) { status=XR_XIR_BAD_STRUCTURE;break; }
@@ -106,28 +106,28 @@ static XrXirStatus effect_invocation_deferred_record(EffectInvocationFlow *flow,
         }
         xr_compile_resources_free(input);return status;
     }
-    if (status==XR_XIR_OK && owner->deferred_count==owner->deferred_capacity) {
-        uint32_t capacity=owner->deferred_capacity ? owner->deferred_capacity : 8;
-        if (capacity>owner->maximum) capacity=owner->maximum;
-        else if (owner->deferred_capacity) capacity=capacity>owner->maximum/2 ? owner->maximum : capacity*2;
-        if (capacity<=owner->deferred_count || (uint64_t)capacity>SIZE_MAX/sizeof(EffectInvocationDeferred))
+    if (status==XR_XIR_OK && owner->final->deferred_count==owner->final->deferred_capacity) {
+        uint32_t capacity=owner->final->deferred_capacity ? owner->final->deferred_capacity : 8;
+        if (capacity>flow->owner->maximum) capacity=flow->owner->maximum;
+        else if (owner->final->deferred_capacity) capacity=capacity>flow->owner->maximum/2 ? flow->owner->maximum : capacity*2;
+        if (capacity<=owner->final->deferred_count || (uint64_t)capacity>SIZE_MAX/sizeof(EffectInvocationDeferred))
             status=XR_XIR_BUDGET;
         EffectInvocationDeferred *records=status==XR_XIR_OK ? xir_compile_alloc(owner->work,
             (size_t)capacity*sizeof(*records),&status) : NULL;
         if (status==XR_XIR_OK && !records) status=XR_XIR_OUT_OF_MEMORY;
         if (status==XR_XIR_OK && !xir_compile_work(owner->work,
-                (uint64_t)owner->deferred_count*sizeof(*records))) status=XR_XIR_BUDGET;
+                (uint64_t)owner->final->deferred_count*sizeof(*records))) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) {
-            if (owner->deferred_count) memcpy(records,owner->deferred_calls,
-                (size_t)owner->deferred_count*sizeof(*records));
-            xr_compile_resources_free(owner->deferred_calls);owner->deferred_calls=records;
-            owner->deferred_capacity=capacity;
+            if (owner->final->deferred_count) memcpy(records,owner->final->deferred_calls,
+                (size_t)owner->final->deferred_count*sizeof(*records));
+            xr_compile_resources_free(owner->final->deferred_calls);flow->owner->final.deferred_calls=records;
+            flow->owner->final.deferred_capacity=capacity;
         } else xr_compile_resources_free(records);
     }
     if (status==XR_XIR_OK && !xir_compile_work(owner->work,sizeof(EffectInvocationDeferred)+1))
         status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) { xr_compile_resources_free(input);return status; }
-    owner->deferred_calls[owner->deferred_count]=(EffectInvocationDeferred){flow->node,instruction,
+    owner->final->deferred_calls[owner->final->deferred_count]=(EffectInvocationDeferred){flow->node,instruction,
         parameter,signature->parameter_count,input};
-    ++owner->deferred_count;return XR_XIR_OK;
+    ++flow->owner->final.deferred_count;return XR_XIR_OK;
 }

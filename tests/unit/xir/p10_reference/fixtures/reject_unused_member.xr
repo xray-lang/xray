@@ -1,0 +1,1 @@
+fn unused<T>(value:T)->i64{return value.extra()}

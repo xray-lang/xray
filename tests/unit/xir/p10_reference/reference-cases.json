@@ -1,0 +1,173 @@
+{
+  "scope": "UNMODIFIED_FORMAL_SOURCE_REFERENCE_ONLY",
+  "product_interface_changes": false,
+  "cases": [
+    {
+      "name": "explicit_witness",
+      "kind": "accept",
+      "expected_result": 41,
+      "rules": [
+        "319.2.4.11",
+        "319.2.5.1"
+      ]
+    },
+    {
+      "name": "witness_forward",
+      "kind": "accept",
+      "expected_result": 42,
+      "rules": [
+        "319.2.5.1",
+        "313.2.7.5"
+      ]
+    },
+    {
+      "name": "witness_diamond",
+      "kind": "accept",
+      "expected_result": 53,
+      "rules": [
+        "319.2.4.7",
+        "319.2.4.11"
+      ]
+    },
+    {
+      "name": "generic_method_value",
+      "kind": "accept",
+      "expected_result": 69,
+      "rules": [
+        "319.2.4.11",
+        "319.2.5.5"
+      ]
+    },
+    {
+      "name": "optional_layers",
+      "kind": "accept",
+      "expected_result": 12,
+      "rules": [
+        "319.2.3.1",
+        "319.2.3.4",
+        "319.2.3.5"
+      ]
+    },
+    {
+      "name": "optional_lazy_absent",
+      "kind": "accept",
+      "expected_result": 10109,
+      "rules": [
+        "319.2.3.5",
+        "319.2.3.1.lazy"
+      ]
+    },
+    {
+      "name": "optional_lazy_inner",
+      "kind": "accept",
+      "expected_result": 99,
+      "rules": [
+        "319.2.3.5",
+        "319.2.3.1.lazy"
+      ]
+    },
+    {
+      "name": "optional_exact_context",
+      "kind": "accept",
+      "expected_result": 102,
+      "rules": [
+        "319.2.3.4",
+        "319.2.3.1.expected"
+      ]
+    },
+    {
+      "name": "optional_triple_claims",
+      "kind": "accept",
+      "expected_result": 14,
+      "rules": [
+        "319.2.3.5",
+        "319.2.3.1.claims"
+      ]
+    },
+    {
+      "name": "for_and_ternary",
+      "kind": "accept",
+      "expected_result": 607,
+      "rules": [
+        "319.2.6.2"
+      ]
+    },
+    {
+      "name": "reject_unused_member",
+      "kind": "reject",
+      "expected_line": 1,
+      "expected_reason": "receiver has no declared interface requirements",
+      "rules": [
+        "319.2.5.1"
+      ]
+    },
+    {
+      "name": "reject_call_witness",
+      "kind": "reject",
+      "expected_line": 4,
+      "expected_reason": "type argument does not prove the declared constraint",
+      "rules": [
+        "319.2.4.11",
+        "319.2.5.1"
+      ]
+    },
+    {
+      "name": "reject_extra_member",
+      "kind": "reject",
+      "expected_line": 2,
+      "expected_reason": "member is absent from declared interface requirements",
+      "rules": [
+        "319.2.2.13",
+        "319.2.5.1"
+      ]
+    },
+    {
+      "name": "reject_method_arguments",
+      "kind": "reject",
+      "expected_line": 2,
+      "expected_reason": "interface method value requires its complete explicit type arguments",
+      "rules": [
+        "319.2.5.5",
+        "319.2.4.11"
+      ]
+    },
+    {
+      "name": "reject_method_constraint",
+      "kind": "reject",
+      "expected_line": 2,
+      "expected_reason": "method type argument does not prove the declared constraint",
+      "rules": [
+        "319.2.5.1",
+        "319.2.5.5"
+      ]
+    },
+    {
+      "name": "reject_forward_constraint",
+      "kind": "reject",
+      "expected_line": 2,
+      "expected_reason": "type argument does not prove the declared constraint",
+      "rules": [
+        "319.2.5.1",
+        "313.2.7.5"
+      ]
+    },
+    {
+      "name": "reject_dead_default",
+      "kind": "reject",
+      "expected_line": 1,
+      "expected_reason": "expression cannot satisfy its declared type",
+      "rules": [
+        "319.2.3.1.lazy"
+      ]
+    },
+    {
+      "name": "reject_stale_fact",
+      "kind": "reject",
+      "expected_line": 8,
+      "expected_reason": "operator requires a declared concrete operand contract",
+      "rules": [
+        "319.2.3.1.mutation"
+      ]
+    }
+  ]
+}
