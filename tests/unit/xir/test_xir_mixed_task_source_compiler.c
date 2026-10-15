@@ -58,6 +58,34 @@ static bool task_compiler_images(TaskSourcePrepare *source, TaskLateFixture *fix
     if (!task_source_stage(source, 11, status)) { CHECK(!*program && !fixture->releases); return false; }
     CHECK(*program && !fixture->releases); return true;
 }
+#if XR_MIXED_TASK_RESULT_MODULES == 3
+static void task_compiler_error_metadata(const XrXirProgram *program) {
+    const XrXirDeclarations *d = program->declarations;
+    const char *core = "memory-module-v1:id=23:xray-core-assertions-v1";
+    CHECK(d->module_count == 3 && !d->root_module && d->slot_count == 1 && !d->slots[0].module);
+    CHECK(d->modules[2].name_length == strlen(core) && !memcmp(d->modules[2].name, core, strlen(core)));
+    const XrXirTypes *types = program->types;
+    CHECK(types->nominals && types->nominals->identities && !types->nominals->declarations);
+    uint32_t declaration = UINT32_MAX;
+    for (uint32_t n = 0; n < types->nominals->count; ++n) {
+        const XrXirNominalIdentity *identity = &types->nominals->identities[n];
+        if (identity->name.length != 9 || memcmp(identity->name.bytes, "TaskFault", 9)) continue;
+        CHECK(declaration == UINT32_MAX && identity->kind == XR_XIR_NOMINAL_ENUM && identity->exported);
+        CHECK(identity->arity == 0 && identity->field_count == 1 && identity->variant_count == 1);
+        CHECK(identity->variants[0].name.length == 6 && !memcmp(identity->variants[0].name.bytes, "Failed", 6));
+        CHECK(!identity->variants[0].field_begin && identity->variants[0].field_count == 1);
+        CHECK(identity->fields[0].name.length == 7 && !memcmp(identity->fields[0].name.bytes, "message", 7));
+        declaration = n;
+    }
+    CHECK(declaration != UINT32_MAX); unsigned closed = 0;
+    for (uint32_t n = 0; n < types->count; ++n) {
+        const XrXirTypeNode *node = &types->nodes[n];
+        if (node->kind != XR_XIR_TYPE_NOMINAL || node->nominal.declaration != declaration || node->parameter_span) continue;
+        CHECK(node->nominal.field_count == 1 && node->nominal.fields && node->nominal.fields[0] == XR_XIR_STRING); ++closed;
+    }
+    CHECK(closed == 1);
+}
+#endif
 static void task_compiler_product(const XrXirProgram *program) {
     CHECK(program && program->entry_count > p20_task_result_entries[2]);
     const XrXirTypeNode *task = xr_xir_type_node(program->types, program->entries[p20_task_result_entries[0]].result);
@@ -65,6 +93,9 @@ static void task_compiler_product(const XrXirProgram *program) {
     const XrXirTypeNode *array = xr_xir_type_node(program->types, task->element);
     CHECK(array && array->kind == XR_XIR_TYPE_ARRAY && array->element == XR_XIR_STRING && !array->parameter_span);
     CHECK(program->entries[p20_task_result_entries[2]].result == task->element);
+#if XR_MIXED_TASK_RESULT_MODULES == 3
+    task_compiler_error_metadata(program);
+#endif
 }
 static TaskCompilerResult task_compiler_operation(unsigned backend, size_t failure,
     XrCompileResourceLimits caps, const char *dump) {

@@ -54,7 +54,11 @@ target_compile_definitions(test_xir_mixed_task_fault_lifetime PRIVATE XR_MIXED_T
 add_executable(test_xir_mixed_task_fault_resources xir/test_xir_mixed_task_fault_resources.c "${XIR_MIXED_TASK_FAULT_C}")
 target_link_libraries(test_xir_mixed_task_fault_resources PRIVATE xray_xir_vm xray_xir_scalar)
 target_compile_definitions(test_xir_mixed_task_fault_resources PRIVATE XR_MIXED_TASK_RESULT_MODULES=3)
-foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_mixed_task_fault_lifetime test_xir_mixed_task_fault_resources)
+add_executable(test_xir_mixed_task_fault_compiler xir/test_xir_mixed_task_source_compiler.c "${XIR_MIXED_TASK_FAULT_C}")
+target_link_libraries(test_xir_mixed_task_fault_compiler PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm xray_xir_scalar)
+target_compile_definitions(test_xir_mixed_task_fault_compiler PRIVATE XR_MIXED_TASK_RESULT_MODULES=3
+    XR_MIXED_TASK_RESULT_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_task_faults")
+foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_mixed_task_fault_lifetime test_xir_mixed_task_fault_resources test_xir_mixed_task_fault_compiler)
     set_target_properties(${task_fault_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${task_fault_target} PRIVATE /W4 /WX /utf-8)
@@ -63,6 +67,24 @@ foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_m
     endif()
 endforeach()
 foreach(task_fault_backend IN ITEMS 0 1 vm native)
+    foreach(task_fault_compiler_mode IN ITEMS baseline axes)
+        add_test(NAME test_xir_mixed_task_fault_compiler_${task_fault_backend}_${task_fault_compiler_mode}
+            COMMAND test_xir_mixed_task_fault_compiler ${task_fault_backend} ${task_fault_compiler_mode})
+        set_tests_properties(test_xir_mixed_task_fault_compiler_${task_fault_backend}_${task_fault_compiler_mode} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;task;compiler;resource;generated-c;throw;panic")
+    endforeach()
+    foreach(task_fault_compiler_shard RANGE 0 292)
+        math(EXPR task_fault_compiler_begin "${task_fault_compiler_shard} * 32")
+        math(EXPR task_fault_compiler_end "${task_fault_compiler_begin} + 32")
+        if(task_fault_compiler_end GREATER 9346)
+            set(task_fault_compiler_end 9346)
+        endif()
+        add_test(NAME test_xir_mixed_task_fault_compiler_${task_fault_backend}_fi_${task_fault_compiler_shard}
+            COMMAND test_xir_mixed_task_fault_compiler ${task_fault_backend} fi
+                ${task_fault_compiler_begin} ${task_fault_compiler_end} 9346)
+        set_tests_properties(test_xir_mixed_task_fault_compiler_${task_fault_backend}_fi_${task_fault_compiler_shard} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;compiler;resource;generated-c;throw;panic;fault-injection")
+    endforeach()
     add_test(NAME test_xir_mixed_task_fault_resources_${task_fault_backend}_axes
         COMMAND test_xir_mixed_task_fault_resources ${task_fault_backend} axes)
     set_tests_properties(test_xir_mixed_task_fault_resources_${task_fault_backend}_axes PROPERTIES
