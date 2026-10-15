@@ -135,6 +135,14 @@ add_test(NAME test_xir_p10_source_generation_program_baseline
     COMMAND test_xir_p10_source_generation_resources --program --baseline)
 set_tests_properties(test_xir_p10_source_generation_program_baseline PROPERTIES
     TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;resource-control")
+add_test(NAME test_xir_p10_source_generation_program_cell_resources
+    COMMAND test_xir_p10_source_generation_resources --program-cell)
+set_tests_properties(test_xir_p10_source_generation_program_cell_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_generation_program_cell_baseline
+    COMMAND test_xir_p10_source_generation_resources --program-cell --baseline)
+set_tests_properties(test_xir_p10_source_generation_program_cell_baseline PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;resource-control")
 add_test(NAME test_xir_p10_source_generation_semantic_baseline
     COMMAND test_xir_p10_source_generation_resources --baseline)
 add_test(NAME test_xir_p10_source_generation_comptime_baseline
