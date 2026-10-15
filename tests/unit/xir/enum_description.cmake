@@ -57,3 +57,5 @@ foreach(constant_test IN ITEMS test_xir_derived_constants_native test_xir_derive
     add_test(NAME ${constant_test}_runtime_resources COMMAND ${constant_test} --runtime-resources)
     set_tests_properties(${constant_test}_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;constants;ownership;runtime-fault;resources")
 endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/derived_arrays.cmake")
