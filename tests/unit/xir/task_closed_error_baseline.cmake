@@ -28,5 +28,5 @@ foreach(backend vm native vm-native native-vm)
     string(REPLACE "-" "_" name "${backend}")
     add_test(NAME test_xir_task_closed_error_baseline_${name} COMMAND test_xir_task_closed_error_baseline ${backend})
     set_tests_properties(test_xir_task_closed_error_baseline_${name} PROPERTIES TIMEOUT 60
-        LABELS "unit;xir;task;ownership;runtime;generated-c;capability-gap")
+        LABELS "unit;xir;task;ownership;runtime;generated-c;typed-error")
 endforeach()

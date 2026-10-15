@@ -24,6 +24,7 @@ typedef struct XirTaskActivation {
     struct XirTask *task;
     struct XirTaskActivation *ready_next;
     uint64_t ticket;
+    uint32_t entry;
     bool queued;
 } XirTaskActivation;
 typedef struct XirTask {

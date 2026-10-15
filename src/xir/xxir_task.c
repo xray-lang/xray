@@ -12,6 +12,7 @@
 #include "xxir_task_internal.h"
 #include "xxir_task_result_internal.h"
 #include "xxir_error.h"
+#include "xxir_effects.h"
 #include <string.h>
 
 struct XrXirTaskExecutor {
@@ -302,7 +303,7 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
         return freed == XR_XIR_CALL_READY ? status : freed;
     }
     task->generation = executor->generation; task->identity = ++executor->next_identity;
-    task->activation = (XirTaskActivation){.call = task->call, .task = task, .ticket = task->identity};
+    task->activation = (XirTaskActivation){.call = task->call, .task = task, .ticket = task->identity, .entry = request->entry};
     const XrXirExecutorBinding binding = {executor, &task->activation, executor->generation, task->identity};
     XR_CHECK(xr_xir_call_bind_executor(task->call, &binding) == XR_XIR_CALL_READY,
         "new child activation owns one non-reusable executor ticket");
@@ -374,7 +375,7 @@ static void task_core_finish_task(XrXirTaskExecutor *executor, XirTask *task) {
     XrXirCallStatus status = xr_xir_call_take_outcome(task->call, &prepared);
     XR_CHECK(status != XR_XIR_CALL_READY && status != XR_XIR_CALL_SUSPENDED,
         "terminal task publication takes its complete call outcome");
-    XrXirCallStatus admitted = task_core_outcome_admit(executor, &prepared);
+    XrXirCallStatus admitted = task_core_outcome_admit(executor, task, &prepared);
     if (admitted != XR_XIR_CALL_READY) {
         task_core_record_status(executor, admitted);
         xr_xir_call_result_drop(&prepared); prepared.status = status = admitted;
@@ -396,6 +397,7 @@ static void task_core_finish_task(XrXirTaskExecutor *executor, XirTask *task) {
         executor->external = NULL; executor->external_call_wake = 0;
     }
     task->activation.call = NULL;
+    task->activation.entry = UINT32_MAX;
     if (task->active_previous) task->active_previous->active_next = task->active_next;
     else {
         XR_CHECK(executor->active == task, "terminal task keeps its original executor membership");
