@@ -1,0 +1,4 @@
+enum E{Bad}
+fn good()->i64{return 42}
+fn answer()->i64{try{return good()}catch(e:E){return 0}}
+export fn run()->i64{return comptime answer()}

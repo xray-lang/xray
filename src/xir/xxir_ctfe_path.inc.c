@@ -81,7 +81,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     XrXirValue cell=ctfe_array_operand(run,root_op->args[0]),root={0},target={0},result={0};
     XrXirValuePlace place={0};XrXirFaultDetail fault={0};bool held=false;
     bool mutate=op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_STRUCT_SET;
-    if (!scalar_compile_work(run,state->cell_header_work)) { status=XR_XIR_CTFE_BUDGET;goto done; }
+    if (!scalar_compile_work(run,state->value_header_work)) { status=XR_XIR_CTFE_BUDGET;goto done; }
     bool projected=xr_xir_cell_is_projection(&cell);
     if (!xr_xir_cell_in_domain(&cell,state->domain)) { status=XR_XIR_CTFE_BAD_ARTIFACT;goto done; }
     status=ctfe_validation_work(run,&bounded,root_op->type);if (status!=XR_XIR_CTFE_OK) goto done;

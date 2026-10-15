@@ -42,6 +42,7 @@ static XrXirCtfeStatus ctfe_nominal_owner_admit(const XrXirArtifact *artifact,ui
 static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type,bool internal,XrXirCtfeTypeShape *output) {
     if (!xir_compile_context_valid(context)) return XR_XIR_CTFE_BAD_ARGUMENT;
+    if (internal && type==XR_XIR_ERROR) { *output=(XrXirCtfeTypeShape){1,true,false};return XR_XIR_CTFE_OK; }
     if (ctfe_result_type(type)) { *output=(XrXirCtfeTypeShape){1,false,type!=XR_XIR_UNIT};return XR_XIR_CTFE_OK; }
     const XrXirTypeNode *root=ctfe_execution_node(types,type,internal);
     if (!root || !types || !types->count) return XR_XIR_CTFE_NOT_SUPPORTED;
@@ -98,6 +99,10 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             field.type=xr_xir_cell_element(types,field.type);
         }
         if (single && field.type==XR_XIR_UNIT) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+        if (internal && field.type==XR_XIR_ERROR) {
+            if (frame->work==UINT64_MAX) { status=XR_XIR_CTFE_BUDGET;break; }
+            ++frame->work;frame->dynamic=true;frame->pure_arrays=false;continue;
+        }
         if (ctfe_result_type(field.type)) {
             if (frame->work==UINT64_MAX) { status=XR_XIR_CTFE_BUDGET;break; }
             ++frame->work;if (node->kind==XR_XIR_TYPE_ARRAY) frame->pure_arrays=field.type!=XR_XIR_UNIT;continue;

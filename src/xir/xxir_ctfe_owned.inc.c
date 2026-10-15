@@ -25,7 +25,7 @@ typedef struct CtfeOwnedState {
     const XrXirCompileContext *context;
     XrXirCtfeTypeShape *tuple_costs;
     uint64_t frame_spare;
-    uint64_t cell_header_work;
+    uint64_t value_header_work;
     struct CtfeCallFrame *activation;
     const XrXirArtifact *artifact;
     struct CtfeOwnedState *identity;
@@ -53,10 +53,15 @@ static XrXirCtfeStatus ctfe_value_status(XrXirValueStatus status) {
 }
 static bool ctfe_cell_type(const XrXirTypes *types,XrXirType type) {
     XrXirType element=xr_xir_cell_element(types,type);
-    return xr_xir_type_is_cell(types,type) && (ctfe_result_type(element) || ctfe_execution_node(types,element,true));
+    return xr_xir_type_is_cell(types,type) && (element==XR_XIR_ERROR || ctfe_result_type(element) || ctfe_execution_node(types,element,true));
 }
 static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFunction *body,
     const XrXirInstruction *op) {
+    if (op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT || op->op==XR_XIR_INVOKE_RESULT) return true;
+    if (op->type==XR_XIR_ERROR) return op->op==XR_XIR_ERROR_ERASE || op->op==XR_XIR_INVOKE_ERROR || op->op==XR_XIR_CALL ||
+        op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW ||
+        op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN || op->op==XR_XIR_CELL_READ ||
+        op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET;
     if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         return ctfe_cell_type(module->types,xr_xir_operand_type(body,op->args[0]));
     if (ctfe_scalar_type(op->type) || op->type==XR_XIR_UNIT) return true;
@@ -65,7 +70,7 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
         op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ARRAY_GET ||
         op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW ||
         op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_OWNED_RETAIN;
-    if (ctfe_composite_node(module->types,op->type)) return op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_TUPLE_NEW ||
+    if (ctfe_composite_node(module->types,op->type)) return op->op==XR_XIR_ERROR_NARROW || op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_TUPLE_NEW ||
         op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT ||
         op->op==XR_XIR_ARRAY_WITH_CAPACITY || op->op==XR_XIR_ARRAY_RESERVE || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_PLACE_READ ||
         op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
@@ -123,7 +128,7 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
     if (validation!=XR_XIR_CTFE_OK) return validation;
     bool local=op->op==XR_XIR_CELL_LOCAL_WRITE;
     if (local && !cell.payload) create=true;
-    if (!scalar_compile_work(run,state->cell_header_work)) return XR_XIR_CTFE_BUDGET;
+    if (!scalar_compile_work(run,state->value_header_work)) return XR_XIR_CTFE_BUDGET;
     if (!create && !xr_xir_cell_in_domain(&cell,state->domain)) return XR_XIR_CTFE_BAD_ARTIFACT;
     bool projected=!create && xr_xir_cell_is_projection(&cell);
     if (op->op!=XR_XIR_CELL_READ && !xr_xir_cell_is_unit(run->module->types,type)) {
@@ -138,7 +143,7 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
     if (op->op!=XR_XIR_CELL_READ && paid!=XR_XIR_CTFE_OK) return paid;
     /* Scalar admission has no child traversal. This local bound is not a
      * replenished compiler budget: Domain work bills the shared ledger. */
-    bool composite=ctfe_execution_node(run->module->types,xr_xir_cell_element(run->module->types,type),true)!=NULL;
+    bool composite=xr_xir_cell_element(run->module->types,type)==XR_XIR_ERROR || ctfe_execution_node(run->module->types,xr_xir_cell_element(run->module->types,type),true)!=NULL;
     XrXirValueAdmission admission=ctfe_value_admission(state);admission.work=composite || projected?UINT64_MAX:8;
     XrXirValueStatus status;
     if (projected) {
@@ -166,6 +171,7 @@ static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types
 #include "xxir_ctfe_tuple.inc.c"
 #include "xxir_ctfe_nullable.inc.c"
 #include "xxir_ctfe_nominal.inc.c"
+#include "xxir_ctfe_error_value.inc.c"
 #include "xxir_ctfe_array.inc.c"
 #include "xxir_ctfe_path.inc.c"
 #include "xxir_ctfe_projection.inc.c"

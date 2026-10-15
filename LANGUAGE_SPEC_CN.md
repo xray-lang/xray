@@ -7725,7 +7725,7 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 每个真实compiler activation使用私有身份、稳定frame及本次有限epoch构成既有CellAuthority。loan记录在进入前按全部Cell参数数量预留，计入原live frame；现有Cell loan prepare/commit/abort/release拥有唯一借用语义。只有直接活跃父authority可以重借；所有参数完成准备且后续发布费用可支付后才统一commit。任一失败逆序abort已准备前缀；正常或失败pop逆序release，精确恢复父loan。Cell读写及同步Array/字段路径使用既有authorized Value操作，不能凭type ID、持有引用或root标志绕过权限。借用期间不把scoped Cell伪装成拥有capture。
 
-参数类型、元素形状、别名检查、frontier查找/迁移及所有可变接收先付原累计work；loan终态释放费用预付，scratch仍限原剩余frame。所有cleanup和ref调用共享原steps/depth/frame及原128M/64MiB/8MiB、output8限额。缺省declarations继续明确拒绝，入口guard不能先解引用缺省表。scoped projection遵守17.57；error/panic cleanup、外部有界接收及其他未准入族仍fail closed；内部ref/cleanup不授予P12、共享/provider或正式全安全资格。
+参数类型、元素形状、别名检查、frontier查找/迁移及所有可变接收先付原累计work；loan终态释放费用预付，scratch仍限原剩余frame。所有cleanup和ref调用共享原steps/depth/frame及原128M/64MiB/8MiB、output8限额。缺省declarations继续明确拒绝，入口guard不能先解引用缺省表。scoped projection遵守17.57；Error cleanup遵守17.58；panic cleanup、外部有界接收及其他未准入族仍fail closed；内部ref/cleanup不授予P12、共享/provider或正式全安全资格。
 
 ### 17.57 有界scoped projection与当前根的真实借用
 
@@ -7735,7 +7735,19 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 每次投影访问预付根接收work乘以4×(根形状+1)，覆盖公共path操作的前缀、suffix及完整接收。修改还先读真实Domain live统计，预付live_bytes×根形状×32，覆盖同一无环路径可能发生的祖先COW与保留；Array叶增长另按真实容量及元素storage付费。所有乘法先检溢出，费用不可支付时在Value访问/修改前BUDGET，累计账本从不退款或重置。观察快照在修改之前释放，保留既有COW副本；可变拥有结果可在Source/Artifact/ledger调用者死亡后继续持有，最后drop不分配。
 
-临时selector、共同接收scratch和所有同时存活activation共享原frame；child分配后，参数接收和loan准备只能使用再扣除child字节的余额。Value的scratch不足可能沿既有LIMIT映射为BUDGET，显式frame检查仍返回FRAME_LIMIT；两者均保全空输出并释放已准备前缀，不能伪装为成功或放宽上限。所有step/depth/output与原128M/64MiB/8MiB及65536 frame不变。该族没有公共Value/Call/Instance/SourceContext或schema/opcode变更。普通Source ref lambda、error/panic cleanup、foreign/deep-variable接收、P12及完整共享/provider/安全资格仍为独立剩余责任。
+临时selector、共同接收scratch和所有同时存活activation共享原frame；child分配后，参数接收和loan准备只能使用再扣除child字节的余额。Value的scratch不足可能沿既有LIMIT映射为BUDGET，显式frame检查仍返回FRAME_LIMIT；两者均保全空输出并释放已准备前缀，不能伪装为成功或放宽上限。所有step/depth/output与原128M/64MiB/8MiB及65536 frame不变。该族没有公共Value/Call/Instance/SourceContext或schema/opcode变更。Error cleanup遵守17.58；普通Source ref lambda、panic cleanup、foreign/deep-variable接收、P12及完整共享/provider/安全资格仍为独立剩余责任。
+
+### 17.58 内部Error、显式错误continuation与有界cleanup
+
+每次完整Lowered/identity/target/profile复验后，CTFE把INVOKE与direct CALL、FUNCTION_REF和cleanup目标共同纳入实际可达闭包。INVOKE_INDIRECT仍只调用本次真实Function lease已经验证的目标；未执行的错误分支或cleanup也不能隐藏I/O、挂起或其他未准入操作。ERROR_ERASE/IS/NARROW直接使用共同Value的真实enum视图、精确声明身份与既有权限规则，不制造另一Error包装、Value表示或解释器。Error可在准入族内作内部参数/返回、Cell、owned局部、PHI及Tuple/Nullable/enum持有值；外部Error参数及Error或含Error的拥有常量导出继续拒绝，不能借Error擦除扩大类型/声明或执行权限。
+
+真实可达enum创建点的完整形状，与投影所需的Cell根形状共同决定128倍浅层metadata预付上界。opaque Error先付该原ledger费用，再经公开error_borrow取得实际enum视图；完整有界接收另按实际活动字段、String/Array跨度、Function capture及Cell付费。Tuple getter和Nullable unwrap返回Error时也先付实际opaque元数据上界。内部Error类型只标记变量接收，不为其他拥有族绕过原类型限制；尚缺有界观察接口的Array<Error>、动态struct child及其他深变量族继续明确拒绝。私有Cell写入前，Error内的Function/Cell图仍沿既有观察路径检查目标Cell回边；合法无环持有与替换允许，环不能由Error隐藏。
+
+成功INVOKE沿真实正常边进入专属INVOKE_RESULT或INVOKE_DISCARD，Unit正常边不伪造值槽。错误先保留真实concrete enum快照，沿该frame的frontier执行LIFO cleanup；每个注册仍只在cleanup child正常返回后退休。跨普通CALL传播先结束child、逆序释放其loan、恢复真实父authority，再将保留错误交给父frame退出。对应INVOKE接收则沿专属INVOKE_ERROR边保留共同Error视图，原shared scalar edge负责真实predecessor与并行PHI；marker必须绑定实际callsite。当前frame的CLEANUP_ERROR保持已求值错误快照，在离开相应scope后沿原错误continuation继续，不能因为cleanup改变Cell而追溯改变抛出的String/Array值。
+
+cleanup内部可有完整处理的try/catch与调用，但其定义仍须满足真实Source/Checker的不逃逸throw和不挂起规则；不能把NO_THROW或root标志当确定性证明。预算/OOM等编译作业失败从不进入语言catch，仍保全空输出并在不分配、不退款的终态路径释放全部frame、pending error、返回快照、lease与loan。未捕获语言错误在适用cleanup完成后返回compiler-only UNCAUGHT_ERROR，Source在原comptime站点报告编译错误；无限cleanup仍受原step/work/frame/depth上限而不能抢先发布未捕获错误。
+
+所有metadata、接收、retention、continuation与清理迁移费用计原累计128M work/64MiB allocated/8MiB live；steps65536、depth128、frame65536、output8不变，错误槽和同时存活child/receiving scratch计原frame。Error不授予外部输入快照、Error常量导出或宿主执行。未接通的panic handler/cleanup、普通Source ref lambda、外部私有物化/Unit前置、有界foreign/deep-variable接收、P12及完整共享/provider/正式安全资格仍为独立责任。本族不改变公共Value/Call/Instance/SourceContext布局、schema或opcode。
 
 ---
 

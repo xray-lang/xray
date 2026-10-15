@@ -31,6 +31,36 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"error_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cycle_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cycle_acyclic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup_invoke", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_caller_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_nested_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_work_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_generic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cell", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_abort_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_success", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_discard", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_rethrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_filter", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup_catch", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_snapshot", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_unhandled", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime uncaught error", 3},
+    {"error_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"error_infinite_cleanup", XR_XIR_I64, 0, XR_XIR_BUDGET, NULL, 3},
+    {"error_recursion", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_owning_direct", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
+    {"error_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_call", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_ref", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"project_owning_direct", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
     {"project_reproject", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"project_suffix", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -681,6 +711,8 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_function_cases.h"
 #include "xir_ctfe_cleanup_cases.h"
 #include "xir_ctfe_projection_cases.h"
+#include "xir_ctfe_error_cases.h"
+#include "xir_ctfe_error_abort_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -701,6 +733,11 @@ int main(int argc, char **argv) {
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
         if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
+        else if (!strcmp(selected->name,"error_cycle_direct")) reference_function_cycle(&context,&source);
+        else if (!strcmp(selected->name,"error_work_direct")) reference_error_work(&context,&source);
+        else if (!strcmp(selected->name,"error_abort_direct")) reference_error_abort(&context,&source);
+        else if (!strcmp(selected->name,"error_owning_direct")) reference_error_owning(&context,&source);
+        else if (!strcmp(selected->name,"error_direct")) reference_error_direct(&context,&source);
         else if (!strcmp(selected->name,"project_direct")) reference_projection_direct(&context,&source);
         else if (!strcmp(selected->name,"project_owning_direct")) reference_projection_owning(&context,&source);
         else if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_owning(&context,&source);
@@ -758,6 +795,7 @@ int main(int argc, char **argv) {
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
+    if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();

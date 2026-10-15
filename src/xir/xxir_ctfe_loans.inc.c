@@ -31,7 +31,7 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
         XrXirCtfeStatus paid=ctfe_validation_work(&frame->run,state,body->parameters[p]);if (paid!=XR_XIR_CTFE_OK) return paid;
         XrXirValue value=ctfe_nominal_operand(&frame->run,p);
         XrXirCellProofRole role=xr_xir_cell_provenance_role(state->cells,frame->function,p);
-        if (!scalar_compile_work(&frame->run,state->cell_header_work)) return XR_XIR_CTFE_BUDGET;
+        if (!scalar_compile_work(&frame->run,state->value_header_work)) return XR_XIR_CTFE_BUDGET;
         if (!xr_xir_cell_in_domain(&value,state->domain) || xr_xir_cell_module_storage(&value)) return XR_XIR_CTFE_NOT_SUPPORTED;
         bool projected=xr_xir_cell_is_projection(&value);
         if (role==XR_XIR_CELL_PROOF_OWNED_CAPTURE) {
@@ -45,7 +45,7 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
             if (!xr_xir_type_is_cell(module->types,body->parameters[prior])) continue;
             paid=ctfe_validation_work(&frame->run,state,body->parameters[p]);if (paid!=XR_XIR_CTFE_OK) return paid;
             paid=ctfe_validation_work(&frame->run,state,body->parameters[prior]);if (paid!=XR_XIR_CTFE_OK) return paid;
-            if (!scalar_compile_work(&frame->run,state->cell_header_work*2)) return XR_XIR_CTFE_BUDGET;
+            if (!scalar_compile_work(&frame->run,state->value_header_work*2)) return XR_XIR_CTFE_BUDGET;
             XrXirValue other=ctfe_nominal_operand(&frame->run,prior);
             if (xr_xir_cell_same_owner(&value,&other)) return XR_XIR_CTFE_NOT_SUPPORTED;
         }

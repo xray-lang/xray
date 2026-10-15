@@ -37,13 +37,13 @@ static XrXirCtfeStatus ctfe_projection_access_work(ScalarRun *run,CtfeOwnedState
 static XrXirCtfeStatus ctfe_projection_loan_bound(CtfeCallExecution *execution,CtfeCallFrame *frame,CtfeCellLoan *record) {
     CtfeOwnedState *state=&execution->owned;ScalarRun *run=&frame->run;CtfeCallFrame *parent=state->activation;
     if (parent) for (uint32_t p=0;p<parent->loan_count;++p) {
-        if (!scalar_compile_work(run,64+state->cell_header_work*2)) return XR_XIR_CTFE_BUDGET;
+        if (!scalar_compile_work(run,64+state->value_header_work*2)) return XR_XIR_CTFE_BUDGET;
         const CtfeCellLoan *outer=&parent->loans[p];
         if (!outer->projected || !xr_xir_cell_same_owner(&record->value,&outer->value)) continue;
         record->root_work=outer->root_work;record->root_shape=outer->root_shape;
         return ctfe_projection_receive_work(run,record);
     }
-    if (!scalar_compile_work(run,128+state->cell_header_work)) return XR_XIR_CTFE_BUDGET;
+    if (!scalar_compile_work(run,128+state->value_header_work)) return XR_XIR_CTFE_BUDGET;
     const XrXirValue *root=xr_xir_cell_canonical_root(&record->value);if (!root) return XR_XIR_CTFE_BAD_ARTIFACT;
     XrXirType type=xr_xir_cell_element(run->module->types,(XrXirType)root->type);
     if (!xr_xir_type_is_array(run->module->types,type) && !xr_xir_type_is_struct(run->module->types,type)) return XR_XIR_CTFE_NOT_SUPPORTED;

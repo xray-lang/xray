@@ -24,7 +24,7 @@ typedef enum XrXirCtfeStatus {
     XR_XIR_CTFE_BUDGET, XR_XIR_CTFE_OUT_OF_MEMORY, XR_XIR_CTFE_STEP_LIMIT,
     XR_XIR_CTFE_FRAME_LIMIT, XR_XIR_CTFE_OUTPUT_LIMIT,
     XR_XIR_CTFE_DIVIDE_BY_ZERO, XR_XIR_CTFE_NUMERIC_RANGE,
-    XR_XIR_CTFE_DEPTH_LIMIT, XR_XIR_CTFE_NOT_SUPPORTED, XR_XIR_CTFE_NULL_UNWRAP, XR_XIR_CTFE_BOUNDS
+    XR_XIR_CTFE_DEPTH_LIMIT, XR_XIR_CTFE_NOT_SUPPORTED, XR_XIR_CTFE_NULL_UNWRAP, XR_XIR_CTFE_BOUNDS, XR_XIR_CTFE_UNCAUGHT_ERROR
 } XrXirCtfeStatus;
 typedef struct XrXirCtfeLimits { uint64_t steps, frame_bytes, output_bytes; } XrXirCtfeLimits;
 typedef struct XrXirCtfeRequest {
@@ -87,7 +87,10 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
  * prepay scan/table work and report NUMERIC_RANGE on invalid starts. Immutable
  * Tuple/Nullable/Array and admitted struct/enum exports retain their actual type
  * arena and active fields. External Cell/Function/composite arguments, Function
- * exports and error/panic cleanup remain unadmitted. Scoped projections use
+ * exports and panic cleanup remain unadmitted. Internal enum Error values use
+ * authentic Value erasure/matching and explicit invoke/error continuations.
+ * An uncaught error follows applicable cleanup before UNCAUGHT_ERROR; compiler
+ * resource failures never enter language catch. Scoped projections use
  * existing authorized Cell paths and exact parent loans; selectors, child
  * preparation and common receiving scratch share the remaining frame quota.
  * This entry never invokes Instance, native code or a fallback. */

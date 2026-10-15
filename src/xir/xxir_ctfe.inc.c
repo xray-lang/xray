@@ -38,9 +38,16 @@ static bool ctfe_result_value(const XrXirValue *value, XrXirType type, const XrX
 
 /* The count describes frame reads/writes in scalar_step; edge transfers charge
  * their actual predecessor scans and copies inside scalar_edge. */
+static bool ctfe_error_operation(XrXirOp op) {
+    return op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT || op==XR_XIR_INVOKE_RESULT || op==XR_XIR_INVOKE_ERROR ||
+        op==XR_XIR_INVOKE_DISCARD || op==XR_XIR_THROW || op==XR_XIR_CLEANUP_ERROR || op==XR_XIR_ERROR_ERASE ||
+        op==XR_XIR_ERROR_IS || op==XR_XIR_ERROR_NARROW;
+}
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     switch (op) {
     case XR_XIR_CONST_FLOAT: case XR_XIR_CONST_RUNE: case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
+    case XR_XIR_THROW: case XR_XIR_CLEANUP_ERROR: case XR_XIR_ERROR_ERASE: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD:
     case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_CLEANUP_REGISTER: case XR_XIR_CLEANUP_LEAVE: *work=8;return true;
     case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER:
@@ -85,7 +92,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
 }
 /* Local writes produce Unit but keep ordinary fallthrough control flow. */
 static bool ctfe_unit_result(XrXirOp op) {
-    return op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_STRUCT_SET || op == XR_XIR_RANGE_CHECK || op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
+    return op == XR_XIR_THROW || op == XR_XIR_CLEANUP_ERROR || op == XR_XIR_INVOKE_DISCARD || op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_STRUCT_SET || op == XR_XIR_RANGE_CHECK || op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
         op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_CELL_WRITE || op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
 }
 static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t selected) {
@@ -121,7 +128,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
         const XrXirInstruction *op = &body->instructions[i]; uint64_t work;
-        if (op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_CLEANUP_LEAVE || op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_FUNCTION_WEAKEN || op->op==XR_XIR_CALL_INDIRECT ||
+        if (ctfe_error_operation(op->op) || op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_CLEANUP_LEAVE || op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_FUNCTION_WEAKEN || op->op==XR_XIR_CALL_INDIRECT ||
             !ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
         admitted=ctfe_tuple_instruction_admit(artifact,body,op);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;

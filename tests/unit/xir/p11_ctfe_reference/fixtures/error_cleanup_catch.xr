@@ -1,0 +1,4 @@
+enum E{Bad}
+fn inc(x:ref i64){defer{try{throw E.Bad}catch(e:E){x=x+2}}}
+fn answer()->i64{var x=40;inc(ref x);return x}
+export fn run()->i64{return comptime answer()}

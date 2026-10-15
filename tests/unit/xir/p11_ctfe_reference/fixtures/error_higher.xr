@@ -1,0 +1,4 @@
+enum E{Bad}
+fn fail()->i64{throw E.Bad}
+fn answer(f:fn()->i64)->i64{try{return f()}catch(e:E){return 42}}
+export fn run()->i64{return comptime answer(fail)}

@@ -1,0 +1,3 @@
+enum E{Bad{text:string}}
+fn fail(text:string)->i64{throw E.Bad{text:text}}
+export fn run()->string{var text="ab";try{defer{text=text+"c"};fail(text)}catch(e:E){return match(e){E.Bad{text}->text}};return ""}
