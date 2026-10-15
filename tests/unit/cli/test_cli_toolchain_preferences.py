@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix="preferences-中-", dir=parent) as direc
     assert [row["target"] for row in state["preferences"]] == ["aarch64-windows-msvc"]
     run("reset-all", ["reset"])
     assert not config.exists()
-    assert run("plain-config-path", ["config-path"], machine=False).strip() == str(config)
+    assert run("plain-config-path", ["config-path"], machine=False).strip() == path
     malformed = b"schema = 1\n[native]\nprovider = 42\n"
     config.write_bytes(malformed)
     run("corrupt-list-rejected", ["list"], expected=1)
