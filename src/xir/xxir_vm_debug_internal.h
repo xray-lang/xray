@@ -18,6 +18,7 @@ typedef struct XirVmDebugPoint {
     XrXirCallView *view;
     uint32_t instruction;
 } XirVmDebugPoint;
+typedef struct XirVmDebugStopCause { uint32_t groups;bool unfiltered; } XirVmDebugStopCause;
 XR_FUNC bool xir_vm_debug_retain(XrXirVmDebug *debug);
 XR_FUNC bool xir_vm_debug_bind(XrXirVmDebug *debug, const XrXirArtifact *artifact);
 XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program);
@@ -36,4 +37,10 @@ XR_FUNC XrXirValueStatus xir_vm_debug_threads(XrXirVmDebug *,uint64_t *,uint32_t
 /* Before target construction only. Copy display identities on the exact
  * artifact's original finite compiler ledger; no parser or product borrow. */
 XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *,const XrXirCompileContext *,const XrXirSourceDebugView *);
+/* Only actual matching logical rule groups are captured. A pause, step, throw
+ * or ungrouped breakpoint is unfiltered and cannot be silently discarded. */
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot *,XirVmDebugStopCause *);
+/* Resume a filtered logical rule visit once, retaining the original step
+ * thread/frame/depth/source anchor. Stale or unfiltered stops stay paused. */
+XR_FUNC XrXirValueStatus xir_vm_debug_continue_filtered(XrXirVmDebug *,uint64_t);
 #endif // XXIR_VM_DEBUG_INTERNAL_H

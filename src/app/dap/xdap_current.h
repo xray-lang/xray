@@ -35,6 +35,7 @@ XR_FUNC XrXirCallStatus xdap_current_wait_request(XdapCurrent *,uint64_t epoch,
 XR_FUNC XrXirCallStatus xdap_current_resume(XdapCurrent *,uint64_t epoch,uint64_t wake);
 XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t epoch,
     XrXirVmDebugMode mode);
+XR_FUNC XrXirValueStatus xdap_current_continue_filtered(XdapCurrent *,uint64_t epoch);
 XR_FUNC void xdap_current_pause(XdapCurrent *session);
 XR_FUNC XrXirValueStatus xdap_current_breakpoint(XdapCurrent *session,
     uint32_t function, uint32_t instruction, bool enabled);

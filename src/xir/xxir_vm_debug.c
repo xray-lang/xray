@@ -28,7 +28,7 @@ typedef struct DebugBreakpoint {
     bool enabled;
     XrXirVmDebugHitKind hit_kind;
     uint64_t hit_value;
-    uint32_t counter;
+    uint32_t counter,group;
 } DebugBreakpoint;
 typedef struct DebugSourcePoint { uint32_t module,statement,line,flags; } DebugSourcePoint;
 typedef struct SnapshotFrame {
@@ -50,6 +50,7 @@ struct XrXirVmDebugSnapshot {
     XrXirDomain *domain;
     SnapshotFrame *frames;
     XrXirValue exception;
+    XirVmDebugStopCause cause;
 };
 struct XrXirVmDebug {
     uint64_t identity;
@@ -63,8 +64,8 @@ struct XrXirVmDebug {
     DebugFrame *frames;
     DebugBreakpoint breakpoints[32];
     uint64_t hits[32];
-    uint64_t epoch, skip_id, step_thread;
-    uint32_t skip_instruction, step_depth;
+    uint64_t epoch, skip_id, step_thread,resume_id;
+    uint32_t skip_instruction, step_depth,resume_instruction;
     void *source_memory;
     uint32_t source_functions;
     uint32_t *source_offsets;
@@ -248,7 +249,7 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_rules_replace(XrXirVmDebug *debug,const
             (rule->hit_kind==XR_XIR_VM_DEBUG_HIT_ALWAYS && rule->hit_value) ||
             (rule->hit_kind==XR_XIR_VM_DEBUG_HIT_MULTIPLE && !rule->hit_value) || rule->group>32) return XR_XIR_VALUE_BAD_ARGUMENT;
         fresh[i]=(DebugBreakpoint){.function=rule->location.function,.instruction=rule->location.instruction,.enabled=true,
-            .hit_kind=rule->hit_kind,.hit_value=rule->hit_value,.counter=i};
+            .hit_kind=rule->hit_kind,.hit_value=rule->hit_value,.counter=i,.group=rule->group};
         for (uint32_t j=0;rule->group && j<i;++j) if (rules[j].group==rule->group) {
             if (rules[j].hit_kind!=rule->hit_kind || rules[j].hit_value!=rule->hit_value) return XR_XIR_VALUE_BAD_ARGUMENT;
             fresh[i].counter=fresh[j].counter;break;
@@ -310,12 +311,26 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_continue(XrXirVmDebug *debug,
     const XirDebugCallFrame *call=xir_debug_calls_id(&debug->calls,current->id);
     if (!call) return XR_XIR_VALUE_BAD_ARGUMENT;
     debug->skip_id=current->id;debug->skip_instruction=current->instruction;
+    debug->resume_id=current->id;debug->resume_instruction=current->instruction;
     debug->skip_once = true;
     debug->step_depth=call->event.depth;debug->step_thread=call->thread;
     debug->step_source=debug_source_point(debug,current->function,current->instruction);
     atomic_store_explicit(&debug->mode, (unsigned)mode, memory_order_release);
     clear_snapshot(debug);
     return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot *snapshot,XirVmDebugStopCause *output) {
+    if (!snapshot_valid(snapshot) || !output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(snapshot->domain,sizeof(*output))) return XR_XIR_VALUE_LIMIT;
+    *output=snapshot->cause;return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xir_vm_debug_continue_filtered(XrXirVmDebug *debug,uint64_t epoch) {
+    if (!debug_valid(debug) || !xr_xir_vm_debug_paused(debug) || !debug->snapshot || !epoch || epoch!=debug->epoch ||
+        !debug->snapshot->cause.groups || debug->snapshot->cause.unfiltered) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(debug->domain,1)) return XR_XIR_VALUE_LIMIT;
+    const XrXirVmDebugFrameInfo *frame=&debug->snapshot->frames[0].info;
+    debug->resume_id=frame->id;debug->resume_instruction=frame->instruction;debug->skip_once=true;
+    clear_snapshot(debug);return XR_XIR_VALUE_OK;
 }
 static DebugFrame *find_frame(XrXirVmDebug *debug, void *state) {
     for (uint32_t i = 0; i < debug->count; ++i)
@@ -441,7 +456,7 @@ static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFram
     if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
     return copy_frame_values(debug,live,view,frame);
 }
-static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view, const XrXirInstruction *throw_op) {
+static XrXirValueStatus capture(XrXirVmDebug *debug,XrXirCallView *view,const XrXirInstruction *throw_op,XirVmDebugStopCause cause) {
     if (debug->epoch == UINT64_MAX) return XR_XIR_VALUE_LIMIT;
     const XirDebugCallFrame *current=xir_debug_calls_current(&debug->calls);
     if (!current) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -458,6 +473,7 @@ static XrXirValueStatus capture(XrXirVmDebug *debug, XrXirCallView *view, const 
     atomic_init(&snapshot->references, 1);
     snapshot->domain = debug->domain;
     snapshot->count=count;snapshot->stopped_thread=current->thread;
+    snapshot->cause=cause;
     snapshot->frames = debug_allocate(debug->domain,
         (uint64_t)snapshot->count * sizeof(*snapshot->frames), &status);
     if (!snapshot->frames) goto fail;
@@ -516,8 +532,8 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     DebugFrame *frame;
     XrXirValueStatus status = register_frame(debug, point, &frame);
     if (status != XR_XIR_VALUE_OK) return status;
-    if (debug->skip_once && frame->id == debug->skip_id &&
-        point->instruction == debug->skip_instruction) {
+    if (debug->skip_once && frame->id == debug->resume_id &&
+        point->instruction == debug->resume_instruction) {
         debug->skip_once = false;
         return XR_XIR_VALUE_OK;
     }
@@ -534,7 +550,7 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
         if (!xr_xir_domain_work(debug->domain,sizeof(DebugSourcePoint)+1)) return XR_XIR_VALUE_LIMIT;
         if (debug_source_boundary(debug,frame,call,mode)) stop=true;
     }
-    bool advanced[32]={0};
+    XirVmDebugStopCause cause={.unfiltered=stop};bool advanced[32]={0};
     for (unsigned i = 0; i < 32; ++i) {
         DebugBreakpoint *rule=&debug->breakpoints[i];
         if (!rule->enabled || rule->function!=point->binding->function || rule->instruction!=point->instruction) continue;
@@ -543,10 +559,13 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
             if (*hits==UINT64_MAX) return XR_XIR_VALUE_LIMIT;
             ++*hits;advanced[rule->counter]=true;
         }
-        if (hit_matches(rule,*hits)) stop=true;
+        if (hit_matches(rule,*hits)) {
+            stop=true;
+            if (rule->group) cause.groups|=UINT32_C(1)<<(rule->group-1);else cause.unfiltered=true;
+        }
     }
     if (!stop) return XR_XIR_VALUE_OK;
-    status = capture(debug, point->view,throwing ? op : NULL);
+    status = capture(debug,point->view,throwing ? op : NULL,cause);
     if (status == XR_XIR_VALUE_OK) *stopped = true;
     return status;
 }

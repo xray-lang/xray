@@ -368,3 +368,16 @@ endif()
 add_test(NAME test_dap_evaluate COMMAND test_dap_evaluate)
 add_test(NAME test_dap_evaluate_resources COMMAND test_dap_evaluate --resources)
 set_tests_properties(test_dap_evaluate test_dap_evaluate_resources PROPERTIES TIMEOUT 120 LABELS "dap;evaluate;ctfe;source;ownership;fault-injection;resources")
+
+add_executable(test_dap_filter test_filter.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_filter PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_filter PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_LOOP_FIXTURE="${XR_DAP_FIXTURE_DIR}/conditional_hits.xr")
+if(MSVC)
+    target_compile_options(test_dap_filter PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_filter PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_filter COMMAND test_dap_filter)
+set_tests_properties(test_dap_filter PROPERTIES TIMEOUT 120 LABELS "dap;breakpoints;stepping;source;ownership")
