@@ -99,6 +99,7 @@ XIR_TESTS = (
     "test_xir_instances",
     "test_xir_emit_program",
     "test_xir_program_vm",
+    "test_xir_program_correspondence",
     "test_xir_program_native",
     "test_xir_emit_output",
     "test_xir_output_vm",

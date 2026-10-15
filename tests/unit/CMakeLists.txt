@@ -4572,3 +4572,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)
