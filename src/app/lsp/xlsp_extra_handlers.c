@@ -10,12 +10,11 @@
  */
 
 #include "xlsp_extra_handlers.h"
-#include "xlsp_ast_utils.h"
-#include "xlsp_analysis.h"
 #include "xlsp_imports.h"
 #include "xlsp_source_index_store.h"
 #include "xlsp_index_json.h"
-#include "../../frontend/analyzer/xanalyzer.h"
+#include "xlsp_source_selection.h"
+#include "../../api/xsource_compile.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -80,66 +79,18 @@ XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server,XrJsonValue *param
 // Selection Range
 // ============================================================================
 
-XrJsonValue *xlsp_handle_selection_range(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    XrJsonValue *positions = xjson_get(params, "positions");
-    if (!textDocument || !positions)
-        return xjson_new_array();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content)
-        return xjson_new_array();
-
-    XrJsonValue *ranges = xjson_new_array();
-
-    for (int i = 0; i < xjson_array_len(positions); i++) {
-        XrJsonValue *pos_obj = xjson_array_get(positions, i);
-        XrLspPosition pos = {.line = (uint32_t) xjson_get_int(pos_obj, "line"),
-                             .character = (uint32_t) xjson_get_int(pos_obj, "character")};
-
-        uint32_t offset = xlsp_position_to_offset(doc, pos);
-        const char *content = doc->content;
-
-        uint32_t word_start = offset;
-        uint32_t word_end = offset;
-
-        while (word_start > 0 && xlsp_is_ident_char(content[word_start - 1])) {
-            word_start--;
-        }
-        while (word_end < doc->length && xlsp_is_ident_char(content[word_end])) {
-            word_end++;
-        }
-
-        uint32_t line_start = offset;
-        uint32_t line_end = offset;
-        while (line_start > 0 && content[line_start - 1] != '\n')
-            line_start--;
-        while (line_end < doc->length && content[line_end] != '\n')
-            line_end++;
-
-        // Build nested selection ranges: word -> line -> document
-        XrJsonValue *doc_range = xjson_new_object();
-        xjson_object_set(doc_range, "range", xjson_make_range(0, 0, doc->line_count - 1, 100));
-
-        XrJsonValue *line_range = xjson_new_object();
-        XrLspPosition ls = xlsp_offset_to_position(doc, line_start);
-        XrLspPosition le = xlsp_offset_to_position(doc, line_end);
-        xjson_object_set(line_range, "range",
-                         xjson_make_range(ls.line, ls.character, le.line, le.character));
-        xjson_object_set(line_range, "parent", doc_range);
-
-        XrJsonValue *word_range = xjson_new_object();
-        XrLspPosition ws = xlsp_offset_to_position(doc, word_start);
-        XrLspPosition we = xlsp_offset_to_position(doc, word_end);
-        xjson_object_set(word_range, "range",
-                         xjson_make_range(ws.line, ws.character, we.line, we.character));
-        xjson_object_set(word_range, "parent", line_range);
-
-        xjson_array_push(ranges, word_range);
-    }
-
-    return ranges;
+XrJsonValue *xlsp_handle_selection_range(XrLspServer *server,XrJsonValue *params) {
+    if(!server)return NULL;server->source_failure.stage=14;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri");
+    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
+    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
+    if(!doc||doc->server!=server||!doc->content)return NULL;
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;
+    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);XrJsonValue *result=NULL;
+    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
+    if(status==XR_XIR_OK)status=xlsp_source_selection_json(resources,doc->content,doc->length,xjson_get(params,"positions"),&result);
+    xr_compile_resources_release(resources);server->source_failure.status=(unsigned)status;
+    if(status==XR_XIR_OK)server->source_failure.stage=0;return result;
 }
 
 // ============================================================================
