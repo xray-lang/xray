@@ -87,6 +87,9 @@ static void visibility_fixture(VisibilityFixture *f, const XrXirCompileContext *
         f->contracts[0].formula=(XrXirRootFormula){.terms=&f->context_call,.term_count=1};
     }
     if (mode==1) {
+        /* A generic reference keeps its unresolved Template obligation until
+         * ordinary specialization derives the concrete callable body. */
+        f->contracts[0].formula.constant_mask=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         f->callable_parameter=(XrXirCallableParameter){.type=XR_XIR_I64};
         f->callable=(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,.parameters=&f->callable_parameter,
             .parameter_count=1,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE};
@@ -134,6 +137,10 @@ static uint32_t visibility_shape(const XrXirArtifact *artifact, unsigned mode) {
         const XrXirRootFormula *formula=&source->provenance->contracts[0].formula;
         CHECK(!formula->constant_mask && formula->term_count==1 && formula->terms &&
             formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && formula->terms[0].index==1);
+    }
+    if (mode==1) {
+        const XrXirRootFormula *formula=&source->provenance->contracts[0].formula;
+        CHECK(formula->constant_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !formula->term_count);
     }
     const XrXirInstruction *edge=&m->functions[0].instructions[mode==3?2:1];
     CHECK(edge->op==(mode==1?XR_XIR_FUNCTION_REF:mode==2?XR_XIR_INVOKE:XR_XIR_CALL));
@@ -207,7 +214,30 @@ static void visibility_rejected(XrXirArtifact *artifact, XrXirStatus expected) {
     CHECK(xr_xir_compile_checked_write(artifact,&packet,&d)==expected && !packet.bytes && !packet.length);
 }
 
+/* Raw permission failures stay structural. A scalar-typed reference and a
+ * missing generic-reference obligation fail the independent type proof. */
+static void visibility_source_refusals(void) {
+    static const XrXirStatus expected[]={XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE,
+        XR_XIR_BAD_TYPE,XR_XIR_BAD_TYPE};
+    for (unsigned invalid=0;invalid<4;++invalid) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext c=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&c).live_bytes;VisibilityFixture f;
+        visibility_fixture(&f,&c,invalid==3?1:0);
+        if (!invalid) f.identities[1].exported=0;
+        if (invalid==1) { f.modules[0].dependencies=NULL;f.modules[0].dependency_count=0; }
+        if (invalid==2) f.entry[1].op=XR_XIR_FUNCTION_REF;
+        if (invalid==3) f.contracts[0].formula.constant_mask=0;
+        XrXirArtifact *checked=NULL;XrXirDiagnostic d={0};
+        XrXirStatus status=xir_fixture_check(&c,&f.module,&checked,&d);
+        if (status!=expected[invalid]) fprintf(stderr,"visibility raw%u status%u f%u b%u i%u\n",
+            invalid,status,d.function,d.block,d.instruction);
+        CHECK(status==expected[invalid] && !checked);
+        rp_owner_free(&c,baseline);rp_balanced(physical);
+    }
+}
+
 static void visibility_forged(void) {
+    visibility_source_refusals();
     RootParameterMark physical=rp_mark();XrXirCompileContext c=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&c).live_bytes;XrXirArtifact *artifact=NULL;
     CHECK(visibility_pipeline(&c,0,&artifact,true)==XR_XIR_OK && artifact);
@@ -219,14 +249,16 @@ static void visibility_forged(void) {
     XrXirOrigin *origins=(XrXirOrigin *)p->origins;
     XrXirInstruction *edge=(XrXirInstruction *)m->functions[0].instructions;
     XrXirInstruction *source_edge=(XrXirInstruction *)p->source->module.functions[0].instructions;
-    original[1].exported=0;visibility_rejected(artifact,XR_XIR_BAD_STRUCTURE);original[1].exported=1;
+    original[1].exported=0;
+    visibility_rejected(artifact,XR_XIR_BAD_STRUCTURE);original[1].exported=1;
     const uint32_t *dependencies=modules[0].dependencies;
     modules[0].dependencies=NULL;modules[0].dependency_count=0;
     visibility_rejected(artifact,XR_XIR_BAD_STRUCTURE);
     modules[0].dependencies=dependencies;modules[0].dependency_count=1;
     origins[target].function=2;visibility_rejected(artifact,XR_XIR_BAD_STRUCTURE);origins[target].function=1;
     source_edge[1].immediate=2;visibility_rejected(artifact,XR_XIR_BAD_STRUCTURE);source_edge[1].immediate=1;
-    source_edge[1].op=XR_XIR_FUNCTION_REF;visibility_rejected(artifact,XR_XIR_BAD_STRUCTURE);source_edge[1].op=XR_XIR_CALL;
+    /* The forged reference still has the original scalar CALL result type. */
+    source_edge[1].op=XR_XIR_FUNCTION_REF;visibility_rejected(artifact,XR_XIR_BAD_TYPE);source_edge[1].op=XR_XIR_CALL;
     edge[1].args[1]=0;visibility_rejected(artifact,XR_XIR_BAD_STRUCTURE);edge[1].args[1]=1;
     XrXirType *arguments=(XrXirType *)origins[target].arguments;
     arguments[0]=XR_XIR_BOOL;visibility_rejected(artifact,XR_XIR_BAD_TYPE);arguments[0]=XR_XIR_I64;
@@ -235,7 +267,7 @@ static void visibility_forged(void) {
     xr_xir_compile_artifact_free(artifact);rp_owner_free(&c,baseline);rp_balanced(physical);
 }
 
-static void visibility_resources(void) {
+static void visibility_resources(bool baseline_only) {
     /* Each operation count is measured on this exact graph, including both
      * packets, producer destruction, specialization and Lowered validation. */
     for (unsigned mode=0;mode<4;++mode) {
@@ -244,12 +276,27 @@ static void visibility_resources(void) {
         CHECK(visibility_pipeline(&normal,mode,&artifact,false)==XR_XIR_OK && artifact);
         size_t sites=rp_attempts;CHECK(sites);XrCompileResourceStats required=rp_stats(&normal);
         xr_xir_compile_artifact_free(artifact);rp_owner_free(&normal,baseline);rp_balanced(physical);
+        if(baseline_only) {
+            printf("visibility mode%u original pipeline baseline sites=%zu allocated=%llu peak=%llu work=%llu physical0\n",
+                mode,sites,(unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,
+                (unsigned long long)required.work);
+            continue;
+        }
         for (size_t fault=0;fault<sites;++fault) {
             XrXirCompileContext c=rp_owner(rp_caps());baseline=rp_stats(&c).live_bytes;
             RootParameterMark mark=rp_mark();rp_attempts=0;rp_fail_at=fault;rp_injected=false;artifact=NULL;
             CHECK(visibility_pipeline(&c,mode,&artifact,false)==XR_XIR_OUT_OF_MEMORY && rp_injected && !artifact);
             rp_balanced(mark);XrCompileResourceStats failed=rp_stats(&c);rp_fail_at=SIZE_MAX;
-            CHECK(visibility_pipeline(&c,mode,&artifact,false)==XR_XIR_OK && artifact);
+            XrXirStatus retry_status=visibility_pipeline(&c,mode,&artifact,false);
+            if(retry_status!=XR_XIR_OK || !artifact) {
+                XrCompileResourceStats after=rp_stats(&c);
+                fprintf(stderr,"VISIBILITY_RETRY mode=%u fault=%zu sites=%zu status=%u output=%u normal_work=%llu failed_work=%llu after_work=%llu failed_allocated=%llu after_allocated=%llu after_live=%llu peak=%llu\n",
+                    mode,fault,sites,(unsigned)retry_status,artifact!=NULL,
+                    (unsigned long long)required.work,(unsigned long long)failed.work,(unsigned long long)after.work,
+                    (unsigned long long)failed.allocated_bytes,(unsigned long long)after.allocated_bytes,
+                    (unsigned long long)after.live_bytes,(unsigned long long)after.peak_bytes);
+            }
+            CHECK(retry_status==XR_XIR_OK && artifact);
             CHECK(rp_stats(&c).work>=failed.work && rp_stats(&c).allocated_bytes>=failed.allocated_bytes);
             xr_xir_compile_artifact_free(artifact);rp_balanced(mark);
             rp_owner_free(&c,baseline);rp_balanced(physical);
@@ -272,7 +319,12 @@ static void visibility_resources(void) {
 
 #include "xir_root_parameter_visibility_runtime.h"
 
-int main(void) {
-    visibility_literals();visibility_forged();visibility_resources();visibility_runtime();
+int main(int argc,char **argv) {
+    bool normal=argc==2 && !strcmp(argv[1],"--normal");
+    bool baseline_only=argc==2 && !strcmp(argv[1],"--resource-baselines");
+    CHECK(argc==1 || normal || baseline_only);
+    visibility_literals();visibility_forged();
+    if (!normal) visibility_resources(baseline_only);
+    visibility_runtime();
     CHECK(!rp_live && !rp_live_bytes);return 0;
 }
