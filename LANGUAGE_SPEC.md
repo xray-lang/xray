@@ -7956,6 +7956,14 @@ A Source limit above8388608 returns BAD_STRUCTURE before evaluation or additiona
 
 A suitable limit may retry on the same original owner. Every failed prefix, retry, description and independent receiving still accumulates original allocated/work charges without refunds or reset. This policy grants no field access, construction authority or unchecked generated declarations, and changes no complete FI,600/60/original normal timeout or safety/provider gate. Published results own their data after Source/authority/policy/session producer death. The current evaluator has no persistent CTFE result cache; a larger-limit success cannot grant a free smaller-request success.
 
+### 17.63 Owned generated Built and the ordinary complete second check
+
+Generated receiving accepts only a Built module, an actual construction owner and explicit per-function/per-instruction user entry, module, file and field-path origins. It copies function names, parameters, blocks, instructions, operands, canonical types, declarations, generics, defaults, construction and every origin byte onto the original compiler ledger, producing an independent unchecked owner. Physical extents and metadata admission do not check function bodies. A generator's Checked tag, effect summary, query result or Sendable fact cannot substitute this input or exempt later checking.
+
+Every request for Checked output invokes the existing ordinary complete Built checker anew, including current types, constraints, visibility, CFG/SSA, ownership, borrow escape, actual calls and captures, cleanup, effects and root bounds. Only success publishes an independent Checked owner. Generated type mismatch, borrowed-carrier escape and no_suspend effect escalation reject. Body diagnostics map to the owning user origin of the actual instruction; declaration failures use the function entry, and global failures use the program entry or a library's first function entry. Diagnostics borrow origins from the generated owner and must be copied before it is freed. Origins grant no private read, write or construction access.
+
+Generating input and construction may die after receiving; the generated owner may die after Checked publication. Subsequent packet, Lowered and execution consumers cannot borrow that storage. Failure preserves empty output. Retrying on the same owner repeats complete checking and accumulates the original charges without refunds or reset. This physical owner adds no language macro, arbitrary host generator or second type/execution semantics. Typed Source grants, ordinary library derivation wiring and their complete resource/safety qualification remain separate obligations.
+
 ---
 
 ## 18. Error Codes

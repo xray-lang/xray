@@ -1,0 +1,18 @@
+add_executable(test_xir_generated_built "${CMAKE_CURRENT_LIST_DIR}/test_xir_generated_built.c")
+target_link_libraries(test_xir_generated_built PRIVATE xray_xir_vm)
+set_target_properties(test_xir_generated_built PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_generated_built PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_generated_built PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(generated_case IN ITEMS ownership type effect escape private invalid)
+    add_test(NAME test_xir_generated_built_${generated_case} COMMAND test_xir_generated_built ${generated_case})
+    set_tests_properties(test_xir_generated_built_${generated_case} PROPERTIES TIMEOUT 30 LABELS "unit;xir;generated;ownership;receiving")
+endforeach()
+add_test(NAME test_xir_generated_built_budgets COMMAND test_xir_generated_built --budgets)
+set_tests_properties(test_xir_generated_built_budgets PROPERTIES TIMEOUT 30
+    LABELS "unit;xir;generated;ownership;receiving;budget")
+add_test(NAME test_xir_generated_built_resources COMMAND test_xir_generated_built --resources)
+set_tests_properties(test_xir_generated_built_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+    LABELS "unit;xir;generated;ownership;receiving;compiler-fault;resources")

@@ -64,3 +64,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/derived_records.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/derived_fibonacci.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/derived_pairs.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/generated_built.cmake")

@@ -752,6 +752,14 @@ compiler-private Source请求提供可选XrXirSourceComptimeLimits.output_bytes�
 
 失败后可在同一原owner上使用合适限额重试；所有失败前缀、重试、描述和独立receiving仍累计原allocated/work，不退款或重置。政策不授予字段权限、构造权或生成声明免检资格，不改变完整FI、600/60/原普通时限及安全/provider门。Source/authority/policy/session生产者死亡后，已发布结果仍独立拥有。当前evaluator没有持久CTFE结果缓存，较大限额成功不能为较小请求提供免费成功。
 
+### 17.63 拥有式生成 Built 与普通完整第二检查
+
+生成收件接口只接收 Built 模块、真实 construction owner 和按函数/指令逐项提供的用户入口、模块、文件及字段路径。它在原编译账本复制函数名、参数、block、指令、operands、canonical 类型、声明、泛型、default、construction 和所有 origin 字节，保存独立的未检查 owner。物理范围及元数据准入不等于函数体检查；生成器的 Checked 标签、效果摘要、查询结果或 Sendable 事实不能作为此收件输入或检查豁免。
+
+该 owner 每次申请 Checked 时调用既有普通完整 Built checker，重新执行当前类型、约束、可见性、CFG/SSA、所有权、借用逃逸、真实调用与捕获、清理和效果/root 上界检查；成功才发布独立 Checked。生成错型、借用载体逃逸和 no_suspend 效果升级必须拒绝。函数体错误映射到对应指令的已拥有用户 origin；函数声明错误使用函数入口，模块级错误使用程序入口或 library 首函数的入口。诊断借用生成 owner 的 origin，销毁 owner 前须复制；origin 自身不授予任何私有读、写或构造权限。
+
+生成者输入和 construction 可在收件后销毁，生成 owner 可在 Checked 发布后销毁；后续 packet、Lowered 和执行不得借用这些存储。失败保全空输出；同一 owner 重试必须重新完整检查并累计原费用，不退款、不重置。该物理 owner 不新增语言宏、任意宿主生成器或另一类型/执行语义；Source 类型化授权、普通库派生接线及其完整资源/安全资格仍须分别完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1614,5 +1622,13 @@ The compiler-private Source request accepts optional XrXirSourceComptimeLimits.o
 A Source limit above8388608 returns BAD_STRUCTURE before evaluation or additional ledger charges and publishes no result. Occupied Checked/snapshot output is preserved too. An8-byte Source request rejects the original9-byte Array, ten-element Fibonacci and16-byte pair with BUDGET, an actual location and no Checked/snapshot. Exact9/10/16 requests receive complete independent recipes through ordinary Checker/packet/VM value checks; minus-one still rejects. Unit and empty String accept0; an ordinary runtime result is not subject to this comptime output cap when no comptime evaluation occurs.
 
 A suitable limit may retry on the same original owner. Every failed prefix, retry, description and independent receiving still accumulates original allocated/work charges without refunds or reset. This policy grants no field access, construction authority or unchecked generated declarations, and changes no complete FI,600/60/original normal timeout or safety/provider gate. Published results own their data after Source/authority/policy/session producer death. The current evaluator has no persistent CTFE result cache; a larger-limit success cannot grant a free smaller-request success.
+
+### 17.63 Owned generated Built and the ordinary complete second check
+
+Generated receiving accepts only a Built module, an actual construction owner and explicit per-function/per-instruction user entry, module, file and field-path origins. It copies function names, parameters, blocks, instructions, operands, canonical types, declarations, generics, defaults, construction and every origin byte onto the original compiler ledger, producing an independent unchecked owner. Physical extents and metadata admission do not check function bodies. A generator's Checked tag, effect summary, query result or Sendable fact cannot substitute this input or exempt later checking.
+
+Every request for Checked output invokes the existing ordinary complete Built checker anew, including current types, constraints, visibility, CFG/SSA, ownership, borrow escape, actual calls and captures, cleanup, effects and root bounds. Only success publishes an independent Checked owner. Generated type mismatch, borrowed-carrier escape and no_suspend effect escalation reject. Body diagnostics map to the owning user origin of the actual instruction; declaration failures use the function entry, and global failures use the program entry or a library's first function entry. Diagnostics borrow origins from the generated owner and must be copied before it is freed. Origins grant no private read, write or construction access.
+
+Generating input and construction may die after receiving; the generated owner may die after Checked publication. Subsequent packet, Lowered and execution consumers cannot borrow that storage. Failure preserves empty output. Retrying on the same owner repeats complete checking and accumulates the original charges without refunds or reset. This physical owner adds no language macro, arbitrary host generator or second type/execution semantics. Typed Source grants, ordinary library derivation wiring and their complete resource/safety qualification remain separate obligations.
 
 <!-- /xr-spec:en -->
