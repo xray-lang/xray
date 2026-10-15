@@ -714,7 +714,15 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 接收者先求值，展开源各求值一次，普通字段保持静态顺序，零字段展开仍在原位置执行。普通Unit实参仍占一个逻辑参数，不能因零宽SSA而擦除。Tuple字段只提供READ值，不能满足ref参数；可写Array接收者仍经原真实place/权限检查。get、entries和concat在展开参数可能重绑根时保留原接收者快照；变更配方在参数完成后读取已绑定place的当前值，fill缺省end取该当前值的长度。concat的可变READ形参重复接收者的已实例化Array类型，共用展开器按实际宽度增长私有entry向量并计费复制，不先求值展开源、不预留最大参数数；全部实参快照完成后才构造候选结果。已有COW、UTF-8/NUL、nullable和调用者泛型类型语义不变。
 
-全部观察、计划存储及转换消耗原Source账本，Checked/Lowered和CTFE闭包、类型/identity、steps/frame/output与原预算继续完整复验。普通Array回调可按17.55/17.56使用真实内部Function和cleanup；这不代表回调参数展开、未准入的sort/迭代/指针成员、core intrinsic、普通Unit形参、完整库模板或P12已经完成。脚本根的运行期顺序验证不开放编译期外部状态或库私有var。
+全部观察、计划存储及转换消耗原Source账本，Checked/Lowered和CTFE闭包、类型/identity、steps/frame/output与原预算继续完整复验。普通Array回调可按17.55/17.56使用真实内部Function和cleanup；这不代表未准入的sort/迭代/指针成员、core intrinsic、普通Unit形参、完整库模板或P12已经完成。脚本根的运行期顺序验证不开放编译期外部状态或库私有var。
+
+### 17.60 Array回调的有序上下文参数
+
+map/filter/reduce/forEach/find/findIndex/every/some的普通READ实参及Tuple展开沿共同CALL参数计划，接收者先保留快照。map/filter/forEach保持已有单参数或元素加索引双参数规则，其它谓词保持元素单参数，reduce保持accumulator和元素双参数。回调头观察不执行捕获或函数体；map的结果由真实回调体决定，不制造泛型U或把Unit结果占位当成确定返回类型。reduce从initial的真实字段计划取得类型及有效自动读取层，callback值仍先于initial完成。
+
+Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展开传递相应字段上下文并在原位置求值，原Tuple值来源保一次求值与真实投影。共同完成器按顺序消费同一计划，零字段展开不擦除副作用，普通Unit仍是逻辑参数。闭包参数上下文可以保持返回结果开放，最终转换仅填入实际结果，原参数模式、完整callable执行契约和效果/ROOT检查仍生效；无上下文或开放结果字段保真实ROOT合并证据。所有存储、观察、效果及转换向原账本计费，不预执行或用AST替身改变求值。
+
+回调中的局部可变捕获仍按真实Cell/借用、cleanup及CTFE闭包权限处理；脚本运行期副作用例不授库var或编译期外部状态。上述参数路径不代表全部库模板、未准入Array成员、完整资源/性能/安全门、P12或322保护已经完成。
 
 <!-- /xr-spec:cn -->
 
@@ -1541,6 +1549,14 @@ Admitted integer, Float/Bool/Rune and String methods, plus Array contains/indexO
 
 The receiver evaluates first, each spread source evaluates once, ordinary fields preserve static order and zero-field spreads still execute in place. An ordinary Unit argument retains one logical parameter and is never erased because it lacks an SSA payload. Tuple fields provide READ values rather than ref arguments; writable Array receivers retain authentic place/access checks. get, entries and concat preserve the original receiver snapshot when spread arguments may rebind the root. Mutation recipes read the current bound place after arguments complete; fill's omitted end uses that current value's length. concat's variadic READ formal repeats the receiver's already instantiated Array type. The common expander grows its private entry vector with the actual width and charges copies, without pre-evaluating spread sources or reserving the maximum arity. All argument snapshots complete before constructing the candidate result. Existing COW, UTF-8/NUL, nullable and caller-generic semantics remain.
 
-All observation, plan storage and conversion consume the original Source ledger. Complete Checked/Lowered and CTFE closure/type/identity, steps/frame/output and original-budget verification remain. Ordinary Array callbacks may use authentic internal Functions and cleanup under 17.55/17.56; this does not complete callback argument expansion, unadmitted sort/iterator/pointer members, core intrinsics, ordinary Unit formals, complete library templates or P12. Runtime ordering in a script root grants neither compiler external-state access nor library private variables.
+All observation, plan storage and conversion consume the original Source ledger. Complete Checked/Lowered and CTFE closure/type/identity, steps/frame/output and original-budget verification remain. Ordinary Array callbacks may use authentic internal Functions and cleanup under 17.55/17.56; this does not complete unadmitted sort/iterator/pointer members, core intrinsics, ordinary Unit formals, complete library templates or P12. Runtime ordering in a script root grants neither compiler external-state access nor library private variables.
+
+### 17.60 Ordered contextual arguments for Array callbacks
+
+Ordinary READ arguments and Tuple spreads of map/filter/reduce/forEach/find/findIndex/every/some use the common CALL argument plan and retain the receiver snapshot first. map/filter/forEach preserve their existing element-only or element-plus-index shapes; other predicates take one element and reduce takes accumulator and element. Header observation evaluates neither captures nor bodies. A map callback's actual body decides its result without a synthetic generic U or treating a Unit placeholder as a fixed return. reduce obtains initial's type and valid automatic read layers from its authentic field plan while completing the callback value before initial.
+
+Tuple literal fields keep their original syntax, owner and expression plans. Nested spreads receive the corresponding field contexts and evaluate in place; existing Tuple value sources evaluate once and supply authentic projections. The common completion worker consumes the same plans in order. Zero-field spreads retain effects and ordinary Unit retains logical arity. A closure parameter context may leave the result open; final conversion fills only the actual result while preserving parameter modes, the complete callable execution contract and effect/ROOT checks. Uncontextualized or open-result fields retain authentic ROOT join evidence. Original ledgers charge storage, observation, effects and conversion without pre-execution or synthetic AST evaluation.
+
+Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closure authority. Runtime script effects grant neither library private variables nor compiler external-state access. This argument path does not complete all library templates, unadmitted Array members, full resource/performance/safety gates, P12 or322 protection.
 
 <!-- /xr-spec:en -->

@@ -222,7 +222,7 @@ static bool source_constructor_invoke(SourceContext *ctx, AstNode *node,
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constructor argument requires a value");
     }
     SourceCallPlan plan={SOURCE_CALL_CONSTRUCTOR,substitution,substitution,function->parameters,NULL,
-        type,{0},arguments,0,0,NULL};
+        type,{0},arguments,0,0,NULL,NULL};
     if (!source_call_expand(ctx,node,&syntax,&plan,function->parameter_count) ||
         !source_argument_arity(ctx,node,index,(uint32_t)syntax.arg_count) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
     for (uint32_t p = (uint32_t)syntax.arg_count; p < function->parameter_count; ++p)

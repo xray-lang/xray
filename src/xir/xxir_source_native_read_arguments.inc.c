@@ -27,7 +27,7 @@ static bool source_native_read_arguments(SourceContext *ctx,AstNode *node,
      * The indirect argument scope preserves caller binders without treating
      * them as callee substitution parameters. No indirect call is emitted. */
     SourceCallPlan plan={SOURCE_CALL_INDIRECT,{0},{0},parameters,NULL,XR_XIR_UNIT,
-        {0},values,0,0,NULL};
+        {0},values,0,0,NULL,NULL};
     if (!source_call_expand(ctx,node,&syntax,&plan,maximum)) return false;
     if ((uint32_t)syntax.arg_count<minimum || (uint32_t)syntax.arg_count>maximum)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,diagnostic);
@@ -43,7 +43,7 @@ static bool source_native_variadic_read_arguments(SourceContext *ctx,AstNode *no
     if (!source_call_syntax(ctx,node,&syntax)) return false;
     if (syntax.type_arg_count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,diagnostic);
     SourceCallPlan plan={SOURCE_CALL_VARIADIC_READ,{0},{0},&parameter,NULL,XR_XIR_UNIT,
-        {0},NULL,0,0,NULL};
+        {0},NULL,0,0,NULL,NULL};
     if (!source_call_expand(ctx,node,&syntax,&plan,65536)) return false;
     uint32_t count=(uint32_t)syntax.arg_count;
     plan.values=count ? source_recipe_storage(ctx,count,sizeof(*plan.values)) : NULL;

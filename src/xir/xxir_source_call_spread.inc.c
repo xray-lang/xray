@@ -16,6 +16,7 @@ typedef struct SourceCallSpread {
     XrXirType *known_fields;
     bool *field_known;
     bool prepared;
+    SourceExpressionPlan **field_plans;
 } SourceCallSpread;
 typedef struct SourceCallProjection { SourceCallSpread *spread;uint32_t field; } SourceCallProjection;
 typedef struct SourceCallEntry {
@@ -163,9 +164,10 @@ static bool source_call_expand_reserve(SourceContext *ctx,AstNode *node,
     expanded->entries=entries;expanded->entry_capacity=capacity;
     return true;
 }
+#include "xxir_source_call_spread_context.inc.c"
 static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax *call,
     const SourceCallPlan *formal,uint32_t parameter_count) {
-    bool present=false;
+    bool present=formal->argument_contexts!=NULL;
     for (int a=0;a<call->arg_count;++a) {
         if (!source_work(ctx,node)) return false;
         if (call->arguments[a] && call->arguments[a]->type==AST_SPREAD_EXPR) present=true;
@@ -209,6 +211,15 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
             if (!known && arity && !source_call_spread_field_hints(ctx,input->as.spread_expr.expr,arity,0,
                     spread->known_fields,spread->field_known)) goto done;
             spread->count=arity;
+            if (formal->argument_contexts && arity) {
+                spread->field_plans=source_recipe_storage(ctx,arity,sizeof(*spread->field_plans));
+                if (!spread->field_plans) goto done;
+                SourceFact *field_facts=ctx->facts;SourceEpoch *field_epochs=ctx->epochs;uint32_t at=0;
+                bool prepared=source_call_spread_field_plans(ctx,input->as.spread_expr.expr,
+                    spread->field_plans,arity,&at,0);
+                ctx->facts=field_facts;ctx->epochs=field_epochs;
+                if (!prepared || at!=arity) goto done;
+            }
             if (!source_planned_effects(ctx,spread->source,0)) goto done;
         }
         if (formal->parameter_offset>parameter_count || arity>parameter_count-formal->parameter_offset-count) {
@@ -275,6 +286,10 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
             literal=literal->left;
         }
         if (literal->syntax->type!=AST_TUPLE_LITERAL) continue;
+        if (formal->argument_contexts) {
+            if (!source_call_spread_context(ctx,spread,literal,formal)) return false;
+            continue;
+        }
         XrXirCallableParameter *fields=source_recipe_storage(ctx,spread->count,sizeof(*fields));
         if (!fields) return false;
         bool complete=true;
@@ -296,7 +311,7 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
         if (complete) {
             SourceTuplePrefix *prefix=source_recipe_storage(ctx,1,sizeof(*prefix));
             if (!prefix) return false;
-            *prefix=(SourceTuplePrefix){fields,spread->count,false};literal->tuple_prefix=prefix;
+            *prefix=(SourceTuplePrefix){fields,spread->count,false,NULL,NULL};literal->tuple_prefix=prefix;
         }
     }
     return true;

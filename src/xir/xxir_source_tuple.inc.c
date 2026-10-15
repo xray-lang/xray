@@ -23,7 +23,14 @@ typedef struct SourceTuplePrefix {
     const XrXirCallableParameter *fields;
     uint32_t count;
     bool inferred;
+    const SourceExpectedType *contexts;
+    SourceExpressionPlan *const *plans;
 } SourceTuplePrefix;
+static SourceExpectedType source_tuple_field_context(const SourceTuplePrefix *context,uint32_t index) {
+    if (context && context->contexts) return context->contexts[index];
+    return (SourceExpectedType){context!=NULL,context ? context->fields[index].type : XR_XIR_UNIT,
+        false,!context || context->inferred};
+}
 static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
     SourceExpectedType expected,SourceValue *value);
 static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value) {
@@ -91,12 +98,11 @@ static bool source_tuple_append(SourceContext *ctx,AstNode *node,const SourceTup
     if (*count>=65536) return source_fail(ctx,node,XR_XIR_BUDGET,"Tuple expanded arity exhausted");
     if (context && *count>=context->count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
-    SourceExpectedType hint={context!=NULL,context ? context->fields[*count].type : XR_XIR_UNIT,
-        false,!context || context->inferred};
+    SourceExpectedType hint=source_tuple_field_context(context,*count);
     SourceConversionRecipe conversion;
     if (!source_conversion_plan(ctx,node,element.type,hint,&conversion) ||
         !source_conversion_emit(ctx,&conversion,&element)) return false;
-    if ((!context || context->inferred) && !source_root_join_record(ctx,&element)) return false;
+    if ((!hint.present || hint.inferred || hint.infer_result) && !source_root_join_record(ctx,&element)) return false;
     SourceValue *grown=source_query_append(ctx,*fields,count,capacity,sizeof(**fields));
     if (!grown) return false;
     *fields=grown;grown[*count-1]=element;return true;
@@ -125,10 +131,15 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
             if (count>=65536) return source_fail(ctx,child,XR_XIR_BUDGET,"Tuple expanded arity exhausted");
             if (context && count>=context->count)
                 return source_fail(ctx,child,XR_XIR_BAD_TYPE,"Tuple literal requires an exact ordered arity context");
-            SourceExpectedType hint={context!=NULL,context ? context->fields[count].type : XR_XIR_UNIT,
-                false,!context || context->inferred};
-            if (!source_plan_expression(ctx,child,hint,&element)) return false;
-            if ((!context || context->inferred) && !source_root_join_record(ctx,&element)) return false;
+            SourceExpectedType hint=source_tuple_field_context(context,count);
+            SourceExpressionPlan *prepared=context && context->plans ? context->plans[count] : NULL;
+            if (prepared) {
+                if (prepared->syntax!=child)
+                    return source_fail(ctx,child,XR_XIR_BAD_STRUCTURE,"Tuple field plan no longer owns its original syntax");
+                prepared->expected=hint;
+                if (!source_plan_complete(ctx,prepared,&element)) return false;
+            } else if (!source_plan_expression(ctx,child,hint,&element)) return false;
+            if ((!hint.present || hint.inferred || hint.infer_result) && !source_root_join_record(ctx,&element)) return false;
             /* The ordinary expression plan already consumed this conversion. */
             SourceValue *grown=source_query_append(ctx,fields,&count,&capacity,sizeof(*fields));
             if (!grown) return false;
@@ -136,8 +147,10 @@ static bool source_tuple_expanded_literal(SourceContext *ctx,AstNode *node,
         }
         child=child->as.spread_expr.expr;
         if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple spread source is missing");
-        SourceTuplePrefix tail={context && context->count ? context->fields+count : NULL,
-            context ? context->count-count : 0,context && context->inferred};
+        SourceTuplePrefix tail={context && context->fields ? context->fields+count : NULL,
+            context ? context->count-count : 0,context && context->inferred,
+            context && context->contexts ? context->contexts+count : NULL,
+            context && context->plans ? context->plans+count : NULL};
         if (!source_tuple_spread_value(ctx,child,context ? &tail : NULL,&element)) return false;
         if (element.type==XR_XIR_UNIT) continue;
         const XrXirTypeNode *signature=xr_xir_tuple_signature(&ctx->types,element.type);

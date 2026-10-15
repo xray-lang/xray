@@ -76,6 +76,7 @@ typedef struct SourceCallPlan {
     SourceValue *values;
     uint32_t parameter_offset, value_offset;
     const uint32_t *parameter_kinds;
+    const SourceExpectedType *argument_contexts;
 } SourceCallPlan;
 /* Variadic READ recipes repeat one already instantiated caller-pool type. */
 static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t index) {
@@ -176,6 +177,70 @@ static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const
     }
     ctx->facts=facts;ctx->epochs=epochs;return ok && ctx->diagnostic.status==XR_XIR_OK;
 }
+typedef struct SourceCallArgumentCompletion {
+    const SourceCallPlan *plan;
+    const SourceCallSyntax *call;
+    SourceCallArgumentPlan *arguments;
+    const bool *references;
+    XrXirInferenceState *state;
+} SourceCallArgumentCompletion;
+static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
+    const SourceCallArgumentCompletion *request,uint32_t a) {
+    const SourceCallPlan *plan=request->plan;const SourceCallSyntax *call=request->call;
+    SourceCallArgumentPlan *arguments=request->arguments;const bool *references=request->references;
+    XrXirInferenceState *state=request->state;
+    bool inferred=state!=NULL,requirement=plan->family==SOURCE_CALL_REQUIREMENT;
+    if (!source_call_spread_events(ctx,node,call,plan,state,a)) return false;
+    if (!references[a] && source_call_argument_access(call,a)!=XR_CALL_ARG_PLAIN) {
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,requirement ? "interface method argument must be read" :
+            "direct call arguments must use the declared READ contract"); return false;
+    }
+    uint32_t parameter=a+plan->parameter_offset;
+    XrXirType formal=source_call_parameter_type(plan,parameter);
+    if (references[a]) {
+        SourceValue *reference=&plan->values[a+plan->value_offset];
+        if (!source_reference_argument_syntax(ctx,node,a,references,arguments[a].reference,call,reference)) return false;
+        if (inferred && !source_call_observe(ctx,node,state,formal,reference->type,requirement)) return false;
+        return true;
+    }
+    SourceExpectedType expected={false,XR_XIR_UNIT, false, false};
+    if (inferred) {
+        XrXirInferenceKnown known={0};
+        XrXirStatus status=xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
+        if (status!=XR_XIR_OK) { source_fail(ctx,node,status,requirement ?
+            "method inference context is invalid" : "direct call inference context is invalid"); return false; }
+        if (known.known) {
+            SourceSubstitution partial={known.arguments,known.argument_count};
+            expected.present=true;
+            if (!source_substitute(ctx,&partial,formal,0,&expected.type)) return false;
+        }
+    } else {
+        if (plan->argument_contexts) expected=plan->argument_contexts[parameter];
+        else {
+            expected.present=true;
+            if (source_call_caller_parameters(plan)) expected.type=formal;
+            else if (!source_substitute(ctx,&plan->substitution,formal,0,&expected.type)) return false;
+        }
+    }
+    SourceValue *value=&plan->values[a+plan->value_offset];
+    arguments[a].value->expected=expected;
+    SourceExpressionPlan *previous_argument = ctx->effect_argument;
+    bool callback = expected.present &&
+        xr_xir_callable_signature(&ctx->types,expected.type);
+    if (callback) {
+        arguments[a].value->conversion_ready = false;
+        ctx->effect_argument = arguments[a].value;
+    }
+    bool completed = source_plan_complete(ctx,arguments[a].value,value);
+    ctx->effect_argument = previous_argument;
+    if (!completed) return false;
+    if (!requirement && value->type==XR_XIR_UNIT) {
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,"unit argument is not admitted"); return false;
+    }
+    if (inferred && !arguments[a].value->conversion_ready &&
+        !source_call_observe(ctx,node,state,formal,value->type,requirement)) return false;
+    return true;
+}
 static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
     const SourceCallPlan *plan,const SourceCallSyntax *call) {
     bool requirement=plan->family==SOURCE_CALL_REQUIREMENT;
@@ -258,54 +323,9 @@ static bool source_call_plan_arguments(SourceContext *ctx, AstNode *node,
             if (!source_call_observe(ctx,node,state,formal,argument->conversion.target,requirement)) goto done;
         }
     }
-    for (uint32_t a=0;a<argument_count;++a) {
-        if (!source_call_spread_events(ctx,node,call,plan,state,a)) goto done;
-        if (!references[a] && source_call_argument_access(call,a)!=XR_CALL_ARG_PLAIN) {
-            source_fail(ctx,node,XR_XIR_BAD_TYPE,requirement ? "interface method argument must be read" :
-                "direct call arguments must use the declared READ contract"); goto done;
-        }
-        uint32_t parameter=a+plan->parameter_offset;
-        XrXirType formal=source_call_parameter_type(plan,parameter);
-        if (references[a]) {
-            SourceValue *reference=&plan->values[a+plan->value_offset];
-            if (!source_reference_argument_syntax(ctx,node,a,references,arguments[a].reference,call,reference)) goto done;
-            if (inferred && !source_call_observe(ctx,node,state,formal,reference->type,requirement)) goto done;
-            continue;
-        }
-        SourceExpectedType expected={false,XR_XIR_UNIT, false, false};
-        if (inferred) {
-            XrXirInferenceKnown known={0};
-            XrXirStatus status=xr_xir_compile_inference_expected_known(state, &ctx->types, formal, &known);
-            if (status!=XR_XIR_OK) { source_fail(ctx,node,status,requirement ?
-                "method inference context is invalid" : "direct call inference context is invalid"); goto done; }
-            if (known.known) {
-                SourceSubstitution partial={known.arguments,known.argument_count};
-                expected.present=true;
-                if (!source_substitute(ctx,&partial,formal,0,&expected.type)) goto done;
-            }
-        } else {
-            expected.present=true;
-            if (source_call_caller_parameters(plan)) expected.type=formal;
-            else if (!source_substitute(ctx,&plan->substitution,formal,0,&expected.type)) goto done;
-        }
-        SourceValue *value=&plan->values[a+plan->value_offset];
-        arguments[a].value->expected=expected;
-        SourceExpressionPlan *previous_argument = ctx->effect_argument;
-        bool callback = expected.present &&
-            xr_xir_callable_signature(&ctx->types,expected.type);
-        if (callback) {
-            arguments[a].value->conversion_ready = false;
-            ctx->effect_argument = arguments[a].value;
-        }
-        bool completed = source_plan_complete(ctx,arguments[a].value,value);
-        ctx->effect_argument = previous_argument;
-        if (!completed) goto done;
-        if (!requirement && value->type==XR_XIR_UNIT) {
-            source_fail(ctx,node,XR_XIR_BAD_TYPE,"unit argument is not admitted"); goto done;
-        }
-        if (inferred && !arguments[a].value->conversion_ready &&
-            !source_call_observe(ctx,node,state,formal,value->type,requirement)) goto done;
-    }
+    SourceCallArgumentCompletion completion={plan,call,arguments,references,state};
+    for (uint32_t a=0;a<argument_count;++a)
+        if (!source_call_complete_argument(ctx,node,&completion,a)) goto done;
     if (!source_call_spread_events(ctx,node,call,plan,state,argument_count)) goto done;
     if (inferred) {
         XrXirStatus status=xr_xir_compile_inference_finalize(state, &ctx->types, types, count);

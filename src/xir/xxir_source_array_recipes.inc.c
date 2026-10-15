@@ -63,39 +63,7 @@ typedef struct SourceArrayCallbackShape {
     SourceExpectedType result;
 } SourceArrayCallbackShape;
 typedef struct SourceArrayCallback { SourceValue value; uint32_t arity; } SourceArrayCallback;
-static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *argument,
-    const SourceArrayCallbackShape *shape, SourceArrayCallback *output) {
-    SourceValue *callback = &output->value;
-    SourceExpectedType result = shape->result;
-    AstNode *literal = argument;
-    while (literal && literal->type == AST_GROUPING) literal = literal->as.grouping;
-    if (literal && literal->type == AST_FUNCTION_EXPR) {
-        uint32_t count = (uint32_t) literal->as.function_expr.param_count;
-        if (count < shape->shortest || count > shape->longest)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback takes a different number of parameters");
-        XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
-        if (count && !parameters) return false;
-        for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ};
-        XrXirType expected;
-        if (!source_signature(ctx, parameters, count, result.present ? result.type : XR_XIR_UNIT, &expected)) return false;
-        if (!source_closure(ctx, literal, (SourceExpectedType) {true, expected, !result.present, false}, callback)) return false;
-        output->arity = count;
-    } else {
-        if (!expression(ctx, argument, callback)) return false;
-        const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
-        if (!signature || signature->parameter_count < shape->shortest || signature->parameter_count > shape->longest)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback requires a function of the declared shape");
-        output->arity = signature->parameter_count;
-    }
-    const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
-    if (!signature) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback is not callable");
-    for (uint32_t i = 0; i < signature->parameter_count; ++i)
-        if (signature->parameters[i].type != shape->parameters[i] || signature->parameters[i].mode != XR_PARAM_READ)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback parameter type differs from the element");
-    if (result.present && signature->result != result.type)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback result differs from its declared result");
-    return true;
-}
+#include "xxir_source_array_call_arguments.inc.c"
 static bool source_equal_admitted(SourceContext *ctx, AstNode *node, XrXirType type) {
     XrXirDeclarations declarations;
     XrXirModule module = source_module_view(ctx, &declarations);
@@ -538,12 +506,6 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     if (recipe >= SOURCE_ARRAY_CONTAINS) return source_array_query_call(ctx, node, recipe, evaluated, value);
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
-    int expected_arguments = recipe == SOURCE_ARRAY_REDUCE ? 2 : 1;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count != expected_arguments || !call->arguments)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method arguments use ordinary READ values");
     SourceValue array;
     if (evaluated) array = *evaluated;
     else if (!expression(ctx, access->object, &array)) return false;
@@ -553,29 +515,8 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     SourceArrayCallback callback = {0};
     SourceValue initial = {0};
     XrXirType accumulator = XR_XIR_UNIT;
-    if (recipe == SOURCE_ARRAY_REDUCE) {
-        /* Collecting the initial value's type does not evaluate it. The callback
-         * must be completed first so effects retain ordinary argument order. */
-        SourceExpressionPlan *initial_plan = source_plan_collect(ctx, call->arguments[1], (SourceExpectedType) {false, XR_XIR_UNIT, false, false});
-        if (!initial_plan || !source_plan_binary_prepare(ctx, initial_plan, initial_plan->expected, true) ||
-            !source_plan_numeric_prepare(ctx, initial_plan, initial_plan->expected, true)) return false;
-        if (!initial_plan->type_ready)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "reduce initial type is not admitted without a known context");
-        accumulator = initial_plan->ground_type;
-        SourceArrayCallbackShape shape = {{accumulator, element_type}, 2, 2, {true, accumulator, false, false}};
-        if (accumulator == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "reduce initial value cannot be unit");
-        if (!source_array_callback(ctx, node, call->arguments[0], &shape, &callback) ||
-            !source_plan_complete(ctx, initial_plan, &initial))
-            return false;
-        if (initial.type != accumulator)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "reduce initial type differs from its callback accumulator");
-    } else {
-        bool indexed = recipe == SOURCE_ARRAY_MAP || recipe == SOURCE_ARRAY_FILTER || recipe == SOURCE_ARRAY_FOR_EACH;
-        SourceExpectedType result = recipe == SOURCE_ARRAY_MAP ? (SourceExpectedType) {false, XR_XIR_UNIT, false, false} :
-            recipe == SOURCE_ARRAY_FOR_EACH ? (SourceExpectedType) {true, XR_XIR_UNIT, false, false} : (SourceExpectedType) {true, XR_XIR_BOOL, false, false};
-        SourceArrayCallbackShape shape = {{element_type, XR_XIR_I64}, 1, indexed ? 2 : 1, result};
-        if (!source_array_callback(ctx, node, call->arguments[0], &shape, &callback)) return false;
-    }
+    if (!source_array_callback_arguments(ctx,node,recipe,array,&callback,&initial)) return false;
+    if (recipe==SOURCE_ARRAY_REDUCE) accumulator=initial.type;
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback.value.type);
     XrXirType result_type = signature->result, store_type = XR_XIR_UNIT, store_cell = XR_XIR_UNIT;
     /* The accumulating cell holds the output array, the running value, or the lookup result. */
