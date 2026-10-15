@@ -63,7 +63,7 @@ def main():
     original = model()
     checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
     assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+28u', checked)
-    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+73u', checked)
+    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+74u', checked)
     body, _ = encoder.encode_body(original, 0)
     assert body[-8:] == bytes(8) and original['generics'] is None
     # Actual alpha.initializer is f0; none of the remaining five definitions
@@ -89,7 +89,7 @@ def main():
     recursive_offset = 64 + len(prefix) + len(body) - 8
     origins = words(5) + b''.join(words(f, 0, 0) for f in range(5)) + words(0)
     instance_body = prefix + checked_body + origins
-    def frame(payload, schema=28, semantic=73):
+    def frame(payload, schema=28, semantic=74):
         header = b'XRCHK\0\0\0' + words(schema, semantic, 2, 0) + struct.pack('<Q', len(payload))
         return header + hashlib.sha256(header + payload).digest() + payload
     # Preserve the independent historical 26/71 malformed/previous input:

@@ -15,7 +15,7 @@ static bool source_match_alternatives(SourceContext *ctx, SourceMatchArm *arm,
     SourceName *saved=ctx->locals;
     SourceName **branches=source_alloc(ctx,arm->count,sizeof(*branches));
     uint32_t *ends=source_alloc(ctx,arm->count,sizeof(*ends)), *jumps=source_alloc(ctx,arm->count,sizeof(*jumps));
-    SourceValue *inputs=source_alloc(ctx,(size_t)arm->count*2,sizeof(*inputs));
+    SourceValue *inputs=source_recipe_storage(ctx,(size_t)arm->count*2,sizeof(*inputs));
     if (!branches || !ends || !jumps || !inputs) return false;
     SourceFunction *body=&ctx->bodies[ctx->function]; uint32_t used=0;
     for (uint32_t i=0;i<arm->count;++i) {

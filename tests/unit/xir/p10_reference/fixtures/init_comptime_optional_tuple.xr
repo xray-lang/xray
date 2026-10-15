@@ -1,0 +1,16 @@
+fn layer<T>(value: T) -> T? { return value }
+fn identity<T>(value: T) -> T { return value }
+struct Cached {
+    value: (i8, string) = comptime identity<(i8, string)>((7, "a\0b"))
+    state: i8?? = comptime layer<i8?>(null)
+    init() {}
+}
+fn classify(value: i8??) -> i64 {
+    if (value == null) { return 0 }
+    if (value == null) { return 1 }
+    return 2
+}
+export fn referenceAnswer() -> i64 {
+    const cached = Cached()
+    return classify(cached.state) * 100 + (cached.value.0 as i64) * 10 + len(cached.value.1)
+}

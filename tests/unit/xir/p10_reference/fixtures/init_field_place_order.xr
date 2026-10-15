@@ -1,0 +1,15 @@
+var events: i64 = 0
+fn selector() -> i64 { events = events * 10 + 1; return 0 }
+fn element() -> i64 { events = events * 10 + 2; return 41 }
+struct Product {
+    items: Array<i64> = [3]
+    observed: i64
+    init() {
+        this.items[selector()] = element()
+        this.observed = events
+    }
+}
+export fn referenceAnswer() -> i64 {
+    const product = Product()
+    return product.items[0] * 100 + product.observed
+}

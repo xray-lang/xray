@@ -1,0 +1,1 @@
+export fn run()->(i8,string)? { return comptime { const x:(i8,string)?=(7,"ab"); x } }

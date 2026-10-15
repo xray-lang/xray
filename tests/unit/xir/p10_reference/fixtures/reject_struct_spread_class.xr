@@ -1,0 +1,6 @@
+class Source { x: i64 = 1 }
+struct Target { x: i64 }
+export fn referenceAnswer() -> i64 {
+    const value = Target{...Source()}
+    return value.x
+}

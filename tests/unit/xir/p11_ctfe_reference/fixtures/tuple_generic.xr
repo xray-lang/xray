@@ -1,0 +1,2 @@
+fn id<T>(x:T)->T { return x }
+export fn run()->(i8,string) { return comptime id<(i8,string)>((7,"ab")) }

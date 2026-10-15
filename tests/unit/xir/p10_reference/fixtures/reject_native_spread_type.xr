@@ -1,0 +1,5 @@
+export fn referenceAnswer() -> i64 {
+    var values: Array<i8> = [3]
+    values.push(...("wrong",))
+    return 0
+}

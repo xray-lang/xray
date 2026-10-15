@@ -61,7 +61,7 @@ static bool source_destructure_binding(SourceContext *ctx, AstNode *node, bool t
     if (!tuple || tuple->parameter_count != count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple binding requires its exact ordered arity");
     XrXirCallableParameter *fields = source_alloc(ctx,count,sizeof(*fields));
-    SourceValue *values = source_alloc(ctx,count,sizeof(*values));
+    SourceValue *values = source_recipe_storage(ctx,count,sizeof(*values));
     SourceName **symbols = source_alloc(ctx,count,sizeof(*symbols));
     if (!fields || !values || !symbols ||
         !source_copy_bytes(ctx,node,fields,tuple->parameters,count*sizeof(*fields))) return false;
@@ -70,7 +70,7 @@ static bool source_destructure_binding(SourceContext *ctx, AstNode *node, bool t
         if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_FIELD,fields[i].type,
             {initial.id,0},{0},i,{0}},&values[i])) return false;
     uint32_t bindings=0,first_slot=0,payloads=0;
-    SourceValue *compact=top ? source_alloc(ctx,count,sizeof(*compact)) : NULL;
+    SourceValue *compact=top ? source_recipe_storage(ctx,count,sizeof(*compact)) : NULL;
     if(top && !compact)return false;
     for (uint32_t i = 0; i < count; ++i) {
         XrDestructurePattern *field = pattern->as.array.elements[i];

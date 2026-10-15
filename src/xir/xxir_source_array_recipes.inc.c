@@ -115,19 +115,14 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
     const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
-    int most = recipe == SOURCE_ARRAY_CLEAR ? 0 : 1, fewest = recipe == SOURCE_ARRAY_JOIN || recipe == SOURCE_ARRAY_CLEAR ? 0 : 1;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < fewest || call->arg_count > most ||
-        (call->arg_count && !call->arguments))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method arguments use ordinary READ values");
+    uint32_t supplied=0;
     if (recipe == SOURCE_ARRAY_CLEAR) {
         SourceValue place, empty;
         if (!source_value_place(ctx, access->object, &place)) return false;
         if (!xr_xir_type_is_array(&ctx->types, place.type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "clear requires an Array place");
-        if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, place.type, {0}, {0}, 0, {0}}, NULL, 0, &empty) ||
+        if (!source_native_read_arguments(ctx,node,(SourceNativeArity){0,0},NULL,NULL,&supplied) ||
+            !source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, place.type, {0}, {0}, 0, {0}}, NULL, 0, &empty) ||
             !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {place.id, empty.id}, {0}, 0, {0}}, NULL))
             return false;
         *value = (SourceValue) {UINT32_MAX, XR_XIR_UNIT};
@@ -140,15 +135,16 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method receiver is not an Array");
     XrXirType element_type = xr_xir_array_element(&ctx->types, array.type);
     SourceValue argument = {0}, separator = {0};
+    XrXirType operand=recipe==SOURCE_ARRAY_JOIN ? XR_XIR_STRING : element_type;
+    if (!source_native_read_arguments(ctx,node,(SourceNativeArity){recipe==SOURCE_ARRAY_JOIN ? 0 : 1,1},&operand,&argument,&supplied)) return false;
     if (recipe == SOURCE_ARRAY_JOIN) {
-        if (call->arg_count) {
-            if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_STRING, false, false}, &separator)) return false;
+        if (supplied) {
+            separator=argument;
             if (separator.type != XR_XIR_STRING) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join separator must be a string");
         } else if (!source_string_literal(ctx, node, "", 0, &separator)) return false;
         if (element_type != XR_XIR_STRING && element_type != XR_XIR_BOOL && element_type != XR_XIR_RUNE && !xr_xir_type_is_number(element_type))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "join requires string, number, bool or rune elements");
     } else {
-        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false, false}, &argument)) return false;
         if (argument.type != element_type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "searched value must have the element type");
         if (!source_equal_admitted(ctx, node, element_type)) return false;
@@ -174,17 +170,13 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
         return false;
     SourceGuard guard;
     if (recipe == SOURCE_ARRAY_JOIN) {
-        SourceValue later, current, joined, piece, extended;
+        SourceValue later, piece;
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LT_INT, XR_XIR_BOOL, {zero.id, counter.index.id}, {0}, 0, {0}}, &later) ||
             !source_guard_open(ctx, later, false, &guard) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_STRING, {store.id, 0}, {0}, 0, {0}}, &current) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {current.id, separator.id}, {0}, 0, {0}}, &joined) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {store.id, joined.id}, {0}, 0, {0}}, NULL) ||
+            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT, {store.id, separator.id}, {0}, 0, {0}}, NULL) ||
             !source_guard_close(ctx, &guard) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_STRING, {store.id, 0}, {0}, 0, {0}}, &current) ||
             !source_array_join_piece(ctx, node, element, &piece) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {current.id, piece.id}, {0}, 0, {0}}, &extended) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {store.id, extended.id}, {0}, 0, {0}}, NULL)) return false;
+            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT, {store.id, piece.id}, {0}, 0, {0}}, NULL)) return false;
     } else {
         SourceValue same, decided;
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_EQUAL, XR_XIR_BOOL, {element.id, argument.id}, {0}, 0, {0}}, &same) ||
@@ -203,21 +195,15 @@ static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceA
     SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
-    int arity = recipe == SOURCE_ARRAY_UNSHIFT ? 1 : 0;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count != arity ||
-        (arity && !call->arguments))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");
-    if (arity && call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method arguments use ordinary READ values");
+    uint32_t arity = recipe == SOURCE_ARRAY_UNSHIFT ? 1 : 0,supplied;
     SourceValue root, input = {0}, array, empty, store, candidate, length, zero;
     if (!source_value_place(ctx, access->object, &root)) return false;
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method receiver is not an Array place");
     XrXirType element_type = xr_xir_array_element(&ctx->types, root.type), cell_type;
     /* The input may rebind the root or suspend; only afterwards read its current value. */
+    if (!source_native_read_arguments(ctx,node,(SourceNativeArity){arity,arity},&element_type,&input,&supplied)) return false;
     if (arity) {
-        if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element_type, false, false}, &input))
-            return false;
         if (input.type != element_type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array unshift input must have the element type");
     }
@@ -261,14 +247,14 @@ static bool source_array_remove_call(SourceContext *ctx, AstNode *node, SourceAr
     SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array removal requires no explicit arguments");
     SourceValue root, array, length, zero, one, nonempty, empty, candidate_store, candidate;
     SourceValue none, result_store;
     XrXirType element_type, result_type, array_cell, result_cell;
     if (!source_value_place(ctx, access->object, &root)) return false;
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array removal receiver is not an Array place");
+    uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,(SourceNativeArity){0,0},NULL,NULL,&supplied)) return false;
     element_type = xr_xir_array_element(&ctx->types, root.type);
     if (!source_nullable_type(ctx, element_type, &result_type) ||
         !source_cell_type(ctx, root.type, &array_cell) || !source_cell_type(ctx, result_type, &result_cell) ||
@@ -315,18 +301,14 @@ static bool source_array_remove_call(SourceContext *ctx, AstNode *node, SourceAr
 static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count != 2 || !call->arguments)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize requires length and fill");
-    for (int a = 0; a < 2; ++a)
-        if (call->arg_accesses && call->arg_accesses[a] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize arguments use ordinary READ values");
     SourceValue root, length, fill, array, replacement, store, candidate, old_length, zero;
     if (!source_value_place(ctx, access->object, &root)) return false;
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize receiver is not an Array place");
     XrXirType element_type = xr_xir_array_element(&ctx->types, root.type), array_cell, count_cell;
-    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &length) ||
-        !source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, element_type, false, false}, &fill)) return false;
+    XrXirType types[2]={XR_XIR_I64,element_type};SourceValue operands[2];uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,(SourceNativeArity){2,2},types,operands,&supplied)) return false;
+    length=operands[0];fill=operands[1];
     if (length.type != XR_XIR_I64 || fill.type != element_type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize arguments differ from length and element types");
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
@@ -363,31 +345,28 @@ static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceVa
 static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < 1 || call->arg_count > 3 || !call->arguments)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill requires value and optional start and end");
-    for (int a = 0; a < call->arg_count; ++a)
-        if (call->arg_accesses && call->arg_accesses[a] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill arguments use ordinary READ values");
     SourceValue root, fill, start = {0}, end = {0}, array, length;
     if (!source_value_place(ctx, access->object, &root)) return false;
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill receiver is not an Array place");
     XrXirType element = xr_xir_array_element(&ctx->types, root.type), cell;
-    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, element, false, false}, &fill)) return false;
+    XrXirType types[3]={element,XR_XIR_I64,XR_XIR_I64};SourceValue operands[3];uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,(SourceNativeArity){1,3},types,operands,&supplied)) return false;
+    fill=operands[0];
     if (fill.type != element) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill value differs from its element type");
-    if (call->arg_count > 1) {
-        if (!source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &start)) return false;
+    if (supplied > 1) {
+        start=operands[1];
         if (start.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill start must be i64");
     }
-    if (call->arg_count > 2) {
-        if (!source_plan_expression(ctx, call->arguments[2], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &end)) return false;
+    if (supplied > 2) {
+        end=operands[2];
         if (end.type != XR_XIR_I64) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array fill end must be i64");
     }
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id}, {0}, 0, {0}}, &length)) return false;
-    if (call->arg_count < 2 &&
+    if (supplied < 2 &&
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &start)) return false;
-    if (call->arg_count < 3) end = length;
+    if (supplied < 3) end = length;
     SourceValue bounds[3] = {start, end, length};
     if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_RANGE_CHECK, XR_XIR_UNIT, {0}, {0}, 0, {0}}, bounds, 3, NULL)) return false;
     SourceValue store, candidate;
@@ -410,13 +389,13 @@ static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValu
 static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
     const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array entries takes no arguments");
     SourceValue array;
     if (evaluated) array = *evaluated;
     else if (!expression(ctx, call->callee->as.member_access.object, &array)) return false;
     if (!xr_xir_type_is_array(&ctx->types, array.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array entries receiver is not an Array");
+    uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,(SourceNativeArity){0,0},NULL,NULL,&supplied)) return false;
     XrXirType element = xr_xir_array_element(&ctx->types, array.type), tuple, result_type, cell_type;
     XrXirCallableParameter *fields = source_alloc(ctx, 2, sizeof(*fields));
     if (!fields) return false;
@@ -447,32 +426,43 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
         {store.id}, {0}, 0, {0}}, value);
 }
 
+static bool source_array_append_snapshot(SourceContext *ctx, AstNode *node,
+    SourceValue candidate, SourceValue array, SourceValue zero) {
+    XrXirType element = xr_xir_array_element(&ctx->types,array.type);
+    SourceValue length, payload;
+    if (!source_work(ctx,node) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,
+            {array.id},{0},0,{0}},&length)) return false;
+    SourceCounter counter;
+    return source_counter_open(ctx,zero,length,false,&counter) &&
+        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,element,
+            {array.id,counter.index.id},{0},0,{0}},&payload) &&
+        source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_PUSH,XR_XIR_UNIT,
+            {candidate.id,payload.id},{0},0,{0}},NULL) &&
+        source_counter_close(ctx,&counter);
+}
+
 /* Capture every input before constructing output so later argument effects cannot replace a snapshot. */
 static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
     const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < 0 ||
-        (call->arg_count && !call->arguments))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat takes ordinary trailing Array arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat arguments use ordinary READ values");
     SourceValue receiver;
     if (evaluated) receiver = *evaluated;
     else if (!expression(ctx, call->callee->as.member_access.object, &receiver)) return false;
     if (!xr_xir_type_is_array(&ctx->types, receiver.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat receiver is not an Array");
-    const uint32_t count = (uint32_t)call->arg_count + 1;
-    SourceValue *arrays = source_alloc(ctx, count, sizeof(*arrays));
+    SourceValue *trailing;uint32_t supplied;
+    if (!source_native_uniform_arguments(ctx,node,receiver.type,&trailing,&supplied)) return false;
+    const uint32_t count = supplied + 1;
+    SourceValue *arrays = source_recipe_storage(ctx, count, sizeof(*arrays));
     if (!arrays) return false;
     arrays[0] = receiver;
     for (uint32_t i = 1; i < count; ++i) {
-        if (!source_plan_expression(ctx, call->arguments[i - 1],
-                (SourceExpectedType){true, receiver.type, false, false}, &arrays[i])) return false;
+        arrays[i]=trailing[i-1];
         if (arrays[i].type != receiver.type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat argument type differs from its receiver");
     }
-    XrXirType element = xr_xir_array_element(&ctx->types, receiver.type), cell_type;
+    XrXirType cell_type;
     SourceValue seed, store, candidate, zero;
     if (!source_cell_type(ctx, receiver.type, &cell_type) ||
         !source_recipe_group(ctx, (XrXirInstruction){XR_XIR_ARRAY_NEW, receiver.type, {0}, {0}, 0, {0}}, NULL, 0, &seed) ||
@@ -480,19 +470,61 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_PLACE, receiver.type, {store.id}, {0}, 0, {0}}, &candidate) ||
         !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;
     for (uint32_t i = 0; i < count; ++i) {
-        SourceValue length, payload;
-        if (!source_recipe_record(ctx, (XrXirInstruction){XR_XIR_ARRAY_LEN, XR_XIR_I64,
-                {arrays[i].id}, {0}, 0, {0}}, &length)) return false;
-        SourceCounter counter;
-        if (!source_counter_open(ctx, zero, length, false, &counter) ||
-            !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_ARRAY_GET, element,
-                {arrays[i].id, counter.index.id}, {0}, 0, {0}}, &payload) ||
-            !source_recipe_record(ctx, (XrXirInstruction){XR_XIR_ARRAY_PUSH, XR_XIR_UNIT,
-                {candidate.id, payload.id}, {0}, 0, {0}}, NULL) ||
-            !source_counter_close(ctx, &counter)) return false;
+        if (!source_array_append_snapshot(ctx,node,candidate,arrays[i],zero)) return false;
     }
     return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_READ, receiver.type,
         {store.id}, {0}, 0, {0}}, value);
+}
+
+typedef struct SourceArrayLiteralPart { SourceValue value; bool spread; } SourceArrayLiteralPart;
+static bool source_array_spread_literal(SourceContext *ctx, AstNode *node,
+    SourceExpectedType expected, SourceValue *value) {
+    const ArrayLiteralNode *literal = &node->as.array_literal;
+    SourceArrayLiteralPart *parts = source_recipe_storage(ctx,(size_t)literal->count,sizeof(*parts));
+    if (!parts) return false;
+    SourceExpectedType element = {expected.present,XR_XIR_UNIT,false,expected.inferred};
+    XrXirType array = expected.present ? expected.type : XR_XIR_UNIT;
+    if (expected.present) element.type = xr_xir_array_element(&ctx->types,array);
+    for (int i = 0; i < literal->count; ++i) {
+        AstNode *child = literal->elements[i];
+        if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array literal entry is missing");
+        parts[i].spread = child->type == AST_SPREAD_EXPR;
+        SourceExpectedType hint = element;
+        if (parts[i].spread) {
+            child = child->as.spread_expr.expr;
+            if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Array literal spread source is missing");
+            hint = (SourceExpectedType){element.present,array,false,element.inferred};
+        }
+        if (!source_plan_expression(ctx,child,hint,&parts[i].value)) return false;
+        XrXirType actual = parts[i].value.type;
+        if (parts[i].spread) {
+            if (!xr_xir_type_is_array(&ctx->types,actual))
+                return source_fail(ctx,child,XR_XIR_BAD_TYPE,"Array literal spread requires an Array value");
+            actual = xr_xir_array_element(&ctx->types,actual);
+        }
+        if (!element.present) {
+            element = (SourceExpectedType){true,actual,false,true};
+            if (!source_array_element_type(ctx,actual,&array)) return false;
+        }
+        if (actual != element.type)
+            return source_fail(ctx,child,XR_XIR_BAD_TYPE,"Array literal entries require one exact element type");
+        if ((!expected.present || expected.inferred) && !source_root_join_record(ctx,&parts[i].value)) return false;
+    }
+    XrXirType cell_type; SourceValue seed, store, candidate, zero;
+    if (!source_native_array_declaration(ctx) || !source_cell_type(ctx,array,&cell_type) ||
+        !source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ARRAY_NEW,array,{0},{0},0,{0}},NULL,0,&seed) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_NEW,cell_type,{seed.id},{0},0,{0}},&store) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,array,{store.id},{0},0,{0}},&candidate) ||
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&zero)) return false;
+    for (int i = 0; i < literal->count; ++i) {
+        if (!source_work(ctx,node)) return false;
+        if (parts[i].spread) {
+            if (!source_array_append_snapshot(ctx,node,candidate,parts[i].value,zero)) return false;
+        } else if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_PUSH,XR_XIR_UNIT,
+            {candidate.id,parts[i].value.id},{0},0,{0}},NULL)) return false;
+    }
+    return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_READ,array,{store.id},{0},0,{0}},value) &&
+        source_query_target_token_reference(ctx,node,ctx->array_declaration,XR_XIR_SOURCE_TYPE_USE);
 }
 
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,

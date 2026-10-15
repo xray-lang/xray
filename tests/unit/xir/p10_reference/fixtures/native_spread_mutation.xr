@@ -1,0 +1,26 @@
+var trace: i64 = 0
+var source: Array<i64> = [3, 7]
+fn replacement() -> (i64,) {
+    trace = trace * 10 + 1
+    source = [11, 13]
+    return (17,)
+}
+fn fillArgs() -> (i64, i64, i64) {
+    trace = trace * 10 + 2
+    return (19, 0, 2)
+}
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3, 7]
+    source.push(...replacement())
+    const pushed = source[0] * 100 + source[2]
+    source.fill(...fillArgs())
+    source.set(...(1, 23))
+    source.unshift(...(29,))
+    source.reverse(...())
+    const removed = source.pop(...())
+    if (removed == null) { return 0 }
+    source.resize(...(5, 31))
+    source.reserve(...(9,))
+    return trace * 100000000 + pushed * 100000 + source.get(...(0,)) * 1000 + source[1] * 100 + source[4] + (removed as i64)
+}

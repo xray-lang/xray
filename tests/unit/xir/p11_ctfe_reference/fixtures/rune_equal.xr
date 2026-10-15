@@ -1,0 +1,2 @@
+fn same(a:rune,b:rune)->bool { return a==b }
+export fn run()->bool { return comptime (same('A',rune(65)) && !same('A',rune(66))) }

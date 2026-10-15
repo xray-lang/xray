@@ -10,6 +10,12 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
 set_tests_properties(test_xir_p10_source_generations PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source")
+foreach(fact IN ITEMS function generic type)
+    add_test(NAME test_xir_p10_source_history_${fact}
+        COMMAND test_xir_p10_source_generations --history-${fact})
+    set_tests_properties(test_xir_p10_source_history_${fact} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept")
+endforeach()
 
 add_executable(test_xir_p10_source_generation_resources "${CMAKE_CURRENT_LIST_DIR}/test_source_generation_resources.c")
 target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source)
@@ -52,6 +58,25 @@ else()
 endif()
 add_test(NAME test_xir_p10_initializer_resources COMMAND test_xir_p10_initializer_resources)
 set_tests_properties(test_xir_p10_initializer_resources PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ownership;budget;allocation")
+foreach(family IN ITEMS array optional-tuple)
+    string(REPLACE "-" "_" suffix "${family}")
+    add_test(NAME test_xir_p10_initializer_comptime_${suffix}_resources
+        COMMAND test_xir_p10_initializer_resources --comptime-${family})
+    set_tests_properties(test_xir_p10_initializer_comptime_${suffix}_resources PROPERTIES
+        TIMEOUT 300 COST 80 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ctfe;ownership;budget;allocation")
+endforeach()
+add_test(NAME test_xir_p10_initializer_comptime_resources_baseline
+    COMMAND test_xir_p10_initializer_resources --comptime-baseline)
+set_tests_properties(test_xir_p10_initializer_comptime_resources_baseline PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;p10;init;ctfe;ownership;resource-control")
+add_test(NAME test_xir_p10_initializer_field_places_resources
+    COMMAND test_xir_p10_initializer_resources --field-places)
+set_tests_properties(test_xir_p10_initializer_field_places_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ownership;budget;allocation")
+add_test(NAME test_xir_p10_initializer_field_places_baseline
+    COMMAND test_xir_p10_initializer_resources --field-places-baseline)
+set_tests_properties(test_xir_p10_initializer_field_places_baseline PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;p10;init;ownership;resource-control")
 target_link_libraries(test_xir_p10_initializer_surface PRIVATE xray_xir_source xray_frontend_format)
 set_target_properties(test_xir_p10_initializer_surface PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
@@ -106,6 +131,8 @@ add_test(NAME test_xir_p10_reference_reject_init_legacy_spelling COMMAND test_xi
 add_test(NAME test_xir_p10_reference_reject_init_foreign_literal COMMAND test_xir_p10_reference --reject reject_init_foreign_literal 2 "struct literal with init is restricted to its declaring module")
 set_tests_properties(test_xir_p10_reference_init_module_authority test_xir_p10_reference_reject_init_foreign_literal PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;init;authority")
 set_tests_properties(test_xir_p10_reference_reject_init_other_parameter test_xir_p10_reference_reject_init_duplicate test_xir_p10_reference_reject_init_legacy_spelling PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject;init")
+add_test(NAME test_xir_p10_reference_reject_generic_class_sendable COMMAND test_xir_p10_reference --reject reject_generic_class_sendable 7 "type argument does not prove the declared constraint")
+set_tests_properties(test_xir_p10_reference_reject_generic_class_sendable PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject;class")
 add_test(NAME test_xir_p10_reference_reject_unused_member COMMAND test_xir_p10_reference --reject reject_unused_member 1 "receiver has no declared interface requirements")
 set_tests_properties(test_xir_p10_reference_reject_unused_member PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
 add_test(NAME test_xir_p10_reference_reject_call_witness COMMAND test_xir_p10_reference --reject reject_call_witness 4 "type argument does not prove the declared constraint")
@@ -124,6 +151,25 @@ add_test(NAME test_xir_p10_reference_reject_stale_fact COMMAND test_xir_p10_refe
 set_tests_properties(test_xir_p10_reference_reject_stale_fact PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;reject")
 
 set(reference_native_targets)
+set(native_generic_class_phantom "${CMAKE_CURRENT_BINARY_DIR}/generated_native/generic_class_phantom.c")
+add_custom_command(OUTPUT ${native_generic_class_phantom}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
+    COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit generic_class_phantom 41 ${native_generic_class_phantom}
+    DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/generic_class_phantom.xr"
+    VERBATIM)
+foreach(profile IN ITEMS native mixed)
+    set(target "test_xir_p10_reference_${profile}_generic_class_phantom")
+    add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" ${native_generic_class_phantom})
+    target_link_libraries(${target} PRIVATE xray_xir_vm)
+    if(profile STREQUAL "mixed")
+        target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=1)
+    else()
+        target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=0)
+    endif()
+    list(APPEND reference_native_targets ${target})
+    add_test(NAME ${target} COMMAND ${target} 41)
+    set_tests_properties(${target} PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;${profile};class")
+endforeach()
 set(native_explicit_witness "${CMAKE_CURRENT_BINARY_DIR}/generated_native/explicit_witness.c")
 add_custom_command(OUTPUT ${native_explicit_witness}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
@@ -402,7 +448,65 @@ foreach(case IN ITEMS reject_init_generic_default reject_init_unused_generic_def
     add_test(NAME test_xir_p10_reference_${case} COMMAND test_xir_p10_reference --reject ${case} 3 "expression cannot satisfy its declared type")
     set_tests_properties(test_xir_p10_reference_${case} PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;reference;init;default;generic;reject")
 endforeach()
+foreach(case IN ITEMS init_comptime_array init_comptime_optional_tuple init_field_places init_field_place_order)
+    if(case STREQUAL "init_comptime_array")
+        set(expected 3867)
+    elseif(case STREQUAL "init_comptime_optional_tuple")
+        set(expected 173)
+    elseif(case STREQUAL "init_field_places")
+        set(expected 131256)
+    else()
+        set(expected 4112)
+    endif()
+    add_test(NAME test_xir_p10_reference_${case} COMMAND test_xir_p10_reference --accept ${case} ${expected})
+    set_tests_properties(test_xir_p10_reference_${case} PROPERTIES
+        TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ctfe;ownership")
+    set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated_native/${case}.c")
+    add_custom_command(OUTPUT "${generated}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated_native"
+        COMMAND $<TARGET_FILE:test_xir_p10_reference> --emit ${case} ${expected} "${generated}"
+        DEPENDS test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/fixtures/${case}.xr"
+        VERBATIM)
+    foreach(backend IN ITEMS native mixed)
+        set(target "test_xir_p10_reference_${backend}_${case}")
+        add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_language_native.c" "${generated}")
+        target_link_libraries(${target} PRIVATE xray_xir_vm)
+        set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+        if(backend STREQUAL "mixed")
+            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=1)
+        else()
+            target_compile_definitions(${target} PRIVATE XR_LANGUAGE_MIXED=0)
+        endif()
+        if(MSVC)
+            target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+        else()
+            target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+        endif()
+        list(APPEND reference_native_targets ${target})
+        add_test(NAME ${target} COMMAND ${target} ${expected})
+        set_tests_properties(${target} PROPERTIES
+            TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ctfe;ownership;${backend}")
+    endforeach()
+endforeach()
+add_test(NAME test_xir_p10_reference_reject_init_field_place_uninitialized
+    COMMAND test_xir_p10_reference --reject-value reject_init_field_place_uninitialized 3 "read requires storage initialized on every incoming path")
+add_test(NAME test_xir_p10_reference_reject_init_field_place_const
+    COMMAND test_xir_p10_reference --reject reject_init_field_place_const 3 "field access is not permitted")
+add_test(NAME test_xir_p10_reference_reject_init_field_place_nested_const
+    COMMAND test_xir_p10_reference --reject reject_init_field_place_nested_const 4 "field access is not permitted")
+add_test(NAME test_xir_p10_reference_reject_init_field_place_ref
+    COMMAND test_xir_p10_reference --reject reject_init_field_place_ref 4 "ref argument requires a mutable stored binding")
+set_tests_properties(test_xir_p10_reference_reject_init_field_place_uninitialized
+    test_xir_p10_reference_reject_init_field_place_const test_xir_p10_reference_reject_init_field_place_nested_const
+    test_xir_p10_reference_reject_init_field_place_ref PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;p10;reference;init;ownership;reject")
+include("${CMAKE_CURRENT_LIST_DIR}/struct_spread.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/array_spread.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/tuple_spread.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/call_spread.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/native_spread.cmake")
 add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
+include("${CMAKE_CURRENT_LIST_DIR}/initializer_places_runtime.cmake")
 
 add_executable(test_xir_p10_initializer_lifecycle "${CMAKE_CURRENT_LIST_DIR}/test_initializer_lifecycle.c")
 target_link_libraries(test_xir_p10_initializer_lifecycle PRIVATE xray_xir_source xray_xir_vm)

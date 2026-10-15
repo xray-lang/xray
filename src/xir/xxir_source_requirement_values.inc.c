@@ -28,7 +28,7 @@ static bool source_requirement_helper_body(SourceContext *ctx, AstNode *site,
         return source_fail(ctx,site,XR_XIR_BAD_STRUCTURE,"bound requirement signature changed");
     const XrXirFunction *function = &ctx->functions[ctx->function];
     uint32_t count = function->parameter_count;
-    SourceValue *arguments = source_alloc(ctx,count,sizeof(*arguments));
+    SourceValue *arguments = source_recipe_storage(ctx,count,sizeof(*arguments));
     if (!arguments) return false;
     for (uint32_t p = 0; p < count; ++p) {
         if (!source_work(ctx,site)) return false;

@@ -1,0 +1,5 @@
+export fn referenceAnswer() -> i64 {
+    const values: Array<i64> = [3, 7]
+    const mapped = values.map(...(fn(item) { return item + 1 },))
+    return mapped[0] + mapped[1]
+}

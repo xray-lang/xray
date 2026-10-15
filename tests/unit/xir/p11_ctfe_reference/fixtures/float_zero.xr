@@ -1,0 +1,1 @@
+export fn run()->f64 { return comptime (-0.0) }

@@ -280,6 +280,35 @@ static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType typ
     }
     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unknown struct field");
 }
+static bool source_struct_spread(SourceContext *ctx, AstNode *node, XrXirType target,
+    SourceValue *fields, uint8_t *provided) {
+    if (!node || node->type != AST_SPREAD_EXPR || !node->as.spread_expr.expr)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"struct spread entry is malformed");
+    SourceValue source;
+    if (!source_plan_expression(ctx,node->as.spread_expr.expr,(SourceExpectedType){0},&source)) return false;
+    if (!xr_xir_type_is_struct(&ctx->types,source.type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"struct spread requires a nominal struct value");
+    uint32_t declaration = xr_xir_type_node(&ctx->types,source.type)->nominal.declaration;
+    const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[declaration];
+    for (uint32_t f = 0; f < decl->field_count; ++f) {
+        if (!source_work(ctx,node)) return false;
+        XrXirLiteral field = decl->fields[f].name;
+        char *name = source_alloc(ctx,(size_t)field.length + 1,1);
+        if (!name || !source_copy_bytes(ctx,node,name,field.bytes,field.length)) return false;
+        uint32_t source_index, target_index; XrXirType source_type, target_type;
+        if (!source_struct_field(ctx,node,source.type,name,false,&source_index,&source_type) ||
+            !source_struct_field(ctx,node,target,name,false,&target_index,&target_type)) return false;
+        source_release_private(name);
+        SourceConversionRecipe conversion;
+        if (!source_conversion_plan(ctx,node,source_type,
+                (SourceExpectedType){true,target_type,false,false},&conversion)) return false;
+        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_STRUCT_GET,source_type,
+                {source.id,0},{0},source_index,{0}},&fields[target_index]) ||
+            !source_conversion_emit(ctx,&conversion,&fields[target_index])) return false;
+        provided[target_index] |= 1;
+    }
+    return true;
+}
 static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *path,
     char **names, AstNode **values, int field_count, XrTypeRef **type_args, int type_arg_count, SourceValue *value) {
     SourceName *symbol = NULL, *binding = NULL;
@@ -301,22 +330,27 @@ static bool source_struct_construct(SourceContext *ctx, AstNode *node, AstNode *
         return source_fail(ctx, node, XR_XIR_BAD_TYPE,
             "struct literal with init is restricted to its declaring module");
     uint32_t count = decl->field_count;
-    if ((uint32_t) field_count > count)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct literal has too many fields");
-    SourceValue *fields = count ? source_alloc(ctx, count, sizeof(*fields)) : NULL;
-    bool *seen = count ? source_alloc(ctx, count, sizeof(*seen)) : NULL;
-    if (count && (!fields || !seen)) return false;
+    if (field_count && (!names || !values))
+        return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "struct literal entries are missing");
+    SourceValue *fields = count ? source_recipe_storage(ctx, count, sizeof(*fields)) : NULL;
+    uint8_t *provided = count ? source_alloc(ctx, count, sizeof(*provided)) : NULL;
+    if (count && (!fields || !provided)) return false;
     for (uint32_t f = 0; f < (uint32_t) field_count; ++f) {
+        if (!source_work(ctx,values[f])) return false;
+        if (!names[f]) {
+            if (!source_struct_spread(ctx,values[f],instance_type,fields,provided)) return false;
+            continue;
+        }
         uint32_t index; XrXirType type;
         if (!source_struct_field(ctx, node, instance_type, names[f], false, &index, &type)) return false;
-        if (seen[index]) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate struct literal field");
-        seen[index] = true;
+        if (provided[index] & 2) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "duplicate struct literal field");
+        provided[index] |= 3;
         if (!source_plan_expression(ctx, values[f], (SourceExpectedType){type != XR_XIR_UNIT,type, false, false}, &fields[index])) return false;
         if (fields[index].type != type) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct field type mismatch");
     }
     for (uint32_t f = 0; f < count; ++f) {
         if (!source_work(ctx, node)) return false;
-        if (seen[f]) continue;
+        if (provided[f]) continue;
         uint32_t function = ctx->nominal_defaults[symbol->index][f];
         bool owner = ctx->identities[ctx->function].nominal_owner == symbol->index + 1;
         if (!function || (!owner && (decl->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED))))

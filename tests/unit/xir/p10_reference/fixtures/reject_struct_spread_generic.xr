@@ -1,0 +1,5 @@
+struct Target { x: i64 }
+fn unused<T>(source: T) -> Target {
+    return Target{...source}
+}
+export fn referenceAnswer() -> i64 { return 1 }

@@ -1,0 +1,6 @@
+export fn referenceAnswer() -> i64 {
+    var values: Array<i64> = [3]
+    var item: i64 = 7
+    values.push(ref item)
+    return 0
+}

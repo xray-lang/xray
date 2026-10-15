@@ -1,0 +1,6 @@
+fn change(values: ref Array<i64>) { values.push(7) }
+struct Batch {
+    items: Array<i64> = [1]
+    init() { change(ref this.items) }
+}
+export fn referenceAnswer() -> i64 { return len(Batch().items) }

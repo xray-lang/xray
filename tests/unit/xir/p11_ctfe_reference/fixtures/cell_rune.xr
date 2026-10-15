@@ -1,0 +1,2 @@
+fn changed()->rune { var c='A'; c=rune(128512); return c }
+export fn run()->rune { return comptime changed() }

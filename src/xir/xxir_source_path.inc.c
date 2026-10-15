@@ -77,31 +77,35 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
         (!xr_xir_type_is_struct(&ctx->types,root_type) && !xr_xir_type_is_array(&ctx->types,root_type) &&
             !xr_xir_type_is_class(&ctx->types,root_type))))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"projected ref requires an actual stored root");
-    bool object_root = root && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT) &&
+    bool constructing = root && root->construction;
+    bool object_root = root && !constructing && (root->kind == SOURCE_LOCAL || root->kind == SOURCE_SLOT) &&
         xr_xir_type_is_class(&ctx->types,root_type);
-    if (!root || (!root->mutable && !object_root) || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"value mutation requires a mutable named root");
-    if (object_root && root->construction)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class constructor field mutation is not implemented in XIR");
-    SourceName saved = *root;
-    AstNode *base = count ? steps[count - 1] : node;
-    if (count) base = base->type == AST_MEMBER_ACCESS ? base->as.member_access.object : base->as.index_get.array;
-    if (!source_query_reference(ctx,base,root,root,object_root ? XR_XIR_SOURCE_READ : XR_XIR_SOURCE_READ_WRITE)) return false;
-    if (object_root) {
-        SourceValue handle;
-        if (!source_binding_read(ctx, &saved, &handle)) return false;
-        /* A binding narrowed to hold a value roots the path at that value. */
-        if (narrowed) {
-            uint32_t prefix=source_fact_depth(ctx,root);
-            for (uint32_t layer=0;layer<prefix;++layer)
-                if (!source_work(ctx,node) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
-        }
-        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,root_type,{handle.id,0},{0},0,{0}},place)) return false;
+    if (constructing) {
+        if (!count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"unfinished receiver has no whole-value place");
+        if (!source_constructor_place(ctx, steps[--count], place)) return false;
     } else {
-        SourceValue cell = {0};
-        if (!source_binding_cell(ctx, &saved, &cell) ||
-            !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,
-                saved.type,{cell.id,0},{0},0,{0}},place)) return false;
+        if (!root || (!root->mutable && !object_root) || (root->kind != SOURCE_LOCAL && root->kind != SOURCE_SLOT))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"value mutation requires a mutable named root");
+        SourceName saved = *root;
+        AstNode *base = count ? steps[count - 1] : node;
+        if (count) base = base->type == AST_MEMBER_ACCESS ? base->as.member_access.object : base->as.index_get.array;
+        if (!source_query_reference(ctx,base,root,root,object_root ? XR_XIR_SOURCE_READ : XR_XIR_SOURCE_READ_WRITE)) return false;
+        if (object_root) {
+            SourceValue handle;
+            if (!source_binding_read(ctx, &saved, &handle)) return false;
+            /* A binding narrowed to hold a value roots the path at that value. */
+            if (narrowed) {
+                uint32_t prefix=source_fact_depth(ctx,root);
+                for (uint32_t layer=0;layer<prefix;++layer)
+                    if (!source_work(ctx,node) || !source_unwrap_value(ctx,node,handle,&handle)) return false;
+            }
+            if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_OBJECT_PLACE,root_type,{handle.id,0},{0},0,{0}},place)) return false;
+        } else {
+            SourceValue cell = {0};
+            if (!source_binding_cell(ctx, &saved, &cell) ||
+                !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CELL_PLACE,
+                    saved.type,{cell.id,0},{0},0,{0}},place)) return false;
+        }
     }
     uint32_t initial_count = count;
     while (count) {

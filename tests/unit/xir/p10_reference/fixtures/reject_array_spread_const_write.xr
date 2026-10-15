@@ -1,0 +1,6 @@
+export fn referenceAnswer() -> i64 {
+    const source: Array<i64> = [3]
+    const value = [...source]
+    value[0] = 7
+    return value[0]
+}

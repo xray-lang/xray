@@ -254,7 +254,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
     if (handler.count) {
         uint32_t target = body->block_count;
         if (!begin_block(ctx)) return false;
-        SourceValue *inputs = source_alloc(ctx,(size_t)handler.count*2,sizeof(*inputs));
+        SourceValue *inputs = source_recipe_storage(ctx,(size_t)handler.count*2,sizeof(*inputs));
         if (!inputs) return false;
         uint32_t at = handler.count;
         for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {

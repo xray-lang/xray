@@ -1,0 +1,4 @@
+fn layer<T>(x:T)->T? { return x }
+fn same(a:string??,b:string??)->bool { return a==b }
+fn answer()->bool { const a:string?="a\0b"; const b:string?="a\0c"; return same(layer<string?>(a),layer<string?>(a)) && !same(layer<string?>(a),layer<string?>(b)) }
+export fn run()->bool { return comptime answer() }

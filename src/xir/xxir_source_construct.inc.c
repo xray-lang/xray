@@ -44,9 +44,12 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     bool declarations_ready = source_query_modules(ctx) && collect_declarations(ctx);
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
-        source_implementations_bind(ctx) && build_bodies(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx)) {
+        source_implementations_bind(ctx) && build_bodies(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx) && source_query_seal_storage(ctx) && source_function_seal_storage(ctx)) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
+        source_owned_text_index_clear(ctx);
+        ctx->locals=NULL;ctx->facts=NULL;ctx->epochs=NULL;
+        source_vector_retired_free(ctx);
         XrXirDiagnostic location = {0};
         XrXirRootRefiner refiner = {ctx,source_root_refine};
         XrXirStatus status = xr_xir_compile_check_refined_v2(&ctx->compile, &built, ctx->construction, &refiner, &output->checked, &location);
@@ -85,4 +88,6 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
             source_fail(ctx, site, status, cause);
         }
     }
+    source_vector_retired_free(ctx);
+    source_owned_text_index_clear(ctx);
 }

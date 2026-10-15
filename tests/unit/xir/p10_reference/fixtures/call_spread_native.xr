@@ -1,0 +1,5 @@
+export fn referenceAnswer() -> i64 {
+    const values: Array<i64> = [3, 7]
+    if (values.contains(...(7,))) { return 1 }
+    return 0
+}

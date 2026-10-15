@@ -46,6 +46,7 @@
 #include "xxir_construction.h"
 
 typedef struct SourceMemory { struct SourceMemory *next; struct SourceMemory **previous; } SourceMemory;
+typedef struct SourceOwnedTextEntry { const char *text; uint64_t hash; } SourceOwnedTextEntry;
 typedef struct SourceManifest {
     struct SourceManifest *next;
     XrModuleIdentityAuthority authority;
@@ -110,6 +111,7 @@ typedef struct SourceExpressionPlan {
     struct SourceConditionalRecipe *conditional;
     struct SourceMatchPlan *match;
     struct SourceBinaryRecipe *binary;
+    union { struct SourceTuplePrefix *tuple_prefix; struct SourceCallProjection *call_projection; };
     AstNode *syntax;
     SourceName *binding;
     uint32_t owner, identity;
@@ -204,6 +206,9 @@ typedef struct SourceContext {
     uint32_t remaining_blocks, remaining_instructions;
     XrXirSourceDiagnostic diagnostic;
     SourceMemory *memory;
+    SourceMemory *retired_vectors;
+    SourceOwnedTextEntry *owned_texts;
+    uint32_t owned_text_count, owned_text_capacity;
     XrXirConstruction *construction;
     SourceLibraryUnit *library_units;
     SourceRootQuery *root_queries;
@@ -341,7 +346,26 @@ static void source_release_private(void *pointer) {
     if (memory->next) memory->next->previous=memory->previous;
     xr_compile_resources_free(memory);
 }
-static void *source_recipe_storage(SourceContext *ctx, uint32_t count, size_t size) {
+/* Superseded private vectors survive active construction frames. Sealed bodies
+ * and later query refinements retain record identities in the current vectors. */
+static void source_vector_retire(SourceContext *ctx, const void *pointer) {
+    if (!pointer) return;
+    SourceMemory *memory=(SourceMemory *)pointer-1;
+    *memory->previous=memory->next;
+    if (memory->next) memory->next->previous=memory->previous;
+    memory->next=ctx->retired_vectors;memory->previous=&ctx->retired_vectors;
+    if (ctx->retired_vectors) ctx->retired_vectors->previous=&memory->next;
+    ctx->retired_vectors=memory;
+}
+static void source_vector_retired_free(SourceContext *ctx) {
+    while (ctx->retired_vectors) source_release_private(ctx->retired_vectors+1);
+}
+static void *source_planning_storage(SourceContext *ctx, size_t count, size_t size) {
+    void *memory=source_alloc(ctx,count,size);
+    if (memory) source_vector_retire(ctx,memory);
+    return memory;
+}
+static void *source_recipe_storage(SourceContext *ctx, size_t count, size_t size) {
     if (count>(SIZE_MAX-sizeof(SourceRecipeStorage))/size) {
         source_fail(ctx,NULL,XR_XIR_BUDGET,"source region storage exhausted"); return NULL;
     }
@@ -461,11 +485,13 @@ static void *source_query_append(SourceContext *ctx, const void *array, uint32_t
         void *grown = source_alloc(ctx, next, size);
         if (!grown) return NULL;
         if (!source_copy_bytes(ctx, NULL, grown, array, (size_t) *count * size)) return NULL;
+        source_vector_retire(ctx,array);
         array = grown; *capacity = next;
     }
     ++*count;
     return (void *) array;
 }
+#include "xxir_source_storage_seal.inc.c"
 static XrXirSourceRange source_query_range(SourceContext *ctx, AstNode *node, const char *name) {
     XrXirSourceRange range = {ctx->module, 0, 0, 0, 0};
     if (!node) return range;
@@ -878,7 +904,7 @@ static bool source_recipe_group(SourceContext *ctx, XrXirInstruction op, const S
     uint32_t needed = body->operand_count + count;
     if (needed > body->operand_capacity) {
         uint32_t capacity = needed <= UINT32_MAX / 2 ? needed * 2 : needed;
-        uint32_t *operands = source_alloc(ctx, capacity, sizeof(*operands));
+        uint32_t *operands = source_recipe_storage(ctx, capacity, sizeof(*operands));
         if (!operands) return false;
         if (!source_copy_bytes(ctx, NULL, operands, body->operands, body->operand_count * sizeof(*operands))) return false;
         body->operands = operands; body->operand_capacity = capacity;
@@ -988,6 +1014,7 @@ static bool source_type_arguments(SourceContext *ctx, AstNode *node, const XrXir
         XrXirType *table = source_alloc(ctx, capacity, sizeof(*table));
         if (!table) return false;
         if (!source_copy_bytes(ctx, node, table, caller->arguments, caller->argument_count * sizeof(*table))) return false;
+        source_vector_retire(ctx,caller->arguments);
         caller->arguments = table; body->type_capacity = capacity;
     }
     op->type_arguments[0] = count ? caller->argument_count : 0; op->type_arguments[1] = count;
@@ -1053,8 +1080,11 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 }
 #include "xxir_source_arguments.inc.c"
 #include "xxir_source_inference_result.inc.c"
+#include "xxir_source_tuple.inc.c"
 #include "xxir_source_call_plan.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
+#include "xxir_source_indirect_call.inc.c"
+#include "xxir_source_native_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 typedef enum SourceArrayRecipe {
     SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,
@@ -1067,10 +1097,10 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value);
 #include "xxir_source_array.inc.c"
-#include "xxir_source_tuple.inc.c"
 #include "xxir_source_string.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
+static bool source_constructor_place(SourceContext *ctx, AstNode *member, SourceValue *place);
 #include "xxir_source_struct.inc.c"
 #include "xxir_source_path.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
@@ -1094,6 +1124,7 @@ static bool source_literal_append(SourceContext *ctx, AstNode *node, const char 
         if (!literals) return false;
         if (!source_work_units(ctx, node, (uint64_t)ctx->literal_count * sizeof(*literals))) return false;
         if (!source_copy_bytes(ctx, NULL, literals, ctx->literals, ctx->literal_count * sizeof(*literals))) return false;
+        source_vector_retire(ctx,ctx->literals);
         ctx->literals = literals; ctx->literal_capacity = capacity;
     }
     uint32_t id = ctx->literal_count;
@@ -1295,57 +1326,25 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             source_query_reference(ctx,callee,binding,target,XR_XIR_SOURCE_CALL) &&
             source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
     }
-    XrXirTypeNode signature = {0};
     if (!print && !stream && !host_time && (!target || target->kind != SOURCE_FUNCTION)) {
         if (call->type_arg_count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call has no generic declaration parameters");
         if (!indirect_ready && !expression(ctx, callee, &indirect)) return false;
-        const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types, indirect.type);
-        if (!found || found->parameter_count != (uint32_t) call->arg_count)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call requires its declared signature");
-        signature = *found;
+        return source_indirect_call(ctx,node,indirect,value);
     }
     if ((print || stream || host_time) && call->type_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "primitive does not admit explicit type arguments");
     XrXirInstruction op = {0};
     uint32_t argument_count = (uint32_t)call->arg_count;
-    SourceValue *args = argument_count ? source_alloc(ctx, argument_count, sizeof(*args)) : NULL;
+    SourceValue *args = argument_count ? source_recipe_storage(ctx, argument_count, sizeof(*args)) : NULL;
     if (argument_count && !args) return false;
-    bool *references = NULL;
     for (int i = 0; i < call->arg_count; ++i) {
-        if (indirect.type) {
-            const XrXirCallableParameter *parameter = &signature.parameters[i];
-            if (!xr_xir_callable_parameter_storage_valid(&ctx->types, parameter))
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect parameter storage and mode disagree");
-            if (parameter->mode == XR_PARAM_REF) {
-                if (!references) {
-                    references = source_alloc(ctx, argument_count, sizeof(*references));
-                    if (!references) return false;
-                }
-                references[i] = true;
-                if (!source_reference_argument(ctx, node, (uint32_t)i, references, NULL, &args[i])) return false;
-                continue;
-            }
-        }
         if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "argument mode does not match the callable parameter");
         XrXirType expected = XR_XIR_UNIT;
-        if (indirect.type) expected = signature.parameters[i].type;
         if (stream) expected = XR_XIR_STRING;
         if (host_time > (uint32_t) XR_XIR_CLOCK_MONOTONIC) expected = XR_XIR_I64;
         if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false, false}, &args[i])) return false;
         if (args[i].type == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unit argument is not admitted");
-    }
-    if (indirect.type) {
-        for (uint32_t p = 0; p < (uint32_t) call->arg_count; ++p)
-            if (args[p].type != signature.parameters[p].type)
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect argument type mismatch");
-        /* Every actual completes before invalidating borrowed roots. */
-        for (uint32_t p = 0; p < (uint32_t)call->arg_count; ++p) if (references && references[p]) {
-            SourceName *root = source_ref_binding(ctx,call->arguments[p]);
-            if (!root || !source_fact_push(ctx,root,0)) return false;
-        }
-        return source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_CALL_INDIRECT, signature.result, {0}, {0}, indirect.id, {0}},
-            args, (uint32_t) call->arg_count, value);
     }
     if (stream) {
         if (call->arg_count != 1 || args[0].type != XR_XIR_STRING)
@@ -2042,6 +2041,9 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
     case AST_EXPR_STMT: {
         SourceValue value; AstNode *expr=node->as.expr_stmt;
+        bool appended = false;
+        if (!source_string_append_statement(ctx, expr, &appended)) return false;
+        if (appended) return true;
         if (expr->type!=AST_MATCH_EXPR) return expression(ctx,expr,&value);
         SourceExpressionPlan *plan=source_plan_collect(ctx,expr,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
         if (!plan) return false;
@@ -2708,7 +2710,7 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
         if (p->source->construction)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "recursive nested function cannot capture a constructor value");
     }
-    SourceValue *captures = scan->count ? source_alloc(ctx, scan->count, sizeof(*captures)) : NULL;
+    SourceValue *captures = scan->count ? source_recipe_storage(ctx, scan->count, sizeof(*captures)) : NULL;
     uint32_t count = ctx->generics[index].parameter_count;
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
     SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
@@ -2764,7 +2766,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     uint32_t parameter_count = scan.count + (uint32_t)decl->param_count;
     body->parameters = parameter_count ? source_alloc(ctx,parameter_count,sizeof(*body->parameters)) : NULL;
     XrXirCallableParameter *parameters = decl->param_count ? source_alloc(ctx, (uint32_t) decl->param_count, sizeof(*parameters)) : NULL;
-    SourceValue *captures = source_alloc(ctx, scan.count, sizeof(*captures));
+    SourceValue *captures = source_recipe_storage(ctx, scan.count, sizeof(*captures));
     if (!name || (parameter_count && !body->parameters) || (decl->param_count && !parameters) || !captures) return false;
     if (source_format(ctx, name, 32, "$closure%u", index) != XR_DIAG_OK)
         return source_fail(ctx, node, XR_XIR_BUDGET, "closure name formatting exhausted");
@@ -2935,6 +2937,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         if (output) xr_xir_compile_source_result_free(output);
         return;
     }
+    if (!source_array_query_types(ctx)) { xr_xir_compile_source_result_free(output); return; }
     ctx->query.complete = ctx->diagnostic.status == XR_XIR_OK;
     ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
     ctx->query.diagnostic = ctx->diagnostic;

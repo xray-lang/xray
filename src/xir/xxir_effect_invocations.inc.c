@@ -53,8 +53,14 @@ typedef struct EffectInvocationNode {
     uint32_t class_count,class_return_mask;
     uint64_t class_return_rank;
     uint32_t edge_head;
-    bool deferred,local_deferred,queued,expanded;
+    bool deferred,local_deferred;
 } EffectInvocationNode;
+
+/* Construction history belongs only to the solver's finite scratch owner.
+ * It cannot qualify any receiving Final fact or survive publication. */
+typedef struct EffectInvocationState { bool queued,expanded; } EffectInvocationState;
+_Static_assert(_Alignof(EffectInvocationState)<=_Alignof(uint32_t),
+    "Invocation state follows aligned reverse-index storage");
 
 /* The two output copies and cause copies share one payload lifetime. These
  * views store no permission facts and are checked against the real root and
@@ -146,6 +152,7 @@ typedef struct EffectInvocationWorkspace {
     uint32_t *edge_index;
     size_t edge_index_capacity;
     uint32_t *consumers;
+    EffectInvocationState *states;
     uint32_t maximum;
     uint32_t front,back,pending;
     bool producer_enabled,class_enabled;

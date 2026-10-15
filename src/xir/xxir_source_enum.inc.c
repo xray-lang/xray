@@ -148,12 +148,14 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     int count = provided ? provided->count : 0;
     if (count < 0 || (uint32_t)count != variant.field_count || (!variant.field_count && provided))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum variant requires exactly its declared named payload");
-    SourceValue *fields = count ? source_alloc(ctx,(uint32_t)count,sizeof(*fields)) : NULL;
+    SourceValue *fields = count ? source_recipe_storage(ctx,(uint32_t)count,sizeof(*fields)) : NULL;
     bool *seen = count ? source_alloc(ctx,(uint32_t)count,sizeof(*seen)) : NULL;
     if (count && (!fields || !seen)) return false;
     const XrXirNominalType *instance = &xr_xir_type_node(&ctx->types,selected->type)->nominal;
     SourceSubstitution substitution = {instance->arguments,instance->argument_count};
     for (int i = 0; i < count; ++i) {
+        if (!provided->names[i])
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum payload spread is not admitted");
         uint32_t at = 0;
         for (; at < variant.field_count; ++at) {
             if (!source_work(ctx,node)) return false;

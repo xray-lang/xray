@@ -1,0 +1,4 @@
+export fn referenceAnswer() -> i64 {
+    const result: (i64, bool) = (...(3, "x"),)
+    return result.0
+}

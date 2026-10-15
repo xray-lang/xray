@@ -1,0 +1,6 @@
+import "./init_types" as declared
+export fn referenceAnswer() -> i64 {
+    const first = declared.Plain{value: 41}
+    const second = declared.Plain{...first, value: 42}
+    return first.value + second.value + declared.localLiteral()
+}

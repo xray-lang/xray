@@ -1464,6 +1464,39 @@ static void xr_parser_recover_struct_literal_field(Parser *parser) {
     parser->panic_mode = 0;
 }
 
+XR_FUNC bool xr_parse_struct_literal_entry(Parser *parser, char **name, AstNode **value) {
+    *name = NULL; *value = NULL;
+    int line = parser->current.line, column = parser->current.column;
+    if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+        AstNode *inner = xr_parse_expression(parser);
+        if (!xr_parser_healthy(parser) || !inner) return false;
+        *value = xr_ast_spread_expr(parser->compiler_session, inner, line);
+        if (*value) (*value)->column = column;
+        return xr_parser_healthy(parser) && *value;
+    }
+    if (!xr_parser_check(parser, TK_NAME)) {
+        xr_parser_error(parser, "expected field name or spread in struct literal");
+        return false;
+    }
+    xr_parser_advance(parser);
+    if (!xr_parser_healthy(parser)) return false;
+    size_t length = (size_t)parser->previous.length;
+    char *field = (char *)ast_alloc(parser->compiler_session, length + 1);
+    if (!field || !ast_copy(parser->compiler_session, field, parser->previous.start, length) ||
+        !ast_work(parser->compiler_session, 1)) return false;
+    field[length] = '\0';
+    *name = field;
+    if (xr_parser_match(parser, TK_COLON)) *value = xr_parse_expression(parser);
+    else if (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE)) {
+        *value = xr_ast_variable(parser->compiler_session, field, line);
+        if (*value) (*value)->column = column;
+    } else {
+        xr_parser_error(parser, "expected ':' or a field separator after field name");
+        return false;
+    }
+    return xr_parser_healthy(parser) && *value;
+}
+
 AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
                                             XrTypeRef **type_args, int type_arg_count) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -1501,56 +1534,13 @@ AstNode *xr_parse_struct_literal_after_type(Parser *parser, AstNode *type_path,
             field_values = grown_values;
         }
 
-        if (!xr_parser_check(parser, TK_NAME)) {
-            do {
-                xr_parser_error(parser, "expected field name in struct literal");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                xr_parser_recover_struct_literal_field(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            if (xr_parser_match(parser, TK_COMMA))
-                continue;
-            break;
-        }
-        do {
-            xr_parser_advance(parser);
+        if (!xr_parse_struct_literal_entry(parser, &field_names[field_count], &field_values[field_count])) {
             if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        char *field_name =
-            (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1u);
-        if (!xr_parser_healthy(parser)) return NULL;
-        if (!field_name)
-            return NULL;
-        do { if (!ast_copy(parser->compiler_session, field_name, parser->previous.start, (size_t) parser->previous.length)) return NULL; } while (0);
-        do { if (!ast_work(parser->compiler_session, 1)) return NULL; field_name[parser->previous.length] = '\0'; } while (0);
-        field_names[field_count] = field_name;
-        if (!xr_parser_match(parser, TK_COLON)) {
-            do {
-                xr_parser_error(parser, "expected ':' after field name");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                xr_parser_recover_struct_literal_field(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            if (xr_parser_match(parser, TK_COMMA))
-                continue;
+            xr_parser_recover_struct_literal_field(parser);
+            if (!xr_parser_healthy(parser)) return NULL;
+            if (xr_parser_match(parser, TK_COMMA)) continue;
             break;
         }
-        AstNode *field_value = xr_parse_expression(parser);
-        if (!xr_parser_healthy(parser)) return NULL;
-        if (!field_value) {
-            do {
-                xr_parser_recover_struct_literal_field(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            if (xr_parser_match(parser, TK_COMMA))
-                continue;
-            break;
-        }
-        field_values[field_count] = field_value;
         field_count++;
 
         if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_match(parser, TK_COMMA)) {
