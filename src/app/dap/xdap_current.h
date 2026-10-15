@@ -36,6 +36,8 @@ XR_FUNC XrXirCallStatus xdap_current_resume(XdapCurrent *,uint64_t epoch,uint64_
 XR_FUNC XrXirValueStatus xdap_current_continue(XdapCurrent *session, uint64_t epoch,
     XrXirVmDebugMode mode);
 XR_FUNC XrXirValueStatus xdap_current_continue_filtered(XdapCurrent *,uint64_t epoch);
+XR_FUNC XrXirValueStatus xdap_current_write_begin(XdapCurrent *,uint64_t,uint64_t,uint32_t,const XrXirValue *);
+XR_FUNC XrXirValueStatus xdap_current_write_finish(XdapCurrent *,bool *,XrXirVmDebugSnapshot **);
 XR_FUNC void xdap_current_pause(XdapCurrent *session);
 XR_FUNC XrXirValueStatus xdap_current_breakpoint(XdapCurrent *session,
     uint32_t function, uint32_t instruction, bool enabled);

@@ -15,6 +15,7 @@
 #include "xxir_vm_debug_calls_internal.h"
 #include "xxir_error.h"
 #include "xxir_type_arena.h"
+#include "xxir_cell_owner_internal.h"
 #include <stdatomic.h>
 #include <string.h>
 
@@ -31,6 +32,13 @@ typedef struct DebugBreakpoint {
     uint32_t counter,group;
 } DebugBreakpoint;
 typedef struct DebugSourcePoint { uint32_t module,statement,line,flags; } DebugSourcePoint;
+typedef struct DebugWrite {
+    XrXirValue value;
+    XrXirVmDebugSnapshot *snapshot;
+    uint64_t epoch,frame;
+    uint32_t operand,phase;
+    XrXirValueStatus result;
+} DebugWrite;
 typedef struct SnapshotFrame {
     XrXirVmDebugFrameInfo info;
     XrXirValue name;
@@ -74,6 +82,7 @@ struct XrXirVmDebug {
     _Atomic unsigned mode;
     _Atomic bool paused;
     XrXirVmDebugSnapshot *snapshot;
+    DebugWrite write;
 };
 static bool debug_valid(const XrXirVmDebug *debug) {
     return debug && debug->identity == debug_identity && atomic_load_explicit(&debug->references, memory_order_relaxed) &&
@@ -159,6 +168,7 @@ XR_FUNC void xr_xir_vm_debug_drop(XrXirVmDebug *debug) {
     if (!debug) return;
     XR_CHECK(debug_valid(debug), "invalid VM debug owner");
     if (!xr_xir_reference_release(&debug->references)) return;
+    xr_xir_value_drop(&debug->write.value);xr_xir_vm_debug_snapshot_drop(debug->write.snapshot);
     XR_CHECK(!debug->count && !debug->artifact, "VM debug owner still bound");
     clear_snapshot(debug);
     XrXirDomain *domain = debug->domain;
@@ -304,7 +314,7 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_continue(XrXirVmDebug *debug,
     uint64_t epoch, XrXirVmDebugMode mode) {
     if (!debug_valid(debug) || !xr_xir_vm_debug_paused(debug) || !debug->snapshot ||
         (unsigned)mode > XR_XIR_VM_DEBUG_LINE_OUT || mode == XR_XIR_VM_DEBUG_PAUSE ||
-        !epoch || epoch != debug->epoch) return XR_XIR_VALUE_BAD_ARGUMENT;
+        !epoch || epoch != debug->epoch || debug->write.phase) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (mode>=XR_XIR_VM_DEBUG_STATEMENT_IN && !debug->source_memory) return XR_XIR_VALUE_UNSUPPORTED;
     if (!xr_xir_domain_work(debug->domain, 1)) return XR_XIR_VALUE_LIMIT;
     const XrXirVmDebugFrameInfo *current=&debug->snapshot->frames[0].info;
@@ -326,7 +336,7 @@ XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot 
 }
 XR_FUNC XrXirValueStatus xir_vm_debug_continue_filtered(XrXirVmDebug *debug,uint64_t epoch) {
     if (!debug_valid(debug) || !xr_xir_vm_debug_paused(debug) || !debug->snapshot || !epoch || epoch!=debug->epoch ||
-        !debug->snapshot->cause.groups || debug->snapshot->cause.unfiltered) return XR_XIR_VALUE_BAD_ARGUMENT;
+        !debug->snapshot->cause.groups || debug->snapshot->cause.unfiltered || debug->write.phase) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_domain_work(debug->domain,1)) return XR_XIR_VALUE_LIMIT;
     const XrXirVmDebugFrameInfo *frame=&debug->snapshot->frames[0].info;
     debug->resume_id=frame->id;debug->resume_instruction=frame->instruction;debug->skip_once=true;
@@ -456,7 +466,8 @@ static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFram
     if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
     return copy_frame_values(debug,live,view,frame);
 }
-static XrXirValueStatus capture(XrXirVmDebug *debug,XrXirCallView *view,const XrXirInstruction *throw_op,XirVmDebugStopCause cause) {
+static XrXirValueStatus capture_prepare(XrXirVmDebug *debug,XrXirCallView *view,const XrXirInstruction *throw_op,
+    XirVmDebugStopCause cause,XrXirVmDebugSnapshot **output) {
     if (debug->epoch == UINT64_MAX) return XR_XIR_VALUE_LIMIT;
     const XirDebugCallFrame *current=xir_debug_calls_current(&debug->calls);
     if (!current) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -505,15 +516,22 @@ static XrXirValueStatus capture(XrXirVmDebug *debug,XrXirCallView *view,const Xr
         if (!xr_xir_domain_work(debug->domain,1)) { status=XR_XIR_VALUE_LIMIT;goto fail; }
         status=xr_xir_value_copy(&concrete,&snapshot->exception);if (status!=XR_XIR_VALUE_OK) goto fail;
     }
-    debug->snapshot = snapshot;
-    ++debug->epoch;
-    atomic_store_explicit(&debug->paused, true, memory_order_release);
+    *output=snapshot;
     return XR_XIR_VALUE_OK;
 fail:
     if (!snapshot->frames) snapshot->count = 0;
     xr_xir_vm_debug_snapshot_drop(snapshot);
     return status;
 }
+static void capture_publish(XrXirVmDebug *debug,XrXirVmDebugSnapshot *snapshot) {
+    XrXirVmDebugSnapshot *previous=debug->snapshot;debug->snapshot=snapshot;++debug->epoch;
+    atomic_store_explicit(&debug->paused,true,memory_order_release);xr_xir_vm_debug_snapshot_drop(previous);
+}
+static XrXirValueStatus capture(XrXirVmDebug *debug,XrXirCallView *view,const XrXirInstruction *throw_op,XirVmDebugStopCause cause) {
+    XrXirVmDebugSnapshot *snapshot=NULL;XrXirValueStatus status=capture_prepare(debug,view,throw_op,cause,&snapshot);
+    if (status==XR_XIR_VALUE_OK) capture_publish(debug,snapshot);return status;
+}
+#include "xxir_vm_debug_write.inc.c"
 XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     const XirVmDebugPoint *point, bool *stopped) {
     *stopped = false;
@@ -525,7 +543,10 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
         xr_xir_call_cleanup_active(point->view->activation)) return XR_XIR_VALUE_OK;
     XrXirValueStatus bound=xir_debug_calls_bind(&debug->calls,point->view);
     if (bound!=XR_XIR_VALUE_OK) return bound;
-    if (xr_xir_vm_debug_paused(debug)) { *stopped = true; return XR_XIR_VALUE_OK; }
+    if (xr_xir_vm_debug_paused(debug)) {
+        if (debug->write.phase==1) { debug->write.result=debug_write_apply(debug,point);debug->write.phase=2; }
+        *stopped=true;return XR_XIR_VALUE_OK;
+    }
     if (!xr_xir_domain_work(debug->domain, (uint64_t)debug->count * 2 + 33))
         return XR_XIR_VALUE_LIMIT;
     if (!xr_xir_domain_work(debug->domain,32)) return XR_XIR_VALUE_LIMIT;
