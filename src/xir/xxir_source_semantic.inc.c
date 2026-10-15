@@ -10,11 +10,6 @@
  *   Binding ordinals come from actual semantic registration. Their AST closure
  *   and module identities survive the temporary Source construction context.
  */
-typedef struct SourceSemanticEnvironment {
-    XrModuleGraph *graph;
-    SourceName **names, *symbols;
-    uint32_t module_count, symbol_count;
-} SourceSemanticEnvironment;
 
 static void source_semantic_free(SourceSemanticEnvironment *environment) {
     if (!environment) return;
@@ -23,6 +18,7 @@ static void source_semantic_free(SourceSemanticEnvironment *environment) {
         xr_compile_resources_free((void *)environment->symbols[i].imported);
     }
     xr_compile_module_graph_free(environment->graph);
+    xr_compile_resources_free(environment->latest);
     xr_compile_resources_free(environment->symbols);
     xr_compile_resources_free(environment->names);
     xr_compile_resources_free(environment);
@@ -41,6 +37,18 @@ static const char *source_semantic_text(SourceContext *ctx,const char *text) {
     if (!owned) return NULL;
     if (!source_copy_bytes(ctx,NULL,owned,text,length+1)) {xr_compile_resources_free(owned);return NULL;}
     return owned;
+}
+static SourceName *source_semantic_binding(SourceContext *ctx,const SourceSemanticEnvironment *environment,
+    const SourceName *source) {
+    uint32_t index=0;
+    for (uint32_t m=0;m<environment->module_count;++m) {
+        for (const SourceName *symbol=ctx->names[m];symbol;symbol=symbol->next) {
+            if (!source_work(ctx,NULL)) return NULL;
+            if (symbol==source) return &environment->symbols[index];
+            ++index;
+        }
+    }
+    source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Source latest binding has no semantic registration");return NULL;
 }
 static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment **output) {
     if (!output || *output)
@@ -87,6 +95,28 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
             }
             *tail=owned;tail=&owned->next;
         }
+    }
+    if (count) {
+        environment->latest=source_semantic_alloc(ctx,count,sizeof(*environment->latest));
+        if (!environment->latest) goto failed;
+    }
+    uint32_t entry=(uint32_t)ctx->graph->entry_index;
+    for (SourceName *symbol=environment->names[entry];symbol;symbol=symbol->next) {
+        if (!source_work(ctx,NULL)) goto failed;
+        environment->latest[environment->latest_count++]=symbol;
+    }
+    for (uint32_t i=0;ctx->history && i<ctx->history->latest_count;++i) {
+        const SourceName *symbol=ctx->history->latest[i];
+        if (!source_work(ctx,NULL)) goto failed;
+        SourceName *shadow=find_name(ctx,ctx->names[entry],symbol->name);
+        if (ctx->diagnostic.status!=XR_XIR_OK) goto failed;
+        if (shadow) continue;
+        SourceName *owned=source_semantic_binding(ctx,environment,symbol);
+        if (!owned) goto failed;
+        if (environment->latest_count>=count) {
+            source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Source latest binding inventory is inconsistent");goto failed;
+        }
+        environment->latest[environment->latest_count++]=owned;
     }
     /* The input owner transfers the complete syntax graph only after this
      * final semantic construction and query publication have succeeded. */

@@ -69,8 +69,8 @@ static void atomic_instruction_fixture(AtomicInstructionFixture *f,char *name,
     f->functions[3]=(XrXirFunction){.name="atomic_method",.name_length=13,.parameters=f->parameters,.parameter_count=parameters,
         .result=result,.blocks=&f->method_block,.block_count=1,.instructions=f->method_ops,.instruction_count=cursor,
         .operands=operation==XR_XIR_ATOMIC_NEW?NULL:f->operands,.operand_count=operation==XR_XIR_ATOMIC_NEW?0:required+optional};
-    f->dependency=1;f->modules[0]=(XrXirSourceModule){"root",4,&f->dependency,1,0};
-    f->modules[1]=(XrXirSourceModule){name,(uint32_t)strlen(name),NULL,0,1};
+    f->dependency=1;f->modules[0]=(XrXirSourceModule){"root",4,&f->dependency,1,0, 0};
+    f->modules[1]=(XrXirSourceModule){name,(uint32_t)strlen(name),NULL,0,1, 0};
     f->identities[0].module=0;f->identities[1].module=1;f->identities[2].exported=1;f->identities[3].exported=1;
     f->declarations=(XrXirDeclarations){.modules=f->modules,.module_count=2,.functions=f->identities,.entry_function=2};
     if(marker){f->constraint.markers=marker;f->generics[3]=(XrXirGeneric){.constraints=&f->constraint,.parameter_count=1};}

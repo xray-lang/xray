@@ -32,7 +32,7 @@ static void default_binding_case(unsigned mode,bool generic) {
   {"entry",5,NULL,0,XR_XIR_I64,&three,1,entry,3,operands,1},
   {"owner",5,&i64,1,XR_XIR_I64,&one,1,&ret,1,NULL,0},
   {"helper",6,NULL,0,XR_XIR_I64,&two,1,helper,2,NULL,0}};
- XrXirSourceModule source={"root",4,NULL,0,0};
+ XrXirSourceModule source={"root",4,NULL,0,0, 0};
  XrXirFunctionIdentity ids[4]={{0},{0},{0},{0}};
  XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=ids,.entry_function=1};
  XrXirDefaultBinding bindings[2]={{XR_XIR_DEFAULT_PARAMETER,2,0,3},{XR_XIR_DEFAULT_PARAMETER,2,0,3}};

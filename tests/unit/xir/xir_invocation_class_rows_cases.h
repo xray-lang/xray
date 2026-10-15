@@ -117,7 +117,7 @@ static void invocation_class_rows_fixture(InvocationClassRowsFixture *f,uint32_t
     f->functions[4]=(XrXirFunction){"main",4,NULL,0,XR_XIR_I64,
         &f->main_block,1,f->main,3,NULL,0};
     f->identities[1]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR};
-    f->source=(XrXirSourceModule){"root",4,NULL,0,0};
+    f->source=(XrXirSourceModule){"root",4,NULL,0,0, 0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,.entry_function=4};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,5,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};
 }

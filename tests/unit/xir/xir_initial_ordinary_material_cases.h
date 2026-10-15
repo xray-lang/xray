@@ -257,9 +257,9 @@ static void initial_ordinary_refresh_controls(void) {
     CHECK(effect_infer_construct(&context,original,NULL,&effects)==XR_XIR_OK && effects &&
         effects->outcomes_owner && !effects->invocations->final->outcomes);
 
-    CHECK(effects->contexts && !effects->refinement &&
+    CHECK(effect_contexts_read(effects) && !effects->refinement &&
         effects->result_borrow==(&effects->invocations->final->summary) &&
-        effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary));
+        effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary));
     CHECK(effects->invocations && !effects->invocations->body->backbone);
     EffectInvocationCertificate *certificate=effects->invocations,saved_certificate=*certificate;
     EffectBodyMaterial *initial=certificate->body;uint32_t sites[2]={0};
@@ -278,7 +278,7 @@ static void initial_ordinary_refresh_controls(void) {
         initial_ordinary_wide(&context,original->types,narrow[1])};
     for (uint32_t pass=0;pass<2;++pass) for (uint32_t site=0;site<2;++site) {
         EffectBodyMaterial saved=*initial;
-        EffectBodyMaterial *old_ordinary=effects->contexts->ordinary->uses.generation;
+        EffectBodyMaterial *old_ordinary=effect_contexts_read(effects)->ordinary->uses.generation;
         /* Dropping the previous context retires exactly its actual parent
          * edge. The certificate's own edge and every payload remain intact. */
         if (old_ordinary->backbone==initial) { CHECK(saved.references>1);--saved.references; }
@@ -288,10 +288,10 @@ static void initial_ordinary_refresh_controls(void) {
         CHECK(effect_body_source_match(&context,initial,&current)==expected);
         CHECK(xir_effects_context_refresh(&context,&current,effects)==XR_XIR_OK);
         CHECK(effects->invocations==certificate && effects->result_borrow==(&certificate->final->summary) &&
-            effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary) &&
+            effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary) &&
             !memcmp(certificate,&saved_certificate,sizeof(saved_certificate)) &&
             !memcmp(initial,&saved,sizeof(saved)) && !initial->backbone && !initial->overlay);
-        EffectBodyMaterial *fresh=effects->contexts->ordinary->uses.generation;
+        EffectBodyMaterial *fresh=effect_contexts_read(effects)->ordinary->uses.generation;
         CHECK(fresh && fresh!=initial && !fresh->backbone && !fresh->overlay &&
             fresh->cells!=initial->cells && fresh->functions[selected].block_count==0);
         uint32_t mask=UINT32_MAX;

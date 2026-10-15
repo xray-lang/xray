@@ -11,6 +11,7 @@ import struct
 from derive_construction72_vectors import frame, header, literal
 from derive_role_construction72 import nullable_model, encode_body
 from derive_nested_nullable_vectors import nested_packet
+from checked_scope_wire import receive_scopes
 
 HERE = Path(__file__).resolve().parent
 
@@ -25,12 +26,14 @@ def main():
         body, _ = encode_body(nullable_model(some), 8, True)
         name = 'nullable_' + ('some' if some else 'none')
         assert frame(body, 27, 72) == literal(HERE / 'xir_nullable72_golden.h', name + '72_golden')
-        ordinary.append((name + '75_golden', frame(body, 28, 75)))
+        scoped, _ = receive_scopes(body)
+        ordinary.append((name + '75_golden', frame(scoped, 29, 75)))
     body = nested_packet(65)[64:]
     assert body[-8:] == bytes(8)
     body = body[:-8] + struct.pack('<I', 0) + body[-8:]
     assert frame(body, 27, 72) == literal(HERE / 'xir_nested_nullable72_golden.h', 'nested_nullable72_golden')
-    nested = [('nested_nullable75_golden', frame(body, 28, 75))]
+    scoped, _ = receive_scopes(body)
+    nested = [('nested_nullable75_golden', frame(scoped, 29, 75))]
     for stem, rows in [('xir_nullable75_golden', ordinary), ('xir_nested_nullable75_golden', nested)]:
         header(HERE / (stem + '.h'), stem.upper() + '_H', rows, args.write)
         records.extend(dict(symbol=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest())

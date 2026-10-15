@@ -62,7 +62,7 @@ static void go_cgen_fixture(GoCGenFixture *f) {
     f->functions[4] = (XrXirFunction){.name = "init", .name_length = 4, .blocks = &f->init_block,
         .block_count = 1, .instructions = &f->initializer, .instruction_count = 1};
     f->identities[2].exported = f->identities[3].exported = 1;
-    f->source = (XrXirSourceModule){"root", 4, NULL, 0, 4};
+    f->source = (XrXirSourceModule){"root", 4, NULL, 0, 4, 0};
     f->literal = (XrXirLiteral){"A\0\xe4\xb8\xad", 5};
     f->declarations = (XrXirDeclarations){.modules = &f->source, .module_count = 1,
         .functions = f->identities, .literals = &f->literal, .literal_count = 1, .root_module = 0, .entry_function = 2};

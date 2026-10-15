@@ -238,7 +238,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                 (uint32_t) op->immediate == d->modules[callee_module].initializer ||
                 !xr_xir_module_imports(d, caller_module, callee_module))
                 return XR_XIR_BAD_STRUCTURE;
-            if (caller_module != callee_module && !d->functions[op->immediate].exported) {
+            if (!xr_xir_module_same_scope(d, caller_module, callee_module) && !d->functions[op->immediate].exported) {
                 bool source_visible = false;
                 XrXirStatus status = instance_call_visibility(module, caller_id,
                     (uint32_t)(op - function->instructions), (uint32_t)op->immediate,

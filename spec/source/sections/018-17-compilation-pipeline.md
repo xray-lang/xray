@@ -792,7 +792,15 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 完整结果独立拥有String并可在Source、Artifact及账本调用方死亡后存活，最后释放不分配。准入不等于完整标准库、库私有var、StringBuilder性能或全部FI/安全资格；整消费者和原分配故障序列仍须在原预算内完成。
 
-### 17.67 有界容器显示与完整输出准备
+### 17.67 已发布Source定义的历史接收
+
+持续Source拥有者只向下一候选输入提供本拥有者已发布的真实Checked Program和实际注册绑定。历史输入使用独立于Catalog Library的内部模块表示；不重新解析或拼接旧Source，不修改Program的linkage，也不以查询名称构造函数、泛型或名义类型身份。接收复制并重定位完整Checked声明闭包，仍进入唯一Built→Checked→特化复验→Lowered管线。
+
+词法作用域与模块出生身份独立：模块的`lexical_scope=0`表示独立作用域，非零值为同一作用域规范模块编号加一；引用必须在界内，不能指向自身或另一条引用。当前会话输入与准确接收的历史会话根共享词法作用域，普通导入模块继续独立。该关系只替代跨输入的模块私有可见性检查，不授予缺失依赖、私有成员、initializer调用或运行时存储权限。函数、名义类型、slot和初始化归属仍保留准确模块。
+
+作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用Checked schema29、语义75和Program ABI31，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
+
+### 17.68 有界容器显示与完整输出准备
 
 Source与独立Checked verifier共享按原compiler ledger计费的闭合显示类型遍历。Bool、Rune、各整数/浮点和String为叶；Array、nullable与enum的所有声明payload递归要求同一能力。每个实际descriptor只访问一次，容器间递归不制造额外类型深度帽；开放类型参数、函数值、Class、Struct及其它未接通类型明确拒绝，不以空容器或当前variant绕过类型要求。本文不授予新的泛型约束或派生协议。
 
@@ -1705,7 +1713,15 @@ Every instruction and type/metadata observation pays the original compiler ledge
 
 Complete results independently own their Strings after Source, Artifact and ledger caller death, and final release allocates nothing. Admission does not qualify the complete standard library, private library variables, StringBuilder performance or all FI/safety gates; whole consumers and original allocation fault sequences must still finish within original budgets.
 
-### 17.67 Bounded container display and complete output preparation
+### 17.67 Receiving published Source definitions
+
+A persistent Source owner supplies a candidate with only that owner's published, actual Checked Program and registered bindings. History uses an internal module representation distinct from Catalog Libraries. Receiving neither reparses nor concatenates prior Source, changes Program linkage, nor constructs function, generic or nominal identities from query names. It copies and relocates the complete Checked declaration closure through the single Built → Checked → specialization recheck → Lowered pipeline.
+
+Lexical scope is separate from module birth identity. A zero `lexical_scope` owns an independent scope; a nonzero value is one plus its canonical module ordinal. References must remain in bounds and cannot refer to themselves or another reference. Current and accurately received historical session roots share a lexical scope; ordinary imports remain separate. This relation replaces only module-private visibility across inputs. It grants no missing dependency, private-member, initializer-call or runtime-storage permission. Functions, nominal types, slots and initialization keep their exact owning modules.
+
+Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
+
+### 17.68 Bounded container display and complete output preparation
 
 Source and the independent Checked verifier share a closed display-type walk charged to the original compiler ledger. Bool, Rune, all integer/float types and String are leaves; Array, nullable and every declared enum payload recursively require the same capability. Each actual descriptor is visited once, including recursive container graphs, without another type-depth cap. Open type parameters, callable values, Class, Struct and other unconnected types reject; empty containers and inactive variants cannot bypass that requirement. This grants no new generic constraint or derivation protocol.
 

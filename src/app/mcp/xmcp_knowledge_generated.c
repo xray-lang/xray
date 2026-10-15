@@ -8488,7 +8488,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "modules",
         .title = "Modules & Imports",
-        .aliases_csv = "import,export,module,require,package,re-export,circular dependency,module graph",
+        .aliases_csv = "import,export,module,require,package,re-export,circular dependency,module graph,Source generations,lexical scope",
         .body =
             "[Language reference](#11-\xe6\xa8\xa1\xe5\x9d\x97\xe7\xb3\xbb\xe7\xbb\x9f-modules)\n"
             "\n"
@@ -8541,6 +8541,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Module graph & circular dependencies\n"
+            "\n"
+            "### Published Source definitions\n"
             "",
     },
     {

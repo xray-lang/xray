@@ -15,7 +15,6 @@
 #include "xir_assert_panics71_golden.h"
 #include "xir_assert_panics72_golden.h"
 #include "xir_assert_panics73_golden.h"
-#include "xir_assert_panics74_golden.h"
 #include "xir_assert_panics75_golden.h"
 #include "xir_assert_atomic64_packet_rejection.h"
 static void panics_word(uint8_t *bytes,uint32_t value) {
@@ -145,7 +144,7 @@ static void panics_packet_gates(void) {
     panics_previous_identity_rejected(assert_panics72_golden,sizeof(assert_panics72_golden),27,72);
     panics_previous_identity_rejected(assert_panics73_golden,sizeof(assert_panics73_golden),28,73);
     panics_previous_identity_rejected(assert_panics74_golden,sizeof(assert_panics74_golden),28,74);
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==75,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==29 && XR_XIR_CHECKED_CONTRACT==75,
         "Core packet known bytes require the independently encoded contract");
     panics_core_bound_rejections();
     XrXirArtifact *checked=panics_core_checked();XrXirCheckedPacket packet={0};

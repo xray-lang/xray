@@ -45,7 +45,7 @@ static XrXirAction weaken_authority_resume(XrXirCallView *view) {
 }
 static void weaken_authority_cases(void) {
     WeakenWitness witness = {0}; uint32_t dependency = 1;
-    XrXirSourceModule modules[] = {{"root", 4, &dependency, 1, 0}, {"library", 7, NULL, 0, 5}};
+    XrXirSourceModule modules[] = {{"root", 4, &dependency, 1, 0, 0}, {"library", 7, NULL, 0, 5, 0}};
     XrXirFunctionIdentity ids[7] = {{0}};
     ids[1].exported = ids[2].exported = ids[4].exported = ids[6].exported = 1;
     ids[2].module = ids[3].module = ids[5].module = 1;

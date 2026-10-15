@@ -24,11 +24,10 @@
 #include "xir_checked_range70_golden.h"
 #include "xir_checked_range72_golden.h"
 #include "xir_checked_range73_golden.h"
-#include "xir_checked_range74_golden.h"
 #include "xir_checked_range75_golden.h"
 _Static_assert(XR_XIR_RANGE_CHECK == 148 && XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147,
     "The range instruction preserves existing operation ordinals");
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 75,
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 29 && XR_XIR_CHECKED_CONTRACT == 75,
     "The unchanged wire schema carries the range semantic revision");
 
 typedef struct RangeView {

@@ -8020,7 +8020,15 @@ Every instruction and type/metadata observation pays the original compiler ledge
 
 Complete results independently own their Strings after Source, Artifact and ledger caller death, and final release allocates nothing. Admission does not qualify the complete standard library, private library variables, StringBuilder performance or all FI/safety gates; whole consumers and original allocation fault sequences must still finish within original budgets.
 
-### 17.67 Bounded container display and complete output preparation
+### 17.67 Receiving published Source definitions
+
+A persistent Source owner supplies a candidate with only that owner's published, actual Checked Program and registered bindings. History uses an internal module representation distinct from Catalog Libraries. Receiving neither reparses nor concatenates prior Source, changes Program linkage, nor constructs function, generic or nominal identities from query names. It copies and relocates the complete Checked declaration closure through the single Built → Checked → specialization recheck → Lowered pipeline.
+
+Lexical scope is separate from module birth identity. A zero `lexical_scope` owns an independent scope; a nonzero value is one plus its canonical module ordinal. References must remain in bounds and cannot refer to themselves or another reference. Current and accurately received historical session roots share a lexical scope; ordinary imports remain separate. This relation replaces only module-private visibility across inputs. It grants no missing dependency, private-member, initializer-call or runtime-storage permission. Functions, nominal types, slots and initialization keep their exact owning modules.
+
+Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
+
+### 17.68 Bounded container display and complete output preparation
 
 Source and the independent Checked verifier share a closed display-type walk charged to the original compiler ledger. Bool, Rune, all integer/float types and String are leaves; Array, nullable and every declared enum payload recursively require the same capability. Each actual descriptor is visited once, including recursive container graphs, without another type-depth cap. Open type parameters, callable values, Class, Struct and other unconnected types reject; empty containers and inactive variants cannot bypass that requirement. This grants no new generic constraint or derivation protocol.
 

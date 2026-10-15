@@ -75,7 +75,7 @@ static XrXirArtifact *fixture(const XrXirCompileContext *c,bool lowered) {
         {.name="cleanup",.name_length=7,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,.instructions=unit,.instruction_count=1},
         {.name="identity",.name_length=8,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_I64,
             .blocks=&one,.block_count=1,.instructions=identity,.instruction_count=1}};
-    const XrXirSourceModule source={"table",5,NULL,0,0};
+    const XrXirSourceModule source={"table",5,NULL,0,0, 0};
     XrXirFunctionIdentity identities[4]={{0}};identities[2].cleanup_owner=2;
     const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.root_module=0,.entry_function=1};
     const XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=4,

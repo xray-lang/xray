@@ -206,7 +206,6 @@ static const uint8_t rune_current_golden[]={
 };
 #include "xir_rune65_golden.h"
 #include "xir_rune72_golden.h"
-#include "xir_rune74_golden.h"
 #include "xir_rune75_golden.h"
 static void rune_wire(void) {
     XrXirInstruction ops[]={
@@ -278,6 +277,6 @@ static void rune_leaf(int argc,char **argv) {
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);
     _Static_assert(XR_XIR_RUNE==16 && XR_XIR_CONST_RUNE==136 && XR_XIR_GE_STRING==142,"A2 current Rune and text wire IDs; historical packet remains fixed");
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==75 && XR_XIR_VALUE_ABI_VERSION==25 && XR_XIR_CALL_ABI_VERSION==29 && XR_XIR_PROGRAM_ABI_VERSION==30,"current admission versions");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==29 && XR_XIR_CHECKED_CONTRACT==75 && XR_XIR_VALUE_ABI_VERSION==25 && XR_XIR_CALL_ABI_VERSION==29 && XR_XIR_PROGRAM_ABI_VERSION==31,"current admission versions");
     rune_values();rune_text();rune_wire();rune_leaf(argc,argv);rune_execution();rune_resources();return 0;
 }

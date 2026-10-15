@@ -21,7 +21,6 @@
 #include "xir_generic_method71_golden.h"
 #include "xir_generic_method72_golden.h"
 #include "xir_generic_method73_golden.h"
-#include "xir_generic_method74_golden.h"
 #include "xir_generic_method75_golden.h"
 static void generic_method_packet_cases(void) {
     checked_previous_identity_rejected(generic_method71_golden,sizeof(generic_method71_golden));

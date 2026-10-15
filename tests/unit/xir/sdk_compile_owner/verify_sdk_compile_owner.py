@@ -87,7 +87,7 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 75, 25, 29, 30]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [29, 75, 25, 29, 31]
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:

@@ -6,6 +6,7 @@ product writer, generated C or runtime measurement supplies an expected byte.
 """
 from pathlib import Path
 import argparse, contextlib, copy, hashlib, importlib.util, io, json, re, struct, sys, tempfile
+from checked_scope_wire import receive_scopes, receive_offset
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
@@ -42,16 +43,21 @@ def main():
             assert previous.read_text(encoding='utf-8') == fixed.read_text(encoding='utf-8'), previous.name
             rows = []
             for name, value in arrays(previous):
+                rows.append((name,value))
                 if '74' not in name: continue
                 if value.startswith(b'XRCHK\0\0\0'):
                     assert struct.unpack_from('<II', value, 8) == (28, 74)
-                    value = fields.frame(value[64:], 28, 75)
+                    body, positions = receive_scopes(value[64:])
+                    value = fields.frame(body, 29, 75)
                 elif name.endswith('digest'):
+                    if name=='checked_scalar74_digest': rows.append(('checked_scalar75_digest', current_digest))
                     continue
                 rows.append((name.replace('74', '75'), value))
-                if name == 'checked_scalar74_golden': rows.append(('checked_scalar75_digest', value[32:64]))
-            macros = [(name.replace('74', '75'), int(value)) for name, value in
-                      re.findall(r'#define (\w*74\w*) (\d+)u?', previous.read_text(encoding='utf-8'))]
+                if name == 'checked_scalar74_golden': current_digest=value[32:64]
+            old_macros = [(name,int(value)) for name,value in
+                re.findall(r'#define (\w*74\w*) (\d+)u?', previous.read_text(encoding='utf-8'))]
+            macros = old_macros + [(name.replace('74','75'),receive_offset(value,positions) if
+                'VECTOR_' in name or '_OWN' in name else value) for name,value in old_macros]
             target = HERE / previous.name.replace('74', '75')
             fields.header(target, target.stem.upper() + '_H', rows, args.write, macros)
             records += [{'header': target.name, 'symbol': n, 'bytes': len(v),
@@ -62,7 +68,7 @@ def main():
         old = sizing.packet(name, 28, 74, 33, True)
         assert old == sizing.literal(HERE / 'compile_owner/checked_sizing74_golden.h', 'sizing74_' + suffix)
         rows.append(('sizing74_retired_' + suffix, old))
-        rows.append(('sizing75_' + suffix, sizing.packet(name, 28, 75, 33, True)))
+        rows.append(('sizing75_' + suffix, sizing.packet(name, 29, 75, 33, True)))
     fields.header(HERE / 'compile_owner/checked_sizing75_golden.h', 'CHECKED_SIZING75_GOLDEN_H', rows, args.write)
     encoder = load('derive_callable71_checked_vectors')
     # One definition returns its borrowed parameter through the normal
@@ -74,13 +80,14 @@ def main():
     body, _ = encoder.encode_body(model, 0)
     assert body[-8:] == bytes(8)
     body = body[:-8] + bytes(4) + body[-8:]
-    packet = fields.frame(body, 28, 75)
+    body, _ = receive_scopes(body)
+    packet = fields.frame(body, 29, 75)
     fields.header(HERE / 'xir_hash75_golden.h', 'XIR_HASH75_GOLDEN_H', [('hash75_golden', packet)], args.write)
     identities = load('derive_source_product_identity')
     for filename, mapping in identities.frames().items():
         fixed = dict(arrays(HERE / filename))
         for name, expected in mapping.items(): assert fixed[name] == expected, (filename, name)
-    current = identities.frames(25, 75)
+    current = identities.frames(25, 75, 29, 31)
     rows = [item for mapping in current.values() for item in mapping.items()]
     fields.header(HERE / 'xir_hash75_identity.h', 'XIR_HASH75_IDENTITY_H', rows, args.write)
     print(json.dumps({'status': 'COMPLETE_INDEPENDENT_75_FIELD_MODELS', 'records': records,

@@ -165,7 +165,7 @@ XR_FUNC XrXirStatus xr_xir_compile_default_call_verify(const XrXirCompileContext
     const XrXirFunctionIdentity *f=&d->functions[a->owner],*c=&d->functions[caller];
     if(!defaults_spend(b,d->modules[c->module].dependency_count)) return XR_XIR_BUDGET;
     if ((f->member_access && c->nominal_owner!=f->nominal_owner) ||
-        !xr_xir_module_imports(d,c->module,f->module) || (c->module!=f->module && !f->exported))
+        !xr_xir_module_imports(d,c->module,f->module) || (!xr_xir_module_same_scope(d,c->module,f->module) && !f->exported))
         return XR_XIR_BAD_STRUCTURE;
     XrXirInstruction call=*op; call.immediate=a->owner;
     s=xr_xir_compile_generic_call(b, m, caller, &call);

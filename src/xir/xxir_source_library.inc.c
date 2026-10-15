@@ -11,6 +11,17 @@
  */
 #include "xxir_internal.h"
 #include "xxir_library_import_shape.inc.c"
+static bool source_owned_checked(const XrModuleSpec *spec) {
+    return spec->representation==XR_MODULE_CHECKED_LIBRARY || spec->representation==XR_MODULE_CHECKED_HISTORY;
+}
+static const XrXirArtifact *source_owned_artifact(const XrModuleSpec *spec) {
+    return spec->representation==XR_MODULE_CHECKED_HISTORY ? (spec->history ? spec->history->checked : NULL) :
+        spec->representation==XR_MODULE_CHECKED_LIBRARY && spec->resource ? spec->resource->checked : NULL;
+}
+static uint32_t source_owned_module(const XrModuleSpec *spec) {
+    return spec->representation==XR_MODULE_CHECKED_HISTORY ? spec->history_module :
+        spec->resource ? spec->resource->checked_module : UINT32_MAX;
+}
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module) {
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     if(!resource||!resource->checked){source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");return NULL;}
@@ -59,33 +70,44 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
     }
     return library;
 }
+static const XrXirModule *source_owned_module_view(SourceContext *ctx,uint32_t module) {
+    const XrModuleSpec *spec=&ctx->graph->specs[module];
+    if (spec->representation==XR_MODULE_CHECKED_LIBRARY) return source_library_module(ctx,module);
+    if (spec->representation!=XR_MODULE_CHECKED_HISTORY) {
+        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"owned Checked module view is missing");return NULL;
+    }
+    const XrXirModule *history=source_history_module(ctx,spec->history);
+    if (history && spec->history_module>=history->declarations->module_count) {
+        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history module ordinal is outside its Checked owner");return NULL;
+    }
+    return history;
+}
 /* Each artifact is installed once even when several of its module views are
  * reachable. An absent module map entry is not an initialization dependency. */
 static bool source_library_first(SourceContext *ctx, uint32_t module) {
-    const void *artifact = ctx->graph->specs[module].resource->checked;
+    const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[module]);
     for (uint32_t prior = 0; prior < module; ++prior) {
         if (!source_work(ctx,NULL)) return false;
-        const XrModuleResourceBinding *resource = ctx->graph->specs[prior].resource;
-        if (ctx->graph->specs[prior].representation == XR_MODULE_CHECKED_LIBRARY &&
-            resource && resource->checked == artifact) return false;
+        if (source_owned_checked(&ctx->graph->specs[prior]) &&
+            source_owned_artifact(&ctx->graph->specs[prior])==artifact) return false;
     }
     return true;
 }
 static bool source_library_inventory(SourceContext *ctx, uint32_t module,
     const XrXirModule *library, uint32_t *count, uint32_t *slots) {
     const XrXirDeclarations *d = library->declarations;
-    const XrModuleResourceBinding *resource = ctx->graph->specs[module].resource;
-    if (!d || resource->checked_module >= d->module_count)
+    uint32_t source_module=source_owned_module(&ctx->graph->specs[module]);
+    if (!d || source_module >= d->module_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library module view is invalid");
     uint32_t total = 0;
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx,NULL)) return false;
-        if (d->functions[f].module == resource->checked_module &&
-            f != d->modules[resource->checked_module].initializer) ++total;
+        if (d->functions[f].module == source_module &&
+            f != d->modules[source_module].initializer) ++total;
     }
     for (uint32_t s=0; s<d->slot_count; ++s) {
         if (!source_work(ctx,NULL)) return false;
-        if (d->slots[s].module!=resource->checked_module) continue;
+        if (d->slots[s].module!=source_module) continue;
         if (*slots==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library slot inventory exhausted");
         ++*slots;
@@ -116,8 +138,7 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
     if (!d || !d->module_count || !library->function_count ||
         ctx->graph->spec_count <= 0 || module >= (uint32_t)ctx->graph->spec_count ||
         first < (uint32_t)ctx->graph->spec_count || first > ctx->function_count ||
-        !ctx->graph->specs || !ctx->graph->specs[module].resource ||
-        !ctx->graph->specs[module].resource->checked || first_slot>ctx->slot_count)
+        !ctx->graph->specs || !source_owned_artifact(&ctx->graph->specs[module]) || first_slot>ctx->slot_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library identity reservation is invalid");
     if (d->literal_count > UINT32_MAX - ctx->literal_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal inventory exhausted");
@@ -134,16 +155,16 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
         if (!source_work(ctx,NULL)) goto failed;
         map.modules[m] = UINT32_MAX;
     }
-    const void *artifact = ctx->graph->specs[module].resource->checked;
+    const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[module]);
     for (uint32_t m = 0; m < (uint32_t)ctx->graph->spec_count; ++m) {
         if (!source_work(ctx,NULL)) goto failed;
         const XrModuleSpec *spec = &ctx->graph->specs[m];
-        const XrModuleResourceBinding *resource = spec->resource;
-        if (spec->representation != XR_MODULE_CHECKED_LIBRARY || !resource || resource->checked != artifact) continue;
-        if (resource->checked_module >= map.module_count || map.modules[resource->checked_module] != UINT32_MAX) {
+        if (!source_owned_checked(spec) || source_owned_artifact(spec)!=artifact) continue;
+        uint32_t source_module=source_owned_module(spec);
+        if (source_module >= map.module_count || map.modules[source_module] != UINT32_MAX) {
             source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library module view is duplicated"); goto failed;
         }
-        map.modules[resource->checked_module] = m;
+        map.modules[source_module] = m;
     }
     uint32_t next = first;
     for (uint32_t f = 0; f < map.function_count; ++f) {
@@ -198,6 +219,10 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
         if ((uint64_t)result.immediate > UINT32_MAX - map->literal_begin)
             return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal identity overflow");
         result.immediate += map->literal_begin;
+        break;
+    case XR_XIR_PRINT: case XR_XIR_OUTPUT:
+        if (!map->unit || !map->unit->history)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
         break;
     default:
         if (!library_catalog_local_instruction(result.op))
@@ -508,6 +533,15 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
 
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
+    for (uint32_t m=0;m<map->module_count;++m) {
+        if (!source_work(ctx,NULL)) return false;
+        if (map->modules[m]==UINT32_MAX) continue;
+        uint32_t scope=library->declarations->modules[m].lexical_scope;
+        if (!scope) continue;
+        if (scope>map->module_count || map->modules[scope-1]==UINT32_MAX)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"lexical scope is outside the selected Checked closure");
+        ctx->modules[map->modules[m]].lexical_scope=map->modules[scope-1]+1;
+    }
     if (!source_library_slots(ctx,library,map) || !source_library_literals(ctx, library, map)) return false;
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
@@ -530,8 +564,7 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
 }
 
 static bool source_library_install(SourceContext *ctx, uint32_t module, uint32_t *next_function, uint32_t *next_slot) {
-    const XrModuleResourceBinding *resource = ctx->graph->specs[module].resource;
-    const XrXirModule *library = xr_xir_compile_artifact_module(resource->checked);
+    const XrXirModule *library=xr_xir_compile_artifact_module(source_owned_artifact(&ctx->graph->specs[module]));
     SourceLibraryMap map = {0};
     if (!source_library_map(ctx,library,module,*next_function,*next_slot,&map)) return false;
     bool ok = source_library_copy(ctx,library,&map);

@@ -552,7 +552,7 @@ static XrXirStatus nominal_context_use(const XrXirTypes *types, XrXirType type,
         {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
         {"use",3,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0}};
     uint32_t dependency = 1;
-    XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0},{"other",5,NULL,0,1}};
+    XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0},{"other",5,NULL,0,1, 0}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0,NULL};
     XrXirGeneric generics[] = {{0},{0},{constraints,count,NULL,0, NULL}};
@@ -573,7 +573,7 @@ static XrXirStatus nominal_catalog_semantics(const XrXirTypes *types, XrXirCompi
         {"other_init",10,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry_ops,2,NULL,0}};
     uint32_t dependency = 1;
-    XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0},{"other",5,NULL,0,1}};
+    XrXirSourceModule modules[] = {{"alpha",5,&dependency,1,0, 0},{"other",5,NULL,0,1, 0}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
@@ -841,7 +841,7 @@ static void error_filter_guards(void) {
             {"init_root", 9, NULL, 0, XR_XIR_UNIT, &empty, 1, &ret, 1, NULL, 0},
             {"entry", 5, NULL, 0, XR_XIR_I64, &entry_block, 1, entry_ops, 2, NULL, 0}, function};
         uint32_t dependency = 0;
-        XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0}, {"root", 4, &dependency, 1, 1}};
+        XrXirSourceModule modules[] = {{"alpha", 5, NULL, 0, 0, 0}, {"root", 4, &dependency, 1, 1, 0}};
         XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
         XrXirDeclarations declarations = {modules, 2, identities, NULL, 0, NULL, 0, 1, 2, NULL};
         XrXirModule module = {XR_XIR_BUILT, functions, 4, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};

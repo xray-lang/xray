@@ -109,7 +109,7 @@ static void cell_class_fact_fixture(CellClassFactFixture *f,unsigned mode) {
     f->functions[4]=(XrXirFunction){"formal",6,&f->object,1,XR_XIR_I64,&f->formal_block,1,
         f->formal,5,&f->formal_operand,1};
     f->identities[1]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR};
-    f->source=(XrXirSourceModule){"root",4,NULL,0,0};
+    f->source=(XrXirSourceModule){"root",4,NULL,0,0, 0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,
         .functions=f->identities,.slots=mode==1?&f->slot:NULL,.slot_count=mode==1?1u:0u,.entry_function=3};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,5,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};

@@ -36,11 +36,11 @@ def main():
     model = json.loads((args.models or directory / 'native_projection72_identity_models.json').read_text(encoding='utf-8'))
     assert len(model['records']) == 10
     for value, file, macro in (
-        (28,'xxir_checked.h','XR_XIR_CHECKED_SCHEMA'),
+        (29,'xxir_checked.h','XR_XIR_CHECKED_SCHEMA'),
         (75,'xxir_checked.h','XR_XIR_CHECKED_CONTRACT'),
         (25,'xxir_value.h','XR_XIR_VALUE_ABI_VERSION'),
         (29,'xxir_call.h','XR_XIR_CALL_ABI_VERSION'),
-        (30,'xxir_program.h','XR_XIR_PROGRAM_ABI_VERSION'),
+        (31,'xxir_program.h','XR_XIR_PROGRAM_ABI_VERSION'),
     ):
         text = (root / 'src/xir' / file).read_text(encoding='utf-8')
         assert re.findall(r'^#define\s+' + macro + r'\s+(\d+)u?\s*$', text, re.M) == [str(value)]
@@ -79,7 +79,7 @@ def main():
         assert literal(header,role+'_policy73')==hashlib.sha256(frame).digest()
     for role in ('linked','original'):
         prefix=(role+'_source').encode('ascii')
-        frame=DOMAIN+struct.pack('<7I',1,28,74,24,29,30,len(prefix))+prefix
+        frame=DOMAIN+struct.pack('<7I',1,29,75,24,29,31,len(prefix))+prefix
         assert literal(header,role+'_policy_value24_preimage')==frame
         assert literal(header,role+'_policy_value24')==hashlib.sha256(frame).digest()
     current=(directory/'xir_hash75_identity.h').read_text(encoding='utf-8')
