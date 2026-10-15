@@ -26,31 +26,6 @@ static bool pattern_is_glob(const char *pattern) {
     return strchr(pattern, '*') != NULL || strchr(pattern, '?') != NULL;
 }
 
-// Simple glob matching (supports * and ?)
-static bool glob_match(const char *pattern, const char *str) {
-    while (*pattern && *str) {
-        if (*pattern == '*') {
-            pattern++;
-            if (*pattern == '\0')
-                return true;
-            while (*str) {
-                if (glob_match(pattern, str))
-                    return true;
-                str++;
-            }
-            return false;
-        } else if (*pattern == '?' || *pattern == *str) {
-            pattern++;
-            str++;
-        } else {
-            return false;
-        }
-    }
-    while (*pattern == '*')
-        pattern++;
-    return *pattern == '\0' && *str == '\0';
-}
-
 // Add an ignore pattern to config
 void xlsp_config_add_ignore(XlspConfig *config, const char *pattern, bool is_dir_only) {
     if (!config || !pattern)
@@ -86,35 +61,6 @@ void xlsp_config_free_ignores(XlspConfig *config) {
     config->ignore_patterns = NULL;
     config->ignore_pattern_count = 0;
     config->ignore_pattern_capacity = 0;
-}
-
-// Check if a name should be ignored
-bool xlsp_config_should_ignore(XlspConfig *config, const char *name, bool is_dir) {
-    if (!config || !name)
-        return false;
-
-    // Always skip hidden files/dirs
-    if (name[0] == '.')
-        return true;
-
-    for (int i = 0; i < config->ignore_pattern_count; i++) {
-        XlspIgnorePattern *p = &config->ignore_patterns[i];
-
-        // Skip file-only patterns for directories and vice versa
-        if (p->is_dir_only && !is_dir)
-            continue;
-
-        // Match pattern
-        if (p->is_glob) {
-            if (glob_match(p->pattern, name))
-                return true;
-        } else {
-            if (strcmp(p->pattern, name) == 0)
-                return true;
-        }
-    }
-
-    return false;
 }
 
 // Load default ignore patterns (currently empty - user controls all ignore rules)
