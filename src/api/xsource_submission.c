@@ -129,6 +129,10 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
         else *entry=declarations->entry_function;
     }
     if(status==XR_XIR_OK) {stage="Source Program transfer";status=xr_xir_compile_vm_program_take(&lowered,output);}
+    if(status==XR_XIR_OK) {
+        stage="Source sealed Program correspondence";
+        status=xr_xir_compile_source_generation_bind_program(owner->source,owner->source_serial,*output);
+    }
     xr_xir_compile_artifact_free(lowered);
     if(diagnostic) {
         diagnostic->status=status;
@@ -151,7 +155,8 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare(XrSourceSubmission *owner,co
     XrXirProgram *program=NULL;uint32_t entry=UINT32_MAX;
     SubmissionBindingDraft bindings={0};
     if(status==XR_SOURCE_OK)status=submission_program(owner,&program,&entry,&bindings,diagnostic);
-    if(status==XR_SOURCE_OK)status=submission_call(xr_xir_instance_generation_prepare(owner->runtime,program,&owner->runtime_serial));
+    if(status==XR_SOURCE_OK)status=submission_call(xr_xir_source_generation_prepare_instance(owner->source,
+        owner->source_serial,owner->runtime,&owner->runtime_serial));
     xr_xir_compile_program_drop(program);
     if(status==XR_SOURCE_OK && bindings.count)status=submission_call(xr_xir_instance_generation_bind(owner->runtime,
         owner->runtime_serial,bindings.rows,bindings.count));

@@ -42,6 +42,8 @@ add_test(NAME source_binding_history_inputs COMMAND test_source_binding_reads --
 set_tests_properties(source_binding_history_inputs PROPERTIES TIMEOUT 120 LABELS "unit;api;source;generation;ownership;binding;history-accept")
 add_test(NAME source_binding_history_admission COMMAND test_source_binding_reads --history-admission)
 set_tests_properties(source_binding_history_admission PROPERTIES TIMEOUT 120 LABELS "unit;api;source;generation;ownership;binding;history-accept")
+add_test(NAME source_binding_history_receiving COMMAND test_source_binding_reads --history-receiving)
+set_tests_properties(source_binding_history_receiving PROPERTIES TIMEOUT 120 LABELS "unit;api;source;generation;ownership;binding;history-accept")
 set_tests_properties(source_binding_reads PROPERTIES TIMEOUT 120 LABELS "unit;api;source;generation;ownership;binding")
 add_test(NAME source_binding_reads_budget COMMAND test_source_binding_reads --budget)
 set_tests_properties(source_binding_reads_budget PROPERTIES TIMEOUT 120 LABELS "unit;api;source;generation;ownership;compiler-faults")
