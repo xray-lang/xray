@@ -26,6 +26,8 @@ typedef struct DeepRecord {
     XrXirInstance *instance;
     XrXirCallObserver observer;
     XrXirValue task;
+    XrXirCallStatus fault;
+    bool retiring_fault;
     uintptr_t stack_low, stack_high;
     uint32_t depth, mode, entered, left, live, peak_depth, walks, walk_leaves, yields, vm, native;
     uint64_t before_yield_stack;
@@ -57,17 +59,26 @@ static void deep_event(void *owner, const XrXirCallEvent *event) {
         XrXirCallStatus expected = record->mode == 5 ? XR_XIR_CALL_LIMIT :
             record->mode == 3 || record->mode == 4 || (record->mode == 2 && event->entry == worker_deep_entry) ?
             XR_XIR_CALL_CANCELLED : XR_XIR_CALL_RETURNED;
-        CHECK(event->status == expected);
+        CHECK(event->status == expected || (record->fault != XR_XIR_CALL_READY && event->status == record->fault) ||
+            (record->retiring_fault && event->status == XR_XIR_CALL_CANCELLED));
     }
     if (event->entry >= code->functions) return;
-    if (event->code == XR_XIR_CALL_CODE_UNKNOWN) { CHECK(record->mode == 5); return; }
+    if (event->code == XR_XIR_CALL_CODE_UNKNOWN) {
+        CHECK(record->mode == 5 || (record->fault != XR_XIR_CALL_READY && event->status == record->fault) ||
+            (record->retiring_fault && event->status == XR_XIR_CALL_CANCELLED)); return;
+    }
     CHECK(event->code == (code->native[event->entry] ? XR_XIR_CALL_CODE_NATIVE : XR_XIR_CALL_CODE_VM));
     if (event->code == XR_XIR_CALL_CODE_NATIVE) ++record->native; else ++record->vm;
 }
 static XrXirAction deep_resume(XrXirCallView *view) {
     DeepRecord *record = &deep_code->record;
     CHECK(view->instance == record->instance);
-    CHECK(xr_xir_call_observer_bind(view, &record->observer) == XR_XIR_CALL_READY); deep_stack_sample(record);
+    XrXirCallStatus bound = xr_xir_call_observer_bind(view, &record->observer);
+    if (bound != XR_XIR_CALL_READY) {
+        CHECK(bound == XR_XIR_CALL_LIMIT && record->fault == XR_XIR_CALL_LIMIT);
+        return xr_xir_call_fault(XR_XIR_RUN_FRAME_LIMIT);
+    }
+    deep_stack_sample(record);
     XrXirAction action = worker_control_resume(view);
     if (action.kind == XR_XIR_ACTION_AWAIT_TASK && !record->task.type)
         CHECK(xr_xir_value_copy(&action.value, &record->task) == XR_XIR_VALUE_OK);
@@ -156,7 +167,7 @@ static DeepMetrics deep_operation(XrXirProgram *program, unsigned mode, XrXirVal
         after.work, record->peak_depth, record->walks};
     *retained = record->task; record->task = (XrXirValue){0}; xr_xir_domain_drop(domain); CHECK(!worker_code_releases); return metrics;
 }
-int main(int argc, char **argv) {
+static int deep_main(int argc, char **argv) {
     CHECK(argc == 2); (void)worker_control_main; unsigned backend = 0;
     while (backend < 4 && strcmp(argv[1], worker_backends[backend])) ++backend;
     CHECK(backend < 4); XrXirProgram *program = deep_program(backend); XrXirValue retained[6] = {{0}}; DeepMetrics metrics[6];
@@ -183,3 +194,6 @@ int main(int argc, char **argv) {
     }
     CHECK(!runtime_live && !runtime_bytes); effects_source_owners_free(); return 0;
 }
+#ifndef XR_DEEP_RESOURCE_MAIN
+int main(int argc, char **argv) { return deep_main(argc, argv); }
+#endif
