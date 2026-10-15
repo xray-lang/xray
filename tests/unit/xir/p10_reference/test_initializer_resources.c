@@ -216,6 +216,158 @@ static const char array_spread_failure_source[] =
     "        return panic.code * 100 + trace\n"
     "    }\n"
     "}\n";
+static const char tuple_spread_order_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn saved() -> (Array<i64>, i64) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return (source, 11)\n"
+    "}\n"
+    "fn replace() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    source[0] = 13\n"
+    "    return 17\n"
+    "}\n"
+    "fn tail() -> (i64, string) {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return (19, \"a\\0b\")\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    const result = (...saved(), replace(), ...tail())\n"
+    "    var copy = result.0\n"
+    "    copy[0] = 23\n"
+    "    return trace * 100000000 + result.0[0] * 1000000 + result.1 * 10000 + result.2 * 100 + result.3 + len(result.4) + copy[0] + source[0]\n"
+    "}\n";
+
+static const char tuple_spread_context_source[] =
+    "fn widen<T>(pair: (T, i8)) -> ((), T, i64, ()) {\n"
+    "    return ((), ...pair, ())\n"
+    "}\n"
+    "fn layer<T>(value: T) -> T? { return value }\n"
+    "fn missing(value: i64?) -> i64 {\n"
+    "    if (value == null) { return 1 }\n"
+    "    return 0\n"
+    "}\n"
+    "fn classify(value: i64?" "?) -> i64 {\n"
+    "    if (value == null) { return 0 }\n"
+    "    if (value == null) { return 1 }\n"
+    "    return 2\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const result: ((), i64?, i64, (), i64?" "?, string) = (...widen<i64?>((null, 7)), ...(...(layer<i64?>(null), \"a\\0b\"),))\n"
+    "    const hinted: (i8?, i8) = (...((null, 7)),)\n"
+    "    if (hinted.0 != null || hinted.1 != 7) { return 0 }\n"
+    "    const begin: () = result.0\n"
+    "    const end: () = result.3\n"
+    "    return missing(result.1) * 100000 + result.2 * 1000 + classify(result.4) * 10 + len(result.5)\n"
+    "}\n";
+
+static const char tuple_spread_empty_source[] =
+    "var trace: i64 = 0\n"
+    "fn empty() -> () {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return ()\n"
+    "}\n"
+    "fn marker() -> () {\n"
+    "    trace = trace * 10 + 2\n"
+    "    return ()\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    const nothing: () = (...empty(),)\n"
+    "    const result = (marker(), ...empty(), ...(), 7)\n"
+    "    const one = (...(...(11,),),)\n"
+    "    return trace * 100 + result.1 * 10 + one.0\n"
+    "}\n";
+
+static const char tuple_spread_suspend_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3]\n"
+    "fn saved() -> (Array<i64>, ()) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return (source, ())\n"
+    "}\n"
+    "fn later() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    Coro.yield()\n"
+    "    source[0] = 7\n"
+    "    return 11\n"
+    "}\n"
+    "fn tail() -> (i64,) {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return (17,)\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3]\n"
+    "    const result = (...saved(), later(), ...tail())\n"
+    "    return result.0[0] * 10000 + result.2 * 100 + result.3 + trace * 100000 + source[0]\n"
+    "}\n";
+
+static const char tuple_spread_nested_source[] =
+    "class Counter {\n"
+    "    value: i64\n"
+    "    init(value) { this.value = value }\n"
+    "}\n"
+    "fn layer<T>(value: T) -> T? { return value }\n"
+    "fn classify(value: i64?" "?) -> i64 {\n"
+    "    if (value == null) { return 0 }\n"
+    "    if (value == null) { return 1 }\n"
+    "    return 2\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const inner: Array<i64> = [3, 7]\n"
+    "    const counter = Counter(17)\n"
+    "    const source: (Array<Array<i64>>, Counter, i64?" "?, i64?" "?) = ([inner], counter, layer<i64?>(null), null)\n"
+    "    const copied = (...source,)\n"
+    "    var changed = copied.0\n"
+    "    changed[0].push(13)\n"
+    "    copied.1.value = 19\n"
+    "    return source.0[0][0] * 100000 + len(source.0[0]) * 10000 + len(changed[0]) * 1000 + classify(copied.2) * 100 + classify(copied.3) * 10 + source.1.value\n"
+    "}\n";
+
+static const char tuple_spread_failure_source[] =
+    "var trace: i64 = 0\n"
+    "fn saved() -> (Array<i64>, i64) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return ([3, 7], 11)\n"
+    "}\n"
+    "fn failing() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    assert(false, \"tuple-literal-element-failure\")\n"
+    "    return 0\n"
+    "}\n"
+    "fn late() -> i64 {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return 17\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    try {\n"
+    "        const result = (...saved(), failing(), late())\n"
+    "        return result.3\n"
+    "    } catch panic (panic: PanicInfo) {\n"
+    "        return panic.code * 100 + trace\n"
+    "    }\n"
+    "}\n";
+
+static const char tuple_spread_callable_source[] =
+    "var counter: i64 = 0\n"
+    "fn next() -> i64 {\n"
+    "    counter = counter + 1\n"
+    "    return counter\n"
+    "}\n"
+    "fn identity(value: i64) -> i64 { return value }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    counter = 0\n"
+    "    const original = (next, 7)\n"
+    "    const copied = (...original,)\n"
+    "    const callback = copied.0\n"
+    "    return callback() * 10 + identity(copied.1)\n"
+    "}\n";
+
 typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
 static const InitializerCase cases[] = {
     {"ordinary",source,sizeof(source)-1},
@@ -228,7 +380,14 @@ static const InitializerCase cases[] = {
     {"array-spread-generic",array_spread_generic_source,sizeof(array_spread_generic_source)-1},
     {"array-spread-suspend",array_spread_suspend_source,sizeof(array_spread_suspend_source)-1},
     {"array-spread-nested",array_spread_nested_source,sizeof(array_spread_nested_source)-1},
-    {"array-spread-failure",array_spread_failure_source,sizeof(array_spread_failure_source)-1}
+    {"array-spread-failure",array_spread_failure_source,sizeof(array_spread_failure_source)-1},
+    {"tuple-spread-order",tuple_spread_order_source,sizeof(tuple_spread_order_source)-1},
+    {"tuple-spread-context",tuple_spread_context_source,sizeof(tuple_spread_context_source)-1},
+    {"tuple-spread-empty",tuple_spread_empty_source,sizeof(tuple_spread_empty_source)-1},
+    {"tuple-spread-suspend",tuple_spread_suspend_source,sizeof(tuple_spread_suspend_source)-1},
+    {"tuple-spread-nested",tuple_spread_nested_source,sizeof(tuple_spread_nested_source)-1},
+    {"tuple-spread-failure",tuple_spread_failure_source,sizeof(tuple_spread_failure_source)-1},
+    {"tuple-spread-callable",tuple_spread_callable_source,sizeof(tuple_spread_callable_source)-1}
 };
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -308,6 +467,14 @@ int main(int argc,char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--array-spread-nested")) { first=9;last=10; }
     else if (argc==2 && !strcmp(argv[1],"--array-spread-baseline")) { first=6;last=11;baseline=true; }
     else if (argc==2 && !strcmp(argv[1],"--array-spread-failure")) { first=10;last=11; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-order")) { first=11;last=12; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-context")) { first=12;last=13; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-empty")) { first=13;last=14; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-suspend")) { first=14;last=15; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-nested")) { first=15;last=16; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-failure")) { first=16;last=17; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-callable")) { first=17;last=18; }
+    else if (argc==2 && !strcmp(argv[1],"--tuple-spread-baseline")) { first=11;last=18;baseline=true; }
     else CHECK(argc==1);
     for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;

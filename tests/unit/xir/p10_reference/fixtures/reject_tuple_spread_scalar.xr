@@ -1,0 +1,4 @@
+export fn referenceAnswer() -> i64 {
+    const result = (...7,)
+    return result.0
+}
