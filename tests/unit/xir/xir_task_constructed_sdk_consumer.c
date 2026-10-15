@@ -15,6 +15,7 @@
 #include "xir/xxir_enum.h"
 #include "xir/xxir_atomic.h"
 #include "xir/xxir_value_internal.h"
+#include "execution/xr_xir_host_execution.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,6 +107,14 @@ int main(void) {
         unsigned code_releases = 0; XrXirProgramSpec spec = task_constructed_native_program;
         spec.code = (XrXirCodeLease){&code_releases,sdk_code_release}; XrXirProgram *program = NULL;
         CHECK(xr_xir_compile_program_seal(&context,&spec,&program) == XR_XIR_OK);
+        XrXirCallResult hosted[2] = {{0}}; XrXirDomain *host_domains[2] = {0};
+        XrXirInstanceConfig host_config; CHECK(xr_xir_instance_config_init(&host_config,sizeof(host_config)) == XR_XIR_CALL_READY);
+        for (unsigned mode = 0; mode < 2; ++mode) {
+            XrXirHostExecutionRequest request = {program,&host_config,constructed_entries[family][mode],NULL,0};
+            CHECK(xr_xir_host_execute(&request,&hosted[mode]) == XR_XIR_CALL_RETURNED);
+            host_domains[mode] = ((const XirObject *)(uintptr_t)hosted[mode].value.payload)->domain;
+            CHECK(xr_xir_domain_retain(host_domains[mode]));
+        }
         XrXirInstance *instances[2] = {0}; XrXirValue tasks[2] = {{0}}; XrXirDomain *domains[2] = {0};
         for (unsigned i = 0; i < 2; ++i) {
             XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config,sizeof(config)) == XR_XIR_CALL_READY);
@@ -128,6 +137,19 @@ int main(void) {
             CHECK(xr_xir_instance_free(instances[i]) == XR_XIR_CALL_READY);
         }
         CHECK(code_releases == 1 && domains[0] != domains[1]);
+        CHECK(constructed_value(&hosted[0].value,family));
+        XrXirCallResult host_first = {0}, host_second = {0};
+        CHECK(xr_xir_task_copy_outcome(&hosted[1].value,&host_first) == XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_task_copy_outcome(&hosted[1].value,&host_second) == XR_XIR_CALL_RETURNED);
+        CHECK(constructed_value(&host_first.value,family) && constructed_value(&host_second.value,family));
+        xr_xir_call_result_drop(&host_first); xr_xir_call_result_drop(&host_second);
+        for (unsigned mode = 0; mode < 2; ++mode) {
+            xr_xir_call_result_drop(&hosted[mode]);
+            CHECK(xr_xir_domain_stats(host_domains[mode]).live_bytes == domain_baseline);
+            XrXirDomainBudgetStats spent = xr_xir_domain_budget_stats(host_domains[mode]);
+            CHECK(!spent.call_live && !spent.metadata_live && spent.call_allocations == spent.call_frees &&
+                spent.metadata_allocations == spent.metadata_frees); xr_xir_domain_drop(host_domains[mode]);
+        }
         for (unsigned i = 0; i < 2; ++i) {
             XrXirCallResult first = {0}, second = {0};
             CHECK(xr_xir_task_copy_outcome(&tasks[i],&first) == XR_XIR_CALL_RETURNED);
@@ -143,6 +165,6 @@ int main(void) {
         XrCompileResourceStats final = {0}; CHECK(xr_compile_resources_stats(context.resources,&final) == XR_COMPILE_RESOURCE_OK);
         CHECK(final.live_bytes == baseline.live_bytes); xr_compile_resources_release(context.resources);
     }
-    puts("TASK_SDK families=8 twoInstances repeatedAwait escapedStickyCopies2 lastCodeLease1 ownerBaselines=restored");
+    puts("TASK_SDK families=8 twoInstances repeatedAwait escapedStickyCopies2 hostedOutcomesAfterCodeDeath lastCodeLease1 ownerBaselines=restored");
     return 0;
 }

@@ -68,7 +68,7 @@ def main():
                  *(str(p) for p in objects + libraries), 'kernel32.lib',
                  '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
         actual = checked([str(executable)]).decode('utf-8').strip()
-        assert actual == 'TASK_SDK families=8 twoInstances repeatedAwait escapedStickyCopies2 lastCodeLease1 ownerBaselines=restored', actual
+        assert actual == 'TASK_SDK families=8 twoInstances repeatedAwait escapedStickyCopies2 hostedOutcomesAfterCodeDeath lastCodeLease1 ownerBaselines=restored', actual
         record = {'status': 'PASS', 'provider': args.provider, 'output': str(output), 'sdk_files': int(ready[3]),
                   'sdk_sanitizers': manifest['sanitizers'], 'actual': actual,
                   'source': {'bytes': source.stat().st_size, 'sha256': hashlib.sha256(source.read_bytes()).hexdigest()},
