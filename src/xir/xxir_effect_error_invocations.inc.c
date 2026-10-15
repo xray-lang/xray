@@ -242,6 +242,65 @@ static XrXirStatus error_invocation_fallback(ErrorFlow *flow,ErrorInvocationCont
     call->head=link;contexts->consumers[target]=link;return XR_XIR_OK;
 }
 
+static bool error_invocation_indirect_opcode(XrXirOp op) {
+    return op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT;
+}
+/* This storage census reads actual opcodes only. Constant physical runs merge
+ * absence; genuine targets retain all later correspondence and edge proofs. */
+static XrXirStatus error_invocation_has_indirect(ErrorFlow *flow,bool *output) {
+    if (!flow || !output) return XR_XIR_BAD_STRUCTURE;
+    bool found=false;
+    for (uint32_t f=0;f<flow->body.domain.function_count && !found;++f) {
+        EffectBodyFunctionDimensions head={0};
+        XrXirStatus status=effect_body_request_dimensions(&flow->body,f,&head);
+        if (status!=XR_XIR_OK) return status;
+        if (!effect_body_request_sequence_owned(&flow->body)) {
+            for (uint32_t i=0;i<head.instruction_count;++i) {
+                if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+                EffectBodyInstructionShape shape={0};status=error_shape(flow,f,i,&shape);
+                if (status!=XR_XIR_OK) return status;
+                if (error_invocation_indirect_opcode(shape.op)) {found=true;break;}
+            }
+            continue;
+        }
+        if (flow->body.read.owner!=flow->remaining) return XR_XIR_BAD_STRUCTURE;
+        EffectBodyRecordCursor cursor;
+        status=effect_body_request_sequence_begin(&flow->body,&cursor);
+        if (status!=XR_XIR_OK) return status;
+        const EffectBodyMaterial *material=flow->body.owner;
+        const EffectBodyFunction *function=&material->functions[f];
+        if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+        EffectBodyRecordCursor finish={0,0,UINT32_MAX};
+        while (cursor.first<head.instruction_count) {
+            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+            const EffectBodyRun *ref=NULL;
+            status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+            if (status!=XR_XIR_OK) return status;
+            if (!xir_compile_work(flow->remaining,sizeof(finish))) return XR_XIR_BUDGET;
+            finish=(EffectBodyRecordCursor){ref->first,cursor.run-1,cursor.first-1};
+            if (found) continue;
+            uint32_t opcode;
+            status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
+            if (status!=XR_XIR_OK) return status;
+            if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            found=error_invocation_indirect_opcode((XrXirOp)opcode);
+            if (!(ref->mask&UINT32_C(1))) continue;
+            for (uint32_t i=ref->first+1;!found && i<ref->first+ref->count;++i) {
+                status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
+                if (status!=XR_XIR_OK) return status;
+                if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+                if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+                found=error_invocation_indirect_opcode((XrXirOp)opcode);
+            }
+        }
+        status=effect_body_request_sequence_finish(&flow->body,f,&finish);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!xir_compile_work(flow->remaining,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=found;return XR_XIR_OK;
+}
+
 static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocationContexts **output) {
     if (!flow || !flow->effects || !output || *output) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCertificate *certificate=flow->effects->invocations;
@@ -257,17 +316,8 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     const EffectInvocationFinal *sealed=certificate->final;
     if (!sealed->site_count) return XR_XIR_OK;
     bool indirect=false;
-    for (uint32_t f=0;f<flow->body.domain.function_count && !indirect;++f) {
-        EffectBodyFunctionDimensions head={0};
-        XrXirStatus read=effect_body_request_dimensions(&flow->body,f,&head);
-        if (read!=XR_XIR_OK) return read;
-        for (uint32_t i=0;i<head.instruction_count;++i) {
-            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
-            EffectBodyInstructionShape shape={0};read=error_shape(flow,f,i,&shape);
-            if (read!=XR_XIR_OK) return read;
-            if (shape.op==XR_XIR_CALL_INDIRECT || shape.op==XR_XIR_INVOKE_INDIRECT) { indirect=true;break; }
-        }
-    }
+    XrXirStatus probe=error_invocation_has_indirect(flow,&indirect);
+    if (probe!=XR_XIR_OK) return probe;
     if (!indirect) return XR_XIR_OK;
     XrXirStatus status=effect_body_physical_match(flow->remaining,sealed->physical,certificate->body);
     ErrorInvocationContexts *contexts=NULL;
