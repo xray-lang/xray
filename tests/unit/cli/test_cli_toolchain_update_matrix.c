@@ -32,7 +32,7 @@ typedef struct MatrixCase {
     XrCliToolchainUpdateRequest request;
     const char *path,*initial;
     char nested[3][4096],file[4096],lock[4096],large[8193],many[4096];
-    XrCliToolchainUpdateStatus expected;
+    XrCliToolchainUpdateStatus expected,construction_status;
     unsigned phase;
 } MatrixCase;
 static void matrix_case(MatrixCase *test,const char *path,unsigned phase){
@@ -54,8 +54,10 @@ static void matrix_case(MatrixCase *test,const char *path,unsigned phase){
         case 5:test->request.path=NULL;break;
         case 6:test->initial="broken = [\n";test->expected=XR_CLI_TOOLCHAIN_UPDATE_INVALID;break;
         case 7:memset(test->large,'a',4096);test->large[4096]=0;test->request.compiler=test->large;break;
-        case 8:test->request.target="not-a-real-target";test->expected=XR_CLI_TOOLCHAIN_UPDATE_INVALID;break;
-        case 9:test->request.compiler="C:/bad/\xff.exe";test->expected=XR_CLI_TOOLCHAIN_UPDATE_INVALID;break;
+        case 8:test->request.target="not-a-real-target";
+            test->construction_status=test->expected=XR_CLI_TOOLCHAIN_UPDATE_INVALID;break;
+        case 9:test->request.compiler="C:/bad/\xff.exe";
+            test->construction_status=test->expected=XR_CLI_TOOLCHAIN_UPDATE_INVALID;break;
         case 10:test->request.selector=XR_TOOLCHAIN_SELECTOR_ZIG;test->request.compiler=NULL;test->request.zig="C:/owned/zig.exe";break;
         case 11:test->request.selector=XR_TOOLCHAIN_SELECTOR_AUTO;test->request.zig="C:/owned/zig.exe";break;
         case 12:{
@@ -70,7 +72,8 @@ static void matrix_case(MatrixCase *test,const char *path,unsigned phase){
             test->initial=test->many;break;
         }
         case 13:memset(test->large,'a',sizeof(test->large)-1);test->large[sizeof(test->large)-1]=0;
-            test->request.compiler=test->large;test->expected=XR_CLI_TOOLCHAIN_UPDATE_INVALID;break;
+            test->request.compiler=test->large;
+            test->construction_status=test->expected=XR_CLI_TOOLCHAIN_UPDATE_INVALID;break;
         default:CHECK(false);
     }
 }
@@ -89,14 +92,14 @@ static int matrix_main(int argc,char **argv){
     unsigned phase=(unsigned)atoi(argv[2]);bool resources=!strcmp(argv[3],"resources");
     MatrixCase test;matrix_case(&test,argv[1],phase);matrix_setup(&test);
     XrCompileResourceStats stats={0};
-    XrCliToolchainUpdateStatus baseline=run(&test.request,SIZE_MAX,&defaults,&stats,false);
+    XrCliToolchainUpdateStatus baseline=run(&test.request,SIZE_MAX,&defaults,&stats,false,test.construction_status);
     if(baseline!=test.expected)fprintf(stderr,"phase=%u actual=%u expected=%u\n",phase,(unsigned)baseline,(unsigned)test.expected);
     CHECK(baseline==test.expected);
     size_t total=calls;
     if(resources){
         for(size_t cut=0;cut<total;++cut){
             matrix_setup(&test);XrCompileResourceStats unused={0};
-            CHECK(run(&test.request,cut,&defaults,&unused,false)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);
+            CHECK(run(&test.request,cut,&defaults,&unused,false,test.construction_status)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);
             matrix_preserved(&test);
         }
         const uint64_t bounds[3]={stats.allocated_bytes,stats.peak_bytes,stats.work};
@@ -104,7 +107,7 @@ static int matrix_main(int argc,char **argv){
             matrix_setup(&test);XrCompileResourceLimits limits=defaults;uint64_t bound=bounds[axis];CHECK(bound);
             uint64_t selected=delta<0?bound-1:bound+(unsigned)delta;
             if(axis==0)limits.allocated_bytes=selected;if(axis==1)limits.live_bytes=selected;if(axis==2)limits.work=selected;
-            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&test.request,SIZE_MAX,&limits,&unused,false);
+            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&test.request,SIZE_MAX,&limits,&unused,false,test.construction_status);
             CHECK(status==(delta<0?XR_CLI_TOOLCHAIN_UPDATE_BUDGET:test.expected));
             if(delta<0||status!=XR_CLI_TOOLCHAIN_UPDATE_OK)matrix_preserved(&test);
         }
