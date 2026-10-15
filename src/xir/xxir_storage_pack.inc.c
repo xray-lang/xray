@@ -25,11 +25,9 @@ typedef struct StoragePack {
 } StoragePack;
 
 static XrXirValueStatus storage_pack_leaf(StoragePack *pack,
-    const XrXirValue *value, XrXirType type, unsigned char *bytes) {
+    XrXirType type,const XrXirValue *value,unsigned char *bytes) {
     XrXirLayout layout = {0};
-    if ((type==XR_XIR_UNIT ? !unit_value(value) :
-            !xr_xir_value_argument(value,pack->admission->arena,type)) ||
-        !xr_xir_compile_type_arena_layout(pack->admission->arena, type, &layout) ||
+    if (!xr_xir_compile_type_arena_layout(pack->admission->arena,type,&layout) ||
         layout.size > sizeof(value->payload) || (layout.size && !bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue owned = {0};
     XrXirValueStatus status = xr_xir_value_copy(value, &owned);
@@ -39,8 +37,7 @@ static XrXirValueStatus storage_pack_leaf(StoragePack *pack,
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus storage_pack_enter(StoragePack *pack,
-    const XrXirValue *value, unsigned char *bytes) {
-    XrXirType type = (XrXirType) value->type;
+    XrXirType type,const XrXirValue *value,unsigned char *bytes) {
     if (!xr_xir_value_argument(value, pack->admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(pack->admission->arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -60,6 +57,7 @@ static XrXirValueStatus storage_pack_enter(StoragePack *pack,
 static XrXirValueStatus storage_pack_walk(StoragePack *pack,
     const XrXirValue *value, unsigned char *bytes) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(pack->admission->arena);
+    XrXirType type=pack->type;
     bool pending = true;
     while (pending || pack->depth) {
         if (!pack->admission->work) return XR_XIR_VALUE_LIMIT;
@@ -73,11 +71,13 @@ static XrXirValueStatus storage_pack_walk(StoragePack *pack,
             bool nullable = frame->node->kind == XR_XIR_TYPE_NULLABLE;
             bytes = frame->bytes ? frame->bytes +
                 (nullable ? frame->layout->value.alignment : frame->layout->field_offsets[field]) : NULL;
-            if (value->type != (uint32_t)(nullable ? frame->node->element : frame->node->nominal.fields[field]))
+            type=nullable ? frame->node->element : frame->node->nominal.fields[field];
+            if (type==XR_XIR_UNIT ? !unit_value(value) :
+                !xr_xir_value_argument(value,pack->admission->arena,type))
                 return XR_XIR_VALUE_BAD_ARGUMENT;
         }
-        XrXirValueStatus status = inline_nominal_type(types, (XrXirType)value->type) ?
-            storage_pack_enter(pack, value, bytes) : storage_pack_leaf(pack, value, (XrXirType)value->type, bytes);
+        XrXirValueStatus status = inline_nominal_type(types,type) ?
+            storage_pack_enter(pack,type,value,bytes) : storage_pack_leaf(pack,type,value,bytes);
         if (status != XR_XIR_VALUE_OK) return status;
     }
     return XR_XIR_VALUE_OK;
@@ -112,10 +112,10 @@ static void storage_pack_end(StoragePack *pack) {
  * One scratch reservation serves every element of a bulk operation. */
 static XrXirValueStatus storage_pack_value(StoragePack *pack,
     const XrXirValue *value, unsigned char *bytes) {
-    if (!value) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (pack->type==XR_XIR_UNIT ? !unit_value(value) :
+        !xr_xir_value_argument(value,pack->admission->arena,pack->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     pack->depth = 0; pack->owners = 0;
-    if (!pack->frames) return storage_pack_leaf(pack, value, pack->type, bytes);
-    if (value->type != (uint32_t)pack->type) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!pack->frames) return storage_pack_leaf(pack,pack->type,value,bytes);
     XrXirValueAdmission *admission = pack->admission;
     const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, pack->type);
     if (layout->value.size && !bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -154,8 +154,8 @@ static XrXirValueStatus storage_pack_copy(StoragePack *pack,
         StorageSpan leaf = {0}; bool found = false;
         status = storage_cursor_next(&cursor, pack->frames ? &pack->admission->work : NULL, &leaf, &found);
         if (status != XR_XIR_VALUE_OK || !found) break;
-        XrXirValue value = storage_leaf_value(leaf.type, leaf.bytes, sizeof(uint64_t)), owned = {0};
-        if (!xr_xir_value_from_payload(pack->admission->arena,leaf.type,value.payload,&value)) {
+        XrXirValue value = {0}, owned = {0};
+        if (!storage_leaf_value(pack->admission->arena,leaf.type,leaf.bytes,sizeof(uint64_t),&value)) {
             status=XR_XIR_VALUE_BAD_ARGUMENT;break;
         }
         status = xr_xir_value_copy(&value, &owned);

@@ -10,6 +10,7 @@ typedef struct ValuePathSlot {
     XrXirType type;
     unsigned char *bytes;
     bool inline_storage;
+    const XrXirTypeArena *arena;
 } ValuePathSlot;
 typedef struct ValuePathWrite {
     XrXirValue candidate;
@@ -20,7 +21,8 @@ typedef struct ValuePathWrite {
 static XrXirValue path_handle(ValuePathSlot slot) {
     XrXirValue value = {(uint32_t)slot.type, 0, 0};
     memcpy(&value.payload, slot.bytes, sizeof(value.payload));
-    return value;
+    XrXirValue actual={0};
+    return xr_xir_value_from_payload(slot.arena,slot.type,value.payload,&actual) ? actual : value;
 }
 static XrXirValueStatus path_array_clone(const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirValue *output) {
@@ -71,7 +73,7 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
     }
     return XR_XIR_VALUE_OK;
 }
-static XrXirValueStatus path_step(ValuePathSlot *slot,
+static XrXirValueStatus path_storage_step(ValuePathSlot *slot,
     const XrXirValuePathStep *step, XrXirValueAdmission *admission,
     ValuePathWrite *write, XrXirFaultDetail *fault, const XirObject *borrow_owner) {
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
@@ -97,7 +99,7 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,
             field >= layout->field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
         if (write && xr_xir_class_module_storage(&handle)) write->module_publication = true;
         *slot = (ValuePathSlot){node->nominal.fields[field],
-            (unsigned char *)((XirClassObject *)object + 1) + layout->field_offsets[field], true};
+            (unsigned char *)((XirClassObject *)object + 1) + layout->field_offsets[field], true,admission->arena};
         return XR_XIR_VALUE_OK;
     }
     if (step->kind == XR_XIR_PATH_FIELD) {
@@ -133,8 +135,31 @@ static XrXirValueStatus path_step(ValuePathSlot *slot,
         if (status != XR_XIR_VALUE_OK) return status;
         value = path_handle(*slot); array = (XirArray *)object_pointer(&value);
     }
-    *slot = (ValuePathSlot){array->element, array_slot(array, (size_t)step->selector), true};
+    *slot = (ValuePathSlot){array->element, array_slot(array, (size_t)step->selector), true,admission->arena};
     return XR_XIR_VALUE_OK;
+}
+typedef struct ValuePathSelector {
+    const XrXirValuePathStep *step;
+    const XrXirTypeArena *arena;
+} ValuePathSelector;
+static XrXirValueStatus path_step(ValuePathSlot *slot,ValuePathSelector selector,
+    XrXirValueAdmission *admission,ValuePathWrite *write,XrXirFaultDetail *fault,const XirObject *borrow_owner) {
+    if (!xir_type_arena_same_type(slot->arena,slot->type,selector.arena,selector.step->container))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(slot->arena);
+    if (owned_carrier_type(slot->type) && (!slot->inline_storage || !inline_nominal_type(types,slot->type))) {
+        XrXirValue value=path_handle(*slot);
+        if (!xr_xir_value_argument(&value,slot->arena,slot->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (owned_carrier_type((XrXirType)value.type) && object_pointer(&value)->arena) {
+            slot->type=(XrXirType)value.type;slot->arena=object_pointer(&value)->arena;
+        }
+    }
+    XrXirValueAdmission local=*admission;local.arena=slot->arena;
+    /* Only the checked descriptor's type coordinate changes; the selector,
+     * actual object header and caller's Domain/loan authority stay intact. */
+    XrXirValuePathStep step=*selector.step;step.container=slot->type;
+    XrXirValueStatus status=path_storage_step(slot,&step,&local,write,fault,borrow_owner);
+    return storage_admission_end(admission,&local,status);
 }
 static XrXirValueStatus path_begin(const XrXirValuePlace *root,
     const XrXirValuePath *path, XrXirValueAdmission *admission,
@@ -143,11 +168,11 @@ static XrXirValueStatus path_begin(const XrXirValuePlace *root,
     if (!root || !root->payload || !path || (path->count && !path->steps) ||
         !admission || !admission->arena || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (path->count > admission->work) return XR_XIR_VALUE_LIMIT;
-    *slot = (ValuePathSlot){root->type, root->payload, false};
+    *slot = (ValuePathSlot){root->type, root->payload, false,admission->arena};
     XrXirValue value = path_handle(*slot);
     return xr_xir_value_admit(&value, root->type, admission);
 }
-static XrXirValueStatus path_store(ValuePathSlot slot,
+static XrXirValueStatus path_storage_store(ValuePathSlot slot,
     const XrXirValue *value, XrXirValueAdmission *admission,
     XrXirClassPublication *publication) {
     /* The incoming tree was admitted once before any ancestor replacement.
@@ -165,7 +190,7 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
     XrXirLayout layout = {0};
     if (!xr_xir_compile_type_arena_layout(admission->arena, slot.type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
     StoragePrepared prepared = {0};
-    status = storage_prepared_begin(&prepared, value, layout.size, admission);
+    status = storage_prepared_begin(&prepared,slot.type,value,layout.size,admission);
     if (status != XR_XIR_VALUE_OK) return status;
     StorageCursor cursor = {0}; XirObject *pending = NULL;
     XR_CHECK(storage_cursor_init(admission->arena, (StorageSpan){slot.type, slot.bytes},
@@ -177,14 +202,22 @@ static XrXirValueStatus path_store(ValuePathSlot slot,
     prepared.owns = false; release_pending(pending); storage_prepared_end(&prepared);
     return XR_XIR_VALUE_OK;
 }
+static XrXirValueStatus path_store(ValuePathSlot slot,const XrXirValue *value,
+    XrXirValueAdmission *admission,XrXirClassPublication *publication) {
+    XrXirValueAdmission local=*admission;local.arena=slot.arena;
+    XrXirValueStatus status=path_storage_store(slot,value,&local,publication);
+    return storage_admission_end(admission,&local,status);
+}
 typedef struct ValuePathRoute {
     XrXirValuePath prefix, suffix;
     const XirObject *borrow_owner;
     bool module_publication;
+    const XrXirTypeArena *root_arena,*prefix_arena;
 } ValuePathRoute;
-static const XrXirValuePathStep *path_route_step(const ValuePathRoute *route, uint32_t i) {
-    return i < route->prefix.count ? &route->prefix.steps[i] :
-        &route->suffix.steps[i - route->prefix.count];
+static ValuePathSelector path_route_step(const ValuePathRoute *route,uint32_t i,
+    const XrXirTypeArena *arena) {
+    return i<route->prefix.count ? (ValuePathSelector){&route->prefix.steps[i],route->prefix_arena ? route->prefix_arena : arena} :
+        (ValuePathSelector){&route->suffix.steps[i-route->prefix.count],arena};
 }
 static XrXirValueStatus path_route_begin(const XrXirValuePlace *root,
     const ValuePathRoute *route, XrXirValueAdmission *admission,
@@ -194,7 +227,10 @@ static XrXirValueStatus path_route_begin(const XrXirValuePlace *root,
         route->suffix.count > UINT32_MAX - route->prefix.count) return XR_XIR_VALUE_BAD_ARGUMENT;
     *count = route->prefix.count + route->suffix.count;
     XrXirValuePath shape = {route->prefix.count ? route->prefix.steps : route->suffix.steps, *count};
-    return path_begin(root, &shape, admission, slot, fault);
+    XrXirValueAdmission local=*admission;
+    if (route->root_arena) local.arena=route->root_arena;
+    XrXirValueStatus status=path_begin(root,&shape,&local,slot,fault);
+    return storage_admission_end(admission,&local,status);
 }
 static XrXirValueStatus value_path_read_route(const XrXirValuePlace *root,
     const ValuePathRoute *route, XrXirValueAdmission *admission,
@@ -204,17 +240,21 @@ static XrXirValueStatus value_path_read_route(const XrXirValuePlace *root,
     XrXirValueStatus status = path_route_begin(root, route, admission, &slot, &count, fault);
     if (status != XR_XIR_VALUE_OK) return status;
     for (uint32_t i = 0; i < count; ++i) {
-        status = path_step(&slot, path_route_step(route, i), admission, NULL, fault, i ? NULL : route->borrow_owner);
+        status = path_step(&slot, path_route_step(route,i,admission->arena), admission, NULL, fault, i ? NULL : route->borrow_owner);
         if (status != XR_XIR_VALUE_OK) return status;
     }
-    if (slot.inline_storage) return storage_unpack((StorageSpan){slot.type, slot.bytes}, admission, output);
+    if (slot.inline_storage) {
+        XrXirValueAdmission local=*admission;local.arena=slot.arena;
+        status=storage_unpack((StorageSpan){slot.type,slot.bytes},&local,output);
+        return storage_admission_end(admission,&local,status);
+    }
     XrXirValue value = path_handle(slot); return xr_xir_value_copy(&value, output);
 }
 static XrXirValueStatus xr_xir_value_path_read_graph_operation(const XrXirValuePlace *root,
     const XrXirValuePath *path, XrXirValueAdmission *admission,
     XrXirValue *output, XrXirFaultDetail *fault) {
     if (!path) return XR_XIR_VALUE_BAD_ARGUMENT;
-    ValuePathRoute route = {*path, {0}, NULL, false};
+    ValuePathRoute route = {.prefix=*path};
     return value_path_read_route(root, &route, admission, output, fault);
 }
 XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
@@ -236,10 +276,15 @@ static XrXirValueStatus path_mutate_route(const XrXirValuePlace *root,
     uint32_t count = 0;
     XrXirValueStatus status = path_route_begin(root, route, admission, &slot, &count, fault);
     if (status != XR_XIR_VALUE_OK) return status;
-    status = value_admit_summary(value, (XrXirType)value->type, admission, &write.domain_sensitive);
+    XrXirValueAdmission incoming={0};
+    status=storage_admission_begin(value,admission,&incoming);
+    if (status==XR_XIR_VALUE_OK) {
+        status=value_admit_summary(value,(XrXirType)value->type,&incoming,&write.domain_sensitive);
+        status=storage_admission_end(admission,&incoming,status);
+    }
     if (status != XR_XIR_VALUE_OK) return status;
     for (uint32_t i = 0; i < count; ++i) {
-        status = path_step(&slot, path_route_step(route, i), admission, &write, fault, i ? NULL : route->borrow_owner);
+        status = path_step(&slot, path_route_step(route,i,admission->arena), admission, &write, fault, i ? NULL : route->borrow_owner);
         if (status != XR_XIR_VALUE_OK) break;
     }
     if (status == XR_XIR_VALUE_OK) {
@@ -251,8 +296,16 @@ static XrXirValueStatus path_mutate_route(const XrXirValuePlace *root,
             XrXirValuePlace leaf = {slot.type, slot.bytes};
             XrXirClassPublication *prepared = publication.operation ? &publication : NULL;
             const ArrayMutation mutation = {true, true, write.domain_sensitive, prepared};
-            status = append ? array_mutate(&leaf, 0, value, admission, NULL, &mutation) :
-                path_store(slot, value, admission, prepared);
+            if (append) {
+                XrXirValueAdmission local=*admission,storage={0};local.arena=slot.arena;
+                XrXirValuePlace actual={0};
+                status=storage_place_admission(&leaf,&local,&storage,&actual);
+                if (status==XR_XIR_VALUE_OK) {
+                    status=array_mutate(&actual,0,value,&storage,NULL,&mutation);
+                    status=storage_admission_end(&local,&storage,status);
+                }
+                status=storage_admission_end(admission,&local,status);
+            } else status=path_store(slot,value,admission,prepared);
         }
     }
     if (status == XR_XIR_VALUE_OK && write.publish) {
@@ -268,7 +321,7 @@ static XrXirValueStatus path_mutate(const XrXirValuePlace *root,
     const XrXirValuePath *path, const XrXirValue *value,
     XrXirValueAdmission *admission, XrXirFaultDetail *fault, bool append) {
     if (!path) return XR_XIR_VALUE_BAD_ARGUMENT;
-    ValuePathRoute route = {*path, {0}, NULL, false};
+    ValuePathRoute route = {.prefix=*path};
     return path_mutate_route(root, &route, value, admission, fault, append);
 }
 static XrXirValueStatus xr_xir_value_path_write_graph_operation(const XrXirValuePlace *root,

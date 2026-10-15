@@ -107,10 +107,9 @@ static void storage_queue_release(StorageCursor *cursor, uint64_t owners, XirObj
         XrXirValueStatus status = storage_cursor_next(cursor, NULL, &leaf, &found);
         XR_CHECK(status == XR_XIR_VALUE_OK, "invalid initialized inline storage during release");
         if (!found) break;
-        XrXirValue value = {(uint32_t) leaf.type, 0, 0};
-        memcpy(&value.payload, leaf.bytes, sizeof(value.payload));
-        XR_CHECK(xr_xir_value_from_payload(cursor->arena,leaf.type,value.payload,&value),
-            "initialized storage must retain its actual admitted carrier");
+        XrXirValue value = {0};
+        XR_CHECK(storage_leaf_value(cursor->arena,leaf.type,leaf.bytes,sizeof(uint64_t),&value),
+            "owned storage release recovers its actual carrier header");
         queue_release(&value, pending); ++released;
     }
     XR_CHECK(owners == UINT64_MAX || released == owners, "storage ownership prefix is incomplete");
