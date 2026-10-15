@@ -288,11 +288,12 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
         ++selected;
     }
     CHECK(selected==2 && first==2 && call==4);const EffectBodyRun *ref=NULL;
-    /* The genuine CALL and RETURN are the final two-row affine run. The
+    /* The genuine CALL and RETURN are the final literal pair. The
      * first selected FnRef is earlier; only the second selected CALL changes. */
     CHECK(effect_body_record_ref(&flow->body.read,body,call,&ref)==XR_XIR_OK &&
         ref->first==call && ref->count==2 && ref->base.op==XR_XIR_CALL &&
-        (ref->mask&(UINT32_C(1)<<6)) && !(ref->mask&(UINT32_C(1)<<7)));
+        ref->mask==EFFECT_BODY_MASK && ref->delta[6]!=(uint32_t)(uint64_t)ref->base.immediate &&
+        ref->delta[7]==(uint32_t)((uint64_t)ref->base.immediate>>32));
     XrXirInstruction *base=(XrXirInstruction *)&ref->base;int64_t saved=base->immediate;
     base->immediate=effect_body_count(material);
     for (uint32_t precision=0;precision<2;++precision) {

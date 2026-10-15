@@ -100,7 +100,16 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
             if (status!=XR_XIR_OK) return status;
         }
         if (count && current.next==first) {
-            if (ref->count!=count || (ref->mask&UINT32_C(3))) return XR_XIR_BAD_TYPE;
+            bool varying=!!(ref->mask&UINT32_C(3));
+            if (ref->count==2) {
+                uint32_t opcode=0,type=0;
+                status=effect_body_run_word(&adapter->request.read,ref,ref->first+1,0,&opcode);
+                if (status==XR_XIR_OK) status=effect_body_run_word(&adapter->request.read,ref,ref->first+1,1,&type);
+                if (status!=XR_XIR_OK) return status;
+                if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+                varying=opcode!=(uint32_t)ref->base.op || type!=(uint32_t)ref->base.type;
+            }
+            if (ref->count!=count || varying) return XR_XIR_BAD_TYPE;
             if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             if (!xir_compile_work(work,2+sizeof(current.shape))) return XR_XIR_BUDGET;
             current.shape=(XrXirCellProofInstructionShape){(XrXirOp)ref->base.op,(XrXirType)ref->base.type};
@@ -147,9 +156,18 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (status!=XR_XIR_OK) return status;
     status=effect_body_instruction_ref_prepare(&adapter->request.read,ref,ref->first);
     if (status!=XR_XIR_OK) return status;
-    XrXirInstruction operation=effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,0);
+    XrXirInstruction operation=ref->base;
+    uint32_t varying=ref->mask;
+    if (ref->count==2) {
+        if (!xir_compile_work(work,sizeof(varying))) return XR_XIR_BUDGET;
+        varying=0;
+        for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+            if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+            if (effect_body_source_word(&ref->base,w)!=ref->delta[w]) varying|=UINT32_C(1)<<w;
+        }
+    }
     if (!xir_compile_work(work,sizeof(*output)+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
-    *output=(XrXirCellProofRun){ref->first,ref->count,ref->mask,operation};
+    *output=(XrXirCellProofRun){ref->first,ref->count,varying,operation};
     cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;
 }
 

@@ -21,9 +21,10 @@ static uint32_t effect_body_entry_limit(const XrXirCompileContext *work) {
 }
 
 enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023 };
-/* The sole owned representation is an actual affine record. Inactive delta
- * slots are neither initialized nor read. No summary, authority or pointer to
- * the generating Module is retained by a record. */
+/* One row stores only its base. Two rows store all ten literal second-row
+ * words under the full mask; longer runs store nonzero affine differences in
+ * selected slots. Other slots are never read. No record retains authority or
+ * a pointer to its generating Module. */
 typedef struct EffectBodyRun {
     uint32_t first,count,mask;
     XrXirInstruction base;

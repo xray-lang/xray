@@ -4592,3 +4592,5 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_keys.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_source.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_contains.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/effect_physical_records.cmake)
