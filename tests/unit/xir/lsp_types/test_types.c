@@ -71,6 +71,7 @@ static void normal(char **argv) {
     XrJsonValue *children=related(&f,base,2);CHECK(children->as.array.count==3);find(children,"Left");find(children,"Right");XrJsonValue *external=find(children,"External");
     CHECK(!strcmp(xjson_get_string(external,"uri"),argv[3])&&xjson_get(xjson_get_object(external,"data"),"version")->type==XR_JSON_NULL);
     XrJsonValue *parents=related(&f,find(children,"Left"),1);CHECK(parents->as.array.count==1&&named(xjson_array_get(parents,0),"Base"));xjson_free(parents);
+    xjson_free(children);children=NULL;
     XrJsonValue *empty=related(&f,base,1);CHECK(!empty->as.array.count);xjson_free(empty);xjson_free(prepared);prepared=prepare(&f,3,11);
     parents=related(&f,xjson_array_get(prepared,0),1);CHECK(parents->as.array.count==2&&named(xjson_array_get(parents,0),"Left")&&named(xjson_array_get(parents,1),"Right"));
     XrJsonValue *nominals=related(&f,xjson_array_get(prepared,0),2);CHECK(nominals->as.array.count==1);XrJsonValue *meter=xjson_array_get(nominals,0);
