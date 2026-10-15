@@ -504,3 +504,22 @@ endif()
 add_test(NAME test_dap_class_write COMMAND test_dap_class_write)
 add_test(NAME test_dap_class_write_resources COMMAND test_dap_class_write --resources)
 set_tests_properties(test_dap_class_write test_dap_class_write_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")
+
+add_executable(test_dap_wrapper_rebind test_wrapper_rebind.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_wrapper_rebind PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_wrapper_rebind PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_THREADS_FIXTURE="${XR_DAP_FIXTURE_DIR}/threads_fixture.xr" XR_DAP_ORIGIN_FIXTURE="${XR_DAP_FIXTURE_DIR}/write_projection.xr"
+    XR_DAP_CHILD_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/child_write.xr"
+    XR_DAP_REBIND_FIXTURE="${XR_DAP_FIXTURE_DIR}/wrapper_rebind.xr" XR_DAP_REBIND_CHILD_FIXTURE="${XR_DAP_FIXTURE_DIR}/wrapper_rebind_child.xr")
+if(MSVC)
+    target_compile_options(test_dap_wrapper_rebind PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_wrapper_rebind PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_wrapper_rebind_root COMMAND test_dap_wrapper_rebind --root)
+add_test(NAME test_dap_wrapper_rebind_child COMMAND test_dap_wrapper_rebind --child)
+add_test(NAME test_dap_wrapper_rebind_root_resources COMMAND test_dap_wrapper_rebind --root --resources)
+add_test(NAME test_dap_wrapper_rebind_child_resources COMMAND test_dap_wrapper_rebind --child --resources)
+set_tests_properties(test_dap_wrapper_rebind_root test_dap_wrapper_rebind_child test_dap_wrapper_rebind_root_resources test_dap_wrapper_rebind_child_resources
+    PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")
