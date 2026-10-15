@@ -120,3 +120,10 @@ set_tests_properties(test_xir_source_comptime_class PROPERTIES
 add_test(NAME test_xir_source_comptime_class_resources COMMAND test_xir_source_comptime --class-resources)
 set_tests_properties(test_xir_source_comptime_class_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;class" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_output COMMAND test_xir_source_comptime --output)
+set_tests_properties(test_xir_source_comptime_output PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;output" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_output_resources COMMAND test_xir_source_comptime --output-resources)
+set_tests_properties(test_xir_source_comptime_output_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;output" TIMEOUT 600 RUN_SERIAL TRUE)

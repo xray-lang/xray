@@ -16,7 +16,10 @@
 
 #define XR_XIR_CTFE_MAX_STEPS UINT64_C(65536)
 #define XR_XIR_CTFE_MAX_FRAME_BYTES UINT64_C(65536)
-#define XR_XIR_CTFE_MAX_OUTPUT_BYTES UINT64_C(8)
+/* Persistent result keys must include this policy and all request/ledger limits.
+ * A result accepted with a larger ceiling grants no smaller-budget cache hit. */
+#define XR_XIR_CTFE_OUTPUT_POLICY_VERSION UINT32_C(2)
+#define XR_XIR_CTFE_MAX_OUTPUT_BYTES (UINT64_C(8)*1024*1024)
 #define XR_XIR_CTFE_MAX_CALL_DEPTH UINT32_C(128)
 typedef enum XrXirCtfeStatus {
     XR_XIR_CTFE_OK, XR_XIR_CTFE_BAD_ARGUMENT, XR_XIR_CTFE_BAD_ARTIFACT,

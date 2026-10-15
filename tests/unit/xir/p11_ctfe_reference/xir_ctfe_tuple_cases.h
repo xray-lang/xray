@@ -20,7 +20,8 @@ static void reference_tuple_value(const XrXirValue *value,const CtfeReferenceCas
     if (!strcmp(selected->name,"float_tuple")) {
         CHECK(a.type==XR_XIR_F32 && !a.reserved && a.payload==INT64_C(0x40600000));
         CHECK(b.type==XR_XIR_F32 && !b.reserved && b.payload==INT64_C(0x3fe00000));
-    } else if (!strcmp(selected->name,"tuple_units")) CHECK(!a.type && !a.reserved && !a.payload && !b.type && !b.reserved && !b.payload);
+    } else if (!strcmp(selected->name,"tuple_oversize")) CHECK(a.type==XR_XIR_I64 && a.payload==41 && b.type==XR_XIR_BOOL && b.payload==1);
+    else if (!strcmp(selected->name,"tuple_units")) CHECK(!a.type && !a.reserved && !a.payload && !b.type && !b.reserved && !b.payload);
     else {
         if (!strcmp(selected->name,"tuple_nested")) {
             XrXirValue number={0};CHECK(xr_xir_tuple_get(&a,0,&number)==XR_XIR_VALUE_OK);

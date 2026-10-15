@@ -27,6 +27,12 @@ static const char source_comptime_cleanup_text[]=
     "fn work(x:ref i64) { defer { twice(ref x) } }\n"
     "fn answer()->i64 { var x=40; work(ref x); return x }\n"
     "export fn run()->i64 { return comptime answer() }\n";
+static const char source_comptime_output_text[]=
+    "fn table()->Array<i8>{var xs:Array<i8>=[0,1];var i=2;while(i<10){xs.push(xs[i-1]+xs[i-2]);i=i+1};return xs}\n"
+    "fn pair()->(i64,i64){return (21,21)}\n"
+    "fn table_constant()->Array<i8>{return comptime table()}\n"
+    "fn pair_constant()->(i64,i64){return comptime pair()}\n"
+    "export fn run()->i64{return comptime {const xs=table_constant();const p=pair_constant();xs[9] as i64+p.0+p.1-34}}\n";
 static const char source_comptime_class_text[]=
     "class Box{items:Array<i64>;constructor(items:Array<i64>){this.items=items}}\n"
     "fn inc(x:ref i64){defer{x=x+2}}\n"
@@ -171,6 +177,10 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--output")) {
+        source_comptime_test_answer(source_comptime_output_text,XR_XIR_I64,42);
+        fprintf(stderr,"Source original Fibonacci10/pair16 output policy2 independent recipes complete Checked/query normal physical0\n");return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--class")) {
         source_comptime_test_answer(source_comptime_class_text,XR_XIR_I64,42);
         fprintf(stderr,"Source private Class/Array field/projected-ref cleanup/independent recipe complete Checked/query normal physical0\n");return 0;
@@ -202,7 +212,7 @@ int main(int argc,char **argv) {
         source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&report);CHECK(report.status==XR_XIR_OK);
         fprintf(stderr,"Source nominal independent recipe complete Checked/query producer normal physical0\n");return 0;
     }
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources") || !strcmp(argv[1],"--lexical-resources") || !strcmp(argv[1],"--function-resources") || !strcmp(argv[1],"--cleanup-resources") || !strcmp(argv[1],"--projection-resources") || !strcmp(argv[1],"--error-resources") || !strcmp(argv[1],"--panic-resources") || !strcmp(argv[1],"--class-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources") || !strcmp(argv[1],"--lexical-resources") || !strcmp(argv[1],"--function-resources") || !strcmp(argv[1],"--cleanup-resources") || !strcmp(argv[1],"--projection-resources") || !strcmp(argv[1],"--error-resources") || !strcmp(argv[1],"--panic-resources") || !strcmp(argv[1],"--class-resources") || !strcmp(argv[1],"--output-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -278,6 +288,10 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--error-resources")) {
             source_comptime_resource_text=source_comptime_error_text;
             fprintf(stderr,"Source typed Error/invoke/projected-ref cleanup whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--output-resources")) {
+            source_comptime_resource_text=source_comptime_output_text;
+            fprintf(stderr,"Source original Fibonacci10/pair16 policy2 whole-producer resources\n");
         }
         if (!strcmp(argv[1],"--class-resources")) {
             source_comptime_resource_text=source_comptime_class_text;

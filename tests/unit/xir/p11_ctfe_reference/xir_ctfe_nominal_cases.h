@@ -27,6 +27,9 @@ static void reference_nominal_value(const XrXirValue *value,const CtfeReferenceC
             CHECK(xr_xir_tuple_get(&tuple,1,&text)==XR_XIR_VALUE_OK);reference_text_value(&text,"ab");
             xr_xir_value_drop(&number);xr_xir_value_drop(&text);xr_xir_value_drop(&tuple);xr_xir_value_drop(&record);return;
         }
+        if (!strcmp(selected->name,"nominal_large")) {
+            CHECK(record.type==XR_XIR_I64 && !record.reserved && record.payload==7);xr_xir_value_drop(&record);return;
+        }
         if (!nested) { reference_text_value(&record,"ab");xr_xir_value_drop(&record);return; }
     } else {
         CHECK(xr_xir_type_is_struct(types,(XrXirType)value->type));
