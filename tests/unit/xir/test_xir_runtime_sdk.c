@@ -192,7 +192,7 @@ static void sdk_known_bytes(void) {
     _Static_assert(sizeof(previous73_sdk_kat_preimage)==3186,"complete previous73 SDK preimage");
     xr_sha256(previous73_sdk_kat_preimage,sizeof(previous73_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous73_sdk_kat_digest,32));
-    CHECK(previous73_sdk_kat_preimage[semantic_offset]==73 && current_sdk_kat_preimage[semantic_offset]==76);
+    CHECK(previous73_sdk_kat_preimage[semantic_offset]==73 && current_sdk_kat_preimage[semantic_offset]==77);
     CHECK(memcmp(previous73_sdk_kat_digest,current_sdk_kat_digest,32));
     xr_sha256(previous74_sdk_kat_preimage,sizeof(previous74_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous74_sdk_kat_digest,32));
