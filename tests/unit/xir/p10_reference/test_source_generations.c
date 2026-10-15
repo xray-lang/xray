@@ -39,7 +39,8 @@ static XrXirProgram *program(const XrXirSourceGenerationView *view,const char *n
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);bool found=false;
     for (uint32_t i=0;i<module->function_count;++i)
-        if (module->functions[i].name_length==strlen(name) && !memcmp(module->functions[i].name,name,strlen(name))) {
+        if (module->declarations->functions[i].module==module->declarations->root_module &&
+            module->functions[i].name_length==strlen(name) && !memcmp(module->functions[i].name,name,strlen(name))) {
             CHECK(!found);*entry=i;found=true;
         }
     CHECK(found && xr_xir_compile_vm_program_take(&lowered,&output)==XR_XIR_OK && !lowered);return output;
@@ -50,6 +51,19 @@ static XrXirCallStatus generation_poll(XrXirInstance *instance) {
         if (status!=XR_XIR_CALL_READY) return status;
     }
     CHECK(false);return XR_XIR_CALL_LIMIT;
+}
+static void bind_program(SourceFixtureOwner *compiler,XrXirSourceGenerations *owner,
+    uint64_t serial,XrXirProgram *input) {
+    XrXirStatus status=xr_xir_compile_source_generation_bind_program(owner,serial,input);
+    if (status!=XR_XIR_OK) fprintf(stderr,"Source Program binding serial%llu status%u\n",
+        (unsigned long long)serial,(unsigned)status);
+    CHECK(status==XR_XIR_OK);
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(compiler->context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,input)==XR_XIR_OK);
+    CHECK(xr_compile_resources_stats(compiler->context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(before.allocation_count==after.allocation_count && before.allocated_bytes==after.allocated_bytes &&
+        before.live_bytes==after.live_bytes && before.work==after.work);
 }
 static void old_function(XrXirInstance *instance,const XrXirValue *function) {
     CHECK(xr_xir_instance_start_function(instance,function,NULL,0)==XR_XIR_CALL_READY);
@@ -175,12 +189,13 @@ static int history_check(const char *mode) {
     const struct AstNode *original=view.ast;
     definition_checks(owner,first,&view,folded || stateful);
     uint32_t entry=0;XrXirProgram *initial=program(&view,"seed",&entry);
+    bind_program(&compiler,owner,first,initial);
     XrXirInstanceConfig runtime_config;CHECK(xr_xir_instance_config_init(&runtime_config,sizeof(runtime_config))==XR_XIR_CALL_READY);
     unsigned output_calls=0;
     if (stateful) runtime_config.output=(XrXirOutputProvider){.abi_version=XR_XIR_CALL_ABI_VERSION,
         .write=generation_output,.context=&output_calls};
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_generation_new(&runtime_config,&instance)==XR_XIR_CALL_READY);
-    uint64_t runtime=0;CHECK(xr_xir_instance_generation_prepare(instance,initial,&runtime)==XR_XIR_CALL_READY);
+    uint64_t runtime=0;CHECK(xr_xir_source_generation_prepare_instance(owner,first,instance,&runtime)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
     CHECK(result.type==XR_XIR_I64 && result.payload==(folded || imported ? 42u : 0u));xr_xir_value_drop(&result);
@@ -202,20 +217,57 @@ static int history_check(const char *mode) {
         uint32_t root=declarations->root_module,scope=declarations->modules[root].lexical_scope;
         CHECK(scope && scope-1!=root && xr_xir_module_same_scope(declarations,root,scope-1));
         uint32_t next_entry=0;XrXirProgram *received=program(&view,"answer",&next_entry);uint64_t candidate=0;
-        CHECK(xr_xir_instance_generation_prepare(instance,received,&candidate)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,initial)==XR_XIR_BAD_STRUCTURE);
+        bind_program(&compiler,owner,serial,received);
+        CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,initial)==XR_XIR_BAD_STAGE);
+        XrXirInstance *foreign=NULL;
+        CHECK(xr_xir_instance_new(initial,&runtime_config,&foreign)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_source_generation_prepare_instance(owner,serial,foreign,&candidate)==XR_XIR_CALL_BAD_ARGUMENT && !candidate);
+        CHECK(xr_xir_instance_free(foreign)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_source_generation_prepare_instance(owner,serial,instance,&candidate)==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_start(instance,next_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
         XrXirValue answer={0};CHECK(xr_xir_instance_take_result(instance,&answer)==XR_XIR_CALL_RETURNED);
         CHECK(answer.type==XR_XIR_I64 && answer.payload==42);xr_xir_value_drop(&answer);
-        CHECK(xr_xir_instance_generation_abort(instance,candidate)==XR_XIR_CALL_READY);
+        if (stateful) {
+            CHECK(xr_xir_instance_generation_publish(instance,candidate)==XR_XIR_CALL_READY);
+            source_publish(&compiler,owner,serial);
+            uint64_t third=prepare(owner,"const value=true\nexport fn answer()->i64{return old()}");
+            CHECK(xr_xir_compile_source_generation_view(owner,third,&view)==XR_XIR_OK && view.parent==serial);
+            uint32_t third_entry=0;XrXirProgram *latest=program(&view,"answer",&third_entry);
+            bind_program(&compiler,owner,third,latest);
+            candidate=0;
+            CHECK(xr_xir_source_generation_prepare_instance(owner,third,instance,&candidate)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_start(instance,third_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_take_result(instance,&answer)==XR_XIR_CALL_RETURNED);
+            CHECK(answer.type==XR_XIR_I64 && answer.payload==42);xr_xir_value_drop(&answer);
+            CHECK(xr_xir_instance_generation_publish(instance,candidate)==XR_XIR_CALL_READY);
+            source_publish(&compiler,owner,third);
+            uint64_t failed=prepare(owner,"const value=99\nexport fn fail()->i64{assert(false);return old()}");
+            CHECK(xr_xir_compile_source_generation_view(owner,failed,&view)==XR_XIR_OK);
+            uint32_t failed_entry=0;XrXirProgram *broken=program(&view,"fail",&failed_entry);
+            bind_program(&compiler,owner,failed,broken);candidate=0;
+            CHECK(xr_xir_source_generation_prepare_instance(owner,failed,instance,&candidate)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_start(instance,failed_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_ASSERTION);
+            CHECK(xr_xir_instance_generation_publish(instance,candidate)==XR_XIR_CALL_BAD_STATE);
+            CHECK(xr_xir_instance_generation_abort(instance,candidate)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_compile_source_generation_abort(owner,failed)==XR_XIR_OK);
+            CHECK(xr_xir_instance_start(instance,third_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
+            CHECK(xr_xir_instance_take_result(instance,&answer)==XR_XIR_CALL_RETURNED);
+            CHECK(answer.type==XR_XIR_I64 && answer.payload==42);xr_xir_value_drop(&answer);
+            xr_xir_compile_program_drop(broken);xr_xir_compile_program_drop(latest);
+        } else {
+            CHECK(xr_xir_instance_generation_abort(instance,candidate)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_compile_source_generation_abort(owner,serial)==XR_XIR_OK);
+        }
         xr_xir_compile_program_drop(received);
-        CHECK(xr_xir_compile_source_generation_abort(owner,serial)==XR_XIR_OK);
     } else CHECK(!serial);
     xr_xir_compile_source_generations_free(owner);xr_xir_compile_program_drop(initial);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);source_fixture_owner_free(&compiler);
     CHECK(status==XR_XIR_OK);
     if (stateful) CHECK(output_calls==1);
-    puts(definitions ? "Owned actual semantic ordinals, generic/type/slot owners and original AST survived Source construction; no history receiving qualification" :
-        "Published historical declaration entered ordinary checking and VM returned42; paired candidate aborted, birth storage remains separate");
+    puts(definitions ? "Owned actual semantic ordinals, generic/type/slot owners and original AST survived Source construction; no history receiving qualification" : stateful ?
+        "Three Source/Instance generations returned42 from birth storage; original initialization ran once and foreign Domain was rejected" :
+        "Published historical declaration entered ordinary checking and VM returned42; paired candidate aborted");
     return 0;
 }
 int main(int argc,char **argv) {
