@@ -163,8 +163,8 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
     if (has_value) {
         CHECK(xr_xir_compile_source_generation_definition(owner,serial,"value",&definition)==XR_XIR_OK);
         XrXirType element=mutable_value ? xr_xir_cell_element(module->types,definition.stored_type) : definition.stored_type;
-        CHECK(value_kind>=4 ? xr_xir_type_is_class(module->types,element) :
-            value_kind==2 || value_kind==3 ? xr_xir_type_is_array(module->types,element) &&
+        CHECK(value_kind==4 || value_kind==5 ? xr_xir_type_is_class(module->types,element) :
+            value_kind==2 || value_kind==3 || value_kind==6 ? xr_xir_type_is_array(module->types,element) &&
             xr_xir_array_element(module->types,element)==XR_XIR_I64 : element==XR_XIR_I64);
         CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_BINDING && definition.mutable==mutable_value &&
             definition.ordinal<module->declarations->slot_count &&
@@ -192,14 +192,15 @@ static int history_check(const char *mode) {
     bool definition_cell=!strcmp(mode,"--definitions-cell");
     bool class_array=!strcmp(mode,"--history-class-array");
     bool class_value=class_array || !strcmp(mode,"--history-class");
+    bool array_equal=!strcmp(mode,"--history-array-equal");
     bool array_const=!strcmp(mode,"--history-array-const");
-    bool array_value=array_const || !strcmp(mode,"--history-array");
-    bool mutating=class_value || (array_value && !array_const) || !strcmp(mode,"--history-cell-write");
-    unsigned storage_kind=class_array ? 5u : class_value ? 4u : array_const ? 3u : array_value ? 2u : mutating ? 1u : 0u;
+    bool array_value=array_equal || array_const || !strcmp(mode,"--history-array");
+    bool mutating=class_value || (array_value && !array_const && !array_equal) || !strcmp(mode,"--history-cell-write");
+    unsigned storage_kind=array_equal ? 6u : class_array ? 5u : class_value ? 4u : array_const ? 3u : array_value ? 2u : mutating ? 1u : 0u;
     bool definitions=definition_cell || !strcmp(mode,"--definitions") || !strcmp(mode,"--definitions-comptime") || !strcmp(mode,"--definitions-import");
     bool folded=!strcmp(mode,"--definitions-comptime");
     bool imported=!strcmp(mode,"--definitions-import");
-    bool cell=definition_cell || mutating || !strcmp(mode,"--history-cell");
+    bool cell=definition_cell || array_equal || mutating || !strcmp(mode,"--history-cell");
 #if defined(XR_SOURCE_HISTORY_NATIVE)
     history_native_case=(cell || array_value) && !definition_cell;history_native_kind=storage_kind;
 #endif

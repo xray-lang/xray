@@ -72,6 +72,7 @@ static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResou
     if (program_storage==3) first="const value=5\nconst cell:Array<i64> = [40]\nfn old()->i64{return cell[0]+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}";
     if (program_storage==4) first="const value=5\nvar cell:Box=Box(40)\nfn old()->i64{cell.value+=1;return cell.value}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nclass Box{value:i64 init(first:i64){this.value=first}}\nexport fn seed()->i64{return 0}";
     if (program_storage==5) first="const value=5\nvar cell:Box=Box(40)\nfn old()->i64{cell.value.set(0,cell.value[0]+1);return cell.value[0]}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nclass Box{value:Array<i64> init(first:i64){this.value=[first]}}\nexport fn seed()->i64{return 0}";
+    if (program_storage==6) first="const value=5\nvar cell:Array<i64> = [40]\nfn old()->i64{if(cell==[40]){return 41}else{return 0}}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}";
     XrXirSourceText text={NULL,first,strlen(first)};uint64_t serial=0;
     status=xr_xir_compile_source_generation_prepare(owner,&text,&serial,NULL);
     if (status!=XR_XIR_OK) { CHECK(!serial);goto done; }
@@ -138,6 +139,7 @@ int main(int argc,char **argv) {
         else if (!strcmp(argv[i],"--program-cell")) {CHECK(!program_binding);program_binding=true;trial.storage=1;history=true;}
         else if (!strcmp(argv[i],"--program-array")) {CHECK(!program_binding);program_binding=true;trial.storage=2;history=true;}
         else if (!strcmp(argv[i],"--program-array-const")) {CHECK(!program_binding);program_binding=true;trial.storage=3;history=true;}
+        else if (!strcmp(argv[i],"--program-array-equal")) {CHECK(!program_binding);program_binding=true;trial.storage=6;history=true;}
         else if (program_phase(argv[i],&trial,&phase)) {CHECK(!program_binding);program_binding=true;history=true;}
         else if (!strcmp(argv[i],"--focused-fault")) {CHECK(!focused);focused=true;}
         else {CHECK(!strcmp(argv[i],"--baseline") && !baseline);baseline=true;}

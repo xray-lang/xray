@@ -18,6 +18,8 @@ static inline const char *source_history_cell_input(unsigned generation,unsigned
         "var value:Item = Item(41)\nfn old()->i64{value.value+=1;return value.value}\nfn identity<T>(value:T)->T{return value}\nclass Item{value:i64 init(value){this.value=value}}\nprint(17)\nexport fn seed()->i64{return 0}";
     if (generation==1 && kind==5) return
         "var value:Item = Item(41)\nfn old()->i64{value.value.set(0,value.value[0]+1);return value.value[0]}\nfn identity<T>(value:T)->T{return value}\nclass Item{value:Array<i64> init(first:i64){this.value=[first]}}\nprint(17)\nexport fn seed()->i64{return 0}";
+    if (generation==1 && kind==6) return
+        "var value:Array<i64> = [41]\nfn old()->i64{if(value==[41]){return 42}else{return 0}}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}";
     switch(generation) {
     case 1:return mutating ?
         "var value:i64=41\nfn old()->i64{value+=1;return value}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}" :
