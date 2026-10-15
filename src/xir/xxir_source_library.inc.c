@@ -227,6 +227,13 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
         if (!map->history)
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
         break;
+    case XR_XIR_ASSERT_CONDITION: case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_INVOKE_DISCARD: case XR_XIR_PANIC_CATCH:
+        /* Values and invoke coordinates stay within the copied body. Literal
+         * messages relocate through CONST_STRING; common checking owns effects. */
+        if (!map->history)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program assertion requires a history owner");
+        break;
     default:
         if (!library_catalog_local_instruction(result.op))
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library instruction remapping is not admitted");
