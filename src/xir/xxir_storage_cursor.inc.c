@@ -109,6 +109,8 @@ static void storage_queue_release(StorageCursor *cursor, uint64_t owners, XirObj
         if (!found) break;
         XrXirValue value = {(uint32_t) leaf.type, 0, 0};
         memcpy(&value.payload, leaf.bytes, sizeof(value.payload));
+        XR_CHECK(xr_xir_value_from_payload(cursor->arena,leaf.type,value.payload,&value),
+            "initialized storage must retain its actual admitted carrier");
         queue_release(&value, pending); ++released;
     }
     XR_CHECK(owners == UINT64_MAX || released == owners, "storage ownership prefix is incomplete");

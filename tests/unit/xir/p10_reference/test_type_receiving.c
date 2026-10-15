@@ -15,6 +15,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 #include "../xir_instance_compile_observer.h"
+#include "../xir_runtime_allocations.h"
 static XrXirType type(uint32_t index) {return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index);}
 static XrXirTypeArena *arena(SourceFixtureOwner *compiler,unsigned shift) {
     XrXirTypeNode nodes[4]={0};
@@ -26,6 +27,7 @@ static XrXirTypeArena *arena(SourceFixtureOwner *compiler,unsigned shift) {
     XrXirTypes pool={nodes,shift+2,NULL,NULL};XrXirTypeArena *result=NULL;
     CHECK(xr_xir_compile_type_arena_new(&compiler->context,&pool,&result)==XR_XIR_VALUE_OK);return result;
 }
+#include "type_receiving_format_cases.h"
 static void no_change(const XrXirCompileContext *context,XrCompileResourceStats before) {
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==before.live_bytes);
@@ -96,7 +98,11 @@ int main(void) {
     xr_xir_value_drop(&cell);xr_xir_value_drop(&array);
     xr_xir_domain_drop(foreign);xr_xir_domain_drop(domain);
     xr_xir_compile_type_arena_drop(unrelated);xr_xir_compile_type_arena_drop(third);
+    receiving_display_cases(&compiler);
+    receiving_error_storage_cases(&compiler);
+    receiving_storage_faults(&compiler);
     source_fixture_owner_free(&compiler);instance_compile_zero();
+    CHECK(!runtime_live && !runtime_bytes);
     puts("Actual nested Cell/Array carrier retained its birth type through two receiving identities; unrelated lookalike, foreign Domain and failed preparation rejected; physical0");
     return 0;
 }

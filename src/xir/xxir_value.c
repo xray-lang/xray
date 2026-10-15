@@ -322,7 +322,8 @@ XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType exp
     XrXirValue value={(uint32_t)expected,0,payload};
     if (owned_carrier_type(expected)) {
         if (!payload) return false;
-        value.type=(uint32_t)object_pointer(&value)->type;
+        /* Error is an existing erased view; its object keeps the concrete enum. */
+        if (expected!=XR_XIR_ERROR) value.type=(uint32_t)object_pointer(&value)->type;
     }
     if (!xr_xir_value_argument(&value,arena,expected)) return false;
     *output=value;return true;
@@ -1849,7 +1850,7 @@ XR_FUNC bool xr_xir_value_format_leaf(const XrXirFormatCursor *cursor,XrXirValue
             !xr_xir_compile_type_arena_layout(cursor->arena,cursor->type,&layout) ||
             !layout.size || layout.size>sizeof(uint64_t) || !cursor->storage) return false;
         value=storage_leaf_value(cursor->type,cursor->storage,layout.size);
-        if (!xr_xir_value_argument(&value,cursor->arena,cursor->type)) return false;
+        if (!xr_xir_value_from_payload(cursor->arena,cursor->type,value.payload,&value)) return false;
     }
     *output=value;return true;
 }
@@ -1902,7 +1903,7 @@ XR_FUNC bool xr_xir_value_format_child(const XrXirFormatCursor *cursor,uint32_t 
         xr_xir_type_is_array(xr_xir_compile_type_arena_types(cursor->arena),cursor->type)) {
         const XirArray *array=(const XirArray *)object_pointer(&value);
         if (index>=array->length) return false;
-        *output=(XrXirFormatCursor){array_slot(array,index),cursor->arena,array->element,true};return true;
+        *output=(XrXirFormatCursor){array_slot(array,index),array->object.arena,array->element,true};return true;
     }
     FormatEnumStorage storage={0};
     if (!format_enum_storage(cursor,&storage) || index>=storage.count) return false;

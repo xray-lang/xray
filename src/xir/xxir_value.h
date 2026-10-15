@@ -94,7 +94,8 @@ XR_FUNC XrXirDomainStats xr_xir_domain_stats(XrXirDomain *domain);
 XR_FUNC bool xr_xir_value_valid(const XrXirValue *value);
 XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena *arena, XrXirType type);
 /* Recover the actual carrier type from trusted compact storage, then apply
- * ordinary expected-type admission. Failure preserves output; no retagging. */
+ * ordinary expected-type admission. Canonical Error storage keeps its erased
+ * view over the unchanged concrete enum. Failure preserves output. */
 XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType expected,
     int64_t payload,XrXirValue *output);
 /* Borrowing expression for verified frame operands. Invalid storage yields

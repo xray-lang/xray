@@ -138,6 +138,9 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                 if (!xr_xir_compile_type_arena_layout(arena, type, &layout) || !layout.size ||
                     layout.size > sizeof(uint64_t) || !span.bytes) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 current = storage_leaf_value(type, span.bytes, layout.size);
+                if (!xr_xir_value_from_payload(arena,type,current.payload,&current)) {
+                    status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+                }
             }
             if (type==XR_XIR_UNIT ? (!tuple_field || inlined || !unit_value(&current)) :
                 !xr_xir_value_argument(&current, arena, type)) {
