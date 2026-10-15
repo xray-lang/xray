@@ -179,7 +179,7 @@ static void effect_enum_ownership(void) {
     printf("Error atoms: %zu allocation failure sites released across checked and lowered\n",sites);
 }
 static void effect_extreme_budgets(void) {
-    XrXirEffects effects={0}; effects.words=UINT32_MAX/64+1; effects.atom_count=UINT32_MAX-1;
+    XrXirEffects effects={0}; effects.outcomes_work.words=UINT32_MAX/64+1; effects.outcomes_work.atom_count=UINT32_MAX-1;
     XrXirFunction function={0}; function.parameter_count=UINT32_MAX-1; function.instruction_count=1;
     function.block_count=UINT32_MAX;
     XrXirModule module={0}; module.functions=&function; module.function_count=1;
@@ -187,7 +187,7 @@ static void effect_extreme_budgets(void) {
     flow.effects=&effects;flow.remaining=&effect_context;
     EffectMark mark=effect_mark(); attempts=0;
     CHECK(error_function(&flow,0)==XR_XIR_BUDGET && !attempts); effect_mark_check(mark);
-    flow.values=UINT32_MAX; flow.stride=(size_t)UINT32_MAX*effects.words;
+    flow.values=UINT32_MAX; flow.stride=(size_t)UINT32_MAX*effects.outcomes_work.words;
     CHECK(error_edge(&flow,0,0,NULL,true)==XR_XIR_BUDGET && !attempts); effect_mark_check(mark);
 
 }
@@ -251,12 +251,12 @@ static void effect_missing_errors(bool wide) {
     XrXirArtifact *artifact = effect_missing_fixture(wide);
     size_t sites = effect_failures(artifact); XrXirEffects *effects = NULL;
     CHECK(effect_analyze(artifact, &effects) == XR_XIR_OK);
-    CHECK(effects->words == (wide ? 2u : 1u));
-    CHECK(effects->atom_count == (wide ? 63u : 4u));
+    CHECK(effect_final_outcomes(effects)->words == (wide ? 2u : 1u));
+    CHECK(effect_final_outcomes(effects)->atom_count == (wide ? 63u : 4u));
     effect_expect(effects, 1, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY);
     CHECK(!xr_xir_effects_error_unknown(effects, 1) && !xr_xir_effects_error_unidentified(effects, 1));
     CHECK(!xr_xir_effects_error(effects, 1, (XrXirType)257, 1));
-    CHECK(error_bit(effects->errors + effects->words, effects->atom_count + 1));
+    CHECK(error_bit(effect_final_outcomes(effects)->errors + effect_final_outcomes(effects)->words, effect_final_outcomes(effects)->atom_count + 1));
     effect_artifact_free(artifact);
     CHECK(xr_xir_effects_error(effects, 2, (XrXirType)256, 1));
     effect_summary_free(effects); CHECK(effect_balanced());

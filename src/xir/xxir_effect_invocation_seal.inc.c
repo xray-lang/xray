@@ -367,8 +367,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         !*request->equations || !request->result || !*request->result) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationWorkspace *owner=*request->equations;EffectFinalFunctions *result=*request->result;
     EffectFinalFunctions *staged=result;bool summary_moved=false;
-    if (!effect_body_request_owned_matches(owner->work,&owner->body,owner->final.material) ||
-        owner->work->resources!=work->resources || result->resources!=work->resources ||
+    if (!effect_body_request_owned_matches(owner->read.work,&owner->read.body,owner->final.material) ||
+        owner->read.work->resources!=work->resources || result->resources!=work->resources ||
         result->count!=effect_body_count(owner->final.material) ||
         !effect_invocation_projection_sink_matches(work,sink,effect_body_count(owner->final.material)))
         return XR_XIR_BAD_STRUCTURE;
@@ -376,12 +376,12 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     EffectInvocationLocalInput *local_inputs=NULL;
     if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
     if (status==XR_XIR_OK && local_inputs) {
-        if (!owner->consumers || !owner->states || owner->pending || owner->front || owner->back ||
-            owner->producer_enabled || owner->class_enabled || owner->edge_index || owner->edge_index_capacity)
+        if (!owner->read.consumers || !owner->states || owner->pending || owner->front || owner->back ||
+            owner->read.producer_enabled || owner->read.class_enabled || owner->edge_index || owner->edge_index_capacity)
             status=XR_XIR_BAD_STRUCTURE;
         for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f) {
             if (!xir_compile_work(work,3)) status=XR_XIR_BUDGET;
-            else if (owner->consumers[f]!=UINT32_MAX || !owner->states[f].expanded || owner->states[f].queued)
+            else if (owner->read.consumers[f]!=UINT32_MAX || !owner->states[f].expanded || owner->states[f].queued)
                 status=XR_XIR_BAD_STRUCTURE;
         }
         if (status==XR_XIR_OK) status=effect_invocation_local_equations_match(work,&owner->final,local_inputs);
@@ -391,7 +391,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
-        if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner->read);
         if (status==XR_XIR_OK) status=effect_invocation_result_match(owner,result);
         if (status==XR_XIR_OK) status=effect_invocation_causes(owner);
     }
@@ -403,7 +403,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         certificate->resources=work->resources;certificate->terms.remaining=work;
         status=effect_invocation_bind_bodies(certificate,owner);
     }
-    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(certificate,owner->declared,owner->final.physical);
+    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(certificate,owner->read.declared,owner->final.physical);
     if (status==XR_XIR_OK) status=effect_invocation_copy_origins(certificate,owner,request->dense);
     if (status==XR_XIR_OK) status=effect_body_owned_types_verify(work,certificate->body);
     if (status==XR_XIR_OK) {

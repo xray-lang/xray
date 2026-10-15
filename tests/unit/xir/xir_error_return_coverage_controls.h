@@ -90,13 +90,13 @@ static void er_fixture(ReturnErrorFixture *fixture,unsigned mode) {
 static void er_golden(const XrXirEffects *effects,unsigned mode) {
     static const uint64_t errors[ER_CASES]={0,8,8,1,0,1};
     CHECK(mode<ER_CASES && effects && effects->count==(mode==4?6u:5u));
-    CHECK(effects->words==1 && effects->atom_count==2 && !effects->errors[0]);
-    CHECK(effects->errors[1]==errors[mode] && effects->errors[3]==8 && !effects->errors[4]);
+    CHECK(effect_final_outcomes(effects)->words==1 && effect_final_outcomes(effects)->atom_count==2 && !effect_final_outcomes(effects)->errors[0]);
+    CHECK(effect_final_outcomes(effects)->errors[1]==errors[mode] && effect_final_outcomes(effects)->errors[3]==8 && !effect_final_outcomes(effects)->errors[4]);
     CHECK(!xr_xir_effects_error_unidentified(effects,1));
     CHECK(xr_xir_effects_error_unknown(effects,1)==(mode==3 || mode==5));
     CHECK(!xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,0));
     CHECK(xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,1)==(mode==1 || mode==2));
-    CHECK(effects->task_errors[1]==(mode==3 || mode==5?XR_XIR_BAD_TYPE:XR_XIR_OK));
+    CHECK(effect_final_outcomes(effects)->task_errors[1]==(mode==3 || mode==5?XR_XIR_BAD_TYPE:XR_XIR_OK));
     CHECK(effects->invocations && effects->invocations->final);
     const EffectInvocationFinal *owner=effects->invocations->final;
     CHECK(owner->site_count);

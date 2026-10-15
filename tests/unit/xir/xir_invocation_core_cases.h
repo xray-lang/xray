@@ -11,8 +11,8 @@ static XrXirStatus invocation_core_storage(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirEffects *effects) {
     *effects=(XrXirEffects){.resources=context->resources,.count=module->function_count};
     XrXirStatus status=XR_XIR_OK;uint32_t count=effects->count;
-    effects->functions=xir_compile_calloc(context,count,sizeof(*effects->functions),&status);
-    if (status==XR_XIR_OK) effects->task_creation=xir_compile_calloc(context,count,sizeof(*effects->task_creation),&status);
+    effects->outcomes_work.functions=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.functions),&status);
+    if (status==XR_XIR_OK) effects->outcomes_work.task_creation=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.task_creation),&status);
     if (status==XR_XIR_OK) effects->root=xir_compile_calloc(context,count,sizeof(*effects->root),&status);
     if (status==XR_XIR_OK) effects->root_witnesses=xir_compile_calloc(context,count,sizeof(*effects->root_witnesses),&status);
     if (status==XR_XIR_OK) effects->unresolved_witnesses=xir_compile_calloc(context,count,sizeof(*effects->unresolved_witnesses),&status);
@@ -21,7 +21,7 @@ static XrXirStatus invocation_core_storage(const XrXirCompileContext *context,
 
 static void invocation_core_storage_free(XrXirEffects *effects) {
     effect_parameters_free(effects);
-    xr_compile_resources_free(effects->functions);xr_compile_resources_free(effects->task_creation);
+    xr_compile_resources_free(effects->outcomes_work.functions);xr_compile_resources_free(effects->outcomes_work.task_creation);
     xr_compile_resources_free(effects->root);xr_compile_resources_free(effects->root_witnesses);
     xr_compile_resources_free(effects->unresolved_witnesses);*effects=(XrXirEffects){0};
 }
@@ -55,7 +55,7 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
     if (status==XR_XIR_OK) {
         CHECK(!rp_release_observer);
         invocation_retired_blocks[0]=invocation_retired_block(workspace);
-        invocation_retired_blocks[1]=invocation_retired_block(workspace->consumers);
+        invocation_retired_blocks[1]=invocation_retired_block(workspace->read.consumers);
         invocation_retired_blocks[2]=invocation_retired_block(workspace->edge_index);
         CHECK(workspace->states && invocation_retired_block(workspace->states)==invocation_retired_blocks[1]);
         for (uint32_t n=0;n<workspace->final.count;++n)
@@ -236,10 +236,10 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             invocation_final_initializer_erasure(context,certificate);
             invocation_final_trace_callback(context,certificate);
             EffectInvocationFinal damaged=*certificate->final;
-            damaged.physical=NULL;EffectInvocationWorkspace refused={0};size_t admission_attempts=rp_attempts;
+            damaged.physical=NULL;EffectInvocationRead refused={0};size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
             CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
-                !refused.work && !refused.consumers && !refused.final.nodes && rp_attempts==admission_attempts &&
+                !refused.work && !refused.consumers && !refused.final && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             refused.work=context;
             CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
