@@ -35,11 +35,37 @@ static int build_operation_close(XtcXirNativeOperation **owner) {
 }
 static int build_native_prepare(XrCompileResources *resources, const XrCliInvocation *inv,
     const XrXirNativeProjection *projection, XrXirNativeArtifact **artifact) {
-    XtcXirLocalToolchainRequest locate = {xr_cli_opt_string(&inv->options, "cc", NULL),
+    XrCliToolchainConfig *config = NULL;
+    XrCliToolchainConfigStatus configured = xr_cli_toolchain_config_open(resources, NULL, &config);
+    if (configured != XR_CLI_TOOLCHAIN_CONFIG_OK) {
+        fprintf(stderr, "XR_BUILD_6010: toolchain preference snapshot failed (status=%u)\n", (unsigned)configured);
+        return configured == XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
+    }
+    const XrCliToolchainConfigView *preferences = xr_cli_toolchain_config_view(config);
+    const char *compiler = xr_cli_opt_string(&inv->options, "cc", NULL);
+    const char *provider = xr_cli_opt_string(&inv->options, "toolchain", NULL);
+    for (size_t i = 0; !provider && i < preferences->count; ++i) {
+        const XrCliToolchainPreference *preference = &preferences->preferences[i];
+        XrCompileResourceStatus work = xr_compile_resources_work(resources, 7);
+        if (work != XR_COMPILE_RESOURCE_OK) {
+            xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
+        }
+        if (strcmp(preference->target, "native")) continue;
+        if (preference->selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
+            preference->selector != XR_TOOLCHAIN_SELECTOR_MSVC &&
+            preference->selector != XR_TOOLCHAIN_SELECTOR_HOST) {
+            fputs("XR_BUILD_6011: selected native toolchain provider is unsupported by this build\n", stderr);
+            xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
+        }
+        if (!compiler) compiler = preference->compiler;
+        break;
+    }
+    XtcXirLocalToolchainRequest locate = {compiler,
         NULL, NULL, 30000, 4 * 1024 * 1024, 1024 * 1024};
     XtcXirLocalDiagnostic local_diagnostic = {0};
     XtcXirLocalToolchain *local = NULL;
     XtcXirLocalStatus found = xtc_xir_local_toolchain_open(resources, &locate, &local, &local_diagnostic);
+    xr_cli_toolchain_config_free(config);
     if (found != XTC_XIR_LOCAL_OK) {
         fprintf(stderr,
             "XR_BUILD_6006: native toolchain lookup failed (status=%u stage=%u domain=%u code=%d os=%u child=%d)\n",
