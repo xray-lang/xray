@@ -14,7 +14,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'spec/source/sections/019-18-error-codes.md': '2c4416085d5d38f37fb0e434d863cba1ff5d5758d44efb29402fa5158282d9ad',
  'src/shared/xr_float_fmt.h': 'dc3f35e72dd96729e5948f98b8103810d1362bad8cec207aabf93db1352f983b',
  'src/shared/xr_sort_core.h': '12d05da0942da491ae99d49729a27f0dfc71e978f0d3992666624fc150d10cdf',
- 'src/shared/xr_value_format_core.h': '0805feed1b616604d68f829132cbec56180a79cded3ad3c5d61c6539156f3704',
+ 'src/shared/xr_value_format_core.h': 'ff804a32605d092bcf7c931cc16fe5c6c3b17ff5af8253d85afbe0d0077b3a06',
  'stdlib/math/math.xr': '0126a1eb1db1760b5950da3f6be0c47f504f65070afaff3757f7b45f27a86115',
  'stdlib/types/array.xr': 'ac31595b3801ee1df3c3f3ab6f1903c5f66ef084f0fa016dc19d24a2fa653223',
  'stdlib/types/f64.xr': '16f8b34079a8ef926027abf5a73c12e2e5601e692c027db00aca622a850cf16c',
