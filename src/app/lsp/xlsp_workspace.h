@@ -8,9 +8,8 @@
  * xlsp_workspace.h - Workspace background indexing and file scanning
  *
  * KEY CONCEPT:
- *   workspace_analyzer is the SOLE authoritative semantic state source.
- *   This module manages background scanning, parallel indexing, and
- *   pending analysis queue — no separate symbol index layer.
+ *   Background display indexing owns immutable Source syntax facts on the
+ *   caller ledger. It never creates VM/compiler semantic authority.
  */
 
 #ifndef XLSP_WORKSPACE_H
@@ -41,24 +40,10 @@ typedef struct XrLspIndexResult XrLspIndexResult;
 // Poll index pool and process results (call from main loop)
 XR_FUNC void xlsp_workspace_poll_index_results(XrLspServer *server);
 
-// Get index pool notify fd (for select/poll)
-XR_FUNC int xlsp_workspace_get_index_notify_fd(XrLspServer *server);
-
 // Merge index results into workspace analyzer
 XR_FUNC void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *results);
 
 // Purge all analyzer/cache state for files under a path prefix
 XR_FUNC void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix);
-
-// Long-session memory bound: rebuild the workspace analyzer from scratch when
-// its type pool has accumulated too much reclaimable garbage. No-op unless the
-// server is idle (not indexing, pool idle) and the pool has grown past an
-// adaptive threshold. Safe to call every main-loop tick.
-XR_FUNC void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server);
-
-// Evict analyzer files that are neither open nor directly imported by any open
-// document, slowing type-pool growth. Self-healing (needed files are re-pulled
-// on the next parse); safe to call whenever the open-document set changes.
-XR_FUNC void xlsp_workspace_evict_unreferenced_files(XrLspServer *server);
 
 #endif  // XLSP_WORKSPACE_H

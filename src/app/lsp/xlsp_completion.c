@@ -20,7 +20,8 @@
 #include "xlsp_imports.h"
 #include "xlsp_builtins.h"
 #include "xlsp_workspace.h"
-#include "xlsp_symbol_index.h"
+#include "xlsp_source_index_store.h"
+#include "xlsp_index_json.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/analyzer/xanalyzer_builtins.h"
 #include "../../frontend/parser/xast_nodes.h"
@@ -363,33 +364,40 @@ typedef struct {
     int added;
 } ShallowCompletionCtx;
 
-static void shallow_completion_collect(const XlspIndexEntry *entry, void *ctx_) {
-    ShallowCompletionCtx *ctx = (ShallowCompletionCtx *) ctx_;
-    if (ctx->added >= XLSP_COMPLETION_SHALLOW_LIMIT)
-        return;
-    if (!entry->name || !entry->is_exported)
-        return;
-    // Same-file symbols already came from the analyzer scope above.
-    if (ctx->doc_uri && entry->uri && strcmp(entry->uri, ctx->doc_uri) == 0)
-        return;
-    if (ctx->seen && xr_hashmap_has(ctx->seen, entry->name))
-        return;
-    if (ctx->seen)
-        xr_hashmap_set(ctx->seen, entry->name, (void *) (uintptr_t) 1);
-
-    XrJsonValue *item =
-        make_completion_item(entry->name, shallow_symbol_completion_kind(entry->kind), NULL);
-    xjson_object_set(item, "sortText", xjson_new_string("4"));
-    xjson_array_push(ctx->items, item);
-    ctx->added++;
+static XrXirStatus completion_index_io(XrOsIoStatus status) {
+    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_BUDGET?XR_XIR_BUDGET:
+        status==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+}
+static XrJsonValue *completion_index_failed(XrLspServer *server,XrJsonValue *items,XrHashMap *seen,XrXirStatus status) {
+    xr_hashmap_owned_free(seen);xjson_free(items);if(server){server->source_failure.stage=2;server->source_failure.status=(unsigned)status;}return NULL;
+}
+static XrXirStatus shallow_completion_collect(const XlspIndexedSymbol *view,void *context) {
+    ShallowCompletionCtx *ctx=context;const XlspSourceIndexSymbol *symbol=view->symbol;
+    if(ctx->added>=XLSP_COMPLETION_SHALLOW_LIMIT||!symbol->exported)return XR_XIR_OK;
+    if(ctx->doc_uri&&!strcmp(ctx->doc_uri,view->uri))return XR_XIR_OK;
+    bool known=false;XrXirStatus status=completion_index_io(xr_hashmap_owned_has(ctx->seen,symbol->name,&known));
+    if(status!=XR_XIR_OK||known)return status;
+    status=completion_index_io(xr_hashmap_owned_set(ctx->seen,symbol->name,(void *)(uintptr_t)1));if(status!=XR_XIR_OK)return status;
+    XrJsonValue *item=xjson_new_object();if(!item)return XR_XIR_OUT_OF_MEMORY;
+    if(!index_json_member(item,"label",xjson_new_string(symbol->name))||
+       !index_json_member(item,"kind",xjson_new_number(shallow_symbol_completion_kind(symbol->kind)))||
+       !index_json_member(item,"sortText",xjson_new_string("4"))){xjson_free(item);return XR_XIR_OUT_OF_MEMORY;}
+    int before=ctx->items->as.array.count;xjson_array_push(ctx->items,item);
+    if(ctx->items->as.array.count!=before+1){xjson_free(item);return XR_XIR_OUT_OF_MEMORY;}
+    ++ctx->added;return XR_XIR_OK;
 }
 
 static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
+    if(server&&server->index_failure!=XR_XIR_OK){server->source_failure.stage=2;server->source_failure.status=(unsigned)server->index_failure;return NULL;}
     XrJsonValue *items = xjson_new_array();
 
     // Tracks names already emitted from the analyzer scope so the shallow
     // workspace-index augmentation below does not duplicate them.
-    XrHashMap *seen = xr_hashmap_new();
+    XrHashMap *seen=NULL;
+    if(!server||!server->index_resources||!items)return completion_index_failed(server,items,seen,XR_XIR_OUT_OF_MEMORY);
+    XrOsIoPolicy seen_policy=xr_compile_io_policy(server->index_resources);
+    XrXirStatus seen_status=completion_index_io(xr_hashmap_owned_new(&seen_policy,&seen));
+    if(seen_status!=XR_XIR_OK)return completion_index_failed(server,items,seen,seen_status);
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     if (doc && analyzer) {
@@ -475,8 +483,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             XrJsonValue *item = make_completion_item(sym->name, kind, detail);
             xjson_object_set(item, "sortText", xjson_new_string("0"));
             xjson_array_push(items, item);
-            if (seen)
-                xr_hashmap_set(seen, sym->name, (void *) (uintptr_t) 1);
+            seen_status=completion_index_io(xr_hashmap_owned_set(seen,sym->name,(void *)(uintptr_t)1));
+            if(seen_status!=XR_XIR_OK){xr_free(symbols);return completion_index_failed(server,items,seen,seen_status);}
         }
         xr_free(symbols);
     }
@@ -537,13 +545,14 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
 
     // Augment with exported top-level symbols from other workspace files
     // (Approach A: closed files are shallow-indexed, not fully analyzed).
-    if (doc && server && server->symbol_index) {
+    if (doc && server && server->source_index) {
         ShallowCompletionCtx sctx = {.items = items, .seen = seen, .doc_uri = doc->uri, .added = 0};
-        xlsp_symbol_index_foreach(server->symbol_index, shallow_completion_collect, &sctx);
+        XrXirStatus status=xlsp_source_index_store_visit(server->source_index,shallow_completion_collect,&sctx);
+        if(status!=XR_XIR_OK){if(seen)xr_hashmap_owned_free(seen);xjson_free(items);server->source_failure.stage=2;server->source_failure.status=(unsigned)status;return NULL;}
     }
 
     if (seen)
-        xr_hashmap_free(seen);
+        xr_hashmap_owned_free(seen);
 
     return items;
 }

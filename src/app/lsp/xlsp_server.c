@@ -20,7 +20,7 @@
 #include "xlsp_ast_utils.h"
 #include "xlsp_workspace.h"
 #include "xlsp_index_pool.h"
-#include "xlsp_symbol_index.h"
+#include "xlsp_source_index_store.h"
 #include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -222,9 +222,10 @@ XrLspServer *xlsp_server_new(void) {
     }
 
     // Shallow workspace-wide symbol index (parallel-populated, no type memory).
-    server->symbol_index = xlsp_symbol_index_new();
-    if (!server->symbol_index) {
-        lsp_log("Warning: Failed to create workspace symbol index");
+    XrCompileResourceLimits index_limits=xr_source_compile_default_resource_limits();
+    if(xr_compile_resources_new(&index_limits,&server->index_resources)!=XR_COMPILE_RESOURCE_OK||
+       xlsp_source_index_store_new(server->index_resources,&server->source_index)!=XR_XIR_OK) {
+        xlsp_server_free(server);return NULL;
     }
 
     // Create background task system.
@@ -338,10 +339,11 @@ void xlsp_server_free(XrLspServer *server) {
     xr_free(server->pending_diag);
 
     // Free the shallow workspace symbol index
-    if (server->symbol_index) {
-        xlsp_symbol_index_free(server->symbol_index);
-        server->symbol_index = NULL;
+    if (server->source_index) {
+        xlsp_source_index_store_free(server->source_index);
+        server->source_index = NULL;
     }
+    xr_compile_resources_release(server->index_resources);server->index_resources=NULL;
 
     // Release any still-live string ids in the pending-request ring
     // buffer. After a clean shutdown the ring is usually empty, but
@@ -1245,6 +1247,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
                 strcmp(token, server->index_progress_token) == 0) {
                 lsp_log("Workspace indexing cancelled by user");
                 server->index_cancelled = true;
+                xlsp_index_pool_cancel_all(server->index_pool);
             }
         }
         xlsp_request_id_free(&id);
@@ -1333,12 +1336,11 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
 
 // Context identifiers for poll events
 typedef struct {
-    int type;  // 0=stdin, 1=async, 2=index_pool
+    int type;  // 0=stdin, 1=async
 } XlspPollCtx;
 
 static XlspPollCtx g_stdin_ctx = {0};
 static XlspPollCtx g_async_ctx = {1};
-static XlspPollCtx g_index_ctx = {2};
 
 int xlsp_server_run(XrLspServer *server) {
     // Set thread-local server for logging
@@ -1375,16 +1377,6 @@ int xlsp_server_run(XrLspServer *server) {
         }
     }
 
-    // Register index pool notification fd
-    if (server->index_pool) {
-        int index_fd = xlsp_index_pool_get_notify_fd(server->index_pool);
-        if (index_fd >= 0) {
-            if (xr_poll_add(&poll, index_fd, XR_POLL_IN, &g_index_ctx) < 0) {
-                lsp_log("Failed to add index pool notify fd to poll");
-            }
-        }
-    }
-
     lsp_log("Event loop initialized with poll");
 
     // Event-driven main loop — runs until `exit` notification arrives.
@@ -1400,7 +1392,6 @@ int xlsp_server_run(XrLspServer *server) {
         }
 
         bool stdin_ready = false;
-        bool index_ready = false;
 
         // Determine which sources are ready
         for (int i = 0; i < n; i++) {
@@ -1414,9 +1405,6 @@ int xlsp_server_run(XrLspServer *server) {
                     break;
                 case 1:
                     break;
-                case 2:
-                    index_ready = true;
-                    break;
             }
         }
 
@@ -1428,10 +1416,6 @@ int xlsp_server_run(XrLspServer *server) {
             }
         }
 
-        // Process parallel indexing results
-        if (index_ready) {
-            xlsp_workspace_poll_index_results(server);
-        }
 
         // Process every complete frame already buffered by the transport.
         // A single pipe read can contain several LSP frames (for example
@@ -1478,16 +1462,12 @@ int xlsp_server_run(XrLspServer *server) {
             if (server->async) {
                 xlsp_async_poll(server->async);
             }
-            xlsp_workspace_poll_index_results(server);
         }
+        xlsp_workspace_poll_index_results(server);
 
         // Check debounced diagnostic deadlines (every loop iteration)
         flush_pending_diagnostics(server);
 
-        // Bound long-session memory: rebuild the analyzer if its type pool has
-        // accumulated too much reclaimable garbage (no-op unless idle + over
-        // threshold).
-        xlsp_workspace_maybe_rebuild_analyzer(server);
     }
 
     xr_poll_destroy(&poll);

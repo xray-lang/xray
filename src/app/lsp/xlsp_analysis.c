@@ -10,6 +10,8 @@
 
 #include "xlsp_analysis.h"
 #include "xlsp_source_open.h"
+#include "../../api/xsource_compile.h"
+#include "../../api/xsource_authority.h"
 #include "xlsp_ast_utils.h"
 #include "xlsp_cache.h"
 #include "../../base/xfileio.h"
@@ -31,7 +33,7 @@
 #include "xlsp_enum_fields.h"
 #include "xlsp_builtins.h"
 #include "xlsp_index_pool.h"
-#include "xlsp_symbol_index.h"
+#include "xlsp_source_index_store.h"
 
 // Static analyzer
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -49,88 +51,6 @@
 #include "../../frontend/analyzer/xanalyzer_ast_visitor.h"
 
 
-
-/* The analyzer names an enum's nominal owner after the compilation unit
- * identity of the session it runs in.  With no identity installed,
- * xa_enum_info_new() fail-closes for every user-declared enum: the variant
- * layout is never recorded, `E.variants` stops being iterable, and every
- * `E.Member` types as <error>.  Batch compilation installs an identity per
- * unit; the editor path has to do the same or it analyses a different
- * language than the compiler does.
- *
- * A graph-backed document uses the graph's canonical identity; a buffer that
- * has no graph entry falls back to an identity derived from its stable URI.
- * Stability is required, not incidental: the owner is baked into the recorded
- * enum layout, so a value that changed per keystroke would invalidate that
- * layout on every edit. */
-/* Turn a document URI into a logical module path: relative, forward-slashed,
- * and free of empty or dot segments.  Returns false when no such path exists,
- * leaving the caller to analyse without an identity rather than inventing one. */
-static bool lsp_logical_path_from_uri(const char *uri, char *buf, size_t cap) {
-    const char *path = xlsp_uri_to_path(uri);
-    if (!path)
-        return false;
-    while (*path == '/' || *path == '\\')
-        path++;
-    size_t len = 0;
-    for (; path[len] && len + 1 < cap; len++)
-        buf[len] = path[len] == '\\' ? '/' : path[len];
-    if (len == 0 || path[len] != '\0')
-        return false;
-    buf[len] = '\0';
-    return true;
-}
-
-static const char *lsp_graph_identity_for_uri(const XrModuleGraph *graph, const char *uri) {
-    if (!graph || !uri)
-        return NULL;
-
-    const char *path = xlsp_uri_to_path(uri);
-    char *canonical_path = xr_realpath(path, NULL);
-    int idx = xr_module_graph_find_source(graph, canonical_path ? canonical_path : path);
-    xr_free(canonical_path);
-    return idx >= 0 ? graph->specs[idx].canonical : NULL;
-}
-
-bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
-                                 const XrModuleGraph *graph, const char *uri) {
-    scope->session = NULL;
-    scope->identity = NULL;
-    if (!session || !uri)
-        return false;
-
-    char *identity = NULL;
-    const char *graph_identity = lsp_graph_identity_for_uri(graph, uri);
-    if (graph_identity) {
-        identity = xr_strdup(graph_identity);
-        if (!identity)
-            return false;
-    } else {
-        char logical[XLSP_MAX_PATH];
-        if (!lsp_logical_path_from_uri(uri, logical, sizeof(logical)))
-            return false;
-        const XrModuleIdentityAuthority authority = {.kind = XR_MODULE_IDENTITY_SCRIPT};
-        if (!(xr_module_identity_from_logical(&authority, logical, &identity) == XR_MODULE_OK))
-            return false;
-    }
-
-    const XrCompileUnitIdentity unit = {.kind = XR_COMPILE_UNIT_USER, .module_identity = identity};
-    if (!xr_compiler_session_set_compile_unit_identity(session, &unit)) {
-        xr_free(identity);
-        return false;
-    }
-    scope->session = session;
-    scope->identity = identity;
-    return true;
-}
-
-void xlsp_analysis_identity_pop(XlspAnalysisIdentity *scope) {
-    if (scope->session)
-        xr_compiler_session_set_compile_unit_identity(scope->session, NULL);
-    xr_free(scope->identity);
-    scope->session = NULL;
-    scope->identity = NULL;
-}
 
 // Use analyzer's scope system for semantic rename (unified design)
 
@@ -260,11 +180,11 @@ void xlsp_analysis_release_module_graph(XrLspServer *server) {
     }
 
     if (server->module_graph) {
-        xr_module_graph_free(server->module_graph);
+        xr_compile_module_graph_free(server->module_graph);
         server->module_graph = NULL;
     }
     if (server->module_graph_authority) {
-        xr_cli_graph_authority_close(server->module_graph_authority);
+        xr_source_authority_close(server->module_graph_authority);
         xr_free(server->module_graph_authority);
         server->module_graph_authority = NULL;
     }
@@ -295,9 +215,12 @@ void xlsp_parse_document(XrLspDocument *doc,XrLspServer *server) {
     xlsp_free_document_cache(doc);
     if(xlsp_source_syntax_diagnostics_json(doc->syntax_snapshot,(XrJsonValue **)&doc->cached_diagnostics)!=XR_XIR_OK)
         lsp_log("Syntax diagnostics unavailable; no empty success cached");
-    if(doc->ast&&server->symbol_index) {
-        XrLspIndexSymbol *symbols=xlsp_index_symbols_from_ast(doc->ast);
-        xlsp_symbol_index_replace_file(server->symbol_index,doc->uri,symbols);xlsp_index_symbol_free_list(symbols);
+    if(doc->ast&&server->source_index) {
+        XlspSourceIndex *index=NULL;XlspSourceDocument input={doc->uri,doc->content,strlen(doc->uri),doc->length,doc->version};
+        XrXirStatus status=xlsp_source_index_build(server->index_resources,&input,&index);
+        if(status==XR_XIR_OK)status=xlsp_source_index_store_replace(server->source_index,&index);
+        xlsp_source_index_free(index);
+        if(status!=XR_XIR_OK){xlsp_index_record_failure(server,status);lsp_log("Open document syntax index unavailable: %u",(unsigned)status);}
     }
     doc->dirty=false;
 }
@@ -535,427 +458,13 @@ cleanup_word:
 
 // SymbolEntry / SymbolTable types declared in xlsp_analysis.h
 
-void xlsp_symbol_table_init(SymbolTable *table) {
-    table->entries = NULL;
-    table->count = 0;
-    table->capacity = 0;
-}
-
-void xlsp_symbol_table_free(SymbolTable *table) {
-    for (int i = 0; i < table->count; i++) {
-        xr_free(table->entries[i].name);
-    }
-    xr_free(table->entries);
-    table->entries = NULL;
-    table->count = 0;
-    table->capacity = 0;
-}
-
-static void symbol_table_add(SymbolTable *table, const char *name, int kind, int line,
-                             int start_char, int end_line, int end_char) {
-    if (table->count >= table->capacity) {
-        int new_cap = table->capacity == 0 ? 16 : table->capacity * 2;
-        XR_REALLOC_OR_ABORT(table->entries, (size_t) new_cap * sizeof(SymbolEntry),
-                            "lsp symbol_table grow");
-        table->capacity = new_cap;
-    }
-    SymbolEntry *entry = &table->entries[table->count++];
-    entry->name = xr_strdup(name);
-    entry->kind = kind;
-    entry->line = line;
-    entry->start_char = start_char;
-    entry->end_line = end_line;
-    entry->end_char = end_char;
-}
-
-// Visitor callback for symbol extraction
-static void symbol_extract_visitor(AstNode *node, void *ctx) {
-    SymbolTable *table = (SymbolTable *) ctx;
-
-    switch (node->type) {
-        case AST_FUNCTION_DECL:
-            if (node->as.function_decl.name) {
-                symbol_table_add(table, node->as.function_decl.name, LSP_SYMBOL_FUNCTION,
-                                 node->line - 1, 0, node->line - 1,
-                                 (int) strlen(node->as.function_decl.name));
-            }
-            break;
-
-        case AST_VAR_DECL:
-        case AST_CONST_DECL:
-            if (node->as.var_decl.name) {
-                int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
-                symbol_table_add(table, node->as.var_decl.name, kind, node->line - 1, 0,
-                                 node->line - 1, (int) strlen(node->as.var_decl.name));
-            }
-            break;
-
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-        case AST_UNION_DECL:
-            if (node->as.class_decl.name) {
-                symbol_table_add(table, node->as.class_decl.name, LSP_SYMBOL_CLASS, node->line - 1,
-                                 0, node->line - 1, (int) strlen(node->as.class_decl.name));
-            }
-            break;
-
-        case AST_METHOD_DECL:
-            if (node->as.method_decl.name) {
-                int kind = node->as.method_decl.is_constructor ? LSP_SYMBOL_CONSTRUCTOR
-                                                               : LSP_SYMBOL_METHOD;
-                symbol_table_add(table, node->as.method_decl.name, kind, node->line - 1, 0,
-                                 node->line - 1, (int) strlen(node->as.method_decl.name));
-            }
-            break;
-
-        case AST_FIELD_DECL:
-            if (node->as.field_decl.name) {
-                symbol_table_add(table, node->as.field_decl.name, LSP_SYMBOL_FIELD, node->line - 1,
-                                 0, node->line - 1, (int) strlen(node->as.field_decl.name));
-            }
-            break;
-
-        case AST_INTERFACE_DECL:
-            if (node->as.interface_decl.name) {
-                symbol_table_add(table, node->as.interface_decl.name, LSP_SYMBOL_INTERFACE,
-                                 node->line - 1, 0, node->line - 1,
-                                 (int) strlen(node->as.interface_decl.name));
-            }
-            break;
-
-        case AST_ENUM_DECL:
-            if (node->as.enum_decl.name) {
-                symbol_table_add(table, node->as.enum_decl.name, LSP_SYMBOL_ENUM, node->line - 1, 0,
-                                 node->line - 1, (int) strlen(node->as.enum_decl.name));
-            }
-            break;
-
-        case AST_ENUM_MEMBER:
-            if (node->as.enum_member.name) {
-                symbol_table_add(table, node->as.enum_member.name, LSP_SYMBOL_ENUM_MEMBER,
-                                 node->line - 1, 0, node->line - 1,
-                                 (int) strlen(node->as.enum_member.name));
-            }
-            break;
-
-        default:
-            break;
-    }
-}
-
-// Extract symbols from AST using visitor framework
-static void extract_symbols_from_ast(AstNode *node, SymbolTable *table) {
-    if (!node)
-        return;
-    xa_ast_walk(node, symbol_extract_visitor, NULL, table);
-}
-
-// Extract symbols from document using lexer-based scanning (fallback)
-static void extract_symbols_lexer(XrLspDocument *doc, SymbolTable *table) {
-    Scanner scanner;
-    xr_scanner_init(&scanner, doc->content);
-
-    Token prev = {0};
-    Token token;
-
-    while (1) {
-        token = xr_scanner_scan(&scanner);
-        if (token.type == TK_EOF)
-            break;
-        if (token.type == TK_ERROR)
-            continue;
-
-        // fn <name>
-        if (prev.type == TK_FN && token.type == TK_NAME) {
-            char *name = xr_strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_FUNCTION, token.line - 1, 0, token.line - 1,
-                             (int) strlen(name));
-            xr_free(name);
-        }
-        // class <name>
-        else if (prev.type == TK_CLASS && token.type == TK_NAME) {
-            char *name = xr_strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_CLASS, token.line - 1, 0, token.line - 1,
-                             (int) strlen(name));
-            xr_free(name);
-        }
-        // interface <name>
-        else if (prev.type == TK_INTERFACE && token.type == TK_NAME) {
-            char *name = xr_strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_INTERFACE, token.line - 1, 0, token.line - 1,
-                             (int) strlen(name));
-            xr_free(name);
-        }
-        // enum <name>
-        else if (prev.type == TK_ENUM && token.type == TK_NAME) {
-            char *name = xr_strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_ENUM, token.line - 1, 0, token.line - 1,
-                             (int) strlen(name));
-            xr_free(name);
-        }
-        // var <name> or const <name>
-        else if ((prev.type == TK_VAR || prev.type == TK_CONST) && token.type == TK_NAME) {
-            char *name = xr_strndup(token.start, token.length);
-            int kind = (prev.type == TK_CONST) ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
-            symbol_table_add(table, name, kind, token.line - 1, 0, token.line - 1,
-                             (int) strlen(name));
-            xr_free(name);
-        }
-
-        prev = token;
-    }
-}
-
-// Extract symbols using AST if available, otherwise fallback to lexer
-void xlsp_extract_symbols(XrLspDocument *doc, SymbolTable *table) {
-    if (doc->ast) {
-        extract_symbols_from_ast(doc->ast, table);
-    } else {
-        extract_symbols_lexer(doc, table);
-    }
-}
-
-// Create a DocumentSymbol JSON object.
-//
-// `full_range` must fully contain `selection_range` — this is enforced by the
-// LSP spec and validated by VS Code. Both ranges come directly from AST
-// location fields (line, column, end_line, end_column) so there is no guessing
-// or clamping here: the AST is the single source of truth.
-static XrJsonValue *create_doc_symbol(const char *name, int kind, XrLspRange full_range,
-                                      XrLspRange selection_range) {
-    XR_DCHECK(name != NULL, "create_doc_symbol: NULL name");
-
-    XrJsonValue *symbol = xjson_new_object();
-    xjson_object_set(symbol, "name", xjson_new_string(name));
-    xjson_object_set(symbol, "kind", xjson_new_number(kind));
-    xjson_object_set(symbol, "range",
-                     xjson_make_range(full_range.start.line, full_range.start.character,
-                                      full_range.end.line, full_range.end.character));
-    xjson_object_set(symbol, "selectionRange",
-                     xjson_make_range(selection_range.start.line, selection_range.start.character,
-                                      selection_range.end.line, selection_range.end.character));
-    return symbol;
-}
-
-// Compute the two ranges expected by DocumentSymbol from an AST declaring
-// node. AST contract:
-//   (node->line, node->column)            — identifier start (1-indexed)
-//   (node->end_line, node->end_column)    — declaration end, exclusive
-//                                            (1-indexed; `.end_column` points
-//                                             to one past the closing token)
-//
-// Converts to LSP's 0-indexed coordinates.
-//
-// Preconditions (checked by parser): node->line >= 1, node->column >= 1,
-// node->end_line >= node->line, and when end_line == line:
-// end_column >= column + strlen(name).
-static void ast_decl_ranges(const AstNode *node, const char *name, XrLspRange *full_range,
-                            XrLspRange *selection_range) {
-    XR_DCHECK(node != NULL && name != NULL, "ast_decl_ranges: NULL arg");
-    XR_DCHECK(node->line >= 1 && node->column >= 1,
-              "ast_decl_ranges: node missing identifier location");
-    XR_DCHECK(node->end_line >= node->line, "ast_decl_ranges: end_line precedes start line");
-
-    int start_line = node->line - 1;
-    int start_col = node->column - 1;
-    int name_len = (int) strlen(name);
-
-    selection_range->start.line = start_line;
-    selection_range->start.character = start_col;
-    selection_range->end.line = start_line;
-    selection_range->end.character = start_col + name_len;
-
-    full_range->start.line = start_line;
-    full_range->start.character = start_col;
-    full_range->end.line = node->end_line - 1;
-    full_range->end.character = (node->end_column > 0) ? node->end_column - 1 : 0;
-
-    XR_DCHECK(full_range->end.line > full_range->start.line ||
-                  (full_range->end.line == full_range->start.line &&
-                   full_range->end.character >= selection_range->end.character),
-              "ast_decl_ranges: selectionRange not contained in fullRange");
-}
-
-// Emit a DocumentSymbol for a declaring node. Returns NULL if the node has
-// incomplete source-location information (in which case the symbol is quietly
-// dropped — we would rather hide one bad entry than reject the whole
-// response).
-static XrJsonValue *emit_decl_symbol(const AstNode *node, const char *name, int kind) {
-    if (!node || !name || node->line < 1 || node->column < 1 || node->end_line < 1) {
-        return NULL;
-    }
-    XrLspRange full_range, selection_range;
-    ast_decl_ranges(node, name, &full_range, &selection_range);
-    return create_doc_symbol(name, kind, full_range, selection_range);
-}
-
-// Build nested document symbols from AST.
-//
-// Every decl node is expected to carry an accurate (line, column,
-// end_line, end_column) span recorded by the parser — see the contract on
-// `AstNode`. This function is therefore pure projection: no heuristics, no
-// range guessing.
-static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
-    if (!node)
-        return;
-
-    switch (node->type) {
-        case AST_PROGRAM:
-            for (int i = 0; i < node->as.program.count; i++) {
-                build_nested_symbols(node->as.program.statements[i], symbols);
-            }
-            break;
-
-        case AST_FUNCTION_DECL: {
-            XrJsonValue *sym =
-                emit_decl_symbol(node, node->as.function_decl.name, LSP_SYMBOL_FUNCTION);
-            if (sym)
-                xjson_array_push(symbols, sym);
-            break;
-        }
-
-        case AST_VAR_DECL:
-        case AST_CONST_DECL: {
-            int kind = node->type == AST_CONST_DECL ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
-            XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, kind);
-            if (sym)
-                xjson_array_push(symbols, sym);
-            break;
-        }
-
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-        case AST_UNION_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node, node->as.class_decl.name, LSP_SYMBOL_CLASS);
-            if (!sym)
-                break;
-
-            XrJsonValue *children = xjson_new_array();
-
-            for (int i = 0; i < node->as.class_decl.field_count; i++) {
-                AstNode *field = node->as.class_decl.fields[i];
-                if (field && field->type == AST_FIELD_DECL) {
-                    XrJsonValue *child =
-                        emit_decl_symbol(field, field->as.field_decl.name, LSP_SYMBOL_FIELD);
-                    if (child)
-                        xjson_array_push(children, child);
-                }
-            }
-
-            for (int i = 0; i < node->as.class_decl.method_count; i++) {
-                AstNode *method = node->as.class_decl.methods[i];
-                if (method && method->type == AST_METHOD_DECL) {
-                    int kind = method->as.method_decl.is_constructor ? LSP_SYMBOL_CONSTRUCTOR
-                                                                     : LSP_SYMBOL_METHOD;
-                    XrJsonValue *child =
-                        emit_decl_symbol(method, method->as.method_decl.name, kind);
-                    if (child)
-                        xjson_array_push(children, child);
-                }
-            }
-
-            if (xjson_array_len(children) > 0) {
-                xjson_object_set(sym, "children", children);
-            } else {
-                xjson_free(children);
-            }
-            xjson_array_push(symbols, sym);
-            break;
-        }
-
-        case AST_INTERFACE_DECL: {
-            XrJsonValue *sym =
-                emit_decl_symbol(node, node->as.interface_decl.name, LSP_SYMBOL_INTERFACE);
-            if (sym)
-                xjson_array_push(symbols, sym);
-            break;
-        }
-
-        case AST_ENUM_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node, node->as.enum_decl.name, LSP_SYMBOL_ENUM);
-            if (!sym)
-                break;
-
-            if (node->as.enum_decl.members) {
-                XrJsonValue *children = xjson_new_array();
-                for (int i = 0; i < node->as.enum_decl.member_count; i++) {
-                    AstNode *member = node->as.enum_decl.members[i];
-                    if (member && member->type == AST_ENUM_MEMBER) {
-                        XrJsonValue *child = emit_decl_symbol(member, member->as.enum_member.name,
-                                                              LSP_SYMBOL_ENUM_MEMBER);
-                        if (child)
-                            xjson_array_push(children, child);
-                    }
-                }
-                if (xjson_array_len(children) > 0) {
-                    xjson_object_set(sym, "children", children);
-                } else {
-                    xjson_free(children);
-                }
-            }
-            xjson_array_push(symbols, sym);
-            break;
-        }
-
-        case AST_EXPORT_STMT:
-            /* Re-exports do not introduce a local declaration symbol. */
-            break;
-
-        default:
-            break;
-    }
-}
-
 XrJsonValue *xlsp_analyze_document_symbols(XrLspDocument *doc) {
-    XrJsonValue *symbols = xjson_new_array();
-
-    if (!doc || !doc->content) {
-        return symbols;
-    }
-
-    // Use AST for nested symbols if available
-    if (doc->ast) {
-        build_nested_symbols(doc->ast, symbols);
-        return symbols;
-    }
-
-    // Fallback to flat symbol table for documents without AST.
-    // The lexer-only path already produces a (line, col, end_line, end_col)
-    // span per entry in 0-indexed form.
-    SymbolTable table;
-    xlsp_symbol_table_init(&table);
-    extract_symbols_lexer(doc, &table);
-
-    for (int i = 0; i < table.count; i++) {
-        SymbolEntry *entry = &table.entries[i];
-        int name_len = (int) strlen(entry->name);
-
-        XrLspRange selection_range = {
-            .start = {entry->line, entry->start_char},
-            .end = {entry->line, entry->start_char + name_len},
-        };
-        // Ensure fullRange covers the identifier (lexer path may return an
-        // end column before the identifier's end when the symbol is followed
-        // by no initializer; clamp locally to keep the invariant).
-        int full_end_line = entry->end_line;
-        int full_end_col = entry->end_char;
-        if (full_end_line < entry->line) {
-            full_end_line = entry->line;
-            full_end_col = entry->start_char + name_len;
-        } else if (full_end_line == entry->line && full_end_col < entry->start_char + name_len) {
-            full_end_col = entry->start_char + name_len;
-        }
-        XrLspRange full_range = {
-            .start = {entry->line, entry->start_char},
-            .end = {full_end_line, full_end_col},
-        };
-
-        XrJsonValue *sym = create_doc_symbol(entry->name, entry->kind, full_range, selection_range);
-        xjson_array_push(symbols, sym);
-    }
-
-    xlsp_symbol_table_free(&table);
-    return symbols;
+    XlspSourceOutline *outline=NULL;XrJsonValue *json=NULL;XrXirStatus status=XR_XIR_BAD_STAGE;
+    if(doc&&doc->syntax_snapshot)status=xlsp_source_syntax_outline(doc->syntax_snapshot,&outline);
+    if(status==XR_XIR_OK)status=xlsp_source_outline_json(outline,&json);
+    xlsp_source_outline_free(outline);
+    if(status!=XR_XIR_OK&&doc&&doc->server){doc->server->source_failure.stage=3;doc->server->source_failure.status=(unsigned)status;}
+    return json;
 }
 
 // ============================================================================

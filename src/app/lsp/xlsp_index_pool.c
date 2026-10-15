@@ -1,626 +1,166 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlsp_index_pool.c - Multi-isolate parallel indexing pool implementation
+ * xlsp_index_pool.c - Same-ledger workers and explicit result ownership
  */
-
 #include "xlsp_index_pool.h"
-#include "xlsp_server.h"
-#include "xray_vm.h"
-#include "../../runtime/xisolate_api.h"
-#include "../../frontend/parser/xparse.h"
-#include "../../frontend/parser/xast.h"
-#include "../../frontend/parser/xast_nodes.h"
-#include "../../toolchain/xcompiler_session.h"
-
-#include <stdlib.h>
+#include "../../os/os_thread.h"
+#include "../../os/os_fs.h"
+#include "../../base/xchecks.h"
+#include "../../base/xutf8.h"
 #include <string.h>
-#include <stdio.h>
-#include <errno.h>
-
+typedef struct IndexWorker {struct XrLspIndexPool *pool;xr_thread_t thread;XrLspIndexResult *current;} IndexWorker;
+struct XrLspIndexPool {
+    XrCompileResources *resources;
+    size_t maximum_file_bytes,queued,active;
+    uint64_t submitted,completed;
+    unsigned worker_count;
+    bool running;
+    xr_mutex_t mutex;
+    xr_cond_t condition;
+    XrLspIndexResult *head,*tail,*results,*result_tail;
+    IndexWorker workers[64];
+};
+static XrXirStatus pool_resource(XrCompileResourceStatus s) {
+    return s==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:s==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
+        s==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+}
+static XrXirStatus pool_work(XrCompileResources *r,size_t n){return pool_resource(xr_compile_resources_work(r,n));}
+static XrXirStatus pool_length(XrCompileResources *r,const char *text,size_t *length) {
+    if(!text)return XR_XIR_BAD_STRUCTURE;
+    for(size_t i=0;;++i){XrXirStatus s=pool_work(r,1);if(s!=XR_XIR_OK)return s;
+        if(!text[i]){*length=i;return XR_XIR_OK;}if(i==SIZE_MAX-1)return XR_XIR_BUDGET;}
+}
+static XrXirStatus pool_copy(XrCompileResources *r,const char *text,char **out) {
+    size_t n=0;XrXirStatus s=pool_length(r,text,&n);if(s!=XR_XIR_OK)return s;
+    s=pool_work(r,n+1);if(s!=XR_XIR_OK)return s;char *copy=NULL;
+    s=pool_resource(xr_compile_resources_alloc(r,n+1,(void **)&copy));
+    if(s==XR_XIR_OK){memcpy(copy,text,n+1);*out=copy;}return s;
+}
+static bool pool_letter(unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z');}
+static unsigned char pool_separator(unsigned char c) {
 #ifdef XR_OS_WINDOWS
-#if defined(_MSC_VER)
-#include <corecrt_io.h>
-#else
-#include <io.h>
+    if(c=='\\')return '/';
 #endif
-#include <fcntl.h>
-#define xr_pipe(fds) _pipe((fds), 4096, _O_BINARY)
-#define xr_pipe_read(fd, buf, n) _read((fd), (buf), (unsigned) (n))
-#define xr_pipe_write(fd, buf, n) _write((fd), (buf), (unsigned) (n))
-#define xr_pipe_close(fd) _close(fd)
-#define xr_pipe_set_nonblocking(fd) /* Windows _pipe fds polled eagerly */
-#else
-#include <unistd.h>
-#include <fcntl.h>
-#define xr_pipe(fds) pipe(fds)
-#define xr_pipe_read(fd, buf, n) read((fd), (buf), (n))
-#define xr_pipe_write(fd, buf, n) write((fd), (buf), (n))
-#define xr_pipe_close(fd) close(fd)
-static inline void xr_pipe_set_nonblocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    return c;
 }
-#endif
-#include "../../base/xarena.h"
-#include "../../base/xfileio.h"
-#include "../../base/xmalloc.h"
-
-// lsp_log declared in xlsp_server.h
-
-// ============================================================================
-// Symbol Extraction from AST
-// ============================================================================
-
-// Create a new index symbol
-static XrLspIndexSymbol *create_symbol(const char *name, XrLspSymbolKind kind, int line, int column,
-                                       bool is_exported) {
-    XrLspIndexSymbol *sym = xr_calloc(1, sizeof(XrLspIndexSymbol));
-    if (!sym)
-        return NULL;
-
-    sym->name = name ? xr_strdup(name) : NULL;
-    sym->kind = kind;
-    sym->line = line;
-    sym->column = column;
-    sym->is_exported = is_exported;
-    sym->is_definition = true;
-
-    return sym;
+static bool pool_unreserved(unsigned char c){return pool_letter(c)||(c>='0'&&c<='9')||c=='-'||c=='_'||c=='.'||c=='~'||c=='/'||c==':';}
+XR_FUNC XrXirStatus xlsp_index_file_uri(XrCompileResources *r,const char *path,char **out) {
+    if(!r||!path||!out||*out)return XR_XIR_BAD_STRUCTURE;
+    size_t n=0;XrXirStatus s=pool_length(r,path,&n);if(s!=XR_XIR_OK)return s;
+    if(!n||n>(SIZE_MAX-9)/3)return XR_XIR_BAD_STRUCTURE;
+    bool drive=n>=3&&pool_letter((unsigned char)path[0])&&path[1]==':'&&pool_separator((unsigned char)path[2])=='/';
+    bool unc=n>=3&&pool_separator((unsigned char)path[0])=='/'&&pool_separator((unsigned char)path[1])=='/';
+    if(!drive&&!unc&&path[0]!='/')return XR_XIR_BAD_STRUCTURE;
+    s=pool_work(r,n);if(s!=XR_XIR_OK)return s;if(!xr_utf8_validate(path,n))return XR_XIR_BAD_STRUCTURE;
+    const char *prefix=drive?"file:///":unc?"file:":"file://";size_t used=strlen(prefix);char *uri=NULL;
+    s=pool_resource(xr_compile_resources_alloc(r,used+n*3+1,(void **)&uri));if(s!=XR_XIR_OK)return s;
+    s=pool_work(r,used);if(s==XR_XIR_OK)memcpy(uri,prefix,used);const char hex[]="0123456789ABCDEF";
+    for(size_t i=0;i<n&&s==XR_XIR_OK;++i){s=pool_work(r,1);if(s!=XR_XIR_OK)break;
+        unsigned char c=pool_separator((unsigned char)path[i]);size_t width=pool_unreserved(c)?1:3;
+        s=pool_work(r,width);if(s!=XR_XIR_OK)break;
+        if(width==1)uri[used++]=(char)c;else{uri[used++]='%';uri[used++]=hex[c>>4];uri[used++]=hex[c&15];}}
+    if(s==XR_XIR_OK)s=pool_work(r,1);
+    if(s==XR_XIR_OK){uri[used]=0;*out=uri;}else xr_compile_resources_free(uri);return s;
 }
-
-// Add symbol to result
-static void add_symbol_to_result(XrLspIndexResult *result, XrLspIndexSymbol *sym) {
-    if (!result || !sym)
-        return;
-
-    sym->next = result->symbols;
-    result->symbols = sym;
-    result->symbol_count++;
+XR_FUNC void xlsp_index_result_free(XrLspIndexResult *n) {
+    if(!n)return;xlsp_source_index_free(n->index);xr_compile_resources_free(n->path);xr_compile_resources_free(n->uri);xr_compile_resources_free(n);
 }
-
-// Extract symbols from AST node (recursive)
-static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_export) {
-    if (!node)
-        return;
-    in_export = in_export || node->is_exported;
-
-    switch (node->type) {
-        case AST_PROGRAM: {
-            int count = node->as.program.count;
-            for (int i = 0; i < count; i++) {
-                extract_symbols(result, node->as.program.statements[i], false);
-            }
-            break;
-        }
-
-        case AST_EXPORT_STMT: {
-            /* Re-exports have no local declaration symbol. */
-            break;
-        }
-
-        case AST_VAR_DECL:
-        case AST_CONST_DECL: {
-            const char *name = node->as.var_decl.name;
-            if (name) {
-                XrLspSymbolKind kind =
-                    node->type == AST_CONST_DECL ? XR_SYMBOL_CONSTANT : XR_SYMBOL_VARIABLE;
-                XrLspIndexSymbol *sym = create_symbol(name, kind, node->line - 1, 0, in_export);
-                add_symbol_to_result(result, sym);
-            }
-            break;
-        }
-
-        case AST_FUNCTION_DECL: {
-            const char *name = node->as.function_decl.name;
-            if (name) {
-                XrLspIndexSymbol *sym =
-                    create_symbol(name, XR_SYMBOL_FUNCTION, node->line - 1, 0, in_export);
-                add_symbol_to_result(result, sym);
-            }
-            // Also extract symbols from function body
-            extract_symbols(result, node->as.function_decl.body, false);
-            break;
-        }
-
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-        case AST_UNION_DECL: {
-            const char *name = node->as.class_decl.name;
-            if (name) {
-                XrLspIndexSymbol *sym =
-                    create_symbol(name, XR_SYMBOL_CLASS, node->line - 1, 0, in_export);
-                add_symbol_to_result(result, sym);
-            }
-            // Extract methods
-            for (int i = 0; i < node->as.class_decl.method_count; i++) {
-                AstNode *method = node->as.class_decl.methods[i];
-                if (method && method->type == AST_FUNCTION_DECL) {
-                    const char *method_name = method->as.function_decl.name;
-                    if (method_name) {
-                        XrLspIndexSymbol *msym = create_symbol(method_name, XR_SYMBOL_METHOD,
-                                                               method->line - 1, 0, false);
-                        add_symbol_to_result(result, msym);
-                    }
-                }
-            }
-            break;
-        }
-
-        case AST_ENUM_DECL: {
-            const char *name = node->as.enum_decl.name;
-            if (name) {
-                XrLspIndexSymbol *sym =
-                    create_symbol(name, XR_SYMBOL_ENUM, node->line - 1, 0, in_export);
-                add_symbol_to_result(result, sym);
-            }
-            // Extract enum members
-            for (int i = 0; i < node->as.enum_decl.member_count; i++) {
-                AstNode *member = node->as.enum_decl.members[i];
-                if (member && member->type == AST_ENUM_MEMBER) {
-                    const char *member_name = member->as.enum_member.name;
-                    if (member_name) {
-                        XrLspIndexSymbol *msym = create_symbol(member_name, XR_SYMBOL_ENUM_MEMBER,
-                                                               member->line - 1, 0, false);
-                        add_symbol_to_result(result, msym);
-                    }
-                }
-            }
-            break;
-        }
-
-        case AST_INTERFACE_DECL: {
-            const char *name = node->as.interface_decl.name;
-            if (name) {
-                XrLspIndexSymbol *sym =
-                    create_symbol(name, XR_SYMBOL_INTERFACE, node->line - 1, 0, in_export);
-                add_symbol_to_result(result, sym);
-            }
-            break;
-        }
-
-        case AST_TYPE_ALIAS: {
-            const char *name = node->as.type_alias.name;
-            if (name) {
-                XrLspIndexSymbol *sym =
-                    create_symbol(name, XR_SYMBOL_TYPE_PARAMETER, node->line - 1, 0, in_export);
-                add_symbol_to_result(result, sym);
-            }
-            break;
-        }
-
-        case AST_BLOCK: {
-            int count = node->as.block.count;
-            for (int i = 0; i < count; i++) {
-                extract_symbols(result, node->as.block.statements[i], false);
-            }
-            break;
-        }
-
-        default:
-            // Skip other node types
-            break;
-    }
+XR_FUNC void xlsp_index_result_free_list(XrLspIndexResult *n){while(n){XrLspIndexResult *next=n->next;xlsp_index_result_free(n);n=next;}}
+static XrXirStatus pool_capture(XrLspIndexPool *p,const char *path,const char *uri,uint64_t revision,XrLspIndexResult **out) {
+    XrLspIndexResult *n=NULL;XrXirStatus s=pool_resource(xr_compile_resources_calloc(p->resources,1,sizeof(*n),(void **)&n));
+    if(s!=XR_XIR_OK)return s;atomic_init(&n->cancel_requested,false);n->revision=revision;
+    s=pool_copy(p->resources,path,&n->path);
+    if(s==XR_XIR_OK)s=uri?pool_copy(p->resources,uri,&n->uri):xlsp_index_file_uri(p->resources,path,&n->uri);
+    char *decoded=NULL;size_t length=0;
+    if(s==XR_XIR_OK)s=pool_length(p->resources,n->uri,&length);
+    if(s==XR_XIR_OK)s=xlsp_source_uri_path(p->resources,n->uri,length,&decoded);
+    if(s==XR_XIR_OK)for(size_t i=0;;++i){s=pool_work(p->resources,2);if(s!=XR_XIR_OK)break;
+        unsigned char a=pool_separator((unsigned char)decoded[i]),b=pool_separator((unsigned char)n->path[i]);
+        if(a!=b){s=XR_XIR_BAD_STRUCTURE;break;}if(!a)break;}
+    xr_compile_resources_free(decoded);if(s==XR_XIR_OK)*out=n;else xlsp_index_result_free(n);return s;
 }
-
-XrLspIndexSymbol *xlsp_index_symbols_from_ast(struct AstNode *ast) {
-    if (!ast)
-        return NULL;
-    // extract_symbols() prepends into result->symbols; borrow a stack result so
-    // callers get an owning list without a full XrLspIndexResult.
-    XrLspIndexResult tmp = {0};
-    extract_symbols(&tmp, (AstNode *) ast, false);
-    return tmp.symbols;
+static void pool_parse(XrLspIndexPool *p,XrLspIndexResult *n) {
+    if(atomic_load(&n->cancel_requested))return;
+    XrOsIoPolicy policy=xr_compile_io_policy(p->resources);uint8_t *text=NULL;size_t length=0;
+    XrOsIoStatus read=xr_os_io_read_regular_file(&policy,n->path,p->maximum_file_bytes,&text,&length);
+    n->status=read==XR_OS_IO_OK?XR_XIR_OK:read==XR_OS_IO_BUDGET?XR_XIR_BUDGET:
+        read==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:read==XR_OS_IO_BAD_ARGUMENT?XR_XIR_BAD_STRUCTURE:XR_XIR_IO;
+    if(n->status==XR_XIR_OK&&!atomic_load(&n->cancel_requested)){
+        size_t uri_length=0;n->status=pool_length(p->resources,n->uri,&uri_length);
+        XlspSourceDocument input={n->uri,(const char *)text,uri_length,length,0};
+        if(n->status==XR_XIR_OK)n->status=xlsp_source_index_build(p->resources,&input,&n->index);}
+    xr_compile_resources_free(text);if(atomic_load(&n->cancel_requested)){xlsp_source_index_free(n->index);n->index=NULL;}
 }
-
-// ============================================================================
-// File Parsing (in worker thread)
-// ============================================================================
-
-static XrLspIndexResult *parse_file(XrVMRuntime *isolate, const char *path, const char *uri) {
-    XrLspIndexResult *result = xr_calloc(1, sizeof(XrLspIndexResult));
-    if (!result)
-        return NULL;
-
-    result->path = xr_strdup(path);
-    result->uri = xr_strdup(uri);
-    result->success = false;
-
-    // Read file content
-    char *content = xr_file_read_all(path, "r", NULL);
-    if (!content) {
-        result->error_message = xr_strdup("Cannot open file");
-        return result;
-    }
-
-    // Parse with recoverable parser (tolerates errors)
-    XrArena arena;
-    xr_arena_init(&arena, 64 * 1024);
-    XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(isolate), &arena,
-                                        uri, &parse_scope)) {
-        result->error_message = xr_strdup("Cannot enter compiler session");
-        xr_arena_destroy(&arena);
-        xr_free(content);
-        return result;
-    }
-
-    Parser parser;
-    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(isolate), content, uri, &arena);
-    AstNode *ast = xr_parse_recoverable(&parser);
-    xr_compiler_session_pop_arena(&parse_scope);
-
-    if (ast) {
-        // Extract symbols from AST
-        extract_symbols(result, ast, false);
-        result->success = !parser.had_error;
-
-        if (parser.had_error && parser.error_count > 0) {
-            result->error_message = xr_strdup("Parse errors");
-        }
-
-    } else {
-        result->error_message = xr_strdup("Parse failed");
-    }
-
-    xr_arena_destroy(&arena);
-    xr_free(content);
-    return result;
-}
-
-// ============================================================================
-// Worker Thread
-// ============================================================================
-
-static void *worker_thread(void *arg) {
-    XrLspIndexWorker *worker = (XrLspIndexWorker *) arg;
-    XrLspIndexPool *pool = worker->pool;
-
-    // Share the main loop's log routing (file + stderr) on this worker
-    // thread. Without this, every lsp_log() below would go to stderr only.
-    if (pool->server) {
-        xlsp_set_log_server(pool->server);
-    }
-
-    lsp_log("[IndexPool] Worker %d started", worker->worker_id);
-
-    // Create per-worker Isolate
-    XrVMConfig params = {0};
-
-    worker->isolate = xray_vm_new_full(&params);
-    if (!worker->isolate) {
-        lsp_log("[IndexPool] Worker %d: Failed to create Isolate", worker->worker_id);
-        return NULL;
-    }
-
-    // Enter the isolate for this thread
-    xr_isolate_enter(worker->isolate);
-
-    while (atomic_load(&pool->running)) {
-        // Wait for work
-        xr_mutex_lock(&pool->work_mutex);
-        while (pool->work_head == NULL && atomic_load(&pool->running)) {
-            xr_cond_wait(&pool->work_cond, &pool->work_mutex);
-        }
-
-        if (!atomic_load(&pool->running)) {
-            xr_mutex_unlock(&pool->work_mutex);
-            break;
-        }
-
-        // Get work item
-        XrLspIndexWork *work = pool->work_head;
-        if (work) {
-            pool->work_head = work->next;
-            if (pool->work_head == NULL) {
-                pool->work_tail = NULL;
-            }
-            pool->work_count--;
-        }
-        xr_mutex_unlock(&pool->work_mutex);
-
-        if (!work)
-            continue;
-
-        atomic_fetch_add(&pool->active_workers, 1);
-
-        // Parse file and extract symbols
-        XrLspIndexResult *result = parse_file(worker->isolate, work->path, work->uri);
-
-        // Free work item
-        xr_free(work->path);
-        xr_free(work->uri);
-        xr_free(work);
-
-        // Submit result
-        if (result) {
-            xr_mutex_lock(&pool->result_mutex);
-            result->next = NULL;
-            if (pool->result_tail) {
-                pool->result_tail->next = result;
-            } else {
-                pool->result_head = result;
-            }
-            pool->result_tail = result;
-            pool->result_count++;
-            xr_mutex_unlock(&pool->result_mutex);
-
-            // Notify main thread
-            char byte = 1;
-            ssize_t n = xr_pipe_write(pool->notify_fd[1], &byte, 1);
-            (void) n;
-        }
-
-        atomic_fetch_add(&pool->files_completed, 1);
-        atomic_fetch_sub(&pool->active_workers, 1);
-    }
-
-    // Cleanup
-    xr_isolate_exit();
-    xray_vm_delete(worker->isolate);
-    worker->isolate = NULL;
-
-    lsp_log("[IndexPool] Worker %d stopped", worker->worker_id);
+static void *pool_worker(void *context) {
+    IndexWorker *w=context;XrLspIndexPool *p=w->pool;
+    for(;;){xr_mutex_lock(&p->mutex);while(p->running&&!p->head)xr_cond_wait(&p->condition,&p->mutex);
+        if(!p->running){xr_mutex_unlock(&p->mutex);break;}
+        XrLspIndexResult *n=p->head;p->head=n->next;if(!p->head)p->tail=NULL;n->next=NULL;
+        --p->queued;++p->active;w->current=n;xr_mutex_unlock(&p->mutex);pool_parse(p,n);
+        xr_mutex_lock(&p->mutex);w->current=NULL;--p->active;++p->completed;
+        if(p->result_tail)p->result_tail->next=n;else p->results=n;p->result_tail=n;xr_mutex_unlock(&p->mutex);}
     return NULL;
 }
-
-// ============================================================================
-// Pool Management
-// ============================================================================
-
-XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
-    XrLspIndexPool *pool = xr_calloc(1, sizeof(XrLspIndexPool));
-    if (!pool)
-        return NULL;
-
-    pool->server = server;
-
-    // Create notification pipe
-    if (xr_pipe(pool->notify_fd) < 0) {
-        xr_free(pool);
-        return NULL;
-    }
-
-    // Set read end to non-blocking
-    xr_pipe_set_nonblocking(pool->notify_fd[0]);
-
-    // Initialize mutexes and condition variables
-    xr_mutex_init(&pool->work_mutex);
-    xr_cond_init(&pool->work_cond);
-    xr_mutex_init(&pool->result_mutex);
-
-    atomic_store(&pool->running, true);
-
-    // Size the pool to the host CPU count so large machines parallelise the
-    // parse pass, but leave one core for the main LSP loop and cap at the
-    // fixed array bound. Always keep at least 2 workers for small machines.
-    unsigned int cpus = xr_os_cpu_count();
-    int desired = cpus > 1 ? (int) cpus - 1 : 1;
-    if (desired < 2)
-        desired = 2;
-    if (desired > XLSP_INDEX_POOL_MAX_WORKERS)
-        desired = XLSP_INDEX_POOL_MAX_WORKERS;
-
-    // Start worker threads
-    pool->worker_count = desired;
-    for (int i = 0; i < pool->worker_count; i++) {
-        pool->workers[i].worker_id = i;
-        pool->workers[i].pool = pool;
-        pool->workers[i].isolate = NULL;
-
-        if (!xr_thread_create(&pool->workers[i].thread, worker_thread, &pool->workers[i])) {
-            lsp_log("[IndexPool] Failed to create worker %d", i);
-            pool->worker_count = i;
-            break;
-        }
-    }
-
-    lsp_log("[IndexPool] Created with %d workers", pool->worker_count);
-    return pool;
+static void pool_cancel_locked(XrLspIndexPool *p) {
+    for(XrLspIndexResult *n=p->head;n;n=n->next)atomic_store(&n->cancel_requested,true);
+    for(XrLspIndexResult *n=p->results;n;n=n->next)atomic_store(&n->cancel_requested,true);
+    for(unsigned i=0;i<p->worker_count;++i)if(p->workers[i].current)atomic_store(&p->workers[i].current->cancel_requested,true);
 }
-
-void xlsp_index_pool_free(XrLspIndexPool *pool) {
-    if (!pool)
-        return;
-
-    // Signal shutdown
-    atomic_store(&pool->running, false);
-
-    // Wake all workers
-    xr_mutex_lock(&pool->work_mutex);
-    xr_cond_broadcast(&pool->work_cond);
-    xr_mutex_unlock(&pool->work_mutex);
-
-    // Wait for workers to finish
-    for (int i = 0; i < pool->worker_count; i++) {
-        xr_thread_join(pool->workers[i].thread, NULL);
-    }
-
-    // Free remaining work items
-    XrLspIndexWork *work = pool->work_head;
-    while (work) {
-        XrLspIndexWork *next = work->next;
-        xr_free(work->path);
-        xr_free(work->uri);
-        xr_free(work);
-        work = next;
-    }
-
-    // Free remaining results
-    xlsp_index_result_free_list(pool->result_head);
-
-    // Cleanup
-    xr_pipe_close(pool->notify_fd[0]);
-    xr_pipe_close(pool->notify_fd[1]);
-    xr_mutex_destroy(&pool->work_mutex);
-    xr_cond_destroy(&pool->work_cond);
-    xr_mutex_destroy(&pool->result_mutex);
-
-    xr_free(pool);
-    lsp_log("[IndexPool] Destroyed");
+XR_FUNC void xlsp_index_pool_cancel_all(XrLspIndexPool *p){if(!p)return;xr_mutex_lock(&p->mutex);pool_cancel_locked(p);xr_mutex_unlock(&p->mutex);}
+static void pool_cancel_file(XrLspIndexResult *node,const char *path) {
+    if(!node)return;
+    for(size_t i=0;;++i){unsigned char a=pool_separator((unsigned char)node->path[i]),b=pool_separator((unsigned char)path[i]);
+        if(a!=b)return;if(!a)break;}
+    atomic_store(&node->cancel_requested,true);
 }
-
-void xlsp_index_pool_submit(XrLspIndexPool *pool, const char *path, const char *uri) {
-    if (!pool || !path)
-        return;
-
-    XrLspIndexWork *work = xr_calloc(1, sizeof(XrLspIndexWork));
-    if (!work)
-        return;
-
-    work->path = xr_strdup(path);
-    work->uri = uri ? xr_strdup(uri) : NULL;
-    if (!work->uri) {
-        // Generate URI from path
-        char uri_buf[1200];
-        snprintf(uri_buf, sizeof(uri_buf), "file://%s", path);
-        work->uri = xr_strdup(uri_buf);
-    }
-
-    xr_mutex_lock(&pool->work_mutex);
-    work->next = NULL;
-    if (pool->work_tail) {
-        pool->work_tail->next = work;
-    } else {
-        pool->work_head = work;
-    }
-    pool->work_tail = work;
-    pool->work_count++;
-    xr_cond_signal(&pool->work_cond);
-    xr_mutex_unlock(&pool->work_mutex);
-
-    atomic_fetch_add(&pool->files_submitted, 1);
+XR_FUNC void xlsp_index_pool_cancel_file(XrLspIndexPool *p,const char *path) {
+    if(!p||!path)return;xr_mutex_lock(&p->mutex);
+    for(XrLspIndexResult *n=p->head;n;n=n->next)pool_cancel_file(n,path);
+    for(XrLspIndexResult *n=p->results;n;n=n->next)pool_cancel_file(n,path);
+    for(unsigned i=0;i<p->worker_count;++i)pool_cancel_file(p->workers[i].current,path);
+    xr_mutex_unlock(&p->mutex);
 }
-
-void xlsp_index_pool_submit_batch(XrLspIndexPool *pool, char **paths, int count) {
-    if (!pool || !paths || count <= 0)
-        return;
-
-    xr_mutex_lock(&pool->work_mutex);
-
-    for (int i = 0; i < count; i++) {
-        if (!paths[i])
-            continue;
-
-        XrLspIndexWork *work = xr_calloc(1, sizeof(XrLspIndexWork));
-        if (!work)
-            continue;
-
-        work->path = xr_strdup(paths[i]);
-        char uri_buf[1200];
-        snprintf(uri_buf, sizeof(uri_buf), "file://%s", paths[i]);
-        work->uri = xr_strdup(uri_buf);
-
-        work->next = NULL;
-        if (pool->work_tail) {
-            pool->work_tail->next = work;
-        } else {
-            pool->work_head = work;
-        }
-        pool->work_tail = work;
-        pool->work_count++;
-    }
-
-    // Wake all workers
-    xr_cond_broadcast(&pool->work_cond);
-    xr_mutex_unlock(&pool->work_mutex);
-
-    atomic_fetch_add(&pool->files_submitted, count);
+XR_FUNC void xlsp_index_pool_free(XrLspIndexPool *p) {
+    if(!p)return;xr_mutex_lock(&p->mutex);p->running=false;pool_cancel_locked(p);xr_cond_broadcast(&p->condition);xr_mutex_unlock(&p->mutex);
+    for(unsigned i=0;i<p->worker_count;++i)XR_CHECK(xr_thread_join(p->workers[i].thread,NULL)==0,"Index worker must join before owner release");
+    xlsp_index_result_free_list(p->head);xlsp_index_result_free_list(p->results);xr_cond_destroy(&p->condition);xr_mutex_destroy(&p->mutex);xr_compile_resources_free(p);
 }
-
-int xlsp_index_pool_get_notify_fd(XrLspIndexPool *pool) {
-    return pool ? pool->notify_fd[0] : -1;
+XR_FUNC XrXirStatus xlsp_index_pool_new(const XlspIndexPoolOptions *o,XrLspIndexPool **out) {
+    if(!o||!o->resources||!o->workers||o->workers>64||!o->maximum_file_bytes||!out||*out)return XR_XIR_BAD_STRUCTURE;
+    XrLspIndexPool *p=NULL;XrXirStatus s=pool_resource(xr_compile_resources_calloc(o->resources,1,sizeof(*p),(void **)&p));if(s!=XR_XIR_OK)return s;
+    p->resources=o->resources;p->maximum_file_bytes=o->maximum_file_bytes;p->running=true;xr_mutex_init(&p->mutex);xr_cond_init(&p->condition);
+    for(unsigned i=0;i<o->workers;++i){s=pool_work(p->resources,sizeof(IndexWorker));if(s!=XR_XIR_OK)break;p->workers[i].pool=p;
+        if(!xr_thread_create(&p->workers[i].thread,pool_worker,&p->workers[i])){s=XR_XIR_IO;break;}++p->worker_count;}
+    if(s==XR_XIR_OK)*out=p;else xlsp_index_pool_free(p);return s;
 }
-
-XrLspIndexResult *xlsp_index_pool_poll(XrLspIndexPool *pool) {
-    if (!pool)
-        return NULL;
-
-    // Drain notification pipe
-    char buf[64];
-    while (xr_pipe_read(pool->notify_fd[0], buf, sizeof(buf)) > 0) {
-        // Consume all notifications
-    }
-
-    // Get all results
-    xr_mutex_lock(&pool->result_mutex);
-    XrLspIndexResult *results = pool->result_head;
-    pool->result_head = NULL;
-    pool->result_tail = NULL;
-    pool->result_count = 0;
-    xr_mutex_unlock(&pool->result_mutex);
-
-    return results;
+static XrXirStatus pool_publish(XrLspIndexPool *p,XrLspIndexResult *head,XrLspIndexResult *tail,size_t count) {
+    xr_mutex_lock(&p->mutex);XrXirStatus s=XR_XIR_OK;
+    if(!p->running)s=XR_XIR_BAD_STAGE;else if(count>UINT64_MAX-p->submitted||count>SIZE_MAX-p->queued)s=XR_XIR_BUDGET;
+    else{if(p->tail)p->tail->next=head;else p->head=head;p->tail=tail;p->queued+=count;p->submitted+=count;xr_cond_broadcast(&p->condition);}
+    xr_mutex_unlock(&p->mutex);return s;
 }
-
-bool xlsp_index_pool_is_idle(XrLspIndexPool *pool) {
-    if (!pool)
-        return true;
-
-    return pool->work_count == 0 && atomic_load(&pool->active_workers) == 0;
+XR_FUNC XrXirStatus xlsp_index_pool_submit(XrLspIndexPool *p,const char *path,const char *uri,uint64_t revision) {
+    if(!p||!path)return XR_XIR_BAD_STRUCTURE;XrLspIndexResult *n=NULL;XrXirStatus s=pool_capture(p,path,uri,revision,&n);
+    if(s==XR_XIR_OK)s=pool_publish(p,n,n,1);if(s!=XR_XIR_OK)xlsp_index_result_free(n);return s;
 }
-
-void xlsp_index_pool_get_progress(XrLspIndexPool *pool, int *submitted, int *completed) {
-    if (!pool) {
-        if (submitted)
-            *submitted = 0;
-        if (completed)
-            *completed = 0;
-        return;
-    }
-
-    if (submitted)
-        *submitted = atomic_load(&pool->files_submitted);
-    if (completed)
-        *completed = atomic_load(&pool->files_completed);
+XR_FUNC XrXirStatus xlsp_index_pool_submit_batch(XrLspIndexPool *p,char *const *paths,size_t count,uint64_t revision) {
+    if(!p||(!paths&&count))return XR_XIR_BAD_STRUCTURE;if(!count)return XR_XIR_OK;if(count>SIZE_MAX/sizeof(*paths))return XR_XIR_BUDGET;
+    XrLspIndexResult *head=NULL,*tail=NULL;XrXirStatus s=XR_XIR_OK;
+    for(size_t i=0;i<count&&s==XR_XIR_OK;++i){s=pool_work(p->resources,sizeof(*paths));if(s!=XR_XIR_OK)break;
+        XrLspIndexResult *n=NULL;s=pool_capture(p,paths[i],NULL,revision,&n);if(s!=XR_XIR_OK)break;if(tail)tail->next=n;else head=n;tail=n;}
+    if(s==XR_XIR_OK)s=pool_publish(p,head,tail,count);if(s!=XR_XIR_OK)xlsp_index_result_free_list(head);return s;
 }
-
-// ============================================================================
-// Memory Management
-// ============================================================================
-
-void xlsp_index_symbol_free(XrLspIndexSymbol *sym) {
-    if (!sym)
-        return;
-    xr_free(sym->name);
-    xr_free(sym->type_str);
-    xr_free(sym);
+XR_FUNC XrLspIndexResult *xlsp_index_pool_poll(XrLspIndexPool *p) {
+    if(!p)return NULL;xr_mutex_lock(&p->mutex);XrLspIndexResult *out=p->results;p->results=p->result_tail=NULL;xr_mutex_unlock(&p->mutex);return out;
 }
-
-void xlsp_index_symbol_free_list(XrLspIndexSymbol *list) {
-    while (list) {
-        XrLspIndexSymbol *next = list->next;
-        xlsp_index_symbol_free(list);
-        list = next;
-    }
+XR_FUNC bool xlsp_index_pool_is_idle(XrLspIndexPool *p) {
+    if(!p)return true;xr_mutex_lock(&p->mutex);bool idle=!p->queued&&!p->active;xr_mutex_unlock(&p->mutex);return idle;
 }
-
-void xlsp_index_result_free(XrLspIndexResult *result) {
-    if (!result)
-        return;
-
-    // Free symbols
-    XrLspIndexSymbol *sym = result->symbols;
-    while (sym) {
-        XrLspIndexSymbol *next = sym->next;
-        xlsp_index_symbol_free(sym);
-        sym = next;
-    }
-
-    xr_free(result->uri);
-    xr_free(result->path);
-    xr_free(result->error_message);
-    xr_free(result);
-}
-
-void xlsp_index_result_free_list(XrLspIndexResult *list) {
-    while (list) {
-        XrLspIndexResult *next = list->next;
-        xlsp_index_result_free(list);
-        list = next;
-    }
+XR_FUNC void xlsp_index_pool_get_progress(XrLspIndexPool *p,uint64_t *submitted,uint64_t *completed) {
+    if(!p){if(submitted)*submitted=0;if(completed)*completed=0;return;}xr_mutex_lock(&p->mutex);
+    if(submitted)*submitted=p->submitted;if(completed)*completed=p->completed;xr_mutex_unlock(&p->mutex);
 }

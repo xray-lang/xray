@@ -18,7 +18,8 @@
 #include "xlsp_cache.h"
 #include "xlsp_imports.h"
 #include "xlsp_utils.h"
-#include "xlsp_symbol_index.h"
+#include "xlsp_source_index_store.h"
+#include "xlsp_index_pool.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 
@@ -50,6 +51,12 @@ void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *p
 
         // Get document if it's open
         XrLspDocument *doc = xlsp_document_get(server, uri);
+
+        char *index_path=NULL,*index_uri=NULL;XrXirStatus index_status=xlsp_source_uri_path(server->index_resources,uri,strlen(uri),&index_path);
+        if(index_status==XR_XIR_OK){xlsp_index_pool_cancel_file(server->index_pool,index_path);index_status=xlsp_index_file_uri(server->index_resources,index_path,&index_uri);}
+        if(index_status==XR_XIR_OK)index_status=xlsp_source_index_store_remove(server->source_index,index_uri);
+        if(index_status!=XR_XIR_OK)xlsp_index_record_failure(server,index_status);
+        xr_compile_resources_free(index_uri);xr_compile_resources_free(index_path);
 
         switch (type) {
             case FILE_CHANGE_CREATED:
@@ -85,8 +92,9 @@ void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *p
                 }
 
                 // Drop the file from the shallow workspace symbol index too.
-                if (server->symbol_index) {
-                    xlsp_symbol_index_remove_file(server->symbol_index, uri);
+                if (server->source_index) {
+                    {XrXirStatus status=xlsp_source_index_store_remove(server->source_index,uri);
+                     if(status!=XR_XIR_OK){xlsp_index_record_failure(server,status);lsp_log("Deleted-file syntax index removal failed");}}
                 }
 
                 lsp_log("Purged state for deleted file: %s", del_path);
@@ -147,6 +155,11 @@ void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri) {
                 server->workspace_folders[j] = server->workspace_folders[j + 1];
             }
             server->workspace_folder_count--;
+            if(server->workspace_folder_count) {
+                const char *roots[MAX_WORKSPACE_FOLDERS];int count=server->workspace_folder_count;
+                for(int root=0;root<count;++root)roots[root]=server->workspace_folders[root].path;
+                xlsp_workspace_start_background_index_roots(server,roots,count);
+            }
             return;
         }
     }

@@ -68,6 +68,7 @@ void xlsp_handle_td_did_close(XrLspServer *server, XrJsonValue *params) {
     const char *uri = xjson_get_string(textDocument, "uri");
     if (uri) {
         xlsp_document_close(server, uri);
+        xlsp_workspace_index_file(server,uri,NULL);
         // The closed document and obsolete Source workspace owners are gone.
     }
 }

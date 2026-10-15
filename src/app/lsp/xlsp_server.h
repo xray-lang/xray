@@ -266,7 +266,9 @@ struct XrLspServer {
     // the live parse path for open documents. Powers workspace/symbol, the
     // go-to-definition fallback for closed files, and completion augmentation
     // without forcing full main-thread analysis of every workspace file.
-    struct XlspSymbolIndex *symbol_index;
+    struct XlspSourceIndexStore *source_index;
+    XrCompileResources *index_resources;
+    XrXirStatus index_failure; /* Sticky failed display-index transaction; never publish stale success. */
 
     // Request cancellation support ($/cancelRequest)
     XlspPendingRequests pending_requests;
@@ -287,13 +289,12 @@ struct XrLspServer {
      * NULL when no report exists. */
     struct XlspCycleReport *cycle_report;
 
-    // Long-session memory bound for the workspace analyzer's type pool.
-    // Holds the pool size (bytes) measured right after the last clean
-    // (re)build/index once the server settled to idle. 0 means "not yet
-    // established". xlsp_workspace_maybe_rebuild_analyzer() rebuilds the
-    // analyzer when the live pool grows past an adaptive multiple of this.
-    size_t analyzer_pool_baseline_bytes;
 };
+
+/* Preserve the first failed display transaction until this server owner dies. */
+static inline void xlsp_index_record_failure(XrLspServer *server,XrXirStatus status) {
+    if(status!=XR_XIR_OK&&server->index_failure==XR_XIR_OK)server->index_failure=status;
+}
 
 // Create and destroy server
 XR_FUNC XrLspServer *xlsp_server_new(void);
