@@ -38,7 +38,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_state_status(const XrCompileState *st
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_fail(XrCompileState *state, XrCompileResourceStatus status) {
     if (!state) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
-    if (status < XR_COMPILE_RESOURCE_OK || status > XR_COMPILE_RESOURCE_OUT_OF_MEMORY)
+    if (status < XR_COMPILE_RESOURCE_OK || status > XR_COMPILE_RESOURCE_CANCELLED)
         status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     if (status != XR_COMPILE_RESOURCE_OK) {
         int expected = XR_COMPILE_RESOURCE_OK;
