@@ -17,6 +17,27 @@ static bool query_syntax_range(const XrXirSourceView *view,XrXirSourceRange rang
     if(absent)return !range.line&&!range.column&&!range.end_line&&!range.end_column;
     return range.line>0&&range.column>0&&range.end_line==range.line&&range.end_column>range.column;
 }
+static bool query_syntax_same_range(XrXirSourceRange a,XrXirSourceRange b) {
+    return a.module==b.module&&a.line==b.line&&a.column==b.column&&a.end_line==b.end_line&&a.end_column==b.end_column;
+}
+static XrXirStatus query_syntax_pattern_binding(SourceQueryCopy *copy,const XrXirSourceSyntaxView *syntax,
+    const XrXirSourceMarker *marker) {
+    const XrXirSourceView *view=&copy->snapshot->view;
+    const XrXirSourceDeclaration *binding=&view->declarations[marker->declaration-1];
+    if(binding->kind!=XR_XIR_SOURCE_BINDING||syntax->declarations[marker->declaration-1].role!=XR_XIR_SOURCE_SYNTAX_NAME)
+        return XR_XIR_BAD_STRUCTURE;
+    bool field=false,declared=query_syntax_same_range(syntax->declarations[marker->declaration-1].name,marker->range);
+    for(uint32_t i=0;i<view->reference_count;++i) {
+        if(!query_work(copy,sizeof(view->references[i])+sizeof(syntax->references[i])))return copy->status;
+        if(!query_syntax_same_range(syntax->references[i],marker->range))continue;
+        const XrXirSourceReference *reference=&view->references[i];
+        if(reference->declaration==marker->declaration&&reference->access==XR_XIR_SOURCE_WRITE)declared=true;
+        if(reference->declaration&&reference->declaration<=view->declaration_count&&
+            reference->declaration==reference->target&&view->declarations[reference->declaration-1].kind==XR_XIR_SOURCE_MEMBER)
+            field=true;
+    }
+    return field&&declared?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapshot *snapshot,
     const XrXirSourceSyntaxView *syntax) {
     if(!snapshot||!syntax||snapshot->syntax_ready)return XR_XIR_BAD_STRUCTURE;
@@ -56,11 +77,17 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         if(!query_work(&copy,sizeof(syntax->markers[i])))return copy.status;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(!marker->declaration||marker->declaration>view->declaration_count||
-            (marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT)||
+            (marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT&&
+                marker->role!=XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING)||
             !query_syntax_range(view,marker->range,false))return XR_XIR_BAD_STRUCTURE;
         const XrXirSourceDeclaration *decl=&view->declarations[marker->declaration-1];
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[marker->declaration-1];
         if(marker->range.module!=decl->range.module)return XR_XIR_BAD_STRUCTURE;
+        if(marker->role==XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING) {
+            XrXirStatus status=query_syntax_pattern_binding(&copy,syntax,marker);
+            if(status!=XR_XIR_OK)return status;
+            continue;
+        }
         if(marker->role==XR_XIR_SOURCE_MARKER_REF_ARGUMENT) {
             /* A readonly Class binding may name an exclusive field projection.
              * This marker is observational; the checked place still authenticates

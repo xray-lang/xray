@@ -20,9 +20,9 @@ static XrXirSourceRange source_query_name_span(SourceContext *ctx,XrNameSpan spa
     return (XrXirSourceRange){ctx->module,span.line,span.column,span.line,span.column+(int)length};
 }
 static XrXirSourceRange source_query_token_range(SourceContext *ctx,AstNode *node) {
-    while(node&&node->type==AST_CALL_EXPR) {
+    while(node&&(node->type==AST_CALL_EXPR||node->type==AST_ENUM_CONSTRUCT)) {
         if(!source_work(ctx,node))return (XrXirSourceRange){ctx->module,0,0,0,0};
-        node=node->as.call_expr.callee;
+        node=node->type==AST_CALL_EXPR?node->as.call_expr.callee:node->as.enum_construct.variant_path;
     }
     if(node&&node->type==AST_MEMBER_ACCESS&&node->as.member_access.name_span.line)
         return source_query_name_span(ctx,node->as.member_access.name_span,node->as.member_access.name);
@@ -62,6 +62,13 @@ static bool source_query_syntax_reference(SourceContext *ctx,XrXirSourceRange ra
         &ctx->syntax.reference_count,&ctx->syntax_reference_capacity,sizeof(*facts));
     if(!facts)return false;ctx->syntax.references=facts;
     return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.reference_count-1],&range,sizeof(range));
+}
+static bool source_query_pattern_binding(SourceContext *ctx,uint32_t declaration,XrXirSourceRange range) {
+    XrXirSourceMarker *facts=source_query_append(ctx,ctx->syntax.markers,&ctx->syntax.marker_count,
+        &ctx->syntax_marker_capacity,sizeof(*facts));
+    if(!facts)return false;ctx->syntax.markers=facts;
+    XrXirSourceMarker marker={range,declaration,XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING};
+    return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.marker_count-1],&marker,sizeof(marker));
 }
 static bool source_query_mode(SourceContext *ctx,uint32_t declaration,XrParamMode mode,XrNameSpan span) {
     if(mode==XR_PARAM_READ)return true;

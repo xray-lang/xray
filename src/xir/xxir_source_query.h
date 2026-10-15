@@ -94,7 +94,10 @@ typedef struct XrXirSourceDeclarationSyntax {
     uint32_t flags;
 } XrXirSourceDeclarationSyntax;
 typedef enum XrXirSourceMarkerRole {
-    XR_XIR_SOURCE_MARKER_REF = 1, XR_XIR_SOURCE_MARKER_MOVE, XR_XIR_SOURCE_MARKER_REF_ARGUMENT
+    XR_XIR_SOURCE_MARKER_REF = 1, XR_XIR_SOURCE_MARKER_MOVE, XR_XIR_SOURCE_MARKER_REF_ARGUMENT,
+    /* One parser token both selects a payload field and declares this binding.
+     * Its same-range MEMBER reference identifies the field independently. */
+    XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING
 } XrXirSourceMarkerRole;
 typedef struct XrXirSourceMarker {
     XrXirSourceRange range;

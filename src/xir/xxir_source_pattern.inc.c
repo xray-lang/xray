@@ -15,7 +15,7 @@ typedef struct SourceMatchPattern {
     SourceName *symbol;
     struct SourceMatchPattern **fields;
     XrXirType type;
-    uint32_t count;
+    uint32_t count, field_declaration;
     bool any, boolean, truth;
     bool interval, empty;
     uint64_t low, high;
@@ -153,6 +153,10 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
         if (!source_query_target_reference(ctx,range,ctx->nominal_members[declaration][variant.field_begin+field],XR_XIR_SOURCE_READ)) return false;
         SourceMatchPattern *child=source_alloc(ctx,1,sizeof(*child));
         if (!child || !source_match_pattern(ctx,payload->patterns[i],types[field],child,depth+1)) return false;
+        /* Shorthand shares the exact parser token with its payload field. An
+         * explicit alias has its own token even when its spelling is equal. */
+        if (child->binding && child->binding->line==span.line && child->binding->column==span.column)
+            child->field_declaration=ctx->nominal_members[declaration][variant.field_begin+field];
         out->fields[field]=child;
     }
     return true;
