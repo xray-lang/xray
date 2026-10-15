@@ -58,7 +58,7 @@ static XrXirStatus effect_go_safe(const XrXirModule *module, XrXirEffects *effec
     }
     for (uint32_t f = 0; f < effects->count; ++f) {
         if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
-        if (effects->root[f].requires_root || effects->root[f].unresolved)
+        if (effect_roots_read(effects)->root[f].requires_root || effect_roots_read(effects)->root[f].unresolved)
             effects->outcomes_work.go_safe[f] = XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;

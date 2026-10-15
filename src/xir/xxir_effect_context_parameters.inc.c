@@ -35,9 +35,9 @@ static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
     xr_xir_compile_declarations_free(contexts->source_declarations);
     xr_xir_compile_generics_free(contexts->source_generics,contexts->base_count);
     effect_parameters_free(&contexts->uses);
-    xr_compile_resources_free(contexts->uses.root);
-    xr_compile_resources_free(contexts->uses.root_witnesses);
-    xr_compile_resources_free(contexts->uses.unresolved_witnesses);
+    xr_compile_resources_free(contexts->uses.outcomes_work.root);
+    xr_compile_resources_free(contexts->uses.outcomes_work.root_witnesses);
+    xr_compile_resources_free(contexts->uses.outcomes_work.unresolved_witnesses);
     xr_compile_resources_free(contexts->uses.outcomes_work.functions);
     xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
     xr_compile_resources_free(contexts->nodes);

@@ -230,7 +230,9 @@ static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
 static XrXirStatus effect_source_publication_match(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
     const EffectInvocationCertificate *certificate=effects->invocations;
-    if (!effects->root || !effects->root_witnesses || !effects->unresolved_witnesses ||
+    const EffectFinalOutcomes *public=effect_final_outcomes(effects);
+    if (!public) return XR_XIR_BAD_STRUCTURE;
+    if (!public->root || !public->root_witnesses || !public->unresolved_witnesses ||
         !effects->contracts || !effects->formula_terminals || !effects->constant_witnesses)
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<effects->count;++f) {
@@ -250,34 +252,16 @@ static XrXirStatus effect_source_publication_match(const XrXirCompileContext *wo
             if (a->terms[t].kind!=b->terms[t].kind || a->terms[t].index!=b->terms[t].index)
                 return XR_XIR_BAD_STRUCTURE;
         }
-        if (!xir_compile_work(work,sizeof(XrXirRootEffects))) return XR_XIR_BUDGET;
-        XrXirRootEffects fact=result->facts[f];
-        XrXirRootEffectWitness witnesses[2];
         for (uint32_t d=0;d<4;++d) {
             const XrXirRootEffectWitness *expected=&result->witnesses[(size_t)d*effects->count+f];
             if (!xir_compile_work(work,10)) return XR_XIR_BUDGET;
             if (!effect_invocation_witness_equal(expected,&effects->formula_terminals[(size_t)d*effects->count+f]) ||
                 (d>=2 && !effect_invocation_witness_equal(expected,
                     &effects->constant_witnesses[(size_t)(d-2)*effects->count+f]))) return XR_XIR_BAD_STRUCTURE;
-            if (d<2) {
-                if (!xir_compile_work(work,sizeof(witnesses[d]))) return XR_XIR_BUDGET;
-                witnesses[d]=*expected;
-            }
         }
-        if (effects->contexts && (!source->generics || !source->generics[f].parameter_count)) {
-            const EffectContextForest *forest=effects->contexts->forest;
-            if (f>=forest->count) return XR_XIR_BAD_STRUCTURE;
-            if (!xir_compile_work(work,sizeof(fact)+sizeof(witnesses))) return XR_XIR_BUDGET;
-            fact=forest->facts[f];witnesses[0]=forest->witnesses[f];
-            witnesses[1]=forest->witnesses[forest->count+f];
-        }
-        if (!xir_compile_work(work,12)) return XR_XIR_BUDGET;
-        if (fact.requires_root!=effects->root[f].requires_root || fact.unresolved!=effects->root[f].unresolved ||
-            !effect_invocation_witness_equal(&witnesses[0],&effects->root_witnesses[f]) ||
-            !effect_invocation_witness_equal(&witnesses[1],&effects->unresolved_witnesses[f]))
-            return XR_XIR_BAD_STRUCTURE;
+
     }
-    return XR_XIR_OK;
+    return effect_public_root_match(work,effects);
 }
 
 /* Control and Error permissions retain their independent original algorithms.
@@ -300,7 +284,7 @@ static XrXirStatus effect_source_outcomes_prepare(const XrXirCompileContext *wor
     const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
     if (!actual) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(*fresh))) return XR_XIR_BUDGET;
-    *fresh=(XrXirEffects){.resources=work->resources,.count=effects->count,.root=effects->root,
+    *fresh=(XrXirEffects){.resources=work->resources,.count=effects->count,.root_input=actual,
         .contexts=effects->contexts,.contracts=effects->contracts,.invocations=effects->invocations,
         .result_borrow=effects->result_borrow,.generation=effects->invocations->body,
         .cells=effects->cells};

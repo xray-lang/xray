@@ -14,9 +14,9 @@ static XrXirStatus effect_context_owner_project(const XrXirCompileContext *conte
     }
     for (uint32_t f=0;f<effects->count;++f) {
         if (source->generics && source->generics[f].parameter_count) continue;
-        effects->root[f]=fresh->forest->facts[f];
-        effects->root_witnesses[f]=fresh->forest->witnesses[f];
-        effects->unresolved_witnesses[f]=fresh->forest->witnesses[fresh->forest->count+f];
+        effects->outcomes_work.root[f]=fresh->forest->facts[f];
+        effects->outcomes_work.root_witnesses[f]=fresh->forest->witnesses[f];
+        effects->outcomes_work.unresolved_witnesses[f]=fresh->forest->witnesses[fresh->forest->count+f];
     }
     return XR_XIR_OK;
 }
@@ -43,7 +43,7 @@ XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
 XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects) {
     if (!xir_effects_context_matches(context,effects,source ? source->function_count : 0) ||
-        !source) return XR_XIR_BAD_STRUCTURE;
+        !source || !effects->outcomes_owner || effects->root_input) return XR_XIR_BAD_STRUCTURE;
     XrXirModule normalized=*source;
     if (!normalized.types) normalized.types=&effect_empty_types;
     source=&normalized;
@@ -346,7 +346,7 @@ XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *contex
             function,instruction,(uint32_t)op->immediate,&mask);
         if (status!=XR_XIR_OK) return status;
     } else {
-        const XrXirRootEffects *facts=&effects->root[op->immediate];
+        const XrXirRootEffects *facts=&effect_roots_read(effects)->root[op->immediate];
         mask=(facts->requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (facts->unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
     }

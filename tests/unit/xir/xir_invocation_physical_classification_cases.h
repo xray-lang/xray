@@ -146,7 +146,7 @@ static XrXirStatus conditional_physical_case(const XrXirCompileContext *context,
             effects->invocations->body);
     }
     if (status==XR_XIR_OK && oracle) {
-        CHECK(!effects->root[0].requires_root && !effects->root[0].unresolved && effects->root[1].unresolved);
+        CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved && effect_roots_read(effects)->root[1].unresolved);
         CHECK((effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL) &&
             effects->invocations->final->physical->resources==context->resources);
         const XrXirTypeNode *signature=xr_xir_callable_signature(&effects->invocations->terms.types,

@@ -308,7 +308,7 @@ static void conditional_domain_rejections(const XrXirCompileContext *context) {
     CHECK(effect_ordinary_classify(context,&fixture.module,resolved,&contexts,&selected)==XR_XIR_OK);
     fixture.types.count=5;
     CHECK(effect_ordinary_roots(context,&fixture.module,contexts)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!contexts->uses.root && !contexts->uses.root_witnesses);
+    CHECK(!contexts->uses.outcomes_work.root && !contexts->uses.outcomes_work.root_witnesses);
     effect_ordinary_free(contexts);effect_context_free(resolved);
 }
 
@@ -336,7 +336,7 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
             for (uint32_t n=0;n<owner->dense->count;++n) {
                 const XrXirFunction *body=&owner->dense->functions[n];
                 fprintf(stderr," context%u decl%u ordinary%u root%u unknown%u",n,owner->dense->nodes[n].declaration,
-                    owner->dense->nodes[n].ordinary,owner->dense->uses.root[n].requires_root,owner->dense->uses.root[n].unresolved);
+                    owner->dense->nodes[n].ordinary,owner->dense->uses.outcomes_work.root[n].requires_root,owner->dense->uses.outcomes_work.root[n].unresolved);
                 for (uint32_t p=0;p<body->parameter_count;++p)
                     fprintf(stderr," p%u:%u/k%u",p,body->parameters[p],owner->dense->uses.contracts[n].parameters[p].kind);
                 for (uint32_t i=0;i<body->instruction_count;++i)
@@ -552,11 +552,11 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};module.provenance=&template;
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(effects->root[0].unresolved && !effects->root[0].requires_root);
-        CHECK(!effects->root[1].unresolved && !effects->root[1].requires_root);
-        CHECK(effects->root[2].requires_root && !effects->root[2].unresolved);
-        CHECK(effects->root[4].unresolved && !effects->root[4].requires_root);
-        CHECK(!effects->root[5].unresolved && !effects->root[5].requires_root);
+        CHECK(effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root);
+        CHECK(!effect_roots_read(effects)->root[1].unresolved && !effect_roots_read(effects)->root[1].requires_root);
+        CHECK(effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
+        CHECK(effect_roots_read(effects)->root[4].unresolved && !effect_roots_read(effects)->root[4].requires_root);
+        CHECK(!effect_roots_read(effects)->root[5].unresolved && !effect_roots_read(effects)->root[5].requires_root);
         CHECK(effects->contracts[0].parameters[0].kind==XR_XIR_EFFECT_PARAMETER_FIXED);
         CHECK(effects->contracts[0].formula.term_count==1 &&
             effects->contracts[0].formula.terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER &&
@@ -631,8 +631,8 @@ static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, 
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     XrXirEffects *effects=NULL;XrXirStatus status=xr_xir_compile_effects_infer_verified(context,&module,&effects);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(!effects->root[0].requires_root && !effects->root[0].unresolved);
-        CHECK(effects->root[1].requires_root && !effects->root[1].unresolved);
+        CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved);
+        CHECK(effect_roots_read(effects)->root[1].requires_root && !effect_roots_read(effects)->root[1].unresolved);
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(context,effects,1,&entry)==XR_XIR_OK &&
             entry.intrinsic_mask==XR_XIR_CALLABLE_ROOT_REQUIRED && !entry.parameter_count);
@@ -742,7 +742,7 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     XrXirEffects *effects=NULL;
     XrXirStatus status=conditional_zero_checked(context,&module,&effects);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(effects->root[0].unresolved && !effects->root[0].requires_root);
+        CHECK(effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root);
         CHECK(effects->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED &&
             !effects->contracts[0].formula.term_count && !effects->contracts[0].formula.terms);
         XirEffectEntryRootView view={0};
@@ -754,7 +754,7 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     /* Merely extracting the same payload does not execute its body. */
     ops[2]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
     status=conditional_zero_checked(context,&module,&effects);
-    if (status==XR_XIR_OK) CHECK(!effects->root[0].unresolved && !effects->root[0].requires_root &&
+    if (status==XR_XIR_OK) CHECK(!effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root &&
         !effects->contracts[0].formula.constant_mask && !effects->contracts[0].formula.term_count);
     xr_xir_compile_effects_free(effects);effects=NULL;
     if (status!=XR_XIR_OK) return status;
@@ -804,11 +804,11 @@ static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context
         CHECK(effect_body_request_head(&flow.body,0,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
         bool needed=true;
         CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && !needed);
-        CHECK(effects->root[0].requires_root && !effects->root[0].unresolved &&
+        CHECK(effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&
             effects->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_REQUIRED &&
             !effects->contracts[0].formula.term_count);
-        CHECK(!effects->root[1].requires_root && !effects->root[1].unresolved);
-        CHECK(effects->root[2].requires_root && !effects->root[2].unresolved);
+        CHECK(!effect_roots_read(effects)->root[1].requires_root && !effect_roots_read(effects)->root[1].unresolved);
+        CHECK(effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
         XirEffectEntryRootView view={0};
         CHECK(xir_effects_entry_root(context,effects,0,&view)==XR_XIR_OK &&
             view.intrinsic_mask==XR_XIR_CALLABLE_ROOT_REQUIRED && !view.parameter_count);
