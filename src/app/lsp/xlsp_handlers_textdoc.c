@@ -15,6 +15,7 @@
 #include "xlsp_server.h"
 #include "../../base/xjson.h"
 #include "xlsp_analysis.h"
+#include "xlsp_format.h"
 #include "xlsp_workspace.h"
 #include "xlsp_rename.h"
 #include "xlsp_semantic_tokens.h"
@@ -249,19 +250,8 @@ XrJsonValue *xlsp_handle_td_prepare_rename(XrLspServer *server, XrJsonValue *par
     return xlsp_analyze_prepare_rename(doc, pos);
 }
 
-XrJsonValue *xlsp_handle_td_formatting(XrLspServer *server, XrJsonValue *params) {
-    /* Direct handler callers have the same request-local error lifetime. */
-    server->formatting_failure.stage = server->formatting_failure.status = 0;
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    if (!textDocument)
-        return xjson_new_array();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc)
-        return xjson_new_array();
-
-    return xlsp_analyze_format(doc);
+XrJsonValue *xlsp_handle_td_formatting(XrLspServer *server,XrJsonValue *params) {
+    return xlsp_format_handle(server,params);
 }
 
 // On-type formatting: auto-indent when typing }, newline, or ;

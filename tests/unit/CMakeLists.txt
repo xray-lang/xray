@@ -4499,6 +4499,7 @@ if(WIN32)
     add_subdirectory(xir/lsp_code_lens)
     add_subdirectory(xir/lsp_semantic_consumers)
     add_subdirectory(xir/lsp_selection)
+    add_subdirectory(xir/lsp_format)
 endif()
 
 add_executable(test_lsp_document_store xir/test_lsp_document_store.c)
