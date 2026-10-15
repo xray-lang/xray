@@ -1,3 +1,6 @@
+add_test(NAME legacy_consumer_complete_structural_inputs_model_controls
+    COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_complete_structural_inputs_model.py")
+set_tests_properties(legacy_consumer_complete_structural_inputs_model_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)
 cmake_minimum_required(VERSION 3.20)
 project(xray_legacy_consumer_preparation LANGUAGES NONE)
 if(NOT CMAKE_GENERATOR STREQUAL "Ninja")

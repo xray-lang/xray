@@ -26,6 +26,18 @@ class CompleteRangeBindings(unittest.TestCase):
         self.assertEqual(rows['complete_original_text_range_ranges']['expected']['stdout_utf8'],
                          '7\ntrue\ntrue\nfalse\n2\nnull\nnull\nnull\n2..9\n7\n2\n8\n35\n')
 
+    def test_all_new_string_programs_keep_every_observation(self):
+        rows = {row['id']: row for row in complete.expected_rows()}
+        values = ranges.observations()
+        for name, count in [('multiconcat', 6), ('strings', 56), ('interpolation_display_shapes', 2)]:
+            row = rows['complete_original_text_range_' + name]
+            self.assertEqual(row['observation_count'], count)
+            self.assertEqual(row['source'], ranges.PATHS[name])
+            self.assertEqual(row['source'], row['original_source'])
+            self.assertEqual(row['expected']['stdout_utf8'],
+                             ''.join(ranges.scalar(value)+'\n' for value in values[name]))
+        self.assertEqual(values['multiconcat'][:2], ['eval 1', 'eval 2'])
+
 
 if __name__ == '__main__':
     unittest.main()

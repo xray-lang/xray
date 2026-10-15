@@ -31,6 +31,7 @@ import complete_calendar_paths_model
 import complete_collection_values_model
 import complete_borrowed_views_model
 import complete_collection_protocols_model
+import complete_structural_inputs_model
 import complete_cleanup_generator_model
 import complete_callable_model
 import task_rejection_model
@@ -70,12 +71,12 @@ def main() -> int:
                                          'extended_named_bindings.json', 'structured_named_models.json',
                                          'independent_complete_models.py', 'complete_program_bindings.json',
                                          'complete_numeric_model.py', 'complete_text_range_model.py',
-                                         'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_borrowed_views_model.py', 'complete_collection_protocols_model.py', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'task_rejection_model.py', 'run_source_rejection_driver.py')]
+                                         'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_borrowed_views_model.py', 'complete_collection_protocols_model.py', 'complete_structural_inputs_model.py', 'structural_inputs_bindings.json', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'task_rejection_model.py', 'run_source_rejection_driver.py')]
     model_digests = {path.name:sha(path.read_bytes()) for path in model_paths}
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
     for row in (independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows()
                 + independent_behavior_models.named_expected_rows() + extended_named_models.expected_rows()
-                + independent_complete_models.expected_rows() + complete_library_model.expected_rows() + complete_channel_model.expected_rows() + complete_resource_model.expected_rows() + complete_callable_model.expected_rows() + complete_cleanup_generator_model.expected_rows() + complete_typed_json_model.expected_rows() + complete_module_model.expected_rows() + complete_exception_model.expected_rows() + complete_aggregate_model.expected_rows() + complete_http_framing_model.expected_rows() + complete_http_policy_model.expected_rows() + complete_text_formats_model.expected_rows() + complete_scalar_events_model.expected_rows() + complete_async_events_model.expected_rows() + complete_error_boundaries_model.expected_rows() + complete_calendar_paths_model.expected_rows() + complete_collection_values_model.expected_rows() + complete_borrowed_views_model.expected_rows() + complete_collection_protocols_model.expected_rows()):
+                + independent_complete_models.expected_rows() + complete_library_model.expected_rows() + complete_channel_model.expected_rows() + complete_resource_model.expected_rows() + complete_callable_model.expected_rows() + complete_cleanup_generator_model.expected_rows() + complete_typed_json_model.expected_rows() + complete_module_model.expected_rows() + complete_exception_model.expected_rows() + complete_aggregate_model.expected_rows() + complete_http_framing_model.expected_rows() + complete_http_policy_model.expected_rows() + complete_text_formats_model.expected_rows() + complete_scalar_events_model.expected_rows() + complete_async_events_model.expected_rows() + complete_error_boundaries_model.expected_rows() + complete_calendar_paths_model.expected_rows() + complete_collection_values_model.expected_rows() + complete_borrowed_views_model.expected_rows() + complete_collection_protocols_model.expected_rows() + complete_structural_inputs_model.expected_rows()):
         if row['id'] in oracles:
             raise ValueError('independent scalar oracle identity collides with a preserved oracle')
         oracles[row['id']] = row
@@ -129,6 +130,8 @@ def main() -> int:
             'complete_collection_values_model_sha256':model_digests['complete_collection_values_model.py'],
             'complete_borrowed_views_model_sha256':model_digests['complete_borrowed_views_model.py'],
             'complete_collection_protocols_model_sha256':model_digests['complete_collection_protocols_model.py'],
+            'complete_structural_inputs_model_sha256':model_digests['complete_structural_inputs_model.py'],
+            'structural_inputs_bindings_sha256':model_digests['structural_inputs_bindings.json'],
             'complete_cleanup_generator_model_sha256':model_digests['complete_cleanup_generator_model.py'],
             'complete_callable_model_sha256':model_digests['complete_callable_model.py'],
             'evidence_directory':str(output),

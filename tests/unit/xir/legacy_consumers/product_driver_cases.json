@@ -25973,6 +25973,356 @@
         "Complete original program CLI/VM/real C projection/native execution against independent bytes.",
         "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
       ]
+    },
+    {
+      "id": "complete_original_text_range_multiconcat",
+      "oracle_id": "complete_original_text_range_multiconcat",
+      "source": "tests/diff/cases/semantics/string/multiconcat.xr",
+      "source_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "eval 1\neval 2\nap1bp2truenullMode.Ready\n42\nfalse\nnull\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original trace under frozen value, identity, call and Array rules.",
+      "independent_observation_count": 6,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/string/multiconcat.xr",
+        "source_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_original_text_range_strings",
+      "oracle_id": "complete_original_text_range_strings",
+      "source": "tests/diff/cases/basic/strings.xr",
+      "source_lf_sha256": "bcb12d73fa39682854db1df69327cf014ec38d8f840ff510d7b9f710f437625d",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "12\nHELLO, WORLD\nhello, world\nHELLO 世界🌍\nhello 世界🌍\nHello\ndef\ncde\nde\ntrue\n7\nabc\ne\n好\n🌍\nc\n169\n30028\n65\nA\n你\n🌍\n🌍好你\nb你a\nnull\nnull\nnull\nnull\nababab\n\n\n好好\n00042\nhi!!!\n  x\nx  \nabc\n.....好\nhello xray\nhello\nXaa\nXX\nac\n4\na\nb\nc\nd\n4\na\n\nb\n\n2\na\nb\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Independent complete original trace under frozen value, identity, call and Array rules.",
+      "independent_observation_count": 56,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/basic/strings.xr",
+        "source_lf_sha256": "bcb12d73fa39682854db1df69327cf014ec38d8f840ff510d7b9f710f437625d"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_original_text_range_interpolation_display_shapes",
+      "oracle_id": "complete_original_text_range_interpolation_display_shapes",
+      "source": "tests/diff/cases/semantics/string/interpolation_display_shapes.xr",
+      "source_lf_sha256": "9c629eb555e10a76b6ac6ee7ecb0968f8daee7d3146fbbe2a2d49c30381b0019",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "b=true c=Color.Green r=1.5 n=null\nlit=false f=0.0\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Independent complete original trace under frozen value, identity, call and Array rules.",
+      "independent_observation_count": 2,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/string/interpolation_display_shapes.xr",
+        "source_lf_sha256": "9c629eb555e10a76b6ac6ee7ecb0968f8daee7d3146fbbe2a2d49c30381b0019"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_structural_inputs_object_width_json_as_extra_key",
+      "oracle_id": "complete_structural_inputs_object_width_json_as_extra_key",
+      "source": "tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr",
+      "source_lf_sha256": "f0111fe78a6eb7e824178accc3f8c5c9a8cc547d524042f89d31b39ed2eac471",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1\n2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete independent structural field, retained value, alias and typed byte-view observations.",
+      "independent_observation_count": 2,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr",
+        "source_lf_sha256": "f0111fe78a6eb7e824178accc3f8c5c9a8cc547d524042f89d31b39ed2eac471"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_structural_inputs_object_width_nullable_field_omission",
+      "oracle_id": "complete_structural_inputs_object_width_nullable_field_omission",
+      "source": "tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr",
+      "source_lf_sha256": "a639d105c31383cc77f81290a57fa36dc682303d10da64992ff6506e093f8581",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "Ann\n30\nBo\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete independent structural field, retained value, alias and typed byte-view observations.",
+      "independent_observation_count": 4,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr",
+        "source_lf_sha256": "a639d105c31383cc77f81290a57fa36dc682303d10da64992ff6506e093f8581"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_structural_inputs_object_destructure",
+      "oracle_id": "complete_structural_inputs_object_destructure",
+      "source": "tests/diff/cases/semantics/object/object_destructure.xr",
+      "source_lf_sha256": "c163e9de6e5b796f74f4d2dca99a2312ca502bc33ab5e68b47e531f0ff1f8231",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "3\n4\nAda\n37\na\nb\nAda\n37\n10\n20\n1\n99\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete independent structural field, retained value, alias and typed byte-view observations.",
+      "independent_observation_count": 12,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/object/object_destructure.xr",
+        "source_lf_sha256": "c163e9de6e5b796f74f4d2dca99a2312ca502bc33ab5e68b47e531f0ff1f8231"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_structural_inputs_tbaa_raw_pointer_store_kills_array_load",
+      "oracle_id": "complete_structural_inputs_tbaa_raw_pointer_store_kills_array_load",
+      "source": "tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr",
+      "source_lf_sha256": "06e0c557ed641238914c7892a85c9f611e6c386870ee0197018da739730f1c2f",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "406\n103\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete independent structural field, retained value, alias and typed byte-view observations.",
+      "independent_observation_count": 2,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr",
+        "source_lf_sha256": "06e0c557ed641238914c7892a85c9f611e6c386870ee0197018da739730f1c2f"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_structural_inputs_ws_connect_options_type_surface",
+      "oracle_id": "complete_structural_inputs_ws_connect_options_type_surface",
+      "source": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr",
+      "source_lf_sha256": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "true\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete independent structural field, retained value, alias and typed byte-view observations.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr",
+        "source_lf_sha256": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_structural_inputs_string_from_utf8_slice",
+      "oracle_id": "complete_structural_inputs_string_from_utf8_slice",
+      "source": "tests/diff/cases/semantics/slice/string_from_utf8_slice.xr",
+      "source_lf_sha256": "dc7dffe347cea843f995ae3c6fe024a93b6b39c67291a62b77b05e55ed643433",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "bin\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete independent structural field, retained value, alias and typed byte-view observations.",
+      "independent_observation_count": 1,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/string_from_utf8_slice.xr",
+        "source_lf_sha256": "dc7dffe347cea843f995ae3c6fe024a93b6b39c67291a62b77b05e55ed643433"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
+    },
+    {
+      "id": "complete_structural_inputs_slice_reinterpret_value_struct",
+      "oracle_id": "complete_structural_inputs_slice_reinterpret_value_struct",
+      "source": "tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr",
+      "source_lf_sha256": "3d66607f8dbd6fc6a2a843b38ce3424ae983ab11b89bfe8a120b75b49a0f22b2",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "1\n1\n2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete independent structural field, retained value, alias and typed byte-view observations.",
+      "independent_observation_count": 3,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr",
+        "source_lf_sha256": "3d66607f8dbd6fc6a2a843b38ce3424ae983ab11b89bfe8a120b75b49a0f22b2"
+      },
+      "remaining_gates": [
+        "Complete original CLI/VM/real C/native against independent bytes.",
+        "Full applicable compiler/runtime FI, resource axes, lifetime/cancellation, physical release, sanitizer and provider qualification."
+      ]
     }
   ]
 }

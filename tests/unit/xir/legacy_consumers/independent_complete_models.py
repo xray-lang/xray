@@ -463,7 +463,10 @@ _SOURCE_IDENTITIES = {'complete_original_text_range_ranges': ('tests/diff/cases/
                                                                  'tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr',
                                                                  'text_range',
                                                                  'string_indexof_start_shared_core',
-                                                                 False)}
+                                                                 False),
+ 'complete_original_text_range_multiconcat': ('tests/diff/cases/semantics/string/multiconcat.xr', 'tests/diff/cases/semantics/string/multiconcat.xr', 'text_range', 'multiconcat', True),
+ 'complete_original_text_range_strings': ('tests/diff/cases/basic/strings.xr', 'tests/diff/cases/basic/strings.xr', 'text_range', 'strings', True),
+ 'complete_original_text_range_interpolation_display_shapes': ('tests/diff/cases/semantics/string/interpolation_display_shapes.xr', 'tests/diff/cases/semantics/string/interpolation_display_shapes.xr', 'text_range', 'interpolation_display_shapes', True)}
 
 def require_owned_input_paths(paths):
     for name in paths:
@@ -500,7 +503,7 @@ def expected_rows():
     derived['numeric'] = {row['id']: row for row in complete_numeric_model.expected()
                           if row['id'] in ['exact_integer_bit_intrinsics', 'int_bits_methods', 'int_overflow_predicates', 'int_safe_methods', 'numeric_method_shared_core', 'stringbuilder_numeric_shared_core', 'uint64_divmod_unsigned', 'wrapping_fixed_width']}
     derived['text_range'] = {row['id']: row for row in complete_text_range_model.expected()
-                             if row['id'] in ['arrays', 'string_indexof_start_shared_core', 'range_precedence', 'ranges']}
+                             if row['id'] in ['arrays', 'string_indexof_start_shared_core', 'range_precedence', 'ranges', 'multiconcat', 'strings', 'interpolation_display_shapes']}
     rows = []
     identifiers = set()
     for entry in bindings['entries']:

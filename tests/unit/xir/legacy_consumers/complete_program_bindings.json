@@ -539,6 +539,39 @@
       "original_lf_sha256": "1a9c70b3946fb2f765d0251350665aa59714716a78600e9b04ac2b59c25daeb4",
       "observation_suffix": "",
       "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_multiconcat",
+      "family": "text_range",
+      "model_key": "multiconcat",
+      "source": "tests/diff/cases/semantics/string/multiconcat.xr",
+      "source_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5",
+      "original_source": "tests/diff/cases/semantics/string/multiconcat.xr",
+      "original_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_strings",
+      "family": "text_range",
+      "model_key": "strings",
+      "source": "tests/diff/cases/basic/strings.xr",
+      "source_lf_sha256": "bcb12d73fa39682854db1df69327cf014ec38d8f840ff510d7b9f710f437625d",
+      "original_source": "tests/diff/cases/basic/strings.xr",
+      "original_lf_sha256": "bcb12d73fa39682854db1df69327cf014ec38d8f840ff510d7b9f710f437625d",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_interpolation_display_shapes",
+      "family": "text_range",
+      "model_key": "interpolation_display_shapes",
+      "source": "tests/diff/cases/semantics/string/interpolation_display_shapes.xr",
+      "source_lf_sha256": "9c629eb555e10a76b6ac6ee7ecb0968f8daee7d3146fbbe2a2d49c30381b0019",
+      "original_source": "tests/diff/cases/semantics/string/interpolation_display_shapes.xr",
+      "original_lf_sha256": "9c629eb555e10a76b6ac6ee7ecb0968f8daee7d3146fbbe2a2d49c30381b0019",
+      "observation_suffix": "",
+      "original_run_corpus": true
     }
   ],
   "inputs": [
