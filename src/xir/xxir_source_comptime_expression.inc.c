@@ -82,7 +82,11 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     if (!name || source_format(ctx,name,32,"$comptime%u",f)!=XR_DIAG_OK)
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,"comptime name allocation failed");
     ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,XR_XIR_UNIT,NULL,0,NULL,0,NULL,0};
-    ctx->identities[f]=(XrXirFunctionIdentity){.module=ctx->module};
+    /* A synthetic lexical closure retains its declaration owner's access,
+     * exactly as an ordinary nested function does. No runtime capture enters. */
+    uint32_t nominal=ctx->identities[outer].nominal_owner;
+    ctx->identities[f]=(XrXirFunctionIdentity){.module=ctx->module,.nominal_owner=nominal,
+        .method_kind=nominal?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER};
     ctx->bodies[f].node=node;ctx->bodies[f].module=ctx->module;
     ctx->function=f;ctx->locals=ctx->scope=NULL;ctx->facts=NULL;ctx->epochs=NULL;
     ctx->loop=NULL;ctx->type_scope=(SourceTypeScope){0};ctx->active_expression=NULL;ctx->effect_argument=NULL;

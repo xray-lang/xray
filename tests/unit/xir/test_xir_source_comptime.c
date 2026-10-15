@@ -84,6 +84,11 @@ static const char source_comptime_nominal_text[]=
     "fn make()->Choice { var p=Pair{x:1,text:\"ab\"}; const old=p; p.x=7; return Choice.Some{pair:p} }\n"
     "fn answer()->i64 { var p=Pair{x:1,text:\"ab\"}; const old=p; p.x=7; return old.x==1 && p.x==7 ? 42 : 0 }\n"
     "export fn run()->i64 { comptime make(); return comptime answer() }\n";
+static const char source_comptime_lexical_text[]=
+    "struct Box {private value:i8;text:string;get()->i8{return this.value};static make()->Box{return comptime Box{value:7,text:\"ab\"}}}\n"
+    "class Math {private static twice(n:i64)->i64{return n*2};static value()->i64{return comptime Math.twice(21)}}\n"
+    "fn answer()->i64{const b=Box.make();return b.get()==7 && b.text==\"ab\" ? Math.value() : 0}\n"
+    "export fn run()->i64{return comptime answer()}\n";
 static const char *source_comptime_resource_text=source_comptime_test_text;
 static XrXirStatus source_comptime_test_resource_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -138,12 +143,17 @@ static void source_comptime_test_fold(const XrXirModule *module,int64_t expected
 #include "xir_source_comptime_cases.h"
 #include "xir_source_comptime_resources.h"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--lexical")) {
+        source_comptime_resource_text=source_comptime_lexical_text;SourceComptimeTestReport report={0};
+        source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&report);CHECK(report.status==XR_XIR_OK);
+        fprintf(stderr,"Source lexical owner private struct/static class/independent recipe Checked/query normal physical0\n");return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--nominal")) {
         source_comptime_resource_text=source_comptime_nominal_text;SourceComptimeTestReport report={0};
         source_comptime_test_trial(&source_comptime_test_limits,SIZE_MAX,false,&report);CHECK(report.status==XR_XIR_OK);
         fprintf(stderr,"Source nominal independent recipe complete Checked/query producer normal physical0\n");return 0;
     }
-    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources"))) {
+    if (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--local-resources") || !strcmp(argv[1],"--unit-resources") || !strcmp(argv[1],"--rune-resources") || !strcmp(argv[1],"--cell-resources") || !strcmp(argv[1],"--string-resources") || !strcmp(argv[1],"--string-read-resources") || !strcmp(argv[1],"--tuple-resources") || !strcmp(argv[1],"--float-resources") || !strcmp(argv[1],"--nullable-resources") || !strcmp(argv[1],"--array-resources") || !strcmp(argv[1],"--array-equal-resources") || !strcmp(argv[1],"--array-path-resources") || !strcmp(argv[1],"--text-resources") || !strcmp(argv[1],"--nominal-resources") || !strcmp(argv[1],"--lexical-resources"))) {
         if (!strcmp(argv[1],"--local-resources")) {
             source_comptime_resource_text=source_comptime_local_text;
             fprintf(stderr,"Source comptime scalar locals whole-producer resources\n");
@@ -199,6 +209,10 @@ int main(int argc,char **argv) {
         if (!strcmp(argv[1],"--nominal-resources")) {
             source_comptime_resource_text=source_comptime_nominal_text;
             fprintf(stderr,"Source comptime Struct/Enum/field COW/independent nominal recipe whole-producer resources\n");
+        }
+        if (!strcmp(argv[1],"--lexical-resources")) {
+            source_comptime_resource_text=source_comptime_lexical_text;
+            fprintf(stderr,"Source lexical declaration owner/private owned recipe/class static whole-producer resources\n");
         }
         source_comptime_test_resources();return 0;
     }

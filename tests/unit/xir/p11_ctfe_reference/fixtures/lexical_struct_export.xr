@@ -1,0 +1,3 @@
+struct Box { private value:i8; text:string; get()->i8{return this.value}; static make()->Box{return comptime Box{value:7,text:"ab"}} }
+fn answer()->i64 {const b=Box.make(); return b.get() as i64}
+export fn run()->i64 {return comptime answer()}

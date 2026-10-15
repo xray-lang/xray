@@ -1,0 +1,2 @@
+struct Box { private static seven()->i64{return 7}; static answer()->i64{return comptime {const n=comptime Box.seven(); n+1}} }
+export fn run()->i64{return comptime Box.answer()}

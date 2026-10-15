@@ -31,6 +31,17 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"lexical_private_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"lexical_nested", XR_XIR_I64, 8, XR_XIR_OK, NULL, 0},
+    {"lexical_class_instance", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 1},
+    {"lexical_class_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 1},
+    {"lexical_oversize", XR_XIR_I64, 0, XR_XIR_BUDGET, NULL, 1},
+    {"lexical_struct_construct", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"lexical_struct_export", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"lexical_private_call", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"lexical_class_static", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"lexical_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 1},
+    {"lexical_unauthorized", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, NULL, 2},
     {"nominal_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
     {"nominal_private", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_enum_array_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
@@ -624,7 +635,7 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) reference_nominal(&context,&source,selected);
+        if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
         else if (!strcmp(selected->name,"text_direct")) reference_text_direct(&context,&source);
         else if (!strcmp(selected->name,"equal_array_direct")) reference_owned_equal(&context,&source);
         else if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
@@ -679,7 +690,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
     if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) reference_array_late_owner(selected->name);
     if (!strcmp(selected->name,"text_direct")) reference_text_last_owner();
-    if (!strcmp(selected->name,"nominal_struct_direct") || !strcmp(selected->name,"nominal_enum_direct")) reference_nominal_last_owner(selected);
+    if (!strcmp(selected->name,"nominal_struct_direct") || !strcmp(selected->name,"nominal_enum_direct") || !strcmp(selected->name,"lexical_private_direct")) reference_nominal_last_owner(selected);
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,
