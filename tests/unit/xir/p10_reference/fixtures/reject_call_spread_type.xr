@@ -1,0 +1,4 @@
+fn target(first: i64, last: bool) -> i64 { return first }
+export fn referenceAnswer() -> i64 {
+    return target(...(3, "x"))
+}

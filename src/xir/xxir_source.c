@@ -111,7 +111,7 @@ typedef struct SourceExpressionPlan {
     struct SourceConditionalRecipe *conditional;
     struct SourceMatchPlan *match;
     struct SourceBinaryRecipe *binary;
-    struct SourceTuplePrefix *tuple_prefix;
+    union { struct SourceTuplePrefix *tuple_prefix; struct SourceCallProjection *call_projection; };
     AstNode *syntax;
     SourceName *binding;
     uint32_t owner, identity;
@@ -1080,8 +1080,10 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 }
 #include "xxir_source_arguments.inc.c"
 #include "xxir_source_inference_result.inc.c"
+#include "xxir_source_tuple.inc.c"
 #include "xxir_source_call_plan.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
+#include "xxir_source_indirect_call.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 typedef enum SourceArrayRecipe {
     SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,
@@ -1094,7 +1096,6 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value);
 #include "xxir_source_array.inc.c"
-#include "xxir_source_tuple.inc.c"
 #include "xxir_source_string.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
@@ -1324,14 +1325,10 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             source_query_reference(ctx,callee,binding,target,XR_XIR_SOURCE_CALL) &&
             source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
     }
-    XrXirTypeNode signature = {0};
     if (!print && !stream && !host_time && (!target || target->kind != SOURCE_FUNCTION)) {
         if (call->type_arg_count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call has no generic declaration parameters");
         if (!indirect_ready && !expression(ctx, callee, &indirect)) return false;
-        const XrXirTypeNode *found = xr_xir_callable_signature(&ctx->types, indirect.type);
-        if (!found || found->parameter_count != (uint32_t) call->arg_count)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect call requires its declared signature");
-        signature = *found;
+        return source_indirect_call(ctx,node,indirect,value);
     }
     if ((print || stream || host_time) && call->type_arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "primitive does not admit explicit type arguments");
@@ -1339,42 +1336,14 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
     uint32_t argument_count = (uint32_t)call->arg_count;
     SourceValue *args = argument_count ? source_recipe_storage(ctx, argument_count, sizeof(*args)) : NULL;
     if (argument_count && !args) return false;
-    bool *references = NULL;
     for (int i = 0; i < call->arg_count; ++i) {
-        if (indirect.type) {
-            const XrXirCallableParameter *parameter = &signature.parameters[i];
-            if (!xr_xir_callable_parameter_storage_valid(&ctx->types, parameter))
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect parameter storage and mode disagree");
-            if (parameter->mode == XR_PARAM_REF) {
-                if (!references) {
-                    references = source_alloc(ctx, argument_count, sizeof(*references));
-                    if (!references) return false;
-                }
-                references[i] = true;
-                if (!source_reference_argument(ctx, node, (uint32_t)i, references, NULL, &args[i])) return false;
-                continue;
-            }
-        }
         if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "argument mode does not match the callable parameter");
         XrXirType expected = XR_XIR_UNIT;
-        if (indirect.type) expected = signature.parameters[i].type;
         if (stream) expected = XR_XIR_STRING;
         if (host_time > (uint32_t) XR_XIR_CLOCK_MONOTONIC) expected = XR_XIR_I64;
         if (!source_plan_expression(ctx, call->arguments[i], (SourceExpectedType){expected != XR_XIR_UNIT,expected, false, false}, &args[i])) return false;
         if (args[i].type == XR_XIR_UNIT) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "unit argument is not admitted");
-    }
-    if (indirect.type) {
-        for (uint32_t p = 0; p < (uint32_t) call->arg_count; ++p)
-            if (args[p].type != signature.parameters[p].type)
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "indirect argument type mismatch");
-        /* Every actual completes before invalidating borrowed roots. */
-        for (uint32_t p = 0; p < (uint32_t)call->arg_count; ++p) if (references && references[p]) {
-            SourceName *root = source_ref_binding(ctx,call->arguments[p]);
-            if (!root || !source_fact_push(ctx,root,0)) return false;
-        }
-        return source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_CALL_INDIRECT, signature.result, {0}, {0}, indirect.id, {0}},
-            args, (uint32_t) call->arg_count, value);
     }
     if (stream) {
         if (call->arg_count != 1 || args[0].type != XR_XIR_STRING)

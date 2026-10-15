@@ -368,6 +368,178 @@ static const char tuple_spread_callable_source[] =
     "    return callback() * 10 + identity(copied.1)\n"
     "}\n";
 
+static const char call_spread_order_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn saved() -> (Array<i64>, i64) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return (source, 11)\n"
+    "}\n"
+    "fn replace() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    source[0] = 13\n"
+    "    return 17\n"
+    "}\n"
+    "fn tail() -> (i64,) {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return (19,)\n"
+    "}\n"
+    "fn combine(items: Array<i64>, first: i64, middle: i64, last: i64) -> i64 {\n"
+    "    var copy = items\n"
+    "    copy[0] = 23\n"
+    "    return items[0] * 1000000 + first * 10000 + middle * 100 + last + copy[0] + source[0]\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    const result = combine(...saved(), replace(), ...tail())\n"
+    "    return trace * 100000000 + result\n"
+    "}\n";
+
+static const char call_spread_generic_source[] =
+    "var trace: i64 = 0\n"
+    "fn duo<T>(first: T, last: T) -> (T, T) { return (first, last) }\n"
+    "fn triple<T>(first: T, middle: T, last: T) -> (T, T, T) { return (first, middle, last) }\n"
+    "fn saved() -> (i64,) { trace = trace * 10 + 1; return (3,) }\n"
+    "fn mark() -> i64 { trace = trace * 10 + 2; return 11 }\n"
+    "fn add(first: i64, last: i64 = mark()) -> i64 { return first * 10 + last }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    const small: i8 = 7\n"
+    "    const numbers = duo(...(1, small))\n"
+    "    const narrow: (i8, i8) = numbers\n"
+    "    const missing: i8? = null\n"
+    "    const optional = triple(...(null, 7), missing)\n"
+    "    if (optional.0 != null || optional.2 != null) { return 0 }\n"
+    "    const seven = optional.1\n"
+    "    if (seven == null) { return 0 }\n"
+    "    if ((seven as i64) != 7) { return 0 }\n"
+    "    const called = add(...saved())\n"
+    "    return trace * 100000 + called * 100 + (narrow.0 as i64) * 10 + (narrow.1 as i64)\n"
+    "}\n";
+
+static const char call_spread_dispatch_source[] =
+    "interface Sum { sum(first: i64, last: i64) -> i64 }\n"
+    "struct Calc implements Sum {\n"
+    "    base: i64\n"
+    "    init(base) { this.base = base }\n"
+    "    sum(first: i64, last: i64) -> i64 { return this.base + first + last }\n"
+    "}\n"
+    "struct Box<T> {\n"
+    "    first: T\n"
+    "    last: T\n"
+    "    init(first, last) { this.first = first; this.last = last }\n"
+    "}\n"
+    "fn via<T: Sum>(value: T, pair: (i64, i64)) -> i64 { return value.sum(...pair) }\n"
+    "fn product(first: i64, last: i64) -> i64 { return first * 10 + last }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const box = Box<i64>(...(3, 7))\n"
+    "    const calc = Calc(5)\n"
+    "    const callback = product\n"
+    "    const method = calc.sum\n"
+    "    return box.first * 10000 + box.last * 1000 + via(calc, (11, 13)) * 100 + callback(...(17, 19)) + method(...(1, 2))\n"
+    "}\n";
+
+static const char call_spread_empty_source[] =
+    "var trace: i64 = 0\n"
+    "fn empty() { trace = trace * 10 + 1 }\n"
+    "fn mark() -> i64 { trace = trace * 10 + 2; return 3 }\n"
+    "fn noargs() -> i64 { trace = trace * 10 + 3; return 7 }\n"
+    "fn combine(first: i64, last: i64) -> i64 { return first * 10 + last }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    const first = noargs(...empty())\n"
+    "    const second = combine(...empty(), mark(), ...(), 5, ...empty())\n"
+    "    return trace * 100 + first * 10 + second\n"
+    "}\n";
+
+static const char call_spread_ref_source[] =
+    "fn bump(value: ref i64, amount: i64) -> i64 { value = value + amount; return value }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    var value: i64 = 3\n"
+    "    const first = bump(ref value, ...(7,))\n"
+    "    const callback = bump\n"
+    "    const second = callback(ref value, ...(11,))\n"
+    "    return first * 100 + second\n"
+    "}\n";
+
+static const char call_spread_task_source[] =
+    "fn combine(first: i64, last: i64) -> i64 { return first * 10 + last }\n"
+    "fn seed() -> (i64, i64) { return (3, 7) }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const pair = seed()\n"
+    "    const task = go combine(...pair)\n"
+    "    return await task\n"
+    "}\n";
+
+static const char call_spread_suspend_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn saved() -> (Array<i64>, i64) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return (source, 11)\n"
+    "}\n"
+    "fn replace() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    Coro.yield()\n"
+    "    source[0] = 13\n"
+    "    return 17\n"
+    "}\n"
+    "fn tail() -> (i64,) {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return (19,)\n"
+    "}\n"
+    "fn combine(items: Array<i64>, first: i64, middle: i64, last: i64) -> i64 {\n"
+    "    var copy = items\n"
+    "    copy[0] = 23\n"
+    "    return items[0] * 1000000 + first * 10000 + middle * 100 + last + copy[0] + source[0]\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    const result = combine(...saved(), replace(), ...tail())\n"
+    "    return trace * 100000000 + result\n"
+    "}\n";
+
+static const char call_spread_failure_source[] =
+    "var trace: i64 = 0\n"
+    "fn saved() -> (Array<i64>, i64) {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return ([3, 7], 11)\n"
+    "}\n"
+    "fn failing() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    assert(false, \"call-spread-argument-failure\")\n"
+    "    return 0\n"
+    "}\n"
+    "fn late() -> i64 {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return 17\n"
+    "}\n"
+    "fn combine(items: Array<i64>, first: i64, middle: i64, last: i64) -> i64 { return items[0] + first + middle + last }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    try {\n"
+    "        const result = combine(...saved(), failing(), late())\n"
+    "        return result\n"
+    "    } catch panic (panic: PanicInfo) {\n"
+    "        return panic.code * 100 + trace\n"
+    "    }\n"
+    "}\n";
+
+static const char call_spread_inferred_result_source[] =
+    "fn identity<T>(value: T) -> T { return value }\n"
+    "fn combine(first: i64, last: i64) -> i64 { return first * 10 + last }\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const pair = (3, 7)\n"
+    "    const first = combine(...identity(pair))\n"
+    "    const second = combine(...identity<(i64, i64)>(pair))\n"
+    "    const maybe: (i64, i64)? = pair\n"
+    "    if (maybe == null) { return 0 }\n"
+    "    const third = combine(...maybe)\n"
+    "    return first * 10000 + second * 100 + third\n"
+    "}\n";
+
 typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
 static const InitializerCase cases[] = {
     {"ordinary",source,sizeof(source)-1},
@@ -387,7 +559,16 @@ static const InitializerCase cases[] = {
     {"tuple-spread-suspend",tuple_spread_suspend_source,sizeof(tuple_spread_suspend_source)-1},
     {"tuple-spread-nested",tuple_spread_nested_source,sizeof(tuple_spread_nested_source)-1},
     {"tuple-spread-failure",tuple_spread_failure_source,sizeof(tuple_spread_failure_source)-1},
-    {"tuple-spread-callable",tuple_spread_callable_source,sizeof(tuple_spread_callable_source)-1}
+    {"tuple-spread-callable",tuple_spread_callable_source,sizeof(tuple_spread_callable_source)-1},
+    {"call-spread-order",call_spread_order_source,sizeof(call_spread_order_source)-1},
+    {"call-spread-generic",call_spread_generic_source,sizeof(call_spread_generic_source)-1},
+    {"call-spread-dispatch",call_spread_dispatch_source,sizeof(call_spread_dispatch_source)-1},
+    {"call-spread-empty",call_spread_empty_source,sizeof(call_spread_empty_source)-1},
+    {"call-spread-ref",call_spread_ref_source,sizeof(call_spread_ref_source)-1},
+    {"call-spread-task",call_spread_task_source,sizeof(call_spread_task_source)-1},
+    {"call-spread-suspend",call_spread_suspend_source,sizeof(call_spread_suspend_source)-1},
+    {"call-spread-failure",call_spread_failure_source,sizeof(call_spread_failure_source)-1},
+    {"call-spread-inferred_result",call_spread_inferred_result_source,sizeof(call_spread_inferred_result_source)-1}
 };
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -475,6 +656,16 @@ int main(int argc,char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--tuple-spread-failure")) { first=16;last=17; }
     else if (argc==2 && !strcmp(argv[1],"--tuple-spread-callable")) { first=17;last=18; }
     else if (argc==2 && !strcmp(argv[1],"--tuple-spread-baseline")) { first=11;last=18;baseline=true; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-order")) { first=18;last=19; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-generic")) { first=19;last=20; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-dispatch")) { first=20;last=21; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-empty")) { first=21;last=22; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-ref")) { first=22;last=23; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-task")) { first=23;last=24; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-suspend")) { first=24;last=25; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-failure")) { first=25;last=26; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-inferred_result")) { first=26;last=27; }
+    else if (argc==2 && !strcmp(argv[1],"--call-spread-baseline")) { first=18;last=27;baseline=true; }
     else CHECK(argc==1);
     for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;

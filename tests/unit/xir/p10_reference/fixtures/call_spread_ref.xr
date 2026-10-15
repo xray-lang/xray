@@ -1,0 +1,8 @@
+fn bump(value: ref i64, amount: i64) -> i64 { value = value + amount; return value }
+export fn referenceAnswer() -> i64 {
+    var value: i64 = 3
+    const first = bump(ref value, ...(7,))
+    const callback = bump
+    const second = callback(ref value, ...(11,))
+    return first * 100 + second
+}

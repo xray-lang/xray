@@ -130,9 +130,6 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
         (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))) {
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method requires its exact explicit type arguments or an omitted list"); goto done;
     }
-    if ((uint32_t)call->arg_count != formal.parameter_count) {
-        source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument arity mismatch"); goto done;
-    }
     uint32_t count = parent+own;
     SourceCallStorage storage={0};
     if (!source_call_storage(ctx,count,(uint64_t)formal.parameter_count+1,&storage)) goto done;
@@ -146,7 +143,12 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     arguments[0] = receiver;
     SourceCallPlan plan = {SOURCE_CALL_REQUIREMENT,{application.arguments,parent},substitution,NULL,
         formal.parameters,formal.result,result_context,arguments,0,1,NULL};
-    if (!source_call_plan_arguments(ctx,node,&plan)) goto done;
+    SourceCallSyntax syntax;
+    if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,node,&syntax,&plan,formal.parameter_count)) goto done;
+    if ((uint32_t)syntax.arg_count!=formal.parameter_count) {
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,"interface method argument arity mismatch"); goto done;
+    }
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) goto done;
     if (!source_requirement_prove(ctx,node,selected.member,application,substitution,&signature)) goto done;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);
     SourceCallConversions conversions={SOURCE_CALL_REQUIREMENT,substitution,NULL,callable.parameters,

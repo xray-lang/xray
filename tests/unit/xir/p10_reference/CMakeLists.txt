@@ -497,6 +497,7 @@ set_tests_properties(test_xir_p10_reference_reject_init_field_place_uninitialize
 include("${CMAKE_CURRENT_LIST_DIR}/struct_spread.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/array_spread.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/tuple_spread.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/call_spread.cmake")
 add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 include("${CMAKE_CURRENT_LIST_DIR}/initializer_places_runtime.cmake")
 

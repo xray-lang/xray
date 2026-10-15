@@ -1,0 +1,7 @@
+fn combine(first: i64, last: i64) -> i64 { return first * 10 + last }
+fn seed() -> (i64, i64) { return (3, 7) }
+export fn referenceAnswer() -> i64 {
+    const pair = seed()
+    const task = go combine(...pair)
+    return await task
+}

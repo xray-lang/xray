@@ -1,0 +1,24 @@
+var trace: i64 = 0
+fn saved() -> (Array<i64>, i64) {
+    trace = trace * 10 + 1
+    return ([3, 7], 11)
+}
+fn failing() -> i64 {
+    trace = trace * 10 + 2
+    assert(false, "call-spread-argument-failure")
+    return 0
+}
+fn late() -> i64 {
+    trace = trace * 10 + 3
+    return 17
+}
+fn combine(items: Array<i64>, first: i64, middle: i64, last: i64) -> i64 { return items[0] + first + middle + last }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    try {
+        const result = combine(...saved(), failing(), late())
+        return result
+    } catch panic (panic: PanicInfo) {
+        return panic.code * 100 + trace
+    }
+}
