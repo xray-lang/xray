@@ -65,6 +65,12 @@ typedef enum {
 
 /* ========== The Type Reference ========== */
 
+typedef struct XrTypeNameSpan {
+    int line;
+    int column;
+    int length;
+} XrTypeNameSpan;
+
 typedef struct XrTypeRef {
     uint8_t kind;      /* XrTypeRefKind                    */
     uint8_t nchildren; /* number of child type refs        */
@@ -87,6 +93,9 @@ typedef struct XrTypeRef {
     AstBorrowOriginRef *borrow_origins;
     int borrow_origin_count;
     struct XrTypeRef **children;       /* child type refs (arena array)   */
+    /* Exact final name token, including qualified spellings with whitespace.
+     * Synthesized and alias-expanded references have no source token. */
+    XrTypeNameSpan name_span;
 } XrTypeRef;
 
 /* ========== Arena Constructors ========================================

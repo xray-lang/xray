@@ -39,8 +39,21 @@ static uint32_t declaration(const XrXirSourceView *view,const char *name) {
     for(uint32_t i=0;i<view->declaration_count;++i)if(view->declarations[i].kind==XR_XIR_SOURCE_TYPE&&!strcmp(view->declarations[i].name,name))return i;
     CHECK(false);return UINT32_MAX;
 }
+static void inspect_interface_uses(const XrXirSourceView *view,unsigned mode) {
+    if(mode!=3)return;
+    unsigned matches=0;
+    for(uint32_t i=0;i<view->reference_count;++i){const XrXirSourceReference *r=&view->references[i];
+        if(r->access!=XR_XIR_SOURCE_TYPE_USE||r->range.line!=2||r->range.column!=25)continue;
+        CHECK(r->declaration&&r->target&&r->declaration!=r->target);
+        CHECK(r->declaration<=view->declaration_count&&r->target<=view->declaration_count);
+        CHECK(!strcmp(view->declarations[r->declaration-1].name,"Parent")&&!strcmp(view->declarations[r->target-1].name,"Shape"));
+        CHECK(r->range.end_line==2&&r->range.end_column==31);++matches;
+    }
+    CHECK(matches==1);
+}
 static void inspect(const XrXirSourceView *view,const XrXirSourceTypeFacts *facts,unsigned mode) {
     CHECK(view&&view->complete&&facts&&facts->declaration_count==view->declaration_count);
+    inspect_interface_uses(view,mode);
     unsigned count=0;for(uint32_t i=0;i<facts->declaration_count;++i){const XrXirSourceTypeFact *f=&facts->declarations[i];
         if(f->kind==XR_XIR_SOURCE_TYPE_NONE)continue;CHECK(view->declarations[i].kind==XR_XIR_SOURCE_TYPE);
         if(f->kind==XR_XIR_SOURCE_TYPE_INTERFACE)CHECK(view->types->interfaces&&f->table_index<view->types->interfaces->count);
