@@ -145,7 +145,7 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_range_ref(&adapter->request.read,function,&position,&ref);
     if (status!=XR_XIR_OK) return status;
-    status=effect_body_instruction_ref_prepare(&adapter->request.read,ref,ref->first);
+    status=effect_body_instruction_ref_prepare(&adapter->request.read,ref,ref->first,false);
     if (status!=XR_XIR_OK) return status;
     XrXirInstruction operation=effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,0);
     if (!xir_compile_work(work,sizeof(*output)+2*sizeof(uint32_t))) return XR_XIR_BUDGET;

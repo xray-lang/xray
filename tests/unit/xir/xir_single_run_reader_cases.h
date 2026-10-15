@@ -15,7 +15,72 @@ static bool single_run_consume(const void *owner,uint64_t units) {
     if (probe->calls++==probe->refuse) return false;
     CHECK(units<=UINT64_MAX-probe->work);probe->work+=units;return true;
 }
+typedef struct SingleRunLimitProbe { uint64_t remaining; } SingleRunLimitProbe;
+static bool single_run_limit_consume(const void *owner,uint64_t units) {
+    SingleRunLimitProbe *probe=(SingleRunLimitProbe *)owner;
+    if (units>probe->remaining) return false;
+    probe->remaining-=units;return true;
+}
+static bool single_run_complete_same(const XrXirInstruction *a,const XrXirInstruction *b) {
+    return a->op==b->op && a->type==b->type && a->args[0]==b->args[0] && a->args[1]==b->args[1] &&
+        a->targets[0]==b->targets[0] && a->targets[1]==b->targets[1] && a->immediate==b->immediate &&
+        a->type_arguments[0]==b->type_arguments[0] && a->type_arguments[1]==b->type_arguments[1];
+}
+static void single_run_base_copy_controls(void) {
+    EffectBodyRun run={.first=7,.count=4,
+        .base={.op=XR_XIR_COPY,.type=0x76543210u,.args={0x11223344u,0x89abcdefu},
+            .targets={0xfedcba98u,0x55667788u},.immediate=INT64_MIN+123,
+            .type_arguments={0x80000001u,0x7fffffffu}}};
+    for (uint32_t w=0;w<10;++w) run.delta[w]=w+1;
+    for (uint32_t mask=0;mask<1024;++mask) {
+        run.mask=mask;uint32_t columns=0;
+        for (uint32_t w=0;w<10;++w) if (mask&(1u<<w)) ++columns;
+        SingleRunReadProbe probe={.refuse=SIZE_MAX};EffectBodyRead read={&probe,single_run_consume};
+        XrXirInstruction output={0};
+        CHECK(effect_body_instruction_ref_value(&read,&run,7,&output)==XR_XIR_OK &&
+            single_run_complete_same(&output,&run.base));
+        uint64_t expected=sizeof(output)+(mask?19u+columns+((mask&1u)?3u:0u):9u);
+        CHECK(probe.work==expected);
+        for (uint32_t exact=0;exact<2;++exact) {
+            SingleRunLimitProbe limit={expected-(exact?0u:1u)};
+            EffectBodyRead bounded={&limit,single_run_limit_consume};
+            XrXirInstruction sentinel;memset(&sentinel,0x5a,sizeof(sentinel));output=sentinel;
+            CHECK(effect_body_instruction_ref_value(&bounded,&run,7,&output)==
+                (exact?XR_XIR_OK:XR_XIR_BUDGET));
+            CHECK(exact?(!limit.remaining && single_run_complete_same(&output,&run.base)):
+                !memcmp(&output,&sentinel,sizeof(output)));
+        }
+    }
+    /* The existing Cell span preparation keeps its original full decoder fees. */
+    const uint32_t masks[3]={0,1,1023},fees[3]={27,45,90};
+    for (uint32_t i=0;i<3;++i) {
+        run.mask=masks[i];SingleRunReadProbe probe={.refuse=SIZE_MAX};
+        EffectBodyRead read={&probe,single_run_consume};
+        CHECK(effect_body_instruction_ref_prepare(&read,&run,7,false)==XR_XIR_OK &&
+            probe.work==sizeof(XrXirInstruction)+fees[i]);
+    }
+    run.mask=1023;
+    for (uint32_t mode=0;mode<12;++mode) {
+        EffectBodyRun bad=run;
+        if (mode<10) bad.delta[mode]=0;
+        else bad.base.op=mode==10?XR_XIR_INVALID:XR_XIR_OP_COUNT;
+        SingleRunReadProbe probe={.refuse=SIZE_MAX};EffectBodyRead read={&probe,single_run_consume};
+        XrXirInstruction output,sentinel;memset(&sentinel,0x5a,sizeof(sentinel));output=sentinel;
+        CHECK(effect_body_instruction_ref_value(&read,&bad,7,&output)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&output,&sentinel,sizeof(output)));
+    }
+    SingleRunReadProbe probe={.refuse=SIZE_MAX};EffectBodyRead read={&probe,single_run_consume};
+    XrXirInstruction output,sentinel;memset(&sentinel,0x5a,sizeof(sentinel));output=sentinel;
+    CHECK(effect_body_instruction_ref_prepare(&read,&run,8,true)==XR_XIR_BAD_STRUCTURE && !probe.calls);
+    CHECK(effect_body_instruction_ref_value(&read,NULL,7,&output)==XR_XIR_BAD_STRUCTURE && !probe.calls &&
+        !memcmp(&output,&sentinel,sizeof(output)));
+    CHECK(effect_body_instruction_ref_value(NULL,&run,7,&output)==XR_XIR_BAD_STRUCTURE &&
+        !memcmp(&output,&sentinel,sizeof(output)));
+    CHECK(effect_body_instruction_ref_value(&read,&run,7,NULL)==XR_XIR_BAD_STRUCTURE && !probe.calls);
+    puts("base-row copy: all1024 masks, complete ten fields,12 malformed, exact work cuts and old span fees passed");
+}
 static void single_run_reader_controls(void) {
+    single_run_base_copy_controls();
     EffectBodyRun run={.first=0,.count=8,.mask=(1u<<6)|(1u<<7)|(1u<<8),
         .base={.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={17,23},.targets={31,47},
             .immediate=-11,.type_arguments={0x7ffffff0u,0x80000001u}}};

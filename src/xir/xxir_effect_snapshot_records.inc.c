@@ -468,35 +468,39 @@ static XrXirInstruction effect_body_instruction_words_value(const XrXirInstructi
 }
 
 /* Counting and opcode validation finish before the full row is published.
- * The value core writes no temporary ten-word array; its actual cursor,
- * selected reads and complete Instruction output remain charged. */
+ * Only the actual first row may copy the complete stored base. Other rows
+ * retain every column reconstruction; all output bytes remain charged. */
 static XrXirStatus effect_body_instruction_ref_prepare(const EffectBodyRead *read,
-    const EffectBodyRun *ref,uint32_t instruction) {
+    const EffectBodyRun *ref,uint32_t instruction,bool base_copy) {
     if (!read || !ref || (ref->mask&~EFFECT_BODY_MASK) || (ref->count==1 && ref->mask) ||
-        instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+        instruction<ref->first || instruction-ref->first>=ref->count ||
+        (base_copy && instruction!=ref->first)) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,1+sizeof(uint32_t)+((ref->mask&UINT32_C(1))?3:0)))
         return XR_XIR_BUDGET;
     uint32_t operation=effect_body_source_word(&ref->base,0)+((ref->mask&UINT32_C(1))?
         ref->delta[0]*(instruction-ref->first):0);
     if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    uint64_t units=EFFECT_BODY_WORDS+sizeof(XrXirInstruction)+2;
+    uint64_t units=(base_copy?0:EFFECT_BODY_WORDS)+sizeof(XrXirInstruction)+2;
     for (uint32_t w=0;ref->mask && w<EFFECT_BODY_WORDS;++w) {
         if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
         if (ref->mask&(UINT32_C(1)<<w)) {
             if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
             if (!ref->delta[w]) return XR_XIR_BAD_STRUCTURE;
-            units+=4;
+            units+=base_copy?0:4;
         }
     }
-    if (!effect_body_read_work(read,units+EFFECT_BODY_WORDS)) return XR_XIR_BUDGET;
+    if (!effect_body_read_work(read,units+(base_copy?0:EFFECT_BODY_WORDS))) return XR_XIR_BUDGET;
     return XR_XIR_OK;
 }
 static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
     const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_instruction_ref_prepare(read,ref,instruction);
+    bool base_copy=ref && instruction==ref->first;
+    XrXirStatus status=effect_body_instruction_ref_prepare(read,ref,instruction,base_copy);
     if (status!=XR_XIR_OK) return status;
-    *output=effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,instruction-ref->first);
+    if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+    *output=base_copy?ref->base:
+        effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,instruction-ref->first);
     return XR_XIR_OK;
 }
 
