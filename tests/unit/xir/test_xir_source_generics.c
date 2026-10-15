@@ -155,6 +155,10 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
             CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_STRUCTURE);
             CHECK(xr_xir_compile_verify_v2(generic_source_context, &proof->source->module,
                 proof->source->construction, NULL) == XR_XIR_BAD_TYPE);
+            CHECK(xr_xir_compile_artifact_verify(proof->source, NULL) == XR_XIR_BAD_TYPE);
+            XrXirCheckedPacket altered = {0};
+            CHECK(xr_xir_compile_checked_write(closed, &altered, NULL) == XR_XIR_BAD_STRUCTURE &&
+                !altered.bytes && !altered.length);
             definition->result = saved;
             CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
         }
