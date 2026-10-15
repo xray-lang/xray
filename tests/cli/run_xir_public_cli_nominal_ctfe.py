@@ -48,7 +48,6 @@ def main(cases=CASES, negative_cases=None, family='NOMINAL_CTFE', case_semantics
         negative=negative_cases if negative_cases is not None else [
             ('class','class Box{value:i8;init(value){this.value=value}}\nfn make()->Box{return Box(7)}\nconst p=comptime make()\nprint(p.value)\n',b'comptime result must belong to an admitted closed value family'),
             ('io','struct Pair{value:i8}\nfn make()->Pair{print(1);return Pair{value:7}}\nconst p=comptime make()\nprint(p.value)\n',b'admitted deterministic scalar direct-call closure'),
-            ('output','struct Pair{word:i64;tag:i8}\nfn make()->Pair{return Pair{word:7,tag:1}}\nconst p=comptime make()\nprint(p.word)\n',b'error: budget'),
             ('private-read','import {make} from "./private-result-values"\nconst p=make()\nprint(p.value)\n',b'field access is not permitted'),
             ('private-import','import {Secret} from "./private-inside-values"\nprint(7)\n',b'import requires an exported declaration')]
         for name,body,message in negative:

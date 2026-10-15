@@ -44,7 +44,7 @@ def main():
                        'print(comptime ordering(),comptime filled())\n')
         text=prefix+('print(comptime integers())\nprint(comptime floats())\nprint(comptime unicode())\n'
                      'print(comptime runeText(),comptime boolText(),comptime wide())\n')
-        cases=[('paths',arrays,b'2 7 2 3 11 true\ntrue true\n'),
+        cases=[('wide-output','fn bad()->string{return (9223372036854775807 as i64).toString()}\nprint(comptime bad())\n',b'9223372036854775807\n'),('paths',arrays,b'2 7 2 3 11 true\ntrue true\n'),
                ('text',text,'-7:12\n3.5,-0.0\nA\0|中\n😀 true true\n'.encode('utf-8'))]
         def invoke(name,executable,arguments,environment):
             argv=[str(executable),*arguments]
@@ -69,7 +69,6 @@ def main():
         negatives=[
             ('bounds','fn bad()->i8{var xs:Array<Array<i8>>=[[1]];xs[0][2]=3;return 0}\nprint(comptime bad())\n',b'comptime index out of bounds'),
             ('fill-range','fn bad()->i64{var xs:Array<Array<i8>>=[[1,2]];xs[0].fill(7,-1,2);return 42}\nprint(comptime bad())\n',b'comptime value range violation'),
-            ('output','fn bad()->string{return (9223372036854775807 as i64).toString()}\nprint(comptime bad())\n',b'error: budget'),
             ('io','fn bad()->string{print(1);return true.toString()}\nprint(comptime bad())\n',b'admitted deterministic scalar direct-call closure'),
             ('append','fn bad()->string{var value:string="a";value+="b";return value}\nprint(comptime bad())\n',b'admitted deterministic scalar direct-call closure'),
             ('private-import','import {identity} from "./future-text-values"\nprint(identity<i64>(7))\n',b'import requires an exported declaration')]
@@ -80,7 +79,7 @@ def main():
             private_nested_Array_paths=True,COW_old_snapshots=True,owning_capacity_preserved=True,ordinary_Array_methods=True,
             scalar_TO_STRING_and_numeric_join=True,Unicode_NUL=True,full_binary64_and_integer_endpoint_spelling=True,
             source_absent_and_poisoned=True,Windows_absolute_child_denial=policy.control,
-            original_output8_preserved=True,IO_and_append_CTFE_refused=True,private_import_refused=True,
+            output_policy_version=2,maximum_logical_output_bytes=8*1024*1024,IO_and_append_CTFE_refused=True,private_import_refused=True,
             open_generic_CTFE_defaults=False,foreign_aggregate_inputs=False,user_class_CTFE=False,
             library_private_var_opened=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('Bounded scalar text and private Array paths: independent exact bytes, COW/capacity, native and refusals PASS');return 0

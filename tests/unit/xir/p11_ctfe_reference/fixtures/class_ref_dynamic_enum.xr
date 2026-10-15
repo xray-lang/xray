@@ -1,5 +1,5 @@
 enum Items{Empty,Some{items:Array<(i64,i64)>}}
-class Box{items:Items;constructor(items:Items){this.items=items}}
+class Box{items:Items;init(items:Items){this.items=items}}
 fn change(xs:ref Items){xs=Items.Some{items:[(20,20),(1,1)]}}
 fn middle(xs:ref Items){change(ref xs);xs=match(xs){Items.Empty->Items.Empty,Items.Some{items}->Items.Some{items:items}}}
 fn answer()->i64{const b=Box(Items.Empty);middle(ref b.items);return match(b.items){Items.Empty->0,Items.Some{items}->items[0].0+items[0].1+items[1].0+items[1].1}}

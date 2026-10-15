@@ -33,7 +33,7 @@ def main():
                   'const empty=comptime optional(false)\nprint(empty==null)\n'
                   'const wrapped=comptime nested()\nprint(wrapped==null,wrapped! == null)\n'
                   'const present=comptime flag(false)\nprint(present!)\n')
-        cases=[('arrays',arrays,b'7 2 3 1 2\n0 7\n7 7 7\n'),('nullable',nullable,'é\0\ntrue\nfalse true\nfalse\n'.encode())]
+        cases=[('wide-output','fn bad()->Array<i8>{return Array<i8>(9,1)}\nconst xs=comptime bad()\nprint(len(xs))\n',b'9\n'),('arrays',arrays,b'7 2 3 1 2\n0 7\n7 7 7\n'),('nullable',nullable,'é\0\ntrue\nfalse true\nfalse\n'.encode())]
         def invoke(name,executable,arguments,environment):
             argv=[str(executable),*arguments]
             result=policy.run(name,argv,environment) if environment is hidden else subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60)
@@ -56,7 +56,6 @@ def main():
             assert (result.returncode,result.stdout,result.stderr)==(0,expected,b''),result
         negatives=[('none','fn bad()->i8{const n:i8?=null;return n!}\nprint(comptime bad())\n',b'comptime null unwrap'),
                    ('bounds','fn bad()->i8{const xs:Array<i8>=[1];return xs[-1]}\nprint(comptime bad())\n',b'comptime index out of bounds'),
-                   ('output','fn bad()->Array<i8>{return Array<i8>(9,1)}\nconst xs=comptime bad()\nprint(len(xs))\n',b'error: budget'),
                    ('deep','fn bad()->Array<Array<i8?>>{return [[null,7]]}\nconst xs=comptime bad()\nprint(len(xs))\n',b'comptime result must belong to an admitted closed value family'),
                    ('io','fn bad()->Array<i8>{print(1);return [1]}\nconst xs=comptime bad()\nprint(len(xs))\n',b'admitted deterministic scalar direct-call closure')]
         for name,text,message in negatives:
@@ -65,7 +64,7 @@ def main():
         (output/'summary.json').write_text(json.dumps(dict(status='ARRAY_NULLABLE_CTFE_IMPORT_PASS',commands=len(records),
             private_Array_Cell_COW=True,old_snapshot_preserved=True,empty_capacity_7_preserved=True,repeat=True,
             Nullable_String_Unicode_NUL=True,Some_None_distinct_from_None=True,user_generic_primitive_Nullable=True,
-            None_unwrap_refused=True,negative_index_refused=True,original_output_8_bytes_preserved=True,deep_dynamic_Array_refused=True,
+            None_unwrap_refused=True,negative_index_refused=True,output_policy_version=2,maximum_logical_output_bytes=8*1024*1024,deep_dynamic_Array_refused=True,
             source_absent_and_poisoned=True,Windows_absolute_child_denial=policy.control,
             foreign_aggregate_inputs=False,user_class_CTFE=False,library_private_var_opened=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('Array/Nullable CTFE: exact COW snapshots, capacity and active variants; bounds and closure refusals PASS');return 0

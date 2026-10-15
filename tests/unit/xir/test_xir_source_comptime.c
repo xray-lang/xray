@@ -39,7 +39,7 @@ static const char source_comptime_class_text[]=
     "fn answer()->i64{const b=Box([40]);inc(ref b.items[0]);return b.items[0]}\n"
     "export fn run()->i64{return comptime answer()}\n";
 static const char source_comptime_dynamic_loan_text[]=
-    "class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}\n"
+    "class Box{items:Array<(i64,i64)>;init(items:Array<(i64,i64)>){this.items=items}}\n"
     "fn add(xs:ref Array<(i64,i64)>){xs.push((1,1))}\n"
     "fn middle(xs:ref Array<(i64,i64)>){add(ref xs);xs[1]=(20,20);add(ref xs)}\n"
     "fn answer()->i64{const b=Box([(0,0)]);middle(ref b.items);return b.items[1].0+b.items[1].1+b.items[2].0+b.items[2].1}\n"

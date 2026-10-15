@@ -319,3 +319,25 @@ foreach(mode IN ITEMS measure faults)
     set_tests_properties(test_xir_integer_runtime_${mode} PROPERTIES
         TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;ownership;stdlib;resources;integer")
 endforeach()
+
+add_test(NAME test_xir_public_cli_library_owned_results
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_library_owned_results.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
+set_tests_properties(test_xir_public_cli_library_owned_results PROPERTIES
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    LABELS "cli;xir;stdlib;native;execution;ownership;ctfe")
+foreach(mode IN ITEMS measure faults)
+    if(mode STREQUAL "measure")
+        set(library_owned_binding_mode binding-measure)
+    else()
+        set(library_owned_binding_mode faults)
+    endif()
+    add_test(NAME test_xir_library_owned_results_preparation_${mode}
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/library_owned_result_resources.py
+            $<TARGET_FILE:test_xir_stdlib_preparation> ${PROJECT_SOURCE_DIR} ${mode})
+    add_test(NAME test_xir_library_owned_results_binding_${mode}
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/library_owned_result_resources.py
+            $<TARGET_FILE:test_xir_stdlib_resources> ${PROJECT_SOURCE_DIR} ${library_owned_binding_mode})
+    set_tests_properties(test_xir_library_owned_results_preparation_${mode} test_xir_library_owned_results_binding_${mode} PROPERTIES
+        TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;stdlib;resources;ownership;ctfe")
+endforeach()

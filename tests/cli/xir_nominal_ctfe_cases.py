@@ -81,3 +81,6 @@ CASES += [
   'import {seed} from "./lexical-spread-values"\nconst xs=seed()\n'
   'print(xs[0],xs[1],xs[2],xs[3])\n',
   b'1 2 3 4\n')]
+
+# The original nine-byte output case is positive under output policy two.
+CASES.append(('wide-output', '', 'struct Pair{word:i64;tag:i8}\nfn make()->Pair{return Pair{word:7,tag:1}}\nconst p=comptime make()\nprint(p.word)\n', b'7\n'))
