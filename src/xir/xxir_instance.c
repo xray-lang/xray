@@ -24,6 +24,7 @@
 #include "xxir_task_internal.h"
 #include "xxir_struct.h"
 #include "xxir_output.h"
+#include "xxir_format.h"
 #include "xxir_panic.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -1108,12 +1109,14 @@ XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, X
     const XrXirLiteral *bytes = &instance->program->declarations->literals[literal];
     return value_call_status(xr_xir_string_new(instance->domain, bytes->bytes, bytes->length, output));
 }
-XrXirCallStatus xr_xir_instance_scalar_text(XrXirCallView *view, const XrXirValue *scalar, XrXirValue *output) {
+XrXirCallStatus xr_xir_instance_value_text(XrXirCallView *view, const XrXirValue *value, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance = view_instance(view);
     char buffer[XR_XIR_SCALAR_TEXT_BYTES]; const char *bytes = NULL; size_t length = 0;
-    if (!instance || !scalar || !output || !xr_xir_scalar_text(scalar, buffer, &bytes, &length))
-        return XR_XIR_CALL_BAD_STATE;
+    if (!instance || !value || !output) return XR_XIR_CALL_BAD_STATE;
+    if (value->type==XR_XIR_STRING || value->type>=XR_XIR_CONSTRUCTED_TYPE_BASE)
+        return value_call_status(xr_xir_value_format_string(value,xr_xir_call_admission(view),output));
+    if (!xr_xir_scalar_text(value,buffer,&bytes,&length)) return XR_XIR_CALL_BAD_STATE;
     return value_call_status(xr_xir_string_new(instance->domain, bytes, length, output));
 }
 static XrXirCallStatus time_call_status(XrXirTimeStatus status) {

@@ -469,9 +469,9 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         break;
     }
     case XR_XIR_TO_STRING:
-        EMIT_FORMAT(buffer, et_00b9a688ca9d6f61, " XrXirValue scalar = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n"
-            " status = xr_xir_instance_scalar_text(view, &scalar, &value);\n",
-            (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
+        EMIT_LITERAL(buffer," XrXirValue input = ");
+        emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer,";\n status = xr_xir_instance_value_text(view, &input, &value);\n");
         break;
     default: emit_reject(buffer, XR_XIR_BAD_STAGE); break;
     }

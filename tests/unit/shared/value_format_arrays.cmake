@@ -26,6 +26,11 @@ else()
 endif()
 add_test(NAME test_xir_value_format_storage COMMAND test_xir_value_format_storage)
 set_tests_properties(test_xir_value_format_storage PROPERTIES LABELS "unit;xir;format;ownership" TIMEOUT 30)
+add_test(NAME test_xir_owned_text_public
+    COMMAND ${Python3_EXECUTABLE} "${PROJECT_SOURCE_DIR}/tests/cli/run_xir_owned_text.py"
+        --binary $<TARGET_FILE:xray> --root "${PROJECT_SOURCE_DIR}")
+set_tests_properties(test_xir_owned_text_public PROPERTIES
+    TIMEOUT 180 LABELS "unit;xir;text;ownership;public-cli;native;ctfe")
 
 add_executable(test_array_format_public "${PROJECT_SOURCE_DIR}/tests/unit/xir/legacy_consumers/test_array_format_public.c")
 target_link_libraries(test_array_format_public PRIVATE xray_source_api)

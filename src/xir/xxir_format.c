@@ -17,12 +17,9 @@
 #include "xxir_rune.h"
 #include "xxir_value_internal.h"
 #include "xxir_type_arena_internal.h"
+#include "xxir_text_cost.h"
 
-static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
-    XrXirValue borrowed = {0};
-    if (!view || !xr_xir_value_format_storage(context, node, &borrowed, view)) return 0;
-    if (view->kind) return 1;
-    const XrXirValue *value = &borrowed;
+static int xir_format_leaf(const XrXirValue *value,XrValueFormatView *view) {
     XrXirType type = (XrXirType)value->type;
     if (type == XR_XIR_UNIT) {
         view->kind = XR_VALUE_FORMAT_LITERAL; view->name = "()"; view->name_size = 2;
@@ -59,6 +56,11 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
     }
     return 0;
 }
+static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
+    XrXirValue borrowed = {0};
+    if (!view || !xr_xir_value_format_storage(context, node, &borrowed, view)) return 0;
+    return view->kind ? 1 : xir_format_leaf(&borrowed,view);
+}
 
 static int xir_format_child(const void *context, XrValueFormatNode node, uint32_t index,
     XrValueFormatNode *child) {
@@ -84,7 +86,13 @@ static bool metered_format_work(MeteredFormat *format, uint64_t work) {
 }
 static int metered_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
     MeteredFormat *format=(MeteredFormat *)context;
-    return metered_format_work(format,1) && format->borrowed.read(format->borrowed.context,node,view);
+    XrXirValue borrowed={0};
+    if (!metered_format_work(format,1) ||
+        !xr_xir_value_format_storage(format->borrowed.context,node,&borrowed,view)) return 0;
+    if (view->kind) return 1;
+    if (xr_xir_float_bits((XrXirType)borrowed.type) &&
+        !metered_format_work(format,xir_text_cost(&borrowed).work+64)) return 0;
+    return xir_format_leaf(&borrowed,view);
 }
 static int metered_format_child(const void *context, XrValueFormatNode node, uint32_t index,
     XrValueFormatNode *child) {

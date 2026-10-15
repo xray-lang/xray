@@ -115,7 +115,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_utc_offset(XrXirCallView *view, int64_t 
     int64_t *minutes);
 XR_FUNC XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, XrXirValue *output);
 /* Owned string spelling of one bool or number value, as `print` would write it. */
-XR_FUNC XrXirCallStatus xr_xir_instance_scalar_text(XrXirCallView *view, const XrXirValue *scalar,
+XR_FUNC XrXirCallStatus xr_xir_instance_value_text(XrXirCallView *view, const XrXirValue *value,
     XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell(XrXirCallView *view, XrXirType type,
     const XrXirValue *initial, XrXirValue *output);

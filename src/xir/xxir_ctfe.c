@@ -15,6 +15,7 @@
 #include "xxir_types.h"
 #include "xxir_interpreter_state.h"
 #include "xxir_scalar_core.h"
+#include "xxir_display_type.h"
 typedef XirScalarCoreRun ScalarRun;
 static bool scalar_compile_work(ScalarRun *run,uint64_t units) {
     return xir_scalar_core_work(run,units);

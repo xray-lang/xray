@@ -115,9 +115,8 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
     case XR_XIR_CONST_STRING:
         status = xr_xir_instance_literal(run->view, (uint32_t) op->immediate, &value); break;
     case XR_XIR_TO_STRING: {
-        XrXirValue scalar = {(uint32_t) xr_xir_operand_type(run->function, op->args[0]), 0,
-            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
-        status = xr_xir_instance_scalar_text(run->view, &scalar, &value); break;
+        XrXirValue input=vm_value_operand(run,op->args[0]);
+        status = xr_xir_instance_value_text(run->view, &input, &value); break;
     }
     case XR_XIR_SLOT_LOAD:
         status = xr_xir_instance_slot_read(run->view, (uint32_t) op->immediate, &value); break;

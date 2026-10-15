@@ -1328,8 +1328,7 @@ static bool source_literal(SourceContext *ctx, AstNode *node, SourceValue *value
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_BOOL, XR_XIR_BOOL, {0, 0}, {0, 0},
         node->as.literal.raw_value.bool_val, {0}}, value);
 }
-/* An interpolated template is the left-to-right concatenation of its parts; a bool or
- * number part is spelled exactly as `print` writes it. */
+/* Interpolation evaluates each part once, then uses its closed display text. */
 static bool source_template(SourceContext *ctx, AstNode *node, SourceValue *value) {
     TemplateStringNode *template = &node->as.template_str;
     if (template->part_count < 0 || (template->part_count && !template->parts))
@@ -1344,11 +1343,7 @@ static bool source_template(SourceContext *ctx, AstNode *node, SourceValue *valu
             if (!source_literal(ctx, part, &piece)) return false;
         } else {
             if (!expression(ctx, part, &piece)) return false;
-            if (piece.type == XR_XIR_BOOL || piece.type == XR_XIR_RUNE || xr_xir_type_is_number(piece.type)) {
-                if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {piece.id, 0}, {0}, 0, {0}}, &piece))
-                    return false;
-            } else if (piece.type != XR_XIR_STRING)
-                return source_fail(ctx, part, XR_XIR_BAD_TYPE, "interpolated value has no admitted string conversion");
+            if (!source_text_conversion(ctx,part,piece,&piece)) return false;
         }
         if (!started) { result = piece; started = true; continue; }
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {result.id, piece.id}, {0}, 0, {0}}, &result))
@@ -1391,11 +1386,13 @@ static bool source_logic(SourceContext *ctx, AstNode *node, SourceValue *value) 
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LOCAL_READ, XR_XIR_BOOL, {place.id, 0}, {0}, 0, {0}}, value);
 }
 #include "xxir_source_nullable.inc.c"
-/* The text of a bool or number, as `print` writes it; a string converts to itself. */
+/* String identity is free; other closed display values prepare owned text. */
 static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value) {
     if (input.type == XR_XIR_STRING) { *value = input; return true; }
-    if (input.type != XR_XIR_BOOL && input.type != XR_XIR_RUNE && !xr_xir_type_is_number(input.type))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "value has no admitted string conversion");
+    XrXirStatus display=xir_compile_display_type(&ctx->compile,&ctx->types,input.type);
+    if (display!=XR_XIR_OK) return source_fail(ctx,node,display,"value has no admitted string conversion");
+    if (input.type==XR_XIR_UNIT &&
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,XR_XIR_UNIT,{0},{0},0,{0}},&input)) return false;
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_TO_STRING, XR_XIR_STRING, {input.id, 0}, {0}, 0, {0}}, value);
 }
 static bool source_number_cast(SourceContext *ctx, AstNode *node, SourceValue *value) {

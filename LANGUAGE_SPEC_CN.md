@@ -7893,9 +7893,19 @@ Unit保留一个真实逻辑参数与有序arity，不能按零宽frame擦除。
 
 当前Source沿共同实参计划接入自由函数、callable/closure、方法/构造器、接口签名及泛型定义中的固定Unit READ形参；未能推导的构造器参数仍拒绝。独立public leaf CTFE、生成C leaf与原Tuple的VM/native/mixed消费者沿同一接点验证。泛型Unit实参域及各表面完整资格仍须分别闭合，不能从固定Unit参数推断额外能力。Source、Program、Instance及库state权限的原限制不变。
 
-本族扩展Checked值验证域，唯一semantic为76；wire29与Value25/Call29/Program31的字段、布局和ABI事实未变。旧75完整包及SDK语义在早期准入拒绝，不留旧reader或别名；独立完整旧前像保留作拒例，新向量从明确字段推导而非writer输出刷新。布局与identity仍由§17.6列出的实现常量唯一承担。
+本族首次以semantic76发布；当前唯一semantic77由§17.70的闭合文本转换规则确定。wire29与Value25/Call29/Program31的字段、布局和ABI事实未变。旧76及更早完整包及SDK语义在早期准入拒绝，不留旧reader或别名；独立完整旧前像保留作拒例，新向量从明确字段推导而非writer输出刷新。布局与identity仍由§17.6列出的实现常量唯一承担。
 
 Unit空值本身不分配，结构接收、完整复验和参数元数据仍计原ledger。所有原完整物理FI、分配/peak/work三轴、same-owner重试、失败输出保全、取消/physical0、sanitizer及provider门继续必需；本族不调高128M、64MiB/8MiB、steps/frame/depth或既有timeout，也不开放库私有var或授予完整标准库资格。
+
+### 17.70 闭合拥有值文本转换
+
+Source字符串插值、显式string转换与独立Checked TO_STRING使用§17.68同一个闭合显示域：Unit、标量、String、Array、nullable和所有enum payload。空容器或当前无payload的variant不免除声明中的其它类型。函数、Class、Struct及开放泛型不因转换取得显示或运行权限。String的Source转换仍为身份；其它转换先完成原表达式一次，再准备完整owned String。Unit只使用canonical零值，不读取零宽frame。裸null仍要求精确nullable上下文，不引入隐式null类型或Unit→null。
+
+VM与生成C从真实对象头恢复拥有值及每条边的出生arena；当前Program的接收身份、Domain与原admission共同复验，不按相同编号或形状重贴类型。拥有文本由同一个借用formatter生成，保留深度3、首32项、引号、nullable、UTF8和NUL规则。两遍计数/填充、真实身份查找、临时字节、最终String和失败清理均付原账本；浮点叶在实际格式化前预付原IEEE指数界定的整数十进制转换工作，不借输出长度隐藏格式化工作。
+
+CTFE在完整Lowered和可达闭包准入后使用同一formatter与compiler Domain；不调用Instance输出、原生工具或另一种值表示。标量路径保持原预付工作与frame界限；拥有路径保留16384字节有界本地工作区，余下frame才可用作admission与输出scratch。编译器分配/work仍由原Domain桥接至同一个compiler ledger。错误、预算耗尽和OOM不发布半个String，不刷新预算或获取外部身份权限。
+
+本族扩展TO_STRING合法操作数域，唯一semantic为77；wire29和Value25/Call29/Program31布局未变。完整旧76及更早包与SDK语义在早期准入拒绝；当前独立字段向量和完整旧前像分别保留，不能只让writer更新golden。上述实现须由完整正常/拒例、VM/C/native/CTFE、FI、资源、取消、寿命、物理释放、sanitizer和provider门验证；注册fixture与本节文字不构成完整资格。所有原128M、8MiB/64MiB、frame/steps/depth与timeout保持。
 
 ---
 

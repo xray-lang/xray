@@ -160,7 +160,12 @@ static XrXirCtfeStatus ctfe_body_type_admit(const XrXirArtifact *artifact,XrXirT
 }
 static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifact,
     const XrXirFunction *body,const XrXirInstruction *op) {
-    if (op->op==XR_XIR_TO_STRING && !ctfe_scalar_type(xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
+    if (op->op==XR_XIR_TO_STRING) {
+        XrXirStatus display=xir_compile_display_type(&artifact->context,artifact->module.types,
+            xr_xir_operand_type(body,op->args[0]));
+        if (display==XR_XIR_BAD_TYPE) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (display!=XR_XIR_OK) return ctfe_compile_status(display);
+    }
     bool array_receiver=op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_LEN || op->op==XR_XIR_ARRAY_CAPACITY ||
         op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_ARRAY_RESERVE ||
         op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_STRUCT_SET;
