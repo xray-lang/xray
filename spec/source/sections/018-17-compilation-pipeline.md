@@ -726,7 +726,7 @@ cleanup可在内部完整捕获panic，包括外层已持有返回/Error/panic�
 
 类型费用将Class句柄的固定header验证计32单元，不递归猜测可能递归的声明图。实际接收在原ledger上的显式拥有栈逐字段访问真实对象；只调用浅层公开class_get，先付根/字段metadata、实际Array接收span与同时存活scratch。它不读取私有对象头，也不先运行完整未付费receiver扫描。每次写入先观察完整当前receiver及输入图，拒绝通向实际目标Class的回边；句柄相同仅用于回边拒绝，真实Domain/arena、存储和借用仍由Value API认证。无环共享、别名可见字段修改和替换保留普通身份语义；不能把抛出的Class身份当不可变字段快照。
 
-OBJECT_PLACE代表完整Class根，FIELD_PLACE才增加字段selector。经已求值selector的字段/Array路径先付接收与可能祖先复制，再使用真实帧authority prepare/commit短整对象loan，通过共同authorized path操作，所有终态allocation-free释放loan。路径不保存内部地址；若路径在首根之外跨另一Class身份，当前入口明确拒绝，须从实际子对象另建合法根。ref投影仍由唯一Cell projection工厂与真实父子loan管理。Class根的初始投影借用要求所有字段为可导出纯数据类型，拒绝窄loan期间不能观察的其他可变身份。scalar/String及受支持纯Array链可借用、重借用和cleanup写回；动态数据leaf的增长、替换和父借用接收上界遵守17.62，Class-bearing根仍明确拒绝。
+OBJECT_PLACE代表完整Class根，FIELD_PLACE才增加字段selector。经已求值selector的字段/Array路径先付接收与可能祖先复制，再使用真实帧authority prepare/commit短整对象loan，通过共同authorized path操作，所有终态allocation-free释放loan。路径不保存内部地址；若路径在首根之外跨另一Class身份，当前入口明确拒绝，须从实际子对象另建合法根。ref投影仍由唯一Cell projection工厂与真实父子loan管理。Class根的初始投影借用要求所有字段为可导出纯数据类型，或按17.63证明实际不可变包装中不存在活动子权限，拒绝窄loan期间不能观察的其他可变身份。scalar/String及受支持纯Array链可借用、重借用和cleanup写回；动态数据leaf的增长、替换和父借用接收上界遵守17.62，含活动子身份的Class根仍明确拒绝。
 
 字段get返回真实拥有值；返回String快照不受随后Class字段替换影响，并在Source/Artifact/ledger调用者死亡后保持有效。普通返回、Error与panic的LIFO cleanup、真实父loan恢复和资源失败语义继续遵守17.56–17.59。完整物理FI包括构造、字段图接收、投影/cleanup、拥有String和回边拒绝的所有已观测分配点，失败后同一原owner重试，保持空输出及live归零。遍历栈/loan/路径与共同scratch计原frame；work耗尽后重试不能重置费用。
 
@@ -746,7 +746,7 @@ compiler-private输出政策版本为2，XR_XIR_CTFE_MAX_OUTPUT_BYTES固定为83
 
 ### 17.62 纯数据Class根上的动态借用接收费用
 
-在17.60的真实Class根、唯一Cell投影和原帧authority上，scoped ref可借用已准入的动态纯数据leaf，包括Array<静态Tuple/Nullable/enum>及含这些Array的Nullable/enum整体替换。整个Class根的每个字段仍须通过外部纯数据类型族检查；Class/Function/Cell/Error/PanicInfo字段或尚无有界接收的深动态Array/struct不能借此获准。COW数据副本不会在窄loan外修改该根的变量接收span；其他Class身份仍是独立权限边界。
+在17.60的真实Class根、唯一Cell投影和原帧authority上，scoped ref可借用已准入的动态纯数据leaf，包括Array<静态Tuple/Nullable/enum>及含这些Array的Nullable/enum整体替换。整个Class根的每个字段须通过外部纯数据类型族检查或17.63的实际无活动子权限检查；Class/Function/Cell/Error/PanicInfo字段或尚无有界接收的深动态Array/struct不能借此获准。COW数据副本不会在窄loan外修改该根的变量接收span；其他Class身份仍是独立权限边界。
 
 借用记录只保存根类型形状和保守接收费用上界，不保存根Value、内部地址或新的访问证明。初借在实际完整根上计费；重借用继承真实直接父loan的上界与变量标记。在投影CELL_WRITE/路径写入/Array push调用共同Value修改前，先按原ledger接收完整输入，并观察该次输入接收实际支付的work。静态复合Array单元素新增接收至多shape*32，其自身接收已付shape*16；整体替换已付完整新变量子树，外层固定metadata由原根形状覆盖。因此输入接收work的四倍是保守增量；原始标量Array的接收没有随长度增长的逐元素span。乘加溢出拒绝BUDGET。
 
@@ -754,7 +754,13 @@ compiler-private输出政策版本为2，XR_XIR_CTFE_MAX_OUTPUT_BYTES固定为83
 
 普通返回、LIFO cleanup、caught Error/panic与reborrow保持17.56–17.59的真实父loan恢复。Class别名可见字段修改；先取得的Array或String数据快照保持COW/拥有语义。拥有结果在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。完整FI逐实际物理分配点失败并在同一原有限job owner重试；不同故障场景可独立建job，不把整个故障矩阵累计到同一耗尽账本，也不分片每次求值。
 
-原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及17.61的policy2输出保持。全部新增metadata遍历、真实输入接收与共同scratch仍计原资源。无新Value/Call/Instance/SourceContext布局、schema、opcode或替代evaluator；foreign接收、跨第二Class路径、Class-bearing根、未准入深动态数据与完整共享/provider/正式安全仍保留独立原责任。
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及17.61的policy2输出保持。全部新增metadata遍历、真实输入接收与共同scratch仍计原资源。无新Value/Call/Instance/SourceContext布局、schema、opcode或替代evaluator；foreign接收、跨第二Class路径、含活动子身份的Class根、未准入深动态数据与完整共享/provider/正式安全仍保留独立原责任。
+
+### 17.63 无活动子权限的Class字段借用
+
+Class字段的声明类型含身份并不代表当前值存在子身份。初始投影在外部纯数据类型检查明确返回NOT_SUPPORTED时，先以真实Class getter付费读取当前字段，再复用唯一接收图遍历观察Tuple、Nullable和enum的实际活动字段。None或空variant可以证明该分支没有活动子权限；嵌套包装继续逐实际子值检查。静态纯数据子树仍走原完整接收；动态纯数据子树保留原接收与复制费用。活动Class、Cell、Function、Error、PanicInfo及尚无有界接收的Array/struct不能借此获准。OOM、预算与其他失败立即传播，不能当作类型不支持后继续观察。
+
+借用leaf本身必须为可导出的纯数据类型，防止通过该loan把原空分支改成含身份。真实整根loan阻止别名在窄借用期间重绑兄弟字段；实际无子权限证明不创建访问权限、Value哨兵或第二loan协议。重借用、cleanup、动态leaf增长和父上界传播继续使用17.56–17.62的唯一实现。遍历栈与委托接收的同时scratch计入原frame额度，全部分配和访问付同一原有限owner；其他预算不变。
 
 <!-- /xr-spec:cn -->
 
@@ -1593,7 +1599,7 @@ After complete Lowered/identity/target/profile and entire reachable closure admi
 
 Type costs count fixed Class header validation as32 units without recursively guessing a possibly recursive declaration graph. Actual receiving visits authentic fields through an explicit owning stack on the original ledger. It uses only shallow public class_get after prepaying root/field metadata, actual Array receiving spans and simultaneous scratch. It reads no private object headers and performs no unpaid whole-receiver scan. Before each write, observation visits the complete current receiver and incoming graph, rejecting a backedge to the actual destination Class. Handle equality only rejects backedges; Value APIs still authenticate actual Domain/arena, storage and loans. Acyclic sharing, alias-visible field changes and replacement retain ordinary identity semantics; a thrown Class identity is not an immutable snapshot of its fields.
 
-OBJECT_PLACE denotes the complete Class root; FIELD_PLACE adds the field selector. Paths with evaluated selectors prepay receiving and possible ancestor copies, then prepare/commit a short whole-object loan under real frame authority and use common authorized path operations. Every terminal releases the loan without allocation. Paths retain no interior address. A path crossing another Class identity beyond its first root currently rejects; a legal route must instead start at the actual child object. Ref projections still use the sole Cell projection factory and authentic parent/child loans. Initial projection loans on Class roots require all fields to be exportable data types, rejecting other mutable identities that a narrow loan cannot observe. Scalar/String and supported pure Array chains allow borrowing, reborrowing and cleanup writes. Dynamic data leaf growth, replacement and parent receiving bounds follow17.62; Class-bearing roots remain refused.
+OBJECT_PLACE denotes the complete Class root; FIELD_PLACE adds the field selector. Paths with evaluated selectors prepay receiving and possible ancestor copies, then prepare/commit a short whole-object loan under real frame authority and use common authorized path operations. Every terminal releases the loan without allocation. Paths retain no interior address. A path crossing another Class identity beyond its first root currently rejects; a legal route must instead start at the actual child object. Ref projections still use the sole Cell projection factory and authentic parent/child loans. Initial projection loans on Class roots require all fields to be exportable data types or prove absence of active descendant authority through immutable wrappers under17.63, rejecting other mutable identities that a narrow loan cannot observe. Scalar/String and supported pure Array chains allow borrowing, reborrowing and cleanup writes. Dynamic data leaf growth, replacement and parent receiving bounds follow17.62; Class roots with active descendant identities remain refused.
 
 Field getters return real owners. A returned String snapshot survives subsequent Class field replacement and Source/Artifact/ledger caller death. Ordinary returns, Error and panic retain LIFO cleanup, authentic parent loan restoration and resource-failure rules from17.56–17.59. Complete physical FI includes every observed allocation point in construction, field graph receiving, projection/cleanup, owning String and cycle refusal, with retry on the same original owner and empty output/live restoration. Traversal stacks, loans, paths and common scratch share the original frame. Retrying work exhaustion cannot reset charges.
 
@@ -1613,7 +1619,7 @@ Policy version2 and its hard ceiling belong to compiler artifact and future pers
 
 ### 17.62 Dynamic loan receiving costs on data-only Class roots
 
-On authentic Class roots, sole Cell projections and original frame authority from17.60, scoped ref may borrow admitted dynamic data leaves, including Arrays of static Tuples/Nullable/enums and whole replacement of Nullable/enums containing such Arrays. Every Class root field must still pass the external data-only type family. Class/Function/Cell/Error/PanicInfo fields and deeper dynamic Arrays/structs lacking bounded receiving gain no admission. COW data copies cannot change this root's variable receiving span outside the narrow loan; other Class identities remain separate authority boundaries.
+On authentic Class roots, sole Cell projections and original frame authority from17.60, scoped ref may borrow admitted dynamic data leaves, including Arrays of static Tuples/Nullable/enums and whole replacement of Nullable/enums containing such Arrays. Every Class root field must pass the external data-only type family or the actual absence check from17.63. Class/Function/Cell/Error/PanicInfo fields and deeper dynamic Arrays/structs lacking bounded receiving gain no admission. COW data copies cannot change this root's variable receiving span outside the narrow loan; other Class identities remain separate authority boundaries.
 
 A loan record holds only root type shape and a conservative receiving-work bound, never a root Value, interior address or new access proof. Initial admission pays on the actual complete root; reborrowing inherits the authentic immediate parent loan's bound and variable flag. Before projected CELL_WRITE/path writes/Array push call common Value mutation, the original ledger admits the complete input and observes the work actually paid by that input admission. Adding a static composite Array element needs at most shape*32 receiving work while its own admission pays shape*16. Whole replacement pays the complete new variable subtree and original root shape covers enclosing fixed metadata. Four times input admission work therefore bounds either increase; primitive Array receiving has no length-dependent element span. Multiplication/addition overflow rejects BUDGET.
 
@@ -1621,6 +1627,12 @@ Before writing, a paid scan follows actual activation parents and all live loans
 
 Ordinary returns, LIFO cleanup, caught Error/panic and reborrowing retain authentic parent loan restoration from17.56–17.59. Class aliases observe field mutation while previously obtained Array/String data snapshots retain COW/owning semantics. Owned results survive Source/Artifact/ledger caller death and final drop allocates nothing. Complete FI fails every actual physical allocation point and retries on the same original finite job owner. Different fault scenarios may use independent jobs; they do not cumulatively consume a single matrix-wide exhausted ledger or partition individual evaluations.
 
-Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2 output from17.61 remain. New metadata traversal, authentic input receiving and common scratch still pay original resources. No Value/Call/Instance/SourceContext layout, schema, opcode or alternative evaluator is added. Foreign receiving, paths across a second Class, Class-bearing roots, unadmitted deeper dynamic data and complete shared/provider/formal safety retain independent original responsibilities.
+Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2 output from17.61 remain. New metadata traversal, authentic input receiving and common scratch still pay original resources. No Value/Call/Instance/SourceContext layout, schema, opcode or alternative evaluator is added. Foreign receiving, paths across a second Class, roots with active descendant identities, unadmitted deeper dynamic data and complete shared/provider/formal safety retain independent original responsibilities.
+
+### 17.63 Class field loans without active descendant authority
+
+An identity-bearing field declaration does not imply a live descendant identity. Only when the external data-only type check returns NOT_SUPPORTED does an initial projection prepay a real Class getter and reuse the sole receiving graph traversal to inspect actual active Tuple, Nullable and enum fields. None or an empty variant proves absence in that branch; nested wrappers inspect actual children. Statically data-only subtrees retain ordinary complete admission, and dynamic data subtrees retain receiving and copy charges. Active Class, Cell, Function, Error, PanicInfo and Arrays/structs without bounded receiving gain no admission. OOM, budget and other failures propagate immediately instead of becoming a type-unsupported fallback.
+
+The borrowed leaf itself must be exportable data, preventing the loan from replacing an absent branch with an identity. The authentic whole-root loan blocks aliases from rebinding sibling fields while a narrow loan is active. Absence proves no access authority and creates no Value sentinel or second loan protocol. Reborrowing, cleanup, dynamic leaf growth and parent bound propagation retain the sole implementation from17.56–17.62. Traversal stacks and simultaneous delegated receiving scratch share the original frame allowance. All allocation and access pay the same original finite owner; other budgets remain unchanged.
 
 <!-- /xr-spec:en -->

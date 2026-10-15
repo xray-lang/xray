@@ -134,6 +134,7 @@ static XrXirCtfeStatus ctfe_validation_work(ScalarRun *run,CtfeOwnedState *state
 static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *value,
     CtfeOwnedState *state,uint64_t maximum);
 static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value);
+static XrXirCtfeStatus ctfe_data_admission_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value);
 static XrXirCtfeStatus ctfe_array_scan_work(ScalarRun *run,CtfeOwnedState *state,XrXirType element,uint64_t count);
 static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];

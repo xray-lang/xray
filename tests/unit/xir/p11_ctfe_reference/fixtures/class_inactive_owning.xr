@@ -1,0 +1,4 @@
+class Box{items:Array<(string,i64)>;extra:(i64,Box?);constructor(items:Array<(string,i64)>,extra:(i64,Box?)){this.items=items;this.extra=extra}}
+fn change(xs:ref Array<(string,i64)>)->string{xs.push(("ab",42));defer{xs[1]=("changed",0)};return xs[1].0}
+fn answer()->string{const b=Box([("old",0)],(0,null));return change(ref b.items)}
+export fn run()->string{return comptime answer()}

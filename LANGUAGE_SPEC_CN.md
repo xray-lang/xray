@@ -7767,7 +7767,7 @@ cleanup可在内部完整捕获panic，包括外层已持有返回/Error/panic�
 
 类型费用将Class句柄的固定header验证计32单元，不递归猜测可能递归的声明图。实际接收在原ledger上的显式拥有栈逐字段访问真实对象；只调用浅层公开class_get，先付根/字段metadata、实际Array接收span与同时存活scratch。它不读取私有对象头，也不先运行完整未付费receiver扫描。每次写入先观察完整当前receiver及输入图，拒绝通向实际目标Class的回边；句柄相同仅用于回边拒绝，真实Domain/arena、存储和借用仍由Value API认证。无环共享、别名可见字段修改和替换保留普通身份语义；不能把抛出的Class身份当不可变字段快照。
 
-OBJECT_PLACE代表完整Class根，FIELD_PLACE才增加字段selector。经已求值selector的字段/Array路径先付接收与可能祖先复制，再使用真实帧authority prepare/commit短整对象loan，通过共同authorized path操作，所有终态allocation-free释放loan。路径不保存内部地址；若路径在首根之外跨另一Class身份，当前入口明确拒绝，须从实际子对象另建合法根。ref投影仍由唯一Cell projection工厂与真实父子loan管理。Class根的初始投影借用要求所有字段为可导出纯数据类型，拒绝窄loan期间不能观察的其他可变身份。scalar/String及受支持纯Array链可借用、重借用和cleanup写回；动态数据leaf的增长、替换和父借用接收上界遵守17.62，Class-bearing根仍明确拒绝。
+OBJECT_PLACE代表完整Class根，FIELD_PLACE才增加字段selector。经已求值selector的字段/Array路径先付接收与可能祖先复制，再使用真实帧authority prepare/commit短整对象loan，通过共同authorized path操作，所有终态allocation-free释放loan。路径不保存内部地址；若路径在首根之外跨另一Class身份，当前入口明确拒绝，须从实际子对象另建合法根。ref投影仍由唯一Cell projection工厂与真实父子loan管理。Class根的初始投影借用要求所有字段为可导出纯数据类型，或按17.63证明实际不可变包装中不存在活动子权限，拒绝窄loan期间不能观察的其他可变身份。scalar/String及受支持纯Array链可借用、重借用和cleanup写回；动态数据leaf的增长、替换和父借用接收上界遵守17.62，含活动子身份的Class根仍明确拒绝。
 
 字段get返回真实拥有值；返回String快照不受随后Class字段替换影响，并在Source/Artifact/ledger调用者死亡后保持有效。普通返回、Error与panic的LIFO cleanup、真实父loan恢复和资源失败语义继续遵守17.56–17.59。完整物理FI包括构造、字段图接收、投影/cleanup、拥有String和回边拒绝的所有已观测分配点，失败后同一原owner重试，保持空输出及live归零。遍历栈/loan/路径与共同scratch计原frame；work耗尽后重试不能重置费用。
 
@@ -7787,7 +7787,7 @@ compiler-private输出政策版本为2，XR_XIR_CTFE_MAX_OUTPUT_BYTES固定为83
 
 ### 17.62 纯数据Class根上的动态借用接收费用
 
-在17.60的真实Class根、唯一Cell投影和原帧authority上，scoped ref可借用已准入的动态纯数据leaf，包括Array<静态Tuple/Nullable/enum>及含这些Array的Nullable/enum整体替换。整个Class根的每个字段仍须通过外部纯数据类型族检查；Class/Function/Cell/Error/PanicInfo字段或尚无有界接收的深动态Array/struct不能借此获准。COW数据副本不会在窄loan外修改该根的变量接收span；其他Class身份仍是独立权限边界。
+在17.60的真实Class根、唯一Cell投影和原帧authority上，scoped ref可借用已准入的动态纯数据leaf，包括Array<静态Tuple/Nullable/enum>及含这些Array的Nullable/enum整体替换。整个Class根的每个字段须通过外部纯数据类型族检查或17.63的实际无活动子权限检查；Class/Function/Cell/Error/PanicInfo字段或尚无有界接收的深动态Array/struct不能借此获准。COW数据副本不会在窄loan外修改该根的变量接收span；其他Class身份仍是独立权限边界。
 
 借用记录只保存根类型形状和保守接收费用上界，不保存根Value、内部地址或新的访问证明。初借在实际完整根上计费；重借用继承真实直接父loan的上界与变量标记。在投影CELL_WRITE/路径写入/Array push调用共同Value修改前，先按原ledger接收完整输入，并观察该次输入接收实际支付的work。静态复合Array单元素新增接收至多shape*32，其自身接收已付shape*16；整体替换已付完整新变量子树，外层固定metadata由原根形状覆盖。因此输入接收work的四倍是保守增量；原始标量Array的接收没有随长度增长的逐元素span。乘加溢出拒绝BUDGET。
 
@@ -7795,7 +7795,13 @@ compiler-private输出政策版本为2，XR_XIR_CTFE_MAX_OUTPUT_BYTES固定为83
 
 普通返回、LIFO cleanup、caught Error/panic与reborrow保持17.56–17.59的真实父loan恢复。Class别名可见字段修改；先取得的Array或String数据快照保持COW/拥有语义。拥有结果在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。完整FI逐实际物理分配点失败并在同一原有限job owner重试；不同故障场景可独立建job，不把整个故障矩阵累计到同一耗尽账本，也不分片每次求值。
 
-原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及17.61的policy2输出保持。全部新增metadata遍历、真实输入接收与共同scratch仍计原资源。无新Value/Call/Instance/SourceContext布局、schema、opcode或替代evaluator；foreign接收、跨第二Class路径、Class-bearing根、未准入深动态数据与完整共享/provider/正式安全仍保留独立原责任。
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及17.61的policy2输出保持。全部新增metadata遍历、真实输入接收与共同scratch仍计原资源。无新Value/Call/Instance/SourceContext布局、schema、opcode或替代evaluator；foreign接收、跨第二Class路径、含活动子身份的Class根、未准入深动态数据与完整共享/provider/正式安全仍保留独立原责任。
+
+### 17.63 无活动子权限的Class字段借用
+
+Class字段的声明类型含身份并不代表当前值存在子身份。初始投影在外部纯数据类型检查明确返回NOT_SUPPORTED时，先以真实Class getter付费读取当前字段，再复用唯一接收图遍历观察Tuple、Nullable和enum的实际活动字段。None或空variant可以证明该分支没有活动子权限；嵌套包装继续逐实际子值检查。静态纯数据子树仍走原完整接收；动态纯数据子树保留原接收与复制费用。活动Class、Cell、Function、Error、PanicInfo及尚无有界接收的Array/struct不能借此获准。OOM、预算与其他失败立即传播，不能当作类型不支持后继续观察。
+
+借用leaf本身必须为可导出的纯数据类型，防止通过该loan把原空分支改成含身份。真实整根loan阻止别名在窄借用期间重绑兄弟字段；实际无子权限证明不创建访问权限、Value哨兵或第二loan协议。重借用、cleanup、动态leaf增长和父上界传播继续使用17.56–17.62的唯一实现。遍历栈与委托接收的同时scratch计入原frame额度，全部分配和访问付同一原有限owner；其他预算不变。
 
 ---
 

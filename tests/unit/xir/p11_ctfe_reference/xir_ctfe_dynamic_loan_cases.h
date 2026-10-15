@@ -158,10 +158,10 @@ static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSou
     fprintf(stderr,"CTFE dynamic Class loan owning=%u FI=%zu complete per-job same-owner retry/live; all steps0..%llu depth1..%u frame exact%llu/minus-one status%u output exact%u/minus-one; original owner work%llu/128000000 after%u successes then retry BUDGET physical0\n",
         (unsigned)owning,sites,(unsigned long long)steps,depth,(unsigned long long)low,(unsigned)short_frame,owning?2:8,(unsigned long long)spent,completed);
 }
-static void reference_dynamic_last_owner(void) {
+static void reference_dynamic_last_owner(const char *name) {
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
-    CHECK(reference_source(&context,"class_ref_dynamic_owning_direct",&source,&diagnostic)==XR_XIR_OK);
+    CHECK(reference_source(&context,name,&source,&diagnostic)==XR_XIR_OK);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);XrXirValue output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,2}};

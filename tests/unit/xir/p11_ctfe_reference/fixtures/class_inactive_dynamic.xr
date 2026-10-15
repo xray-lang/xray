@@ -1,0 +1,4 @@
+class Bucket{items:Array<(i64,i64)>;next:Bucket?;constructor(items:Array<(i64,i64)>,next:Bucket?){this.items=items;this.next=next}}
+fn grow(xs:ref Array<(i64,i64)>){xs.push((1,1))}
+fn answer()->i64{const b=Bucket([(20,20)],null);grow(ref b.items);return b.items[0].0+b.items[0].1+b.items[1].0+b.items[1].1}
+export fn run()->i64{return comptime answer()}

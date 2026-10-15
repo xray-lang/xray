@@ -42,12 +42,18 @@ static XrXirCtfeStatus ctfe_class_projection_type(ScalarRun *run,CtfeOwnedState 
     for (uint32_t i=0;i<node->nominal.field_count;++i) {
         if (!scalar_compile_work(run,4)) return XR_XIR_CTFE_BUDGET;
         XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(state->context,run->module->types,node->nominal.fields[i],false,&shape);
+        if (status==XR_XIR_CTFE_NOT_SUPPORTED) {
+            XrXirValue child={0};status=ctfe_class_member_read(run,state,root,i,&child);
+            if (status==XR_XIR_CTFE_OK) status=ctfe_data_admission_work(run,state,&child);
+            xr_xir_value_drop(&child);
+        }
         if (status!=XR_XIR_CTFE_OK) return status;
     }
-    XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(state->context,run->module->types,leaf,true,&shape);
+    XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(state->context,run->module->types,leaf,false,&shape);
     if (status!=XR_XIR_CTFE_OK) return status;
-    /* A narrow loan cannot observe a mutable identity elsewhere in its root.
-     * Data-only dynamic leaves instead update every live parent reserve. */
+    /* The actual graph has no descendant authority. The authentic root loan
+     * blocks sibling rebinding, and an exportable leaf cannot add an identity.
+     * Dynamic data growth still updates every live parent reserve. */
     *variable=shape.dynamic;return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_class_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
