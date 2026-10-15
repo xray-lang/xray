@@ -72,7 +72,7 @@ static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirVal
 }
 XR_FUNC XrXirValueStatus xr_xir_hash_delete(const XrXirValuePlace *place, const XrXirValue *key,
     XrXirValueAdmission *admission, bool *removed) {
-    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = hash_delete(place, key, admission, removed);
     xr_xir_value_graph_end(); return status;
@@ -99,7 +99,7 @@ static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmis
     return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_hash_clear(const XrXirValuePlace *place, XrXirValueAdmission *admission) {
-    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = hash_clear(place, admission);
     xr_xir_value_graph_end(); return status;

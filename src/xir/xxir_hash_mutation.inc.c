@@ -88,14 +88,14 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
 }
 XR_FUNC XrXirValueStatus xr_xir_map_set(const XrXirValuePlace *place, const XrXirValue *key,
     const XrXirValue *value, XrXirValueAdmission *admission) {
-    if (!value || !admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!value || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = hash_upsert(place, key, value, admission);
     xr_xir_value_graph_end(); return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_set_add(const XrXirValuePlace *place, const XrXirValue *element,
     XrXirValueAdmission *admission) {
-    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = hash_upsert(place, element, NULL, admission);
     xr_xir_value_graph_end(); return status;

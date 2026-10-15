@@ -57,11 +57,12 @@ static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType 
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
-            node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+            node->kind == XR_XIR_TYPE_TUPLE ||
             node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
         if (node->kind == XR_XIR_TYPE_SET) { *needed = false; return XR_XIR_VALUE_OK; }
+        /* Nullable adds no execution authority beyond its element type. */
         if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
             node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
         type = node->kind == XR_XIR_TYPE_MAP ? node->result : node->element;

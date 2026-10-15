@@ -31,6 +31,9 @@ XR_FUNC XrXirValueStatus xr_xir_hash_len(const XrXirValue *container,
  * preserves both outputs. A present Unit value is distinguished by found. */
 XR_FUNC XrXirValueStatus xr_xir_map_get(const XrXirValue *map, const XrXirValue *key,
     XrXirValueAdmission *admission, XrXirValue *output, bool *found);
+/* Membership probes the key without materializing or retaining its value. */
+XR_FUNC XrXirValueStatus xr_xir_map_contains_key(const XrXirValue *map, const XrXirValue *key,
+    XrXirValueAdmission *admission, bool *output);
 XR_FUNC XrXirValueStatus xr_xir_set_contains(const XrXirValue *set, const XrXirValue *element,
     XrXirValueAdmission *admission, bool *output);
 /* Places require a caller-pinned writable root and authenticated whole loan.

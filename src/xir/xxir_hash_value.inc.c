@@ -30,7 +30,7 @@ static XrXirValueStatus hash_new(XrXirType type, const XrXirValue *keys,
 }
 XR_FUNC XrXirValueStatus xr_xir_map_new(XrXirType type, const XrXirValue *keys,
     const XrXirValue *values, size_t count, XrXirValueAdmission *admission, XrXirValue *output) {
-    if (!admission_domain_current(admission) ||
+    if (!hash_admission_current(admission) ||
         !xr_xir_type_is_map(xr_xir_compile_type_arena_types(admission->arena), type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
@@ -39,7 +39,7 @@ XR_FUNC XrXirValueStatus xr_xir_map_new(XrXirType type, const XrXirValue *keys,
 }
 XR_FUNC XrXirValueStatus xr_xir_set_new(XrXirType type, const XrXirValue *elements,
     size_t count, XrXirValueAdmission *admission, XrXirValue *output) {
-    if (!admission_domain_current(admission) ||
+    if (!hash_admission_current(admission) ||
         !xr_xir_type_is_set(xr_xir_compile_type_arena_types(admission->arena), type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
@@ -48,7 +48,7 @@ XR_FUNC XrXirValueStatus xr_xir_set_new(XrXirType type, const XrXirValue *elemen
 }
 XR_FUNC XrXirValueStatus xr_xir_hash_len(const XrXirValue *container,
     XrXirValueAdmission *admission, int64_t *output) {
-    if (!output || !admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!output || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XirHash *map = NULL;
     XrXirValueStatus status = hash_admit(container, 0, admission, &map);
@@ -57,7 +57,7 @@ XR_FUNC XrXirValueStatus xr_xir_hash_len(const XrXirValue *container,
 }
 XR_FUNC XrXirValueStatus xr_xir_map_get(const XrXirValue *value, const XrXirValue *key,
     XrXirValueAdmission *admission, XrXirValue *output, bool *found) {
-    if (!unit_value(output) || !found || !admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!unit_value(output) || !found || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XirHash *map = NULL; HashProbe probe = {0};
     XrXirValueStatus status = hash_admit(value, XR_XIR_TYPE_MAP, admission, &map);
@@ -67,13 +67,21 @@ XR_FUNC XrXirValueStatus xr_xir_map_get(const XrXirValue *value, const XrXirValu
     if (status == XR_XIR_VALUE_OK) *found = probe.found;
     xr_xir_value_graph_end(); return status;
 }
-XR_FUNC XrXirValueStatus xr_xir_set_contains(const XrXirValue *value, const XrXirValue *element,
-    XrXirValueAdmission *admission, bool *output) {
-    if (!output || !admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+static XrXirValueStatus hash_contains(const XrXirValue *value, const XrXirValue *key,
+    uint32_t kind, XrXirValueAdmission *admission, bool *output) {
+    if (!output || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XirHash *map = NULL; HashProbe probe = {0};
-    XrXirValueStatus status = hash_admit(value, XR_XIR_TYPE_SET, admission, &map);
-    if (status == XR_XIR_VALUE_OK) status = hash_probe(map, element, admission, &probe);
+    XrXirValueStatus status = hash_admit(value, kind, admission, &map);
+    if (status == XR_XIR_VALUE_OK) status = hash_probe(map, key, admission, &probe);
     if (status == XR_XIR_VALUE_OK) *output = probe.found;
     xr_xir_value_graph_end(); return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_map_contains_key(const XrXirValue *map, const XrXirValue *key,
+    XrXirValueAdmission *admission, bool *output) {
+    return hash_contains(map, key, XR_XIR_TYPE_MAP, admission, output);
+}
+XR_FUNC XrXirValueStatus xr_xir_set_contains(const XrXirValue *set, const XrXirValue *element,
+    XrXirValueAdmission *admission, bool *output) {
+    return hash_contains(set, element, XR_XIR_TYPE_SET, admission, output);
 }

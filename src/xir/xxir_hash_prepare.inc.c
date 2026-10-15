@@ -7,6 +7,9 @@
  * xxir_hash_prepare.inc.c - Private typed hash backing and bounded probes
  */
 typedef struct HashProbe { uint64_t hash; size_t bucket, entry; bool found; } HashProbe;
+static bool hash_admission_current(const XrXirValueAdmission *admission) {
+    return admission && admission->arena && admission->domain && admission_domain_current(admission);
+}
 static XrXirValue hash_value(XirHash *map) {
     XrXirValue value = {(uint32_t)map->object.type, 0, 0};
     memcpy(&value.payload, &map, sizeof(map)); return value;
@@ -18,7 +21,7 @@ static XrXirValueStatus hash_charge(XrXirValueAdmission *admission, uint64_t wor
 }
 static XrXirValueStatus hash_admit(const XrXirValue *value, uint32_t kind,
     XrXirValueAdmission *admission, XirHash **out) {
-    if (!value || !admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!value || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),
         (XrXirType)value->type);
     if (!node || (kind ? node->kind != kind :
