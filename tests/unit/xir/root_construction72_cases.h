@@ -159,6 +159,7 @@ static void root_construction72_attacks(void) {
     CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous_current77,
         sizeof(root_construction71_previous_current77),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(decoded == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
+    decoded = NULL;
     CHECK(xr_xir_compile_checked_read(&context,root_construction74_previous,
         sizeof(root_construction74_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded);
