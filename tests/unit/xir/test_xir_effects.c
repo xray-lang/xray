@@ -73,6 +73,25 @@ static void effect_expect(const XrXirEffects *effects, uint32_t f, XrXirEffect s
     const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);
     CHECK(fact && fact->suspend == suspend && fact->throws == throws);
 }
+static void effect_error_query_work(void) {
+    XrXirArtifact *artifact=effect_fixture(false);XrXirEffects *effects=NULL;
+    CHECK(effect_analyze(artifact,&effects)==XR_XIR_OK);
+    effect_artifact_free(artifact);
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(effects->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    size_t calls=attempts;uint64_t work=77;
+    CHECK(xr_xir_effects_error_query_work(NULL,0,&work)==XR_XIR_BAD_STRUCTURE && work==77);
+    CHECK(xr_xir_effects_error_query_work(effects,8,&work)==XR_XIR_BAD_STRUCTURE && work==77);
+    CHECK(xr_xir_effects_error_query_work(effects,0,NULL)==XR_XIR_BAD_STRUCTURE);
+    for (uint32_t f=0;f<8;++f) {
+        CHECK(xr_xir_effects_error_query_work(effects,f,&work)==XR_XIR_OK && work==2);
+        CHECK(!xr_xir_effects_error(effects,f,XR_XIR_I64,0));
+    }
+    CHECK(xr_compile_resources_stats(effects->resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(calls==attempts && !memcmp(&before,&after,sizeof(before)));
+    effect_summary_free(effects);CHECK(effect_balanced());
+    puts("Immutable Error query work: producer retired, exact empty bound, invalid outputs preserved, no compiler debit PASS");
+}
 static size_t effect_failures(XrXirArtifact *artifact) {
     XrXirEffects *summary = NULL; attempts = 0; fail_at = SIZE_MAX;
     CHECK(effect_analyze(artifact,&summary) == XR_XIR_OK); size_t sites = attempts;
@@ -540,7 +559,10 @@ static void effect_callable_weakening(void) {
 }
 #define EFFECT_CASE(call) do { effect_case_begin(); call; effect_case_end(); } while (0)
 #include "xir_effect_collector_cases.h"
-int main(void) {
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--error-query-work")));
+    if (argc==2) { EFFECT_CASE(effect_error_query_work());return 0; }
+    EFFECT_CASE(effect_error_query_work());
     EFFECT_CASE(collector_bare_case(false)); EFFECT_CASE(collector_bare_case(true));
     EFFECT_CASE(collector_declaration_cases());
     EFFECT_CASE(effect_callable_weakening());

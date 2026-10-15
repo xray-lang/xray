@@ -15,6 +15,14 @@ static bool error_bit(const uint64_t *set, uint32_t bit) {
     return (set[bit / 64] & ((uint64_t)1 << (bit % 64))) != 0;
 }
 static void error_add(uint64_t *set, uint32_t bit) { set[bit / 64] |= (uint64_t)1 << (bit % 64); }
+XR_FUNC XrXirStatus xr_xir_effects_error_query_work(const XrXirEffects *effects,
+    uint32_t f, uint64_t *work) {
+    if (!work) return XR_XIR_BAD_STRUCTURE;
+    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
+    if (!final || f>=final->count) return XR_XIR_BAD_STRUCTURE;
+    *work=2+UINT64_C(3)*final->atom_count;
+    return XR_XIR_OK;
+}
 bool xr_xir_effects_error(const XrXirEffects *effects, uint32_t f, XrXirType type, uint32_t variant) {
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     if (!final || f>=final->count) return false;
