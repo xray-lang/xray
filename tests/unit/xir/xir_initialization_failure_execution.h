@@ -100,7 +100,10 @@ static void init_protocol_failures(XrXirProgram *program,uint32_t entry){
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==expected);XrXirCallResult copy={0};
         XrXirValue no_take={XR_XIR_I64,0,73};CHECK(xr_xir_instance_take_result(instance,&no_take)==XR_XIR_CALL_BAD_STATE&&no_take.type==XR_XIR_I64&&no_take.payload==73);
         CHECK(xr_xir_instance_copy_failure(instance,&copy)==expected&&!copy.value.type&&xr_xir_fault_empty(copy.panic.detail));
-        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        /* Cancellation completes shutdown; a host output fault remains a
+         * shutdown fault even after its failed initialization is observed. */
+        XrXirCallStatus shutdown=mode?XR_XIR_CALL_OUTPUT_ERROR:XR_XIR_CALL_READY;
+        CHECK(xr_xir_instance_free(instance)==shutdown);
     }
 }
 static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
