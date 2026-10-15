@@ -8,6 +8,7 @@
  */
 #include "xdap_dispatch_internal.h"
 #include "xdap_hit.h"
+#include "xdap_lexical.h"
 #include <stdio.h>
 #include <string.h>
 static XrXirStatus inspect_finish(XdapAdapter *s,const XdapRequest *r,XdapJsonWriter *body) {
@@ -107,7 +108,7 @@ static XrXirStatus inspect_scopes(XdapAdapter *s,const XdapRequest *r) {
     xr_xir_value_drop(&name);
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     if (!info.value_count) { XDAP_TEXT(&body,"{\"scopes\":[]}");return inspect_finish(s,r,&body); }
-    XDAP_TEXT(&body,"{\"scopes\":[{\"name\":\"VM values\",\"presentationHint\":\"registers\",\"variablesReference\":");
+    XDAP_TEXT(&body,"{\"scopes\":[{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":");
     xdap_json_unsigned(&body,s->frames[frame].scope);XDAP_TEXT(&body,",\"expensive\":false}]}");
     return inspect_finish(s,r,&body);
 }
@@ -182,6 +183,7 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
     XDAP_TEXT(&body,"]}");XrXirStatus status=inspect_finish(s,r,&body);
     if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
 }
+#include "xdap_dispatch_lexical.inc.c"
 static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
     uint64_t handle=0,start=0,count=0;XrXirStatus status=xdap_dispatch_number(r,"variablesReference",0,&handle);
     if (status==XR_XIR_OK && s->variable_paging) status=xdap_dispatch_number(r,"start",0,&start);
@@ -204,25 +206,7 @@ static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
         XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"variables\":[]}");
         return inspect_finish(s,r,&body);
     }
-    XrXirVmDebugFrameInfo info={0};XrXirValue function_name={0};
-    if (xr_xir_vm_debug_snapshot_frame(s->snapshot,frame,&info,&function_name)!=XR_XIR_VALUE_OK) return XR_XIR_BUDGET;
-    xr_xir_value_drop(&function_name);
-    XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"variables\":[");
-    uint32_t ordinal=0,shown=0,before=s->value_count;
-    for (uint32_t value_id=0;value_id<info.value_count;++value_id) {
-        XrXirValue value={0};XrXirValueStatus copied=xr_xir_vm_debug_snapshot_value(s->snapshot,frame,value_id,&value);
-        if (copied==XR_XIR_VALUE_BAD_ARGUMENT) continue;
-        if (copied!=XR_XIR_VALUE_OK) { body.status=copied==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;break; }
-        if (ordinal++<start || (count && shown>=count)) { xr_xir_value_drop(&value);continue; }
-        XrXirValue cell={0};copied=xr_xir_vm_debug_snapshot_cell_value(s->snapshot,frame,value_id,&cell);
-        if (copied==XR_XIR_VALUE_OK) { xr_xir_value_drop(&value);value=cell; }
-        else if (copied!=XR_XIR_VALUE_UNSUPPORTED) { xr_xir_value_drop(&value);body.status=XR_XIR_BUDGET;break; }
-        char name[32];int name_length=snprintf(name,sizeof(name),"%%v%u",value_id);
-        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,(size_t)name_length,&value,frame);xr_xir_value_drop(&value);
-        if (!emitted) break;
-    }
-    XDAP_TEXT(&body,"]}");status=inspect_finish(s,r,&body);
-    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
+    return inspect_lexical(s,r,frame,start,count);
 }
 static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest *r) {
     if (!s->launch || s->running || s->terminal) return xdap_dispatch_response(s,r,false,NULL,"No configurable program");
