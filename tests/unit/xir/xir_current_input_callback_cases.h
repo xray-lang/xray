@@ -56,7 +56,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         XrXirInstruction saved=rows[4];XrXirEffects old=*effects;
         XrXirRootEffects facts[3];XrXirRootEffectWitness witnesses[6];
         XrXirFunctionEffectContract contracts[3];
-        memcpy(facts,effect_roots_read(effects)->root,sizeof(facts));memcpy(contracts,effects->contracts,sizeof(contracts));
+        memcpy(facts,effect_roots_read(effects)->root,sizeof(facts));memcpy(contracts,effect_roots_read(effects)->contracts,sizeof(contracts));
         memcpy(witnesses,effect_roots_read(effects)->root_witnesses,sizeof(witnesses)/2);
         memcpy(witnesses+3,effect_roots_read(effects)->unresolved_witnesses,sizeof(witnesses)/2);
         XrCompileResourceStats before=pc_stats(context);
@@ -68,7 +68,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
             mutation,pc_current_input_calls,status,effects->invocations==old.invocations);
         if (status==XR_XIR_BAD_STRUCTURE && mutation && pc_current_input_calls==1) {
             CHECK(!memcmp(effects,&old,sizeof(old)) && !memcmp(effect_roots_read(effects)->root,facts,sizeof(facts)) &&
-                !memcmp(effects->contracts,contracts,sizeof(contracts)) &&
+                !memcmp(effect_roots_read(effects)->contracts,contracts,sizeof(contracts)) &&
                 !memcmp(effect_roots_read(effects)->root_witnesses,witnesses,sizeof(witnesses)/2) &&
                 !memcmp(effect_roots_read(effects)->unresolved_witnesses,witnesses+3,sizeof(witnesses)/2));
             CHECK(pc_stats(context).work>before.work &&

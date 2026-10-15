@@ -52,13 +52,13 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
         for (uint32_t f=0;f<summary->count;++f) {
-            const XrXirRootFormula *view=&summary->contracts[f].formula;
+            const XrXirRootFormula *view=&effect_roots_read(summary)->contracts[f].formula;
             const XrXirRootFormula *actual=&borrowed->functions[f].formula;
             CHECK(view->terms==actual->terms && view->term_count==actual->term_count &&
                 view->constant_mask==actual->constant_mask);
         }
         effect_parameters_free(summary);
-        CHECK(!summary->result_borrow && !summary->contracts &&
+        CHECK(!summary->result_borrow && !effect_roots_read(summary)->contracts &&
             !summary->formula_terminals && !summary->constant_witnesses);
         effect_context_owner_free(owner);owner=NULL;
         CHECK(ordinary->references==1 && initial->references==references+1);

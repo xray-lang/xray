@@ -165,7 +165,7 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
             CHECK(effect_final_outcomes(e)->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
             CHECK(effect_final_outcomes(e)->task_errors[f]==(payload && f?XR_XIR_BAD_TYPE:XR_XIR_OK));
             CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && effect_roots_read(e)->root[f].unresolved==(f==1));
-            const XrXirRootFormula *formula=&e->contracts[f].formula;
+            const XrXirRootFormula *formula=&effect_roots_read(e)->contracts[f].formula;
             CHECK(formula->constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0));
             CHECK(formula->term_count==(f==1?1u:0u));
             if(f==1){
@@ -212,8 +212,8 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
             effect_final_outcomes(e)->errors[2]==(UINT64_C(1)<<62));
         for(uint32_t f=0;f<3;++f){
             CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && !effect_roots_read(e)->root[f].unresolved);
-            CHECK(e->contracts[f].formula.constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&
-                !e->contracts[f].formula.term_count);
+            CHECK(effect_roots_read(e)->contracts[f].formula.constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&
+                !effect_roots_read(e)->contracts[f].formula.term_count);
             CHECK(effect_final_outcomes(e)->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
             CHECK(!xr_xir_effects_error_unknown(e,f) && !xr_xir_effects_error_unidentified(e,f));
         }
