@@ -59,3 +59,5 @@ foreach(constant_test IN ITEMS test_xir_derived_constants_native test_xir_derive
 endforeach()
 
 include("${CMAKE_CURRENT_LIST_DIR}/derived_arrays.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/derived_squares.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/derived_records.cmake")
