@@ -215,11 +215,14 @@ static void reads_history_receiving(void) {
     xr_xir_value_drop(&text);xr_xir_call_result_drop(&panic);submission_close(&owned);
     puts("Actual paired history: four publications, old42 through String/Bool shadows, output17 once, rejected Source and historical Panic abort, Source6/runtime5, original birth entry, escaped String after owner death; physical0");
 }
+#include "source_binding_history_array.h"
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--resources") || !strcmp(argv[1],"--budget") ||
-        !strcmp(argv[1],"--history-inputs") || !strcmp(argv[1],"--history-admission") || !strcmp(argv[1],"--history-receiving"))));
+        !strcmp(argv[1],"--history-inputs") || !strcmp(argv[1],"--history-admission") || !strcmp(argv[1],"--history-receiving") ||
+        !strcmp(argv[1],"--history-array-receiving"))));
     if(argc==1)reads_normal();else if(!strcmp(argv[1],"--history-inputs"))reads_history_inputs();
     else if(!strcmp(argv[1],"--history-admission"))reads_history_admission();
     else if(!strcmp(argv[1],"--history-receiving"))reads_history_receiving();
+    else if(!strcmp(argv[1],"--history-array-receiving"))reads_history_array_receiving();
     else reads_resources(!strcmp(argv[1],"--resources"));return 0;
 }
