@@ -10,6 +10,12 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
 set_tests_properties(test_xir_p10_source_generations PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source")
+foreach(fact IN ITEMS function generic type)
+    add_test(NAME test_xir_p10_source_history_${fact}
+        COMMAND test_xir_p10_source_generations --history-${fact})
+    set_tests_properties(test_xir_p10_source_history_${fact} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept")
+endforeach()
 
 add_executable(test_xir_p10_source_generation_resources "${CMAKE_CURRENT_LIST_DIR}/test_source_generation_resources.c")
 target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source)
