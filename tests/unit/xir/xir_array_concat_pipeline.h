@@ -135,7 +135,13 @@ static ConcatCompile concat_build(size_t failure, XrCompileResourceLimits limits
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
         if (declaration->native_identity == 14) {
             CHECK(!declaration->mutable && declaration->parameter_count == 1 && declaration->exported);
-            CHECK(!declaration->type.known && !strcmp(declaration->signature, "(...arrays: Array<T>) -> Array<T>"));
+            CHECK(declaration->type.known && !strcmp(declaration->signature, "(...arrays: Array<T>) -> Array<T>"));
+            CHECK(declaration->generic_parent && declaration->generic_parent_count == 1);
+            const XrXirTypeNode *display = xr_xir_type_node(view->types,declaration->type.type);
+            CHECK(display && display->kind == XR_XIR_TYPE_ARRAY && display->element == XR_XIR_TYPE_PARAMETER_BASE);
+            CHECK(declaration->type.generic_owner == declaration->generic_parent);
+            CHECK(declaration->parameters[0].known && declaration->parameters[0].type == declaration->type.type &&
+                declaration->parameters[0].generic_owner == declaration->generic_parent);
             ++concat_members;
         }
     }

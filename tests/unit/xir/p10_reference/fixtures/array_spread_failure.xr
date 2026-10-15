@@ -1,0 +1,23 @@
+var trace: i64 = 0
+fn saved() -> Array<i64> {
+    trace = trace * 10 + 1
+    return [3, 7]
+}
+fn failing() -> i64 {
+    trace = trace * 10 + 2
+    assert(false, "array-literal-element-failure")
+    return 0
+}
+fn late() -> i64 {
+    trace = trace * 10 + 3
+    return 11
+}
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    try {
+        const result = [...saved(), failing(), late()]
+        return len(result)
+    } catch panic (panic: PanicInfo) {
+        return panic.code * 100 + trace
+    }
+}

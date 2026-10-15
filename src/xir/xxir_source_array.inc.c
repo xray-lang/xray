@@ -159,6 +159,8 @@ static bool source_array_receiver(SourceContext *ctx, AstNode *node, AstNode *in
         return source_array_read_place(ctx, node, root, value);
     return expression(ctx, node, value);
 }
+static bool source_array_spread_literal(SourceContext *ctx, AstNode *node,
+    SourceExpectedType expected, SourceValue *value);
 static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     ArrayLiteralNode *literal = &node->as.array_literal;
     if (literal->is_repeat || literal->count < 0 ||
@@ -166,6 +168,11 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal needs an admitted explicit element list");
     if (expected.present && !xr_xir_type_is_array(&ctx->types, expected.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal cannot satisfy a non-Array context");
+    for (int i = 0; i < literal->count; ++i) {
+        if (!source_work(ctx,literal->elements[i])) return false;
+        if (literal->elements[i] && literal->elements[i]->type == AST_SPREAD_EXPR)
+            return source_array_spread_literal(ctx,node,expected,value);
+    }
     SourceExpectedType element = {expected.present,XR_XIR_UNIT, false, expected.inferred};
     if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
     if (!literal->count && !element.present)

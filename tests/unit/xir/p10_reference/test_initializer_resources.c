@@ -108,6 +108,114 @@ static const char struct_spread_cow_source[] =
     "    copied.items.push(19)\n"
     "    return original.items[0] * 1000 + copied.items[0] * 100 + len(copied.items) * 10 + copied.marker\n"
     "}\n";
+static const char array_spread_order_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3, 7]\n"
+    "fn saved() -> Array<i64> {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return source\n"
+    "}\n"
+    "fn replace() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    source[0] = 11\n"
+    "    source.push(13)\n"
+    "    return 17\n"
+    "}\n"
+    "fn tail() -> Array<i64> {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return [19, 23]\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3, 7]\n"
+    "    const result = [...saved(), replace(), ...tail()]\n"
+    "    var copied = result\n"
+    "    copied[0] = 29\n"
+    "    return trace * 100000000 + result[0] * 1000000 + result[1] * 10000 + result[2] * 100 + result[3] + result[4] + copied[0] + source[0] + len(source) * 1000\n"
+    "}\n";
+static const char array_spread_generic_source[] =
+    "fn copy<T>(items: Array<T>, first: T, last: T) -> Array<T> {\n"
+    "    return [first, ...items, last]\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const empty: Array<string> = []\n"
+    "    const seed: Array<string> = [\"a\\0b\"]\n"
+    "    const result = copy<string>([...empty, ...seed], \"x\", \"y\")\n"
+    "    var changed = [...result]\n"
+    "    changed[1] = \"z\"\n"
+    "    return len(result) * 1000 + len(result[1]) * 100 + (result[1] == \"a\\0b\" ? 41 : 0) + len(changed[1])\n"
+    "}\n";
+static const char array_spread_suspend_source[] =
+    "var trace: i64 = 0\n"
+    "var source: Array<i64> = [3]\n"
+    "fn saved() -> Array<i64> {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return source\n"
+    "}\n"
+    "fn later() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    Coro.yield()\n"
+    "    source[0] = 7\n"
+    "    return 11\n"
+    "}\n"
+    "fn tail() -> Array<i64> {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return [17]\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    source = [3]\n"
+    "    const result = [...saved(), later(), ...tail()]\n"
+    "    return result[0] * 10000 + result[1] * 100 + result[2] + trace * 100000 + source[0]\n"
+    "}\n";
+static const char array_spread_nested_source[] =
+    "class Counter {\n"
+    "    value: i64\n"
+    "    init(value) { this.value = value }\n"
+    "}\n"
+    "fn layer<T>(value: T) -> T? { return value }\n"
+    "fn classify(value: i64?" "?) -> i64 {\n"
+    "    if (value == null) { return 0 }\n"
+    "    if (value == null) { return 1 }\n"
+    "    return 2\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    const inner: Array<i64> = [3, 7]\n"
+    "    const nested: Array<Array<i64>> = [...[inner], [11]]\n"
+    "    var changed = [...nested]\n"
+    "    changed[0].push(13)\n"
+    "    const states: Array<i64?" "?> = [layer<i64?>(null), null]\n"
+    "    const copied = [...states]\n"
+    "    const counter = Counter(17)\n"
+    "    const references = [counter]\n"
+    "    const aliases = [...references]\n"
+    "    aliases[0].value = 19\n"
+    "    return nested[0][0] * 100000 + len(nested[0]) * 10000 + len(changed[0]) * 1000 + classify(copied[0]) * 100 + classify(copied[1]) * 10 + references[0].value\n"
+    "}\n";
+static const char array_spread_failure_source[] =
+    "var trace: i64 = 0\n"
+    "fn saved() -> Array<i64> {\n"
+    "    trace = trace * 10 + 1\n"
+    "    return [3, 7]\n"
+    "}\n"
+    "fn failing() -> i64 {\n"
+    "    trace = trace * 10 + 2\n"
+    "    assert(false, \"array-literal-element-failure\")\n"
+    "    return 0\n"
+    "}\n"
+    "fn late() -> i64 {\n"
+    "    trace = trace * 10 + 3\n"
+    "    return 11\n"
+    "}\n"
+    "export fn referenceAnswer() -> i64 {\n"
+    "    trace = 0\n"
+    "    try {\n"
+    "        const result = [...saved(), failing(), late()]\n"
+    "        return len(result)\n"
+    "    } catch panic (panic: PanicInfo) {\n"
+    "        return panic.code * 100 + trace\n"
+    "    }\n"
+    "}\n";
 typedef struct InitializerCase { const char *name, *text;size_t length; } InitializerCase;
 static const InitializerCase cases[] = {
     {"ordinary",source,sizeof(source)-1},
@@ -115,7 +223,12 @@ static const InitializerCase cases[] = {
     {"comptime-optional-tuple",optional_tuple_source,sizeof(optional_tuple_source)-1},
     {"field-places",field_place_source,sizeof(field_place_source)-1},
     {"struct-spread-order",struct_spread_order_source,sizeof(struct_spread_order_source)-1},
-    {"struct-spread-cow",struct_spread_cow_source,sizeof(struct_spread_cow_source)-1}
+    {"struct-spread-cow",struct_spread_cow_source,sizeof(struct_spread_cow_source)-1},
+    {"array-spread-order",array_spread_order_source,sizeof(array_spread_order_source)-1},
+    {"array-spread-generic",array_spread_generic_source,sizeof(array_spread_generic_source)-1},
+    {"array-spread-suspend",array_spread_suspend_source,sizeof(array_spread_suspend_source)-1},
+    {"array-spread-nested",array_spread_nested_source,sizeof(array_spread_nested_source)-1},
+    {"array-spread-failure",array_spread_failure_source,sizeof(array_spread_failure_source)-1}
 };
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -189,6 +302,12 @@ int main(int argc,char **argv) {
     else if (argc==2 && !strcmp(argv[1],"--struct-spread-order")) { first=4;last=5; }
     else if (argc==2 && !strcmp(argv[1],"--struct-spread-cow")) { first=5;last=6; }
     else if (argc==2 && !strcmp(argv[1],"--struct-spread-baseline")) { first=4;last=6;baseline=true; }
+    else if (argc==2 && !strcmp(argv[1],"--array-spread-order")) { first=6;last=7; }
+    else if (argc==2 && !strcmp(argv[1],"--array-spread-generic")) { first=7;last=8; }
+    else if (argc==2 && !strcmp(argv[1],"--array-spread-suspend")) { first=8;last=9; }
+    else if (argc==2 && !strcmp(argv[1],"--array-spread-nested")) { first=9;last=10; }
+    else if (argc==2 && !strcmp(argv[1],"--array-spread-baseline")) { first=6;last=11;baseline=true; }
+    else if (argc==2 && !strcmp(argv[1],"--array-spread-failure")) { first=10;last=11; }
     else CHECK(argc==1);
     for (size_t i=first;i<last;++i) initializer_case(&cases[i],baseline);
     return 0;

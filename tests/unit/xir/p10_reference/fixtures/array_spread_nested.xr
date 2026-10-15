@@ -1,0 +1,23 @@
+class Counter {
+    value: i64
+    init(value) { this.value = value }
+}
+fn layer<T>(value: T) -> T? { return value }
+fn classify(value: i64??) -> i64 {
+    if (value == null) { return 0 }
+    if (value == null) { return 1 }
+    return 2
+}
+export fn referenceAnswer() -> i64 {
+    const inner: Array<i64> = [3, 7]
+    const nested: Array<Array<i64>> = [...[inner], [11]]
+    var changed = [...nested]
+    changed[0].push(13)
+    const states: Array<i64??> = [layer<i64?>(null), null]
+    const copied = [...states]
+    const counter = Counter(17)
+    const references = [counter]
+    const aliases = [...references]
+    aliases[0].value = 19
+    return nested[0][0] * 100000 + len(nested[0]) * 10000 + len(changed[0]) * 1000 + classify(copied[0]) * 100 + classify(copied[1]) * 10 + references[0].value
+}
