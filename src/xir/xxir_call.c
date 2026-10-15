@@ -366,6 +366,9 @@ XR_FUNC XrXirCallStatus xr_xir_call_observer_vm(const XrXirCallView *view) {
     }
     return XR_XIR_CALL_READY;
 }
+XR_FUNC bool xir_call_vm_view_current(const XrXirCallView *view) {
+    return xr_xir_call_admission(view) && view->activation->top->code_kind==XR_XIR_CALL_CODE_VM;
+}
 
 static void frame_release(XrXirCall *call, CallFrame *frame) {
     CallSegment *segment = call->segment;

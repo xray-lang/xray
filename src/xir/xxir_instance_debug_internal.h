@@ -16,4 +16,9 @@ XR_FUNC XrXirCallStatus xir_instance_visit_vm(XrXirInstance *,const XrXirExecuto
  * live invocation proof, publication and loan, without inventing an opcode.
  * Success owns one committed access; the caller must finish it on every exit. */
 XR_FUNC XrXirCallStatus xir_instance_debug_class_access(XrXirCallView *,const XrXirValue *,XrXirCallClassAccess *);
+/* Read-only capture at exact authenticated VM ingress. Class projections keep
+ * their real descriptor scope and sealed parent proof; no loan is returned. */
+XR_FUNC XrXirCallStatus xir_instance_observe_cell(XrXirCallView *,const XrXirValue *,XrXirValue *);
+/* Control writes require the actual directed visit in addition to VM ingress. */
+XR_FUNC XrXirCallStatus xir_instance_debug_cell_write(XrXirCallView *,const XrXirValue *,const XrXirValue *);
 #endif // XXIR_INSTANCE_DEBUG_INTERNAL_H

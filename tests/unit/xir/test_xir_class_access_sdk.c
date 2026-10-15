@@ -38,12 +38,15 @@ static bool host_rejections(XrXirCallView *view,HostAccessWitness *witness) {
     const XrXirValuePath path={0};
     const XrXirFaultDetail observed={XR_XIR_PANIC_BOUNDS,0,9,7};
     XrXirCallClassAccess access={0};
+    CHECK(!xir_call_vm_view_current(view));XrXirCallView copied=*view;CHECK(!xir_call_vm_view_current(&copied));
     CHECK(xir_instance_debug_class_access(view,&value,&access)==XR_XIR_CALL_BAD_STATE);
     CHECK(!access.value && !access.loan.cell && !access.authority.activation);
     for (uint32_t occupied=0;occupied<2;++occupied) {
         XrXirValue output=occupied?value:(XrXirValue){0};
         const XrXirValue original=output;
         XrXirFaultDetail fault=observed;
+        CHECK(xir_instance_observe_cell(view,&value,&output)==XR_XIR_CALL_BAD_STATE);
+        CHECK(xir_instance_debug_cell_write(view,&value,&value)==XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_cell_read_at(view,0,&value,&output,&fault)==XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_cell_write_at(view,0,&value,&value,&fault)==XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_cell_project_at(view,0,XR_XIR_UNIT,&receiver,&path,&output)==XR_XIR_CALL_BAD_STATE);
