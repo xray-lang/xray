@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
     FILE *file = fopen(argv[1], "wb"); CHECK(file && fwrite(state.generated.text, 1, state.generated.length, file) == state.generated.length);
     CHECK(fprintf(file, "\nconst uint32_t p20_task_result_entries[3] = {%uu,%uu,%uu};\n", state.entries[0], state.entries[1], state.entries[2]) > 0);
     CHECK(!fclose(file));
-    printf("P20 compound Task real Source modules=2 C11bytes=%zu SourceDead independentPacketDead VMexecuted=0\n", state.generated.length);
+    printf("P20 compound Task real Source modules=%u C11bytes=%zu SourceDead independentPacketDead VMexecuted=0\n",
+        (unsigned)XR_MIXED_TASK_RESULT_MODULES, state.generated.length);
     task_source_cleanup(&state); effects_source_owners_free(); return 0;
 }

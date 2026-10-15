@@ -17,6 +17,9 @@
 #include "xir/xxir_task.c"
 XR_DATA const XrXirProgramSpec p20_task_result_fixture_program;
 XR_DATA const uint32_t p20_task_result_entries[3];
+#ifndef XR_MIXED_TASK_RESULT_MODULES
+#define XR_MIXED_TASK_RESULT_MODULES 2
+#endif
 typedef struct TaskLateFixture {
     XrCompileResources *resources;
     XrXirProgram *vm;
@@ -51,7 +54,7 @@ static XrXirProgram *task_late_program(TaskLateFixture *fixture, unsigned backen
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     CHECK(module->function_count == native->entry_count && module->function_count < 64);
     fixture->count = module->function_count;
-    CHECK(module->declarations->module_count == 2 && module->declarations->slot_count == 1);
+    CHECK(module->declarations->module_count == XR_MIXED_TASK_RESULT_MODULES && module->declarations->slot_count == 1);
     CHECK(xr_compile_resources_calloc(context.resources, fixture->count, sizeof(*fixture->entries),
         (void **)&fixture->entries) == XR_COMPILE_RESOURCE_OK);
     XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);

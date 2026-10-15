@@ -13,6 +13,9 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_emit_c.h"
 #include "toolchain/xcompiler_session.h"
+#ifndef XR_MIXED_TASK_RESULT_MODULES
+#define XR_MIXED_TASK_RESULT_MODULES 2
+#endif
 
 typedef struct TaskSourcePrepare {
     const XrXirCompileContext *context;
@@ -31,7 +34,18 @@ static bool task_source_stage(TaskSourcePrepare *state, unsigned stage, XrXirSta
 }
 static void task_source_entries(const XrXirModule *module, uint32_t entries[3]) {
     static const char *const names[] = {"run", "observed", "words"};
-    CHECK(module->declarations->module_count == 2 && module->declarations->slot_count == 1);
+    if (module->declarations->module_count != 2 || module->declarations->slot_count != 1) {
+        const XrXirDeclarations *declarations = module->declarations;
+        fprintf(stderr, "Task Source shape modules=%u slots=%u functions=%u root=%u\n",
+            declarations->module_count, declarations->slot_count, module->function_count, declarations->root_module);
+        for (uint32_t i = 0; i < declarations->module_count; ++i)
+            fprintf(stderr, "Task Source module=%u name=%.*s\n", i, (int)declarations->modules[i].name_length,
+                declarations->modules[i].name);
+        for (uint32_t i = 0; i < declarations->slot_count; ++i)
+            fprintf(stderr, "Task Source slot=%u module=%u type=%u mutable=%u\n", i,
+                declarations->slots[i].module, declarations->slots[i].type, declarations->slots[i].mutable);
+    }
+    CHECK(module->declarations->module_count == XR_MIXED_TASK_RESULT_MODULES && module->declarations->slot_count == 1);
     CHECK(module->declarations->slots[0].module == module->declarations->root_module);
     for (unsigned n = 0; n < 3; ++n) {
         entries[n] = UINT32_MAX;

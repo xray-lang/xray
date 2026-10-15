@@ -1,0 +1,12 @@
+export enum TaskFault { Failed { message:string } }
+
+export fn fails()->Array<string> {
+    Coro.yield()
+    throw TaskFault.Failed{message:"task" + "-throw"}
+}
+
+export fn words()->Array<string> {
+    Coro.yield()
+    assert(false, "task" + "-panic")
+    return ["unreachable"]
+}
