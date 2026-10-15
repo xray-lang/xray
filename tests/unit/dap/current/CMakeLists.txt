@@ -305,3 +305,17 @@ endif()
 add_test(NAME test_dap_source_breakpoints COMMAND test_dap_source_breakpoints)
 add_test(NAME test_dap_source_breakpoints_resources COMMAND test_dap_source_breakpoints --resources)
 set_tests_properties(test_dap_source_breakpoints test_dap_source_breakpoints_resources PROPERTIES TIMEOUT 120 LABELS "dap;breakpoints;source;ownership;resources;fault-injection")
+
+add_executable(test_dap_source_steps test_source_steps.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_source_steps PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_source_steps PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_STEPS_FIXTURE="${XR_DAP_FIXTURE_DIR}/steps_fixture.xr"
+    XR_DAP_LOOP_FIXTURE="${XR_DAP_FIXTURE_DIR}/conditional_hits.xr")
+if(MSVC)
+    target_compile_options(test_dap_source_steps PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_source_steps PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_source_steps COMMAND test_dap_source_steps)
+add_test(NAME test_dap_source_steps_resources COMMAND test_dap_source_steps --resources)
+set_tests_properties(test_dap_source_steps test_dap_source_steps_resources PROPERTIES TIMEOUT 120 LABELS "dap;stepping;source;ownership;resources;fault-injection")

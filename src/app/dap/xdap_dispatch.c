@@ -248,13 +248,21 @@ static XrXirStatus dispatch_control(XdapAdapter *s,const XdapRequest *r,const ch
     if (!s->snapshot || !s->stop_epoch) return xdap_dispatch_response(s,r,false,NULL,"notStopped");
     XrXirVmDebugMode mode=XR_XIR_VM_DEBUG_CONTINUE;
     if (strcmp(command,"continue")) {
-        uint32_t granularity=0;bool instruction=false;
+        uint32_t granularity=0;bool instruction=false,line=false,statement=true;
         status=xdap_dispatch_argument(r,"granularity",&granularity);
-        if (status==XR_XIR_OK && granularity) status=xdap_json_equal(&r->document,granularity,"instruction",&instruction);
+        if (status==XR_XIR_OK && granularity) {
+            status=xdap_json_equal(&r->document,granularity,"instruction",&instruction);
+            if (status==XR_XIR_OK) status=xdap_json_equal(&r->document,granularity,"line",&line);
+            if (status==XR_XIR_OK) status=xdap_json_equal(&r->document,granularity,"statement",&statement);
+        }
         if (status!=XR_XIR_OK) return status;
-        if (!instruction) return xdap_dispatch_response(s,r,false,NULL,"Source stepping requires the owned source mapping");
-        mode=!strcmp(command,"next") ? XR_XIR_VM_DEBUG_STEP_OVER :
-            !strcmp(command,"stepIn") ? XR_XIR_VM_DEBUG_STEP_IN : XR_XIR_VM_DEBUG_STEP_OUT;
+        if (!instruction && !line && !statement) return xdap_dispatch_response(s,r,false,NULL,"Invalid stepping granularity");
+        mode=instruction ? (!strcmp(command,"next") ? XR_XIR_VM_DEBUG_STEP_OVER :
+            !strcmp(command,"stepIn") ? XR_XIR_VM_DEBUG_STEP_IN : XR_XIR_VM_DEBUG_STEP_OUT) :
+            line ? (!strcmp(command,"next") ? XR_XIR_VM_DEBUG_LINE_OVER :
+            !strcmp(command,"stepIn") ? XR_XIR_VM_DEBUG_LINE_IN : XR_XIR_VM_DEBUG_LINE_OUT) :
+            (!strcmp(command,"next") ? XR_XIR_VM_DEBUG_STATEMENT_OVER :
+            !strcmp(command,"stepIn") ? XR_XIR_VM_DEBUG_STATEMENT_IN : XR_XIR_VM_DEBUG_STATEMENT_OUT);
     }
     status=dispatch_value(xdap_current_continue(s->launch->control,s->stop_epoch,mode));
     if (status!=XR_XIR_OK) return xdap_dispatch_response(s,r,false,NULL,"Stop epoch rejected");

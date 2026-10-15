@@ -9,6 +9,7 @@
 #ifndef XXIR_VM_DEBUG_INTERNAL_H
 #define XXIR_VM_DEBUG_INTERNAL_H
 #include "xxir_vm_debug.h"
+#include "xxir_source_query.h"
 
 typedef struct XirVmDebugPoint {
     const XrXirVmBinding *binding;
@@ -32,4 +33,7 @@ XR_FUNC void xir_vm_debug_faulted(XrXirVmDebug *,const XrXirCallView *);
  * never frame state or values. Failure preserves both outputs. Before the first
  * admitted VM ingress there is no complete Call observer inventory. */
 XR_FUNC XrXirValueStatus xir_vm_debug_threads(XrXirVmDebug *,uint64_t *,uint32_t,uint32_t *);
+/* Before target construction only. Copy display identities on the exact
+ * artifact's original finite compiler ledger; no parser or product borrow. */
+XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *,const XrXirCompileContext *,const XrXirSourceDebugView *);
 #endif // XXIR_VM_DEBUG_INTERNAL_H

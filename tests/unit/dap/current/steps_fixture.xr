@@ -1,0 +1,5 @@
+fn leaf(value:i64)->i64 {
+    var first=value+1; var second=first+1
+    return second
+}
+print(leaf(20))

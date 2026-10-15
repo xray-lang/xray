@@ -314,6 +314,10 @@ static void pause_and_step_over(void) {
     XrXirDomainBudgetStats after=xr_xir_domain_budget_stats(fixture.metadata);
     CHECK(before.work==after.work && before.requested_call_bytes==after.requested_call_bytes);
     CHECK(xdap_current_continue(fixture.session,result.debug_epoch,(XrXirVmDebugMode)-1)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xdap_current_continue(fixture.session,result.debug_epoch,XR_XIR_VM_DEBUG_LINE_OVER)==XR_XIR_VALUE_UNSUPPORTED);
+    XrXirVmDebugSnapshot *unchanged=NULL;
+    CHECK(xdap_current_snapshot(fixture.session,&unchanged)==XR_XIR_VALUE_OK && unchanged==snapshot);
+    xr_xir_vm_debug_snapshot_drop(unchanged);
     CHECK(xdap_current_breakpoint(fixture.session,fixture.probe,fixture.call_at,true)==XR_XIR_VALUE_OK);
     CHECK(xdap_current_continue(fixture.session,result.debug_epoch,XR_XIR_VM_DEBUG_CONTINUE)==XR_XIR_VALUE_OK);
     xdap_current_result_drop(&result);result=poll_fixture(&fixture);CHECK(result.state==XDAP_CURRENT_STOPPED);

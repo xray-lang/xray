@@ -14,7 +14,9 @@ typedef struct XrXirVmDebug XrXirVmDebug;
 typedef struct XrXirVmDebugSnapshot XrXirVmDebugSnapshot;
 typedef enum XrXirVmDebugMode {
     XR_XIR_VM_DEBUG_CONTINUE, XR_XIR_VM_DEBUG_PAUSE,
-    XR_XIR_VM_DEBUG_STEP_IN, XR_XIR_VM_DEBUG_STEP_OVER, XR_XIR_VM_DEBUG_STEP_OUT
+    XR_XIR_VM_DEBUG_STEP_IN, XR_XIR_VM_DEBUG_STEP_OVER, XR_XIR_VM_DEBUG_STEP_OUT,
+    XR_XIR_VM_DEBUG_STATEMENT_IN, XR_XIR_VM_DEBUG_STATEMENT_OVER, XR_XIR_VM_DEBUG_STATEMENT_OUT,
+    XR_XIR_VM_DEBUG_LINE_IN, XR_XIR_VM_DEBUG_LINE_OVER, XR_XIR_VM_DEBUG_LINE_OUT
 } XrXirVmDebugMode;
 typedef struct XrXirVmDebugLocation { uint32_t function, instruction; } XrXirVmDebugLocation;
 typedef enum XrXirVmDebugHitKind {

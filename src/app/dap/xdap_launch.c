@@ -8,6 +8,7 @@
  */
 #include "xdap_launch.h"
 #include "../../xir/xxir_internal.h"
+#include "../../xir/xxir_vm_debug_internal.h"
 #include "../../xir/xxir_value_internal.h"
 #include <string.h>
 static void launch_diagnostic(XrSourceCompileDiagnostic *diagnostic,XrXirStatus status) {
@@ -240,6 +241,7 @@ XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunc
     status=launch_value_status(xr_xir_vm_debug_new(request->observer_metadata,request->instance.depth_limit,&debug));
     if (status!=XR_XIR_OK) goto done;
     status=xr_xir_compile_vm_debug_program_take(&lowered,debug,&program);if (status!=XR_XIR_OK) goto done;
+    status=xir_vm_debug_source_map(debug,context,xr_xir_compile_source_product_debug(launch->source));if (status!=XR_XIR_OK) goto done;
     status=launch_value_status(xdap_current_new(request->observer_metadata,&debug,program,&request->instance,&launch->control));
     if (status==XR_XIR_OK) { *output=launch;launch=NULL; }
 done:
