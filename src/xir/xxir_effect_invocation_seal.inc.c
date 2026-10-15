@@ -288,9 +288,12 @@ static XrXirStatus effect_invocation_local_certificate_match(const XrXirCompileC
 static XrXirStatus effect_invocation_input_seed_run(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,uint32_t function,const EffectBodyRun *run,
     XrXirRootEffects *facts,XrXirRootEffectWitness witnesses[2]) {
-    if (!xir_compile_work(work,2+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,2+sizeof(XrXirOp))) return XR_XIR_BUDGET;
+    XrXirOp opcode=run->base.op;
+    if (!(run->mask&UINT32_C(1)) && effect_root_seed_local(opcode)) return XR_XIR_OK;
+    if (!xir_compile_work(work,1+sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t consumed=UINT32_C(1);
-    switch (run->base.op) {
+    switch (opcode) {
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_PLACE: case XR_XIR_SLOT_STORE:
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT:
         consumed|=UINT32_C(192);break;

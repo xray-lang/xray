@@ -39,7 +39,7 @@ static void single_run_base_copy_controls(void) {
         XrXirInstruction output={0};
         CHECK(effect_body_instruction_ref_value(&read,&run,7,&output)==XR_XIR_OK &&
             single_run_complete_same(&output,&run.base));
-        uint64_t expected=sizeof(output)+(mask?19u+columns+((mask&1u)?3u:0u):9u);
+        uint64_t expected=sizeof(output)+(mask?13u+3u*columns+((mask&1u)?3u:0u):9u);
         CHECK(probe.work==expected);
         for (uint32_t exact=0;exact<2;++exact) {
             SingleRunLimitProbe limit={expected-(exact?0u:1u)};
@@ -51,8 +51,9 @@ static void single_run_base_copy_controls(void) {
                 !memcmp(&output,&sentinel,sizeof(output)));
         }
     }
-    /* The existing Cell span preparation keeps its original full decoder fees. */
-    const uint32_t masks[3]={0,1,1023},fees[3]={27,45,90};
+    /* Full decoder/output prices remain unchanged; selected delta validation
+     * uses the same actual sparse mask walk for rows and Cell spans. */
+    const uint32_t masks[3]={0,1,1023},fees[3]={27,41,104};
     for (uint32_t i=0;i<3;++i) {
         run.mask=masks[i];SingleRunReadProbe probe={.refuse=SIZE_MAX};
         EffectBodyRead read={&probe,single_run_consume};
@@ -77,7 +78,7 @@ static void single_run_base_copy_controls(void) {
     CHECK(effect_body_instruction_ref_value(NULL,&run,7,&output)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&output,&sentinel,sizeof(output)));
     CHECK(effect_body_instruction_ref_value(&read,&run,7,NULL)==XR_XIR_BAD_STRUCTURE && !probe.calls);
-    puts("base-row copy: all1024 masks, complete ten fields,12 malformed, exact work cuts and old span fees passed");
+    puts("base-row copy: all1024 masks, complete ten fields,12 malformed, exact work cuts and sparse span fees passed");
 }
 static void single_run_reader_controls(void) {
     single_run_base_copy_controls();

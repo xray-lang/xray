@@ -267,11 +267,14 @@ static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
         run->mask&~EFFECT_BODY_MASK || (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
     /* A selected physical delta must be nonzero. The array is full length,
      * so there is no packed-column directory or rank to reconstruct. */
-    for (uint32_t w=0;run->mask && w<EFFECT_BODY_WORDS;++w) {
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (!(run->mask&(UINT32_C(1)<<w))) continue;
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (!run->delta[w]) return XR_XIR_BAD_STRUCTURE;
+    if (run->mask) {
+        if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t remaining=run->mask;
+        do {
+            if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+            uint32_t w=(uint32_t)__builtin_ctz(remaining);remaining&=remaining-1;
+            if (!run->delta[w]) return XR_XIR_BAD_STRUCTURE;
+        } while (remaining);
     }
     if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=run;return XR_XIR_OK;
@@ -481,13 +484,15 @@ static XrXirStatus effect_body_instruction_ref_prepare(const EffectBodyRead *rea
         ref->delta[0]*(instruction-ref->first):0);
     if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
     uint64_t units=(base_copy?0:EFFECT_BODY_WORDS)+sizeof(XrXirInstruction)+2;
-    for (uint32_t w=0;ref->mask && w<EFFECT_BODY_WORDS;++w) {
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (ref->mask&(UINT32_C(1)<<w)) {
-            if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+    if (ref->mask) {
+        if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t remaining=ref->mask;
+        do {
+            if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+            uint32_t w=(uint32_t)__builtin_ctz(remaining);remaining&=remaining-1;
             if (!ref->delta[w]) return XR_XIR_BAD_STRUCTURE;
             units+=base_copy?0:4;
-        }
+        } while (remaining);
     }
     if (!effect_body_read_work(read,units+(base_copy?0:EFFECT_BODY_WORDS))) return XR_XIR_BUDGET;
     return XR_XIR_OK;
