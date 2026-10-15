@@ -17,6 +17,7 @@ static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrX
     for(uint32_t n=0;n<2;++n){
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
+        XrXirCallStatus expected_free=XR_XIR_CALL_READY;
         for(uint32_t e=0;e<14 && status!=XR_XIR_CALL_OOM;++e){
             status=xr_xir_instance_start(instance,ids[e],NULL,0);
             if(status==XR_XIR_CALL_READY){
@@ -28,6 +29,9 @@ static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrX
                     run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 }
                 if(status==XR_XIR_CALL_READY)status=run.outcome.status;
+                /* A driven root records its runtime fault for shutdown. Rejected
+                 * starts and result transfers do not create that failure. */
+                if(status==XR_XIR_CALL_OOM)expected_free=XR_XIR_CALL_OOM;
                 if(status!=XR_XIR_CALL_OOM)CHECK(yields==(e==13 ? 1u : 0u));
             }
             if(status==XR_XIR_CALL_OOM)break;
@@ -38,7 +42,7 @@ static bool default_invoke_pair(XrXirProgram *program,const uint32_t ids[14],XrX
             if(e>=10 && e<=12)held[n][e-10]=value;
             else {CHECK(value.type==XR_XIR_I64 && value.payload==41);xr_xir_value_drop(&value);}
         }
-        if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        if(instance)CHECK(xr_xir_instance_free(instance)==expected_free);
         if(status==XR_XIR_CALL_OOM)return false;
     }
     return true;
