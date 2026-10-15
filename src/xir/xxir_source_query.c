@@ -25,6 +25,8 @@ struct XrXirSourceSnapshot {
     bool syntax_ready;
     XrXirSourceCalls calls;
     bool calls_ready;
+    XrXirSourceTypeFacts type_facts;
+    bool type_facts_ready;
     XrXirSourceDependencies dependencies;
     bool dependencies_ready;
     SourceQueryMemory *memory;
@@ -325,5 +327,6 @@ XR_FUNC void xr_xir_compile_source_result_free(XrXirSourceResult *result) {
 
 #include "xxir_source_syntax_owner.inc.c"
 #include "xxir_source_calls_owner.inc.c"
+#include "xxir_source_type_facts_owner.inc.c"
 
 #include "xxir_source_dependencies_owner.inc.c"

@@ -2935,6 +2935,7 @@ static bool source_query_modules(SourceContext *ctx) {
 }
 #include "xxir_source_dependencies.inc.c"
 #include "xxir_source_calls_publish.inc.c"
+#include "xxir_source_type_facts_publish.inc.c"
 static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) {
     if (!output || !ctx->query_ready || ctx->diagnostic.status != XR_XIR_OK) {
         if (output) xr_xir_compile_source_result_free(output);
@@ -2957,6 +2958,10 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     if (status == XR_XIR_OK) {
         failure = "source dependency snapshot publication failed";
         status = source_dependencies_publish(ctx, output->snapshot);
+    }
+    if (status == XR_XIR_OK) {
+        failure = "source type snapshot publication failed";
+        status = source_type_facts_publish(ctx, output->snapshot);
     }
     if (status != XR_XIR_OK) {
         xr_xir_compile_source_result_free(output); memset(&ctx->diagnostic, 0, sizeof(ctx->diagnostic));
