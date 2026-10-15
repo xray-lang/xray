@@ -261,14 +261,23 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourc
         .ordinal=symbol->index,.dependency=UINT32_MAX,.name=symbol->name,.syntax=symbol->node,
         .checked=record->result.checked,.mutable=symbol->mutable};
     switch (symbol->kind) {
-    case SOURCE_SLOT:
+    case SOURCE_UNIT_SLOT:
+        if (!symbol->mutable) {
+            definition.kind=XR_XIR_SOURCE_DEFINITION_UNIT;definition.ordinal=UINT32_MAX;break;
+        }
+        /* A mutable Unit still owns an actual Cell slot. */
+        /* fall through */
+    case SOURCE_SLOT: {
         if (symbol->index>=checked->declarations->slot_count ||
             checked->declarations->slots[symbol->index].module!=module ||
-            checked->declarations->slots[symbol->index].type!=symbol->type ||
             checked->declarations->slots[symbol->index].mutable!=(uint32_t)symbol->mutable) return XR_XIR_BAD_STRUCTURE;
-        definition.kind=XR_XIR_SOURCE_DEFINITION_BINDING;definition.stored_type=symbol->type;break;
-    case SOURCE_UNIT_SLOT:
-        definition.kind=XR_XIR_SOURCE_DEFINITION_UNIT;definition.ordinal=UINT32_MAX;break;
+        XrXirType physical=checked->declarations->slots[symbol->index].type;
+        if (symbol->mutable ? !xr_xir_type_is_cell(checked->types,physical) ||
+            xr_xir_cell_element(checked->types,physical)!=symbol->type : physical!=symbol->type)
+            return XR_XIR_BAD_STRUCTURE;
+        definition.kind=XR_XIR_SOURCE_DEFINITION_BINDING;
+        definition.logical_type=symbol->type;definition.stored_type=physical;break;
+    }
     case SOURCE_FUNCTION:
         if (symbol->index>=checked->function_count || checked->declarations->functions[symbol->index].module!=module)
             return XR_XIR_BAD_STRUCTURE;
@@ -291,4 +300,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourc
     default:return XR_XIR_BAD_STRUCTURE;
     }
     *output=definition;return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_candidate_bindings(const XrXirSourceGenerations *owner,
+    uint64_t serial,const XrXirSourceGenerationBinding **output,size_t *count) {
+    if (!owner || !serial || !output || *output || !count || *count) return XR_XIR_BAD_STRUCTURE;
+    const SourceGenerationRecord *record=owner->pending;
+    if (!record || record->view.serial!=serial) return XR_XIR_BAD_STAGE;
+    if (!xir_compile_work(&owner->config.context,1)) return XR_XIR_BUDGET;
+    *output=record->bindings;*count=record->binding_count;return XR_XIR_OK;
 }

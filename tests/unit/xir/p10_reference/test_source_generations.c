@@ -11,6 +11,7 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
+#include "xir/xxir_types.h"
 #include "module/xmodule_fingerprint.h"
 #include "frontend/parser/xast.h"
 #include <stdio.h>
@@ -201,9 +202,33 @@ static int history_check(const char *mode) {
         "Published historical declaration entered ordinary Source checking; candidate aborted without runtime/storage qualification");
     return 0;
 }
+static void mutable_definitions(void) {
+    SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
+    XrXirSourceGenerationConfig config={compiler.context,"mutable-definition-test",NULL,NULL,NULL};
+    XrXirSourceGenerations *owner=NULL;CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
+    uint64_t serial=prepare(owner,"var value:i64=11\nvar empty=()\nconst unit=()\n");
+    XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(view.result->checked);
+    const char *names[]={"value","empty"};const XrXirType types[]={XR_XIR_I64,XR_XIR_UNIT};
+    for(unsigned i=0;i<2;++i) {
+        XrXirSourceGenerationDefinition definition={0};
+        CHECK(xr_xir_compile_source_generation_definition(owner,serial,names[i],&definition)==XR_XIR_OK);
+        CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_BINDING && definition.mutable &&
+            definition.logical_type==types[i] && definition.ordinal<module->declarations->slot_count &&
+            definition.stored_type==module->declarations->slots[definition.ordinal].type &&
+            xr_xir_type_is_cell(module->types,definition.stored_type) &&
+            xr_xir_cell_element(module->types,definition.stored_type)==types[i]);
+    }
+    XrXirSourceGenerationDefinition unit={0};
+    CHECK(xr_xir_compile_source_generation_definition(owner,serial,"unit",&unit)==XR_XIR_OK &&
+        unit.kind==XR_XIR_SOURCE_DEFINITION_UNIT && !unit.mutable && unit.ordinal==UINT32_MAX);
+    CHECK(xr_xir_compile_source_generation_abort(owner,serial)==XR_XIR_OK);
+    xr_xir_compile_source_generations_free(owner);source_fixture_owner_free(&compiler);
+}
 int main(int argc,char **argv) {
     if (argc==2) return history_check(argv[1]);
     CHECK(argc==1);
+    mutable_definitions();
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     char namespace_id[]="source-generation-test";
     XrXirSourceGenerationConfig config={compiler.context,namespace_id,NULL,NULL,NULL};

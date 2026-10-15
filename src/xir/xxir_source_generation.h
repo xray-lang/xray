@@ -44,7 +44,7 @@ typedef struct XrXirSourceGenerationDefinition {
     uint64_t generation;
     XrXirSourceDefinitionKind kind;
     uint32_t module, ordinal, dependency;
-    XrXirType stored_type;
+    XrXirType logical_type, stored_type;
     bool mutable;
     const char *name, *imported;
     const struct AstNode *syntax, *dependency_syntax;
@@ -78,10 +78,19 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_view(const XrXirSourceGener
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_lookup(const XrXirSourceGenerations *owner,
     const char *name, XrXirSourceGenerationBinding *output);
 /* Observes actual semantic registration in one exact prepared/published record.
- * Ordinals and stored types belong only to the returned Checked owner; they
+ * Binding logical types and physical stored types remain distinct for Cell
+ * owners. Ordinals and types belong only to the returned Checked owner; they
  * are not Lowered/Program ordinals or a runtime storage correspondence. Syntax
  * borrows the record's complete AST closure. Failure preserves the output.
  * This observation does not yet receive history into subsequent checking. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourceGenerations *owner,
     uint64_t serial, const char *name, XrXirSourceGenerationDefinition *output);
+/* Borrows the exact pending candidate's effective lexical-name table. Rows
+ * retain their birth Source serial; select serial to enumerate this input.
+ * The borrow ends on publication, abort or owner destruction. These query
+ * selectors are not semantic ordinals or runtime authority; resolve each name
+ * through definition before using its actual Checked declaration. Outputs
+ * must be empty, and failure preserves them. */
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_candidate_bindings(const XrXirSourceGenerations *owner,
+    uint64_t serial, const XrXirSourceGenerationBinding **output, size_t *count);
 #endif // XXIR_SOURCE_GENERATION_H
