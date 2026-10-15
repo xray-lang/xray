@@ -163,8 +163,9 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         self.assertEqual(29, len(actual))
         self.assertEqual({member.name for member in members}, set(actual))
         admitted = {entry["name"] for entry in actual.values() if entry["xir_admitted"]}
-        self.assertEqual(24, len(admitted))
-        self.assertEqual({"parse", "tryParse", "toBigInt", "sqrt", "pow"}, set(actual) - admitted)
+        self.assertEqual(25, len(admitted))
+        self.assertEqual("INTEGER_SQRT", actual["sqrt"]["operation"])
+        self.assertEqual({"parse", "tryParse", "toBigInt", "pow"}, set(actual) - admitted)
         for identity, member in enumerate(members, 1):
             entry = actual[member.name]
             self.assertEqual(6, entry["native_type_id"])
