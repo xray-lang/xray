@@ -520,7 +520,8 @@ static bool source_query_reference(SourceContext *ctx, AstNode *node, SourceName
     if (!records) return false;
     ctx->query.references = records;
     XrXirSourceReference *record = &records[ctx->query.reference_count - 1];
-    *record = (XrXirSourceReference) {source_query_range(ctx, node, NULL), binding->declaration, target->declaration, access};
+    const char *spelling = node && node->type == AST_VARIABLE ? node->as.variable.name : NULL;
+    *record = (XrXirSourceReference) {source_query_range(ctx, node, spelling), binding->declaration, target->declaration, access};
     return source_query_syntax_reference(ctx, source_query_token_range(ctx, node));
 }
 static bool source_query_expression(SourceContext *ctx, AstNode *node, XrXirType type) {
