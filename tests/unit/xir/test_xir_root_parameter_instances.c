@@ -74,9 +74,9 @@ static void ri_roundtrip(void) {
     ri_shape(read);
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(read,&effects)==XR_XIR_OK && effects);
-    CHECK(!xr_xir_effects_root(effects,0)->requires_root && !xr_xir_effects_root(effects,0)->unresolved);
-    CHECK(!xr_xir_effects_root(effects,1)->requires_root && xr_xir_effects_root(effects,1)->unresolved);
-    CHECK(!xr_xir_effects_root(effects,4)->requires_root && !xr_xir_effects_root(effects,4)->unresolved);
+    CHECK(!xr_xir_effects_read(effects,0).root.requires_root && !xr_xir_effects_read(effects,0).root.unresolved);
+    CHECK(!xr_xir_effects_read(effects,1).root.requires_root && xr_xir_effects_read(effects,1).root.unresolved);
+    CHECK(!xr_xir_effects_read(effects,4).root.requires_root && !xr_xir_effects_read(effects,4).root.unresolved);
     xr_xir_compile_effects_free(effects);
     CHECK(xr_xir_compile_lower(read,&target,&lowered,&d)==XR_XIR_OK && lowered);
     CHECK(xr_xir_compile_artifact_module(lowered)->stage==XR_XIR_LOWERED);

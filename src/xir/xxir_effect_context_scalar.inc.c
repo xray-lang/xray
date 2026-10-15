@@ -161,7 +161,7 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
     XrXirTypeNode bound=*signature;
     const EffectOrdinaryContexts *contexts=flow->contexts;
     if (!contexts || contexts->uses.resources!=flow->terms->remaining->resources ||
-        !contexts->uses.root || !contexts->uses.constant_witnesses || !contexts->uses.formula_terminals ||
+        !contexts->uses.outcomes_work.root || !contexts->uses.constant_witnesses || !contexts->uses.formula_terminals ||
         contexts->terms.types.nodes!=flow->terms->types.nodes || op.immediate<0 ||
         (uint64_t)op.immediate>=contexts->count || !contexts->uses.contracts)
         return XR_XIR_BAD_STRUCTURE;

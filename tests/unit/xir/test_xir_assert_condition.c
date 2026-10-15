@@ -100,7 +100,8 @@ static void assert_bindings(const XrXirSourceResult *source) {
     CHECK(core==1 && parameters==7);
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(source->checked,&effects)==XR_XIR_OK);
-    const XrXirFunctionEffects *effect=xr_xir_effects_function(effects,binding->owner);
+    XrXirEffectFacts effect_read=xr_xir_effects_read(effects,binding->owner);
+    const XrXirFunctionEffects *effect=(effect_read.status==XR_XIR_OK?&effect_read.control:NULL);
     CHECK(effect && effect->suspend==XR_XIR_EFFECT_NONE && effect->throws==XR_XIR_EFFECT_NONE);
     xr_xir_compile_effects_free(effects);
 }

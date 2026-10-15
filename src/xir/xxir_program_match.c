@@ -226,7 +226,8 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     uint32_t reference_at = 0, root_parameter_at = 0;
     for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
-        const XrXirRootEffects *root = xr_xir_effects_root(effects, f);
+        XrXirEffectFacts root_read=xr_xir_effects_read(effects, f);
+        const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
         if (!root) { status = XR_XIR_BAD_STRUCTURE; break; }
         permissions->entries[f].requires_root = root->requires_root;
         permissions->entries[f].unresolved = root->unresolved;

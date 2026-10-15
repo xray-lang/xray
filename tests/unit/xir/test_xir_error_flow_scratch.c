@@ -96,7 +96,8 @@ static void owner_free(XrXirCompileContext *c,uint64_t baseline){
 }
 static void golden(const XrXirEffects *e){
     static const XrXirEffect expected[]={XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_MAY,XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_MAY};
-    for(uint32_t f=0;f<5;++f){const XrXirFunctionEffects *v=xr_xir_effects_function(e,f);CHECK(v && v->suspend==XR_XIR_EFFECT_NONE && v->throws==expected[f]);
+    for(uint32_t f=0;f<5;++f){XrXirEffectFacts v_read=xr_xir_effects_read(e,f);
+        const XrXirFunctionEffects *v=(v_read.status==XR_XIR_OK?&v_read.control:NULL);CHECK(v && v->suspend==XR_XIR_EFFECT_NONE && v->throws==expected[f]);
         CHECK(!xr_xir_effects_error_unknown(e,f));CHECK(xr_xir_effects_error_unidentified(e,f)==(f==1 || f==4));}
 }
 static XrXirStatus whole(const XrXirCompileContext *context){

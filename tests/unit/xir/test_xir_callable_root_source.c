@@ -43,7 +43,8 @@ static void root_source_facts(XrXirArtifact *artifact, bool flows) {
         for (size_t i = 0; i < sizeof(root_source_expected) / sizeof(*root_source_expected); ++i) {
             const RootSourceExpected *expected = &root_source_expected[i];
             uint32_t f = root_source_function(module,expected->name);
-            const XrXirRootEffects *actual = xr_xir_effects_root(effects,f);
+            XrXirEffectFacts actual_read=xr_xir_effects_read(effects,f);
+            const XrXirRootEffects *actual=(actual_read.status==XR_XIR_OK?&actual_read.root:NULL);
             if (!actual || actual->requires_root != expected->root || actual->unresolved != expected->unknown)
                 fprintf(stderr,"%s expectedroot%u/unknown%u actual%u/%u\n",expected->name,
                     expected->root ? 1u : 0u,expected->unknown ? 1u : 0u,
@@ -52,7 +53,8 @@ static void root_source_facts(XrXirArtifact *artifact, bool flows) {
         }
     } else {
         uint32_t f = root_source_function(module,"worker");
-        const XrXirRootEffects *actual = xr_xir_effects_root(effects,f);
+        XrXirEffectFacts actual_read=xr_xir_effects_read(effects,f);
+        const XrXirRootEffects *actual=(actual_read.status==XR_XIR_OK?&actual_read.root:NULL);
         CHECK(actual && !actual->requires_root && !actual->unresolved);
         CHECK(xr_xir_effects_go_safe(effects,f) == XR_XIR_OK);
     }

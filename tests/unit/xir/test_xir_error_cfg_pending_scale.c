@@ -181,7 +181,7 @@ static void pm_golden(const XrXirEffects *effects,const PmCase *input) {
     CHECK(!xr_xir_effects_error(effects,1,(XrXirType)EE_ENUM,1));
     for(uint32_t f=0;f<3;++f) {
         CHECK(effect_final_outcomes(effects)->task_errors[f]==XR_XIR_OK && effect_final_outcomes(effects)->functions[f].suspend==XR_XIR_EFFECT_NONE);
-        CHECK(effects->root[f].requires_root==(f==0) && !effects->root[f].unresolved);
+        CHECK(effect_roots_read(effects)->root[f].requires_root==(f==0) && !effect_roots_read(effects)->root[f].unresolved);
     }
 }
 static void pm_summary(const PmCase *input,const PmPoint *before,const PmPoint *after,uint64_t infer_work) {

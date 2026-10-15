@@ -242,6 +242,21 @@ static void initial_ordinary_refresh_controls(void) {
     XrXirStatus status=initial_ordinary_effects(&context,original,&effects);
     if (status!=XR_XIR_OK) fprintf(stderr,"INITIAL_REFRESH_EFFECTS status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && effects);
+    /* A published owner has no constructor refresh capability. Its actual
+     * Final, output records and charged resource state must remain unchanged. */
+    EffectInvocationFinal *published=effects->invocations->final;
+    XrCompileResourceStats before_refresh=rp_stats(&context);
+    RootParameterMark retained=rp_mark();
+    CHECK(xir_effects_context_refresh(&context,original,effects)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats after_refresh=rp_stats(&context);
+    CHECK(!memcmp(&before_refresh,&after_refresh,sizeof(before_refresh)) &&
+        effects->invocations->final==published && effect_outcomes_empty(&effects->outcomes_work));
+    rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
+    /* This actual constructor remains private while Source refines its body.
+     * It is released without publishing facts for a changed Source input. */
+    CHECK(effect_infer_construct(&context,original,NULL,&effects)==XR_XIR_OK && effects &&
+        effects->outcomes_owner && !effects->invocations->final->outcomes);
+
     CHECK(effects->contexts && !effects->refinement &&
         effects->result_borrow==(&effects->invocations->final->summary) &&
         effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary));
