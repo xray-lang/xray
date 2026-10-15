@@ -40,9 +40,16 @@ static void state_class_fields(StateClassTrace *t) {
     for(uint32_t n=0;n<4;++n) {
         CHECK(t->old_freed[n]==1);for(uint32_t j=0;j<n;++j)CHECK(t->classes[n]!=t->classes[j]);
         const uint32_t slots[]={1,0,3,2};XrXirValue value={0};
-        CHECK((uintptr_t)t->instance->slots[slots[n]].payload==t->classes[n]);
+        CHECK(xr_xir_cell_in_domain(&t->instance->slots[slots[n]],t->instance->domain));
+        const XirCell *cell=(const XirCell *)object_pointer(&t->instance->slots[slots[n]]);
+        CHECK(cell->module_storage && !cell->projection_count);
+        XrXirValue denied={0};CHECK(xr_xir_cell_read(&t->instance->slots[slots[n]],&denied)==XR_XIR_VALUE_BAD_ARGUMENT &&
+            !denied.type && !denied.reserved && !denied.payload);
+        /* This live physical borrow is an oracle, never an execution grant. */
+        const XrXirValue *stored=&cell->value;
+        CHECK((uintptr_t)stored->payload==t->classes[n]);
         XrXirValueAdmission admission={t->instance->program->arena,t->instance->domain,NULL,NULL,100000,65536};
-        CHECK(xr_xir_class_get(&t->instance->slots[slots[n]],0,&admission,&value)==XR_XIR_VALUE_OK);
+        CHECK(xr_xir_class_get(stored,0,&admission,&value)==XR_XIR_VALUE_OK);
         const char *text=NULL;size_t length=0;CHECK(xr_xir_string_view(&value,&text,&length));
         CHECK(length==1 && text[0]=='x');xr_xir_value_drop(&value);
     }
@@ -74,10 +81,11 @@ static void state_class_terminal(StateClassTrace *trace,bool fault) {
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_OOM && !value.payload);
     }
 }
-static void state_class_release(StateClassTrace *t,bool complete) {
-    CHECK(xr_xir_instance_stop(t->instance)==XR_XIR_CALL_READY);
+static void state_class_release(StateClassTrace *t,bool complete,XrXirCallStatus cleanup) {
+    /* A bound root keeps its host fault until an actual replacement binds. */
+    CHECK(xr_xir_instance_stop(t->instance)==cleanup);
     if(complete)CHECK(!t->free_count && !t->release_count);
-    state_class_active=t;CHECK(xr_xir_instance_free(t->instance)==XR_XIR_CALL_READY);t->instance=NULL;
+    state_class_active=t;CHECK(xr_xir_instance_free(t->instance)==cleanup);t->instance=NULL;
     CHECK(t->release_count==t->publication_count && t->free_count==t->constructed);
     if(complete) {
         CHECK(t->constructed==4 && t->replacements==4 && t->helper_calls==(t->scenario==8?4u:0u));
@@ -105,9 +113,9 @@ static void state_class_pair(XrXirProgram *program,uint32_t scenario,uint32_t or
         CHECK(t->trace_count==12 && !memcmp(t->trace,expected,sizeof(expected)));state_class_fields(t);
     }
     for(uint32_t n=0;n<4;++n)for(uint32_t j=0;j<4;++j)CHECK(traces[0].classes[n]!=traces[1].classes[j]);
-    uint32_t first=order?1:0;state_class_release(&traces[first],true);
+    uint32_t first=order?1:0;state_class_release(&traces[first],true,XR_XIR_CALL_READY);
     state_class_active=&traces[1-first];state_class_fields(&traces[1-first]);
-    state_class_release(&traces[1-first],true);
+    state_class_release(&traces[1-first],true,XR_XIR_CALL_READY);
     CHECK(!runtime_live && !runtime_bytes);state_class_active=NULL;state_class_registry[0]=state_class_registry[1]=NULL;
     printf("class state %u order %u: 2x24, trace, fields, old-owner and actual class free4/3/2/1; physical0/0\n",scenario,order);
 }
@@ -119,11 +127,12 @@ static size_t state_class_runtime_run(XrXirProgram *program,uint32_t scenario,si
     bool injected=runtime_attempts>fail_at;
     if(status==XR_XIR_CALL_READY) {
         status=xr_xir_instance_start(trace.instance,4,NULL,0);injected=runtime_attempts>fail_at;
-        if(status==XR_XIR_CALL_READY) {
+        bool bound=status==XR_XIR_CALL_READY;
+        if(bound) {
             state_class_terminal(&trace,fail_at!=SIZE_MAX);
             injected=runtime_attempts>fail_at;
         } else CHECK(injected && status==XR_XIR_CALL_OOM);
-        runtime_fail_at=SIZE_MAX;state_class_release(&trace,!injected);
+        runtime_fail_at=SIZE_MAX;state_class_release(&trace,!injected,bound && injected?XR_XIR_CALL_OOM:XR_XIR_CALL_READY);
     } else CHECK(injected && status==XR_XIR_CALL_OOM && !trace.instance);
     size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
     CHECK(!runtime_live && !runtime_bytes);state_class_active=NULL;state_class_registry[0]=NULL;

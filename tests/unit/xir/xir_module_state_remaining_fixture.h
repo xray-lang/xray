@@ -17,19 +17,20 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
 typedef struct RemainingFixture {
-    XrXirInstruction root[24],empty,main[4],ctor[3],replace[3],cause[2];
+    XrXirInstruction root[27],empty,main[4],ctor[3],replace[3],cause[2];
     uint32_t root_operands[8],ctor_operand,cause_operand,main_operand,base,diamond[2];
     XrXirBlock blocks[5];XrXirFunction functions[8];XrXirFunctionIdentity identities[8];
     XrXirSourceModule modules[4];XrXirSlot slots[4];XrXirLiteral literals[3];
     XrXirNominalField fields[2];XrXirNominalDeclaration nominals[2];XrXirNominalTable table;
-    XrXirNominalVariant variant;XrXirType field_types[2],class_type,error_type;
-    XrXirTypeNode nodes[2];XrXirTypes types;XrXirDeclarations declarations;XrXirModule module;
+    XrXirNominalVariant variant;XrXirType field_types[2],class_type,error_type,cell_type;
+    XrXirTypeNode nodes[3];XrXirTypes types;XrXirDeclarations declarations;XrXirModule module;
 } RemainingFixture;
 static bool remaining_yields(uint32_t scenario) {return scenario==7 || scenario==11 || scenario==12;}
 static bool remaining_error(uint32_t scenario) {return scenario==9 || scenario==11;}
 static void remaining_fixture(RemainingFixture *f,uint32_t scenario,uint32_t rejected) {
     CHECK(scenario==6 || scenario==7 || (scenario>=9 && scenario<=13));memset(f,0,sizeof(*f));
     f->class_type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;f->error_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
+    f->cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
     f->field_types[0]=XR_XIR_STRING;f->field_types[1]=f->class_type;
     f->fields[0]=(XrXirNominalField){{"text",4},XR_XIR_STRING,XR_XIR_FIELD_MUTABLE};
     f->fields[1]=(XrXirNominalField){{"state",5},f->class_type,0};
@@ -41,7 +42,8 @@ static void remaining_fixture(RemainingFixture *f,uint32_t scenario,uint32_t rej
         .exported=1,.fields=&f->fields[1],.field_count=1,.kind=XR_XIR_NOMINAL_ENUM,.variants=&f->variant,.variant_count=1};
     f->table=(XrXirNominalTable){f->nominals,2,NULL};
     for(uint32_t i=0;i<2;++i)f->nodes[i]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.nominal={i,NULL,0,&f->field_types[i],1}};
-    f->types=(XrXirTypes){f->nodes,2,&f->table,NULL};
+    f->nodes[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=f->class_type};
+    f->types=(XrXirTypes){f->nodes,3,&f->table,NULL};
     f->empty=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     f->main[0]=(XrXirInstruction){XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0,{0}};
     f->main[1]=(XrXirInstruction){XR_XIR_PRINT,XR_XIR_UNIT,{0,1},{0},0,{0}};
@@ -59,7 +61,11 @@ static void remaining_fixture(RemainingFixture *f,uint32_t scenario,uint32_t rej
         uint32_t value=count;last=value+1;
         f->root[count++]=(XrXirInstruction){XR_XIR_CALL,f->class_type,{0},{0},5,{0}};
         f->root[count++]=(XrXirInstruction){XR_XIR_COPY,f->class_type,{value},{0},0,{0}};
-        f->root[count++]=(XrXirInstruction){XR_XIR_SLOT_INIT,XR_XIR_UNIT,{value+1},{0},publication[i],{0}};
+        uint32_t stored=value+1;
+        if(rejected!=2) {
+            stored=count;f->root[count++]=(XrXirInstruction){XR_XIR_CELL_NEW,f->cell_type,{value+1},{0},0,{0}};
+        }
+        f->root[count++]=(XrXirInstruction){XR_XIR_SLOT_INIT,XR_XIR_UNIT,{stored},{0},publication[i],{0}};
         f->root_operands[operands]=value+1;
         f->root[count++]=(XrXirInstruction){XR_XIR_CALL,XR_XIR_UNIT,{operands++,1},{0},6,{0}};
     }
@@ -99,7 +105,8 @@ static void remaining_fixture(RemainingFixture *f,uint32_t scenario,uint32_t rej
     f->identities[7].nominal_owner=2;f->identities[7].method_kind=XR_XIR_CONSTRUCTOR;
     f->modules[0]=(XrXirSourceModule){"base",4,NULL,0,0};f->modules[1]=(XrXirSourceModule){"left",4,&f->base,1,1};
     f->modules[2]=(XrXirSourceModule){"right",5,&f->base,1,2};f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3};
-    for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected && rejected<3?0:3,f->class_type,rejected==2?0:1};
+    /* The rejected initializer belongs to base; its Cell slots belong to left. */
+    for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected==1?1:rejected==2?0:3,rejected==2?f->class_type:f->cell_type,rejected==2?0:1};
     f->literals[0]=(XrXirLiteral){"x",1};f->literals[1]=(XrXirLiteral){"module initializer assertion",28};f->literals[2]=(XrXirLiteral){"",0};
     f->declarations=(XrXirDeclarations){f->modules,4,f->identities,f->slots,4,f->literals,3,3,4,NULL};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,8,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};

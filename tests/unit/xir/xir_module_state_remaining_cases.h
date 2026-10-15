@@ -69,8 +69,10 @@ static XrXirInstanceResult remaining_drive(RemainingTrace *trace,uint32_t mode,b
         else if(mode==1)CHECK(xr_xir_instance_cancel_current(trace->instance)==XR_XIR_CALL_CANCEL_REQUESTED);
         else {
             CHECK(mode==2 && xr_xir_instance_stop(trace->instance)==XR_XIR_CALL_READY);
-            CHECK(xr_xir_instance_state(trace->instance)==XR_XIR_INSTANCE_DRAINING && trace->instance->state==XR_XIR_INSTANCE_INITIALIZING);
-            CHECK(!trace->release_count && !trace->free_count);
+            /* Nonreentrant stop drains and publishes the terminal initialization failure. */
+            CHECK(xr_xir_instance_state(trace->instance)==XR_XIR_INSTANCE_DRAINING && trace->instance->state==XR_XIR_INSTANCE_FAILED);
+            CHECK(trace->instance->failure.status==XR_XIR_CALL_CANCELLED && !trace->instance->publication_count);
+            CHECK(trace->release_count==trace->publication_count && trace->free_count==trace->constructed);
         }
         do {result=xr_xir_instance_poll_bounded(trace->instance,8);}while(result.outcome.status==XR_XIR_CALL_READY);
     }
@@ -81,7 +83,9 @@ static void remaining_error_view(RemainingTrace *trace,const XrXirValue *value) 
     CHECK(value->type==XR_XIR_CONSTRUCTED_TYPE_BASE+1 && value->payload && xr_xir_value_valid(value));
     XrXirValueAdmission admission={xr_xir_value_arena(value),object_pointer(value)->domain,NULL,NULL,100000,65536};
     const XrXirTypes *types=xr_xir_compile_type_arena_types(admission.arena);
-    CHECK(types && types->count==2 && types->nominals && types->nominals->identities[1].exported);
+    CHECK(types && types->count==3 && types->nominals && types->nominals->identities[1].exported);
+    const XrXirTypeNode *cell=xr_xir_type_node(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2));
+    CHECK(cell && cell->kind==XR_XIR_TYPE_CELL && cell->element==XR_XIR_CONSTRUCTED_TYPE_BASE);
     CHECK(!(types->nominals->identities[0].fields[0].flags & XR_XIR_FIELD_PRIVATE));
     XrXirValue existential={0},borrowed={0},narrowed={0},erased={0},state={0},text={0};
     CHECK(xr_xir_error_erase(value,&admission,&existential)==XR_XIR_VALUE_OK && existential.type==XR_XIR_ERROR && existential.payload==value->payload);
@@ -205,14 +209,18 @@ static size_t remaining_runtime_run(XrXirProgram *program,uint32_t scenario,uint
     XrXirCallStatus status=xr_xir_instance_new(program,&config,&trace.instance);
     if(status==XR_XIR_CALL_READY) {
         status=xr_xir_instance_start(trace.instance,4,NULL,0);
-        if(status==XR_XIR_CALL_READY) {
+        bool bound=status==XR_XIR_CALL_READY;
+        if(bound) {
             XrXirInstanceResult result=remaining_drive(&trace,mode,false);
             if(fail_at==SIZE_MAX)CHECK(result.outcome.status==remaining_expected(scenario,mode));
             else CHECK(runtime_attempts>fail_at && result.outcome.status==XR_XIR_CALL_OOM);
             runtime_fail_at=SIZE_MAX;
             if(fail_at!=SIZE_MAX)remaining_empty_sticky(&trace,XR_XIR_CALL_OOM,result.epoch);
         } else CHECK(runtime_attempts>fail_at && status==XR_XIR_CALL_OOM);
-        runtime_fail_at=SIZE_MAX;CHECK(xr_xir_instance_free(trace.instance)==XR_XIR_CALL_READY);
+        runtime_fail_at=SIZE_MAX;
+        /* Preserve an injected host fault from this accepted initialization root. */
+        XrXirCallStatus cleanup=bound && fail_at!=SIZE_MAX?XR_XIR_CALL_OOM:XR_XIR_CALL_READY;
+        CHECK(xr_xir_instance_free(trace.instance)==cleanup);
         CHECK(trace.release_count==trace.publication_count && trace.free_count==trace.constructed);
     } else CHECK(runtime_attempts>fail_at && status==XR_XIR_CALL_OOM && !trace.instance);
     size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
