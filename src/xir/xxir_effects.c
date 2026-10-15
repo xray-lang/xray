@@ -155,6 +155,8 @@ typedef struct EffectGraph {
     /* One inference-local workspace; every function starts with cleared rows. */
     uint64_t *flow_rows;
     size_t flow_capacity;
+    uint32_t *parameter_first_callers;
+    uint32_t parameter_capacity;
     /* Fresh construction owns this domain. After publication this is only a
      * borrow from the latest certificate, valid until the next refresh. */
     EffectPhysicalDomain *physical;
@@ -246,6 +248,7 @@ static void effect_graph_free(EffectGraph *graph) {
     if (graph->physical_owned) effect_body_material_free(graph->material);
     graph->material=NULL;graph->physical=NULL;graph->physical_owned=false;
     xr_compile_resources_free(graph->flow_rows);
+    xr_compile_resources_free(graph->parameter_first_callers);
     xr_compile_resources_free(graph->reference_heads); xr_compile_resources_free(graph->references);
     xr_compile_resources_free(graph->error_heads); xr_compile_resources_free(graph->error_edges);
     xr_compile_resources_free(graph->heads); xr_compile_resources_free(graph->queue); xr_compile_resources_free(graph->queued); xr_compile_resources_free(graph->edges);
