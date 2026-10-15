@@ -121,7 +121,7 @@ static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContex
         a->entry_function!=b->entry_function))) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t m=0;a && m<a->module_count;++m) {
         const XrXirSourceModule *left=&a->modules[m],*right=&b->modules[m];
-        if (left->initializer!=right->initializer || left->dependency_count!=right->dependency_count)
+        if (left->initializer!=right->initializer || left->lexical_scope!=right->lexical_scope || left->dependency_count!=right->dependency_count)
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=effect_terms_literal_same(terms,
             (XrXirLiteral){left->name,left->name_length},(XrXirLiteral){right->name,right->name_length});

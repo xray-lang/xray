@@ -30,6 +30,8 @@ struct AstNode;
 struct XrModule;
 struct XrCompilerSession;
 struct XrVMRuntime;
+struct XrXirSourceHistoryUnit;
+enum { XR_MODULE_GRAPH_MAX_MODULES = 1024 };
 
 /* ========== Module Spec Status ========== */
 
@@ -52,6 +54,8 @@ typedef struct XrModuleSpec {
     XrModuleKind kind;    /* stdlib / file / package */
     XrModuleRepresentation representation;
     const XrModuleResourceBinding *resource; /* Catalog outlives this graph. */
+    const struct XrXirSourceHistoryUnit *history; /* Exact owned Source record; never a Catalog binding. */
+    uint32_t history_module;
     XrModuleIdentityAuthority authority; /* Owned typed authority */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
     XrFingerprint source_content_fingerprint; /* Source bytes; zero when only an AST was supplied. */

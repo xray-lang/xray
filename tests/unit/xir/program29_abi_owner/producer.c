@@ -19,7 +19,7 @@ int main(int argc,char **argv) {
     const XrXirFunction functions[]={
         {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&init,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,code,2,NULL,0}};
-    const XrXirSourceModule source={"root",4,NULL,0,0};
+    const XrXirSourceModule source={"root",4,NULL,0,0, 0};
     const XrXirFunctionIdentity functions_id[]={{0},{0}};
     const XrXirDeclarations declarations={&source,1,functions_id,NULL,0,NULL,0,0,1,NULL};
     const XrXirNominalDeclaration nominals[]={

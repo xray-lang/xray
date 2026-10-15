@@ -270,7 +270,7 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
     const XrXirSourceModule *original=&module->declarations->modules[0];
     char *identity=source_core_text(ctx,original->name,original->name_length);
     if (!identity) return false;
-    modules[ctx->module_count]=(XrXirSourceModule){identity,original->name_length,NULL,0,first};
+    modules[ctx->module_count]=(XrXirSourceModule){identity,original->name_length,NULL,0,first,0};
     ctx->modules=modules;
     for (uint32_t d=0;d<module->defaults->count;++d) {
         const XrXirDefaultBinding *binding=&module->defaults->records[d];

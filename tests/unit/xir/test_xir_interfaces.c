@@ -153,7 +153,7 @@ static XrXirStatus check_interface_module(const XrXirCompileContext *context, co
         {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0}};
     uint32_t dependency = 0;
-    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1},{"other",5,&dependency,1,2}};
+    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1, 0},{"other",5,&dependency,1,2, 0}};
     XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
@@ -202,7 +202,7 @@ static XrXirStatus inherited_module_verify(Fixture *f, XrXirCompileContext *budg
         {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0}};
     uint32_t dependency = 0;
-    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0},{"other",5,&dependency,1,1}};
+    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0},{"other",5,&dependency,1,1, 0}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
     XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
     XrXirTypes types = f->types; types.interfaces = &f->table;

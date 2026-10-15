@@ -1382,7 +1382,7 @@ static XrXirCallStatus instance_function_create(XrXirCallView *view,
     if (target->cleanup_owner || entry == d->modules[to].initializer || !xr_xir_module_imports(d, from, to) ||
         count > target->parameter_count || target->parameter_count - count != signature->parameter_count ||
         target->result != signature->result) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (from != to && !d->functions[entry].exported) {
+    if (!xr_xir_module_same_scope(d, from, to) && !d->functions[entry].exported) {
         XrXirCallStatus visible = instance_private_reference(instance, caller, entry, type, count);
         if (visible != XR_XIR_CALL_READY) return visible;
     }
@@ -1430,7 +1430,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     uint32_t from = declarations->functions[caller].module, to = declarations->functions[direct_entry].module;
     if (!program->active_modules[from] || !program->active_modules[to] ||
         !xr_xir_module_imports(declarations, from, to) ||
-        (from != to && !declarations->functions[direct_entry].exported) ||
+        (!xr_xir_module_same_scope(declarations, from, to) && !declarations->functions[direct_entry].exported) ||
         target->cleanup_owner || direct_entry == declarations->modules[to].initializer ||
         count != target->parameter_count || program->permissions->entries[direct_entry].worker != XR_XIR_OK)
         return XR_XIR_CALL_BAD_ARGUMENT;

@@ -29,7 +29,7 @@ static XrXirArtifact *library_initializer_middle(const char *canonical) {
         {"$init",5,NULL,0,XR_XIR_UNIT,&one,1,init_ops,1,NULL,0},
         {"answer",6,NULL,0,XR_XIR_I64,&two,1,answer_ops,2,NULL,0}};
     XrXirFunctionIdentity identities[3]={{0},{0},{.exported=1}};
-    XrXirSourceModule module={canonical,(uint32_t)strlen(canonical),NULL,0,1};
+    XrXirSourceModule module={canonical,(uint32_t)strlen(canonical),NULL,0,1, 0};
     XrXirDeclarations declarations={.modules=&module,.module_count=1,.functions=identities,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
