@@ -222,8 +222,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->result, result);
         if (generic_status != XR_XIR_OK) return generic_status;
         if (signature) for (uint32_t p = 0; p < signature->parameter_count; ++p) {
-            if (!xr_xir_callable_parameter_storage_valid(module->types, &signature->parameters[p]) ||
-                (signature->parameters[p].mode == XR_PARAM_REF && op->args[1])) return XR_XIR_BAD_TYPE;
+            if (!xr_xir_callable_parameter_storage_valid(module->types, &signature->parameters[p])) return XR_XIR_BAD_TYPE;
             generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type);
             if (generic_status != XR_XIR_OK) return generic_status;
         }

@@ -164,7 +164,7 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
             if (status!=XR_XIR_OK) break;
         }
         if (xr_xir_type_is_cell(flow->body.domain.types,expected)) {
-            if (signature && (captures || signature->parameters[suffix].mode!=XR_PARAM_REF ||
+            if (signature && (signature->parameters[suffix].mode!=XR_PARAM_REF ||
                 xr_xir_cell_provenance_role(owner->cells,target,p)!=XR_XIR_CELL_PROOF_SCOPED_REF)) {
                 status=XR_XIR_BAD_STRUCTURE;break;
             }
