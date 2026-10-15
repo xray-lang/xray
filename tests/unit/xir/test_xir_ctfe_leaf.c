@@ -24,6 +24,8 @@ static const char ctfe_source[] =
     "export fn answer()->i64 { return 6*7-1 }\n"
     "export fn choose(flag:bool,x:i64,y:i64)->i64 { return flag ? x+1 : y-2 }\n"
     "export fn boolean(value:bool)->bool { return value }\n"
+    "export fn logical(value:i64)->bool { return value==40 && value<42 }\n"
+    "export fn short_circuit(flag:bool)->bool { return flag && (1/0==0) }\n"
     "export fn narrow(value:i8)->i8 { return value+1 }\n"
     "export fn quotient(a:i64,b:i64)->i64 { return a/b }\n"
     "export fn caller()->i64 { return answer() }\n"
@@ -110,6 +112,11 @@ static void ctfe_semantics(void) {
     ctfe_expect(&fixture, choose, XR_XIR_CTFE_OK, XR_XIR_I64, 41);
     args[0].payload = 0; ctfe_expect(&fixture, choose, XR_XIR_CTFE_OK, XR_XIR_I64, 7);
     ctfe_expect(&fixture, ctfe_request(&fixture, "boolean", args, 1), XR_XIR_CTFE_OK, XR_XIR_BOOL, 0);
+    XrXirValue logical={XR_XIR_I64,0,40};
+    ctfe_expect(&fixture,ctfe_request(&fixture,"logical",&logical,1),XR_XIR_CTFE_OK,XR_XIR_BOOL,1);
+    logical.payload=43;ctfe_expect(&fixture,ctfe_request(&fixture,"logical",&logical,1),XR_XIR_CTFE_OK,XR_XIR_BOOL,0);
+    ctfe_expect(&fixture,ctfe_request(&fixture,"short_circuit",args,1),XR_XIR_CTFE_OK,XR_XIR_BOOL,0);
+    args[0].payload=1;ctfe_expect(&fixture,ctfe_request(&fixture,"short_circuit",args,1),XR_XIR_CTFE_DIVIDE_BY_ZERO,XR_XIR_UNIT,0);args[0].payload=0;
     XrXirValue small = {XR_XIR_I8,0,126};
     ctfe_expect(&fixture, ctfe_request(&fixture, "narrow", &small, 1), XR_XIR_CTFE_OK, XR_XIR_I8, 127);
     small.payload = 127; ctfe_expect(&fixture, ctfe_request(&fixture, "narrow", &small, 1),

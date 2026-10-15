@@ -10,7 +10,7 @@
 #include "test_expression.c"
 #undef main
 #include "api/xsource_compiler.h"
-static size_t product_expression(size_t fail) {
+static size_t product_expression(size_t fail,bool boolean) {
     XrCompileResources *resources=NULL;XrCompileResourceLimits limits={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(resources,&baseline)==XR_COMPILE_RESOURCE_OK);
@@ -18,8 +18,9 @@ static size_t product_expression(size_t fail) {
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},XR_DAP_STDLIB,xr_source_compile_default_manifest_limits()};
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_new(&config,&compiler,&diagnostic)==XR_SOURCE_COMPILE_OK);xr_source_compile_diagnostic_free(&diagnostic);
-    const char text[]="const evaluator = fn(value:i64) { return value+2 }\n";
-    XrSourceCompilerText input={NULL,"dap-expression-product",text,sizeof(text)-1};XrXirSourceProduct *product=NULL;
+    const char *text=boolean ? "const evaluator = fn(value:i64) { return value==40 && value<42 }\n" :
+        "const evaluator = fn(value:i64) { return value+2 }\n";
+    XrSourceCompilerText input={NULL,"dap-expression-product",text,strlen(text)};XrXirSourceProduct *product=NULL;
     XrSourceCompileStatus built=xr_source_compiler_build_text(compiler,&input,&product,&diagnostic);
     if (built!=XR_SOURCE_COMPILE_OK) fprintf(stderr,"expression product source=%u: %s\n",built,diagnostic.source.source.message);
     CHECK(built==XR_SOURCE_COMPILE_OK && product);xr_source_compile_diagnostic_free(&diagnostic);xr_source_compiler_free(compiler);
@@ -40,7 +41,10 @@ static size_t product_expression(size_t fail) {
     size_t begin=runtime_attempts;runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;
     XrXirCtfeStatus status=xr_xir_compile_source_product_scalar(product,selected,&argument,1,budget,&output);
     size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
-    if (fail==SIZE_MAX) CHECK(status==XR_XIR_CTFE_OK && output.type==XR_XIR_I64 && output.payload==42);
+    if (fail==SIZE_MAX) {
+        if (status!=XR_XIR_CTFE_OK) fprintf(stderr,"Product boolean=%u CTFE status=%u\n",boolean,status);
+        CHECK(status==XR_XIR_CTFE_OK && output.type==(uint32_t)(boolean ? XR_XIR_BOOL : XR_XIR_I64) && output.payload==(int64_t)(boolean ? 1 : 42));
+    }
     else CHECK(status==XR_XIR_CTFE_OUT_OF_MEMORY && sites>fail && !output.type && !output.payload);
     CHECK(argument.type==XR_XIR_I64 && argument.payload==40);
     CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes &&
@@ -55,8 +59,9 @@ static size_t product_expression(size_t fail) {
 }
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool full=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || full);
-    size_t sites=product_expression(SIZE_MAX);CHECK(sites);
-    if (full) for (size_t i=0;i<sites;++i) product_expression(i);
-    else { product_expression(0);if (sites>1) product_expression(sites-1); }
+    size_t sites=product_expression(SIZE_MAX,false);CHECK(sites);
+    if (full) for (size_t i=0;i<sites;++i) product_expression(i,false);
+    else { product_expression(0,false);if (sites>1) product_expression(sites-1,false); }
+    product_expression(SIZE_MAX,true);
     printf("Real Source inferred closure/Closed proof/scalar42, producer death, original ledger, transfer refusal; CTFE sites=%zu injection=%s physical=0/0 PASS\n",sites,full ? "ALL" : "FIRST_LAST_ONLY");return 0;
 }

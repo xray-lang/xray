@@ -14,6 +14,8 @@
 #define XIR_CTFE_CALLS_CHAIN_H
 static const char ctfe_calls_source[] =
     "fn leaf(x:i64)->i64 { return x+1 }\n"
+    "fn bool_local(value:i64)->bool { return value==40 && value<42 }\n"
+    "export fn logic(value:i64)->i64 { return bool_local(value) ? 42 : 1 }\n"
     "fn middle(x:i64)->i64 { return leaf(x)+1 }\n"
     "export fn answer()->i64 { return middle(40) }\n"
     "export fn recurse(n:i64)->i64 { return n==0 ? 41 : recurse(n-1) }\n"

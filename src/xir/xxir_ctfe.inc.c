@@ -24,7 +24,9 @@ static bool ctfe_scalar_type(XrXirType type) {
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     switch (op) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
-    case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER: *work = 2; return true;
+    case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER:
+    case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
+    case XR_XIR_SCALAR_LOCAL_WRITE: *work = 2; return true;
     case XR_XIR_EQUAL: *work = 5; return true;
     case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT: case XR_XIR_AND_INT:
@@ -32,10 +34,13 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_SHR_INT: case XR_XIR_EQ_INT: case XR_XIR_NE_INT:
     case XR_XIR_LT_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT:
     case XR_XIR_GE_INT: *work = 3; return true;
-    case XR_XIR_JUMP: case XR_XIR_PHI: *work = 0; return true;
+    case XR_XIR_JUMP: case XR_XIR_PHI: case XR_XIR_LOCAL_UNINIT: *work = 0; return true;
     case XR_XIR_BRANCH: case XR_XIR_RETURN: *work = 1; return true;
     default: return false;
     }
+}
+static bool ctfe_unit_result(XrXirOp op) {
+    return op==XR_XIR_JUMP || op==XR_XIR_BRANCH || op==XR_XIR_RETURN || op==XR_XIR_SCALAR_LOCAL_WRITE;
 }
 static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t selected) {
     const XrXirModule *module = &artifact->module;
@@ -72,8 +77,8 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
         const XrXirInstruction *op = &body->instructions[i]; uint64_t work;
         if (!ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
-        bool terminal = op->op == XR_XIR_JUMP || op->op == XR_XIR_BRANCH || op->op == XR_XIR_RETURN;
-        if ((!terminal && !ctfe_scalar_type(op->type)) || (terminal && op->type != XR_XIR_UNIT))
+        bool unit=ctfe_unit_result(op->op);
+        if ((!unit && !ctfe_scalar_type(op->type)) || (unit && op->type != XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_LEAF;
         if (op->op == XR_XIR_EQUAL) {
             if (!xir_compile_work(context, 2)) return XR_XIR_CTFE_BUDGET;

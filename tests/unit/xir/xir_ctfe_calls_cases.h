@@ -152,6 +152,9 @@ static void ctfe_calls_semantics(void) {
     CtfeFixture fixture={0};ctfe_calls_fixture_new(&fixture);
     XrXirCtfeCallRequest request=ctfe_calls_request(&fixture,"answer",NULL,0);
     ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_OK,42);
+    XrXirValue logical={XR_XIR_I64,0,40};request=ctfe_calls_request(&fixture,"logic",&logical,1);
+    ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_OK,42);logical.payload=43;
+    ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_OK,1);
     XrXirValue argument={XR_XIR_I64,0,3};request=ctfe_calls_request(&fixture,"recurse",&argument,1);
     request.call_depth=4;ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_OK,41);
     request.call_depth=3;ctfe_calls_expect(&fixture,&request,XR_XIR_CTFE_DEPTH_LIMIT,0);
