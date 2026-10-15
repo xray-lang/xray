@@ -18,10 +18,10 @@
   "sections": [
     {
       "heading": "Imports",
-      "body": "import declarations must appear at module top level. Bare identifiers resolve to stdlib; quoted paths resolve relative to the current file or project root. Dynamic import is not supported.",
       "fences": [
         "modules-import"
-      ]
+      ],
+      "markdown": "import declarations must appear at module top level. Bare identifiers resolve to stdlib; quoted paths resolve relative to the current file or project root. Dynamic import is not supported."
     },
     {
       "heading": "Use module symbols",
@@ -31,18 +31,18 @@
     },
     {
       "heading": "Exports",
-      "body": "export declarations must appear at module top level. export var is not supported — use export const. Re-exports (named and wildcard) aggregate submodule APIs.",
       "fences": [
         "modules-export"
-      ]
+      ],
+      "markdown": "export declarations must appear at module top level. export var is not supported — use export const. Re-exports (named and wildcard) aggregate submodule APIs."
     },
     {
       "heading": "Module graph & circular dependencies",
-      "body": "The compiler builds a module dependency DAG from all import declarations. Circular dependencies are a compile error. Modules initialize in topological order. Selective imports resolve to fixed module index + export slot at compile time."
+      "markdown": "The compiler builds a module dependency DAG from all import declarations. Circular dependencies are a compile error. Modules initialize in topological order. Selective imports resolve to fixed module index + export slot at compile time."
     },
     {
       "heading": "Published Source definitions",
-      "body": "Persistent Source checking receives only its owner's published Checked Program and registered bindings. Session inputs share an explicit lexical scope while definitions retain their birth modules and private visibility. Runtime receiving requires the actual Source map, exact specialized/Lowered Program proof and the same retained runtime Domain. Budgeted routes preserve actual birth slots and skip only completed birth initialization; reads retain ordinary permissions, publication checks and value admission. I64 and String birth storage can use this path. Cross-arena constructed values, full G2/G3 and paired REPL publication remain unfinished. See compilation pipeline section17.50."
+      "markdown": "Persistent Source checking receives only its owner's published Checked Program and registered bindings. Session inputs share an explicit lexical scope while definitions retain their birth modules and private visibility. Runtime receiving requires the actual Source map, exact specialized/Lowered Program proof and the same retained runtime Domain. Budgeted routes preserve actual birth slots and skip only completed birth initialization; reads retain ordinary permissions, publication checks and value admission. I64 and String birth storage can use this path. Cross-arena constructed values, full G2/G3 and paired REPL publication remain unfinished. See compilation pipeline section17.50."
     }
   ]
 }

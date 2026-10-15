@@ -8497,6 +8497,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "Each .xr file is a module. import/export must be top-level. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.\n"
             "\n"
             "### Imports\n"
+            "import declarations must appear at module top level. Bare identifiers resolve to stdlib; quoted paths resolve relative to the current file or project root. Dynamic import is not supported.\n"
             "```xray\n"
             "// 1. stdlib: bare identifier; without `as`, the alias equals the module name\n"
             "import time\n"
@@ -8524,6 +8525,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Exports\n"
+            "export declarations must appear at module top level. export var is not supported \xe2\x80\x94 use export const. Re-exports (named and wildcard) aggregate submodule APIs.\n"
             "```xray\n"
             "// 1. visibility belongs to the declaration\n"
             "export fn helper() { return }\n"
@@ -8541,8 +8543,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Module graph & circular dependencies\n"
+            "The compiler builds a module dependency DAG from all import declarations. Circular dependencies are a compile error. Modules initialize in topological order. Selective imports resolve to fixed module index + export slot at compile time.\n"
             "\n"
             "### Published Source definitions\n"
+            "Persistent Source checking receives only its owner's published Checked Program and registered bindings. Session inputs share an explicit lexical scope while definitions retain their birth modules and private visibility. Runtime receiving requires the actual Source map, exact specialized/Lowered Program proof and the same retained runtime Domain. Budgeted routes preserve actual birth slots and skip only completed birth initialization; reads retain ordinary permissions, publication checks and value admission. I64 and String birth storage can use this path. Cross-arena constructed values, full G2/G3 and paired REPL publication remain unfinished. See compilation pipeline section17.50.\n"
             "",
     },
     {
