@@ -15,11 +15,11 @@ CASES = [
   'import {scalarText} from "./append-scalars-values"\nprint(comptime scalarText())\n',
   '-17|true|Ω|1.5|18446744073709551615\n'.encode()),
  ('append-ref-cleanup',
-  'fn update(text:ref string){text+="r"}\n'
+  'fn update(text:ref string){defer {text+="d"};text+="r"}\n'
   'export fn scoped()->(string,string){var text="q";const old=text;update(ref text);'
-  'defer {text+="d"};return (old,text)}\n',
+  'return (old,text)}\n',
   'import {scoped} from "./append-ref-cleanup-values"\nconst appendScoped=comptime scoped();'
-  'print(appendScoped.0,appendScoped.1)\n',b'q qr\n'),
+  'print(appendScoped.0,appendScoped.1)\n',b'q qrd\n'),
  ('append-joins',
   'export fn joins()->(string,string,string){const a:Array<i8>=[-7,12];'
   'const b:Array<f64>=[3.5,-0.0];const c:Array<string>=["A\\0","中"];'
