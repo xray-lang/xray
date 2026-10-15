@@ -1,0 +1,5 @@
+enable_testing()
+function(xray_watcher_output_gate)
+    include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/CMakeLists.txt")
+endfunction()
+cmake_language(DEFER CALL xray_watcher_output_gate)

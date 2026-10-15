@@ -9,6 +9,7 @@
  */
 
 #include "xlsp_server.h"
+#include "xlsp_protocol_output.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_request.h"
 #include "xlsp_navigation.h"
@@ -652,11 +653,11 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
 // Response / error emitters
 // ---------------------------------------------------------------------------
 
-static void send_protocol_message(XrLspServer *server,XrJsonValue *message) {
-    size_t length=0;char *json=message?xjson_stringify(message,&length):NULL;
-    if(json){xlsp_transport_write(server->transport,json,length);if(!xlsp_transport_is_connected(server->transport))server->exit_received=true;}
-    else {lsp_log("Protocol response allocation failed; closing connection");server->exit_received=true;}
-    xr_free(json);xjson_free(message);
+static void send_protocol_message(XrLspServer *server, XrJsonValue *message) {
+    XrXirStatus status = xlsp_protocol_write_owned(server, message);
+    if (status != XR_XIR_OK && server) {
+        server->exit_received = true; lsp_log("Protocol publication failed: %u", (unsigned)status);
+    }
 }
 static void send_response(XrLspServer *server,const XlspRequestId *id,XrJsonValue *result) {
     XrJsonValue *message=NULL;
@@ -671,23 +672,20 @@ static void send_error(XrLspServer *server,const XlspRequestId *id,int code,cons
     send_protocol_message(server,message);
 }
 
-// Send a notification
-void xlsp_send_notification(XrLspServer *server, const char *method, XrJsonValue *params) {
-    if(!server){xjson_free(params);return;}
-    XrJsonValue *message=NULL;XlspProtocolStatus status=xlsp_protocol_call(NULL,method,&params,&message);
-    xjson_free(params);
-    if(status!=XLSP_PROTOCOL_OK){server->exit_received=true;lsp_log("Notification preparation failed: %u",(unsigned)status);return;}
-    send_protocol_message(server,message);
+// Send a notification.
+XR_FUNC void xlsp_send_notification(XrLspServer *server, const char *method, XrJsonValue *params) {
+    XrXirStatus status = xlsp_protocol_send_notification(server, method, params);
+    if (status != XR_XIR_OK && server) {
+        server->exit_received = true; lsp_log("Notification publication failed: %u", (unsigned)status);
+    }
 }
 
-// Send a server-initiated request (fire-and-forget, response ignored)
-void xlsp_send_request(XrLspServer *server, const char *method, XrJsonValue *params) {
-    if(!server||server->next_request_id==INT32_MAX){xjson_free(params);if(server)server->exit_received=true;return;}
-    XlspRequestId id={.kind=XLSP_ID_NUMBER,.as.number=server->next_request_id+1};
-    XrJsonValue *message=NULL;XlspProtocolStatus status=xlsp_protocol_call(&id,method,&params,&message);
-    xjson_free(params);
-    if(status!=XLSP_PROTOCOL_OK){server->exit_received=true;lsp_log("Server request preparation failed: %u",(unsigned)status);return;}
-    server->next_request_id=id.as.number;send_protocol_message(server,message);
+// Server-initiated requests spend an ID only after complete local publication.
+XR_FUNC void xlsp_send_request(XrLspServer *server, const char *method, XrJsonValue *params) {
+    XrXirStatus status = xlsp_protocol_send_request(server, method, params);
+    if (status != XR_XIR_OK && server) {
+        server->exit_received = true; lsp_log("Server request publication failed: %u", (unsigned)status);
+    }
 }
 
 // ============================================================================
