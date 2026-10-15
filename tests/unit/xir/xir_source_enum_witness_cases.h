@@ -3,6 +3,7 @@
 #define XIR_SOURCE_ENUM_WITNESS_CASES_H
 #include "xir/xxir_vm.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_effects.h"
 
 static void source_enum_witness_run(XrXirSourceRequest *request, const char *source) {
     write_source(request->entry_path,source);
@@ -91,27 +92,56 @@ static void source_enum_ref_permission_rejections(XrXirSourceRequest *request) {
         "enum E { V ref f()->i64{return 41} }\nfn bad(e:E)->i64{return e.f()}\n",
         "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{return E.V.f()}\n",
         "enum E { V ref f()->i64{return 41} }\nvar e=E.V\nfn bad()->i64{return e.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{var es=[E.V];return es[0].f()}\n"
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{var es=[E.V];return es[0].f()}\n",
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{const es=[E.V];return es[0].f()}\n",
+        "enum E { V ref f()->i64{return 41} }\nvar e=E.V\nfn read()->i64{return e.f()}\nfn bad()->i64{return await go read()}\n"
     };
+    const XrXirStatus statuses[] = {XR_XIR_BAD_TYPE,XR_XIR_BAD_TYPE,XR_XIR_BAD_TYPE,
+        XR_XIR_OK,XR_XIR_OK,XR_XIR_BAD_TYPE,XR_XIR_BAD_TYPE};
     const char *reasons[] = {
-        "ref receiver requires a mutable local binding",
-        "ref receiver requires a mutable local binding",
-        "expression cannot satisfy its declared type",
-        "ref receiver of module state is not implemented in XIR",
-        "ref receiver place is not implemented in XIR"
+        "ref requires a mutable stored binding", "ref requires a mutable stored binding",
+        "expression cannot satisfy its declared type", "", "",
+        "ref requires a mutable stored binding", "GO target requires the current instance root execution"
     };
+    _Static_assert(sizeof(statuses)/sizeof(*statuses) == sizeof(sources)/sizeof(*sources),
+        "Every ref receiver source requires an exact status");
+    _Static_assert(sizeof(reasons)/sizeof(*reasons) == sizeof(sources)/sizeof(*sources),
+        "Every ref receiver source requires an exact diagnostic");
     unsigned mismatches = 0;
     for (uint32_t i = 0; i < sizeof(sources)/sizeof(*sources); ++i) {
         write_source(request->entry_path, sources[i]);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
         XrXirStatus status = xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
-        if (status != XR_XIR_BAD_TYPE || strcmp(diagnostic.message, reasons[i]))
-            fprintf(stderr, "enum ref permission %u: %u %s\n", i, status, diagnostic.message);
-        if (status != XR_XIR_BAD_TYPE || result.checked || result.snapshot ||
-            strcmp(diagnostic.message, reasons[i])) ++mismatches;
+        if (status != statuses[i] || strcmp(diagnostic.message,reasons[i]))
+            fprintf(stderr,"enum ref permission %u: %u %s\n",i,status,diagnostic.message);
+        bool matched = status == statuses[i] && !strcmp(diagnostic.message,reasons[i]);
+        if (status == XR_XIR_OK) {
+            matched = matched && result.checked && result.snapshot;
+            if (matched) {
+                source_enum_ref_declaration_facts(&result);
+                XrXirEffects *effects = NULL;
+                CHECK(xr_xir_compile_effects_analyze(result.checked,&effects) == XR_XIR_OK);
+                const XrXirModule *module = xr_xir_compile_artifact_module(result.checked);
+                unsigned found = 0;
+                for (uint32_t f = 0; f < module->function_count; ++f) {
+                    const XrXirFunction *function = &module->functions[f];
+                    if (function->name_length != 3 || memcmp(function->name,"bad",3)) continue;
+                    const XrXirRootEffects *root = xr_xir_effects_root(effects,f);
+                    CHECK(root && root->requires_root == (i == 3) && !root->unresolved); ++found;
+                }
+                CHECK(found == 1); xr_xir_compile_effects_free(effects);
+            }
+        } else matched = matched && !result.checked && !result.snapshot;
+        if (!matched) ++mismatches;
         xr_xir_compile_source_result_free(&result);
     }
     CHECK(!mismatches);
+    source_enum_witness_run(request,
+        "enum E { V ref f()->i64{return 41} }\nvar e=E.V\n"
+        "export fn enumWitness()->i64{return e.f()}\n");
+    source_enum_witness_run(request,
+        "enum E { V ref f()->i64{return 41} }\n"
+        "export fn enumWitness()->i64{var es=[E.V];return es[0].f()}\n");
 }
 static void source_enum_witness_rejections(XrXirSourceRequest *request) {
     const char *rejected[] = {
@@ -138,7 +168,7 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
     const XrXirStatus statuses[] = {
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE,
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_STRUCTURE,
-        XR_XIR_BAD_STRUCTURE, XR_XIR_OK, XR_XIR_BAD_TYPE, XR_XIR_BAD_VALUE,
+        XR_XIR_BAD_TYPE, XR_XIR_OK, XR_XIR_BAD_TYPE, XR_XIR_BAD_VALUE,
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE,
         XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE, XR_XIR_BAD_TYPE
     };
@@ -147,7 +177,7 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
         "method conflicts with enum builtin member", "variant conflicts with enum type metadata member",
         "method conflicts with enum builtin member", "enum method conflicts with variant",
         "enum method conflicts with variant", "duplicate or empty declaration name",
-        "module graph build failed", "", "method declaration contract is not admitted",
+        "enum variants provide construction", "", "method declaration contract is not admitted",
         "name is not an initialized value", "member receiver is not a nominal value",
         "explicit implementation is missing a method",
         "interface implementation requires a read instance method with matching own parameters",
