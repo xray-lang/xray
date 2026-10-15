@@ -152,10 +152,11 @@ static void overlay_catalog_collision(const char *root) {
     const char source[] = "export fn value()->i64 { return 41 }\n"; XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check_text(&request, &(XrXirSourceText){"lib.xr", source, sizeof(source)-1}, &result, NULL, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0}; CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK);
-    XrXirLibraryInput library = {0}; library.authority = authority; library.logical_path = "lib.xr";
+    XrXirLibraryModuleInput module = {authority, "lib.xr"};
+    XrXirLibraryInput library = {.modules = &module, .module_count = 1};
     library.packet = packet.bytes; library.length = packet.length; xr_sha256(packet.bytes, packet.length, library.sha256);
     XrXirLibraryCatalog *catalog = NULL;
-    CHECK(xr_xir_compile_library_catalog_new(&context, &library, 1, &catalog) == XR_XIR_OK);
+    CHECK(xr_xir_compile_library_catalog_new_v2(&context, &library, 1, &catalog) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     XrModuleResolverConfig config = {NULL, NULL, catalog}; XrModuleResolver *resolver = NULL;
     CHECK(xr_compile_module_resolver_new(context.resources, &config, &resolver) == XR_MODULE_OK);
