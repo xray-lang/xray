@@ -363,7 +363,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_runtime_sdk_file(sdk,"ignored",&existing)==XR_XIR_SDK_INVALID &&
         existing==(const char *)(uintptr_t)1 && sdk_stats(resources).work==query_work);
     xr_free(manifest);xr_free(producer_root);xr_compile_resources_release(resources);
-    CHECK(xr_xir_runtime_sdk_root(sdk) && xr_xir_runtime_sdk_facts(sdk)->value_abi==24);
+    CHECK(xr_xir_runtime_sdk_root(sdk) && xr_xir_runtime_sdk_facts(sdk)->value_abi==25);
     sdk_locked_files(sdk);xr_xir_runtime_sdk_free(sdk);CHECK(!runtime_live && !runtime_bytes && sdk_handles()==initial_handles);
     puts("SDK producer destroyed, immutable same-source facts and locked actual bundle PASS");return 0;
 }

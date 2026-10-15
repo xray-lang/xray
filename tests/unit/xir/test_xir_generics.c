@@ -80,15 +80,36 @@ static void nominal_ordered_matching(void) {
             (i == 0 || i == 3 ? XR_XIR_OK : XR_XIR_BAD_TYPE));
     }
 }
+static void nominal_verification_budget(uint64_t construction_work, uint64_t verification_work) {
+    CHECK(verification_work);
+    const uint64_t allowances[]={10000,verification_work-1};
+    for (unsigned test=0;test<2;++test) {
+        XrXirCompileContext context=generic_work_context(construction_work+allowances[test]);
+        XrXirArtifact *checked=nominal_field_closure_fixture(&context,2);
+        XrCompileResourceStats before=consumer_context_stats(&context);
+        CHECK(before.work==construction_work);
+        XrXirStatus expected=allowances[test]<verification_work?XR_XIR_BUDGET:XR_XIR_OK;
+        CHECK(xr_xir_compile_artifact_verify(checked,NULL)==expected);
+        XrCompileResourceStats after=consumer_context_stats(&context);
+        CHECK(after.live_bytes==before.live_bytes && after.work>before.work &&
+            after.work<=construction_work+allowances[test]);
+        xr_xir_compile_artifact_free(checked);
+    }
+}
 static void nominal_field_closure(void) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         XrXirCompileContext measured=consumer_context_default();
         XrXirArtifact *prefix=nominal_field_closure_fixture(&measured,mode);
+        uint64_t construction_work=consumer_context_stats(&measured).work;
+        CHECK(xr_xir_compile_artifact_verify(prefix,NULL)==XR_XIR_OK);
         uint64_t prefix_work=consumer_context_stats(&measured).work;
+        CHECK(prefix_work>construction_work);
         xr_xir_compile_artifact_free(prefix);
+        if (mode==2) nominal_verification_budget(construction_work,prefix_work-construction_work);
         XrXirCompileContext bounded=mode==2?generic_work_context(prefix_work+10000):consumer_context_default();
         XrXirArtifact *checked = nominal_field_closure_fixture(&bounded, mode), *closed = NULL;
         CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
+        if (mode==2) CHECK(consumer_context_stats(&bounded).work==prefix_work);
         XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == expected);
         xr_xir_compile_artifact_free(checked); checked=NULL;
