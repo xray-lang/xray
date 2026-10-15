@@ -12,13 +12,12 @@
 #define XLSP_HANDLERS_LIFECYCLE_H
 
 #include "../../base/xjson.h"
+#include "xlsp_lifecycle_state.h"
 
 typedef struct XrLspServer XrLspServer;
 
 // Lifecycle handlers
 XR_FUNC XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params);
 XR_FUNC void xlsp_handle_lc_initialized(XrLspServer *server, XrJsonValue *params);
-XR_FUNC XrJsonValue *xlsp_handle_lc_shutdown(XrLspServer *server, XrJsonValue *params);
-XR_FUNC void xlsp_handle_lc_exit(XrLspServer *server, XrJsonValue *params);
 
 #endif  // XLSP_HANDLERS_LIFECYCLE_H

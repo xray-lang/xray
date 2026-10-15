@@ -1186,7 +1186,6 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     // Server-originated progress requests do not retain a reply consumer.
     // A reply must not be reinterpreted as a malformed client request.
     if(!xjson_get(msg,"method")&&(xjson_get(msg,"result")||xjson_get(msg,"error")))return;
-    init_method_table(server);
 
     const char *method = xjson_get_string(msg, "method");
     XrJsonValue *params = xjson_get(msg, "params");
@@ -1213,24 +1212,23 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
         return;
     }
 
+    XlspLifecycleAdmission admission = xlsp_lifecycle_admit(server, method, is_request);
+    if (admission != XLSP_LIFECYCLE_ALLOW) {
+        if (admission != XLSP_LIFECYCLE_DROP)
+            send_error(server, &id, (int)admission, admission == XLSP_LIFECYCLE_NOT_INITIALIZED ?
+                       "Server is not initialized" : "Method is invalid in the current lifecycle");
+        xlsp_request_id_free(&id); return;
+    }
+    // Exit needs no dispatch table or pending-request allocation.
+    if (!is_request && !strcmp(method, "exit")) {
+        xlsp_handle_lc_exit(server, params); xlsp_request_id_free(&id); return;
+    }
+    init_method_table(server);
+
     // Handle $/cancelRequest specially (it's a notification)
     if (strcmp(method, "$/cancelRequest") == 0) {
         if(is_request)send_error(server,&id,-32600,"Cancellation must be a notification");
         else handle_cancel_request(server, params);
-        xlsp_request_id_free(&id);
-        return;
-    }
-
-    // LSP spec: once `shutdown` was received, only `shutdown` and
-    // `exit` remain legal. Reject requests with -32002 and silently
-    // drop notifications (including $/cancelRequest handled above so
-    // clients can still cancel outstanding work during teardown).
-    if (server->shutdown_received && strcmp(method, "shutdown") != 0 &&
-        strcmp(method, "exit") != 0) {
-        if (is_request) {
-            send_error(server, &id, -32002, "Server is shutting down");
-        }
-        lsp_log("Dropping '%s' after shutdown", method);
         xlsp_request_id_free(&id);
         return;
     }
@@ -1302,9 +1300,11 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
                         xjson_free(result);
                 } else if (server->source_failure.stage) {
                     char message[128];
+                    int code = entry->request_handler == xlsp_handle_lc_shutdown &&
+                        server->source_failure.status == XR_XIR_BAD_STRUCTURE ? -32602 : -32603;
                     snprintf(message, sizeof(message), "Source query failed (stage=%u status=%u)",
                         server->source_failure.stage, server->source_failure.status);
-                    send_error(server, &id, -32603, message);
+                    send_error(server, &id, code, message);
                     xjson_free(result);
                 } else if (entry->request_handler == xlsp_handle_td_formatting &&
                            server->formatting_failure.stage) {
@@ -1461,10 +1461,10 @@ int xlsp_server_run(XrLspServer *server) {
                 xlsp_async_poll(server->async);
             }
         }
-        xlsp_workspace_poll_index_results(server);
-
-        // Check debounced diagnostic deadlines (every loop iteration)
-        flush_pending_diagnostics(server);
+        if (!server->shutdown_received && !server->exit_received) {
+            xlsp_workspace_poll_index_results(server);
+            flush_pending_diagnostics(server);
+        }
 
     }
 

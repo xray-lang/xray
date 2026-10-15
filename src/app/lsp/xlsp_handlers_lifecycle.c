@@ -76,22 +76,3 @@ XR_FUNC void xlsp_handle_lc_initialized(XrLspServer *server, XrJsonValue *params
     for (int i = 0; i < count; ++i) server->workspace_folders[i].index_requested = true;
     if (count) xlsp_workspace_start_background_index_roots(server, paths, count);
 }
-
-XR_FUNC XrJsonValue *xlsp_handle_lc_shutdown(XrLspServer *server, XrJsonValue *params) {
-    (void) params;
-    lsp_log("Shutdown requested");
-    // Per LSP spec: shutdown is a request, not an exit trigger. We
-    // flush state, reply with null, then wait for the mandatory
-    // `exit` notification. After this point handle_message will
-    // reject everything except `shutdown`/`exit` with -32002.
-    server->shutdown_received = true;
-    return xjson_new_null();
-}
-
-XR_FUNC void xlsp_handle_lc_exit(XrLspServer *server, XrJsonValue *params) {
-    (void) params;
-    lsp_log("Exit notification received");
-    // Only `exit` drops us out of xlsp_server_run. A process-wide
-    // exit code of 0 vs 1 is decided later based on shutdown_received.
-    server->exit_received = true;
-}
