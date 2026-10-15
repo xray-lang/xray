@@ -320,7 +320,7 @@ static void owned_error_direct_ref_controls(const XrXirCompileContext *context,
         else if (mode==4) index=UINT32_MAX;
         else if (mode==5) index=ref->first+ref->count;
         else if (mode==6) { bad.base.op=XR_XIR_OP_COUNT;bad.mask&=~UINT32_C(1); }
-        else { bad.mask|=UINT32_C(1);bad.delta[0]=0; }
+        else { bad.count=3;bad.mask|=UINT32_C(1);bad.delta[0]=0; }
         uint64_t work=rp_stats(context).work;
         CHECK(effect_body_instruction_ref_value(&read,input,index,&output)==XR_XIR_BAD_STRUCTURE &&
             conditional_compact_same(&output,&sentinel));
@@ -328,8 +328,9 @@ static void owned_error_direct_ref_controls(const XrXirCompileContext *context,
     }
 }
 
-/* Two complete storage literals distinguish a constant run from one whose
- * ten physical columns all vary. Neither encoding is a semantic admission. */
+/* Two complete storage literals distinguish equal rows from rows whose ten
+ * physical columns all differ. Both use the sole literal-pair representation;
+ * no physical encoding is a semantic admission. */
 static void owned_error_direct_fields(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;
@@ -346,7 +347,7 @@ static void owned_error_direct_fields(void) {
         XrXirFunction input={.instructions=producer,.instruction_count=2};
         EffectBodyFunction body={.instruction_count=2};
         CHECK(effect_body_records_copy(&context,&input,&body)==XR_XIR_OK && body.run_count==1 &&
-            body.runs[0].mask==(mode?(uint32_t)EFFECT_BODY_MASK:UINT32_C(0)));
+            body.runs[0].count==2 && body.runs[0].mask==EFFECT_BODY_MASK);
         CHECK(xir_compile_work(&context,sizeof(producer)));memset(producer,0xCE,sizeof(producer));
         owned_error_range_values(&context,&body,original);owned_error_range_refusals(&context,&body);
         owned_error_direct_ref_controls(&context,&body);input.instructions=original;

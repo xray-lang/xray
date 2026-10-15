@@ -4584,3 +4584,5 @@ add_subdirectory(xir/p11_ctfe_reference)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_graph_quiescence.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/effect_physical_records.cmake)
