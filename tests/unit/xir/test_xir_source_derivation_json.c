@@ -15,13 +15,14 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_emit_c.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
-#include "xir_source_compile_owner.h"
-#include "xir_runtime_allocations.h"
+#include "xir_source_derivation_json_runtime.h"
 #include "xir_generated_schema.h"
 #include "xir_source_derivation_json_source.h"
 static void json_source(const XrXirCompileContext *context,const char *text,
@@ -64,16 +65,11 @@ static uint32_t json_function(const XrXirModule *module,const char *name) {
         }
     CHECK(found!=UINT32_MAX);return found;
 }
-static XrXirValue json_call(XrXirProgram *program,uint32_t function) {
-    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_start(instance,function,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instance,4096).outcome.status==XR_XIR_CALL_RETURNED);
-    XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);return value;
-}
-static void json_execute(const XrXirCompileContext *context,XrXirSourceResult *source) {
+static void json_execute(const XrXirCompileContext *context,XrXirSourceResult *source,const char *emit,const char *packet_path,bool faults) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
+    if (packet_path) {
+        FILE *file=fopen(packet_path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+    }
     xr_xir_compile_source_result_free(source);XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
@@ -82,15 +78,28 @@ static void json_execute(const XrXirCompileContext *context,XrXirSourceResult *s
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     uint32_t main=json_function(module,"main"),encode=json_function(module,"encode");
+    if (emit) {
+        uint32_t method=json_function(module,"encodeJSON");XrXirCSource output={0};
+        CHECK(xr_xir_compile_emit_c(lowered,"fixture_json",8388608,&output)==XR_XIR_OK);
+        for (size_t i=0;i<output.length;++i) if (output.text[i]=='(') {
+            size_t next=i+1;while(next<output.length && isspace((unsigned char)output.text[next]))++next;
+            CHECK(next==output.length || output.text[next]!='{');
+        }
+        FILE *file=fopen(emit,"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
+        CHECK(fprintf(file,"\nconst uint32_t fixture_json_selection[3]={%uu,%uu,%uu};\n",main,encode,method)>0 && !fclose(file));
+        xr_xir_compile_c_source_free(&output);
+    }
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
-    XrXirValue constant=json_call(program,main),text=json_call(program,encode);
+    size_t constant_sites=json_runtime_failures(program,main,false,faults),text_sites=json_runtime_failures(program,encode,true,faults);
+    XrXirValue constant=json_runtime_take(program,main),text=json_runtime_take(program,encode);
     CHECK(constant.type==XR_XIR_I64 && !constant.reserved && constant.payload==42);xr_xir_value_drop(&constant);
     xr_xir_compile_program_drop(program);
-    const char *bytes=NULL;size_t length=0;const char expected[]="{\"left\":42,\"secret\":-7}";
-    CHECK(text.type==XR_XIR_STRING && xr_xir_string_view(&text,&bytes,&length) &&
-        length==sizeof(expected)-1 && !memcmp(bytes,expected,length));xr_xir_value_drop(&text);
+    json_runtime_expected(&text,true);xr_xir_value_drop(&text);
+    printf("ordinary JSON VM census: constant=%zu string=%zu; full runtime FI=%u\n",constant_sites,text_sites,faults);
 }
-int main(void) {
+int main(int argc,char **argv) {
+    bool emit=argc==4 && !strcmp(argv[1],"--emit-native"),faults=argc==2 && !strcmp(argv[1],"--runtime-resources");
+    CHECK(argc==1 || emit || faults);
     XrCompileResourceLimits caps={67108864,8388608,128000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0},after={0};
@@ -101,14 +110,14 @@ int main(void) {
     json_source(&context,text,XR_XIR_LIBRARY,NULL,&producer,XR_XIR_OK);memset(text,0xa5,sizeof(text));
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&producer);
-    json_refuse_ungranted_public(&packet);
+    if (!emit && !faults) json_refuse_ungranted_public(&packet);
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_DERIVATION_JSON_WORK},"generator_json.xr"};
     XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     memset(&binding,0xa5,sizeof(binding));memset(&input,0xa5,sizeof(input));XrXirSourceResult user={0};
     json_source(&context,json_user_source,XR_XIR_PROGRAM,catalog,&user,XR_XIR_OK);xr_xir_compile_library_catalog_free(catalog);
-    json_execute(&context,&user);CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+    json_execute(&context,&user,emit?argv[2]:NULL,emit?argv[3]:NULL,faults);CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
     printf("Ordinary JSON integer-record encoder: dynamic future fields, explicit private READ, hidden string omitted, comptime+VM oracle, producer death, physical0; allocated=%llu peak=%llu work=%llu\n",
