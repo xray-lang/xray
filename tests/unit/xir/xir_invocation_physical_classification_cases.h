@@ -107,9 +107,9 @@ static void conditional_physical_rejections(const XrXirCompileContext *context,
         occupied==domain && rp_attempts==attempts);
     CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_OK);
     conditional_physical_generations(context,certificate,module);
-    EffectInvocationWorkspace replay={.final=*certificate->final};
-    replay.work=context;replay.final.physical=NULL;
-    EffectInvocationFlow flow={.owner=&replay,.node=replay.final.roots[1]};
+    EffectInvocationFinal damaged=*certificate->final;damaged.physical=NULL;
+    EffectInvocationRead replay={.work=context,.final=&damaged};
+    EffectInvocationFlow flow={.read=&replay,.node=damaged.roots[1]};
     CHECK(effect_invocation_origins(&flow)==XR_XIR_BAD_STRUCTURE && !flow.memory);
     RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&foreign).live_bytes;

@@ -157,7 +157,7 @@ static bool generation_range_consume(const void *owner,uint64_t units) {
 /* This calls the pass directly, after a genuine complete origin replay. A
  * different immutable owner on the same ledger is not its equation's body. */
 static void generation_range_origins_refused(EffectInvocationFlow *flow) {
-    const XrXirCompileContext *context=flow->owner->work;
+    const XrXirCompileContext *context=flow->read->work;
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
     uint32_t count=flow->owner->final.count,pending=flow->owner->pending;
     void *memory=flow->memory;bool changed=flow->changed;
@@ -179,7 +179,7 @@ static void generation_range_mixed_origins(EffectInvocationFlow *flow) {
     EffectBodyRequest original=flow->body;uint32_t transfers=0;
     for (uint32_t r=0;r<flow->physical->count;++r)
         transfers+=!!(flow->physical->records[r].mask&EFFECT_PHYSICAL_TRANSFER);
-    CHECK(transfers && !flow->changed && !flow->owner->producer_enabled);
+    CHECK(transfers && !flow->changed && !flow->read->producer_enabled);
     uint64_t scalar_work=0;conditional_generation_instruction_refused=false;
     conditional_generation_shape_refused=conditional_generation_dimensions_refused=false;
     for (uint32_t mixed=0;mixed<5;++mixed) {
@@ -196,10 +196,10 @@ static void generation_range_mixed_origins(EffectInvocationFlow *flow) {
                 effect_body_request_type(&flow->body,flow->owner->final.nodes[flow->node].body,0,&actual)==XR_XIR_OK &&
                 actual==XR_XIR_I64 && generation_range_type_reads==1);
         } else if (mixed==4) CHECK(flow->body.read.consume!=effect_body_compile_consume);
-        XrCompileResourceStats before=rp_stats(flow->owner->work);size_t attempts=rp_attempts;
+        XrCompileResourceStats before=rp_stats(flow->read->work);size_t attempts=rp_attempts;
         CHECK(effect_invocation_origins_pass(flow)==XR_XIR_OK && !flow->changed &&
-            rp_attempts==attempts && rp_stats(flow->owner->work).live_bytes==before.live_bytes);
-        uint64_t cost=rp_stats(flow->owner->work).work-before.work;
+            rp_attempts==attempts && rp_stats(flow->read->work).live_bytes==before.live_bytes);
+        uint64_t cost=rp_stats(flow->read->work).work-before.work;
         if (!mixed) {
             CHECK(conditional_generation_instruction_reads==transfers && cost);scalar_work=cost;
         } else CHECK(cost==scalar_work);
@@ -231,20 +231,20 @@ static void generation_range_dispatch_same(EffectInvocationFlow *flow,const XrXi
             else if (mixed==2) flow->body.type=generation_range_counted_type;
             else if (mixed==3) flow->body.shape=conditional_generation_counted_shape;
             else if (mixed==4) flow->body.read.consume=generation_range_consume;
-            else if (mixed==6) flow->body=effect_body_raw_request(owner->work,source);
+            else if (mixed==6) flow->body=effect_body_raw_request(owner->read.work,source);
             if (mixed==2) {
                 XrXirType actual=XR_XIR_UNIT;
                 CHECK(flow->body.type!=effect_body_owned_type &&
                     effect_body_request_type(&flow->body,owner->final.nodes[flow->node].body,0,&actual)==XR_XIR_OK &&
                     actual==XR_XIR_I64 && generation_range_type_reads==1);
             } else if (mixed==4) CHECK(flow->body.read.consume!=effect_body_compile_consume);
-            XrCompileResourceStats before=rp_stats(owner->work);bool changed=false;
+            XrCompileResourceStats before=rp_stats(owner->read.work);bool changed=false;
             CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_OK && !changed &&
                 owner->final.count==count && owner->final.edge_count==edges && !owner->pending &&
                 owner->final.nodes[flow->node].intrinsic_mask==mask &&
                 owner->final.nodes[flow->node].deferred==deferred &&
-                rp_stats(owner->work).live_bytes==before.live_bytes);
-            uint64_t cost=rp_stats(owner->work).work-before.work;
+                rp_stats(owner->read.work).live_bytes==before.live_bytes);
+            uint64_t cost=rp_stats(owner->read.work).work-before.work;
             if (!mixed) {
                 CHECK(conditional_generation_instruction_reads==selected && cost);scalar_work=cost;
             } else if (mixed<5) CHECK(cost==scalar_work);
@@ -266,11 +266,11 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
     CHECK(flow->physical->count>1 && body->run_count>1 && body->runs);
     uint32_t capacity=body->run_capacity,count=owner->final.count,edges=owner->final.edge_count;
     for (uint32_t precision=0;precision<2;++precision) {
-        flow->precision=precision!=0;bool changed=false;XrCompileResourceStats before=rp_stats(owner->work);
+        flow->precision=precision!=0;bool changed=false;XrCompileResourceStats before=rp_stats(owner->read.work);
         body->run_capacity=body->run_count-1;
         CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_BAD_STRUCTURE && !changed &&
             owner->final.count==count && owner->final.edge_count==edges && !owner->pending &&
-            rp_stats(owner->work).live_bytes==before.live_bytes);
+            rp_stats(owner->read.work).live_bytes==before.live_bytes);
         body->run_capacity=capacity;
     }
     flow->precision=false;
@@ -297,10 +297,10 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
     base->immediate=effect_body_count(material);
     for (uint32_t precision=0;precision<2;++precision) {
         flow->precision=precision!=0;flow->instruction=UINT32_MAX;
-        XrCompileResourceStats before=rp_stats(owner->work);bool changed=false;
+        XrCompileResourceStats before=rp_stats(owner->read.work);bool changed=false;
         CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_BAD_STRUCTURE && !changed &&
             flow->instruction==call && owner->final.count==count && owner->final.edge_count==edges &&
-            !owner->pending && rp_stats(owner->work).live_bytes==before.live_bytes);
+            !owner->pending && rp_stats(owner->read.work).live_bytes==before.live_bytes);
     }
     base->immediate=saved;flow->precision=false;bool changed=false;
     CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_OK && !changed);
@@ -309,19 +309,19 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
 /* A genuine one-row initializer retains the complete scalar path and its
  * original cost. Its declaration is neither empty-body permission nor NONE. */
 static void generation_range_dispatch_singleton(EffectInvocationWorkspace *owner) {
-    EffectInvocationFlow flow={.owner=owner,.node=owner->final.roots[3],.instruction=UINT32_MAX};
+    EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[3],.instruction=UINT32_MAX};
     CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed &&
         (flow.physical->count<=1 || owner->final.material->functions[3].run_count<=1));
     EffectBodyRequest original=flow.body;
     for (uint32_t precision=0;precision<2;++precision) {
-        flow.precision=precision!=0;bool changed=false;XrCompileResourceStats before=rp_stats(owner->work);
+        flow.precision=precision!=0;bool changed=false;XrCompileResourceStats before=rp_stats(owner->read.work);
         CHECK(effect_invocation_dispatch(&flow,&changed)==XR_XIR_OK && !changed);
-        uint64_t canonical=rp_stats(owner->work).work-before.work;
+        uint64_t canonical=rp_stats(owner->read.work).work-before.work;
         flow.body.instruction=conditional_generation_counted_instruction;
-        before=rp_stats(owner->work);
+        before=rp_stats(owner->read.work);
         CHECK(effect_invocation_dispatch(&flow,&changed)==XR_XIR_OK && !changed &&
-            rp_stats(owner->work).work-before.work==canonical &&
-            rp_stats(owner->work).live_bytes==before.live_bytes);
+            rp_stats(owner->read.work).work-before.work==canonical &&
+            rp_stats(owner->read.work).live_bytes==before.live_bytes);
         flow.body=original;
     }
     xr_compile_resources_free(flow.memory);
@@ -336,9 +336,9 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner=NULL;
     CHECK(effect_invocations_receive(context,source,&trial->effects,&trial->graph,
         material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
-    CHECK(!owner->producer_enabled && !owner->pending && owner->final.material==material &&
+    CHECK(!owner->read.producer_enabled && !owner->pending && owner->final.material==material &&
         owner->final.physical==material->physical);
-    EffectInvocationFlow flow={.owner=owner,.node=owner->final.roots[0],.instruction=UINT32_MAX};
+    EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed);
     uint32_t function=owner->final.nodes[flow.node].body;
     CHECK(function==0 && flow.physical==&material->physical->functions[function] &&
@@ -382,7 +382,7 @@ static void generation_range_dispatch_other(const XrXirCompileContext *context,
         (XrXirCompileContext *)context)==XR_XIR_OK &&
         effect_invocations_receive(context,source,&trial->effects,&trial->graph,
             material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
-    EffectInvocationFlow flow={.owner=owner,.node=owner->final.roots[0],.instruction=UINT32_MAX};
+    EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed &&
         flow.physical->count>1 && material->functions[0].run_count>1);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_singleton(owner);
@@ -498,19 +498,19 @@ static void generation_sequence_producers(void) {
     for (uint32_t f=0;f<source->function_count;++f)
         CHECK(effect_invocation_bounds_capture(&context,bounds,source->types,&source->functions[f],f,NULL)==XR_XIR_OK);
     CHECK(effect_invocations_receive(&context,source,&effects,&graph,bounds,&owner)==XR_XIR_OK &&
-        effect_invocations_solve(owner)==XR_XIR_OK && owner->producer_enabled && !owner->pending);
+        effect_invocations_solve(owner)==XR_XIR_OK && owner->read.producer_enabled && !owner->pending);
     uint32_t nodes=owner->final.count,edges=owner->final.edge_count;
     conditional_generation_instruction_refused=false;
     for (uint32_t n=0;n<nodes;++n) for (uint32_t mixed=0;mixed<2;++mixed) {
         EffectBodyRequest request=effect_body_owned_request(&context,owner->final.material);
         if (mixed) request.instruction=conditional_generation_counted_instruction;
-        EffectInvocationFlow flow={.owner=owner,.node=n,.instruction=UINT32_MAX};
+        EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=n,.instruction=UINT32_MAX};
         CHECK(effect_invocation_origins_read(&flow,&request)==XR_XIR_OK);
         bool changed=false;
         CHECK(effect_invocation_producer_step(&flow,&changed,true)==XR_XIR_OK && !changed &&
             owner->final.count==nodes && owner->final.edge_count==edges && !owner->pending);
         uint64_t returned=UINT64_MAX;
-        CHECK(effect_invocation_coverage_return_read(owner,&request,n,&returned)==XR_XIR_OK &&
+        CHECK(effect_invocation_coverage_return_read(&owner->read,&request,n,&returned)==XR_XIR_OK &&
             returned==owner->final.nodes[n].return_coverage);
         xr_compile_resources_free(flow.memory);
     }

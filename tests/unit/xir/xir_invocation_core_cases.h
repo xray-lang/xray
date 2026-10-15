@@ -55,7 +55,7 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
     if (status==XR_XIR_OK) {
         CHECK(!rp_release_observer);
         invocation_retired_blocks[0]=invocation_retired_block(workspace);
-        invocation_retired_blocks[1]=invocation_retired_block(workspace->consumers);
+        invocation_retired_blocks[1]=invocation_retired_block(workspace->read.consumers);
         invocation_retired_blocks[2]=invocation_retired_block(workspace->edge_index);
         CHECK(workspace->states && invocation_retired_block(workspace->states)==invocation_retired_blocks[1]);
         for (uint32_t n=0;n<workspace->final.count;++n)
@@ -236,10 +236,10 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             invocation_final_initializer_erasure(context,certificate);
             invocation_final_trace_callback(context,certificate);
             EffectInvocationFinal damaged=*certificate->final;
-            damaged.physical=NULL;EffectInvocationWorkspace refused={0};size_t admission_attempts=rp_attempts;
+            damaged.physical=NULL;EffectInvocationRead refused={0};size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
             CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
-                !refused.work && !refused.consumers && !refused.final.nodes && rp_attempts==admission_attempts &&
+                !refused.work && !refused.consumers && !refused.final && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             refused.work=context;
             CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&

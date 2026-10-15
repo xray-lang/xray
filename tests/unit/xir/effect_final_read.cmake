@@ -29,3 +29,9 @@ add_test(NAME test_xir_effect_current_input_resources
 set_tests_properties(test_xir_effect_current_input_resources PROPERTIES
     LABELS "unit;xir;root-effects;ownership;metadata;final-input;callback;resources"
     TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_final_borrowed_read
+    COMMAND test_xir_effect_final_read --new)
+set_tests_properties(test_xir_effect_final_borrowed_read PROPERTIES
+    LABELS "unit;xir;root-effects;ownership;metadata;final-read;producer-lifetime"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
