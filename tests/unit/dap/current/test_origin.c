@@ -38,10 +38,13 @@ static void origin_normal(void) {
     const XdapValueRef *writable=origin_ref(adapter,root),*readonly=origin_ref(adapter,before);
     CHECK(writable->value.type==readonly->value.type && writable->value.payload==readonly->value.payload);
     CHECK(writable->origin.epoch==adapter->stop_epoch && writable->origin.frame==write_frame(adapter->snapshot).id);
-    CHECK(!writable->origin.path.count && !writable->origin.path.steps && !readonly->origin.epoch);
+    CHECK(!writable->origin.path.count && !writable->origin.path.steps && readonly->origin.epoch==adapter->stop_epoch);
+    CHECK(readonly->origin.operand!=writable->origin.operand);
     CHECK(origin_child(adapter,scope,"root")==root && origin_child(adapter,scope,"before")==before && adapter->value_count==2);
     request(adapter,"{\"seq\":6,\"type\":\"request\",\"command\":\"evaluate\",\"arguments\":{\"expression\":\"root\"}}");
-    XrJsonValue *reply=last_response("evaluate",true);CHECK((uint32_t)xjson_get_int(xjson_get_object(reply,"body"),"variablesReference")==before);
+    XrJsonValue *reply=last_response("evaluate",true);uint32_t pure=(uint32_t)xjson_get_int(xjson_get_object(reply,"body"),"variablesReference");
+    CHECK(pure && pure!=before && pure!=root && !origin_ref(adapter,pure)->origin.epoch);
+    CHECK(origin_ref(adapter,pure)->value.payload==writable->value.payload && adapter->value_count==3);
     xjson_free(reply);capture.count=0;
     uint32_t parcel=origin_child(adapter,root,"[0]"),items=origin_child(adapter,parcel,"items"),piece=origin_child(adapter,items,"[0]");
     const XdapValueRef *refs[]={origin_ref(adapter,parcel),origin_ref(adapter,items),origin_ref(adapter,piece)};
@@ -54,7 +57,8 @@ static void origin_normal(void) {
     CHECK(refs[2]->origin.path.steps[1].kind==XR_XIR_PATH_FIELD && refs[2]->origin.path.steps[1].selector==0);
     CHECK(refs[2]->origin.path.steps[2].kind==XR_XIR_PATH_INDEX && refs[2]->origin.path.steps[2].selector==0);
     uint32_t old_parcel=origin_child(adapter,before,"[0]"),old_items=origin_child(adapter,old_parcel,"items");
-    CHECK(!origin_ref(adapter,old_parcel)->origin.epoch && !origin_ref(adapter,old_items)->origin.epoch);
+    CHECK(origin_ref(adapter,old_parcel)->origin.operand==readonly->origin.operand && origin_ref(adapter,old_parcel)->origin.path.count==1);
+    CHECK(origin_ref(adapter,old_items)->origin.operand==readonly->origin.operand && origin_ref(adapter,old_items)->origin.path.count==2);
     write_dispose(&fixture);
 }
 static size_t origin_fault(size_t fail) {

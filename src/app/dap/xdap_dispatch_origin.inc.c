@@ -4,9 +4,9 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xdap_dispatch_origin.inc.c - Owned Source Cell selectors on observed references
+ * xdap_dispatch_origin.inc.c - Owned Source operand selectors on observed references
  */
-static bool inspect_origin_equal(const XdapCellOrigin *left,const XdapCellOrigin *right) {
+static bool inspect_origin_equal(const XdapValueOrigin *left,const XdapValueOrigin *right) {
     if (!left->epoch) return !right || !right->epoch;
     if (!right || left->epoch!=right->epoch || left->frame!=right->frame || left->operand!=right->operand ||
         left->path.count!=right->path.count) return false;
@@ -16,7 +16,7 @@ static bool inspect_origin_equal(const XdapCellOrigin *left,const XdapCellOrigin
     }
     return true;
 }
-static XrXirStatus inspect_origin_copy(XdapAdapter *s,const XdapCellOrigin *origin,XdapCellOrigin *output) {
+static XrXirStatus inspect_origin_copy(XdapAdapter *s,const XdapValueOrigin *origin,XdapValueOrigin *output) {
     if (!origin || !origin->epoch) return XR_XIR_OK;
     if (!origin->frame || origin->path.count>128 || (origin->path.count && !origin->path.steps)) return XR_XIR_BAD_STRUCTURE;
     XrXirValuePathStep *steps=NULL;
@@ -30,7 +30,7 @@ static XrXirStatus inspect_origin_copy(XdapAdapter *s,const XdapCellOrigin *orig
     *output=*origin;output->path.steps=steps;return XR_XIR_OK;
 }
 static XrXirStatus inspect_origin_child(XdapAdapter *s,const XdapValueRef *parent,const XdapValueChildInfo *child,
-    XrXirValuePathStep steps[128],XdapCellOrigin *output) {
+    XrXirValuePathStep steps[128],XdapValueOrigin *output) {
     if (!parent->origin.epoch || !child->selected) return XR_XIR_OK;
     if (parent->origin.epoch!=s->stop_epoch) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=parent->origin.path.count;if (count>=128) return XR_XIR_BUDGET;

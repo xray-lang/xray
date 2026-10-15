@@ -40,8 +40,7 @@ static XrXirStatus inspect_lexical(XdapAdapter *s,const XdapRequest *r,uint32_t 
         if (copied!=XR_XIR_VALUE_OK) { body.status=copied==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;break; }
         if (ordinal++<start || (count && shown>=count)) { xr_xir_value_drop(&value);continue; }
         if (shown++) XDAP_TEXT(&body,",");
-        XdapCellOrigin origin={0};
-        if (binding->flags&XR_XIR_SOURCE_DEBUG_CELL) origin=(XdapCellOrigin){view.epoch,view.frame_id,binding->value,{0}};
+        XdapValueOrigin origin={view.epoch,view.frame_id,binding->value,{0}};
         bool emitted=inspect_variable(s,&body,name,length,&value,frame,&origin);xr_xir_value_drop(&value);
         if (!emitted) break;
     }

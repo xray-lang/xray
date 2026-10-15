@@ -1,0 +1,12 @@
+class ChildBox {
+    value:i64
+    constructor() { this.value=11 }
+}
+fn worker()->i64 {
+    const box:ChildBox=ChildBox()
+    const alias:ChildBox=box
+    const before:i64=box.value
+    return box.value+alias.value+before
+}
+const job=go worker()
+print(await job)

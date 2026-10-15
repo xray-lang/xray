@@ -16,6 +16,7 @@
 #include "../../xir/xxir_type_arena.h"
 #include "../../xir/xxir_types.h"
 #include "../../xir/xxir_value_internal.h"
+#include "../../xir/xxir_value_observe_internal.h"
 static XrXirValueAdmission value_admission(const XrXirValue *value,XrXirDomain *domain) {
     return (XrXirValueAdmission){.arena=xr_xir_value_arena(value),.domain=domain,.work=65536,.scratch_bytes=65536};
 }
@@ -68,8 +69,8 @@ XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t ind
     XdapValueChildInfo child={0};
     if (xr_xir_type_is_array(types,(XrXirType)value->type)) {
         XrXirValueAdmission admission=value_admission(value,domain);XrXirFaultDetail fault={0};
-        status=xr_xir_array_get(value,(int64_t)index,&admission,output,&fault);
         child.selector=(XrXirValuePathStep){XR_XIR_PATH_INDEX,(XrXirType)value->type,(int64_t)index};child.selected=true;
+        status=xir_value_observe_child(value,&child.selector,&admission,output,&fault);
     } else if (xr_xir_tuple_signature(types,(XrXirType)value->type)) status=xr_xir_tuple_get(value,(uint32_t)index,output);
     else if (value_nominal(value,types)) {
         const XrXirNominalIdentity *identity=value_nominal(value,types);uint64_t ordinal=0;uint32_t field=UINT32_MAX;
@@ -82,10 +83,11 @@ XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t ind
         }
         if (field==UINT32_MAX) return XR_XIR_VALUE_BOUNDS;
         XrXirValueAdmission admission=value_admission(value,domain);
-        status=xr_xir_type_is_class(types,(XrXirType)value->type) ? xr_xir_class_get(value,field,&admission,output) :
-            xr_xir_struct_get(value,field,&admission,output);
         child.name=identity->fields[field].name.bytes;child.name_length=identity->fields[field].name.length;
         child.selector=(XrXirValuePathStep){XR_XIR_PATH_FIELD,(XrXirType)value->type,field};child.selected=true;
+        XrXirFaultDetail fault={0};
+        status=xr_xir_type_is_class(types,(XrXirType)value->type) ? xr_xir_class_get(value,field,&admission,output) :
+            xir_value_observe_child(value,&child.selector,&admission,output,&fault);
     } else if (xr_xir_type_is_nullable(types,(XrXirType)value->type)) {
         bool some=false;const XrXirValue *payload=NULL;
         if (!xr_xir_nullable_view(value,&some,&payload) || !some) return XR_XIR_VALUE_BAD_ARGUMENT;

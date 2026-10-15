@@ -125,7 +125,7 @@ static bool inspect_value(XdapJsonWriter *body,const XrXirValue *value) {
     return xdap_json_quote(body,"<owned value>",13);
 }
 #include "xdap_dispatch_origin.inc.c"
-static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapCellOrigin *origin,uint32_t *handle,XdapValueShape *shape) {
+static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapValueOrigin *origin,uint32_t *handle,XdapValueShape *shape) {
     XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XrXirValueStatus status=xdap_value_shape(&view,shape);
     if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
@@ -146,7 +146,7 @@ static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint
     candidate.handle=s->next_handle++;candidate.frame=frame;candidate.shape=*shape;
     s->values[s->value_count++]=candidate;*handle=candidate.handle;return XR_XIR_OK;
 }
-static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value,uint32_t frame,const XdapCellOrigin *origin) {
+static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value,uint32_t frame,const XdapValueOrigin *origin) {
     uint32_t handle=0;XdapValueShape shape={0};XrXirStatus status=inspect_reference(s,value,frame,origin,&handle,&shape);
     if (status!=XR_XIR_OK) { body->status=status;return false; }
     XDAP_TEXT(body,"{\"name\":");xdap_json_quote(body,name,length);XDAP_TEXT(body,",\"value\":");
@@ -185,7 +185,7 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
             }
             body.status=status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;break;
         }
-        XrXirValuePathStep steps[128];XdapCellOrigin origin={0};
+        XrXirValuePathStep steps[128];XdapValueOrigin origin={0};
         body.status=inspect_origin_child(s,ref,&child,steps,&origin);
         if (body.status!=XR_XIR_OK) { xr_xir_value_drop(&value);break; }
         char index[32];if (!child.name) { int bytes=snprintf(index,sizeof(index),"[%llu]",(unsigned long long)(start+i));child.name=index;child.name_length=(size_t)bytes; }

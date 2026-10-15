@@ -22,7 +22,7 @@ static XrXirStatus inspect_write_binding(const XdapLexicalView *lexical,const Xd
     return XR_XIR_UNRESOLVED;
 }
 #include "xdap_dispatch_write_target.inc.c"
-static XrXirStatus inspect_write_body(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapCellOrigin *origin,uint32_t *reference,XdapJsonWriter *body) {
+static XrXirStatus inspect_write_body(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapValueOrigin *origin,uint32_t *reference,XdapJsonWriter *body) {
     XdapValueShape shape={0};body->status=inspect_reference(s,value,frame,origin,reference,&shape);
     XDAP_TEXT(body,"{\"value\":");if (!inspect_value(body,value) && body->status==XR_XIR_OK) body->status=XR_XIR_BAD_STRUCTURE;
     if (s->variable_types && body->status==XR_XIR_OK) {
@@ -55,14 +55,14 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     if (frame==UINT32_MAX) for (uint32_t i=0;i<s->value_count;++i) if (s->values[i].handle==scope) { parent=&s->values[i];frame=parent->frame;break; }
     if (!s->snapshot || s->running || frame>=s->depth || !name || !text || r->document.nodes[name].kind!=XDAP_JSON_STRING ||
         r->document.nodes[text].kind!=XDAP_JSON_STRING || !r->document.nodes[name].length || !r->document.nodes[text].length)
-        return xdap_dispatch_response(s,r,false,NULL,"A current Cell scope or child reference, writable name and complete value expression are required");
+        return xdap_dispatch_response(s,r,false,NULL,"A current variable scope or child reference, writable name and complete value expression are required");
     if (s->stop_epoch==UINT64_MAX) return XR_XIR_BUDGET;
     XdapLexicalView lexical={0};status=xdap_lexical_open(s->launch,s->snapshot,frame,&lexical);
-    XrXirValuePathStep steps[128];XdapCellOrigin target={0};XrXirValue value={0};
+    XrXirValuePathStep steps[128];XdapValueOrigin target={0};XrXirValue value={0};
     if (status==XR_XIR_OK && parent) status=inspect_write_child(s,parent,&r->document.nodes[name],steps,&target);
     else if (status==XR_XIR_OK) {
         uint32_t operand=0;status=inspect_write_binding(&lexical,&r->document.nodes[name],&operand);
-        if (status==XR_XIR_OK) target=(XdapCellOrigin){lexical.epoch,lexical.frame_id,operand,{0}};
+        if (status==XR_XIR_OK) target=(XdapValueOrigin){lexical.epoch,lexical.frame_id,operand,{0}};
     }
     if (status==XR_XIR_OK && (target.epoch!=s->stop_epoch || target.frame!=lexical.frame_id)) status=XR_XIR_BAD_TYPE;
     if (status==XR_XIR_OK) {
@@ -76,7 +76,7 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     }
     uint32_t before=s->value_count,next=s->next_handle,reference=0;bool applied=false,armed=false;
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit),success={0},failure={0};
-    XdapCellOrigin returned=target;returned.epoch=s->stop_epoch+1;
+    XdapValueOrigin returned=target;returned.epoch=s->stop_epoch+1;
     status=inspect_write_body(s,&value,frame,&returned,&reference,&body);
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,true,&body,NULL,&success);
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,false,NULL,"The paused write was not admitted",&failure);

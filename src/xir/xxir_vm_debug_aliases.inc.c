@@ -30,15 +30,20 @@ static XrXirValueStatus debug_alias_value(XrXirVmDebug *debug,const XrXirValuePa
  * that passed its real authority and failed only at bounds; a replacement may
  * restore that descendant. Permission-denied roots never become readable. */
 static XrXirValueStatus debug_write_aliases(XrXirVmDebug *debug,XrXirVmDebugSnapshot *snapshot,
-    const XrXirValue *cell,const XrXirValue *replacement,XrXirValueAdmission *admission) {
+    const XrXirValue *cell,const XrXirValuePath *identity_path,const XrXirValue *replacement,XrXirValueAdmission *admission) {
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);XrXirValuePath target={0};
-    XrXirValueStatus status=xir_cell_path_view(cell,&target);if (status!=XR_XIR_VALUE_OK) return status;
+    XrXirValueStatus status=XR_XIR_VALUE_OK;
+    if (identity_path) target=*identity_path;else status=xir_cell_path_view(cell,&target);
+    if (status!=XR_XIR_VALUE_OK) return status;
     for (uint32_t f=0;f<snapshot->count;++f) {
         SnapshotFrame *frame=&snapshot->frames[f];
         if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
         for (uint32_t v=0;v<frame->info.value_count;++v) {
-            if (!(frame->known[v]&1) || !(frame->known[v]&6) || !xr_xir_type_is_cell(module->types,(XrXirType)frame->values[v].type) ||
-                !xr_xir_cell_same_owner(cell,&frame->values[v])) continue;
+            if (!(frame->known[v]&1) || !(frame->known[v]&6) || !xr_xir_type_is_cell(module->types,(XrXirType)frame->values[v].type)) continue;
+            if (identity_path) {
+                const XrXirValue *root=xr_xir_cell_canonical_root(&frame->values[v]);
+                if (!root || root->type!=cell->type || root->payload!=cell->payload) continue;
+            } else if (!xr_xir_cell_same_owner(cell,&frame->values[v])) continue;
             XrXirValuePath alias={0};status=xir_cell_path_view(&frame->values[v],&alias);
             if (status!=XR_XIR_VALUE_OK) return status;
             if (!(frame->known[v]&2) && alias.count<=target.count) continue;

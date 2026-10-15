@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xdap_dispatch_write_target.inc.c - Match displayed children to typed Cell paths
+ * xdap_dispatch_write_target.inc.c - Match displayed children to typed Source paths
  */
 static bool inspect_write_index(const XdapJsonNode *name,uint64_t *output) {
     if (name->length<3 || name->length>12 || name->text[0]!='[' || name->text[name->length-1]!=']' ||
@@ -18,7 +18,7 @@ static bool inspect_write_index(const XdapJsonNode *name,uint64_t *output) {
     *output=value;return true;
 }
 static XrXirStatus inspect_write_child(XdapAdapter *s,const XdapValueRef *parent,const XdapJsonNode *name,
-    XrXirValuePathStep steps[128],XdapCellOrigin *output) {
+    XrXirValuePathStep steps[128],XdapValueOrigin *output) {
     if (!parent->origin.epoch || parent->origin.epoch!=s->stop_epoch) return XR_XIR_BAD_TYPE;
     if (xr_compile_resources_work(s->resources,name->length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     uint64_t first=0,end=parent->shape.children;

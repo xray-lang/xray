@@ -1,0 +1,29 @@
+struct ClassPiece { count:i64; const stable:i64 }
+class ClassBox {
+    values:Array<ClassPiece>
+    const sibling:i64
+    constructor() { this.values=[ClassPiece{count:11,stable:13}]; this.sibling=37 }
+}
+class ClassHolder {
+    const box:ClassBox
+    constructor(box:ClassBox) { this.box=box }
+}
+struct ClassEnvelope { const box:ClassBox }
+fn run() {
+    const box:ClassBox=ClassBox()
+    const alias:ClassBox=box
+    const before:Array<ClassPiece>=box.values
+    const holder:ClassHolder=ClassHolder(box)
+    const roots:Array<ClassHolder>=[holder]
+    const envelopes:Array<ClassEnvelope>=[ClassEnvelope{box:box}]
+    var cells:Array<ClassHolder>=roots
+    const incoming:Array<ClassPiece>=[ClassPiece{count:23,stable:13}]
+    print(box.values[0].count)
+    print(alias.values[0].count)
+    print(before[0].count)
+    print(box.sibling)
+    print(box.values[0].stable)
+    print(roots[0].box.values[0].count)
+    print(cells[0].box.values[0].count)
+}
+run()

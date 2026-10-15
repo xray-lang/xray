@@ -51,7 +51,8 @@ static void child_normal(void) {
     uint32_t root=origin_child(adapter,scope,"root"),before=origin_child(adapter,scope,"before"),twin=origin_child(adapter,scope,"twin");
     const XdapValueRef *a=origin_ref(adapter,root),*b=origin_ref(adapter,twin),*c=origin_ref(adapter,before);
     CHECK(root!=before && root!=twin && before!=twin && a->value.payload==b->value.payload && b->value.payload==c->value.payload);
-    CHECK(a->origin.operand!=b->origin.operand && !c->origin.epoch);
+    CHECK(a->origin.operand!=b->origin.operand && c->origin.epoch==adapter->stop_epoch);
+    CHECK(c->origin.operand!=a->origin.operand && c->origin.operand!=b->origin.operand);
     uint64_t epoch=adapter->stop_epoch;XrXirVmDebugSnapshot *snapshot=adapter->snapshot;XrXirVmDebugFrameInfo original=write_frame(snapshot);
     child_set(adapter,before,"[0]","leaf",false);CHECK(adapter->stop_epoch==epoch && adapter->snapshot==snapshot);
     child_set(adapter,root,"[00]","root",false);child_set(adapter,root,"[-1]","root",false);child_set(adapter,root,"[1]","root",false);

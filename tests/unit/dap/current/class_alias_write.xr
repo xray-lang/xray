@@ -1,0 +1,18 @@
+class AliasBox {
+    values:Array<i64>
+    constructor() { this.values=[11,13] }
+}
+fn observe(value:ref i64)->i64 { return value }
+fn run() {
+    const box:AliasBox=AliasBox()
+    const before:Array<i64>=box.values
+    print(observe(ref box.values[0]))
+    const empty:Array<i64>=[]
+    const incoming:Array<i64>=[100,13]
+    const right:i64=17
+    print(box.values[0])
+    print(before[0])
+    print(incoming[1])
+    print(box.values[1])
+}
+run()
