@@ -103,13 +103,11 @@ static void nested_runtime_faults(XrXirProgram *program) {
             else CHECK(attempts>pass-1 && status==XR_XIR_CALL_OOM && !result.type && !result.payload);
             xr_xir_value_drop(&result);
             if(instance) {
-                XrXirInstanceState state=xr_xir_instance_state(instance);
                 XrXirCallStatus completion=xr_xir_task_executor_completion_status(instance->executor);
+                CHECK(completion==XR_XIR_CALL_READY ||
+                    (status==XR_XIR_CALL_OOM && completion==XR_XIR_CALL_OOM));
                 XrXirCallStatus freed=xr_xir_instance_free(instance);
-                if (freed!=XR_XIR_CALL_READY)
-                    fprintf(stderr,"nested OOM retirement: entry=%u pass=%zu attempts=%zu outcome=%u state=%u completion=%u free=%u\n",
-                        entry,pass,attempts,(unsigned)status,(unsigned)state,(unsigned)completion,(unsigned)freed);
-                CHECK(freed==XR_XIR_CALL_READY);
+                CHECK(freed==completion);
             }
             CHECK(runtime_live==live && runtime_bytes==bytes);
         }
