@@ -47,23 +47,41 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
             (int) member->line, (int) (member->column + source_text_size(ctx, member->name))};
         if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_MEMBER, ctx->array_declaration, range)) return false;
         ctx->array_members[operation] = symbol.declaration;
-        XrXirSourceType *parameters = member->parameter_count ? source_alloc(ctx, member->parameter_count, sizeof(*parameters)) : NULL;
-        if (member->parameter_count && !parameters) return false;
-        for (uint32_t p = 0; p < member->parameter_count; ++p) {
-            if (!source_work(ctx, node)) return false;
-            parameters[p] = source_array_schema_type(ctx, member->parameters[p].type);
-        }
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
         record->native_identity = member->id;
         record->signature = source_owned_text(ctx, member->signature);
         if (!record->signature) return false;
-        record->type = source_array_schema_type(ctx, member->result);
-        record->parameters = parameters; record->parameter_count = member->parameter_count;
         record->exported = true; record->mutable = member->receiver == XR_NATIVE_RECEIVER_REF;
         record->generic_parent = ctx->array_declaration; record->generic_parent_count = 1;
     }
     return source_query_target_token_reference(ctx,node,
         ctx->array_members[operation], member->is_method ? XR_XIR_SOURCE_CALL : XR_XIR_SOURCE_READ);
+}
+/* Generic native query signatures are appended only after Checked has copied
+ * the executable pool; query-only binders never become executable type facts. */
+static bool source_array_query_types(SourceContext *ctx) {
+    if (!ctx->array_declaration) return true;
+    const XrNativeTypeDeclaration *array = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+    for (uint32_t m = 0; m < array->member_count; ++m) {
+        if (!source_work(ctx, NULL)) return false;
+        const XrNativeMemberDeclaration *member = &array->members[m];
+        uint32_t operation = (uint32_t)member->operation;
+        if (!operation || operation >= sizeof(ctx->array_members)/sizeof(ctx->array_members[0])) continue;
+        uint32_t id = ctx->array_members[operation]; if (!id) continue;
+        XrXirSourceType *parameters = member->parameter_count ? source_alloc(ctx, member->parameter_count, sizeof(*parameters)) : NULL;
+        if (member->parameter_count && !parameters) return false;
+        for (uint32_t p = 0; p < member->parameter_count; ++p) {
+            if (!source_work(ctx, NULL)) return false;
+            parameters[p] = source_array_schema_type(ctx, member->parameters[p].type);
+        }
+        XrXirSourceType result = source_array_schema_type(ctx, member->result);
+        if (ctx->diagnostic.status != XR_XIR_OK) return false;
+        XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[id-1];
+        if (record->native_identity != member->id)
+            return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "Array query member identity changed before publication");
+        record->type = result; record->parameters = parameters; record->parameter_count = member->parameter_count;
+    }
+    return true;
 }
 static bool source_array_static_receiver(SourceContext *ctx, AstNode *node) {
     return node && node->type == AST_NEW_EXPR && node->as.new_expr.is_type_namespace &&
