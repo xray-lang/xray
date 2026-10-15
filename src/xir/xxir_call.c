@@ -20,6 +20,7 @@
 #include "xxir_type_arena.h"
 #include "xxir_types.h"
 #include "xxir_panic.h"
+#include "xxir_format.h"
 #include "../shared/xr_error_core.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -607,6 +608,39 @@ static XrXirCallStatus output_call_status(XrXirOutputStatus status) {
     default: return XR_XIR_CALL_BAD_ARGUMENT;
     }
 }
+static void output_prepared_free(XrXirCall *call, const XrXirAction *action,
+    XrXirValue *values, uint32_t count) {
+    if (!values) return;
+    for (uint32_t i=0;i<count;++i)
+        if (action->arguments[i].type>=XR_XIR_CONSTRUCTED_TYPE_BASE) xr_xir_value_drop(&values[i]);
+    call_deallocate(call->config.accounting,call->budget,values,
+        (uint64_t)action->argument_count*sizeof(*values));
+}
+/* Provider input stays scalar/String. Owned display strings for every container
+ * are prepared before the provider sees any argument, then released together. */
+static XrXirCallStatus output_prepare(XrXirCall *call, const XrXirAction *action,
+    XrXirValue **output) {
+    uint64_t bytes=(uint64_t)action->argument_count*sizeof(XrXirValue);
+    if (!call_cell_work(call,bytes)) return XR_XIR_CALL_LIMIT;
+    XrXirCallStatus status=XR_XIR_CALL_READY;
+    XrXirValue *values=call_allocate(&call->config,call->budget,bytes,&status);
+    if (!values) return status;
+    for (uint32_t i=0;i<action->argument_count;++i) {
+        const XrXirValue *original=&action->arguments[i];
+        if (original->type<XR_XIR_CONSTRUCTED_TYPE_BASE) values[i]=*original;
+        else {
+            values[i]=(XrXirValue){0};
+            XrXirValueStatus prepared=xr_xir_value_format_string(original,&call->config.admission,&values[i]);
+            if (prepared!=XR_XIR_VALUE_OK) {
+                output_prepared_free(call,action,values,i);
+                return prepared==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
+                    prepared==XR_XIR_VALUE_LIMIT || prepared==XR_XIR_VALUE_REFCOUNT_LIMIT ?
+                    XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
+            }
+        }
+    }
+    *output=values; return XR_XIR_CALL_READY;
+}
 static void accept_output_action(XrXirCall *call, XrXirAction action) {
     bool writing = action.kind == XR_XIR_ACTION_WRITE_STREAM;
     if (action.callee < XR_XIR_STDOUT || action.callee > XR_XIR_OUTPUT_LINE ||
@@ -617,18 +651,31 @@ static void accept_output_action(XrXirCall *call, XrXirAction action) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
+    bool prepare=false;
     for (uint32_t i = 0; i < action.argument_count; ++i) {
         const XrXirValue *value = &action.arguments[i];
+        bool constructed=value->type>=XR_XIR_CONSTRUCTED_TYPE_BASE;
         if ((writing && value->type != XR_XIR_STRING) ||
-            (value->type != XR_XIR_BOOL && value->type != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
-            !xr_xir_value_argument(value, NULL, (XrXirType) value->type)) {
+            (!constructed && value->type != XR_XIR_BOOL && value->type != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) value->type) && value->type != XR_XIR_STRING) ||
+            !xr_xir_value_argument(value, call->config.admission.arena, (XrXirType) value->type)) {
             abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
+        }
+        prepare=prepare || constructed;
+    }
+    XrXirValue *prepared=NULL;
+    if (prepare) {
+        XrXirCallStatus status=output_prepare(call,&action,&prepared);
+        if (status!=XR_XIR_CALL_READY) { request_execution_failure(call,status); return; }
+        if (call->cancel_requested && !cleanup_active(call) && call->abort_reason==XR_XIR_CALL_READY) {
+            output_prepared_free(call,&action,prepared,action.argument_count);
+            request_exit_status(call,XR_XIR_CALL_CANCELLED); return;
         }
     }
     XrXirOutputGroup group = {action.callee == XR_XIR_OUTPUT_LINE ? XR_XIR_STDOUT :
-        (XrXirOutputStream) action.callee, action.arguments, action.argument_count, action.callee == XR_XIR_OUTPUT_LINE};
+        (XrXirOutputStream) action.callee, prepared ? prepared : action.arguments, action.argument_count, action.callee == XR_XIR_OUTPUT_LINE};
     XrXirOutputStatus output_status = call->config.output.write ?
         call->config.output.write(call->config.output.context, &group) : XR_XIR_OUTPUT_ERROR;
+    output_prepared_free(call,&action,prepared,action.argument_count);
     if (call->cancel_requested && !cleanup_active(call) && call->abort_reason == XR_XIR_CALL_READY)
         request_exit_status(call, XR_XIR_CALL_CANCELLED);
     else if (writing && call->config.output.write &&

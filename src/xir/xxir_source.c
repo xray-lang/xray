@@ -26,6 +26,7 @@
 #include "xxir_nominal.h"
 #include "xxir_float.h"
 #include "xxir_compile_memory.h"
+#include "xxir_display_type.h"
 #include "../shared/xr_decimal_float.h"
 #include "../shared/xnative_declaration.h"
 #include "../shared/xr_core_intrinsic.h"
@@ -1366,9 +1367,11 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             host_time == 4 ? (XrXirInstruction) {XR_XIR_UTC_OFFSET_AT, XR_XIR_I64, {args[0].id, 0}, {0, 0}, 0, {0}} :
             (XrXirInstruction) {XR_XIR_TIMER_AFTER_MS, XR_XIR_UNIT, {args[0].id, 0}, {0, 0}, 0, {0}};
     } else if (print) {
-        for (int i = 0; i < call->arg_count; ++i)
-            if (args[i].type != XR_XIR_BOOL && args[i].type != XR_XIR_RUNE && !xr_xir_type_is_number(args[i].type) && args[i].type != XR_XIR_STRING)
-                return source_fail(ctx, node, XR_XIR_BAD_TYPE, "print requires an admitted display type");
+        for (int i = 0; i < call->arg_count; ++i) {
+            XrXirStatus display=xir_compile_display_type(&ctx->compile,&ctx->types,args[i].type);
+            if (display!=XR_XIR_OK)
+                return source_fail(ctx, node, display, "print requires an admitted display type");
+        }
         op = (XrXirInstruction) {XR_XIR_PRINT, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}};
     }
     if (op.op == XR_XIR_PRINT)

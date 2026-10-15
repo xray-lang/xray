@@ -18,4 +18,8 @@
 /* The root pins the arena and all backing storage throughout traversal.
  * Neither the root nor its children may be mutated or dropped during a read. */
 XR_FUNC XrValueFormatReader xr_xir_value_format_reader(const XrXirValue *root);
+/* Prepare complete owned text before publishing it. Traversal, bytes and
+ * scratch are charged to the receiving admission; failure preserves output. */
+XR_FUNC XrXirValueStatus xr_xir_value_format_string(const XrXirValue *value,
+    XrXirValueAdmission *admission, XrXirValue *output);
 #endif // XXIR_FORMAT_H

@@ -8020,6 +8020,16 @@ Every instruction and type/metadata observation pays the original compiler ledge
 
 Complete results independently own their Strings after Source, Artifact and ledger caller death, and final release allocates nothing. Admission does not qualify the complete standard library, private library variables, StringBuilder performance or all FI/safety gates; whole consumers and original allocation fault sequences must still finish within original budgets.
 
+### 17.67 Bounded container display and complete output preparation
+
+Source and the independent Checked verifier share a closed display-type walk charged to the original compiler ledger. Bool, Rune, all integer/float types and String are leaves; Array, nullable and every declared enum payload recursively require the same capability. Each actual descriptor is visited once, including recursive container graphs, without another type-depth cap. Open type parameters, callable values, Class, Struct and other unconnected types reject; empty containers and inactive variants cannot bypass that requirement. This grants no new generic constraint or derivation protocol.
+
+Print still evaluates all arguments left to right and preserves each authentic value snapshot before the common Call boundary prepares output. Owned containers borrow actual backing and sealed layouts through the shared formatter. Arrays show the first32 elements and the existing remaining-count suffix; depth beyond3 shows an ellipsis. Nested String/Rune quoting, complete UTF8, embedded NUL, integer endpoints, active enum payloads and nullable retain their original lengths and meaning without materializing temporary Array.get elements.
+
+Every borrowed node, child and count/fill byte operation consumes receiving-admission and Domain work. Temporary text obeys scratch and actual Domain allocation/cumulative/live limits. Only after every complete owned String succeeds does the provider receive the ordered scalar/String group with the original argument count; the existing renderer then publishes bytes at most once. Preparation failure releases all temporary owners and restores scratch/physical occupancy without refunding or resetting ledgers or entering language catch; cancellation likewise does not publish a pending group. Already written IO bytes promise no rollback.
+
+VM and generated C use the same Call path, without a new opcode, packet field, public Value/Call/Program layout or raised budget. Array display grants no Map/Set, other unadmitted methods or complete-standard-library qualification. Whole consumers and all allocation-fault, resource/cancellation/lifetime/physical, sanitizer and provider gates remain independent actual obligations.
+
 ---
 
 ## 18. Error Codes

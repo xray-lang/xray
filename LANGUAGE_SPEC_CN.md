@@ -7857,6 +7857,16 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 完整结果独立拥有String并可在Source、Artifact及账本调用方死亡后存活，最后释放不分配。准入不等于完整标准库、库私有var、StringBuilder性能或全部FI/安全资格；整消费者和原分配故障序列仍须在原预算内完成。
 
+### 17.67 有界容器显示与完整输出准备
+
+Source与独立Checked verifier共享按原compiler ledger计费的闭合显示类型遍历。Bool、Rune、各整数/浮点和String为叶；Array、nullable与enum的所有声明payload递归要求同一能力。每个实际descriptor只访问一次，容器间递归不制造额外类型深度帽；开放类型参数、函数值、Class、Struct及其它未接通类型明确拒绝，不以空容器或当前variant绕过类型要求。本文不授予新的泛型约束或派生协议。
+
+print仍先从左到右完成全部实参，保留每个真实值快照，再由共同Call边界准备完整输出。非标量拥有值借用真实backing和封存layout，使用共享formatter；Array显示首32项，超出项使用既有remaining suffix，深度超过3显示省略。嵌套String/Rune带原引号，完整UTF8、内嵌NUL、整数端点、enum active payload与nullable保留原长度和语义，不物化Array.get临时元素。
+
+每个借用节点、child和计数/填充字节操作消耗接收admission及Domain工作；临时文本受scratch和Domain的真实分配/累计/live帽约束。完整拥有String均准备成功后，才向provider提交原顺序和原参数个数的标量/String组，既有renderer再至多发布一次字节。任何准备失败释放全部临时拥有值，恢复scratch与物理占用，不退款、重置账本或进入语言catch；取消也不发布准备中的组。IO已经写出的字节不承诺回滚。
+
+VM与生成C复用同一Call路径，无新opcode、packet字段、公共Value/Call/Program布局或预算调高。整Array显示不授Map/Set、其它未准入成员或完整标准库资格；完整消费者、所有分配故障、资源/取消/寿命/物理、安全和provider门仍分别需要真实完成。
+
 ---
 
 ## 18. 错误码 (Error Codes)

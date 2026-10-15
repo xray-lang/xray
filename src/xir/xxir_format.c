@@ -15,6 +15,7 @@
 #include "xxir_format_internal.h"
 #include "xxir_float.h"
 #include "xxir_rune.h"
+#include "xxir_value_internal.h"
 
 static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
     XrXirValue borrowed = {0};
@@ -61,4 +62,59 @@ static int xir_format_child(const void *context, XrValueFormatNode node, uint32_
 
 XR_FUNC XrValueFormatReader xr_xir_value_format_reader(const XrXirValue *root) {
     return (XrValueFormatReader){xr_xir_value_arena(root), xir_format_read, xir_format_child};
+}
+
+typedef struct MeteredFormat {
+    XrXirValueAdmission *admission;
+    XrValueFormatReader borrowed;
+    XrXirValueStatus status;
+    char *bytes;
+    size_t used, limit;
+} MeteredFormat;
+static bool metered_format_work(MeteredFormat *format, uint64_t work) {
+    if (work>format->admission->work || !xr_xir_domain_work(format->admission->domain,work)) {
+        format->status=XR_XIR_VALUE_LIMIT; return false;
+    }
+    format->admission->work-=work; return true;
+}
+static int metered_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
+    MeteredFormat *format=(MeteredFormat *)context;
+    return metered_format_work(format,1) && format->borrowed.read(format->borrowed.context,node,view);
+}
+static int metered_format_child(const void *context, XrValueFormatNode node, uint32_t index,
+    XrValueFormatNode *child) {
+    MeteredFormat *format=(MeteredFormat *)context;
+    return metered_format_work(format,1) && format->borrowed.child(format->borrowed.context,node,index,child);
+}
+static int metered_format_write(void *context, const void *bytes, size_t length) {
+    MeteredFormat *format=context;
+    if (length>format->limit-format->used || length==SIZE_MAX) {
+        format->status=XR_XIR_VALUE_LIMIT; return 0;
+    }
+    if (!metered_format_work(format,(uint64_t)length+1)) return 0;
+    if (format->bytes && length) memcpy(format->bytes+format->used,bytes,length);
+    format->used+=length; return 1;
+}
+XR_FUNC XrXirValueStatus xr_xir_value_format_string(const XrXirValue *value,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission || !admission->domain || !value || !output ||
+        output->type || output->reserved || output->payload) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=xr_xir_value_admit(value,(XrXirType)value->type,admission);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    MeteredFormat format={admission,xr_xir_value_format_reader(value),XR_XIR_VALUE_OK,NULL,0,
+        admission->scratch_bytes>SIZE_MAX ? SIZE_MAX : (size_t)admission->scratch_bytes};
+    XrValueFormatReader reader={&format,metered_format_read,metered_format_child};
+    XrValueFormatSink sink={&format,metered_format_write};
+    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0},sink,0))
+        return format.status==XR_XIR_VALUE_OK ? XR_XIR_VALUE_BAD_ARGUMENT : format.status;
+    size_t length=format.used, scratch=length ? length : 1;
+    if (scratch>admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
+    format.bytes=xr_xir_domain_allocate(admission->domain,scratch,&status);
+    if (!format.bytes) return status;
+    admission->scratch_bytes-=scratch; format.limit=length; format.used=0;
+    if (!xr_value_format_value(reader,(XrValueFormatNode){value,0},sink,0) || format.used!=length)
+        status=format.status==XR_XIR_VALUE_OK ? XR_XIR_VALUE_BAD_ARGUMENT : format.status;
+    else status=xr_xir_string_new(admission->domain,format.bytes,length,output);
+    xr_xir_domain_deallocate(admission->domain,format.bytes,scratch);
+    admission->scratch_bytes+=scratch; return status;
 }

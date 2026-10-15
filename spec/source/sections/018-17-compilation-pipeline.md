@@ -792,6 +792,16 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 完整结果独立拥有String并可在Source、Artifact及账本调用方死亡后存活，最后释放不分配。准入不等于完整标准库、库私有var、StringBuilder性能或全部FI/安全资格；整消费者和原分配故障序列仍须在原预算内完成。
 
+### 17.67 有界容器显示与完整输出准备
+
+Source与独立Checked verifier共享按原compiler ledger计费的闭合显示类型遍历。Bool、Rune、各整数/浮点和String为叶；Array、nullable与enum的所有声明payload递归要求同一能力。每个实际descriptor只访问一次，容器间递归不制造额外类型深度帽；开放类型参数、函数值、Class、Struct及其它未接通类型明确拒绝，不以空容器或当前variant绕过类型要求。本文不授予新的泛型约束或派生协议。
+
+print仍先从左到右完成全部实参，保留每个真实值快照，再由共同Call边界准备完整输出。非标量拥有值借用真实backing和封存layout，使用共享formatter；Array显示首32项，超出项使用既有remaining suffix，深度超过3显示省略。嵌套String/Rune带原引号，完整UTF8、内嵌NUL、整数端点、enum active payload与nullable保留原长度和语义，不物化Array.get临时元素。
+
+每个借用节点、child和计数/填充字节操作消耗接收admission及Domain工作；临时文本受scratch和Domain的真实分配/累计/live帽约束。完整拥有String均准备成功后，才向provider提交原顺序和原参数个数的标量/String组，既有renderer再至多发布一次字节。任何准备失败释放全部临时拥有值，恢复scratch与物理占用，不退款、重置账本或进入语言catch；取消也不发布准备中的组。IO已经写出的字节不承诺回滚。
+
+VM与生成C复用同一Call路径，无新opcode、packet字段、公共Value/Call/Program布局或预算调高。整Array显示不授Map/Set、其它未准入成员或完整标准库资格；完整消费者、所有分配故障、资源/取消/寿命/物理、安全和provider门仍分别需要真实完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1694,5 +1704,15 @@ The existing CTFE leaf/calls evaluator admits Checked CELL_STRING_APPEND only fo
 Every instruction and type/metadata observation pays the original compiler ledger. Common Value/Domain operations charge authentication, suffix copying and actual growth. Scalar templates retain the sole scalar_text kernel and complete formatter work/frame prepayment, using neither host FPU nor another evaluator. Original steps/frame/depth,64MiB cumulative allocation,8MiB live,128M work and the versioned logical output ceiling remain. Work/frame/output/OOM failures return empty output and release the current owners without refunding or resetting the ledger or entering language catch.
 
 Complete results independently own their Strings after Source, Artifact and ledger caller death, and final release allocates nothing. Admission does not qualify the complete standard library, private library variables, StringBuilder performance or all FI/safety gates; whole consumers and original allocation fault sequences must still finish within original budgets.
+
+### 17.67 Bounded container display and complete output preparation
+
+Source and the independent Checked verifier share a closed display-type walk charged to the original compiler ledger. Bool, Rune, all integer/float types and String are leaves; Array, nullable and every declared enum payload recursively require the same capability. Each actual descriptor is visited once, including recursive container graphs, without another type-depth cap. Open type parameters, callable values, Class, Struct and other unconnected types reject; empty containers and inactive variants cannot bypass that requirement. This grants no new generic constraint or derivation protocol.
+
+Print still evaluates all arguments left to right and preserves each authentic value snapshot before the common Call boundary prepares output. Owned containers borrow actual backing and sealed layouts through the shared formatter. Arrays show the first32 elements and the existing remaining-count suffix; depth beyond3 shows an ellipsis. Nested String/Rune quoting, complete UTF8, embedded NUL, integer endpoints, active enum payloads and nullable retain their original lengths and meaning without materializing temporary Array.get elements.
+
+Every borrowed node, child and count/fill byte operation consumes receiving-admission and Domain work. Temporary text obeys scratch and actual Domain allocation/cumulative/live limits. Only after every complete owned String succeeds does the provider receive the ordered scalar/String group with the original argument count; the existing renderer then publishes bytes at most once. Preparation failure releases all temporary owners and restores scratch/physical occupancy without refunding or resetting ledgers or entering language catch; cancellation likewise does not publish a pending group. Already written IO bytes promise no rollback.
+
+VM and generated C use the same Call path, without a new opcode, packet field, public Value/Call/Program layout or raised budget. Array display grants no Map/Set, other unadmitted methods or complete-standard-library qualification. Whole consumers and all allocation-fault, resource/cancellation/lifetime/physical, sanitizer and provider gates remain independent actual obligations.
 
 <!-- /xr-spec:en -->
