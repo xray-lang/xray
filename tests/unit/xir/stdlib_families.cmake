@@ -46,6 +46,12 @@ add_test(NAME test_xir_public_cli_float_tuple_ctfe
 set_tests_properties(test_xir_public_cli_float_tuple_ctfe PROPERTIES
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     LABELS "cli;xir;stdlib;native;execution;ownership;float;tuple;ctfe")
+add_test(NAME test_xir_public_cli_comptime_after_generics
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_comptime_after_generics.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
+set_tests_properties(test_xir_public_cli_comptime_after_generics PROPERTIES
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    LABELS "cli;xir;ctfe;generic;source;ownership")
 add_executable(test_xir_string_owned_vm ${CMAKE_CURRENT_LIST_DIR}/test_xir_string_owned_vm.c)
 target_include_directories(test_xir_string_owned_vm PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(test_xir_string_owned_vm PRIVATE xray_xir_stdlib_catalog xray_xir_vm)

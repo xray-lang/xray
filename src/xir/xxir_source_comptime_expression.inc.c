@@ -70,7 +70,8 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *child,SourceExpecte
 }
 static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpectedType expected,uint32_t *output) {
     uint32_t outer=ctx->function;
-    if (ctx->generics[outer].parameter_count || ctx->generics[outer].argument_count || ctx->bodies[outer].type_parameter_count)
+    /* Outgoing concrete call arguments do not open the enclosing generic scope. */
+    if (ctx->generics[outer].parameter_count || ctx->bodies[outer].type_parameter_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime in an open generic scope is not supported");
     if (ctx->function_count>=ctx->function_capacity || ctx->comptime_count>=ctx->comptime_capacity)
         return source_fail(ctx,node,XR_XIR_BUDGET,"comptime function inventory exhausted");
