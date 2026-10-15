@@ -31,7 +31,7 @@ static void pc_current_input_mutate(void *memory,size_t bytes) {
 }
 
 /* The raw receiving candidate has independently mutable rows. Its genuine
- * Checked producer and complete graph precede the real allocator callback.
+ * Checked producer and genuine unpublished constructor precede the real allocator callback.
  * Only the expected publication rejection is normalized; all preparation,
  * allocator and budget failures retain their actual status. */
 static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context,
@@ -41,7 +41,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;EffectGraph graph={0};
     XrXirModule source={0};XrXirFunction functions[3];XrXirInstruction rows[EE_MAX_OPS];
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
+    if (status==XR_XIR_OK) status=effect_infer_construct(context,xr_xir_compile_artifact_module(checked),NULL,&effects);
     if (status==XR_XIR_OK) {
         const XrXirModule *original=xr_xir_compile_artifact_module(checked);
         CHECK(original->function_count==3 && original->functions[1].instruction_count<=EE_MAX_OPS);
@@ -85,7 +85,10 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         if (status==XR_XIR_OK) CHECK(effects->root[0].requires_root &&
             pc_stats(context).work>before.work && pc_stats(context).allocated_bytes>before.allocated_bytes);
     }
-    effect_graph_free(&graph);xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
+    effect_graph_free(&graph);
+    if (status==XR_XIR_OK) status=effect_outcomes_publish(context,&source,effects);
+    if (status==XR_XIR_OK) pc_empty_golden(effects,0);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
     CHECK(!pc_allocate_hook && !pc_current_input_row);return status;
 }
 

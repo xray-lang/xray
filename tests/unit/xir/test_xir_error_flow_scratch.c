@@ -128,7 +128,7 @@ static void storage_freshness(void){
     ErrorFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XrXirFunctionEffects functions[5]={{0}};uint64_t errors[5]={0};XrXirEffects effects={0};
-    effects.count=5;effects.words=1;effects.functions=functions;effects.errors=errors;
+    effects.count=5;effects.outcomes_work.words=1;effects.outcomes_work.functions=functions;effects.outcomes_work.errors=errors;
     EffectTerms terms={0};terms.remaining=&c;ErrorFlow flow={0};flow.body=effect_body_raw_request(&c,&f.module);
     flow.effects=&effects;flow.remaining=&c;flow.terms=&terms;
     attempts=0;CHECK(error_function(&flow,1)==XR_XIR_OK && errors[1]==2);CHECK(attempts==1);

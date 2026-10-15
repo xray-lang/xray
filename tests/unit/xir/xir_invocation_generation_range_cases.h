@@ -589,7 +589,7 @@ static void generation_range_controls(void) {
             EffectPhysicalFunction *physical=&material->physical->functions[0];uint32_t go=UINT32_MAX;
             for (uint32_t r=0;r<physical->count;++r)
                 if (physical->records[r].mask&EFFECT_PHYSICAL_GO) go=r;
-            CHECK(go!=UINT32_MAX && trial.effects.task_creation[0]==XR_XIR_EFFECT_MAY);
+            CHECK(go!=UINT32_MAX && trial.effects.outcomes_work.task_creation[0]==XR_XIR_EFFECT_MAY);
             uint32_t mask=physical->records[go].mask;physical->records[go].mask|=EFFECT_PHYSICAL_DIRECT;
             generation_range_build(&context,&trial,XR_XIR_BAD_STRUCTURE,true,UINT32_MAX);
             physical->records[go].mask=mask;

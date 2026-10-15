@@ -29,8 +29,8 @@ static void effect_context_owner_free(EffectContextOwner *owner) {
 
 static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
     effect_parameters_free(&contexts->uses);
-    xr_compile_resources_free(contexts->uses.functions);
-    xr_compile_resources_free(contexts->uses.task_creation);
+    xr_compile_resources_free(contexts->uses.outcomes_work.functions);
+    xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
     xr_compile_resources_free(contexts->uses.root);
     xr_compile_resources_free(contexts->uses.root_witnesses);
     xr_compile_resources_free(contexts->uses.unresolved_witnesses);
