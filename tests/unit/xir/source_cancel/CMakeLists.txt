@@ -1,7 +1,7 @@
 if(TARGET test_compile_cancel_poll)
     return()
 endif()
-add_executable(test_compile_cancel_poll "${CMAKE_CURRENT_LIST_DIR}/test_compile_cancel_poll.c")
+add_executable(test_compile_cancel_poll "${CMAKE_CURRENT_LIST_DIR}/test_compile_cancel_poll.c" "${PROJECT_SOURCE_DIR}/src/base/xcompile_state.c")
 target_link_libraries(test_compile_cancel_poll PRIVATE xray_compile_resources)
 add_executable(test_lsp_source_cancel "${CMAKE_CURRENT_LIST_DIR}/test_source_cancel.c")
 target_link_libraries(test_lsp_source_cancel PRIVATE xray_lsp_source_workspace)
