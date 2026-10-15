@@ -17,6 +17,7 @@ struct SourceComptimeSite {
     SourceExpectedType expected;
     XrXirValue value;
     uint32_t result_arity;
+    uint64_t result_work;
 };
 typedef struct SourceComptimeScope {
     uint32_t function,module,depth,alternatives;
@@ -110,7 +111,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     }
     SourceComptimeSite *site=source_alloc(ctx,1,sizeof(*site));
     if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count)+2)) return false;
-    *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0},0};
+    *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0},0,0};
     ctx->comptime_sites=site;++ctx->comptime_count;
     if (!ctx->comptime_input)
         return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CALL,ctx->functions[helper].result,{0},{0},helper,{0}},value);
@@ -123,7 +124,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
             matched=original;
         }
     }
-    if (!matched || !source_comptime_result_value(ctx,node,&matched->value,matched->result_arity))
+    if (!matched || !source_comptime_result_value(ctx,node,&matched->value,matched->result_arity,matched->result_work))
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence or canonical result changed");
     const XrXirTypeArena *arena=NULL;
     if (matched->result_arity) {
@@ -133,8 +134,9 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     if (!source_comptime_type_matches(ctx,node,xr_xir_compile_type_arena_types(arena),
         (XrXirType)matched->value.type,ctx->functions[helper].result))
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence changed its result type");
-    if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(site->result_arity)+sizeof(ctx->comptime_matched))) return false;
+    if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(site->result_arity)+sizeof(site->result_work)+sizeof(ctx->comptime_matched))) return false;
     site->result_arity=matched->result_arity;
+    site->result_work=matched->result_work;
     if (matched->value.type==XR_XIR_STRING || matched->result_arity) {
         if (!source_work_units(ctx,node,(uint64_t)matched->result_arity*16)) return false;
         XrXirValueStatus copied=xr_xir_value_copy(&matched->value,&site->value);

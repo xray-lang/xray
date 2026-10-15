@@ -64,3 +64,10 @@ set_tests_properties(test_xir_source_comptime_array_path_resources PROPERTIES
 add_test(NAME test_xir_source_comptime_text_resources COMMAND test_xir_source_comptime --text-resources)
 set_tests_properties(test_xir_source_comptime_text_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;text" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_nominal COMMAND test_xir_source_comptime --nominal)
+set_tests_properties(test_xir_source_comptime_nominal PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;nominal" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_nominal_resources COMMAND test_xir_source_comptime --nominal-resources)
+set_tests_properties(test_xir_source_comptime_nominal_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;nominal" TIMEOUT 600 RUN_SERIAL TRUE)

@@ -1,0 +1,3 @@
+struct Empty { }
+fn make()->Empty { return Empty{} }
+export fn run()->Empty { return comptime make() }
