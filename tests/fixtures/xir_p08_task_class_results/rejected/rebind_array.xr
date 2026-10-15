@@ -1,0 +1,2 @@
+class C implements Sendable { x:Array<i64>; constructor(x:Array<i64>){this.x=x} }
+export fn main()->i64{var c=C([1]);c.x[0]=2;return 7}
