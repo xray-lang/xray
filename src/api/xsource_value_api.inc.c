@@ -84,7 +84,12 @@ XRAY_API XrSourceStatus xray_source_value_new_string(XrSourceCompiler *compiler,
     XrXirValue value={0};made=xr_xir_string_new(domain,bytes,length,&value);
     xr_xir_domain_drop(domain);
     status=made==XR_XIR_VALUE_LIMIT ? XR_SOURCE_BUDGET : api_value_status(made);
-    if(status==XR_SOURCE_OK)status=api_value_wrap(resources,&value,output);
+    if(status==XR_SOURCE_OK) {
+        status=api_value_wrap(resources,&value,output);
+        /* This fresh String has no local cap or saturated reference count;
+         * its final copy can exhaust only the original compiler ledger. */
+        if(status==XR_SOURCE_LIMIT)status=XR_SOURCE_BUDGET;
+    }
     xr_xir_value_drop(&value);return api_value_constructed(compiler,status);
 }
 XRAY_API XrSourceStatus xray_source_result_value(const XrSourceResult *result,XrSourceValue **output) {

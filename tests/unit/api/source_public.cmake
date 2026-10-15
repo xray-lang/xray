@@ -117,3 +117,5 @@ add_test(NAME source_public_invoke_values_faults COMMAND test_source_public_faul
 set_tests_properties(source_public_invoke_values_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120 LABELS "unit;api;source;ownership;compiler-faults;runtime-faults;slow;values")
 add_test(NAME source_public_invocation_names COMMAND test_source_public_faults --invocation-name-guards)
 set_tests_properties(source_public_invocation_names PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;call;values")
+add_test(NAME source_public_invoke_values_budget COMMAND test_source_public_faults --invoke-values-budget)
+set_tests_properties(source_public_invoke_values_budget PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;budget;values")

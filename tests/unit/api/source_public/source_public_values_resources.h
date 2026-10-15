@@ -9,6 +9,7 @@
 #ifndef SOURCE_PUBLIC_VALUES_RESOURCES_H
 #define SOURCE_PUBLIC_VALUES_RESOURCES_H
 typedef struct ValueOwners {XrSourceCompiler *compiler;XrSourceValue *value,*copy;} ValueOwners;
+static const char resource_wide[UINT32_C(1)<<20]={'a'};
 static XrSourceStatus value_resources(unsigned mode,const XrCompileResourceLimits *limits,
     ValueOwners *owners,XrCompileResourceStats *stats) {
     XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
@@ -99,24 +100,53 @@ static void value_sticky(void) {
     }
     puts("public constructors share the real CompileState first OOM; no retry allocations; old owned data remains usable");
 }
+static void value_budget_sticky(void) {
+    XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
+    options.stdlib_path=XR_PUBLIC_STDLIB;ValueOwners owners={0};XrCompileResourceStats required;
+    CHECK(xray_source_compiler_new(&options,&owners.compiler)==XR_SOURCE_OK);
+    CHECK(xray_source_value_new_string(owners.compiler,"original",8,&owners.value)==XR_SOURCE_OK);
+    CHECK(xray_source_value_new_string(owners.compiler,resource_wide,sizeof(resource_wide),&owners.copy)==XR_SOURCE_OK);
+    CHECK(xr_compile_resources_stats(owners.copy->resources,&required)==XR_COMPILE_RESOURCE_OK);value_close(&owners);
+    for(unsigned axis=0;axis<3;++axis) {
+        options.allocated_bytes=required.allocated_bytes;options.live_bytes=required.peak_bytes;options.work=required.work;
+        uint64_t *limit=axis==0?&options.allocated_bytes:axis==1?&options.live_bytes:&options.work;CHECK(*limit>1);--*limit;
+        CHECK(xray_source_compiler_new(&options,&owners.compiler)==XR_SOURCE_OK);
+        CHECK(xray_source_value_new_string(owners.compiler,"original",8,&owners.value)==XR_SOURCE_OK);
+        XrSourceStatus status=xray_source_value_new_string(owners.compiler,resource_wide,sizeof(resource_wide),&owners.copy);
+        if(status!=XR_SOURCE_BUDGET)fprintf(stderr,"constructor final budget axis=%u status=%u\n",axis,(unsigned)status);
+        CHECK(status==XR_SOURCE_BUDGET && !owners.copy);size_t attempts=runtime_attempts;
+        const XrSourceScalar scalar={.kind=XR_SOURCE_VALUE_I64,.value.signed_value=41};
+        CHECK(xray_source_value_new_scalar(owners.compiler,&scalar,&owners.copy)==XR_SOURCE_BUDGET && !owners.copy);
+        CHECK(xray_source_value_new_string(owners.compiler,"retry",5,&owners.copy)==XR_SOURCE_BUDGET && !owners.copy);
+        XrSourceText text={NULL,"latched-constructor-budget","print(1)",8};XrSourceProgram *program=NULL;
+        CHECK(xray_source_compile_text(owners.compiler,&text,&program,NULL)==XR_SOURCE_BUDGET && !program && runtime_attempts==attempts);
+        xray_source_compiler_free(owners.compiler);owners.compiler=NULL;const char *bytes=NULL;size_t length=0;
+        CHECK(xray_source_value_bytes(owners.value,&bytes,&length)==XR_SOURCE_OK && length==8 && !memcmp(bytes,"original",8));
+        value_close(&owners);
+    }
+    puts("public String final constructor allocation/live/work refusals latch BUDGET; no retry allocations; old bytes survive; physical=0/0");
+}
 typedef struct InvokeValues {
     XrSourceCompiler *compiler;
     XrSourceProgram *program;
     XrSourceCall *call;
     XrSourceResult *result;
     XrSourceValue *argument,*value,*copy;
+    const char *expected;
+    size_t length;
 } InvokeValues;
-static void invoke_values_prepare(InvokeValues *owners) {
+static XrSourceStatus invoke_values_prepare(InvokeValues *owners,const XrCompileResourceLimits *limits) {
     runtime_fail_at=SIZE_MAX;
     XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
-    options.stdlib_path=XR_PUBLIC_STDLIB;options.allocated_bytes=UINT64_C(64)<<20;
-    options.live_bytes=UINT64_C(8)<<20;options.work=UINT64_C(128000000);
-    CHECK(xray_source_compiler_new(&options,&owners->compiler)==XR_SOURCE_OK);
+    options.stdlib_path=XR_PUBLIC_STDLIB;options.allocated_bytes=limits->allocated_bytes;
+    options.live_bytes=limits->live_bytes;options.work=limits->work;
+    XrSourceStatus status=xray_source_compiler_new(&options,&owners->compiler);if(status!=XR_SOURCE_OK)return status;
     static const char source[]="export fn echo(value:string)->string{Coro.yield();return value}\n";
     XrSourceText text={NULL,"typed-invocation-faults",source,sizeof(source)-1};
-    CHECK(xray_source_compile_text(owners->compiler,&text,&owners->program,NULL)==XR_SOURCE_OK);
+    status=xray_source_compile_text(owners->compiler,&text,&owners->program,NULL);if(status!=XR_SOURCE_OK)return status;
     static const char bytes[]="original\0中value";
-    CHECK(xray_source_value_new_string(owners->compiler,bytes,sizeof(bytes)-1,&owners->argument)==XR_SOURCE_OK);
+    owners->expected=bytes;owners->length=sizeof(bytes)-1;
+    return xray_source_value_new_string(owners->compiler,bytes,sizeof(bytes)-1,&owners->argument);
 }
 static XrSourceStatus invoke_values_drive(InvokeValues *owners) {
     XrSourceCallOptions options;CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);options.write=discard;
@@ -141,14 +171,22 @@ static XrSourceStatus invoke_values_drive(InvokeValues *owners) {
     CHECK(complete);status=xray_source_call_take(owners->call,&owners->result);if(status!=XR_SOURCE_OK)return status;
     status=xray_source_result_value(owners->result,&owners->value);if(status!=XR_SOURCE_OK)return status;
     status=xray_source_value_copy(owners->value,&owners->copy);if(status!=XR_SOURCE_OK)return status;
-    const char *bytes=NULL;size_t length=0;static const char expected[]="original\0中value";
+    const char *bytes=NULL;size_t length=0;
     CHECK(xray_source_value_bytes(owners->copy,&bytes,&length)==XR_SOURCE_OK &&
-        length==sizeof(expected)-1 && !memcmp(bytes,expected,length));return XR_SOURCE_OK;
+        length==owners->length && !memcmp(bytes,owners->expected,length));return XR_SOURCE_OK;
+}
+static void invoke_values_close(InvokeValues *owners) {
+    CHECK(xray_source_call_drop(&owners->call,NULL)==XR_SOURCE_OK);
+    xray_source_result_free(owners->result);xray_source_value_free(owners->argument);
+    xray_source_value_free(owners->value);xray_source_value_free(owners->copy);
+    xray_source_program_free(owners->program);xray_source_compiler_free(owners->compiler);
+    *owners=(InvokeValues){0};CHECK(!runtime_live && !runtime_bytes);
 }
 static void invoke_values_faults(bool probe) {
+    const XrCompileResourceLimits limits={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
     size_t count=0;
     for(size_t point=0;!point || (!probe && point<=count);++point) {
-        InvokeValues owners={0};invoke_values_prepare(&owners);
+        InvokeValues owners={0};CHECK(invoke_values_prepare(&owners,&limits)==XR_SOURCE_OK);
         runtime_attempts=0;runtime_fail_at=point?point-1:SIZE_MAX;
         XrSourceStatus status=invoke_values_drive(&owners);
         if(!point){CHECK(status==XR_SOURCE_OK && owners.copy);count=runtime_attempts;CHECK(count);}
@@ -157,14 +195,52 @@ static void invoke_values_faults(bool probe) {
         if(owners.result && !owners.value) {
             CHECK(xray_source_result_value(owners.result,&owners.value)==XR_SOURCE_OK && owners.value);
         }
-        CHECK(xray_source_call_drop(&owners.call,NULL)==XR_SOURCE_OK);
-        xray_source_result_free(owners.result);xray_source_value_free(owners.argument);
-        xray_source_value_free(owners.value);xray_source_value_free(owners.copy);
-        xray_source_program_free(owners.program);xray_source_compiler_free(owners.compiler);
-        CHECK(!runtime_live && !runtime_bytes);
+        invoke_values_close(&owners);
     }
     printf("public typed invocation sites=%zu swept=%zu; argument/Program/Compiler death, yield, actual result/value copies, physical=0/0\n",
         count,probe?0:count);
+}
+static XrSourceStatus invoke_values_budget_run(const XrCompileResourceLimits *limits,bool large,
+    InvokeValues *owners,unsigned *stage) {
+    *stage=1;XrSourceStatus status=invoke_values_prepare(owners,limits);if(status!=XR_SOURCE_OK)return status;
+    if(large) {
+        XrSourceValue *replacement=NULL;
+        status=xray_source_value_new_string(owners->compiler,resource_wide,sizeof(resource_wide),&replacement);
+        if(status!=XR_SOURCE_OK)return status;
+        xray_source_value_free(owners->argument);owners->argument=replacement;
+        owners->expected=resource_wide;owners->length=sizeof(resource_wide);
+    }
+    *stage=2;return invoke_values_drive(owners);
+}
+static void invoke_values_budgets(void) {
+    const XrCompileResourceLimits generous={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
+    for(unsigned large=0;large<2;++large) {
+        InvokeValues owners={0};XrCompileResourceStats required;unsigned stage=0;
+        CHECK(invoke_values_budget_run(&generous,large!=0,&owners,&stage)==XR_SOURCE_OK && stage==2);
+        CHECK(xr_compile_resources_stats(owners.copy->resources,&required)==XR_COMPILE_RESOURCE_OK);
+        invoke_values_close(&owners);
+        for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
+            XrCompileResourceLimits limits={required.allocated_bytes,required.peak_bytes,required.work};
+            uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
+            CHECK(*bound>1 && *bound<UINT64_MAX);*bound=(uint64_t)((int64_t)*bound+delta);
+            XrSourceStatus status=invoke_values_budget_run(&limits,large!=0,&owners,&stage);
+            if(delta<0) {
+                XrSourceStatus expected=axis==2 ? XR_SOURCE_LIMIT : XR_SOURCE_BUDGET;
+                if(status!=expected || owners.copy || (large && stage!=2))
+                    fprintf(stderr,"invocation budget large=%u axis=%u delta=%d status=%u stage=%u\n",
+                        large,axis,delta,(unsigned)status,stage);
+                CHECK(status==expected && !owners.copy);
+                if(large)CHECK(stage==2);
+                if(owners.value) {const char *bytes=NULL;size_t length=0;
+                    CHECK(xray_source_value_bytes(owners.value,&bytes,&length)==XR_SOURCE_OK &&
+                        length==owners.length && !memcmp(bytes,owners.expected,length));}
+            } else CHECK(status==XR_SOURCE_OK && owners.copy && stage==2);
+            invoke_values_close(&owners);
+        }
+        printf("public invocation original compiler axes large=%u allocated=%llu peak=%llu work=%llu; exact/minus-one/plus-one, physical=0/0\n",
+            large,(unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,
+            (unsigned long long)required.work);
+    }
 }
 static void invocation_name_guards(void) {
     XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
