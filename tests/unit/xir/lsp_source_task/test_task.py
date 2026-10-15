@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import hashlib
 import os
 import re
 import subprocess
@@ -7,6 +8,7 @@ import sys
 import tempfile
 
 exe, stdlib = map(Path, sys.argv[1:3])
+image_sha256 = hashlib.sha256(exe.read_bytes()).hexdigest()
 before = sys.argv[3:] == ['--before']
 budget_before = sys.argv[3:] == ['--budget-before']
 assert sys.argv[3:] in ([], ['--before'], ['--budget-before'])
@@ -71,10 +73,15 @@ with tempfile.TemporaryDirectory(prefix='xray-actual-task-', dir=os.getcwd()) as
         assert (int(match[10]) > 14) if mode == 0 else (int(match[10]) == 0), result.stderr
         rows.append({'mode': mode, 'captured_blocks': int(match[2]), 'exit': int(match[7]),
                      'wire_messages': len(messages), 'admission_checks': int(match[10])})
+        if mode == 0:
+            assert result.stderr.count(b'Actual synchronous Source navigation4 modes strict64Mi8Mi128000000 and output owner death PASS') == 1, result.stderr
+            rows[-1]['synchronous_modes'] = 4
         if mode >= 12:
             interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+) strict64Mi8Mi128000000 physical0/0 JSON0/0 app0/0', result.stderr)
             assert interior and int(interior[1]) == mode, result.stderr
             assert (int(interior[3]) > int(interior[2]) + 64) if before else (int(interior[2]) <= int(interior[3]) <= int(interior[2]) + 64), result.stderr
             rows[-1].update(trigger=int(interior[2]), work_calls=int(interior[3]), interior_cancel=True)
-print(json.dumps({'cases': rows, 'actual_Source_request_run': True, 'editor_table_destroyed_before_run': True,
-                  'compiler_and_JSON_live_zero': not budget_before, 'counterfactual': before or budget_before, 'full_FI': False}))
+assert hashlib.sha256(exe.read_bytes()).hexdigest() == image_sha256
+print(json.dumps({'cases': rows, 'actual_Source_request_run': not budget_before, 'editor_table_destroyed_before_run': not budget_before,
+                  'compiler_and_JSON_live_zero': not budget_before, 'counterfactual': before or budget_before,
+                  'image_sha256': image_sha256, 'full_FI': False}))
