@@ -32,6 +32,15 @@ static XrSourceProgram *named_program(XrSourceCompiler **compiler) {
         "export fn truth()->bool{return true}\n"
         "export fn fraction()->f64{return 1.5}\n"
         "export fn values()->Array<i64>{return [10,20]}\n"
+        "export fn matrix()->Array<Array<i64>>{return [[1,2],[3]]}\n"
+        "export fn texts()->Array<string>{return [\"a\\0中\",\"z\"]}\n"
+        "enum Selection{Empty,Box{values:Array<i64>}}\n"
+        "enum Marker{Only}\n"
+        "export fn emptyMarkers()->Array<Marker>{return [Marker.Only,Marker.Only]}\n"
+        "export fn choices()->Array<Selection>{return [Selection.Empty,Selection.Box{values:[10,20]}]}\n"
+        "export fn deep()->Array<Array<Array<Array<Array<i64>>>>>{return [[[[[1]]]]]}\n"
+        "export fn wide()->Array<i64>{return [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,"
+        "20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]}\n"
         "export fn fail()->i64{assert(false,\"copy\\0中panic\");return 0}\n"
         "export fn paused()->i64{Coro.yield();return seed+1}\n";
     XrSourceText input={NULL,"public-named-entry",source,sizeof(source)-1};
@@ -46,6 +55,16 @@ static XrSourceProgram *named_program(XrSourceCompiler **compiler) {
 static XrSourceCallOptions named_options(NamedOutput *output) {
     XrSourceCallOptions options;CHECK(xray_source_call_options_init(&options,sizeof(options))==XR_SOURCE_OK);
     options.write=named_write;options.context=output;return options;
+}
+typedef struct NamedReentry {NamedOutput output;const XrSourceResult *result;unsigned calls;} NamedReentry;
+static XrSourceWriteStatus named_reentry(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
+    NamedReentry *state=context;
+    if(++state->calls==4) {
+        NamedOutput nested={0};
+        CHECK(xray_source_result_format(state->result,named_write,&nested)==XR_SOURCE_OK);
+        CHECK(nested.length==sizeof("[[1, 2], [3]]")-1 && !memcmp(nested.bytes,"[[1, 2], [3]]",nested.length));
+    }
+    return named_write(&state->output,stream,bytes,length);
 }
 static XrSourceResult *named_execute(XrSourceProgram *program,const char *name,const XrSourceCallOptions *options) {
     XrSourceResult *result=NULL;
@@ -134,7 +153,36 @@ static void named_producer_death(void) {
     }
     CHECK(0);
 }
+static void named_array_spans(void) {
+    XrSourceCompiler *compiler=NULL;XrSourceProgram *program=named_program(&compiler);
+    NamedOutput output={0};XrSourceCallOptions options=named_options(&output);
+    static const struct {const char *name,*expected;size_t length;} cases[]={
+        {"matrix","[[1, 2], [3]]",sizeof("[[1, 2], [3]]")-1},
+        {"texts","[\"a\0中\", \"z\"]",sizeof("[\"a\0中\", \"z\"]")-1},
+        {"choices","[Selection.Empty, Selection.Box([10, 20])]",sizeof("[Selection.Empty, Selection.Box([10, 20])]")-1},
+        {"emptyMarkers","[Marker.Only, Marker.Only]",sizeof("[Marker.Only, Marker.Only]")-1},
+        {"deep","[[[[...]]]]",sizeof("[[[[...]]]]")-1},
+        {"wide","[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, "
+         "20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, ...(8 more)]",
+         sizeof("[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, "
+         "20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, ...(8 more)]")-1},
+    };
+    XrSourceResult *results[sizeof(cases)/sizeof(cases[0])]={0};
+    for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i)results[i]=named_execute(program,cases[i].name,&options);
+    xray_source_program_free(program);xray_source_compiler_free(compiler);
+    NamedReentry reentry={.result=results[0]};
+    CHECK(xray_source_result_format(results[0],named_reentry,&reentry)==XR_SOURCE_OK && reentry.calls>=4 &&
+        reentry.output.length==cases[0].length && !memcmp(reentry.output.bytes,cases[0].expected,cases[0].length));
+    for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
+        NamedOutput formatted={0};XrSourceStatus status=xray_source_result_format(results[i],named_write,&formatted);
+        if(status!=XR_SOURCE_OK || formatted.length!=cases[i].length || memcmp(formatted.bytes,cases[i].expected,cases[i].length))
+            fprintf(stderr,"array %s status=%u length=%zu expected=%zu\n",cases[i].name,(unsigned)status,formatted.length,cases[i].length);
+        CHECK(status==XR_SOURCE_OK && formatted.length==cases[i].length && !memcmp(formatted.bytes,cases[i].expected,cases[i].length));
+        xray_source_result_free(results[i]);
+    }
+}
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--array-display")));
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--array-display") || !strcmp(argv[1],"--array-spans"))));
+    if(argc==2 && !strcmp(argv[1],"--array-spans")){named_array_spans();return 0;}
     named_outcomes(argc==2);named_producer_death();return 0;
 }

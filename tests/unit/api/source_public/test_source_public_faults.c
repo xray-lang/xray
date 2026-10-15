@@ -26,7 +26,8 @@ static XrSourceStatus drive(unsigned mode,XrSourceCompiler **compiler,XrSourcePr
     XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
     options.stdlib_path=XR_PUBLIC_STDLIB;options.allocated_bytes=UINT64_C(64)<<20;options.live_bytes=UINT64_C(8)<<20;options.work=UINT64_C(128000000);
     XrSourceStatus status=xray_source_compiler_new(&options,compiler);if(status!=XR_SOURCE_OK)return status;
-    const char *source=mode==5?"export fn answer()->string{return \"owned\\0中value\"}\n":
+    const char *source=mode==6?"export fn answer()->Array<Array<string>>{return [[\"owned\\0中\"],[\"next\"]]}\n":
+        mode==5?"export fn answer()->string{return \"owned\\0中value\"}\n":
         mode==0?"print(42)\n":mode==1?"assert(false, \"a\\0中z\")\n":
         mode==2?"fn worker() -> i64 { return 42 }\nfn main() -> i64 { return await go worker() }\nprint(main())\n":
         mode==3?"fn worker()->f32 { Coro.yield(); return 1.5 }\n"
@@ -37,11 +38,16 @@ static XrSourceStatus drive(unsigned mode,XrSourceCompiler **compiler,XrSourcePr
     status=xray_source_compile_text(*compiler,&text,program,diagnostic);if(status!=XR_SOURCE_OK)return status;
     xray_source_compiler_free(*compiler);*compiler=NULL;
     XrSourceCallOptions runtime;CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);runtime.write=discard;
-    if(mode==5) {
+    if(mode==5 || mode==6) {
         XrSourceResult *original=NULL;
         status=xray_source_execute_named(*program,"answer",6,&runtime,&original,NULL);
         xray_source_program_free(*program);*program=NULL;
         if(status==XR_SOURCE_OK)status=xray_source_result_copy(original,result);
+        if(status==XR_SOURCE_OK && mode==6 && (*result)->value.status==XR_XIR_CALL_RETURNED) {
+            size_t attempts=runtime_attempts,live=runtime_live,physical=runtime_bytes;
+            XrSourceStatus formatted=xray_source_result_format(*result,discard,NULL);
+            CHECK(formatted==XR_SOURCE_OK && runtime_attempts==attempts && runtime_live==live && runtime_bytes==physical);
+        }
         xray_source_result_free(original);return status;
     }
     if(mode!=1)return xray_source_execute(*program,&runtime,result,NULL);
@@ -84,7 +90,7 @@ static void allocation_faults(unsigned begin,unsigned end,bool probe) {
             xray_source_result_free(result);xray_source_diagnostic_free(diagnostic);
             CHECK(!runtime_live && !runtime_bytes);
         }
-        if(mode==5)printf("public API mode=%u observed=%zu swept=%zu physical=0/0\n",mode,count,probe?0:count);
+        if(mode>=5)printf("public API mode=%u observed=%zu swept=%zu physical=0/0\n",mode,count,probe?0:count);
         else printf("public API mode=%u all compiler/runtime allocations=%zu physical=0/0\n",mode,count);
     }
 }
@@ -115,11 +121,13 @@ static void named_copy_guards(void) {
 }
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--scalar-task") || !strcmp(argv[1],"--constructed-task") ||
-        !strcmp(argv[1],"--named") || !strcmp(argv[1],"--named-probe") || !strcmp(argv[1],"--named-copy-guards"))));
+        !strcmp(argv[1],"--named") || !strcmp(argv[1],"--named-probe") || !strcmp(argv[1],"--named-copy-guards") ||
+        !strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe"))));
     if(argc==1)allocation_faults(0,3,false);
     else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4,false);
     else if(!strcmp(argv[1],"--constructed-task"))allocation_faults(4,5,false);
     else if(!strcmp(argv[1],"--named-copy-guards"))named_copy_guards();
+    else if(!strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe"))allocation_faults(6,7,!strcmp(argv[1],"--array-probe"));
     else allocation_faults(5,6,!strcmp(argv[1],"--named-probe"));
     return 0;
 }
