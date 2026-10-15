@@ -7744,6 +7744,15 @@ Source &&/|| preserve short-circuit semantics through this storage, the ordinary
 
 This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
 
+### 17.50 Receiving published Source definitions
+
+A persistent Source owner supplies a candidate with only that owner's published, actual Checked Program and registered bindings. History uses an internal module representation distinct from Catalog Libraries. Receiving neither reparses nor concatenates prior Source, changes Program linkage, nor constructs function, generic or nominal identities from query names. It copies and relocates the complete Checked declaration closure through the single Built → Checked → specialization recheck → Lowered pipeline.
+
+Lexical scope is separate from module birth identity. A zero `lexical_scope` owns an independent scope; a nonzero value is one plus its canonical module ordinal. References must remain in bounds and cannot refer to themselves or another reference. Current and accurately received historical session roots share a lexical scope; ordinary imports remain separate. This relation replaces only module-private visibility across inputs. It grants no missing dependency, private-member, initializer-call or runtime-storage permission. Functions, nominal types, slots and initialization keep their exact owning modules.
+
+Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
+
+
 ---
 
 ## 18. Error Codes

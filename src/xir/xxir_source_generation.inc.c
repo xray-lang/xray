@@ -12,6 +12,7 @@ typedef struct SourceGenerationRecord {
     XrXirSourceGenerationView view;
     XrXirSourceResult result;
     SourceInputCapture capture;
+    SourceHistoryUnit unit;
     XrXirSourceGenerationBinding *bindings;
     size_t binding_count;
     char *source, *namespace_id;
@@ -180,6 +181,7 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
     XrXirSourceDiagnostic location={0};XrCompilerSession *session=NULL;
     if (status!=XR_XIR_OK) goto done;
     record->view.serial=reserved;record->view.parent=owner->published ? owner->published->view.serial : 0;
+    record->unit.owner=owner;record->unit.serial=reserved;
     status=generation_source(owner,text,record);
     if (status!=XR_XIR_OK) goto done;
     XrCompilerSessionStatus opened=xr_compile_session_new(owner->config.context.resources,&session);
@@ -190,7 +192,8 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,record->namespace_id,NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner->config.context,owner->config.stdlib_path,
         owner->config.lockfile,XR_XIR_PROGRAM,owner->config.libraries};
-    SourceInput input={.supplied=true,.text={NULL,record->source,text->length},.capture=&record->capture,.binding_readers=readers};
+    SourceInput input={.supplied=true,.text={NULL,record->source,text->length},.capture=&record->capture,.binding_readers=readers,
+        .history=owner->published ? &owner->published->unit : NULL,.self=&record->unit};
     status=source_check_input(&request,input,&record->result,&location,NULL);
     if (status!=XR_XIR_OK) goto done;
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
@@ -198,6 +201,8 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
         status=XR_XIR_BAD_STRUCTURE;goto done;
     }
     record->view.ast=record->capture.ast;record->view.result=&record->result;
+    record->unit.semantic=record->capture.semantic;record->unit.checked=record->result.checked;
+    record->unit.entry_module=record->capture.module;
     record->view.identity=view->modules[record->capture.module].identity;
     record->view.fingerprint=view->modules[record->capture.module].fingerprint;
     status=generation_bindings(owner,record);
@@ -223,6 +228,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_publish(XrXirSourceGenerati
     owner->bindings=record->bindings;owner->binding_count=record->binding_count;
     record->bindings=NULL;record->binding_count=0;
     record->view.published=true;record->previous=owner->published;
+    record->unit.published=true;
     owner->published=record;owner->pending=NULL;
     xr_compile_resources_free(previous);return XR_XIR_OK;
 }

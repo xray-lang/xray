@@ -37,7 +37,7 @@ static void observed_free(void *memory) {
 
 static const XrCompileResourceLimits limits = {
     UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
-static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResourceStats *stats,bool comptime) {
+static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResourceStats *stats,bool comptime,bool history) {
     XrCompileResources *resources=NULL;XrXirSourceGenerations *owner=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(bounds,&resources);
     if (opened!=XR_COMPILE_RESOURCE_OK) {
@@ -50,6 +50,7 @@ static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResou
     if (status!=XR_XIR_OK) goto done;
     const char *first=comptime ? "const value=comptime (6*7)\nexport fn answer()->i64{return value}" :
         "const value=5\nexport fn answer()->i64{return value}";
+    if (history) first="const value=5\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}";
     XrXirSourceText text={NULL,first,strlen(first)};uint64_t serial=0;
     status=xr_xir_compile_source_generation_prepare(owner,&text,&serial,NULL);
     if (status!=XR_XIR_OK) { CHECK(!serial);goto done; }
@@ -65,8 +66,9 @@ static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResou
     status=xr_xir_compile_source_generation_lookup(owner,"value",&before);
     if (status!=XR_XIR_OK) goto done;
     CHECK(before.generation==serial && before.declaration->type.type==XR_XIR_I64);
-    const char second[]="const value=\"next\"\nexport fn answer()->string{return value}";
-    text=(XrXirSourceText){NULL,second,sizeof(second)-1};uint64_t candidate=0;
+    const char *second=history ? "const value=\"next\"\nexport fn answer()->i64{const item=Item{value:identity<i64>(old()+1)};return item.value}" :
+        "const value=\"next\"\nexport fn answer()->string{return value}";
+    text=(XrXirSourceText){NULL,second,strlen(second)};uint64_t candidate=0;
     status=xr_xir_compile_source_generation_prepare(owner,&text,&candidate,NULL);
     if (status!=XR_XIR_OK) {
         CHECK(!candidate);
@@ -93,33 +95,35 @@ done:
     xr_compile_resources_release(resources);CHECK(!physical);return status;
 }
 int main(int argc,char **argv) {
-    bool comptime=false,baseline=false;
+    bool comptime=false,baseline=false,history=false;
     for (int i=1;i<argc;++i) {
         if (!strcmp(argv[i],"--comptime")) {CHECK(!comptime);comptime=true;}
+        else if (!strcmp(argv[i],"--history")) {CHECK(!history);history=true;}
         else {CHECK(!strcmp(argv[i],"--baseline") && !baseline);baseline=true;}
     }
     XrCompileResourceStats normal={0},observed={0};
-    CHECK(pipeline(&limits,&normal,comptime)==XR_XIR_OK);
+    CHECK(!comptime || !history);
+    CHECK(pipeline(&limits,&normal,comptime,history)==XR_XIR_OK);
     size_t sites=attempts;CHECK(sites && sites<20000);
     printf("source generation sites=%zu allocated=%llu peak=%llu work=%llu\n",sites,
         (unsigned long long)normal.allocated_bytes,(unsigned long long)normal.peak_bytes,(unsigned long long)normal.work);
     fflush(stdout);
     if (baseline) return 0;
     for (size_t i=0;i<sites;++i) {
-        attempts=0;fail_at=i;XrXirStatus status=pipeline(&limits,&observed,comptime);
+        attempts=0;fail_at=i;XrXirStatus status=pipeline(&limits,&observed,comptime,history);
         if (status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"site=%zu status=%u\n",i,(unsigned)status);
         CHECK(status==XR_XIR_OUT_OF_MEMORY);
     }
     fail_at=SIZE_MAX;attempts=0;
     XrCompileResourceLimits exact={normal.allocated_bytes,normal.peak_bytes,normal.work};
-    CHECK(pipeline(&exact,&observed,comptime)==XR_XIR_OK);
+    CHECK(pipeline(&exact,&observed,comptime,history)==XR_XIR_OK);
     CHECK(observed.allocated_bytes==normal.allocated_bytes && observed.peak_bytes==normal.peak_bytes && observed.work==normal.work);
     for (unsigned axis=0;axis<3;++axis) {
         XrCompileResourceLimits short_limit=exact;
         if (!axis) --short_limit.allocated_bytes;
         else if (axis==1) --short_limit.live_bytes;
         else --short_limit.work;
-        attempts=0;CHECK(pipeline(&short_limit,&observed,comptime)==XR_XIR_BUDGET);
+        attempts=0;CHECK(pipeline(&short_limit,&observed,comptime,history)==XR_XIR_BUDGET);
     }
     CHECK(!physical);
     puts("Source generation full physical FI, staged old-binding preservation, exact/minus-one budgets and zero physical allocations passed");

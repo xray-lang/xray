@@ -11,7 +11,7 @@
 #include "xxir_source_query.h"
 typedef enum XrXirSourceDependencyKind {
     XR_XIR_DEPENDENCY_STDLIB, XR_XIR_DEPENDENCY_FILE,
-    XR_XIR_DEPENDENCY_PACKAGE, XR_XIR_DEPENDENCY_MEMORY
+    XR_XIR_DEPENDENCY_PACKAGE, XR_XIR_DEPENDENCY_MEMORY, XR_XIR_DEPENDENCY_HISTORY
 } XrXirSourceDependencyKind;
 typedef struct XrXirSourceDependency {
     uint32_t module;

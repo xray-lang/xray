@@ -193,13 +193,23 @@ static int history_check(const char *mode) {
     definition_checks(owner,first,&view,folded);
     if (next && status==XR_XIR_OK) {
         CHECK(serial>first && xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK && view.parent==first);
+        const XrXirDeclarations *declarations=xr_xir_compile_artifact_module(view.result->checked)->declarations;
+        uint32_t root=declarations->root_module,scope=declarations->modules[root].lexical_scope;
+        CHECK(scope && scope-1!=root && xr_xir_module_same_scope(declarations,root,scope-1));
+        uint32_t next_entry=0;XrXirProgram *received=program(&view,"answer",&next_entry);uint64_t candidate=0;
+        CHECK(xr_xir_instance_generation_prepare(instance,received,&candidate)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_start(instance,next_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
+        XrXirValue answer={0};CHECK(xr_xir_instance_take_result(instance,&answer)==XR_XIR_CALL_RETURNED);
+        CHECK(answer.type==XR_XIR_I64 && answer.payload==42);xr_xir_value_drop(&answer);
+        CHECK(xr_xir_instance_generation_abort(instance,candidate)==XR_XIR_CALL_READY);
+        xr_xir_compile_program_drop(received);
         CHECK(xr_xir_compile_source_generation_abort(owner,serial)==XR_XIR_OK);
     } else CHECK(!serial);
     xr_xir_compile_source_generations_free(owner);xr_xir_compile_program_drop(initial);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);source_fixture_owner_free(&compiler);
     CHECK(status==XR_XIR_OK);
     puts(definitions ? "Owned actual semantic ordinals, generic/type/slot owners and original AST survived Source construction; no history receiving qualification" :
-        "Published historical declaration entered ordinary Source checking; candidate aborted without runtime/storage qualification");
+        "Published historical declaration entered ordinary checking and VM returned42; paired candidate aborted, birth storage remains separate");
     return 0;
 }
 static void mutable_definitions(void) {

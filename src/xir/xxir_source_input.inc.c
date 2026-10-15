@@ -24,6 +24,7 @@ typedef struct SourceInput {
     AstNode *ast;
     bool ast_input;
     bool binding_readers;
+    const SourceHistoryUnit *history, *self;
 } SourceInput;
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
@@ -47,6 +48,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     ctx.compile = *request->context;
     ctx.semantic_output=input.capture ? &input.capture->semantic : NULL;
     ctx.binding_readers=input.binding_readers;
+    ctx.history_input=input.history;ctx.self_unit=input.self;
     ctx.remaining_blocks = ctx.compile.limits.blocks;
     ctx.remaining_instructions = ctx.compile.limits.instructions;
     XrOsIoPolicy policy = xr_compile_io_policy(ctx.compile.resources);
@@ -110,6 +112,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     }
     if (input.prelude_factory) ctx.prelude_module=(uint32_t)ctx.graph->entry_index+1;
     if (!source_manifests_load(&ctx) || (!input.prelude_factory && !source_prelude_discover(&ctx))) goto done;
+    if (!source_history_input(&ctx)) goto done;
     module_status = xr_compile_module_graph_topological_sort(ctx.graph);
     if (module_status != XR_MODULE_OK) {
         source_module_fail(&ctx, NULL, module_status, "module graph ordering failed"); goto done;
