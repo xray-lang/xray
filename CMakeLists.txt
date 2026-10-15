@@ -260,6 +260,10 @@ else()
             "  cmake -DXRAY_PYTHON=/path/to/python3 ...")
     endif()
 endif()
+if(WIN32)
+    # Generated CMake scripts embed this path as a quoted literal.
+    string(REPLACE "\\" "/" XRAY_PYTHON "${XRAY_PYTHON}")
+endif()
 message(STATUS "Python: ${XRAY_PYTHON} (${_xray_python_version})")
 
 # Generate xray_version.h from template (single source of truth)
