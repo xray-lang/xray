@@ -39,11 +39,13 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
     if (!a) return XR_XIR_OK;
     if (a->interfaces || b->interfaces) return XR_XIR_BAD_STRUCTURE;
     MATCH(a->count, b->count);
+    if (a->count && (!a->nodes || !b->nodes)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < a->count; ++i) {
         const XrXirTypeNode *x = &a->nodes[i], *y = &b->nodes[i];
         MATCH(x->kind, y->kind); MATCH(x->element, y->element);
         MATCH(x->parameter_count, y->parameter_count); MATCH(x->result, y->result);
         MATCH(x->flags, y->flags); MATCH(x->parameter_span, y->parameter_span);
+        if (x->parameter_count && (!x->parameters || !y->parameters)) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < x->parameter_count; ++p) {
             MATCH(x->parameters[p].type, y->parameters[p].type);
             MATCH(x->parameters[p].mode, y->parameters[p].mode);
@@ -51,6 +53,8 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
         MATCH(x->nominal.declaration, y->nominal.declaration);
         MATCH(x->nominal.argument_count, y->nominal.argument_count);
         MATCH(x->nominal.field_count, y->nominal.field_count);
+        if ((x->nominal.argument_count && (!x->nominal.arguments || !y->nominal.arguments)) ||
+            (x->nominal.field_count && (!x->nominal.fields || !y->nominal.fields))) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < x->nominal.argument_count; ++p)
             MATCH(x->nominal.arguments[p], y->nominal.arguments[p]);
         for (uint32_t p = 0; p < x->nominal.field_count; ++p)
@@ -69,6 +73,7 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
         MATCH(u->exported, v->exported); MATCH(u->arity, v->arity);
         MATCH(u->kind, v->kind); MATCH(u->flags, v->flags); MATCH(u->variant_count, v->variant_count);
         MATCH(u->native.native_id, v->native.native_id);
+        if (u->variant_count && (!u->variants || !v->variants)) return XR_XIR_BAD_STRUCTURE;
         TRY(match_bytes(u->native.source_fingerprint, v->native.source_fingerprint,
             sizeof(u->native.source_fingerprint), context));
         for (uint32_t j = 0; j < u->variant_count; ++j) {
@@ -77,6 +82,7 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
             MATCH(u->variants[j].field_count, v->variants[j].field_count);
         }
         MATCH(u->field_count, v->field_count);
+        if (u->field_count && (!u->fields || !v->fields)) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < u->field_count; ++p) {
             TRY(match_literal(u->fields[p].name, v->fields[p].name, context));
             MATCH(u->fields[p].flags, v->fields[p].flags);
@@ -90,11 +96,16 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
     MATCH(a->module_count, b->module_count); MATCH(a->slot_count, b->slot_count);
     MATCH(a->literal_count, b->literal_count); MATCH(a->root_module, b->root_module);
     MATCH(a->entry_function, b->entry_function);
+    if ((a->module_count && (!a->modules || !b->modules)) ||
+        (functions && (!a->functions || !b->functions)) ||
+        (a->slot_count && (!a->slots || !b->slots)) ||
+        (a->literal_count && (!a->literals || !b->literals))) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < a->module_count; ++i) {
         const XrXirSourceModule *x = &a->modules[i], *y = &b->modules[i];
         MATCH(x->name_length, y->name_length);
         TRY(match_bytes(x->name, y->name, x->name_length, context));
         MATCH(x->initializer, y->initializer); MATCH(x->dependency_count, y->dependency_count);
+        if (x->dependency_count && (!x->dependencies || !y->dependencies)) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < x->dependency_count; ++p)
             MATCH(x->dependencies[p], y->dependencies[p]);
     }
@@ -124,8 +135,10 @@ static XrXirStatus match_layout(const XrXirFunctionLayout *a,
     MATCH(a->owned_count, b->owned_count); MATCH(a->outgoing_count, b->outgoing_count);
     MATCH(a->path_count, b->path_count);
     MATCH(a->result.size, b->result.size); MATCH(a->result.alignment, b->result.alignment);
-    if ((a->slot_count && !a->offsets) || (a->owned_count && !a->owned_offsets) ||
-        (parameters && !a->parameters) || (!parameters && a->parameters))
+    if ((a->slot_count && (!a->offsets || !b->offsets)) ||
+        (a->owned_count && (!a->owned_offsets || !b->owned_offsets)) ||
+        (parameters && (!a->parameters || !b->parameters)) ||
+        (!parameters && (a->parameters || b->parameters)))
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < a->slot_count; ++i)
         MATCH(a->offsets[i], b->offsets[i]);

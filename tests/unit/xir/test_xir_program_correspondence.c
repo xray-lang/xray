@@ -29,6 +29,10 @@ static void correspondence_callback(bool allocation) {
         ((XrXirFunctionIdentity *)module->declarations->functions)[1].test_timeout_seconds=7;
     if (probe_attack==4)
         ((XrXirFunctionIdentity *)module->declarations->functions)[1].exported=1;
+    if (probe_attack==5)
+        ((XrXirDeclarations *)module->declarations)->modules=NULL;
+    if (probe_attack==6)
+        ((XrXirDeclarations *)module->declarations)->functions=NULL;
     probe_injected=true;
 }
 static void correspondence_free(void *memory) {
@@ -198,7 +202,7 @@ static void callback_refusal(const XrXirCompileContext *context,unsigned attack,
         allocation ? "allocation" : "free",attack,frees-1);
 }
 
-static void seal_callback_refusal(const XrXirCompileContext *context,bool allocation) {
+static void seal_callback_refusal(const XrXirCompileContext *context,bool allocation,unsigned attack) {
     probe_allocations=allocation;
     XrXirArtifact *artifact = constant_program(context, 42);
     XrXirCallEntry entries[2];
@@ -210,7 +214,9 @@ static void seal_callback_refusal(const XrXirCompileContext *context,bool alloca
         xr_xir_compile_program_proof(artifact)};
     XrXirProgram *program = NULL;
     probe_artifact = artifact;
-    probe_attack = 4;
+    const XrXirSourceModule *saved_modules=spec.declarations->modules;
+    const XrXirFunctionIdentity *saved_functions=spec.declarations->functions;
+    probe_attack = attack;
     probe_at = SIZE_MAX;
     probe_calls = 0;
     probe_injected = false;
@@ -228,12 +234,15 @@ static void seal_callback_refusal(const XrXirCompileContext *context,bool alloca
     XrXirStatus status = xr_xir_compile_program_seal(context, &spec, &program);
     probe_armed = false;
     CHECK(probe_injected && status == XR_XIR_BAD_STRUCTURE && !program);
+    ((XrXirDeclarations *)spec.declarations)->modules=saved_modules;
+    ((XrXirDeclarations *)spec.declarations)->functions=saved_functions;
     ((XrXirFunctionIdentity *)spec.declarations->functions)[1].exported = 0;
     CHECK(xr_xir_compile_program_seal(context, &spec, &program) == XR_XIR_OK);
     CHECK(execute(program) == 42);
     xr_xir_compile_program_drop(program);
     xr_xir_compile_artifact_free(artifact);
-    puts("Public seal rejects valid metadata drift after its final allocator callback");
+    printf("Public seal last %s attack=%u rejected; original storage recovery returns42\n",
+        allocation ? "allocation" : "free",attack);
 }
 
 int main(void) {
@@ -247,8 +256,10 @@ int main(void) {
         callback_refusal(&context,attack,false);
         callback_refusal(&context,attack,true);
     }
-    seal_callback_refusal(&context,false);
-    seal_callback_refusal(&context,true);
+    for(unsigned attack=4;attack<7;++attack) {
+        seal_callback_refusal(&context,false,attack);
+        seal_callback_refusal(&context,true,attack);
+    }
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==before.live_bytes);
     xr_compile_resources_release(context.resources);

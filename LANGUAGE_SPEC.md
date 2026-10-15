@@ -7331,6 +7331,13 @@ permission. Failure leaves the caller's artifact and code lease unconsumed and
 publishes no Program. This boundary does not authenticate arbitrary native
 callback behavior or replace the remaining owned Final transition.
 
+Preparation copies semantic metadata from the independent canonical input,
+so a caller metadata table invalidated by a preparation callback is never used
+as the source of an owned copy. The final comparison rejects missing storage
+for every nonempty table before traversing it, including module and function
+tables. Restoring the caller's original storage permits a retry on the same
+cumulative ledger; rejection does not refund work or allocation charges.
+
 ### 17.11 Definition Checking and Checked Generic Specialization
 
 Ordinary type parameters admit copyable, storable values, excluding unit, views

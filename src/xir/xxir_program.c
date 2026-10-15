@@ -12,6 +12,7 @@
  */
 
 #include "xxir_program_internal.h"
+#include "xxir_internal.h"
 #include "../base/xsha256.h"
 #include "xxir_compile_memory.h"
 #include "xxir_atomic.h"
@@ -137,14 +138,21 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     if (!output || *output || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
-    const XrXirCodeLease code = spec->code;
-    const XrXirProgramProof proof = spec->proof;
+    const XrXirProgramSpec physical = *spec;
+    const XrXirCodeLease code = physical.code;
+    const XrXirProgramProof proof = physical.proof;
     XrXirProgramPermissions *permissions = NULL;
-    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &permissions);
+    status = xr_xir_compile_program_proof_verify(context, &physical, &proof, &permissions);
     if (status != XR_XIR_OK) return status;
-    if (spec->types) for (uint32_t i = 0; i < spec->types->count; ++i) {
+    const XrXirTypes *types = NULL;
+    const XrXirDeclarations *declarations = NULL;
+    status = xir_effects_program_metadata(context, permissions->effects, &types, &declarations);
+    if (status != XR_XIR_OK) { xir_program_permissions_free(permissions); return status; }
+    /* Preparation copies canonical semantic storage. The physical callback
+     * wiring remains borrowed until the final current-descriptor comparison. */
+    for (uint32_t i = 0; i < types->count; ++i) {
         if (!xir_compile_work(context, 1)) { xir_program_permissions_free(permissions); return XR_XIR_BUDGET; }
-        if (spec->types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
+        if (types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
             { xir_program_permissions_free(permissions); return XR_XIR_UNSUPPORTED; }
     }
     XrXirProgram *program = xir_compile_calloc(context, 1, sizeof(*program), &status);
@@ -152,14 +160,14 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     program->permissions = permissions;
     atomic_init(&program->references, 1);
     program->context = *context;
-    program->entry_count = spec->entry_count;
-    status = program_copy_entries(program, spec);
-    program->order = xir_compile_calloc(context, spec->declarations->module_count, sizeof(*program->order), &status);
-    program->active_modules = xir_compile_calloc(context, spec->declarations->module_count, 1, &status);
-    program->module_slots = xir_compile_calloc(context, spec->declarations->module_count, sizeof(*program->module_slots), &status);
+    program->entry_count = permissions->function_count;
+    status = program_copy_entries(program, &physical);
+    program->order = xir_compile_calloc(context, declarations->module_count, sizeof(*program->order), &status);
+    program->active_modules = xir_compile_calloc(context, declarations->module_count, 1, &status);
+    program->module_slots = xir_compile_calloc(context, declarations->module_count, sizeof(*program->module_slots), &status);
     if (status != XR_XIR_OK) goto failed;
-    if (spec->types) {
-        XrXirValueStatus value_status = xr_xir_compile_type_arena_new(context, spec->types, &program->arena);
+    if (physical.types) {
+        XrXirValueStatus value_status = xr_xir_compile_type_arena_new(context, types, &program->arena);
         if (value_status != XR_XIR_VALUE_OK) {
             status = value_status == XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
                 value_status == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_BAD_TYPE :
@@ -168,7 +176,7 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
         }
         program->types = xr_xir_compile_type_arena_types(program->arena);
     }
-    status = xr_xir_compile_declarations_clone(context, spec->declarations, spec->entry_count, &program->declarations);
+    status = xr_xir_compile_declarations_clone(context, declarations, program->entry_count, &program->declarations);
     if (status != XR_XIR_OK) goto failed;
     status = program_execution_order(program);
     if (status != XR_XIR_OK) goto failed;

@@ -180,6 +180,10 @@ Lowered 或旧格式读取器。
 该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
 
+Program 在所有准备分配及释放回调结束后，将当前描述和拥有副本分别与独立检查的规范类型、声明、签名及物理布局比较；VM 拥有权交接还将实际执行 body 和绑定接线对应到同一输入。最终比较不分配或释放存储。摘要仅检查 packet 漂移，不授语义权限。失败不取得调用者 artifact 或代码租约，不发表 Program；此边界不认证任意 native 回调行为，也不替代尚未完成的 Final 拥有权切换。
+
+准备阶段从独立规范输入复制语义元数据，避免把被准备回调失效的调用者表作为拥有副本的来源。最终比较先拒绝所有非空表缺失的存储，再逐项遍历，包括模块表及函数表。恢复原调用者存储后，可在同一累计账本重试；拒绝不退还工作量或分配费用。
+
 ### 17.11 定义处检查与 Checked 泛型特化
 
 普通类型参数准入域为可复制、可保存的值，不包括 unit、视图和 noncopyable 资源。
@@ -765,6 +769,13 @@ storage. A content digest only detects packet drift; it grants no semantic
 permission. Failure leaves the caller's artifact and code lease unconsumed and
 publishes no Program. This boundary does not authenticate arbitrary native
 callback behavior or replace the remaining owned Final transition.
+
+Preparation copies semantic metadata from the independent canonical input,
+so a caller metadata table invalidated by a preparation callback is never used
+as the source of an owned copy. The final comparison rejects missing storage
+for every nonempty table before traversing it, including module and function
+tables. Restoring the caller's original storage permits a retry on the same
+cumulative ledger; rejection does not refund work or allocation charges.
 
 ### 17.11 Definition Checking and Checked Generic Specialization
 
