@@ -277,6 +277,40 @@ static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
     *output=run;return XR_XIR_OK;
 }
 
+/* A short directory is checked in full once during this request. Direct
+ * selection needs neither a binary search nor repeated checks of the same
+ * first/final/neighbor record. No reference survives the immediate decode. */
+static XrXirStatus effect_body_small_record_ref(const EffectBodyRead *read,
+    const EffectBodyFunction *function,uint32_t instruction,const EffectBodyRun **output) {
+    if (!function || !output || !function->run_count || function->run_count>3 ||
+        instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,5)) return XR_XIR_BUDGET;
+    const EffectBodyRun *first;
+    XrXirStatus status=effect_body_run_ref(read,function,0,0,&first);
+    if (status!=XR_XIR_OK) return status;
+    if (function->run_count==1) {
+        if (first->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,3+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=first;return XR_XIR_OK;
+    }
+    const EffectBodyRun *last;
+    uint32_t end=function->run_count-1;
+    if (!effect_body_read_work(read,sizeof(end)+2)) return XR_XIR_BUDGET;
+    status=effect_body_run_ref(read,function,end,function->runs[end].first,&last);
+    if (status!=XR_XIR_OK) return status;
+    if (last->first+last->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *middle=first;
+    if (function->run_count==3) {
+        status=effect_body_run_ref(read,function,1,first->count,&middle);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!effect_body_read_work(read,7+2*sizeof(middle)+sizeof(*output))) return XR_XIR_BUDGET;
+    if (middle->first+middle->count!=last->first) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *ref=instruction<first->count?first:instruction<last->first?middle:last;
+    if (instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+    *output=ref;return XR_XIR_OK;
+}
+
 /* Random projection uses the actual ordinal directory. Its complete owner
  * admission still walks every run; this bounded read independently checks the
  * first, final and selected adjacent boundaries and never grants semantics. */
@@ -286,6 +320,7 @@ static XrXirStatus effect_body_record_ref(const EffectBodyRead *read,
         instruction>=function->instruction_count || !function->run_count ||
         function->run_count>function->run_capacity ||
         function->run_count>function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (function->run_count<=3) return effect_body_small_record_ref(read,function,instruction,output);
     if (!effect_body_read_work(read,3*sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t low=0,high=function->run_count,first=0;
     const EffectBodyRun *boundary;
