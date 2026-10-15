@@ -17,6 +17,8 @@ typedef struct SourceInput {
     size_t overlay_count;
     bool prelude_factory;
     SourceInputCapture *capture;
+    AstNode *ast;
+    bool ast_input;
 } SourceInput;
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
@@ -30,8 +32,9 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     char *error = NULL;
     bool semantic_started = false;
     if (!request || !xir_compile_context_valid(request->context) || !request->session ||
-        (!supplied && !request->entry_path) || !request->authority ||
+        (!supplied && !input.ast_input && !request->entry_path) || !request->authority ||
         (supplied && !text) || !output || output->checked || output->snapshot ||
+        (input.ast_input && (!input.ast || supplied || overlays || overlay_count || input.capture)) ||
         (failure_path && *failure_path)) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
@@ -61,7 +64,10 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (module_status != XR_MODULE_OK) {
         source_module_fail(&ctx, NULL, module_status, "module graph allocation failed"); goto done;
     }
-    if (supplied) {
+    if (input.ast_input) {
+        XrModuleAstInput entry = {input.ast,request->authority,logical_path,request->entry_path};
+        module_status = xr_compile_module_graph_build_ast(ctx.graph,&entry,&error);
+    } else if (supplied) {
         if (length == SIZE_MAX) {
             source_fail(&ctx, NULL, XR_XIR_BUDGET, "source text size exhausted"); goto done;
         }
@@ -141,15 +147,23 @@ XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
 XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
-    SourceInput input = {true, text ? *text : (XrXirSourceText){0}, NULL, 0, false, NULL};
+    SourceInput input = {true, text ? *text : (XrXirSourceText){0}, NULL, 0, false, NULL, NULL, false};
     return source_check_input(request, input, output, diagnostic, failure_path);
 }
 
 XrXirStatus xr_xir_compile_source_check_overlay(const XrXirSourceRequest *request,
     const XrModuleOverlayInput *overlays, size_t count, XrXirSourceResult *output,
     XrXirSourceDiagnostic *diagnostic, char **failure_path) {
-    SourceInput input = {false, {0}, overlays, count, false, NULL};
+    SourceInput input = {false, {0}, overlays, count, false, NULL, NULL, false};
     return source_check_input(request, input, output, diagnostic, failure_path);
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
+    const XrXirSourceAst *ast, XrXirSourceResult *output,
+    XrXirSourceDiagnostic *diagnostic, char **failure_path) {
+    SourceInput input = {.text = {.logical_path = ast ? ast->logical_path : NULL},
+        .ast = ast ? ast->program : NULL, .ast_input = true};
+    return source_check_input(request,input,output,diagnostic,failure_path);
 }
 
 XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *context,
@@ -183,7 +197,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
         }
         ++length;
     }
-    SourceInput input={true,{XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length},NULL,0,true,NULL};
+    SourceInput input={true,{XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length},NULL,0,true,NULL,NULL,false};
     XrXirSourceResult result={0};
     XrXirStatus status=source_check_input(&request,input,&result,diagnostic,NULL);
     if (status==XR_XIR_OK) {

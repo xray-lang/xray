@@ -636,6 +636,7 @@ else()
 endif()
 add_test(NAME test_xir_source_text COMMAND test_xir_source_text)
 set_tests_properties(test_xir_source_text PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_ast.cmake")
 
 target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)

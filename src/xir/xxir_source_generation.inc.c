@@ -178,7 +178,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare(XrXirSourceGenerati
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,record->namespace_id,NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner->config.context,owner->config.stdlib_path,
         owner->config.lockfile,XR_XIR_PROGRAM,owner->config.libraries};
-    SourceInput input={true,{NULL,record->source,text->length},NULL,0,false,&record->capture};
+    SourceInput input={true,{NULL,record->source,text->length},NULL,0,false,&record->capture,NULL,false};
     status=source_check_input(&request,input,&record->result,&location,NULL);
     if (status!=XR_XIR_OK) goto done;
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
