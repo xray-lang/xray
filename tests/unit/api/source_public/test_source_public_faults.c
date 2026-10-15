@@ -123,13 +123,14 @@ static void named_copy_guards(void) {
     xray_source_result_free(copy);CHECK(!runtime_live && !runtime_bytes);
 }
 #include "source_public_values_resources.h"
+#include "source_public_projection_resources.h"
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--scalar-task") || !strcmp(argv[1],"--constructed-task") ||
         !strcmp(argv[1],"--named") || !strcmp(argv[1],"--named-probe") || !strcmp(argv[1],"--named-copy-guards") ||
         !strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe") ||
         !strcmp(argv[1],"--values") || !strcmp(argv[1],"--values-probe") ||
         !strcmp(argv[1],"--invoke-values") || !strcmp(argv[1],"--invoke-values-probe") || !strcmp(argv[1],"--invocation-name-guards") ||
-        !strcmp(argv[1],"--invoke-values-budget"))));
+        !strcmp(argv[1],"--invoke-values-budget") || !strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe"))));
     if(argc==1)allocation_faults(0,3,false);
     else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4,false);
     else if(!strcmp(argv[1],"--constructed-task"))allocation_faults(4,5,false);
@@ -140,6 +141,10 @@ int main(int argc,char **argv) {
         invoke_values_faults(!strcmp(argv[1],"--invoke-values-probe"));
     else if(!strcmp(argv[1],"--invocation-name-guards"))invocation_name_guards();
     else if(!strcmp(argv[1],"--invoke-values-budget"))invoke_values_budgets();
+    else if(!strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe")) {
+        projection_faults(!strcmp(argv[1],"--value-projections-probe"));
+        if(!strcmp(argv[1],"--value-projections"))projection_budgets();
+    }
     else if(!strcmp(argv[1],"--named-copy-guards"))named_copy_guards();
     else if(!strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe"))allocation_faults(6,7,!strcmp(argv[1],"--array-probe"));
     else allocation_faults(5,6,!strcmp(argv[1],"--named-probe"));

@@ -49,6 +49,19 @@ XRAY_API XrSourceStatus xray_source_value_bytes(const XrSourceValue *, const cha
  * returns. A sink may receive a prefix before failure. Unsupported display
  * families return UNSUPPORTED rather than inventing text. */
 XRAY_API XrSourceStatus xray_source_value_format(const XrSourceValue *, XrSourceWrite, void *);
+/* Immutable data projections retain the original value/arena ownership and
+ * grant no execution or member-access authority. Tuple requires a non-Unit
+ * tuple; an out-of-range field returns BAD_ARGUMENT, or LIMIT above UINT32_MAX.
+ * Nullable writes zero/one
+ * and publishes an owned payload only for Some. All failures preserve outputs;
+ * owned outputs must be NULL. PanicInfo messages own exact assertion bytes or
+ * the common kernel's canonical intrinsic message. Copies and allocations use
+ * the original ledgers and may fail with their existing BUDGET/LIMIT status. */
+XRAY_API XrSourceStatus xray_source_value_tuple_count(const XrSourceValue *, size_t *);
+XRAY_API XrSourceStatus xray_source_value_tuple_get(const XrSourceValue *, size_t, XrSourceValue **);
+XRAY_API XrSourceStatus xray_source_value_nullable(const XrSourceValue *, int *, XrSourceValue **);
+XRAY_API XrSourceStatus xray_source_value_panic_code(const XrSourceValue *, int64_t *);
+XRAY_API XrSourceStatus xray_source_value_panic_message(const XrSourceValue *, XrSourceValue **);
 #ifdef __cplusplus
 }
 #endif

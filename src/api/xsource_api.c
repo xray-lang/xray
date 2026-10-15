@@ -398,3 +398,4 @@ XRAY_API void xray_source_result_free(XrSourceResult *result) {
     if(!result)return;xr_xir_call_result_drop(&result->value);xr_compile_resources_free(result);
 }
 #include "xsource_value_api.inc.c"
+#include "xsource_value_projection_api.inc.c"
