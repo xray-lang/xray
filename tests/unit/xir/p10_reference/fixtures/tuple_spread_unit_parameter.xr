@@ -1,0 +1,20 @@
+fn widen<T>(pair: (T, i8), empty: ()) -> ((), T, i64, ()) {
+    return (empty, ...pair, ())
+}
+fn layer<T>(value: T) -> T? { return value }
+fn missing(value: i64?) -> i64 {
+    if (value == null) { return 1 }
+    return 0
+}
+fn classify(value: i64??) -> i64 {
+    if (value == null) { return 0 }
+    if (value == null) { return 1 }
+    return 2
+}
+fn unitCost(value: ()) -> i64 { return 5 }
+export fn referenceAnswer() -> i64 {
+    const result: ((), i64?, i64, (), i64??, string) = (...widen<i64?>((null, 7), ()), ...(...(layer<i64?>(null), "a\0b"),))
+    const hinted: (i8?, i8) = (...((null, 7)),)
+    if (hinted.0 != null || hinted.1 != 7) { return 0 }
+    return missing(result.1) * 100000 + unitCost(result.0) * 10000 + result.2 * 1000 + unitCost(result.3) * 100 + classify(result.4) * 10 + len(result.5)
+}
