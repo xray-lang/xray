@@ -101,7 +101,14 @@ static void nested_runtime_faults(XrXirProgram *program) {
             size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
             if (!pass) {CHECK(status==XR_XIR_CALL_RETURNED);points=attempts;CHECK(points && points<20000);}
             else CHECK(attempts>pass-1 && status==XR_XIR_CALL_OOM && !result.type && !result.payload);
-            xr_xir_value_drop(&result);if(instance) CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+            xr_xir_value_drop(&result);
+            if(instance) {
+                XrXirCallStatus freed=xr_xir_instance_free(instance);
+                if (freed!=XR_XIR_CALL_READY)
+                    fprintf(stderr,"nested OOM retirement: entry=%u pass=%zu attempts=%zu outcome=%u free=%u\n",
+                        entry,pass,attempts,(unsigned)status,(unsigned)freed);
+                CHECK(freed==XR_XIR_CALL_READY);
+            }
             CHECK(runtime_live==live && runtime_bytes==bytes);
         }
         printf("nested entry %u runtime OOM sites=%zu physical baseline restored\n",entry,points);

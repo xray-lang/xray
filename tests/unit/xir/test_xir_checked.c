@@ -914,7 +914,13 @@ static void nominal_callable_components(void) {
     atomic_pool.nodes[1].result = (XrXirType)256; atomic_pool.nodes[1].parameter_span = 1;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     atomic_pool.nodes[1].parameter_span = 0; parameter.type = XR_XIR_UNIT;
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK && checked);
+    xr_xir_compile_artifact_free(checked); checked = NULL;
+    parameter.mode = XR_PARAM_REF;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    parameter.mode = XR_PARAM_MOVE;
+    CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
+    parameter.mode = XR_PARAM_READ;
     parameter.type = (XrXirType)257;
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     xr_xir_compile_artifact_free(base);base=NULL;
