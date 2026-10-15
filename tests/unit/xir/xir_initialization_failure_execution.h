@@ -100,7 +100,7 @@ static void init_protocol_failures(XrXirProgram *program,uint32_t entry){
         CHECK(xr_xir_instance_start(instance,entry,NULL,0)==expected);XrXirCallResult copy={0};
         XrXirValue no_take={XR_XIR_I64,0,73};CHECK(xr_xir_instance_take_result(instance,&no_take)==XR_XIR_CALL_BAD_STATE&&no_take.type==XR_XIR_I64&&no_take.payload==73);
         CHECK(xr_xir_instance_copy_failure(instance,&copy)==expected&&!copy.value.type&&xr_xir_fault_empty(copy.panic.detail));
-        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_free(instance)==(mode?XR_XIR_CALL_OUTPUT_ERROR:XR_XIR_CALL_READY));
     }
 }
 static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
@@ -109,12 +109,15 @@ static void init_runtime_faults(XrXirProgram *program,uint32_t entry){
         InitTrace trace={0};XrXirInstanceConfig c; CHECK(xr_xir_instance_config_init(&c, sizeof(c)) == XR_XIR_CALL_READY);c.output=(XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, init_output, &trace};c.trace=init_trace;c.trace_context=&trace;
         XrXirInstance *instance=NULL;XrXirCallResult held={0};XrXirCallStatus status=xr_xir_instance_new(program,&c,&instance);
         if(status==XR_XIR_CALL_READY)status=xr_xir_instance_start(instance,entry,NULL,0);
+        XrXirCallStatus cleanup=XR_XIR_CALL_READY;
         if(status==XR_XIR_CALL_READY){XrXirInstanceResult r=xr_xir_instance_poll_bounded(instance, UINT64_MAX);status=r.outcome.status;
-            if(status==XR_XIR_CALL_SUSPENDED){CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;}}
+            if(status==XR_XIR_CALL_SUSPENDED){CHECK(xr_xir_instance_resume(instance,r.epoch,r.outcome.wake)==XR_XIR_CALL_READY);status=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;}
+            /* Copy-failure OOM does not replace the completed initialization outcome. */
+            if(status==XR_XIR_CALL_OOM)cleanup=XR_XIR_CALL_OOM;}
         if(status==XR_XIR_CALL_THROWN)status=xr_xir_instance_copy_failure(instance,&held);
         if(!pass){CHECK(status==XR_XIR_CALL_THROWN);sites=runtime_attempts;CHECK(sites);}
         else {if(status!=XR_XIR_CALL_OOM)fprintf(stderr,"init runtime failure %zu/%zu status %u\n",pass-1,sites,status);CHECK(status==XR_XIR_CALL_OOM);}
-        if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&held.value);
+        if(instance)CHECK(xr_xir_instance_free(instance)==cleanup);xr_xir_value_drop(&held.value);
         CHECK(runtime_live==live_before&&runtime_bytes==bytes_before);
     }
     runtime_fail_at=SIZE_MAX;printf("initialization runtime %zu OOM sites, physical baseline restored\n",sites);

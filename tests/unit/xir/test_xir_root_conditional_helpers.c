@@ -345,7 +345,7 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
             }
         }
         CHECK(facts->requires_root==(mode==3 || mode==4) && facts->unresolved==(mode==1));
-        XrXirEffects effects={.resources=context->resources,.count=5,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=5,.outcomes_work={.contexts=owner}};
         XrXirEffectArgument physical[2]={{0,(XrXirType)256},{1,(XrXirType)259}};
         XrXirOrigin origin={4,NULL,0,physical,2};
         XirEffectContextInput request={&f.module,&f.types,&origin,0,NULL,0};XirEffectContextView selected={0};
@@ -482,7 +482,7 @@ static XrXirStatus conditional_cleanup_owner(const XrXirCompileContext *context,
         .types=&types,.provenance=&template,.linkage_kind=XR_XIR_PROGRAM};
     EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
-        XrXirEffects effects={.resources=context->resources,.count=4,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
         XrXirEffectArgument physical[2]={{0,(XrXirType)257},{1,(XrXirType)258}};
         XrXirOrigin origin={0,NULL,0,physical,2};
         XirEffectContextInput input={&module,&types,&origin,0,NULL,0};XirEffectContextView first={0},second={0};
@@ -574,7 +574,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
         CHECK(xir_effects_entry_root(context,effects,6,&entry)==XR_XIR_BAD_STRUCTURE &&
             entry.intrinsic_mask==UINT32_MAX);
         CHECK(owner->dense->count==6);
-        XrXirEffects selected_effects={.resources=context->resources,.count=6,.contexts=owner};
+        XrXirEffects selected_effects={.resources=context->resources,.count=6,.outcomes_work={.contexts=owner}};
         XrXirOrigin local_origin={.function=1},shared_origin={.function=2};
         XirEffectContextInput input={&module,&types,&local_origin,2,NULL,0};
         XirEffectContextView local_view={0},shared_view={0};
@@ -678,7 +678,7 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
         .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM,.provenance=&template};
     EffectContextOwner *owner=NULL;
     CHECK(effect_context_owner_build(context,&module,NULL,NULL,&owner)==XR_XIR_OK);
-    XrXirEffects effects={.resources=context->resources,.count=3,.contexts=owner};
+    XrXirEffects effects={.resources=context->resources,.count=3,.outcomes_work={.contexts=owner}};
     XrXirOrigin origin={.function=1};XirEffectContextInput input={&module,NULL,&origin,0,NULL,0};
     XirEffectContextView selected={0};
     CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_OK && selected.declaration==0);
@@ -689,7 +689,7 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
 
     ConditionalRawFixture nominal;conditional_raw_fixture(&nominal,0);owner=NULL;
     CHECK(effect_context_owner_build(context,&nominal.module,NULL,NULL,&owner)==XR_XIR_OK);
-    effects=(XrXirEffects){.resources=context->resources,.count=4,.contexts=owner};
+    effects=(XrXirEffects){.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
     origin=(XrXirOrigin){.function=2};input=(XirEffectContextInput){&nominal.module,NULL,&origin,UINT32_MAX,NULL,0};
     selected.declaration=UINT32_MAX;
     CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE &&
@@ -851,7 +851,7 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
         xr_xir_compile_artifact_construction(checked),NULL);
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=3,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=3,.outcomes_work={.contexts=owner}};
         XrXirOrigin origin={.function=0,.arguments=&ordinary[0],.argument_count=1};
         XirEffectContextInput input={owned,owned->types,&origin,UINT32_MAX,NULL,0};
         XirEffectContextView first={0},second={0};
@@ -934,7 +934,7 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
         xr_xir_compile_artifact_construction(checked),NULL);
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=5,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=5,.outcomes_work={.contexts=owner}};
         XrXirOrigin nested={.function=2,.arguments=&ordinary[0],.argument_count=1};
         XrXirOrigin parents[2]={{.function=1,.arguments=&ordinary[0],.argument_count=1},
             {.function=0,.arguments=&ordinary[0],.argument_count=1}};
@@ -1042,7 +1042,7 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     uint32_t pure_mask=UINT32_MAX,root_mask=UINT32_MAX;
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=7,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=7,.outcomes_work={.contexts=owner}};
         status=xir_effects_reference_root(context,&effects,owned,2,0,&pure_mask);
         if (status==XR_XIR_OK) status=xir_effects_reference_root(context,&effects,owned,2,1,&root_mask);
         uint32_t noncleanup=UINT32_MAX;
@@ -1443,7 +1443,7 @@ static XrXirStatus conditional_descriptor_case(const XrXirCompileContext *contex
         status=conditional_descriptor_grow(records,oracle);records->terms.remaining=NULL;
     }
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=4,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
         XrXirOrigin origin={.function=2};
         XirEffectContextInput input={&fixture.module,&fixture.types,&origin,UINT32_MAX,NULL,0};
         XirEffectContextView selected={0};

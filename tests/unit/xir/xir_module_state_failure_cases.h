@@ -83,8 +83,10 @@ static void state_failure_pair(XrXirProgram *program,uint32_t scenario) {
         state_failure_outcome(&retained[i],scenario);
         XrXirCallResult occupied={.status=XR_XIR_CALL_RETURNED,.value={XR_XIR_I64,0,91}},before=occupied;
         CHECK(xr_xir_instance_copy_failure(instances[i],&occupied)==XR_XIR_CALL_BAD_ARGUMENT && !memcmp(&occupied,&before,sizeof(before)));
-        CHECK(xr_xir_instance_stop(instances[i])==XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);traces[i].instance=NULL;
+        /* Only this graph faults inside an accepted call; missing publication is diagnosed afterward. */
+        XrXirCallStatus cleanup=scenario==3?XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_READY;
+        CHECK(xr_xir_instance_stop(instances[i])==cleanup);
+        CHECK(xr_xir_instance_free(instances[i])==cleanup);traces[i].instance=NULL;
         CHECK(traces[i].busy==(scenario==2?1u:3u));
     }
     if(scenario==4)CHECK(messages[0]!=messages[1] && runtime_live && runtime_bytes);

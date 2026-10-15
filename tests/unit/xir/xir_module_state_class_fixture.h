@@ -17,23 +17,24 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
 typedef struct StateClassFixture {
-    XrXirInstruction root[21],empty,main[2],ctor[3],replace[3],helper[3];
+    XrXirInstruction root[25],empty,main[2],ctor[3],replace[3],helper[3];
     uint32_t root_operands[8],ctor_operand,base,diamond[2];
     XrXirBlock blocks[5];XrXirFunction functions[8];XrXirFunctionIdentity identities[8];
     XrXirSourceModule modules[4];XrXirSlot slots[4];XrXirLiteral literal;
     XrXirNominalField field;XrXirNominalDeclaration nominal;XrXirNominalTable nominals;
-    XrXirType field_type,class_type;XrXirTypeNode node;XrXirTypes types;
+    XrXirType field_type,class_type,cell_type;XrXirTypeNode nodes[2];XrXirTypes types;
     XrXirDeclarations declarations;XrXirModule module;
 } StateClassFixture;
 static void state_class_fixture(StateClassFixture *f,uint32_t scenario,uint32_t rejected) {
     CHECK(scenario==5 || scenario==8);memset(f,0,sizeof(*f));
-    f->class_type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;f->field_type=XR_XIR_STRING;
+    f->class_type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;f->cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);f->field_type=XR_XIR_STRING;
     f->field=(XrXirNominalField){{"text",4},XR_XIR_STRING,XR_XIR_FIELD_MUTABLE};
     f->nominal=(XrXirNominalDeclaration){.module={rejected?"base":"root",4},.name={"OwnedState",10},
         .exported=1,.fields=&f->field,.field_count=1,.kind=XR_XIR_NOMINAL_CLASS,.flags=XR_XIR_NOMINAL_FINAL};
     f->nominals=(XrXirNominalTable){&f->nominal,1,NULL};
-    f->node=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&f->field_type,1}};
-    f->types=(XrXirTypes){&f->node,1,&f->nominals,NULL};
+    f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL,.nominal={0,NULL,0,&f->field_type,1}};
+    f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=f->class_type};
+    f->types=(XrXirTypes){f->nodes,2,&f->nominals,NULL};
     f->empty=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     f->main[0]=(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}};
     f->main[1]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
@@ -50,7 +51,11 @@ static void state_class_fixture(StateClassFixture *f,uint32_t scenario,uint32_t 
         uint32_t value=count;
         f->root[count++]=(XrXirInstruction){XR_XIR_CALL,f->class_type,{0},{0},5,{0}};
         f->root[count++]=(XrXirInstruction){XR_XIR_COPY,f->class_type,{value},{0},0,{0}};
-        f->root[count++]=(XrXirInstruction){XR_XIR_SLOT_INIT,XR_XIR_UNIT,{value+1},{0},publication[i],{0}};
+        uint32_t stored=value+1;
+        if(rejected!=2) {
+            stored=count;f->root[count++]=(XrXirInstruction){XR_XIR_CELL_NEW,f->cell_type,{value+1},{0},0,{0}};
+        }
+        f->root[count++]=(XrXirInstruction){XR_XIR_SLOT_INIT,XR_XIR_UNIT,{stored},{0},publication[i],{0}};
         f->root_operands[operands]=value+1;
         f->root[count++]=(XrXirInstruction){XR_XIR_CALL,XR_XIR_UNIT,{operands++,1},{0},6,{0}};
         if(scenario==8) {
@@ -83,7 +88,8 @@ static void state_class_fixture(StateClassFixture *f,uint32_t scenario,uint32_t 
     f->modules[1]=(XrXirSourceModule){"left",4,&f->base,1,1};
     f->modules[2]=(XrXirSourceModule){"right",5,&f->base,1,2};
     f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3};
-    for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected?0:3,f->class_type,rejected==2?0:1};
+    /* The rejected initializer belongs to base; its Cell slots belong to left. */
+    for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected==1?1:rejected==2?0:3,rejected==2?f->class_type:f->cell_type,rejected==2?0:1};
     f->literal=(XrXirLiteral){"x",1};
     f->declarations=(XrXirDeclarations){f->modules,4,f->identities,f->slots,4,&f->literal,1,3,4,NULL};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,8,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};

@@ -151,7 +151,7 @@ static XrXirStatus conditional_invocation_rotation(const XrXirCompileContext *co
         run.phase=2;status=xr_xir_compile_effects_analyze(run.checked,&public_effects);
     }
     if (status==XR_XIR_OK) {
-        run.public_forest_count=public_effects->contexts ? public_effects->contexts->forest->count : public_effects->count;
+        run.public_forest_count=effect_contexts_read(public_effects) ? effect_contexts_read(public_effects)->forest->count : public_effects->count;
         run.phase=3;status=xr_xir_compile_root_cause_trace_copy(context,public_effects,0,&public_trace);
     }
     if (status==XR_XIR_OK) {
