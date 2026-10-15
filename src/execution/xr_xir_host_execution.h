@@ -21,6 +21,21 @@ typedef struct XrXirHostExecutionRequest {
     uint32_t argument_count;
 } XrXirHostExecutionRequest;
 typedef struct XrXirHostCall XrXirHostCall;
+typedef struct XrXirHostInstance XrXirHostInstance;
+/* One serialized owner keeps initialization, slots, callable authority, provider
+ * contexts and cumulative limits across calls. Its one active Call must be
+ * dropped before another begin or owner drop. Failure preserves empty output. */
+XR_FUNC XrXirCallStatus xr_xir_host_instance_new(XrXirProgram *program,
+    const XrXirInstanceConfig *config, XrXirHostInstance **output);
+XR_FUNC XrXirCallStatus xr_xir_host_instance_begin(XrXirHostInstance *owner, uint32_t entry,
+    const XrXirValue *arguments, uint32_t count, XrXirHostCall **output);
+/* Uses the actual same-owner function binding; an ordinal grants no authority. */
+XR_FUNC XrXirCallStatus xr_xir_host_instance_begin_function(XrXirHostInstance *owner,
+    const XrXirValue *function, const XrXirValue *arguments, uint32_t count, XrXirHostCall **output);
+XR_FUNC XrXirCallStatus xr_xir_host_instance_execute(XrXirHostInstance *owner, uint32_t entry,
+    const XrXirValue *arguments, uint32_t count, XrXirCallResult *output);
+/* BUSY preserves the owner while a Call is active. NULL is a no-op. */
+XR_FUNC XrXirCallStatus xr_xir_host_instance_drop(XrXirHostInstance *owner);
 /* Calls are serialized by the host. Reentry from execution/cleanup returns BUSY.
  * Begin owns a new instance and retains arguments/code; provider contexts remain
  * host-owned until drop. Output must be empty and is unchanged on failure. */
@@ -39,7 +54,9 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_wait_request(const XrXirHostCall *call,
 XR_FUNC XrXirCallStatus xr_xir_host_call_request_cancel(XrXirHostCall *call);
 /* Takes a terminal result once. Copy failure preserves both owner and output. */
 XR_FUNC XrXirCallStatus xr_xir_host_call_take(XrXirHostCall *call, XrXirCallResult *output);
-/* Consumes the owner except on BUSY, reporting cleanup failure. NULL is a no-op. */
+/* Consumes the Call except on BUSY, reporting cleanup failure. A persistent
+ * owner reclaims the whole activation group and keeps ready module state.
+ * A one-shot Call also destroys its private Instance. NULL is a no-op. */
 XR_FUNC XrXirCallStatus xr_xir_host_call_drop(XrXirHostCall *call);
 /* Admission or cleanup failure preserves output. A published result owns values. A timer
  * suspension waits on the monotonic clock until its full duration has elapsed; a failed

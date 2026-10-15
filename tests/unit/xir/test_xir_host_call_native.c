@@ -17,6 +17,8 @@
 #include "execution/xr_xir_host_execution.c"
 #include "xir_host_call_cases.h"
 #include "xir_bounded_instance_cases.h"
+#include "xir_persistent_host_cases.h"
+#include "xir_persistent_host_faults.h"
 XR_DATA const XrXirProgramSpec host_call_source_program;
 XR_DATA const uint32_t host_call_entries[3];
 XR_DATA const uint32_t host_call_fatal_entry;
@@ -32,6 +34,10 @@ int main(int argc, char **argv) {
     xr_compile_resources_release(resources);
     if (argc == 2) host_fatal_cleanup(program, host_call_fatal_entry);
     activation_cleanup_failure(program,host_call_entries[2]);
+    size_t live=runtime_live,bytes=runtime_bytes;
+    persistent_host_cases(program,host_call_entries[0],host_call_bounded_entries[0],host_call_bounded_entries[2],host_call_bounded_entries[3]);
+    persistent_host_faults(program,host_call_bounded_entries[2]);
+    CHECK(runtime_live==live && runtime_bytes==bytes);
     bounded_instances(program,host_call_entries[0],host_call_bounded_entries[0],host_call_bounded_entries[1],host_call_bounded_entries[2],host_call_bounded_entries[3]);
     host_cases(program, host_call_entries);
     return 0;

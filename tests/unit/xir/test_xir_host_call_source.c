@@ -23,6 +23,8 @@
 #include "execution/xr_xir_host_execution.c"
 #include "xir_host_call_cases.h"
 #include "xir_bounded_instance_cases.h"
+#include "xir_persistent_host_cases.h"
+#include "xir_persistent_host_faults.h"
 static XrXirArtifact *host_source(void) {
     XrCompileResources *resources=NULL;
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
@@ -81,6 +83,10 @@ int main(int argc, char **argv) {
     CHECK(!lowered);
     if (fatal) host_fatal_cleanup(program, entries[3]);
     activation_cleanup_failure(program,entries[2]);
+    size_t live=runtime_live,bytes=runtime_bytes;
+    persistent_host_cases(program,entries[0],entries[4],entries[6],entries[7]);
+    persistent_host_faults(program,entries[6]);
+    CHECK(runtime_live==live && runtime_bytes==bytes);
     bounded_instances(program,entries[0],entries[4],entries[5],entries[6],entries[7]);
     host_cases(program, entries);
     return 0;
