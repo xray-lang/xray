@@ -1,0 +1,2 @@
+fn put(a:ref(i8,i8),b:ref(i8,i8)){a=(40,2);b=(1,2)}
+export fn run()->i64{var a:Array<(i8,i8)>=[(0,0)];var b:Array<(i8,i8)>=[(0,0)];put(ref a[0],ref b[0]);return (a[0].0 as i64)+(a[0].1 as i64)+(b[0].0 as i64)-1}

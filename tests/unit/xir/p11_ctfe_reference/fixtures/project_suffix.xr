@@ -1,0 +1,4 @@
+struct Box{n:i64;text:string}
+fn update(x:ref Box){x.n=x.n+2}
+fn value()->i64{var xs=[Box{n:40,text:"old"}];const old=xs;update(ref xs[0]);return xs[0].n+old[0].n-40}
+export fn run()->i64{return comptime value()}

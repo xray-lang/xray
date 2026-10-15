@@ -31,6 +31,24 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"project_owning_direct", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
+    {"project_reproject", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_suffix", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_reserve", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_evaluate_once", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_bounds", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 3},
+    {"project_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"project_field", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_mixed", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_cow", XR_XIR_I64, 82, XR_XIR_OK, NULL, 0},
+    {"project_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_index", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_grow", XR_XIR_I64, 3, XR_XIR_OK, NULL, 0},
+    {"project_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"cleanup_infinite", XR_XIR_I64, 0, XR_XIR_BUDGET, NULL, 2},
     {"cleanup_generic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"cleanup_owning_direct", XR_XIR_STRING, 1, XR_XIR_OK, NULL, 0},
@@ -662,6 +680,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_nominal_cases.h"
 #include "xir_ctfe_function_cases.h"
 #include "xir_ctfe_cleanup_cases.h"
+#include "xir_ctfe_projection_cases.h"
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
@@ -682,6 +701,8 @@ int main(int argc, char **argv) {
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
         if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
+        else if (!strcmp(selected->name,"project_direct")) reference_projection_direct(&context,&source);
+        else if (!strcmp(selected->name,"project_owning_direct")) reference_projection_owning(&context,&source);
         else if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_owning(&context,&source);
         else if (!strcmp(selected->name,"cleanup_direct")) reference_cleanup_direct(&context,&source);
         else if (!strcmp(selected->name,"function_cycle_direct")) reference_function_cycle(&context,&source);
@@ -736,6 +757,7 @@ int main(int argc, char **argv) {
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
+    if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
     if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
     if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();

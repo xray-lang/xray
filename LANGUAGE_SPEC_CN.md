@@ -6285,7 +6285,7 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 
 `abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
 
-Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身份、完整签名、READ 接收者及生成的操作契约共同决定。当前准入 `abs`、`toString`、`toF64`、`toHex`、`min/max`、三项 `wrapping*`、三项 `checked*`、三项 `saturating*`、三项溢出谓词，以及六项位方法 `popcount/leadingZeros/trailingZeros/byteswap/rotateLeft/rotateRight`。这些调用产生普通受验证 XIR，不查询标准库 native 缓存。六项位方法要求 i64 接收者，按完整64位二补码位表示计算；两个零计数方法对零返回64；旋转量包括负数和i64端点，统一按模64处理。它们使用现有无符号整数中间值及普通位运算，无新增公共 opcode。`wrapping*` 在接收者的原整数位宽中运算，声明的 i64 参数先按该位宽归约；`toString` 保留原整数符号性。其余已准入方法当前要求 i64 接收者。`sqrt()` 亦由固定治理声明准入：先将i64按普通转换舍入为f64，再返回正确舍入的f64平方根；负数为canonical NaN、零为正零。普通标量配方见§17.57，不依赖宿主FPU或libm。`parse/tryParse`、`toBigInt`、`pow` 保留声明但尚未具有 Checked Source 操作准入，调用时明确拒绝；这不是完整整数族资格。
+Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身份、完整签名、READ 接收者及生成的操作契约共同决定。当前准入 `abs`、`toString`、`toF64`、`toHex`、`min/max`、三项 `wrapping*`、三项 `checked*`、三项 `saturating*`、三项溢出谓词，以及六项位方法 `popcount/leadingZeros/trailingZeros/byteswap/rotateLeft/rotateRight`。这些调用产生普通受验证 XIR，不查询标准库 native 缓存。六项位方法要求 i64 接收者，按完整64位二补码位表示计算；两个零计数方法对零返回64；旋转量包括负数和i64端点，统一按模64处理。它们使用现有无符号整数中间值及普通位运算，无新增公共 opcode。`wrapping*` 在接收者的原整数位宽中运算，声明的 i64 参数先按该位宽归约；`toString` 保留原整数符号性。其余已准入方法当前要求 i64 接收者。`sqrt()` 亦由固定治理声明准入：先将i64按普通转换舍入为f64，再返回正确舍入的f64平方根；负数为canonical NaN、零为正零。普通标量配方见§17.58，不依赖宿主FPU或libm。`parse/tryParse`、`toBigInt`、`pow` 保留声明但尚未具有 Checked Source 操作准入，调用时明确拒绝；这不是完整整数族资格。
 
 ### 14.2 `f64` 方法
 
@@ -7748,19 +7748,29 @@ CTFE在每次完整Lowered、identity/target/profile复验后，将实际direct 
 
 RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再退出到frontier0；cleanup改变私有Cell不能追溯改变已捕获的返回值。原拥有slot、COW和Value copy/drop决定寿命。最终结果按原目标逻辑大小导出；临时返回快照在失败或frame释放时也必须释放。预算/物理OOM等编译作业中止不发布部分结果，仍须在不分配、不退款的终态路径释放全部frame、快照、lease和loan。
 
-内部Cell参数继续由本次新推导的真实provenance区分：Function capture只接受OWNED_CAPTURE；普通ref调用接受SCOPED_REF；cleanup参数接受LEXICAL_CLEANUP且必须匹配实际cleanup_owner和正在退出的直接父frame。callable的ref模式描述存储，不单独授予借用权限。实际Cell必须属于当前compiler Domain、非module storage、非projection；外部Cell参数仍在payload接收之前拒绝，cleanup声明也不能作为独立外部CTFE入口调用。
+内部Cell参数继续由本次新推导的真实provenance区分：Function capture只接受OWNED_CAPTURE；普通ref调用接受SCOPED_REF；cleanup参数接受LEXICAL_CLEANUP且必须匹配实际cleanup_owner和正在退出的直接父frame。callable的ref模式描述存储，不单独授予借用权限。实际Cell必须属于当前compiler Domain、非module storage；scoped projection另遵守17.57，拥有capture仍不得接projection。外部Cell参数仍在payload接收之前拒绝，cleanup声明也不能作为独立外部CTFE入口调用。
 
 每个真实compiler activation使用私有身份、稳定frame及本次有限epoch构成既有CellAuthority。loan记录在进入前按全部Cell参数数量预留，计入原live frame；现有Cell loan prepare/commit/abort/release拥有唯一借用语义。只有直接活跃父authority可以重借；所有参数完成准备且后续发布费用可支付后才统一commit。任一失败逆序abort已准备前缀；正常或失败pop逆序release，精确恢复父loan。Cell读写及同步Array/字段路径使用既有authorized Value操作，不能凭type ID、持有引用或root标志绕过权限。借用期间不把scoped Cell伪装成拥有capture。
 
-参数类型、元素形状、别名检查、frontier查找/迁移及所有可变接收先付原累计work；loan终态释放费用预付，scratch仍限原剩余frame。所有cleanup和ref调用共享原steps/depth/frame及原128M/64MiB/8MiB、output8限额。缺省declarations继续明确拒绝，入口guard不能先解引用缺省表。scoped projection、error/panic cleanup、外部有界接收及其他未准入族仍fail closed；内部ref/cleanup不授予P12、共享/provider或正式全安全资格。
+参数类型、元素形状、别名检查、frontier查找/迁移及所有可变接收先付原累计work；loan终态释放费用预付，scratch仍限原剩余frame。所有cleanup和ref调用共享原steps/depth/frame及原128M/64MiB/8MiB、output8限额。缺省declarations继续明确拒绝，入口guard不能先解引用缺省表。scoped projection遵守17.57；error/panic cleanup、外部有界接收及其他未准入族仍fail closed；内部ref/cleanup不授予P12、共享/provider或正式全安全资格。
 
-### 17.57 整数平方根的普通标量配方
+### 17.57 有界scoped projection与当前根的真实借用
+
+完整Lowered及整个direct/FUNCTION_REF/cleanup闭包准入后，CELL_PROJECT接既有Value工厂，为当前compiler Domain私有Cell的INDEX_PLACE/FIELD_PLACE链构造真实描述符。描述符拥有已求值selector和规范存储根，不缓存内部地址或叶快照。先完成receiver与全部实参求值，再由真实loan_prepare_path重验当前根、完整路径和父scope；所有准备成功且费用可支付后统一commit。借用期间通过既有authorized path read/write/push访问，空suffix表示当前借用scope本身；再投影扩展现有selector，只有真实父authority可以重借。既有provenance角色、别名拒绝、精确父loan恢复和静态cleanup规则继续适用，不授予外部Cell、module/object根或拥有capture权限。
+
+只在闭包实际含CELL_PROJECT时，预扫描真实可达Cell创建点的Array/struct元素形状，元数据操作之前向原ledger支付最大形状的128倍。首次投影借用准备时，父authority仍可合法读取完整规范根；实际有界接收遍历的已付work与类型形状保存在该loan记录，临时根快照在借用准备之前释放。后继重借只从当前父loan继承费用上界；该数字不授予读取根或扩大scope的权限，真实Value loan仍独立复验。当前可准入动态根是元素接收跨度静态可界定的Array，其长度不能经严格后代loan改变；其他可准入根接收跨度静态可界定。尚无完整有界观察接口的更深变量族继续拒绝，不无预算探测私有头。
+
+每次投影访问预付根接收work乘以4×(根形状+1)，覆盖公共path操作的前缀、suffix及完整接收。修改还先读真实Domain live统计，预付live_bytes×根形状×32，覆盖同一无环路径可能发生的祖先COW与保留；Array叶增长另按真实容量及元素storage付费。所有乘法先检溢出，费用不可支付时在Value访问/修改前BUDGET，累计账本从不退款或重置。观察快照在修改之前释放，保留既有COW副本；可变拥有结果可在Source/Artifact/ledger调用者死亡后继续持有，最后drop不分配。
+
+临时selector、共同接收scratch和所有同时存活activation共享原frame；child分配后，参数接收和loan准备只能使用再扣除child字节的余额。Value的scratch不足可能沿既有LIMIT映射为BUDGET，显式frame检查仍返回FRAME_LIMIT；两者均保全空输出并释放已准备前缀，不能伪装为成功或放宽上限。所有step/depth/output与原128M/64MiB/8MiB及65536 frame不变。该族没有公共Value/Call/Instance/SourceContext或schema/opcode变更。普通Source ref lambda、error/panic cleanup、foreign/deep-variable接收、P12及完整共享/provider/安全资格仍为独立剩余责任。
+
+### 17.58 整数平方根的普通标量配方
 
 固定治理的 `i64.sqrt() -> f64` 先沿共同数值转换将输入舍入为 binary64，再计算其平方根并按最近偶数规则舍入结果。负数返回 canonical NaN，零返回正零。正数的 binary64 整数表示至多为 2^63；53 轮逐二位恢复算法只用现有无符号整数、比较、PHI、移位和数值转换。所有动态移位量在求值前归约至0..63，越界输入位返回零；根、余数及中间值不超过64位。
 
 末轮整型余数与根比较决定唯一舍入；整数被开方数不可能落在相邻整数根的平方中点。最终精确可表示的整数尾数除以2的幂，复用共同 IEEE 位内核，不调用宿主 FPU/libm、AST/native缓存或新增 opcode。循环只携带标量 PHI，不创建运行期 Cell 或托管对象。完整 Source/Checked/Lowered 复验、CTFE闭包/步骤/帧/输出限制及原累计分配/live/work账本仍适用；该单方法不授予 `pow`、解析、BigInt或完整标准库资格。
 
-### 17.58 治理库配方的普通READ参数展开
+### 17.59 治理库配方的普通READ参数展开
 
 已准入的整数、Float/Bool/Rune、String方法及Array的contains/indexOf/join/clear、get/set/push/reserve/withCapacity、pop/shift/unshift/reverse/resize/fill和entries沿同一真实SourceCallSyntax、静态Tuple展开及有序参数worker接收READ实参。固定声明身份、接收者权限、签名与操作契约仍先核实；调用者池中的具体参数类型不被重解释成被调用者泛型参数。共用indirect参数作用域只保留该类型归属，不生成间接调用或授予Function/借用权限。所有值仍沿原普通转换、类型/权限检查和配方进入XIR，不改写AST或制造语法替身。
 

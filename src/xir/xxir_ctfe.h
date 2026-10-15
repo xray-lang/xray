@@ -72,7 +72,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext
  * not the host carrier size. No source syntax, calls or runtime fallback is implied. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request,
     XrXirValue *output);
-/* Direct calls execute only a fully checked scalar/Unit/String/Tuple reachable closure,
+/* Direct calls execute only a fully checked admitted-value reachable closure,
  * including frame-owned locals and private Cells on the compiler ledger.
  * Internal ref/lexical cleanup parameters require fresh producer roles and
  * authentic frame loans. Static cleanup targets join the complete closure;
@@ -87,7 +87,9 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
  * prepay scan/table work and report NUMERIC_RANGE on invalid starts. Immutable
  * Tuple/Nullable/Array and admitted struct/enum exports retain their actual type
  * arena and active fields. External Cell/Function/composite arguments, Function
- * exports, scoped projections and error/panic cleanup remain unadmitted.
+ * exports and error/panic cleanup remain unadmitted. Scoped projections use
+ * existing authorized Cell paths and exact parent loans; selectors, child
+ * preparation and common receiving scratch share the remaining frame quota.
  * This entry never invokes Instance, native code or a fallback. */
 typedef struct XrXirCtfeCallRequest {
     XrXirCtfeRequest evaluation;

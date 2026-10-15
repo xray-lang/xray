@@ -10,6 +10,7 @@
  *   Actual producer roles admit loans; only live parent authority can reborrow.
  *   Every prepared prefix rolls back and every pop restores its exact parent.
  */
+#include "xxir_ctfe_projection_bounds.inc.c"
 static void ctfe_call_frame_free(CtfeCallFrame *frame) {
     xr_xir_value_drop(&frame->returned);
     while (frame->loan_count) {
@@ -30,10 +31,11 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
         XrXirCtfeStatus paid=ctfe_validation_work(&frame->run,state,body->parameters[p]);if (paid!=XR_XIR_CTFE_OK) return paid;
         XrXirValue value=ctfe_nominal_operand(&frame->run,p);
         XrXirCellProofRole role=xr_xir_cell_provenance_role(state->cells,frame->function,p);
-        if (!xr_xir_cell_in_domain(&value,state->domain) || xr_xir_cell_module_storage(&value) ||
-            xr_xir_cell_is_projection(&value)) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (!scalar_compile_work(&frame->run,state->cell_header_work)) return XR_XIR_CTFE_BUDGET;
+        if (!xr_xir_cell_in_domain(&value,state->domain) || xr_xir_cell_module_storage(&value)) return XR_XIR_CTFE_NOT_SUPPORTED;
+        bool projected=xr_xir_cell_is_projection(&value);
         if (role==XR_XIR_CELL_PROOF_OWNED_CAPTURE) {
-            if (p>=captures || !xr_xir_cell_unborrowed(&value)) return XR_XIR_CTFE_NOT_SUPPORTED;
+            if (p>=captures || projected || !xr_xir_cell_unborrowed(&value)) return XR_XIR_CTFE_NOT_SUPPORTED;
             continue;
         }
         if (p<captures || (frame->cleanup?role!=XR_XIR_CELL_PROOF_LEXICAL_CLEANUP:
@@ -43,12 +45,17 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
             if (!xr_xir_type_is_cell(module->types,body->parameters[prior])) continue;
             paid=ctfe_validation_work(&frame->run,state,body->parameters[p]);if (paid!=XR_XIR_CTFE_OK) return paid;
             paid=ctfe_validation_work(&frame->run,state,body->parameters[prior]);if (paid!=XR_XIR_CTFE_OK) return paid;
+            if (!scalar_compile_work(&frame->run,state->cell_header_work*2)) return XR_XIR_CTFE_BUDGET;
             XrXirValue other=ctfe_nominal_operand(&frame->run,prior);
             if (xr_xir_cell_same_owner(&value,&other)) return XR_XIR_CTFE_NOT_SUPPORTED;
         }
         XR_CHECK(frame->loan_count<frame->loan_capacity,"compiler frame reserves every possible Cell loan");
-        CtfeCellLoan *record=&frame->loans[frame->loan_count];record->value=value;
-        XrXirValueStatus status=xr_xir_cell_loan_prepare(&value,&state->authority,&record->loan);
+        CtfeCellLoan *record=&frame->loans[frame->loan_count];record->value=value;record->projected=projected;
+        if (projected) { paid=ctfe_projection_loan_bound(execution,frame,record);if (paid!=XR_XIR_CTFE_OK) return paid; }
+        XrXirValueAdmission admission=ctfe_value_admission(state);XrXirFaultDetail fault={0};
+        XrXirValueStatus status=projected?xr_xir_cell_loan_prepare_path(&value,&state->authority,&admission,&fault,&record->loan):
+            xr_xir_cell_loan_prepare(&value,&state->authority,&record->loan);
+        if (status==XR_XIR_VALUE_BOUNDS) return XR_XIR_CTFE_BOUNDS;
         if (status!=XR_XIR_VALUE_OK) return ctfe_value_status(status);
         ++frame->loan_count;
     }
