@@ -11,6 +11,7 @@
  */
 #include "xxir_task_internal.h"
 #include "xxir_error.h"
+#include "xxir_call_observer_internal.h"
 #include <string.h>
 
 struct XrXirTaskExecutor {
@@ -428,6 +429,47 @@ static void task_core_reject_closed_wait(XrXirTaskExecutor *executor) {
         task_core_enqueue(executor, &task->activation);
     }
 }
+static void task_core_dispatch_result(XrXirTaskExecutor *executor,XirTaskActivation *activation,XrXirCallResult result) {
+    XirTask *task=activation->task;
+    if (result.status==XR_XIR_CALL_READY) task_core_enqueue(executor,activation);
+    else if (result.status==XR_XIR_CALL_SUSPENDED) {
+        XrXirWaitRequest wait={0};
+        XR_CHECK(xr_xir_call_wait_request(activation->call,result.wake,&wait)==XR_XIR_CALL_READY,
+            "suspended task owns one canonical wait request");
+        if (task && wait.kind==XR_XIR_WAIT_YIELD) {
+            XR_CHECK(xr_xir_call_resume(activation->call,result.wake)==XR_XIR_CALL_READY,
+                "the executor resumes its own exact yield token");
+            task_core_enqueue(executor,activation);
+        } else if (wait.kind==XR_XIR_WAIT_TASK) task_core_register_wait(executor,activation->call);
+    } else if (task) task_core_finish_task(executor,task);
+}
+XR_FUNC XrXirCallStatus xir_task_executor_visit_vm(XrXirTaskExecutor *executor,const XrXirExecutorBinding *binding,
+    uint64_t frame,bool *entered) {
+    if (!task_executor_owner_current(executor) || !executor || !binding || !entered) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
+    if (executor->stopping) return XR_XIR_CALL_BAD_STATE;
+    XirTaskActivation *selected=NULL,*previous=NULL;
+    for (XirTaskActivation *at=executor->ready_head;at;previous=at,at=at->ready_next) {
+        if (!xr_xir_domain_work(executor->config.domain,1)) return XR_XIR_CALL_LIMIT;
+        if (xr_xir_call_executor_member(at->call,binding)) { selected=at;break; }
+    }
+    if (!selected) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus admitted=xir_call_vm_visit_ready(selected->call,binding,frame);
+    if (admitted!=XR_XIR_CALL_READY) return admitted;
+    executor->driving=true;executor->current=selected;*entered=true;
+    XrXirCallResult result=xr_xir_call_poll_bounded(selected->call,1);
+    task_core_record_failure(executor,selected);executor->current=NULL;
+    XrXirCallStatus failure=XR_XIR_CALL_READY;
+    XR_CHECK(xr_xir_call_driver_failure(selected->call,binding,&failure),"visited call retains its executor binding");
+    if (result.status!=XR_XIR_CALL_READY) {
+        if (previous) previous->ready_next=selected->ready_next;else executor->ready_head=selected->ready_next;
+        if (executor->ready_tail==selected) executor->ready_tail=previous;
+        selected->ready_next=NULL;selected->queued=false;
+        task_core_dispatch_result(executor,selected,result);
+    }
+    executor->driving=false;
+    return failure!=XR_XIR_CALL_READY ? failure : result.status;
+}
 XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, uint64_t quantum) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor || !quantum) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -442,18 +484,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
         XrXirCallResult result = xr_xir_call_poll_bounded(activation->call, 1);
         task_core_record_failure(executor, activation);
         executor->current = NULL;
-        if (result.status == XR_XIR_CALL_READY) task_core_enqueue(executor, activation);
-        else if (result.status == XR_XIR_CALL_SUSPENDED) {
-            XrXirWaitRequest wait = {0};
-            XR_CHECK(xr_xir_call_wait_request(activation->call, result.wake, &wait) == XR_XIR_CALL_READY,
-                "suspended task owns one canonical wait request");
-            if (task && wait.kind == XR_XIR_WAIT_YIELD) {
-                XR_CHECK(xr_xir_call_resume(activation->call, result.wake) == XR_XIR_CALL_READY,
-                    "the executor resumes its own exact yield token");
-                task_core_enqueue(executor, activation);
-            }
-            else if (wait.kind == XR_XIR_WAIT_TASK) task_core_register_wait(executor, activation->call);
-        } else if (task) task_core_finish_task(executor, task);
+        task_core_dispatch_result(executor,activation,result);
     }
     task_core_reject_closed_wait(executor);
     executor->driving = false;

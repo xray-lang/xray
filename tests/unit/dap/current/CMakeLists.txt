@@ -399,7 +399,8 @@ set_tests_properties(test_dap_predicates test_dap_predicates_resources PROPERTIE
 add_executable(test_dap_write test_write.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_write PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_write PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
-    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr")
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_THREADS_FIXTURE="${XR_DAP_FIXTURE_DIR}/threads_fixture.xr")
 if(MSVC)
     target_compile_options(test_dap_write PRIVATE /W4 /WX)
 else()

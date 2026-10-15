@@ -67,7 +67,11 @@ static XrXirVmDebugFrameInfo write_frame(const XrXirVmDebugSnapshot *snapshot) {
 }
 static void write_return(WriteFixture *fixture,uint64_t epoch,const char *expected) {
     CHECK(xdap_current_continue(fixture->adapter->launch->control,epoch,XR_XIR_VM_DEBUG_CONTINUE)==XR_XIR_VALUE_OK);
-    XdapCurrentResult result={0};CHECK(xdap_current_poll(fixture->adapter->launch->control,1000,&result)==XR_XIR_VALUE_OK);
+    XdapCurrentResult result={0};
+    for (uint32_t i=0;i<32;++i) {
+        CHECK(xdap_current_poll(fixture->adapter->launch->control,1000,&result)==XR_XIR_VALUE_OK);
+        if (result.state) break;xdap_current_result_drop(&result);
+    }
     CHECK(result.state==XDAP_CURRENT_ENDED && result.outcome.status==XR_XIR_CALL_RETURNED);xdap_current_result_drop(&result);
     bool output=false;
     for (uint32_t i=0;i<capture.count;++i) {
@@ -118,6 +122,29 @@ static void write_revoked(void) {
         if (!cancel) write_return(&fixture,adapter->stop_epoch,"44\n");write_dispose(&fixture);
     }
 }
+static void write_task(void) {
+    WriteFixture fixture=write_open(XR_DAP_THREADS_FIXTURE);XdapAdapter *adapter=fixture.adapter;XdapCurrent *control=adapter->launch->control;
+    request(adapter,"{\"seq\":3,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"" XR_DAP_THREADS_FIXTURE "\"},\"breakpoints\":[{\"line\":3,\"condition\":\"value == 22\"}]}}");
+    request(adapter,"{\"seq\":4,\"type\":\"request\",\"command\":\"configurationDone\"}");
+    for (uint32_t i=0;i<100 && adapter->running;++i) CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK);
+    CHECK(adapter->snapshot && !adapter->running && adapter->depth>=3);capture.count=0;
+    XrXirVmDebugFrameInfo frame=write_frame(adapter->snapshot);CHECK(frame.thread>1);
+    uint32_t operand=write_operand(adapter,adapter->snapshot,"left",256);XrXirValue replacement={XR_XIR_I64,0,0};
+    CHECK(xdap_current_write_begin(control,adapter->stop_epoch,frame.id,operand,&replacement)==XR_XIR_VALUE_OK);
+    XdapCurrentResult result={0};CHECK(xdap_current_poll(control,1,&result)==XR_XIR_VALUE_OK && result.state==XDAP_CURRENT_STOPPED);
+    bool visited=false;XrXirVmDebugSnapshot *fresh=NULL;XrXirValueStatus status=xdap_current_write_finish(control,&visited,&fresh);
+    if (status!=XR_XIR_VALUE_OK) fprintf(stderr,"Task paused write status=%u visited=%u depth=%u thread=%llu\n",status,visited,adapter->depth,(unsigned long long)frame.thread);
+    CHECK(status==XR_XIR_VALUE_OK && visited && fresh && !capture.count);
+    CHECK(xr_xir_vm_debug_snapshot_depth(fresh)==adapter->depth);
+    for (uint32_t i=0;i<adapter->depth;++i) {
+        XrXirVmDebugFrameInfo old={0},next={0};XrXirValue name={0};
+        CHECK(xr_xir_vm_debug_snapshot_frame(adapter->snapshot,i,&old,&name)==XR_XIR_VALUE_OK);xr_xir_value_drop(&name);
+        CHECK(xr_xir_vm_debug_snapshot_frame(fresh,i,&next,&name)==XR_XIR_VALUE_OK);xr_xir_value_drop(&name);
+        CHECK(old.id==next.id && old.instruction==next.instruction && old.code==next.code && old.thread==next.thread);
+    }
+    write_operand(adapter,fresh,"left",0);CHECK(xdap_current_rules_replace(control,NULL,0)==XR_XIR_VALUE_OK);
+    write_return(&fixture,result.debug_epoch,"33\n");xdap_current_result_drop(&result);xr_xir_vm_debug_snapshot_drop(fresh);write_dispose(&fixture);
+}
 static size_t write_fault(size_t fail) {
     WriteFixture fixture=write_open(XR_DAP_CALL_FIXTURE);write_pause(&fixture);XdapAdapter *adapter=fixture.adapter;
     XrXirVmDebugFrameInfo frame=write_frame(adapter->snapshot);uint32_t operand=write_operand(adapter,adapter->snapshot,"doubled",40);
@@ -141,7 +168,7 @@ static size_t write_fault(size_t fail) {
 }
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
-    write_normal();write_revoked();size_t sites=write_fault(SIZE_MAX);CHECK(sites);
+    write_normal();write_revoked();write_task();size_t sites=write_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) write_fault(i);else { write_fault(0);if (sites>1) write_fault(sites-1); }
     printf("Actual paused Call write100, unchanged PC, stale/readonly/type/abort/cancel checks, owned snapshots and actual104; sites=%zu injection=%s physical=0/0 PASS\n",sites,resources ? "ALL" : "FIRST_LAST_ONLY");return 0;
 }

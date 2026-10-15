@@ -47,5 +47,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_observer_bind(const XrXirCallView *view,
     const XrXirCallObserver *observer);
 /* Only the actual admitted VM callback invokes this before any VM operation. */
 XR_FUNC XrXirCallStatus xr_xir_call_observer_vm(const XrXirCallView *view);
+/* The owning executor may visit only this exact already-entered VM frame.
+ * This check lends no view and does not execute a callback. */
+XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *,const XrXirExecutorBinding *,uint64_t);
 
 #endif // XXIR_CALL_OBSERVER_INTERNAL_H

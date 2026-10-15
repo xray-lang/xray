@@ -13,6 +13,7 @@
 
 
 #include "xxir_program_internal.h"
+#include "xxir_instance_debug_internal.h"
 #include "xxir_instance_value.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
@@ -495,6 +496,13 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     instance->requested = entry;
     if (instance->state == XR_XIR_INSTANCE_NEW) instance->state = XR_XIR_INSTANCE_INITIALIZING;
     return status;
+}
+XR_FUNC XrXirCallStatus xir_instance_visit_vm(XrXirInstance *instance,const XrXirExecutorBinding *binding,uint64_t frame,bool *entered) {
+    if (!instance_owner_current(instance) || !instance || !binding || !entered) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (instance->driving || instance_observing(instance)) return XR_XIR_CALL_BUSY;
+    if (instance->stopping || !instance->call || instance->state==XR_XIR_INSTANCE_FAILED) return XR_XIR_CALL_BAD_STATE;
+    instance->driving=true;XrXirCallStatus status=xir_task_executor_visit_vm(instance->executor,binding,frame,entered);
+    instance->driving=false;return status;
 }
 XrXirInstanceResult xr_xir_instance_poll_bounded(XrXirInstance *instance, uint64_t quantum) {
     if (!instance_owner_current(instance)) return (XrXirInstanceResult){.outcome = {.status = XR_XIR_CALL_BAD_ARGUMENT}};

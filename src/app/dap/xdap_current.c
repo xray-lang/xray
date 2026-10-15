@@ -54,7 +54,13 @@ XR_FUNC XrXirValueStatus xdap_current_poll(XdapCurrent *session, uint64_t quantu
     XdapCurrentResult *output) {
     if (!session || session->driving || !output || output->state || output->debug_epoch || output->instance_epoch ||
         !xr_xir_call_result_empty(&output->outcome) || !quantum) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (xr_xir_vm_debug_paused(session->debug) && !xir_vm_debug_write_pending(session->debug)) {
+    if (xir_vm_debug_write_pending(session->debug)) {
+        session->driving=true;XrXirValueStatus status=xir_vm_debug_write_visit(session->debug);session->driving=false;
+        if (status!=XR_XIR_VALUE_OK) return status;
+        status=xr_xir_vm_debug_observation_status(session->debug,false);
+        if (status!=XR_XIR_VALUE_OK) return status;
+    }
+    if (xr_xir_vm_debug_paused(session->debug)) {
         *output = (XdapCurrentResult){.state=XDAP_CURRENT_STOPPED,
             .debug_epoch=xr_xir_vm_debug_epoch(session->debug)};
         return XR_XIR_VALUE_OK;
@@ -110,6 +116,9 @@ XR_FUNC XrXirValueStatus xdap_current_write_begin(XdapCurrent *session,uint64_t 
 }
 XR_FUNC XrXirValueStatus xdap_current_write_finish(XdapCurrent *session,bool *visited,XrXirVmDebugSnapshot **snapshot) {
     return session && !session->driving ? xir_vm_debug_write_finish(session->debug,visited,snapshot) : XR_XIR_VALUE_BAD_ARGUMENT;
+}
+XR_FUNC uint64_t xdap_current_stopped_epoch(const XdapCurrent *session) {
+    return session && !session->driving && !session->ended ? xr_xir_vm_debug_epoch(session->debug) : 0;
 }
 XR_FUNC XrXirCallStatus xdap_current_wait_request(XdapCurrent *session,uint64_t epoch,
     uint64_t wake,XrXirWaitRequest *output) {

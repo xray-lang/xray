@@ -16,6 +16,7 @@
 #include "xxir_error.h"
 #include "xxir_type_arena.h"
 #include "xxir_cell_owner_internal.h"
+#include "xxir_instance_debug_internal.h"
 #include <stdatomic.h>
 #include <string.h>
 

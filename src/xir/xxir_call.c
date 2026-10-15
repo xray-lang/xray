@@ -400,6 +400,15 @@ static uint64_t state_offset(void) {
     return (sizeof(CallFrame) + alignment - 1) / alignment * alignment;
 }
 #include "xxir_call_cell_loans.inc.c"
+XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *call,const XrXirExecutorBinding *binding,uint64_t frame) {
+    if (!call_owner_current(call) || !call || !frame || !xr_xir_call_executor_member(call,binding)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (call->driving || call_observing(call) || call->cleaning || call->admitting || call->active_view) return XR_XIR_CALL_BUSY;
+    if (!call->top || call->top->epoch!=frame || call->top->code_kind!=XR_XIR_CALL_CODE_VM ||
+        !call->top->entered || call->top->exiting || call->top->in_cleanup || call->cancel_requested || call->aborting ||
+        call->result.status!=XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_STATE;
+    if (!call_cell_work(call,1)) return XR_XIR_CALL_LIMIT;
+    return XR_XIR_CALL_READY;
+}
 #include "xxir_call_class_access.inc.c"
 
 typedef struct CallFramePreparation {

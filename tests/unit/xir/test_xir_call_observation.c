@@ -80,6 +80,10 @@ static void observation_reentry(ObservedInstance *record, const XrXirCallEvent *
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_task_executor_stop(instance->executor) == XR_XIR_CALL_BUSY);
     CHECK(xr_xir_task_executor_free(instance->executor, NULL) == XR_XIR_CALL_BUSY);
+    bool visited=false;
+    CHECK(xir_call_vm_visit_ready(call,&event->binding,event->frame)==XR_XIR_CALL_BUSY);
+    CHECK(xir_task_executor_visit_vm(instance->executor,&event->binding,event->frame,&visited)==XR_XIR_CALL_BUSY && !visited);
+    CHECK(xir_instance_visit_vm(instance,&event->binding,event->frame,&visited)==XR_XIR_CALL_BUSY && !visited);
     if (record->view) {
         CHECK(!xr_xir_call_admission(record->view));
         CHECK(xr_xir_call_observer_bind(record->view, &record->observer) == XR_XIR_CALL_BAD_STATE);
@@ -237,6 +241,13 @@ static bool observation_operation(CmFixture *fixture, bool consume_program,
                 XrXirInstanceResult result = {0}; unsigned polls = 0; bool cancelled = false;
                 do {
                     result = xr_xir_instance_poll_bounded(record->instance, 1); CHECK(++polls < 32768);
+                    for (unsigned f=0;f<record->count;++f) {
+                        const ObservedFrame *frame=&record->frames[f];
+                        if (frame->left || frame->code==XR_XIR_CALL_CODE_VM) continue;
+                        XrXirCall *call=((const XirTaskActivation *)frame->first.binding.activation)->call;
+                        if (call && call->top && call->top->epoch==frame->first.frame)
+                            CHECK(xir_call_vm_visit_ready(call,&frame->first.binding,frame->first.frame)==XR_XIR_CALL_BAD_STATE);
+                    }
                     if (observe_cancel && !cancelled && record->bodies[CN_CHILD]) {
                         CHECK(xr_xir_instance_cancel_current(record->instance) == XR_XIR_CALL_CANCEL_REQUESTED); cancelled = true;
                     }

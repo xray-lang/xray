@@ -48,6 +48,7 @@ XR_FUNC XrXirValueStatus xir_vm_debug_continue_filtered(XrXirVmDebug *,uint64_t)
  * Every begin must be paired with finish, including driver failure/cleanup. */
 XR_FUNC XrXirValueStatus xir_vm_debug_write_begin(XrXirVmDebug *,uint64_t,uint64_t,uint32_t,const XrXirValue *);
 XR_FUNC bool xir_vm_debug_write_pending(const XrXirVmDebug *);
+XR_FUNC XrXirValueStatus xir_vm_debug_write_visit(XrXirVmDebug *);
 /* A successful applied write transfers its prepared snapshot even if the
  * enclosing driver later failed. Driver outcome and write outcome are distinct. */
 XR_FUNC XrXirValueStatus xir_vm_debug_write_finish(XrXirVmDebug *,bool *,XrXirVmDebugSnapshot **);

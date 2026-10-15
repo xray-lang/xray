@@ -23,13 +23,25 @@ XR_FUNC bool xir_vm_debug_write_pending(const XrXirVmDebug *debug) { return debu
 XR_FUNC XrXirValueStatus xir_vm_debug_write_finish(XrXirVmDebug *debug,bool *visited,XrXirVmDebugSnapshot **output) {
     if (!debug_valid(debug) || !visited || !output || *output || !debug->write.phase) return XR_XIR_VALUE_BAD_ARGUMENT;
     *visited=debug->write.phase==2;
-    XrXirValueStatus status=*visited ? debug->write.result : XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=debug->write.phase>=2 ? debug->write.result : XR_XIR_VALUE_BAD_ARGUMENT;
     if (status==XR_XIR_VALUE_OK) { *output=debug->write.snapshot;debug->write.snapshot=NULL; }
     xr_xir_value_drop(&debug->write.value);xr_xir_vm_debug_snapshot_drop(debug->write.snapshot);debug->write=(DebugWrite){0};return status;
 }
 static XrXirValueStatus debug_write_status(XrXirCallStatus status) {
     return status==XR_XIR_CALL_READY ? XR_XIR_VALUE_OK : status==XR_XIR_CALL_OOM ? XR_XIR_VALUE_OOM :
         status==XR_XIR_CALL_LIMIT ? XR_XIR_VALUE_LIMIT : status==XR_XIR_CALL_UNSUPPORTED ? XR_XIR_VALUE_UNSUPPORTED : XR_XIR_VALUE_BAD_ARGUMENT;
+}
+XR_FUNC XrXirValueStatus xir_vm_debug_write_visit(XrXirVmDebug *debug) {
+    if (!debug_valid(debug) || !xr_xir_vm_debug_paused(debug) || debug->write.phase!=1 || !debug->snapshot)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirDebugCallFrame *call=xir_debug_calls_id(&debug->calls,debug->snapshot->frames[0].info.id);
+    if (!call || call->event.code!=XR_XIR_CALL_CODE_VM) return XR_XIR_VALUE_BAD_ARGUMENT;
+    bool entered=false;XrXirCallStatus driven=xir_instance_visit_vm(debug->target,&call->event.binding,call->event.frame,&entered);
+    if (debug->write.phase==1) {
+        debug->write.phase=3;debug->write.result=driven==XR_XIR_CALL_READY ? XR_XIR_VALUE_BAD_ARGUMENT : debug_write_status(driven);
+        if (entered) xr_xir_vm_debug_disable(debug);
+    }
+    return debug_write_status(driven);
 }
 /* Root Cell replacement updates every already-readable plain alias. Scoped
  * projections need their own prepared path transaction and reject here. */
