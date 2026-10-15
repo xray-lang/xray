@@ -40,7 +40,7 @@ static bool source_call_syntax(SourceContext *ctx,AstNode *node,SourceCallSyntax
     return true;
 }
 typedef enum SourceCallFamily { SOURCE_CALL_FUNCTION, SOURCE_CALL_REQUIREMENT, SOURCE_CALL_CONSTRUCTOR,
-    SOURCE_CALL_INDIRECT, SOURCE_CALL_VARIADIC_READ } SourceCallFamily;
+    SOURCE_CALL_INDIRECT, SOURCE_CALL_NATIVE, SOURCE_CALL_VARIADIC_READ } SourceCallFamily;
 typedef struct SourceCallStorage {
     XrXirType *types;
     SourceValue *values;
@@ -84,7 +84,8 @@ static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t 
     return plan->function_parameters[plan->family==SOURCE_CALL_VARIADIC_READ ? 0 : index];
 }
 static bool source_call_caller_parameters(const SourceCallPlan *plan) {
-    return plan->family==SOURCE_CALL_INDIRECT || plan->family==SOURCE_CALL_VARIADIC_READ;
+    return plan->family==SOURCE_CALL_INDIRECT || plan->family==SOURCE_CALL_NATIVE ||
+        plan->family==SOURCE_CALL_VARIADIC_READ;
 }
 typedef union SourceCallArgumentPlan {
     SourceExpressionPlan *value;

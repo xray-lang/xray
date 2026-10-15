@@ -73,6 +73,15 @@ static bool source_call_spread_shape(SourceContext *ctx,AstNode *node,uint32_t d
     }
     SourceExpectedType ground;
     if (!source_ground_type(ctx,node,depth,&ground)) return false;
+    if (ground.present && node->type==AST_VARIABLE) {
+        SourceName *binding=visible_name(ctx,node->as.variable.name);
+        uint32_t claims=source_fact_depth(ctx,binding);
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+        for (uint32_t c=0;c<claims && xr_xir_type_is_nullable(&ctx->types,ground.type);++c) {
+            if (!source_work(ctx,node)) return false;
+            ground.type=xr_xir_nullable_element(&ctx->types,ground.type);
+        }
+    }
     if (!ground.present && node->type==AST_CALL_EXPR) {
         const CallExprNode *call=&node->as.call_expr;
         SourceName *binding=source_call_spread_function(ctx,call->callee);

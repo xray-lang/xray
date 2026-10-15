@@ -23,10 +23,10 @@ static bool source_native_read_arguments(SourceContext *ctx,AstNode *node,
         if (xr_xir_type_is_cell(&ctx->types,parameters[p]))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"native READ arguments cannot grant a ref contract");
     }
-    /* These parameter types are already instantiated in the caller's pool.
-     * The indirect argument scope preserves caller binders without treating
-     * them as callee substitution parameters. No indirect call is emitted. */
-    SourceCallPlan plan={SOURCE_CALL_INDIRECT,{0},{0},parameters,NULL,XR_XIR_UNIT,
+    /* Native parameter types are already instantiated in the caller's pool.
+     * Their shared READ plan preserves those binders without applying a
+     * declaration callee's type substitution. */
+    SourceCallPlan plan={SOURCE_CALL_NATIVE,{0},{0},parameters,NULL,XR_XIR_UNIT,
         {0},values,0,0,NULL,NULL};
     if (!source_call_expand(ctx,node,&syntax,&plan,maximum)) return false;
     if ((uint32_t)syntax.arg_count<minimum || (uint32_t)syntax.arg_count>maximum)

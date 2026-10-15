@@ -1,0 +1,12 @@
+fn appended<T>(values: Array<T>, item: T) -> Array<T> {
+    var copy = values
+    copy.push(...(item,))
+    copy.unshift(...(item,))
+    return copy
+}
+export fn referenceAnswer() -> i64 {
+    const original: Array<i8> = [3]
+    const copied: Array<i8> = appended<i8>(original, 7)
+    const joined = ["a\0b", "x"].join(...("|",))
+    return len(original) * 10000 + len(copied) * 1000 + (copied[0] as i64) * 100 + (copied[1] as i64) * 10 + (copied[2] as i64) + len(joined)
+}
