@@ -696,9 +696,6 @@ foreach(target IN ITEMS test_xir_p10_initializer_lifecycle
         TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ownership;resources;fault-injection")
 endforeach()
 
-xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
-xray_prepend_windows_asan_runtime_to_directory_tests()
-
 foreach(storage_kind IN ITEMS array array-const)
     string(REPLACE "-" "_" storage_suffix "${storage_kind}")
     add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_resources
@@ -710,3 +707,6 @@ foreach(storage_kind IN ITEMS array array-const)
     set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_baseline PROPERTIES
         TIMEOUT 60 LABELS "unit;xir;p10;source;resources;generation;ownership;baseline")
 endforeach()
+
+xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
+xray_prepend_windows_asan_runtime_to_directory_tests()
