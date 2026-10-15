@@ -1,0 +1,4 @@
+enum E{Bad,Other}
+fn fail(e:Error)->i64{throw e}
+fn answer()->i64{var e:Error=E.Bad;e=E.Other;try{return fail(e)}catch(e:E){return match(e){E.Bad->0,E.Other->42}}}
+export fn run()->i64{return comptime answer()}

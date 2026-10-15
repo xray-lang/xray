@@ -1,0 +1,2 @@
+class Box {private static seven()->i64{print(7);return 7}; static answer()->i64{return comptime Box.seven()}}
+export fn run()->i64{return comptime Box.answer()}

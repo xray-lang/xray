@@ -38,14 +38,29 @@ static bool ctfe_result_value(const XrXirValue *value, XrXirType type, const XrX
 
 /* The count describes frame reads/writes in scalar_step; edge transfers charge
  * their actual predecessor scans and copies inside scalar_edge. */
+static bool ctfe_error_operation(XrXirOp op) {
+    return op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT || op==XR_XIR_INVOKE_RESULT || op==XR_XIR_INVOKE_ERROR ||
+        op==XR_XIR_INVOKE_DISCARD || op==XR_XIR_THROW || op==XR_XIR_CLEANUP_ERROR || op==XR_XIR_ERROR_ERASE ||
+        op==XR_XIR_ERROR_IS || op==XR_XIR_ERROR_NARROW;
+}
+static bool ctfe_panic_operation(XrXirOp op) {
+    return op==XR_XIR_PANIC_CATCH || op==XR_XIR_PANIC_CODE || op==XR_XIR_PANIC_MESSAGE ||
+        op==XR_XIR_ASSERT_CONDITION || op==XR_XIR_MATCH_FAIL;
+}
 static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     switch (op) {
+    case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
+    case XR_XIR_ASSERT_CONDITION: case XR_XIR_MATCH_FAIL: *work=8;return true;
     case XR_XIR_CONST_FLOAT: case XR_XIR_CONST_RUNE: case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: *work = 1; return true;
+    case XR_XIR_THROW: case XR_XIR_CLEANUP_ERROR: case XR_XIR_ERROR_ERASE: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_FUNCTION_WEAKEN:
+    case XR_XIR_CLEANUP_REGISTER: case XR_XIR_CLEANUP_LEAVE: *work=8;return true;
     case XR_XIR_SCALAR_COPY: case XR_XIR_CONVERT_NUMBER:
     case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_LOCAL_WRITE: *work = 2; return true;
-    case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
+    case XR_XIR_CELL_PROJECT: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
     case XR_XIR_CELL_LOCAL_WRITE: *work = 8; return true;
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP:
@@ -54,6 +69,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE: case XR_XIR_CELL_PLACE: case XR_XIR_INDEX_PLACE: case XR_XIR_FIELD_PLACE:
     case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD:
+    case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET: case XR_XIR_OBJECT_PLACE:
     case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET: case XR_XIR_STRUCT_SET:
     case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET: *work = 8; return true;
     case XR_XIR_CONST_STRING: case XR_XIR_CONCAT_STRING: case XR_XIR_STRING_LEN: case XR_XIR_TO_STRING:
@@ -83,7 +99,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
 }
 /* Local writes produce Unit but keep ordinary fallthrough control flow. */
 static bool ctfe_unit_result(XrXirOp op) {
-    return op == XR_XIR_STRUCT_SET || op == XR_XIR_RANGE_CHECK || op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
+    return op == XR_XIR_CLASS_SET || op == XR_XIR_ASSERT_CONDITION || op == XR_XIR_MATCH_FAIL || op == XR_XIR_THROW || op == XR_XIR_CLEANUP_ERROR || op == XR_XIR_INVOKE_DISCARD || op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CLEANUP_LEAVE || op == XR_XIR_STRUCT_SET || op == XR_XIR_RANGE_CHECK || op == XR_XIR_PLACE_WRITE || op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_JUMP || op == XR_XIR_BRANCH || op == XR_XIR_RETURN ||
         op == XR_XIR_SCALAR_LOCAL_WRITE || op == XR_XIR_CELL_WRITE || op == XR_XIR_CELL_LOCAL_WRITE || op == XR_XIR_OWNED_LOCAL_WRITE;
 }
 static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t selected) {
@@ -107,6 +123,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     }
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
+        if (xr_xir_type_is_cell(module->types,body->parameters[p])) return XR_XIR_CTFE_NOT_LEAF;
         admitted=ctfe_body_type_admit(artifact,body->parameters[p],true);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
     }
@@ -118,7 +135,8 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     for (uint32_t i = 0; i < body->instruction_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
         const XrXirInstruction *op = &body->instructions[i]; uint64_t work;
-        if (!ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
+        if (ctfe_class_operation(op->op) || ctfe_error_operation(op->op) || ctfe_panic_operation(op->op) || op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_CLEANUP_LEAVE || op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_FUNCTION_WEAKEN || op->op==XR_XIR_CALL_INDIRECT ||
+            !ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
         admitted=ctfe_tuple_instruction_admit(artifact,body,op);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
         bool unit = ctfe_unit_result(op->op) || ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_NULLABLE_UNWRAP) && op->type == XR_XIR_UNIT);
@@ -161,11 +179,13 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     status = ctfe_admit(artifact, request->function);
     if (status != XR_XIR_CTFE_OK) return status;
     const XrXirFunction *body = &artifact->module.functions[request->function];
+    status=xr_xir_compile_ctfe_type_admit(&artifact->context,artifact->module.types,body->result);
+    if (status!=XR_XIR_CTFE_OK) return status;
     const XrXirFunctionLayout *layout = &artifact->layouts[request->function];
     if (request->argument_count != body->parameter_count) return XR_XIR_CTFE_BAD_ARGUMENT;
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(&artifact->context, 1)) return XR_XIR_CTFE_BUDGET;
-        if (ctfe_composite_node(artifact->module.types,body->parameters[p])) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (!ctfe_parameter_type(body->parameters[p])) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (!xr_xir_value_argument(&request->arguments[p], NULL, body->parameters[p]))
             return XR_XIR_CTFE_BAD_ARGUMENT;
     }

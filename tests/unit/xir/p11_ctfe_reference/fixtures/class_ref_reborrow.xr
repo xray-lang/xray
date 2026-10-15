@@ -1,0 +1,5 @@
+class Box{items:Array<i64>;constructor(items:Array<i64>){this.items=items}}
+fn inc(x:ref i64){x=x+1}
+fn twice(x:ref i64){inc(ref x);inc(ref x)}
+fn answer()->i64{const b=Box([40]);twice(ref b.items[0]);return b.items[0]}
+export fn run()->i64{return comptime answer()}

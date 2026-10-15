@@ -1,0 +1,2 @@
+fn answer()->i64{const s="a\0b";const f=fn()->bool{return s=="a\0b"};return f()?42:0}
+export fn run()->i64{return comptime answer()}

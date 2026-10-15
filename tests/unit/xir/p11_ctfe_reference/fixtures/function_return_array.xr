@@ -1,0 +1,2 @@
+fn answer()->i64{const f=fn()->Array<i8>{return [1,2,3]};return len(f())}
+export fn run()->i64{return comptime answer()}

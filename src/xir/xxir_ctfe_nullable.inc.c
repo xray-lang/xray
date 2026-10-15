@@ -21,8 +21,7 @@ static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOw
     XrXirType type=create?op->type:xr_xir_operand_type(run->function,op->args[0]);
     XrXirCtfeStatus status=ctfe_validation_work(run,state,type);
     if (status!=XR_XIR_CTFE_OK) return status;
-    XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,
-        .work=UINT64_MAX,.scratch_bytes=state->frame_spare};
+    XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     if (create) {
         XrXirValue payload={0};
@@ -41,6 +40,9 @@ static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOw
             if (op->op==XR_XIR_NULLABLE_IS_SOME) result=(XrXirValue){XR_XIR_BOOL,0,op->immediate?!some:some};
             else {
                 if (!some) return XR_XIR_CTFE_NULL_UNWRAP;
+                if (op->type==XR_XIR_ERROR) {
+                    status=ctfe_validation_work(run,state,op->type);if (status!=XR_XIR_CTFE_OK) return status;
+                }
                 value_status=xr_xir_value_copy(payload,&result);
             }
         }

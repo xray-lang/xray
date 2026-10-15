@@ -1,0 +1,2 @@
+enum E{Callback{f:fn()->i64}}
+export fn run()->i64{var e:Error=E.Callback{f:fn()->i64{return 1}};const f=fn()->i64{try{throw e}catch(x:E){return 1}};e=E.Callback{f:f};return 42}

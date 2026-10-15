@@ -1,0 +1,5 @@
+enum E{Bad}
+fn inner(x:ref i64)->i64{defer{x=x*10+2};throw E.Bad}
+fn outer(x:ref i64)->i64{defer{x=x*10+3};return inner(ref x)}
+fn answer()->i64{var x=0;try{return outer(ref x)}catch(e:E){return x==23 ? 42 : 0}}
+export fn run()->i64{return comptime answer()}

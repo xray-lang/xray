@@ -24,6 +24,10 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_NUMERIC_RANGE?"comptime value range violation":
         status==XR_XIR_CTFE_NULL_UNWRAP?"comptime null unwrap":
         status==XR_XIR_CTFE_BOUNDS?"comptime index out of bounds":
+        status==XR_XIR_CTFE_UNCAUGHT_ERROR?"comptime uncaught error":
+        status==XR_XIR_CTFE_ASSERTION_FAILURE?"comptime assertion failed":
+        status==XR_XIR_CTFE_MATCH_FAILURE?"comptime non-exhaustive match":
+        status==XR_XIR_CTFE_CLEANUP_PANIC?"comptime panic escaped defer cleanup":
         "comptime requires an admitted deterministic scalar direct-call closure";
     return source_fail(ctx,node,mapped,message);
 }
@@ -31,13 +35,15 @@ static bool source_comptime_helper(SourceContext *ctx,const XrXirArtifact *lower
     const SourceComptimeSite *site,uint32_t *output) {
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const XrXirFunction *original=&ctx->functions[site->helper];uint32_t found=UINT32_MAX;
+    const XrXirFunctionIdentity *identity=&ctx->identities[site->helper];
     for (uint32_t f=0;f<module->function_count;++f) {
-        if (!source_work_units(ctx,site->syntax,5)) return false;
+        if (!source_work_units(ctx,site->syntax,7)) return false;
         const XrXirFunction *body=&module->functions[f];
         if (module->declarations->functions[f].module!=site->module || body->name_length!=original->name_length ||
             !source_span_same(ctx,site->syntax,body->name,original->name,body->name_length)) continue;
         if (found!=UINT32_MAX || body->parameter_count ||
-            module->declarations->functions[f].nominal_owner || module->declarations->functions[f].cleanup_owner)
+            module->declarations->functions[f].nominal_owner!=identity->nominal_owner ||
+            module->declarations->functions[f].method_kind!=identity->method_kind || module->declarations->functions[f].cleanup_owner)
             return source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime helper changed its actual identity or signature");
         if (!source_comptime_type_matches(ctx,site->syntax,module->types,body->result,original->result)) return false;
         found=f;

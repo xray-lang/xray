@@ -27,6 +27,9 @@ static void reference_nominal_value(const XrXirValue *value,const CtfeReferenceC
             CHECK(xr_xir_tuple_get(&tuple,1,&text)==XR_XIR_VALUE_OK);reference_text_value(&text,"ab");
             xr_xir_value_drop(&number);xr_xir_value_drop(&text);xr_xir_value_drop(&tuple);xr_xir_value_drop(&record);return;
         }
+        if (!strcmp(selected->name,"nominal_large")) {
+            CHECK(record.type==XR_XIR_I64 && !record.reserved && record.payload==7);xr_xir_value_drop(&record);return;
+        }
         if (!nested) { reference_text_value(&record,"ab");xr_xir_value_drop(&record);return; }
     } else {
         CHECK(xr_xir_type_is_struct(types,(XrXirType)value->type));
@@ -38,9 +41,20 @@ static void reference_nominal_value(const XrXirValue *value,const CtfeReferenceC
     CHECK(xr_xir_struct_get(&record,1,&admission,&text)==XR_XIR_VALUE_OK);reference_text_value(&text,"ab");
     xr_xir_value_drop(&number);xr_xir_value_drop(&text);xr_xir_value_drop(&record);
 }
+static uint32_t reference_nominal_function(const XrXirModule *module,const CtfeReferenceCase *selected) {
+    if (strcmp(selected->name,"lexical_private_direct")) return reference_run_function(module);
+    uint32_t found=UINT32_MAX;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *body=&module->functions[f];const XrXirFunctionIdentity *identity=&module->declarations->functions[f];
+        if (!identity->nominal_owner || identity->method_kind!=XR_XIR_MEMBER_HELPER || body->name_length<9 ||
+            memcmp(body->name,"$comptime",9) || !xr_xir_type_is_struct(module->types,body->result)) continue;
+        CHECK(found==UINT32_MAX && !body->parameter_count);found=f;
+    }
+    CHECK(found!=UINT32_MAX);return found;
+}
 static void reference_nominal(const XrXirCompileContext *context,XrXirSourceResult *source,const CtfeReferenceCase *selected) {
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
-    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t function=reference_run_function(module);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t function=reference_nominal_function(module,selected);
     const XrXirFunction *body=&module->functions[function];bool recipe=false;
     for (uint32_t i=0;i<body->instruction_count;++i) {
         CHECK(body->instructions[i].op!=XR_XIR_CALL && body->instructions[i].op!=XR_XIR_CALL_INDIRECT);
@@ -86,7 +100,7 @@ static void reference_nominal_last_owner(const CtfeReferenceCase *selected) {
     CHECK(reference_source(&context,selected->name,&source,&diagnostic)==XR_XIR_OK);uint8_t identity[32]={0};
     XrXirArtifact *lowered=reference_lower(&context,&source,identity);XrXirValue value={0};XrXirDomain *reader=NULL;
     CHECK(xr_xir_compile_domain_new(context.resources,UINT64_MAX,&reader)==XR_XIR_VALUE_OK);
-    XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
+    XrXirCtfeRequest request={.artifact=lowered,.function=reference_nominal_function(xr_xir_compile_artifact_module(lowered),selected),
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)selected->value}};
     memcpy(request.checked_identity,identity,sizeof(identity));CHECK(reference_text_evaluate(&request,true,&value)==XR_XIR_CTFE_OK);
     xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);reference_nominal_value(&value,selected,reader);

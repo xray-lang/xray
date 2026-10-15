@@ -1,0 +1,2 @@
+fn answer()->i64{try{return (1.0/0.0) as i64}catch panic(p){return p.code==422 && p.message=="numeric conversion is out of range" ? 42 : 0}}
+export fn run()->i64{return comptime answer()}

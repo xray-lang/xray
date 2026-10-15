@@ -1,0 +1,4 @@
+struct Box { n:i64; text:string }
+fn inc(x:ref i64){x=x+2}
+fn value()->i64{var b=Box{n:40,text:"x"};inc(ref b.n);return b.n}
+export fn run()->i64{return comptime value()}

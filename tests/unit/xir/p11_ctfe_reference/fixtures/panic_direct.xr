@@ -1,0 +1,4 @@
+fn fail(x:ref i64)->i64{defer{x=x+2};return 1/0}
+export fn run()->i64{var xs=[40];try{return fail(ref xs[0])}catch panic(p){return p.code==420 ? xs[0] : 0}}
+fn accept_info(p:PanicInfo)->i64{return 42}
+fn make_info()->PanicInfo{try{const n=1/0}catch panic(p){return p};return make_info()}
