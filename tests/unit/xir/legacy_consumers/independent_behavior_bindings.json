@@ -250,7 +250,7 @@
     },
     {
       "path": "spec/source/sections/003-2-type-system.md",
-      "lf_sha256": "916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620"
+      "lf_sha256": "b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677"
     },
     {
       "path": "spec/source/sections/004-3-expressions.md",
@@ -270,7 +270,7 @@
     },
     {
       "path": "spec/source/sections/018-17-compilation-pipeline.md",
-      "lf_sha256": "19abae1415329b6d0f88d6fa6d70a224b795a0f9a638b5f5c38d4742236868f4"
+      "lf_sha256": "462e39b670cb0a0c495ff677f0e39212fe49bcdc33234b9f5e89e27288085694"
     },
     {
       "path": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",

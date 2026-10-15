@@ -4,13 +4,13 @@ import copy,hashlib,struct
 import complete_numeric_model
 
 ROOT=Path(__file__).resolve().parents[4]
-_INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
+_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
  'spec/source/sections/004-3-expressions.md': '1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c',
  'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
  'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
  'spec/source/sections/010-9-generics.md': '246757d531f91e2d19d2cd18353b5ec8addf05d309e5489c10da37e48be81226',
  'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
- 'spec/source/sections/018-17-compilation-pipeline.md': '19abae1415329b6d0f88d6fa6d70a224b795a0f9a638b5f5c38d4742236868f4',
+ 'spec/source/sections/018-17-compilation-pipeline.md': '462e39b670cb0a0c495ff677f0e39212fe49bcdc33234b9f5e89e27288085694',
  'stdlib/types/array.xr': 'ac31595b3801ee1df3c3f3ab6f1903c5f66ef084f0fa016dc19d24a2fa653223',
  'stdlib/types/bool.xr': '8ad71c5d00a9255a5a8d3478f0515b948511758ecb1373848ce6a9393270e26b',
  'stdlib/types/i64.xr': '2d9a160b70394a77ec69dccdf7b895ecd5ac7e66548824a835d3eb0a7cd45567',

@@ -4,7 +4,7 @@ import hashlib
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-_INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
+_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
  'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
  'src/api/xsource_compile.h': '502cfdddebfb278ab2b3deaa3e27371aa4ecdb9ccba43b472189aa2036ffaf7e',
  'src/base/xcompile_resources.c': 'fcf26222e273a27348bddbe01381f5e64d3b1cfc2282d65472976bd5c5fa405f',
@@ -12,7 +12,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'src/base/xmalloc.h': 'bc5038d87f8c37ff556fbd1ecc1b086c3f35c21d3cd3571eaae957ec8f4b4557',
  'src/program/xr_xir_source_product.h': 'e77fbc930a2a1ef5b327146bc94d808d9dfb54feb8c319ce41aed51e6994c240',
  'src/xir/xxir.h': '3753e53bceab8162ee3c566f3d6fed27e950c443dae8f0bcb974e4ba53961041',
- 'src/xir/xxir_checked.h': '53cfd634a01cc2cebb3c6fef7197f1cca190048bd4c4102904b845764d3ec1dd',
+ 'src/xir/xxir_checked.h': '22a26e5700cac788062621add88534473fb1afd0357e5a285d88285526224fb5',
  'src/xir/xxir_constraint_proof.h': 'c0f066ec2dd991fa02bdd6f7735b4c85255145e75f821b8a46f33fe7a45536d5',
  'src/xir/xxir_nominal.h': '8a1d9e940206d3cf35f78d9ac0719ae9bb7b8afed1a00d66baa0770485bd1e38',
  'src/xir/xxir_source_task_type.inc.c': 'b891bd32ab468133012098c50c74f6235da6f3a3e5a5d1d346bcb836ed0421e1',
@@ -36,7 +36,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_owner.c': '0907f4f5fa054bd0e0b139d1962558018ad3dc7ce822b923a951f3571123f367',
  'tests/unit/xir/legacy_consumers/test_owned_process_tree.py': '65ac2e9ed33bc8542ac84dfd466b94e8c37425e04834b8ad5e691d6055145272',
  'tests/unit/xir/legacy_consumers/test_source_rejection_fault_review.py': '63f63ce2294f9088e33b845e2f9f19d2e801baec81464465bddcdaafbec4d977',
- 'tests/unit/xir/legacy_consumers/test_source_rejection_model.py': 'dad0cc7360a91831be7bbd7bbfa3f3acb96bede108debfb68c59c94ca7eddb24',
+ 'tests/unit/xir/legacy_consumers/test_source_rejection_model.py': '8cc5a5810131c70881a16a969a59a6aa2060eaeaf563f57f00a77bd5b5fbdcbb',
  'tests/unit/xir/xir_instance_compile_observer.h': 'd1c48e7330b30d7d9ea6044e5fea086c7d5181b92a77915aa6b90903a68b695d'}
 _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'spec/source/sections/015-14-built-in-type-methods.md',

@@ -23,8 +23,7 @@ XrXirStatus xr_xir_builtin_layout(XrXirType type, const XrXirTarget *target,
     if (!layout || !target || target->architecture != XR_XIR_ARCH_X86_64 ||
         target->abi_version != XR_XIR_VALUE_ABI_VERSION ||
         context < XR_XIR_LAYOUT_STORAGE || context > XR_XIR_LAYOUT_FRAME ||
-        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_RUNE && !xr_xir_type_is_number(type) && !carrier) ||
-        (type == XR_XIR_UNIT && context == XR_XIR_LAYOUT_PARAMETER)) return XR_XIR_BAD_LAYOUT;
+        (type != XR_XIR_UNIT && type != XR_XIR_BOOL && type != XR_XIR_RUNE && !xr_xir_type_is_number(type) && !carrier)) return XR_XIR_BAD_LAYOUT;
     XrXirLayout result;
     if (context == XR_XIR_LAYOUT_PARAMETER || context == XR_XIR_LAYOUT_RESULT || context == XR_XIR_LAYOUT_BOXED)
         result = (XrXirLayout){16, 8};

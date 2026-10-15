@@ -62,7 +62,10 @@ static XrXirCtfeStatus ctfe_tuple_step(ScalarRun *run,VmState *state,CtfeOwnedSt
     if (op->op==XR_XIR_TUPLE_FIELD && op->type==XR_XIR_ERROR) {
         status=ctfe_validation_work(run,owned,op->type);if (status!=XR_XIR_CTFE_OK) return status;
     }
-    if (op->op==XR_XIR_TUPLE_NEW) {
+    if (op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) {
+        XrXirValueAdmission admission=ctfe_value_admission(owned);
+        value=xr_xir_tuple_new(XR_XIR_UNIT,NULL,0,&admission,&result);
+    } else if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,op->type);uint32_t payload=0;
         if (!tuple || !state->arguments || tuple->parameter_count>run->layout->outgoing_count) return XR_XIR_CTFE_BAD_ARTIFACT;
         if (!scalar_compile_work(run,(uint64_t)tuple->parameter_count*(2*sizeof(XrXirValue)+2))) return XR_XIR_CTFE_BUDGET;

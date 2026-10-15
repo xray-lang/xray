@@ -111,16 +111,23 @@ static void format_received_storage(void) {
     CHECK(!live && !value_compile_live && !value_compile_bytes);
 }
 static void format_scalar_storage(void) {
-    XrXirValue values[]={{XR_XIR_I64,0,-17},{XR_XIR_BOOL,0,1},{XR_XIR_U64,0,-1},{XR_XIR_RUNE,0,65}};
-    const char *expected[]={"-17","true","18446744073709551615","A"};
+    XrXirValue values[]={{XR_XIR_I64,0,-17},{XR_XIR_BOOL,0,1},{XR_XIR_U64,0,-1},{XR_XIR_RUNE,0,65},{0}};
+    const char *expected[]={"-17","true","18446744073709551615","A","()"};
     size_t before=calls;
     closed_fail_all=true;
-    for (size_t i=0;i<4;++i) {
+    for (size_t i=0;i<5;++i) {
         XrValueFormatReader reader=xr_xir_value_format_reader(&values[i]);
         FormatCapture capture={.fail_at=SIZE_MAX};
         CHECK(!reader.context && xr_value_format_value(reader,(XrValueFormatNode){&values[i],0,NULL},
             (XrValueFormatSink){&capture,capture_format},0));
         CHECK(capture.used==strlen(expected[i]) && !memcmp(capture.bytes,expected[i],capture.used));
+    }
+    const XrXirValue invalid[]={{XR_XIR_UNIT,1,0},{XR_XIR_UNIT,0,1}};
+    for (size_t i=0;i<2;++i) {
+        XrValueFormatReader reader=xr_xir_value_format_reader(&invalid[i]);
+        FormatCapture capture={.fail_at=SIZE_MAX};
+        CHECK(!xr_value_format_value(reader,(XrValueFormatNode){&invalid[i],0,NULL},
+            (XrValueFormatSink){&capture,capture_format},0) && !capture.writes);
     }
     closed_fail_all=false; CHECK(calls==before);
 }

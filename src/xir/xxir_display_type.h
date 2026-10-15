@@ -13,7 +13,8 @@
 #include "xxir_compile_memory.h"
 
 static inline bool xir_display_scalar(XrXirType type) {
-    return type==XR_XIR_BOOL || type==XR_XIR_RUNE || type==XR_XIR_STRING || xr_xir_type_is_number(type);
+    return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE ||
+        type==XR_XIR_STRING || xr_xir_type_is_number(type);
 }
 static inline XrXirStatus xir_display_enqueue(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirType type, unsigned char *seen, uint32_t *queue, uint32_t *count) {

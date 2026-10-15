@@ -235,7 +235,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             if (parameter->mode == XR_PARAM_REF) {
                 if ((uint32_t)parameter->type - XR_XIR_CONSTRUCTED_TYPE_BASE >= index)
                     return XR_XIR_BAD_TYPE;
-            } else if (!callable_component(types, parameter->type, index)) return XR_XIR_BAD_TYPE;
+            } else if (parameter->type!=XR_XIR_UNIT && !callable_component(types, parameter->type, index)) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, node->parameters[p].type);
             if (component > span) span = component;
         }

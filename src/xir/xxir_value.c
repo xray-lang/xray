@@ -327,7 +327,7 @@ XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena
     if (type == XR_XIR_ERROR || (uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
         return arena && owned_carrier_type((XrXirType)value->type) &&
             xir_type_arena_same_type(object_pointer(value)->arena,(XrXirType)value->type,arena,type);
-    return type != XR_XIR_UNIT && value->type==(uint32_t)type;
+    return value->type==(uint32_t)type;
 }
 XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType expected,
     int64_t payload,XrXirValue *output) {

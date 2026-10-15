@@ -238,9 +238,8 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     bool completed = source_plan_complete(ctx,arguments[a].value,value);
     ctx->effect_argument = previous_argument;
     if (!completed) return false;
-    if (!requirement && value->type==XR_XIR_UNIT) {
-        source_fail(ctx,node,XR_XIR_BAD_TYPE,"unit argument is not admitted"); return false;
-    }
+    if (value->type==XR_XIR_UNIT &&
+        !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,XR_XIR_UNIT,{0},{0},0,{0}},value)) return false;
     if (inferred && !arguments[a].value->conversion_ready &&
         !source_call_observe(ctx,node,state,formal,value->type,requirement)) return false;
     return true;

@@ -46,6 +46,16 @@ static XrXirValueStatus xr_xir_tuple_new_graph_operation(XrXirType type, const X
 }
 XR_FUNC XrXirValueStatus xr_xir_tuple_new(XrXirType type, const XrXirValue *fields,
     uint32_t count, XrXirValueAdmission *admission, XrXirValue *output) {
+    /* The empty tuple is an owner-free Unit value, including at scalar entries. */
+    if (type==XR_XIR_UNIT) {
+        if (!unit_value(output) || count || fields || (admission && !admission_domain_current(admission)))
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (admission) {
+            if (!admission->work) return XR_XIR_VALUE_LIMIT;
+            --admission->work;
+        }
+        return XR_XIR_VALUE_OK;
+    }
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus graph_outcome = xr_xir_tuple_new_graph_operation(type, fields, count, admission, output);

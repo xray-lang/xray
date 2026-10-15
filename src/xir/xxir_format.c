@@ -23,6 +23,10 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
     if (view->kind) return 1;
     const XrXirValue *value = &borrowed;
     XrXirType type = (XrXirType)value->type;
+    if (type == XR_XIR_UNIT) {
+        view->kind = XR_VALUE_FORMAT_LITERAL; view->name = "()"; view->name_size = 2;
+        return 1;
+    }
     if (xr_xir_type_is_integer(type)) {
         view->kind = xr_xir_integer_signed(type) ? XR_VALUE_FORMAT_SIGNED : XR_VALUE_FORMAT_UNSIGNED;
         view->signed_value = value->payload;

@@ -12,6 +12,8 @@
  */
 static XrXirCtfeStatus ctfe_argument_store(ScalarRun *run,uint32_t offset,
     const XrXirValue *value,CtfeOwnedState *state,bool snapshot) {
+    if (value->type==XR_XIR_UNIT)
+        return !value->reserved && !value->payload && offset==UINT32_MAX ? XR_XIR_CTFE_OK : XR_XIR_CTFE_BAD_ARTIFACT;
     if (!xr_xir_type_is_owned(run->module->types,(XrXirType)value->type)) {
         xr_xir_scalar_store(run->frame,offset,value->payload);return XR_XIR_CTFE_OK;
     }

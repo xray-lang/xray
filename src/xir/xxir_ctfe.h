@@ -58,7 +58,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext
     const XrXirTypes *types, XrXirType type);
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function must have bool/integer/Float/Rune/String inputs and results or Unit results, with
+ * ordinary function must have Unit/bool/integer/Float/Rune/String inputs and results, with
  * frame-owned locals and private Cells of admitted value families. Immutable
  * Tuples and Nullable values can be constructed/projected and exported by logical
  * active field-byte sum and canonical discriminants; Unit fields occupy zero

@@ -37,7 +37,7 @@ def main():
     assert len(model['records']) == 10
     for value, file, macro in (
         (29,'xxir_checked.h','XR_XIR_CHECKED_SCHEMA'),
-        (75,'xxir_checked.h','XR_XIR_CHECKED_CONTRACT'),
+        (76,'xxir_checked.h','XR_XIR_CHECKED_CONTRACT'),
         (25,'xxir_value.h','XR_XIR_VALUE_ABI_VERSION'),
         (29,'xxir_call.h','XR_XIR_CALL_ABI_VERSION'),
         (31,'xxir_program.h','XR_XIR_PROGRAM_ABI_VERSION'),
@@ -79,16 +79,16 @@ def main():
         assert literal(header,role+'_policy73')==hashlib.sha256(frame).digest()
     for role in ('linked','original'):
         prefix=(role+'_source').encode('ascii')
-        frame=DOMAIN+struct.pack('<7I',1,29,75,24,29,31,len(prefix))+prefix
+        frame=DOMAIN+struct.pack('<7I',1,28,74,24,29,30,len(prefix))+prefix
         assert literal(header,role+'_policy_value24_preimage')==frame
         assert literal(header,role+'_policy_value24')==hashlib.sha256(frame).digest()
-    current=(directory/'xir_hash75_identity.h').read_text(encoding='utf-8')
+    current=(directory/'xir_hash76_identity.h').read_text(encoding='utf-8')
     for role in ('linked','original'):
         prefix=(role+'_source').encode('ascii')
-        frame=DOMAIN+struct.pack('<7I',1,28,75,25,29,30,len(prefix))+prefix
+        frame=DOMAIN+struct.pack('<7I',1,29,76,25,29,31,len(prefix))+prefix
         assert literal(current,role+'_policy_value25_preimage')==frame
         assert literal(current,role+'_policy_value25')==hashlib.sha256(frame).digest()
-    print(json.dumps({'status':'INDEPENDENT_CURRENT28_75_FULL_FRAMES_PASS',
+    print(json.dumps({'status':'INDEPENDENT_CURRENT29_76_FULL_FRAMES_PASS',
                       'records':records, 'current_macro_authority_checked':True,
                       'all_prior_runtime_negative_responsibilities_retained':True,
                       'product_output_used_as_oracle':False}, indent=2))

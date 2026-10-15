@@ -4,7 +4,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-_INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
+_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
  'stdlib/runtime/runtime.c': 'e969dd60094f379950636359499ad2951eca95062c89dcae1d29857dc0c08e4f',
  'stdlib/runtime/runtime.xr': '9f4d87664a727e7b29ceec161efe07d67d4e416c47030b06c682062f8f2fe57c',
  'stdlib/time/time.xr': 'd2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72',

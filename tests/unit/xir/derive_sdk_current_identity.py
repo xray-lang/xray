@@ -4,7 +4,7 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=75, value_abi=25, call_abi=29, wire=29, program_abi=31):
+def current_preimage(rows, semantic=76, value_abi=25, call_abi=29, wire=29, program_abi=31):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -73,12 +73,22 @@ def main():
     for name,data in (('current_sdk_kat_preimage',previous74_image),('current_sdk_kat_file_digest',previous74_file),('current_sdk_kat_digest',previous74_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous74_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired74 SDK KAT changed'
+    previous75_image,previous75_file,previous75_digest=current_preimage(rows,75,24)
+    previous75_text=Path(__file__).with_name('sdk_previous75_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',previous75_image),('current_sdk_kat_file_digest',previous75_file),('current_sdk_kat_digest',previous75_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous75_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired75 SDK KAT changed'
+    local75_image,local75_file,local75_digest=current_preimage(rows,75,25)
+    local75_text=Path(__file__).with_name('sdk_previous75_value25_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',local75_image),('current_sdk_kat_file_digest',local75_file),('current_sdk_kat_digest',local75_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',local75_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete local retired75/Value25 SDK KAT changed'
     image,file_digest,digest=current_preimage(rows)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(29,75,25,29,31)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(29,76,25,29,31)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     assert len(image)==3186 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest

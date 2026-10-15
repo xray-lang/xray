@@ -180,7 +180,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     status=XR_XIR_VALUE_BAD_ARGUMENT;break;
                 }
             }
-            if (type==XR_XIR_UNIT ? (!tuple_field || inlined || !unit_value(&current)) :
+            if (type==XR_XIR_UNIT ? (inlined || !unit_value(&current)) :
                 !xr_xir_value_argument(&current, arena, type)) {
                 status = XR_XIR_VALUE_BAD_ARGUMENT; break;
             }

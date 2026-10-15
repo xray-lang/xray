@@ -20,12 +20,12 @@ static bool ctfe_scalar_type(XrXirType type) {
     return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type);
 }
 static bool ctfe_parameter_type(XrXirType type) {
-    return ctfe_scalar_type(type) || type == XR_XIR_STRING;
+    return type == XR_XIR_UNIT || ctfe_scalar_type(type) || type == XR_XIR_STRING;
 }
 static bool ctfe_result_type(XrXirType type) {
     return type == XR_XIR_UNIT || ctfe_parameter_type(type);
 }
-/* Unit is a result with no scalar slot, never a value argument. */
+/* Unit crosses the logical boundary without a physical scalar slot. */
 static bool ctfe_result_value(const XrXirValue *value, XrXirType type, const XrXirTypeArena *arena) {
     return value && (type == XR_XIR_UNIT ?
         (!value->type && !value->reserved && !value->payload) :
@@ -139,7 +139,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
             !ctfe_opcode_work(op->op, &work)) return XR_XIR_CTFE_NOT_LEAF;
         admitted=ctfe_tuple_instruction_admit(artifact,body,op);
         if (admitted!=XR_XIR_CTFE_OK) return admitted==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:admitted;
-        bool unit = ctfe_unit_result(op->op) || ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_NULLABLE_UNWRAP) && op->type == XR_XIR_UNIT);
+        bool unit = (op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) || ctfe_unit_result(op->op) || ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_NULLABLE_UNWRAP) && op->type == XR_XIR_UNIT);
         if (!ctfe_storage_instruction(module, body, op) || (unit && op->type != XR_XIR_UNIT) ||
             (!unit && op->type == XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_LEAF;

@@ -65,9 +65,12 @@ static bool source_argument_default(SourceContext *ctx, AstNode *node, uint32_t 
     if (!source_default_binding_get(ctx, node, index, parameter, &binding)) return false;
     if (!binding) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "parameter default binding is missing");
     XrXirInstruction op = {XR_XIR_CALL_DEFAULT, XR_XIR_UNIT, {0}, {index, parameter}, 0, {0}};
-    return source_work(ctx, node) &&
+    if (!(source_work(ctx, node) &&
         source_substitute(ctx, substitution, ctx->functions[index].parameters[parameter], 0, &op.type) &&
-        source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && source_recipe_record(ctx, op, value);
+        source_type_arguments(ctx, node, substitution->types, substitution->count, &op) && source_recipe_record(ctx, op, value)))
+        return false;
+    return value->type != XR_XIR_UNIT || source_recipe_record(ctx,
+        (XrXirInstruction){XR_XIR_TUPLE_NEW,XR_XIR_UNIT,{0},{0},0,{0}},value);
 }
 static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
     uint32_t end = *next;

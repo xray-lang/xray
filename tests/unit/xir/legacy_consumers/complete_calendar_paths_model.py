@@ -4,7 +4,7 @@ from datetime import datetime,timedelta,timezone
 import calendar,hashlib,posixpath
 
 ROOT=Path(__file__).resolve().parents[4]
-_INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
+_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
  'spec/source/sections/004-3-expressions.md': '1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c',
  'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
  'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
@@ -12,7 +12,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'spec/source/sections/012-11-modules.md': '3c32493b1e22d29c459362a9f465a6f5316856b5b375c3d1c1e06025756eecd8',
  'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
  'spec/source/sections/016-15-standard-library.md': 'c776ecb898f3dfbbac76e6e9eb08da0697041af5b118eb55bfd294a9630ba2fa',
- 'spec/source/sections/018-17-compilation-pipeline.md': '19abae1415329b6d0f88d6fa6d70a224b795a0f9a638b5f5c38d4742236868f4',
+ 'spec/source/sections/018-17-compilation-pipeline.md': '462e39b670cb0a0c495ff677f0e39212fe49bcdc33234b9f5e89e27288085694',
  'stdlib/datetime/datetime.xr': 'cd05dfebf4afb1d5a1bf2326aa84afd2dbe17825d90ca6f9a340751db596197d',
  'stdlib/io/io.xr': 'cbb670fe3a25e42a3fa96a3bf3460f9696f459c0fac059b82ba8bc99c4d17096',
  'stdlib/log/log.xr': 'd6f32e59f72cbaf35df46ce3438f576756b7fb0a2820e1c98bbc03bebdfea835',

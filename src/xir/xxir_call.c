@@ -522,7 +522,7 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
         if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
             return XR_XIR_CALL_LIMIT;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
-            if (entry->parameters[p] != XR_XIR_BOOL && entry->parameters[p] != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
+            if (entry->parameters[p] != XR_XIR_UNIT && entry->parameters[p] != XR_XIR_BOOL && entry->parameters[p] != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
                 !xr_xir_type_is_owned(types, entry->parameters[p]))
                 return XR_XIR_CALL_BAD_ARGUMENT;
     }

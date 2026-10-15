@@ -272,8 +272,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 if (!param->type || (param->passing_mode != XR_PARAM_READ && !parameter_reference) ||
                     (parameter_reference && param->default_value) ||
                     param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this") ||
-                    !source_type(ctx, param->type, &body->parameters[i + offset]) ||
-                    (body->parameters[i + offset] == XR_XIR_UNIT && !parameter_reference))
+                    !source_type(ctx, param->type, &body->parameters[i + offset]))
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
                 if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
                     return false;
@@ -300,7 +299,8 @@ static bool source_method_body(SourceContext *ctx) {
         const char *name = i >= offset ? method->params[i - offset]->name : "this";
         SourceName *symbol = add_name(ctx, &ctx->locals, name, body->node);
         if (!symbol) return false;
-        symbol->kind = SOURCE_LOCAL; symbol->index = i; symbol->type = body->parameters[i];
+        symbol->type = body->parameters[i];
+        symbol->kind = symbol->type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;symbol->index = i;
         if (xr_xir_type_is_cell(&ctx->types, symbol->type)) {
             symbol->type = xr_xir_cell_element(&ctx->types, symbol->type);
             symbol->mutable = true;
