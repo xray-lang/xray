@@ -28,6 +28,7 @@ static XrXirStatus source_dependencies_publish(SourceContext *ctx, XrXirSourceSn
         case XR_MOD_FILE: kind = XR_XIR_DEPENDENCY_FILE; break;
         case XR_MOD_PACKAGE: kind = XR_XIR_DEPENDENCY_PACKAGE; break;
         case XR_MOD_MEMORY: kind = XR_XIR_DEPENDENCY_MEMORY; break;
+        case XR_MOD_HISTORY: kind = XR_XIR_DEPENDENCY_HISTORY; break;
         default: return XR_XIR_BAD_STRUCTURE;
         }
         if (spec->dep_count < 0 || (spec->dep_count && !spec->dep_indices)) return XR_XIR_BAD_STRUCTURE;

@@ -618,6 +618,14 @@ Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullab
 
 真实COW修改保留旧快照。负长度/capacity返回NUMERIC_RANGE，索引越界返回追加的compiler-only BOUNDS状态；Source给带位置的编译错误。失败保全Unit输出及借用值。外部复合快照、有嵌套可变接收的元素、nominal/函数值/cleanup和正式共享/完整安全资格继续按原目标实施，不能从此有限开发资格推断完成。
 
+### 17.50 已发布Source定义的历史接收
+
+持续Source拥有者只向下一候选输入提供本拥有者已发布的真实Checked Program和实际注册绑定。历史输入使用独立于Catalog Library的内部模块表示；不重新解析或拼接旧Source，不修改Program的linkage，也不以查询名称构造函数、泛型或名义类型身份。接收复制并重定位完整Checked声明闭包，仍进入唯一Built→Checked→特化复验→Lowered管线。
+
+词法作用域与模块出生身份独立：模块的`lexical_scope=0`表示独立作用域，非零值为同一作用域规范模块编号加一；引用必须在界内，不能指向自身或另一条引用。当前会话输入与准确接收的历史会话根共享词法作用域，普通导入模块继续独立。该关系只替代跨输入的模块私有可见性检查，不授予缺失依赖、私有成员、initializer调用或运行时存储权限。函数、名义类型、slot和初始化归属仍保留准确模块。
+
+作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用Checked schema29、语义75和Program ABI31，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1346,5 +1354,13 @@ Existing array_get admits the entire Array first. If an element contains another
 Logical export recursively sums active elements' target scalars, String bytes, Nullable discriminants and Tuple fields. Empty Arrays use zero bytes; capacity, pointers, ownership headers and inactive storage do not count. Actual capacity remains observable ordinary semantics. Independent Source replay preserves it through WITH_CAPACITY, private Cell, element PUSH and CELL_READ recipes, rather than rebuilding a literal with different capacity. Every failed prefix releases temporary owners. Exported types, elements and ledger remain valid after Source/Artifact/caller death; final drop allocates nothing and refunds only live bytes.
 
 Authentic COW writes preserve prior snapshots. Negative length/capacity returns NUMERIC_RANGE; bounds errors return the appended compiler-only BOUNDS status. Source reports positioned compile errors, preserving Unit output and borrowed values. Foreign composite snapshots, elements with nested variable receiving, nominal/function/cleanup and mandatory shared/full safety qualifications remain part of the original objective; this limited development qualification proves no completion.
+
+### 17.50 Receiving published Source definitions
+
+A persistent Source owner supplies a candidate with only that owner's published, actual Checked Program and registered bindings. History uses an internal module representation distinct from Catalog Libraries. Receiving neither reparses nor concatenates prior Source, changes Program linkage, nor constructs function, generic or nominal identities from query names. It copies and relocates the complete Checked declaration closure through the single Built → Checked → specialization recheck → Lowered pipeline.
+
+Lexical scope is separate from module birth identity. A zero `lexical_scope` owns an independent scope; a nonzero value is one plus its canonical module ordinal. References must remain in bounds and cannot refer to themselves or another reference. Current and accurately received historical session roots share a lexical scope; ordinary imports remain separate. This relation replaces only module-private visibility across inputs. It grants no missing dependency, private-member, initializer-call or runtime-storage permission. Functions, nominal types, slots and initialization keep their exact owning modules.
+
+Owned declarations, Checked packets, specialization provenance matching, effect snapshots and Program proofs preserve and check the relation. The layout uses Checked schema29, semantic contract75 and Program ABI31, rejecting old layouts directly. Ordinary historical function, generic and nominal positive cases pass checking and return42 in the VM. These stateless cases do not prove old slot/cell reuse, initialization exactly once or paired REPL publication; runtime correspondence and complete fault and safety gates remain separate requirements.
 
 <!-- /xr-spec:en -->

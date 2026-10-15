@@ -60,8 +60,10 @@ XR_FUNC void xr_xir_compile_source_generations_free(XrXirSourceGenerations *owne
  * be pending. Its AST, bytes, identity, Checked result and complete latest-name
  * table are owned before return. Failure preserves the empty serial output and
  * all published records; serials consumed by failed attempts are never reused.
- * MEMORY logical_path must be empty. This entry does not yet seed historical
- * declarations into semantic checking; cross-input compilation remains separate. */
+ * MEMORY logical_path must be empty. Only this owner's published Checked and
+ * actual registered bindings seed historical checking. Receiving preserves
+ * birth modules and private lexical scope; it does not prove runtime storage
+ * correspondence or authorize replaying historical initialization. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare(XrXirSourceGenerations *owner,
     const XrXirSourceText *text, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
 /* Source publication allocates and charges nothing. The execution coordinator
@@ -81,7 +83,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_lookup(const XrXirSourceGen
  * Ordinals and stored types belong only to the returned Checked owner; they
  * are not Lowered/Program ordinals or a runtime storage correspondence. Syntax
  * borrows the record's complete AST closure. Failure preserves the output.
- * This observation does not yet receive history into subsequent checking. */
+ * This observation grants no additional historical checking authority. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourceGenerations *owner,
     uint64_t serial, const char *name, XrXirSourceGenerationDefinition *output);
 #endif // XXIR_SOURCE_GENERATION_H

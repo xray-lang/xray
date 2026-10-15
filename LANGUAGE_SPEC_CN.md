@@ -7665,6 +7665,14 @@ Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullab
 
 真实COW修改保留旧快照。负长度/capacity返回NUMERIC_RANGE，索引越界返回追加的compiler-only BOUNDS状态；Source给带位置的编译错误。失败保全Unit输出及借用值。外部复合快照、有嵌套可变接收的元素、nominal/函数值/cleanup和正式共享/完整安全资格继续按原目标实施，不能从此有限开发资格推断完成。
 
+### 17.50 已发布Source定义的历史接收
+
+持续Source拥有者只向下一候选输入提供本拥有者已发布的真实Checked Program和实际注册绑定。历史输入使用独立于Catalog Library的内部模块表示；不重新解析或拼接旧Source，不修改Program的linkage，也不以查询名称构造函数、泛型或名义类型身份。接收复制并重定位完整Checked声明闭包，仍进入唯一Built→Checked→特化复验→Lowered管线。
+
+词法作用域与模块出生身份独立：模块的`lexical_scope=0`表示独立作用域，非零值为同一作用域规范模块编号加一；引用必须在界内，不能指向自身或另一条引用。当前会话输入与准确接收的历史会话根共享词法作用域，普通导入模块继续独立。该关系只替代跨输入的模块私有可见性检查，不授予缺失依赖、私有成员、initializer调用或运行时存储权限。函数、名义类型、slot和初始化归属仍保留准确模块。
+
+作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；本布局采用Checked schema29、语义75和Program ABI31，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
+
 ---
 
 ## 18. 错误码 (Error Codes)
