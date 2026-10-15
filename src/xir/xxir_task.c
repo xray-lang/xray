@@ -10,6 +10,7 @@
  *   A public handle never drives or cancels the executor that owns pending work.
  */
 #include "xxir_task_internal.h"
+#include "xxir_task_result_internal.h"
 #include "xxir_error.h"
 #include <string.h>
 
@@ -48,24 +49,37 @@ static XrXirValue task_core_task_value(XirTask *task) {
     return (XrXirValue){(uint32_t)task->object.type, 0, (int64_t)(uintptr_t)task};
 }
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
-    if (!task || task->object.kind != XR_XIR_TYPE_TASK || !xr_xir_domain_current(task->object.domain)) return false;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(task->object.arena);
-    const XrXirTypeNode *node = xr_xir_type_node(types, task->object.type);
-    if (!node || node->kind != XR_XIR_TYPE_TASK) return false;
-    XrXirType result = node->element;
-    if (result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
-        return false;
-    XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
-    if (state == XIR_TASK_PREPARING)
-        return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
-    /* Pending handles may cross threads. Only the driver touches execution
-     * pointers and the uncommitted outcome until release publication. */
-    if (state == XIR_TASK_PENDING || state == XIR_TASK_RUNNING) return task->generation && task->identity;
-    return state == XIR_TASK_TERMINAL && !task->executor && !task->call && task->generation && task->identity &&
-        xr_xir_call_result_valid(&task->outcome) &&
-        task->outcome.status != XR_XIR_CALL_READY && task->outcome.status != XR_XIR_CALL_SUSPENDED &&
-        task->outcome.status != XR_XIR_CALL_CONSUMED &&
-        (task->outcome.status != XR_XIR_CALL_RETURNED || task->outcome.value.type == (uint32_t)result);
+    for (;;) {
+        if (!task || task->object.kind != XR_XIR_TYPE_TASK || !task->object.domain ||
+            !xr_xir_domain_current(task->object.domain)) return false;
+        const XrXirTypes *types = xr_xir_compile_type_arena_types(task->object.arena);
+        const XrXirTypeNode *node = xr_xir_type_node(types, task->object.type);
+        if (!node || node->kind != XR_XIR_TYPE_TASK || node->parameter_span ||
+            !xr_xir_task_result_supported(types, node->element)) return false;
+        XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
+        if (state == XIR_TASK_PREPARING)
+            return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
+        /* Only the driver reads unpublished outcomes or execution pointers. */
+        if (state == XIR_TASK_PENDING || state == XIR_TASK_RUNNING) return task->generation && task->identity;
+        if (state != XIR_TASK_TERMINAL || task->executor || task->call || !task->generation || !task->identity ||
+            task->outcome.status == XR_XIR_CALL_READY || task->outcome.status == XR_XIR_CALL_SUSPENDED ||
+            task->outcome.status == XR_XIR_CALL_CONSUMED) return false;
+        const XrXirValue *value = &task->outcome.value;
+        if (task->outcome.status == XR_XIR_CALL_RETURNED && value->type != (uint32_t)node->element) return false;
+        const XrXirTypeNode *element = xr_xir_type_node(types, node->element);
+        if (task->outcome.status != XR_XIR_CALL_RETURNED || !element || element->kind != XR_XIR_TYPE_TASK)
+            return xr_xir_call_result_valid(&task->outcome);
+        /* A nested Task uses the same canonical header checks without recursive
+         * value validation. Strict descriptor descent rejects cycles and bounds
+         * the chain by the immutable pool, independently of the C stack. */
+        if (value->reserved || !value->payload || task->outcome.wake || !xr_xir_panic_empty(&task->outcome.panic) ||
+            value->type >= (uint32_t)task->object.type) return false;
+        const XirTask *inner = (const XirTask *)(uintptr_t)value->payload;
+        if (inner->object.type != (XrXirType)value->type || inner->object.arena != task->object.arena ||
+            inner->object.kind != XR_XIR_TYPE_TASK ||
+            !atomic_load_explicit(&inner->object.references, memory_order_relaxed)) return false;
+        task = inner;
+    }
 }
 XR_FUNC XrXirCallStatus xr_xir_task_copy_outcome(const XrXirValue *value, XrXirCallResult *output) {
     if (!value || !xr_xir_value_valid(value) || !xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -250,9 +264,12 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
     if (!node || node->kind != XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = node->element;
-    if ((result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) ||
+    if (!xr_xir_task_result_supported(program->types, result) ||
         request->entry >= program->entry_count ||
         program->entries[request->entry].result != result || program->entries[request->entry].cleanup_owner)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!program->permissions || program->permissions->function_count != program->entry_count ||
+        program->permissions->entries[request->entry].worker != XR_XIR_OK)
         return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t p = 0; p < program->entries[request->entry].parameter_count; ++p) {
         XrXirType parameter = program->entries[request->entry].parameters[p];
