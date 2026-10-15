@@ -122,15 +122,16 @@ set_tests_properties(test_dap_values_resources PROPERTIES TIMEOUT 120 LABELS "da
 set_tests_properties(test_dap_values PROPERTIES TIMEOUT 120 LABELS "dap;values;json;source;execution;ownership")
 
 if(XR_BUILD_DAP)
-    add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py COPYONLY)
+    add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr)
     set_tests_properties(dap_current_stdio PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;execution;ownership")
-    add_test(NAME dap_current_stdio_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
+    add_test(NAME dap_current_stdio_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --start-request attach)
     set_tests_properties(dap_current_stdio_attach PROPERTIES TIMEOUT 120 LABELS "dap;attach;cli;stdio;execution;ownership")
-    add_test(NAME dap_current_tcp COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
+    add_test(NAME dap_current_tcp COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp)
-    add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py
+    add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp --start-request attach)
     set_tests_properties(dap_current_tcp dap_current_tcp_attach PROPERTIES TIMEOUT 120 LABELS "dap;tcp;cli;execution;ownership")
 endif()
