@@ -39,7 +39,7 @@ static XrXirAction effect_binding_resume(XrXirCallView *view) {
 static void effect_binding_cases(void) {
     for (unsigned promised = 0; promised < 2; ++promised) {
         EffectBindingWitness witness = {0};
-        XrXirSourceModule source = {"root", 4, NULL, 0, 0};
+        XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0};
         XrXirFunctionIdentity ids[7] = {{0}};
         ids[1].exported = ids[2].exported = ids[4].exported = ids[5].exported = 1;
         ids[3].promises = promised ? XR_XIR_FUNCTION_NO_SUSPEND : 0;

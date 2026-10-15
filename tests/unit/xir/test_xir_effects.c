@@ -56,7 +56,7 @@ static XrXirArtifact *effect_fixture(bool suspends) {
         {"reference", 9, NULL, 0, XR_XIR_UNIT, &pair, 1, reference, 2, NULL, 0},
         {"init", 4, NULL, 0, XR_XIR_UNIT, &init_block, 1, &init, 1, NULL, 0},
         {"entry", 5, NULL, 0, XR_XIR_I64, &pair, 1, entry, 2, NULL, 0}};
-    XrXirSourceModule source = {"root", 4, NULL, 0, 6};
+    XrXirSourceModule source = {"root", 4, NULL, 0, 6, 0};
     XrXirFunctionIdentity identities[8] = {{0}};
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
@@ -148,7 +148,7 @@ static void effect_long_cycle(void) {
     XrXirBlock init_block={0,1,0,0}, entry_block={0,2,0,0};
     functions[COUNT]=(XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0};
     functions[COUNT+1]=(XrXirFunction){"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0};
-    XrXirSourceModule source={"cycle",5,NULL,0,COUNT}; XrXirFunctionIdentity ids[COUNT+2]={{0}};
+    XrXirSourceModule source={"cycle",5,NULL,0,COUNT, 0}; XrXirFunctionIdentity ids[COUNT+2]={{0}};
     XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,COUNT+1,NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, COUNT+2, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
@@ -503,7 +503,7 @@ static void effect_callable_weakening(void) {
     XrXirFunction function = {"weaken", 6, &source, 1, (XrXirType)256, &block, 1, ops, 2, NULL, 0};
     XrXirInstruction init={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT}; XrXirBlock init_block={0,1,0,0};
     XrXirFunction functions[2]={function,{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
-    XrXirSourceModule source_module={"weaken",6,NULL,0,1}; XrXirFunctionIdentity ids[2]={{0}};
+    XrXirSourceModule source_module={"weaken",6,NULL,0,1, 0}; XrXirFunctionIdentity ids[2]={{0}};
     XrXirDeclarations declarations={&source_module,1,ids,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 2, &declarations, NULL, &types, NULL, XR_XIR_LIBRARY, NULL};
     XrXirArtifact *checked = NULL;

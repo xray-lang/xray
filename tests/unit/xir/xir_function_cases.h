@@ -59,7 +59,7 @@ static void function_case_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 static void function_case_release(void *owner) { ++*(unsigned *) owner; }
 #include "xir_native_metadata_fixture.h"
 static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program) {
-    XrXirSourceModule module = {"root", 4, NULL, 0, 0};
+    XrXirSourceModule module = {"root", 4, NULL, 0, 0, 0};
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirSlot slot = {0, (XrXirType)257, 1};
     XrXirLiteral literal = {"owned callback result", 21};

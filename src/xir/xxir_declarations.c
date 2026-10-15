@@ -73,6 +73,14 @@ static int module_name_compare(const XrXirSourceModule *a, const XrXirSourceModu
     int order = memcmp(a->name, b->name, count);
     return order ? order : a->name_length < b->name_length ? -1 : a->name_length != b->name_length;
 }
+XR_FUNC bool xr_xir_module_same_scope(const XrXirDeclarations *d, uint32_t from, uint32_t target) {
+    if (!d || !d->modules || from >= d->module_count || target >= d->module_count) return false;
+    uint32_t a = d->modules[from].lexical_scope, b = d->modules[target].lexical_scope;
+    if (a > d->module_count || b > d->module_count) return false;
+    if (a && d->modules[a - 1].lexical_scope) return false;
+    if (b && d->modules[b - 1].lexical_scope) return false;
+    return (a ? a - 1 : from) == (b ? b - 1 : target);
+}
 bool xr_xir_module_imports(const XrXirDeclarations *d, uint32_t from, uint32_t target) {
     if (from == target) return true;
     const XrXirSourceModule *module = &d->modules[from];
@@ -128,6 +136,9 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
         if (!(module->name_length + (uint64_t) module->dependency_count * 4 <= SIZE_MAX) ||
             !xir_compile_work(work, module->name_length + (uint64_t) module->dependency_count + m + 1))
             return XR_XIR_BUDGET;
+        if (module->lexical_scope > d->module_count ||
+            (module->lexical_scope && (module->lexical_scope == m + 1 ||
+                d->modules[module->lexical_scope - 1].lexical_scope))) return XR_XIR_BAD_STRUCTURE;
         if (!module->name || !module->name_length || module->initializer >= functions ||
             (module->dependency_count && !module->dependencies) || module->dependency_count >= d->module_count ||
             memchr(module->name, 0, module->name_length) ||

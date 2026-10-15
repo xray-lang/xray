@@ -54,7 +54,7 @@ static XrXirStatus go_shape_check(const XrXirCompileContext *context, unsigned m
         {"worker",6,NULL,0,XR_XIR_I64,&body,1,worker,worker_count,NULL,0},
         {"leaf",4,NULL,0,XR_XIR_I64,&two,1,leaf,2,NULL,0}};
     XrXirFunctionIdentity identities[4]={{0}};identities[3].promises=XR_XIR_FUNCTION_NO_SUSPEND;
-    XrXirSourceModule source={"root",4,NULL,0,0};XrXirSlot slot={0,mutable?(XrXirType)259:(XrXirType)257,mutable};
+    XrXirSourceModule source={"root",4,NULL,0,0, 0};XrXirSlot slot={0,mutable?(XrXirType)259:(XrXirType)257,mutable};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,4,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};

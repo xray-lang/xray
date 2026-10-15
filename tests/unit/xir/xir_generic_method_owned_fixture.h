@@ -56,7 +56,7 @@ static void generic_method_owned_fixture(GenericMethodOwnedFixture *f) {
     f->init = f->ops[1]; f->block = (XrXirBlock){0,2,0,0}; f->init_block = (XrXirBlock){0,1,0,0};
     f->functions[0] = (XrXirFunction){"main",4,NULL,0,XR_XIR_I64,&f->block,1,f->ops,2,NULL,0};
     f->functions[1] = (XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&f->init_block,1,&f->init,1,NULL,0};
-    f->owner = (XrXirSourceModule){"alpha",5,NULL,0,1}; f->identities[0].exported = 1;
+    f->owner = (XrXirSourceModule){"alpha",5,NULL,0,1, 0}; f->identities[0].exported = 1;
     f->program = (XrXirDeclarations){&f->owner,1,f->identities,NULL,0,NULL,0,0,0,NULL};
     f->module = (XrXirModule){XR_XIR_BUILT,f->functions,2,&f->program,NULL,&f->types,NULL, XR_XIR_PROGRAM, NULL};
 }

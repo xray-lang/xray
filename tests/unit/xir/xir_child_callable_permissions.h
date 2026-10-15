@@ -146,7 +146,7 @@ static void cp_graph(CpGraph *g) {
         &g->unit_block, 1, &g->unit, 1, NULL, 0};
     g->identities[XRCP_ROOT].exported = 1;
     g->identities[XRCP_FACTORY].exported = 1;
-    g->source = (XrXirSourceModule){"childCallable", 13, NULL, 0, XRCP_INIT};
+    g->source = (XrXirSourceModule){"childCallable", 13, NULL, 0, XRCP_INIT, 0};
     g->slot = (XrXirSlot){0, (XrXirType)XRCP_CELL, 1};
     g->declarations = (XrXirDeclarations){.modules = &g->source, .module_count = 1,
         .functions = g->identities, .slots = &g->slot, .slot_count = 1, .entry_function = XRCP_ENTRY};

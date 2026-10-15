@@ -90,7 +90,7 @@ static void task_fault_fixture(TaskFaultFixture *f, unsigned mode) {
     f->identities[0].exported = 1;
     f->identities[3].cleanup_owner = 1;
     f->identities[4].cleanup_owner = 2;
-    f->source = (XrXirSourceModule){"fault-cleanup", 13, NULL, 0, 2};
+    f->source = (XrXirSourceModule){"fault-cleanup", 13, NULL, 0, 2, 0};
     f->declarations = (XrXirDeclarations){.modules = &f->source, .module_count = 1,
         .functions = f->identities, .root_module = 0, .entry_function = 0};
     f->module = (XrXirModule){.stage = XR_XIR_BUILT, .functions = f->functions,

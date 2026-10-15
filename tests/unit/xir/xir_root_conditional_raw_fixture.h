@@ -102,7 +102,7 @@ static void conditional_raw_fixture(ConditionalRawFixture *f, uint32_t mode) {
     f->generics[1]=(XrXirGeneric){.constraints=&f->bound,.parameter_count=1};
     f->generics[2]=(XrXirGeneric){.arguments=&f->receiver,.argument_count=1};
     f->identities[0]=(XrXirFunctionIdentity){.exported=1,.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD};
-    f->source=(XrXirSourceModule){"probe",5,NULL,0,3};
+    f->source=(XrXirSourceModule){"probe",5,NULL,0,3, 0};
     f->binding=(XrXirImplementationBinding){f->application,0,0};
     f->implementation=(XrXirImplementation){0,f->application,&f->binding,1};
     f->implementations=(XrXirImplementationTable){&f->implementation,1};

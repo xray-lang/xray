@@ -30,7 +30,7 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&three,1,init,3,NULL,0},
         {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0}};
-    XrXirSourceModule source={"alpha",5,NULL,0,1};
+    XrXirSourceModule source={"alpha",5,NULL,0,1, 0};
     XrXirFunctionIdentity identities[3]={{0}};
     identities[2].exported=1;identities[2].nominal_owner=1;identities[2].method_kind=XR_XIR_READ_METHOD;
     if(flags&1)identities[2].promises=XR_XIR_FUNCTION_NO_SUSPEND;
@@ -58,7 +58,7 @@ static XrXirStatus bound_requirement(const XrXirCompileContext *context,uint32_t
         {"caller",6,&parameter,1,XR_XIR_I64,&two,1,call,2,&operand,1}};
     XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={0,&application,1};
     XrXirGeneric generics[3]={{0}};generics[2].constraints=&constraint;generics[2].parameter_count=1;
-    XrXirSourceModule source={"alpha",5,NULL,0,1};XrXirFunctionIdentity identities[3]={{0}};
+    XrXirSourceModule source={"alpha",5,NULL,0,1, 0};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,generics,&types,NULL,XR_XIR_PROGRAM,NULL};
     return xir_fixture_check(context, &module, output, diagnostic);
@@ -79,7 +79,7 @@ static XrXirStatus bound_invoke(const XrXirCompileContext *context,uint32_t flag
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"caller",6,&parameter,1,XR_XIR_I64,blocks,3,call,6,NULL,0}};
-    XrXirSourceModule source={"alpha",5,NULL,0,1};XrXirFunctionIdentity identities[3]={{0}};
+    XrXirSourceModule source={"alpha",5,NULL,0,1, 0};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     return xir_fixture_check(context, &module, output, diagnostic);
