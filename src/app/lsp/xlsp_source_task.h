@@ -15,5 +15,6 @@
 // by the caller. Server lifetime extends through async shutdown and completion.
 // Modes: 0 definition, 1 references, 2 highlights, 3 hover, 4-6 call hierarchy
 // prepare/incoming/outgoing, 7-9 type hierarchy prepare/supertypes/subtypes.
+// Mode 10 produces CodeLens reference counts from the same captured corpus.
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *, const XlspRequestId *, XrJsonValue *, unsigned mode);
 #endif // XLSP_SOURCE_TASK_H

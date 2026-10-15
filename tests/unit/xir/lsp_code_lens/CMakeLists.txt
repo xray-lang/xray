@@ -19,3 +19,8 @@ add_test(NAME test_lsp_code_lens COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${PROJECT_SOURCE_DIR}/stdlib")
 set_tests_properties(test_lsp_code_lens PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE
     LABELS "unit;lsp;ownership;metadata;allocation")
+add_test(NAME test_lsp_code_lens_normal COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_code_lens.py" "$<TARGET_FILE:test_lsp_code_lens>"
+    "${PROJECT_SOURCE_DIR}/stdlib" --normal)
+set_tests_properties(test_lsp_code_lens_normal PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE
+    LABELS "unit;lsp;ownership;metadata")

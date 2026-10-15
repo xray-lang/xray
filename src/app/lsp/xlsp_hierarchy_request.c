@@ -11,6 +11,7 @@
 #include "xlsp_source_scope.h"
 #include "xlsp_source_call_hierarchy.h"
 #include "xlsp_source_type_hierarchy.h"
+#include "xlsp_source_binding_lenses.h"
 #include "../../base/xchecks.h"
 #include <limits.h>
 #include <string.h>
@@ -27,8 +28,12 @@ struct XlspHierarchyRequest {
     XlspConfig config;
     uint64_t revision;
     unsigned mode;
-    bool types, started;
+    XlspSourceScopeQueryKind kind;
+    bool started;
 };
+static unsigned hierarchy_stage(XlspSourceScopeQueryKind kind) {
+    return kind == XLSP_SOURCE_BINDING_LENSES ? 12u : kind == XLSP_SOURCE_TYPE_HIERARCHY ? 25u : 24u;
+}
 static XrXirStatus hierarchy_resource(XrCompileResourceStatus status) {
     return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
         status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET :
@@ -141,7 +146,7 @@ static XrXirStatus hierarchy_documents(XlspHierarchyRequest *request, const XrLs
     return used == request->count ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus hierarchy_member(XrCompileResources *resources, const XrJsonValue *object,
-    const char *key, const XrJsonValue **out) {
+    const char *key, bool unique, const XrJsonValue **out) {
     if (!object || object->type != XR_JSON_OBJECT) return XR_XIR_BAD_STRUCTURE;
     size_t length = strlen(key);
     for (int i = 0; i < object->as.object.count; ++i) {
@@ -151,9 +156,13 @@ static XrXirStatus hierarchy_member(XrCompileResources *resources, const XrJsonV
         if (member->key_len != length) continue;
         status = hierarchy_resource(xr_compile_resources_work(resources, length));
         if (status != XR_XIR_OK) return status;
-        if (!memcmp(member->key, key, length)) { *out = member->value; return XR_XIR_OK; }
+        if (!memcmp(member->key, key, length)) {
+            if (*out) return XR_XIR_BAD_STRUCTURE;
+            *out = member->value;
+            if (!unique) return XR_XIR_OK;
+        }
     }
-    return XR_XIR_BAD_STRUCTURE;
+    return *out ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspServer *server,
     const XrJsonValue *params) {
@@ -162,8 +171,8 @@ static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspSe
     if (status != XR_XIR_OK) return status;
     const XrJsonValue *owned = xlsp_source_params_view(request->params);
     const XrJsonValue *object = NULL, *uri = NULL;
-    status = hierarchy_member(resources, owned, request->mode ? "item" : "textDocument", &object);
-    if (status == XR_XIR_OK) status = hierarchy_member(resources, object, "uri", &uri);
+    status = hierarchy_member(resources, owned, request->mode ? "item" : "textDocument", false, &object);
+    if (status == XR_XIR_OK) status = hierarchy_member(resources, object, "uri", false, &uri);
     if (status != XR_XIR_OK) return status;
     if (uri->type != XR_JSON_STRING || !uri->as.string) return XR_XIR_BAD_STRUCTURE;
     char *path = NULL;
@@ -182,9 +191,11 @@ static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspSe
     return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *server, const XrJsonValue *params,
-    unsigned mode, bool types, XlspHierarchyRequest **out) {
-    if (!server || !out || *out || mode > 2) return XR_XIR_BAD_STRUCTURE;
-    server->source_failure.stage = types ? 25 : 24; server->source_failure.status = XR_XIR_BAD_STRUCTURE;
+    unsigned mode, XlspSourceScopeQueryKind kind, XlspHierarchyRequest **out) {
+    if (!server || !out || *out || kind < XLSP_SOURCE_CALL_HIERARCHY ||
+        kind > XLSP_SOURCE_BINDING_LENSES || mode > 2 || (kind == XLSP_SOURCE_BINDING_LENSES && mode))
+        return XR_XIR_BAD_STRUCTURE;
+    server->source_failure.stage = hierarchy_stage(kind); server->source_failure.status = XR_XIR_BAD_STRUCTURE;
     if (!params || server->shutdown_received || server->workspace_folder_count < 0 ||
         server->workspace_folder_count > MAX_WORKSPACE_FOLDERS) return XR_XIR_BAD_STRUCTURE;
     const XrCompileResourceLimits limits = {UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
@@ -196,7 +207,7 @@ XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *server, const Xr
     request->context = (XrXirCompileContext){resources, xr_xir_compile_default_limits()};
     // Transfer the initial ledger lease with the owner, including failure cleanup.
     resources = NULL;
-    request->mode = mode; request->types = types; request->revision = server->source_revision;
+    request->mode = mode; request->kind = kind; request->revision = server->source_revision;
     status = hierarchy_inputs(request, server, params);
     if (status == XR_XIR_OK) { *out = request; request = NULL; }
 done:
@@ -211,12 +222,23 @@ static bool hierarchy_cancelled(const _Atomic bool *cancel) {
 static bool hierarchy_cancel_poll(const void *context) {
     return hierarchy_cancelled((const _Atomic bool *)context);
 }
+static XrXirStatus hierarchy_lenses(XlspHierarchyRequest *request, XlspSourceScope *scope,
+    size_t entry, XrJsonValue **out) {
+    const XrJsonValue *document = NULL, *uri = NULL;
+    XrCompileResources *resources = request->context.resources;
+    XrXirStatus status = hierarchy_member(resources, xlsp_source_params_view(request->params),
+        "textDocument", true, &document);
+    if (status == XR_XIR_OK) status = hierarchy_member(resources, document, "uri", true, &uri);
+    if (status != XR_XIR_OK) return status;
+    return xlsp_source_binding_lenses_json(&request->context, xlsp_source_scope_documents(scope),
+        xlsp_source_scope_count(scope), entry, out);
+}
 XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *request,
     const _Atomic bool *cancel, XlspSourceRequestResult *out) {
     if (!request || request->started || !out || out->json || out->stage || out->cancelled ||
         out->status != XR_XIR_OK) return XR_XIR_BAD_STRUCTURE;
     request->started = true;
-    XlspSourceRequestResult result = {.stage = request->types ? 25u : 24u};
+    XlspSourceRequestResult result = {.stage = hierarchy_stage(request->kind)};
     XlspSourceScope *scope = NULL; bool bound = false;
     if (hierarchy_cancelled(cancel)) { result.cancelled = true; goto done; }
     if (cancel) {
@@ -234,11 +256,14 @@ XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *request,
     size_t entry = SIZE_MAX;
     result.status = xlsp_source_scope_find(scope, request->uri, request->uri_length, &entry);
     if (result.status != XR_XIR_OK) goto done;
-    XlspSourceHierarchyRequest input = {&request->context, xlsp_source_scope_documents(scope),
-        xlsp_source_scope_known_versions(scope), xlsp_source_scope_count(scope), entry,
-        xlsp_source_params_view(request->params), request->revision, request->mode};
-    result.status = request->types ? xlsp_source_type_hierarchy_json(&input, &result.json) :
-        xlsp_source_call_hierarchy_json(&input, &result.json);
+    if (request->kind == XLSP_SOURCE_BINDING_LENSES) result.status = hierarchy_lenses(request, scope, entry, &result.json);
+    else {
+        XlspSourceHierarchyRequest input = {&request->context, xlsp_source_scope_documents(scope),
+            xlsp_source_scope_known_versions(scope), xlsp_source_scope_count(scope), entry,
+            xlsp_source_params_view(request->params), request->revision, request->mode};
+        result.status = request->kind == XLSP_SOURCE_TYPE_HIERARCHY ? xlsp_source_type_hierarchy_json(&input, &result.json) :
+            xlsp_source_call_hierarchy_json(&input, &result.json);
+    }
     if (result.status == XR_XIR_OK) result.stage = 0;
 done:
     xlsp_source_scope_free(scope);
@@ -252,4 +277,21 @@ done:
     if (hierarchy_cancelled(cancel)) result.cancelled = true;
     if (result.cancelled) { xjson_free(result.json); result.json = NULL; }
     *out = result; return XR_XIR_OK;
+}
+XR_FUNC XrJsonValue *xlsp_source_scope_query(XrLspServer *server, const XrJsonValue *params,
+    unsigned mode, XlspSourceScopeQueryKind kind) {
+    if (!server) return NULL;
+    uint64_t revision = server->source_revision;
+    uint64_t generation = server->doc_table ? server->doc_table->generation : 0;
+    XlspHierarchyRequest *request = NULL; XlspSourceRequestResult result = {0};
+    XrXirStatus status = xlsp_hierarchy_request_capture(server, params, mode, kind, &request);
+    if (status == XR_XIR_OK) status = xlsp_hierarchy_request_run(request, NULL, &result);
+    if (status == XR_XIR_OK) status = result.status;
+    xlsp_hierarchy_request_free(request);
+    if (status == XR_XIR_OK && (server->shutdown_received || server->source_revision != revision ||
+        (server->doc_table ? server->doc_table->generation : 0) != generation)) status = XR_XIR_UNRESOLVED;
+    if (status != XR_XIR_OK) { xjson_free(result.json); result.json = NULL; }
+    server->source_failure.status = (unsigned)status;
+    server->source_failure.stage = status == XR_XIR_OK ? 0u : hierarchy_stage(kind);
+    return result.json;
 }

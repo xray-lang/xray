@@ -11,13 +11,20 @@
 #include "xlsp_source_request.h"
 #include "xlsp_server.h"
 typedef struct XlspHierarchyRequest XlspHierarchyRequest;
+typedef enum XlspSourceScopeQueryKind {
+    XLSP_SOURCE_CALL_HIERARCHY,
+    XLSP_SOURCE_TYPE_HIERARCHY,
+    XLSP_SOURCE_BINDING_LENSES
+} XlspSourceScopeQueryKind;
 /* Capture borrows editor state only on the dispatch thread. The one-shot run
  * scans captured roots and uses canonical Source without accessing the server.
  * Params, configuration, open texts and roots survive every producer's death.
  * Cancellation borrows the stable task token only until run returns. */
 XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *, const XrJsonValue *,
-    unsigned, bool, XlspHierarchyRequest **);
+    unsigned, XlspSourceScopeQueryKind, XlspHierarchyRequest **);
 XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *,
     const _Atomic bool *, XlspSourceRequestResult *);
 XR_FUNC void xlsp_hierarchy_request_free(XlspHierarchyRequest *);
+XR_FUNC XrJsonValue *xlsp_source_scope_query(XrLspServer *, const XrJsonValue *,
+    unsigned, XlspSourceScopeQueryKind);
 #endif // XLSP_HIERARCHY_REQUEST_H

@@ -3,8 +3,7 @@
 #include "xlsp_server.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_request.h"
-#include "xlsp_source_scope.h"
-#include "xlsp_source_binding_lenses.h"
+#include "xlsp_hierarchy_request.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -69,7 +68,7 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     server->source_failure.stage=1;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     if(!doc||doc->server!=server||!server->doc_table||server->doc_table->doc_count<=0)return NULL;
     XrCompileResources *resources=NULL;XlspSourceDocument *documents=NULL;
-    XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;XlspSourceTokens *tokens=NULL;XlspSourceScope *scope=NULL;
+    XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;XlspSourceTokens *tokens=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&navigation_limits,&resources);
     XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
         created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
@@ -93,20 +92,6 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     if(!selected||used!=count){status=XR_XIR_BAD_STRUCTURE;goto done;}
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     const XlspSourceDocument *inputs=documents;size_t input_count=count;
-    if(mode==7) {
-        if(server->workspace_folder_count<0||server->workspace_folder_count>MAX_WORKSPACE_FOLDERS){status=XR_XIR_BAD_STRUCTURE;goto done;}
-        const char *roots[MAX_WORKSPACE_FOLDERS];size_t root_count=(size_t)server->workspace_folder_count;
-        for(size_t i=0;i<root_count;++i) {
-            if(xr_compile_resources_work(resources,sizeof(*roots))!=XR_COMPILE_RESOURCE_OK){status=XR_XIR_BUDGET;goto done;}
-            roots[i]=server->workspace_folders[i].path;if(!roots[i]){status=XR_XIR_BAD_STRUCTURE;goto done;}
-        }
-        XlspSourceScopeOptions capture={&context,documents,count,roots,root_count,UINT32_C(50)*1024*1024,&server->config};
-        status=xlsp_source_scope_capture(&capture,&scope);if(status!=XR_XIR_OK)goto done;
-        inputs=xlsp_source_scope_documents(scope);input_count=xlsp_source_scope_count(scope);
-        size_t entry=SIZE_MAX;status=xlsp_source_scope_find(scope,doc->uri,selected_length,&entry);if(status!=XR_XIR_OK)goto done;
-        server->source_failure.stage=7;status=xlsp_source_binding_lenses_json(&context,inputs,input_count,entry,&result);
-        if(status==XR_XIR_OK)server->source_failure.stage=0;goto done;
-    }
     status=xlsp_source_workspace_build(&context,inputs,input_count,&fresh,&server->source_failure.stage,NULL);
     if(status!=XR_XIR_OK)goto done;
     server->source_failure.stage=7;
@@ -134,7 +119,7 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     }
 done:
     server->source_failure.status=(unsigned)status;
-    xlsp_source_tokens_free(tokens);xlsp_source_workspace_free(fresh);xlsp_source_scope_free(scope);xr_compile_resources_free(documents);xr_compile_resources_release(resources);
+    xlsp_source_tokens_free(tokens);xlsp_source_workspace_free(fresh);xr_compile_resources_free(documents);xr_compile_resources_release(resources);
     return result;
 }
 XrJsonValue *xlsp_analyze_definition(XrLspServer *server,XrLspDocument *doc,XrLspPosition pos) {
@@ -147,12 +132,7 @@ XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server,XrLspDocument *
     return navigation_request(server,doc,pos,2,true,NULL,NULL);
 }
 XrJsonValue *xlsp_code_lens_handle(XrLspServer *server,XrJsonValue *params) {
-    if(!server)return NULL;
-    server->source_failure.stage=12;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
-    XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri");
-    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
-    XrLspDocument *doc=xlsp_document_store_get(server->doc_table,uri->as.string);
-    return navigation_request(server,doc,(XrLspPosition){0},7,false,NULL,NULL);
+    return xlsp_source_scope_query(server,params,0,XLSP_SOURCE_BINDING_LENSES);
 }
 /* Strict protocol UInteger/URI admission is shared by navigation and typed hover handlers. */
 XrJsonValue *xlsp_navigation_handle(XrLspServer *server,XrJsonValue *params,unsigned mode) {

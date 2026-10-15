@@ -19,6 +19,9 @@ source_task_target(test_lsp_hierarchy_task_before "${PROJECT_SOURCE_DIR}/src/app
     "${CMAKE_CURRENT_LIST_DIR}/before_task_owner.c")
 target_compile_definitions(test_lsp_hierarchy_task PRIVATE XLSP_HIERARCHY_TASK=1)
 target_compile_definitions(test_lsp_hierarchy_task_before PRIVATE XLSP_HIERARCHY_TASK=1)
+source_task_target(test_lsp_lens_task_before "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_navigation.c"
+    "${CMAKE_CURRENT_LIST_DIR}/before_lens_task_owner.c")
+target_compile_definitions(test_lsp_lens_task_before PRIVATE XLSP_HIERARCHY_TASK=1)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 foreach(mode normal capture counterfactual)
     if(mode STREQUAL "counterfactual")
@@ -29,5 +32,16 @@ foreach(mode normal capture counterfactual)
     add_test(NAME test_lsp_hierarchy_task_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/test_task.py" "$<TARGET_FILE:${image}>" "${PROJECT_SOURCE_DIR}/stdlib" --${mode})
     set_tests_properties(test_lsp_hierarchy_task_${mode} PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE
+        LABELS "unit;lsp;source;ownership")
+endforeach()
+foreach(mode normal capture counterfactual)
+    if(mode STREQUAL "counterfactual")
+        set(image test_lsp_lens_task_before)
+    else()
+        set(image test_lsp_hierarchy_task)
+    endif()
+    add_test(NAME test_lsp_lens_task_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_task.py" "$<TARGET_FILE:${image}>" "${PROJECT_SOURCE_DIR}/stdlib" --lens-${mode})
+    set_tests_properties(test_lsp_lens_task_${mode} PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE
         LABELS "unit;lsp;source;ownership")
 endforeach()

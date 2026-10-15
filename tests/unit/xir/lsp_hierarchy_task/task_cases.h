@@ -15,6 +15,7 @@ static XrJsonValue *hierarchy_prepare_params(const char *uri, unsigned line, uns
     CHECK(l && c); l->as.integer = line; c->as.integer = column; return params;
 }
 static XrJsonValue *hierarchy_task_params(XrLspServer *server, const char *uri, unsigned method) {
+    if (method == 10) return parameters(uri);
     unsigned line = method < 7 ? method == 6 ? 1u : 0u : method == 9 ? 3u : 4u;
     unsigned column = method < 7 ? 3u : 10u;
     XrJsonValue *params = hierarchy_prepare_params(uri, line, column);
@@ -58,8 +59,9 @@ static void hierarchy_configure(XrLspServer *server, const char *root) {
 }
 static void hierarchy_capture_faults(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params, unsigned method) {
     XlspHierarchyRequest *request = NULL; size_t begin = runtime_attempts;
-    CHECK(xlsp_hierarchy_request_capture(server, params, method < 7 ? method - 4 : method - 7,
-        method >= 7, &request) == XR_XIR_OK);
+    CHECK(xlsp_hierarchy_request_capture(server, params, method == 10 ? 0u : method < 7 ? method - 4 : method - 7,
+        method == 10 ? XLSP_SOURCE_BINDING_LENSES : method >= 7 ? XLSP_SOURCE_TYPE_HIERARCHY :
+            XLSP_SOURCE_CALL_HIERARCHY, &request) == XR_XIR_OK);
     xlsp_hierarchy_request_free(request); CHECK(!runtime_live && !runtime_bytes);
     size_t sites = runtime_attempts - begin; CHECK(sites);
     for (size_t i = 0; i < sites; ++i) {
@@ -76,7 +78,7 @@ static void hierarchy_capture_faults(XrLspServer *server, const XlspRequestId *i
 }
 static int hierarchy_run(int argc, char **argv) {
     CHECK(argc == 6); unsigned scenario = (unsigned)strtoul(argv[4], NULL, 10);
-    unsigned method = (unsigned)strtoul(argv[5], NULL, 10); CHECK(scenario <= 11 && method >= 4 && method <= 9);
+    unsigned method = (unsigned)strtoul(argv[5], NULL, 10); CHECK(scenario <= 11 && method >= 4 && method <= 10);
     XrLspServer server = {0}; server.initialized = true; server.source_revision = 41; server.next_request_id = 71;
     server.transport = xlsp_transport_stdio(); CHECK(server.transport); XrLspTransport *transport = server.transport;
     XrLspAsync *async = xlsp_async_new(NULL, NULL); CHECK(async); server.async = async;

@@ -11,7 +11,7 @@ add_executable(test_lsp_source_scope "${CMAKE_CURRENT_LIST_DIR}/test_scope.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_index.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_bindings.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_rename.c")
-target_link_libraries(test_lsp_source_scope PRIVATE xray_lsp_document_open)
+target_link_libraries(test_lsp_source_scope PRIVATE xray_lsp_document_open xray_lsp_hierarchy_handlers)
 if(WIN32)
     target_sources(test_lsp_source_scope PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/thread_win.c")
     target_link_libraries(test_lsp_source_scope PRIVATE bcrypt)

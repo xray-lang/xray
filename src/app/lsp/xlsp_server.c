@@ -424,6 +424,7 @@ static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/prepareTypeHierarchy"))return 7;
     if(!strcmp(method,"typeHierarchy/supertypes"))return 8;
     if(!strcmp(method,"typeHierarchy/subtypes"))return 9;
+    if(!strcmp(method,"textDocument/codeLens"))return 10;
     return -1;
 }
 static bool source_request_submit(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params, unsigned mode) {

@@ -9,7 +9,9 @@ import tempfile
 
 exe, stdlib = map(Path, sys.argv[1:3])
 mode = sys.argv[3]
-assert mode in ('--normal', '--capture', '--counterfactual')
+lenses = mode.startswith('--lens-')
+assert mode in ('--normal', '--capture', '--counterfactual', '--lens-normal', '--lens-capture', '--lens-counterfactual')
+operation = '--' + mode.removeprefix('--lens-') if lenses else mode
 digest = hashlib.sha256(exe.read_bytes()).hexdigest()
 
 
@@ -38,15 +40,15 @@ with tempfile.TemporaryDirectory(prefix='hierarchy-task-', dir=os.getcwd()) as f
     (root / 'ignored.xr').write_text('deliberately invalid ignored source', encoding='utf-8')
     (root / 'skip').mkdir()
     (root / 'skip/bad.xr').write_text('deliberately invalid ignored directory source', encoding='utf-8')
-    for method in range(4, 10):
-        scenarios = [11] if mode == '--counterfactual' else [10] if mode == '--capture' else range(10)
+    for method in ([10] if lenses else range(4, 10)):
+        scenarios = [11] if operation == '--counterfactual' else [10] if operation == '--capture' else range(10)
         for scenario in scenarios:
             entry.write_text(text if scenario == 3 else 'invalid disk text replaced by editor overlay', encoding='utf-8')
             result = subprocess.run([str(exe.resolve()), entry.as_uri(), library.as_uri(), str(root.resolve()),
                                      str(scenario), str(method)], input=b'', stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE, timeout=20,
                                     env={**os.environ, 'XRAY_STDLIB_PATH': str(stdlib.resolve())})
-            if mode == '--counterfactual':
+            if operation == '--counterfactual':
                 assert result.returncode == 1 and not result.stdout, (method, result.returncode, result.stderr[-2000:])
                 marker = f'BEFORE actual SourceTask rejected hierarchy mode={method} status=1 physical0/0 JSON0/0 app0/0'
                 assert result.stderr.count(marker.encode()) == 1, result.stderr
@@ -71,14 +73,22 @@ with tempfile.TemporaryDirectory(prefix='hierarchy-task-', dir=os.getcwd()) as f
                 else:
                     assert 'error' not in message, (method, scenario, message)
                     values = message['result']
-                    assert len(values) == 1, values
-                    item = values[0].get('from', values[0].get('to', values[0]))
-                    expected = {4: 'target', 5: 'wrapper', 6: 'target', 7: 'Child', 8: 'Base', 9: 'Child'}[method]
-                    assert item['name'] == expected and item['uri'] == entry.as_uri(), item
-                    if method in (5, 6):
-                        assert len(values[0]['fromRanges']) == 2, values
-                    version = item['data']['version']
-                    assert version is None if scenario == 3 else version == '7', item
+                    if lenses:
+                        assert len(values) == 2, values
+                        assert [v['command']['title'] for v in values] == ['2 references', '1 reference'], values
+                        assert all(v['command']['command'] == '' for v in values), values
+                        assert [v['range'] for v in values] == [
+                            {'start': {'line': 0, 'character': 3}, 'end': {'line': 0, 'character': 9}},
+                            {'start': {'line': 1, 'character': 3}, 'end': {'line': 1, 'character': 10}}], values
+                    else:
+                        assert len(values) == 1, values
+                        item = values[0].get('from', values[0].get('to', values[0]))
+                        expected = {4: 'target', 5: 'wrapper', 6: 'target', 7: 'Child', 8: 'Base', 9: 'Child'}[method]
+                        assert item['name'] == expected and item['uri'] == entry.as_uri(), item
+                        if method in (5, 6):
+                            assert len(values[0]['fromRanges']) == 2, values
+                        version = item['data']['version']
+                        assert version is None if scenario == 3 else version == '7', item
             row = dict(method=method, scenario=scenario, wire_messages=len(messages), all_producers_destroyed=True)
             if scenario == 2:
                 interior = re.search(rb'INTERIOR mode=(\d+) trigger=(\d+) calls=(\d+)', result.stderr)

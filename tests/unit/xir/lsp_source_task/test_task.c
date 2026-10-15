@@ -101,7 +101,7 @@ static void rejected(XrLspServer *server, const XlspRequestId *id, XrJsonValue *
 static void check_admission(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params) {
     XlspRequestId invalid = {0}, missing = {.kind = XLSP_ID_NUMBER, .as.number = 42};
     rejected(server, &invalid, params, 0, XR_XIR_BAD_STRUCTURE);
-    rejected(server, id, params, 10, XR_XIR_BAD_STRUCTURE);
+    rejected(server, id, params, 11, XR_XIR_BAD_STRUCTURE);
     rejected(server, &missing, params, 0, XR_XIR_BAD_STAGE);
     server->initialized = false; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->initialized = true;
     server->shutdown_received = true; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->shutdown_received = false;
