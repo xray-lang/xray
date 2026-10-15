@@ -75,7 +75,7 @@ int main(int argc,char **argv) {
     uint32_t snapshot=state_one_select(module,"snapshot",XR_XIR_STRING);
     uint32_t read_left=state_one_select(module,"libraryLeft",XR_XIR_STRING);
     uint32_t read_right=state_one_select(module,"libraryRight",XR_XIR_STRING);
-    StateOneShape shape=state_one_shape(module->declarations,advance,snapshot,read_left,read_right);
+    StateOneShape shape=state_one_shape(module->declarations,module->types,advance,snapshot,read_left,read_right);
     xr_xir_compile_artifact_free(checked); checked=NULL;
     XrXirCSource source={0};
     CHECK(xr_xir_compile_source_product_emit(product,"module_state_one",UINT64_C(1)*1024*1024,&source)==XR_XIR_OK);

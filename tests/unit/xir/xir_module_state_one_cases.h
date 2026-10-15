@@ -13,6 +13,7 @@
 #define XIR_MODULE_STATE_ONE_CASES_H
 #include "xir/xxir_output.h"
 #include "xir/xxir_panic.h"
+#include "xir/xxir_types.h"
 typedef struct StateOneShape { uint32_t advance,snapshot,read_left,read_right,root,base,left,right,slot,library_slot; } StateOneShape;
 typedef struct StateOneTrace {
     XrXirInstance *instance; XrXirOutputSink sink;
@@ -20,7 +21,7 @@ typedef struct StateOneTrace {
     StateOneShape shape;
     uint32_t begins[4],ready[4],published[2],released[2],busy;
 } StateOneTrace;
-static StateOneShape state_one_shape(const XrXirDeclarations *d,uint32_t advance,uint32_t snapshot,uint32_t read_left,uint32_t read_right) {
+static StateOneShape state_one_shape(const XrXirDeclarations *d,const XrXirTypes *types,uint32_t advance,uint32_t snapshot,uint32_t read_left,uint32_t read_right) {
     CHECK(d && d->module_count==4 && d->slot_count==2 && d->root_module<4);
     uint32_t root=d->root_module;
     CHECK(d->modules[root].dependency_count==2 && d->modules[root].dependencies);
@@ -32,9 +33,14 @@ static StateOneShape state_one_shape(const XrXirDeclarations *d,uint32_t advance
     CHECK(d->modules[right].dependencies[0]==base && !d->modules[base].dependency_count);
     uint32_t slot=UINT32_MAX,library_slot=UINT32_MAX;
     for(uint32_t i=0;i<d->slot_count;++i) {
-        CHECK(d->slots[i].type==XR_XIR_STRING);
-        if(d->slots[i].module==root) {CHECK(slot==UINT32_MAX && d->slots[i].mutable);slot=i;}
-        else {CHECK(d->slots[i].module==base && !d->slots[i].mutable && library_slot==UINT32_MAX);library_slot=i;}
+        if(d->slots[i].module==root) {
+            const XrXirTypeNode *cell=xr_xir_type_node(types,d->slots[i].type);
+            CHECK(cell && cell->kind==XR_XIR_TYPE_CELL && cell->element==XR_XIR_STRING);
+            CHECK(slot==UINT32_MAX && d->slots[i].mutable);slot=i;
+        } else {
+            CHECK(d->slots[i].type==XR_XIR_STRING && d->slots[i].module==base &&
+                !d->slots[i].mutable && library_slot==UINT32_MAX);library_slot=i;
+        }
     }
     CHECK(slot!=UINT32_MAX && library_slot!=UINT32_MAX);
     uint32_t entries[4]={advance,snapshot,read_left,read_right};
@@ -87,9 +93,11 @@ static XrXirInstance *state_one_instance(XrXirProgram *program,StateOneTrace *tr
     CHECK(xr_xir_instance_new(program,&config,&trace->instance)==XR_XIR_CALL_READY && trace->instance);
     return trace->instance;
 }
-static XrXirCallStatus state_one_run(XrXirInstance *instance,uint32_t entry) {
+static XrXirCallStatus state_one_run(XrXirInstance *instance,uint32_t entry,bool *bound) {
+    if(bound)*bound=false;
     XrXirCallStatus status=xr_xir_instance_start(instance,entry,NULL,0);
     if(status!=XR_XIR_CALL_READY)return status;
+    if(bound)*bound=true;
     XrXirInstanceResult outcome;
     do {outcome=xr_xir_instance_poll_bounded(instance,16);}while(outcome.outcome.status==XR_XIR_CALL_READY);
     CHECK(!outcome.outcome.wake && xr_xir_panic_empty(&outcome.outcome.panic));
@@ -109,7 +117,7 @@ static void state_one_string(const XrXirValue *value,bool changed) {
     CHECK(length==expected_length && !memcmp(bytes,expected,length));
 }
 static XrXirValue state_one_read(XrXirInstance *instance,uint32_t entry,bool changed) {
-    CHECK(state_one_run(instance,entry)==XR_XIR_CALL_RETURNED);
+    CHECK(state_one_run(instance,entry,NULL)==XR_XIR_CALL_RETURNED);
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     state_one_string(&value,changed);return value;
 }
@@ -120,49 +128,63 @@ static void state_one_library(XrXirInstance *instance,StateOneShape shape) {
     CHECK(left.payload==instance->slots[shape.library_slot].payload);
     xr_xir_value_drop(&right);xr_xir_value_drop(&left);
 }
+/* A physical oracle borrows only while this published Cell stays alive.
+ * It grants no runtime authority; the public unprivileged read still fails. */
+static const XrXirValue *state_one_cell_value(XrXirInstance *instance,uint32_t slot) {
+    CHECK(instance->published[slot] && xr_xir_cell_in_domain(&instance->slots[slot],instance->domain));
+    const XirCell *cell=(const XirCell *)object_pointer(&instance->slots[slot]);
+    CHECK(cell->module_storage && !cell->projection_count);
+    XrXirValue denied={0};CHECK(xr_xir_cell_read(&instance->slots[slot],&denied)==XR_XIR_VALUE_BAD_ARGUMENT &&
+        !denied.type && !denied.reserved && !denied.payload);
+    return &cell->value;
+}
 static bool state_one_committed(XrXirInstance *instance,uint32_t slot) {
     if(!instance->published[slot])return false;
-    const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&instance->slots[slot],&bytes,&length));
+    const XrXirValue *value=state_one_cell_value(instance,slot);
+    const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(value,&bytes,&length));
     bool changed=length==7 && !memcmp(bytes,"changed",7);
-    CHECK(changed || (length==17 && !memcmp(bytes,"module-owned-text",17)));return changed;
+    CHECK(changed || (length==17 && !memcmp(bytes,"module-owned-text",17)));
+    return changed;
 }
 static void state_one_faults(XrXirProgram *program,StateOneShape shape) {
     StateOneTrace baseline={0};baseline.shape=shape;XrXirInstance *instance=state_one_instance(program,&baseline);
-    runtime_attempts=0;CHECK(state_one_run(instance,shape.advance)==XR_XIR_CALL_RETURNED);
+    runtime_attempts=0;CHECK(state_one_run(instance,shape.advance,NULL)==XR_XIR_CALL_RETURNED);
     size_t sites=runtime_attempts;CHECK(sites>=4 && sites<20000);state_one_unit(instance);state_one_output(&baseline,0,false);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);CHECK(!runtime_live && !runtime_bytes);
     uint32_t sticky=0,recoverable=0,committed=0;
     for(size_t ordinal=0;ordinal<sites;++ordinal) {
         StateOneTrace trace={0};trace.shape=shape;instance=state_one_instance(program,&trace);
         runtime_attempts=0;runtime_fail_at=ordinal;
-        XrXirCallStatus status=state_one_run(instance,shape.advance);
+        bool bound=false;XrXirCallStatus status=state_one_run(instance,shape.advance,&bound);
         size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
         if(status!=XR_XIR_CALL_OOM)fprintf(stderr,"String fault ordinal=%zu status=%u attempts=%zu\n",ordinal,status,attempts);
         CHECK(status==XR_XIR_CALL_OOM && attempts>ordinal && !trace.size);
-        XrXirValue empty={0};CHECK(xr_xir_instance_take_result(instance,&empty)==XR_XIR_CALL_BAD_STATE);
+        bool failed=xr_xir_instance_state(instance)==XR_XIR_INSTANCE_FAILED;
+        XrXirCallStatus take=(bound && !failed)?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;
+        XrXirValue empty={0};CHECK(xr_xir_instance_take_result(instance,&empty)==take);
         CHECK(!empty.type && !empty.reserved && !empty.payload);
         XrXirValue sentinel={XR_XIR_I64,0,91},output=sentinel;
-        XrXirCallStatus occupied=(instance->state==XR_XIR_INSTANCE_FAILED || !instance->call)?XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_BAD_ARGUMENT;
+        XrXirCallStatus occupied=take;
         CHECK(xr_xir_instance_take_result(instance,&output)==occupied);
         CHECK(output.type==sentinel.type && output.payload==sentinel.payload);
-        bool failed=xr_xir_instance_state(instance)==XR_XIR_INSTANCE_FAILED;
         bool changed=state_one_committed(instance,shape.slot);
-        /* The final allocation is the renderer buffer, strictly after SLOT_STORE.
+        /* The final allocation is the renderer buffer, strictly after CELL_WRITE.
          * Every earlier allocation precedes that transaction commit. */
         CHECK(changed==(ordinal+1==sites));
         if(failed) {
             ++sticky;CHECK(!instance->publication_count);
             CHECK(trace.published[0]==trace.released[0] && trace.published[1]==trace.released[1]);
             size_t retry_before=runtime_attempts;uint32_t publication=trace.published[0]+trace.published[1];
-            CHECK(state_one_run(instance,shape.advance)==XR_XIR_CALL_OOM && !trace.size);
+            CHECK(state_one_run(instance,shape.advance,NULL)==XR_XIR_CALL_OOM && !trace.size);
             CHECK(runtime_attempts==retry_before && trace.published[0]+trace.published[1]==publication);
         } else {
             ++recoverable;if(changed)++committed;
-            CHECK(state_one_run(instance,shape.advance)==XR_XIR_CALL_RETURNED);state_one_unit(instance);
+            CHECK(state_one_run(instance,shape.advance,NULL)==XR_XIR_CALL_RETURNED);state_one_unit(instance);
             state_one_output(&trace,0,changed);state_one_library(instance,shape);
         }
-        CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        XrXirCallStatus cleanup=failed?XR_XIR_CALL_OOM:XR_XIR_CALL_READY;
+        CHECK(xr_xir_instance_stop(instance)==cleanup);
+        CHECK(xr_xir_instance_free(instance)==cleanup);
         CHECK(trace.published[0]==trace.released[0] && trace.published[1]==trace.released[1]);
         CHECK(!runtime_live && !runtime_bytes);
     }
@@ -177,14 +199,14 @@ static void state_one_pair(XrXirProgram *program,StateOneShape shape) {
     for(uint32_t i=0;i<2;++i) {traces[i].shape=shape;instances[i]=state_one_instance(program,&traces[i]);}
     for(uint32_t i=0;i<2;++i) {
         XrXirValue initial=state_one_read(instances[i],shape.snapshot,false);
-        CHECK(initial.payload==instances[i]->slots[shape.slot].payload &&
-            initial.payload==instances[i]->slots[shape.library_slot].payload);
+        const XrXirValue *cell_value=state_one_cell_value(instances[i],shape.slot);
+        CHECK(initial.payload==cell_value->payload && initial.payload==instances[i]->slots[shape.library_slot].payload);
         state_one_library(instances[i],shape);xr_xir_value_drop(&initial);
     }
     xr_xir_compile_program_drop(program);program=NULL;
     CHECK(source_program_compile_live==compiler_blocks && source_program_compile_bytes==compiler_bytes);
     for(uint32_t repeat=0;repeat<24;++repeat)for(uint32_t i=0;i<2;++i) {
-        size_t before=traces[i].size;CHECK(state_one_run(instances[i],shape.advance)==XR_XIR_CALL_RETURNED);
+        size_t before=traces[i].size;CHECK(state_one_run(instances[i],shape.advance,NULL)==XR_XIR_CALL_RETURNED);
         state_one_unit(instances[i]);state_one_output(&traces[i],before,repeat!=0);
         for(uint32_t m=0;m<4;++m)CHECK(traces[i].begins[m]==1 && traces[i].ready[m]==1);
         CHECK(traces[i].published[0]==1 && traces[i].published[1]==1 &&

@@ -24,7 +24,7 @@ int main(void) {
     CHECK(module_state_one_advance<module_state_one_program.entry_count);
     CHECK(module_state_one_snapshot<module_state_one_program.entry_count &&
         module_state_one_left<module_state_one_program.entry_count && module_state_one_right<module_state_one_program.entry_count);
-    StateOneShape shape=state_one_shape(module_state_one_program.declarations,module_state_one_advance,
+    StateOneShape shape=state_one_shape(module_state_one_program.declarations,module_state_one_program.types,module_state_one_advance,
         module_state_one_snapshot,module_state_one_left,module_state_one_right);
     CHECK(module_state_one_program.entries[shape.advance].result==XR_XIR_UNIT &&
         !module_state_one_program.entries[shape.advance].parameter_count);
