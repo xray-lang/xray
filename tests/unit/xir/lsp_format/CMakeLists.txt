@@ -13,3 +13,5 @@ else()
 endif()
 add_test(NAME test_lsp_format_owner COMMAND test_lsp_format_owner)
 set_tests_properties(test_lsp_format_owner PROPERTIES TIMEOUT 30 LABELS "unit;lsp;ownership;metadata;allocation")
+
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../lsp_on_type" "${CMAKE_CURRENT_BINARY_DIR}/lsp_on_type")

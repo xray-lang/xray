@@ -16,6 +16,7 @@
 #include "../../base/xjson.h"
 #include "xlsp_analysis.h"
 #include "xlsp_format.h"
+#include "xlsp_on_type.h"
 #include "xlsp_workspace.h"
 #include "xlsp_rename.h"
 #include "xlsp_semantic_tokens.h"
@@ -254,149 +255,8 @@ XrJsonValue *xlsp_handle_td_formatting(XrLspServer *server,XrJsonValue *params) 
     return xlsp_format_handle(server,params);
 }
 
-// On-type formatting: auto-indent when typing }, newline, or ;
-XrJsonValue *xlsp_handle_td_on_type_formatting(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    XrJsonValue *position = xjson_get_object(params, "position");
-    const char *ch = xjson_get_string(params, "ch");
-    if (!textDocument || !position || !ch)
-        return xjson_new_array();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content)
-        return xjson_new_array();
-
-    int line = xjson_get_int(position, "line");
-    XrJsonValue *edits = xjson_new_array();
-
-    // Get formatting options
-    XrJsonValue *options = xjson_get_object(params, "options");
-    int tab_size = options ? (int) xjson_get_int(options, "tabSize") : 4;
-    if (tab_size <= 0)
-        tab_size = 4;
-
-    // Get the current line content
-    const char *line_start = doc->content;
-    int cur_line = 0;
-    while (cur_line < line && *line_start) {
-        if (*line_start == '\n')
-            cur_line++;
-        line_start++;
-    }
-    const char *line_end = line_start;
-    while (*line_end && *line_end != '\n')
-        line_end++;
-
-    if (ch[0] == '}') {
-        // Count brace nesting up to this line to determine correct indent
-        int depth = 0;
-        const char *p = doc->content;
-        while (p < line_start) {
-            if (*p == '{')
-                depth++;
-            else if (*p == '}')
-                depth--;
-            else if (*p == '/' && p[1] == '/') {
-                while (p < line_start && *p != '\n')
-                    p++;
-                continue;
-            } else if (*p == '"' || *p == '\'') {
-                char q = *p++;
-                while (p < line_start && *p != q) {
-                    if (*p == '\\')
-                        p++;
-                    p++;
-                }
-            }
-            p++;
-        }
-        // } closes one level, so indent at depth-1
-        if (depth > 0)
-            depth--;
-        int target_indent = depth * tab_size;
-
-        // Calculate current indent on this line
-        int current_indent = 0;
-        const char *cp = line_start;
-        while (cp < line_end && (*cp == ' ' || *cp == '\t')) {
-            current_indent += (*cp == '\t') ? tab_size : 1;
-            cp++;
-        }
-
-        if (current_indent != target_indent) {
-            // Replace existing whitespace with correct indent
-            int ws_chars = (int) (cp - line_start);
-            char indent_str[256];
-            int n = target_indent < (int) sizeof(indent_str) - 1 ? target_indent
-                                                                 : (int) sizeof(indent_str) - 1;
-            memset(indent_str, ' ', n);
-            indent_str[n] = '\0';
-
-            XrJsonValue *edit = xjson_new_object();
-            xjson_object_set(edit, "range", xjson_make_range(line, 0, line, ws_chars));
-            xjson_object_set(edit, "newText", xjson_new_string(indent_str));
-            xjson_array_push(edits, edit);
-        }
-    } else if (ch[0] == '\n') {
-        // Auto-indent: match previous line's indent, +1 level if prev ends with {
-        if (line <= 0)
-            return edits;
-
-        // Find previous line start
-        const char *prev_line_start = doc->content;
-        cur_line = 0;
-        while (cur_line < line - 1 && *prev_line_start) {
-            if (*prev_line_start == '\n')
-                cur_line++;
-            prev_line_start++;
-        }
-
-        int prev_indent = 0;
-        const char *pp = prev_line_start;
-        while (*pp && *pp != '\n' && (*pp == ' ' || *pp == '\t')) {
-            prev_indent += (*pp == '\t') ? tab_size : 1;
-            pp++;
-        }
-
-        // Check if prev line ends with {
-        const char *prev_end = prev_line_start;
-        while (*prev_end && *prev_end != '\n')
-            prev_end++;
-        const char *last_non_ws = prev_end - 1;
-        while (last_non_ws > prev_line_start &&
-               (*last_non_ws == ' ' || *last_non_ws == '\t' || *last_non_ws == '\r'))
-            last_non_ws--;
-
-        int target_indent = prev_indent;
-        if (last_non_ws >= prev_line_start && *last_non_ws == '{')
-            target_indent += tab_size;
-
-        // Check current line indent
-        int current_indent = 0;
-        const char *cp = line_start;
-        while (cp < line_end && (*cp == ' ' || *cp == '\t')) {
-            current_indent += (*cp == '\t') ? tab_size : 1;
-            cp++;
-        }
-
-        if (current_indent != target_indent) {
-            int ws_chars = (int) (cp - line_start);
-            char indent_str[256];
-            int n = target_indent < (int) sizeof(indent_str) - 1 ? target_indent
-                                                                 : (int) sizeof(indent_str) - 1;
-            memset(indent_str, ' ', n);
-            indent_str[n] = '\0';
-
-            XrJsonValue *edit = xjson_new_object();
-            xjson_object_set(edit, "range", xjson_make_range(line, 0, line, ws_chars));
-            xjson_object_set(edit, "newText", xjson_new_string(indent_str));
-            xjson_array_push(edits, edit);
-        }
-    }
-    // For ';' we don't do anything special yet
-
-    return edits;
+XrJsonValue *xlsp_handle_td_on_type_formatting(XrLspServer *server,XrJsonValue *params) {
+    return xlsp_on_type_handle(server,params);
 }
 
 XrJsonValue *xlsp_handle_td_code_lens(XrLspServer *server,XrJsonValue *params) {
