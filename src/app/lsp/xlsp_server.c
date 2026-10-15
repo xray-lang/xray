@@ -12,6 +12,7 @@
 #include "xlsp_protocol_output.h"
 #include "xlsp_method_table.h"
 #include "xlsp_pending_requests.h"
+#include "xlsp_request_cancel.h"
 #include "xlsp_source_completion.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_request.h"
@@ -709,39 +710,6 @@ static bool pending_request_is_cancelled(XrLspServer *server, const XlspRequestI
     return pending && pending->cancelled;
 }
 
-// Mark a request as cancelled (also cancels associated background tasks).
-// Source tasks are keyed by their task identity, preserving both string and
-// numeric protocol IDs without narrowing either into the worker's int64 key.
-static bool pending_request_cancel(XrLspServer *server, const XlspRequestId *id) {
-    XlspPendingRequests *pending = &server->pending_requests;
-    bool found = false,source=false;
-
-    for (int i = 0; i < MAX_PENDING_REQUESTS; i++) {
-        if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
-            pending->requests[i].cancelled = true;
-            source=pending->requests[i].source_task_id!=0;
-            if(source&&server->async)xlsp_async_cancel_task(server->async,pending->requests[i].source_task_id);
-            lsp_log("Request %s (%s) marked as cancelled", xlsp_request_id_debug(id),
-                    pending->requests[i].method ? pending->requests[i].method : "unknown");
-            found = true;
-            break;
-        }
-    }
-
-    if (!source && server->async && id && id->kind == XLSP_ID_NUMBER) {
-        int async_cancelled = xlsp_async_cancel_request(server->async, (int64_t) id->as.number);
-        if (async_cancelled > 0) {
-            lsp_log("Cancelled %d background tasks for request %s", async_cancelled,
-                    xlsp_request_id_debug(id));
-        }
-    }
-
-    if (!found) {
-        lsp_log("Request %s not found for cancellation", xlsp_request_id_debug(id));
-    }
-    return found;
-}
-
 // Handle $/cancelRequest notification
 static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
     if (!params)
@@ -753,7 +721,8 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
     XlspProtocolStatus parsed=xlsp_request_id_parse(params,&target);
     if(parsed!=XLSP_PROTOCOL_OK||!xlsp_request_id_valid(&target)){xlsp_request_id_free(&target);return;}
 
-    pending_request_cancel(server, &target);
+    bool found = xlsp_request_cancel(server, &target);
+    lsp_log("Cancellation %s for request %s", found ? "recorded" : "ignored", xlsp_request_id_debug(&target));
     xlsp_request_id_free(&target);
 }
 
