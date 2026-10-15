@@ -115,6 +115,8 @@ static void format_scalar_storage(void) {
     const char *expected[]={"-17","true","18446744073709551615","A","()"};
     size_t before=calls;
     closed_fail_all=true;
+    char scalar[XR_XIR_SCALAR_TEXT_BYTES]; const char *text=NULL; size_t length=0;
+    CHECK(xr_xir_scalar_text(&values[4],scalar,&text,&length) && length==2 && !memcmp(text,"()",2));
     for (size_t i=0;i<5;++i) {
         XrValueFormatReader reader=xr_xir_value_format_reader(&values[i]);
         FormatCapture capture={.fail_at=SIZE_MAX};
@@ -124,6 +126,7 @@ static void format_scalar_storage(void) {
     }
     const XrXirValue invalid[]={{XR_XIR_UNIT,1,0},{XR_XIR_UNIT,0,1}};
     for (size_t i=0;i<2;++i) {
+        CHECK(!xr_xir_scalar_text(&invalid[i],scalar,&text,&length));
         XrValueFormatReader reader=xr_xir_value_format_reader(&invalid[i]);
         FormatCapture capture={.fail_at=SIZE_MAX};
         CHECK(!xr_value_format_value(reader,(XrValueFormatNode){&invalid[i],0,NULL},

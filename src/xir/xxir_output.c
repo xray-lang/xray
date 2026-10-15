@@ -17,6 +17,9 @@
 
 bool xr_xir_scalar_text(const XrXirValue *value, char *scalar, const char **bytes, size_t *length) {
     if (!value || !scalar || !bytes || !length || !xr_xir_value_argument(value, NULL, (XrXirType) value->type)) return false;
+    if (value->type == XR_XIR_UNIT) {
+        *bytes = "()"; *length = 2; return true;
+    }
     if (value->type == XR_XIR_RUNE) {
         size_t count=xr_xir_rune_utf8(value->payload,scalar);
         if (!count) return false;
