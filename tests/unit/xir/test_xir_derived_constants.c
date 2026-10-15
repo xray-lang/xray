@@ -128,21 +128,51 @@ static void constant_table(void) {
     CHECK(!runtime_live && !runtime_bytes);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
-static void constant_refusals(void) {
-    const char *cases[]={
-        "fn large()->(i64,i64){return (2,3)}\nexport fn table()->(i64,i64){return comptime large()}\n",
-        "fn effectful()->(i16,i16){print(1);return (2,3)}\nexport fn table()->(i16,i16){return comptime effectful()}\n"};
-    const XrXirStatus expected[]={XR_XIR_BUDGET,XR_XIR_BAD_TYPE};
-    for(unsigned i=0;i<2;++i) {
-        XrXirCompileContext context={0};
-        CHECK(xr_compile_resources_new(&constant_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-        context.limits=xr_xir_compile_default_limits();
-        XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
-        XrXirStatus status=constant_source(&context,cases[i],&source,&diagnostic);
-        CHECK(status==expected[i] && diagnostic.status==expected[i] && diagnostic.line>0);
-        CHECK(!source.checked && !source.snapshot);xr_compile_resources_release(context.resources);
-        CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+static void constant_wide_output(void) {
+    const char text[]="fn large()->(i64,i64){return (2,3)}\nexport fn table()->(i64,i64){return comptime large()}\n";
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&constant_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(constant_source(&context,text,&source,&diagnostic)==XR_XIR_OK && source.checked && source.snapshot);
+    XrXirArtifact *closed=NULL,*lowered=NULL;
+    CHECK(xr_xir_compile_specialize(source.checked,&closed,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&source);
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(closed);
+    uint32_t entry=constant_function(xr_xir_compile_artifact_module(lowered),"table");
+    XrXirProgram *program=NULL;
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+    XrXirInstanceConfig config;
+    CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;
+    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,1024).outcome.status==XR_XIR_CALL_RETURNED);
+    XrXirValue value={0};
+    CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+    xr_xir_compile_program_drop(program);xr_compile_resources_release(context.resources);
+    const int64_t expected[]={2,3};
+    for(uint32_t field=0;field<2;++field) {
+        XrXirValue part={0};CHECK(xr_xir_tuple_get(&value,field,&part)==XR_XIR_VALUE_OK);
+        CHECK(part.type==XR_XIR_I64 && !part.reserved && part.payload==expected[field]);
+        xr_xir_value_drop(&part);
     }
+    xr_xir_value_drop(&value);
+    CHECK(!runtime_live && !runtime_bytes && !source_fixture_compile_live && !source_fixture_compile_bytes);
+}
+static void constant_refusals(void) {
+    const char text[]="fn effectful()->(i16,i16){print(1);return (2,3)}\nexport fn table()->(i16,i16){return comptime effectful()}\n";
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&constant_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(constant_source(&context,text,&source,&diagnostic)==XR_XIR_BAD_TYPE);
+    CHECK(diagnostic.status==XR_XIR_BAD_TYPE && diagnostic.line>0 && !source.checked && !source.snapshot);
+    xr_compile_resources_release(context.resources);
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 static XrCompileResourceStats constant_stats(const XrXirCompileContext *context) {
     XrCompileResourceStats stats={0};
@@ -197,8 +227,8 @@ static void constant_resources(void) {
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--resources")){constant_resources();return 0;}
     CHECK(argc==1);
-    constant_table();constant_refusals();
+    constant_table();constant_wide_output();constant_refusals();
     source_fixture_source_owners_free();
-    puts("Ordinary eight-byte constant table: ordered description, independent recipe, packet, VM7532, producer death and original output/effect refusals");
+    puts("Ordinary eight-byte constant table: ordered description, independent recipe, packet, VM7532, producer death, complete sixteen-byte pair and effect refusal");
     return 0;
 }
