@@ -8,19 +8,27 @@
 #include "app/lsp/xlsp_index_json.h"
 #include "app/lsp/xlsp_async.h"
 #include "api/xsource_compile.h"
+#ifdef XR_OS_WINDOWS
 #include "base/xwindows_utf8.h"
+#endif
 #include "os/os_time.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d:%s\n", __LINE__, #c); exit(1); } } while (0)
+#define xr_compile_resources_new task_resource_new_impl
+#define xr_compile_resources_work task_work_impl
 #include "xir_sdk_resource_test.h"
+#undef xr_compile_resources_work
+#undef xr_compile_resources_new
+#include "task_cancel.h"
 #include "lsp_open_json_owner.h"
 #pragma push_macro("xr_free")
 #undef xr_free
 #define xr_free(p) lsp_json_free(p)
 #include "app/lsp/xlsp_protocol_output.c"
 #pragma pop_macro("xr_free")
+#include "task_sync.h"
 
 typedef struct TaskBlock { void *pointer; size_t bytes; } TaskBlock;
 static TaskBlock task_blocks[32];
@@ -126,7 +134,7 @@ static void check_admission(XrLspServer *server, const XlspRequestId *id, XrJson
     }
 }
 static int run(int argc, char **argv) {
-    CHECK(argc == 4); unsigned mode = (unsigned)strtoul(argv[3], NULL, 10); CHECK(mode < 12);
+    CHECK(argc == 4); unsigned mode = (unsigned)strtoul(argv[3], NULL, 10); CHECK(mode < 16);
     (void)sdk_ledger; (void)sdk_unlimited; (void)sdk_stats;
     XrLspServer server = {0}; server.initialized = true; server.source_revision = 5; server.next_request_id = 71;
     server.transport = xlsp_transport_stdio(); CHECK(server.transport); XrLspTransport *transport = server.transport;
@@ -138,8 +146,8 @@ static int run(int argc, char **argv) {
     add_document(&server, argv[1], root_text, 1); add_document(&server, argv[2], lib_text, 7);
     XlspRequestId id = identity(), owned = {0}; CHECK(xlsp_request_id_clone(&id, &owned) == XLSP_PROTOCOL_OK);
     CHECK(xlsp_pending_request_add(&server.pending_requests, owned, "textDocument/query", 99));
-    XrJsonValue *params = parameters(argv[1]); unsigned query = mode < 4 ? mode : 0;
-    if (mode == 0) check_admission(&server, &id, params);
+    XrJsonValue *params = parameters(argv[1]); unsigned query = mode < 4 ? mode : mode >= 12 ? mode - 12 : 0;
+    if (mode == 0) {check_admission(&server, &id, params);check_sync_navigation(&server, params, argv[2]);}
     XrXirStatus status = xlsp_source_task_submit(&server, &id, params, query);
     if (status != XR_XIR_OK) fprintf(stderr, "admission status=%u stage=%u source_status=%u\n",
         (unsigned)status, server.source_failure.stage, server.source_failure.status);
@@ -161,6 +169,10 @@ static int run(int argc, char **argv) {
     }
     if (mode == 10) server.transport = NULL;
     if (mode == 11) CHECK(xlsp_request_cancel(&server, &id));
+    if (mode >= 12) {
+        task_cancel_arm(); atomic_store(&gate.release, true);
+        task_cancel_wait(); CHECK(xlsp_request_cancel(&server, &id)); task_cancel_release();
+    }
     if (mode == 7 || mode == 11) {
         atomic_store(&gate.release, true); xlsp_async_free(async); server.async = NULL;
     } else {
@@ -183,9 +195,14 @@ static int run(int argc, char **argv) {
     fprintf(stderr, "STATS mode=%u captured=%zu compiler_live=%zu compiler_bytes=%zu json_live=%zu json_bytes=%zu exit=%u app_live=%zu app_bytes=%zu admission=%zu\n",
         mode, captured, runtime_live, runtime_bytes, lsp_json_live, lsp_json_bytes, server.exit_received ? 1u : 0u,
         task_live, task_bytes, admission_checks);
+    if (mode >= 12) return task_cancel_check(mode);
     return 0;
 }
+#ifdef XR_OS_WINDOWS
 int wmain(int argc, wchar_t **wide) {
     XrWinPathStatus status; char **argv = xr_win_utf16_arguments(argc, wide, &status); CHECK(argv);
     int result = run(argc, argv); xr_win_utf8_arguments_free(argc, argv); return result;
 }
+#else
+int main(int argc, char **argv) {return run(argc, argv);}
+#endif

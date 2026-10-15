@@ -5,9 +5,10 @@
 #include "xlsp_source_request.h"
 #include "xlsp_source_scope.h"
 #include "xlsp_source_binding_lenses.h"
-#include "../../api/xsource_compile.h"
 #include <string.h>
 #include <stdio.h>
+
+static const XrCompileResourceLimits navigation_limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
 
 static XrXirStatus navigation_length(XrCompileResources *r,const char *text,size_t *out) {
     if(!text)return XR_XIR_BAD_STRUCTURE;
@@ -32,9 +33,9 @@ XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *server,XrJsonValue *par
         if(!v||v->type!=XR_JSON_BOOL)return XR_XIR_BAD_STRUCTURE;include=v->as.boolean;}
     XrLspDocument *selected=xlsp_document_store_get(server->doc_table,uri->as.string);XrLspDocTable *table=server->doc_table;
     if(!selected||!table||table->doc_count<=0||table->bucket_count<=0||!table->buckets)return XR_XIR_BAD_STRUCTURE;
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;
+    XrCompileResources *resources=NULL;
     XlspSourceDocument *documents=NULL;size_t count=(size_t)table->doc_count,used=0,entry=SIZE_MAX;
-    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    XrCompileResourceStatus created=xr_compile_resources_new(&navigation_limits,&resources);
     XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     if(status!=XR_XIR_OK)goto done;
     if(count>SIZE_MAX/sizeof(*documents)){status=XR_XIR_BUDGET;goto done;}
@@ -67,10 +68,9 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     if(!server)return NULL;
     server->source_failure.stage=1;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     if(!doc||doc->server!=server||!server->doc_table||server->doc_table->doc_count<=0)return NULL;
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;XlspSourceDocument *documents=NULL;
     XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;XlspSourceTokens *tokens=NULL;XlspSourceScope *scope=NULL;
-    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
+    XrCompileResourceStatus created=xr_compile_resources_new(&navigation_limits,&resources);
     XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
         created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     if(status!=XR_XIR_OK)goto done;
