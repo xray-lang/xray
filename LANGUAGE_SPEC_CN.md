@@ -6358,6 +6358,8 @@ Checked Source 的 `toString()` 与 `repeat(count:i64)` 由固定 string 声明�
 
 接收编译Domain与String执行接口后，String参数/结果、COPY、CONCAT、私有String Cell和上述七方法可由同一有界CTFE路径执行，源消费者把拥有结果复制为独立字面值。Unicode/NUL搜索和比较支付原compiler ledger的保守工作上界，保留范围/资源错误、步数/深度/输出帽，不借VM/Instance或native执行冒充CTFE。这是当前开发准入，完整资源/全库资格仍须另证；f64与rune数值文本化的TO_STRING操作不因String拥有准入而自动开放。
 
+普通 String `+=` 的受认证 root 追加路径保留已保存值的 COW 快照、完整 Unicode/NUL 字节、自追加和原有限 Domain 的失败清理。只有足以证明 RHS 不会重绑定接收者的语句才使用 `CELL_STRING_APPEND`；调用、getter 以及用作表达式的复合赋值保留原先读旧值、完成 RHS 后写回的求值顺序。单标量模板可直接追加其 i64/u64、bool、rune 或浮点文本，不先创建临时 String；这不授予额外类型、成员或 root 权限。该操作使用 semantic74，旧 semantic73 包拒绝，不保留双路径协议；它当前仍不属于已准入 CTFE opcode，也不意味着库私有 var、完整 StringBuilder 替代性能或全字符串族已获资格。
+
 `len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
 
 `contains`、`startsWith`、`endsWith` 接受一个 string 并返回 bool，按完整 UTF-8 字节查询，不做大小写折叠或 Unicode 归一化，NUL 不终止匹配。空模式对任意字符串返回 true，非空模式对空字符串返回 false。接收者先求值并取得值快照，再求值模式，各一次；实参求值期间修改原变量不改变快照。查询本身不分配、不修改或转移输入，不引入挂起或语言异常；操作数求值及持有仍可失败。普通泛型必须在定义处具备相应能力。
