@@ -109,8 +109,8 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
         *span = (StorageSpan){node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field],
             frame->packed.bytes ? frame->packed.bytes +
                 (node->kind == XR_XIR_TYPE_NULLABLE ? layout->value.alignment : layout->field_offsets[field]) : NULL};
-    } else if (frame->object->kind == XR_XIR_TYPE_MAP || frame->object->kind == XR_XIR_TYPE_SET) {
-        const XirHash *map = (const XirHash *)frame->object;
+    } else if (frame->boxed.object->kind == XR_XIR_TYPE_MAP || frame->boxed.object->kind == XR_XIR_TYPE_SET) {
+        const XirHash *map = (const XirHash *)frame->boxed.object;
         bool map_value = map->object.kind == XR_XIR_TYPE_MAP && (index & 1);
         *span = hash_span(map, map->object.kind == XR_XIR_TYPE_MAP ? index / 2 : index, map_value);
         *inlined = span->type != XR_XIR_UNIT;

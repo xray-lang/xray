@@ -89,8 +89,10 @@ static XrXirValueStatus hash_probe(const XirHash *map, const XrXirValue *key,
             XrXirLayout layout = {0};
             XR_CHECK(xr_xir_compile_type_arena_layout(map->object.arena, map->key_type, &layout),
                 "sealed hash keys retain their exact storage layout");
-            XrXirValue stored = storage_leaf_value(map->key_type,
-                hash_span(map, probe.entry, false).bytes, layout.size);
+            XrXirValue stored = {0};
+            if (!storage_leaf_value(map->object.arena, map->key_type,
+                hash_span(map, probe.entry, false).bytes, layout.size, &stored))
+                return XR_XIR_VALUE_BAD_ARGUMENT;
             status = xr_xir_key_equal(&stored, key, admission, &probe.found);
             if (status != XR_XIR_VALUE_OK) return status;
             if (probe.found) { *out = probe; return XR_XIR_VALUE_OK; }
@@ -111,7 +113,7 @@ static XrXirValueStatus hash_prepare_field(StoragePrepared *prepared, const XrXi
     XrXirLayout layout = {0};
     if (!value || value->type != (uint32_t)type ||
         !xr_xir_compile_type_arena_layout(admission->arena, type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    return storage_prepared_begin(prepared, value, layout.size, admission);
+    return storage_prepared_begin(prepared, type, value, layout.size, admission);
 }
 static void hash_transfer(StoragePrepared *prepared, XirHash *map, size_t index, bool value) {
     XR_CHECK(prepared->owns, "hash publication transfers exactly one prepared owner");
