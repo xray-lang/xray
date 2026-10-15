@@ -14,6 +14,7 @@
 #include "xxir_value_internal.h"
 #include "xxir_compile_domain.h"
 #include "xxir_cell_owner_internal.h"
+#include "xxir_value_path_internal.h"
 #include "xxir_class_origin_internal.h"
 #include "xxir_type_arena.h"
 #include "xxir_types.h"

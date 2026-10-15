@@ -435,6 +435,9 @@ set_tests_properties(test_xir_array_grow_budget PROPERTIES TIMEOUT 120 LABELS "u
 add_executable(test_xir_value_allocations xir/test_xir_value_allocations.c)
 target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_xir_value_allocations PRIVATE xray_xir_scalar)
+add_test(NAME test_xir_value_path_replacement COMMAND test_xir_value_allocations --path-replacement-normal)
+add_test(NAME test_xir_value_path_replacement_resources COMMAND test_xir_value_allocations --path-replacement)
+set_tests_properties(test_xir_value_path_replacement test_xir_value_path_replacement_resources PROPERTIES TIMEOUT 120 LABELS "unit;xir;ownership;resources;fault-injection")
 # Owned close/copy tests use the production thread wrapper and join every handle.
 target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
 target_include_directories(test_xir_array_grow_budget PRIVATE ${CMAKE_SOURCE_DIR}/src/base)

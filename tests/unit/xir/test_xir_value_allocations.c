@@ -671,8 +671,11 @@ static void deep_value_admission_failures(void) {
 #include "xir_foreign_write_fi_cases.h"
 #include "xir_foreign_array_fi_cases.h"
 #include "xir_array_set_callback_case.h"
+#include "xir_value_path_replacement_cases.h"
 int main(int argc, char **argv) {
     if (argc != 1) {
+        if (argc == 2 && !strcmp(argv[1], "--path-replacement")) { value_path_replacement_cases(true); return 0; }
+        if (argc == 2 && !strcmp(argv[1], "--path-replacement-normal")) { value_path_replacement_cases(false); return 0; }
         if (argc == 2 && !strcmp(argv[1], "--foreign-write-fi")) { foreign_write_fi_cases(); return 0; }
         if (argc == 2 && !strcmp(argv[1], "--foreign-array-fi")) { foreign_array_fi_cases(); return 0; }
         if (argc == 2 && !strcmp(argv[1], "--array-set-callback")) { array_set_callback_case(); return 0; }
@@ -686,7 +689,7 @@ int main(int argc, char **argv) {
         if (mode >= 3) return 2;
         cross_domain_ring_case(mode, order); return 0;
     }
-    value_path_cases();
+    value_path_replacement_cases(true);value_path_cases();
     storage_pack_cases();
     storage_cursor_cases();
     storage_cache_cases(); storage_cache_shared_graph();
