@@ -26,6 +26,16 @@ CASES = [
   'len(entries)==4 && e0.0==0 && e0.1==7 && e3.0==3 && e3.1==8}\n',
   'import {inspectDefaults} from "./defaults-values"\nprint(comptime inspectDefaults())\n',
   b'true\n'),
+ ('projected',
+  'fn mutate<T>(xs:ref Array<T>,value:T)->Array<T>{xs.unshift(...(value,));'
+  'xs.reverse(...());xs.resize(...(4,value));return xs.fill(...(value,1,3))}\n'
+  'export fn inspectNested()->bool{var rows:Array<Array<i8>>=[[1,2],[3]];const old=rows;'
+  'const result=mutate<i8>(ref rows[0],7);const entries=rows[0].entries(...());'
+  'return len(result)==4 && result[0]==2 && result[1]==7 && result[3]==7 && '
+  'len(rows[0])==4 && rows[0][2]==7 && len(rows[1])==1 && rows[1][0]==3 && '
+  'len(old[0])==2 && old[0][0]==1 && old[0][1]==2 && len(entries)==4}\n',
+  'import {inspectNested} from "./projected-values"\nprint(comptime inspectNested())\n',
+  b'true\n'),
  ('order-runtime',
   'export fn marker()->i64{return 1}\n',
   'import {marker} from "./order-runtime-values"\n'
