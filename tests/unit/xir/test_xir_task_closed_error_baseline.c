@@ -116,9 +116,12 @@ static bool closed_error_value(const XrXirValue *error,unsigned family) {
     if (family!=7) return constructed_value(&record.fields[0],family);
     const XirObject *object=(const XirObject *)(uintptr_t)record.fields[0].payload;
     XrXirValueAdmission admission={object->arena,object->domain,NULL,NULL,1000000,16777216};
-    int64_t length=0;CHECK(xr_xir_array_len(&record.fields[0],&admission,&length)==XR_XIR_VALUE_OK && length==1);
+    int64_t length=0;XrXirValueStatus status=xr_xir_array_len(&record.fields[0],&admission,&length);
+    if (status!=XR_XIR_VALUE_OK) { CHECK(status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_OOM);return false; }
+    CHECK(length==1);
     XrXirValue task={0};XrXirFaultDetail fault={0};
-    CHECK(xr_xir_array_get(&record.fields[0],0,&admission,&task,&fault)==XR_XIR_VALUE_OK);
+    status=xr_xir_array_get(&record.fields[0],0,&admission,&task,&fault);
+    if (status!=XR_XIR_VALUE_OK) { CHECK(status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_OOM);return false; }
     bool valid=constructed_value(&task,7);xr_xir_value_drop(&task);return valid;
 }
 int main(int argc, char **argv) {

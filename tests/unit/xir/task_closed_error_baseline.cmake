@@ -9,9 +9,13 @@ add_custom_command(OUTPUT "${CLOSED_ERROR_C}" "${CLOSED_ERROR_HEADER}"
     DEPENDS test_xir_task_closed_error_emit "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p08_task_closed_errors/root.xr" VERBATIM)
 add_executable(test_xir_task_closed_error_baseline ${CMAKE_CURRENT_LIST_DIR}/test_xir_task_closed_error_baseline.c
     "${CLOSED_ERROR_C}" "${CLOSED_ERROR_HEADER}")
+add_executable(test_xir_task_closed_error_resources ${CMAKE_CURRENT_LIST_DIR}/test_xir_task_closed_error_resources.c
+    "${CLOSED_ERROR_C}" "${CLOSED_ERROR_HEADER}")
 target_include_directories(test_xir_task_closed_error_baseline PRIVATE "${CLOSED_ERROR_DIR}")
 target_link_libraries(test_xir_task_closed_error_baseline PRIVATE xray_xir_source xray_xir_vm)
-foreach(target test_xir_task_closed_error_emit test_xir_task_closed_error_baseline)
+target_include_directories(test_xir_task_closed_error_resources PRIVATE "${CLOSED_ERROR_DIR}")
+target_link_libraries(test_xir_task_closed_error_resources PRIVATE xray_xir_source xray_xir_vm)
+foreach(target test_xir_task_closed_error_emit test_xir_task_closed_error_baseline test_xir_task_closed_error_resources)
     target_compile_definitions(${target} PRIVATE
         XR_TASK_CLOSED_ERROR_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p08_task_closed_errors"
         XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
@@ -20,6 +24,17 @@ foreach(target test_xir_task_closed_error_emit test_xir_task_closed_error_baseli
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
+endforeach()
+foreach(family array nested nullable nullable_array tuple enum atomic task_array task)
+    foreach(backend vm native vm-native native-vm)
+        string(REPLACE "-" "_" name "${backend}")
+        foreach(mode normal fi)
+            add_test(NAME test_xir_task_closed_error_${family}_${name}_${mode}
+                COMMAND test_xir_task_closed_error_resources ${family} ${backend} ${mode})
+            set_tests_properties(test_xir_task_closed_error_${family}_${name}_${mode} PROPERTIES TIMEOUT 60
+                LABELS "unit;xir;task;ownership;runtime;generated-c;typed-error;resource-budget")
+        endforeach()
+    endforeach()
 endforeach()
 add_test(NAME test_xir_task_closed_error_source_task_field COMMAND test_xir_task_closed_error_baseline source-task-field)
 set_tests_properties(test_xir_task_closed_error_source_task_field PROPERTIES TIMEOUT 60
