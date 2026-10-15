@@ -1584,6 +1584,33 @@ XR_FUNC XrXirValueStatus xr_xir_array_get(const XrXirValue *value, int64_t index
     xr_xir_value_graph_end();
     return graph_outcome;
 }
+static XrXirValueStatus array_observe_operation(const XrXirValue *value, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
+    if (fault) *fault=(XrXirFaultDetail){0};
+    if (!value || !fault || !unit_value(output) || !admission || !admission->domain || !admission->arena)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) return XR_XIR_VALUE_LIMIT;
+    admission->work-=64;
+    if (!xr_xir_value_argument(value,admission->arena,(XrXirType)value->type) ||
+        !xr_xir_type_is_array(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirArray *array=(XirArray *)object_pointer(value);
+    if (array->object.domain!=admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (index<0 || (uint64_t)index>=array->length) {
+        *fault=(XrXirFaultDetail){430,0,index,(int64_t)array->length};return XR_XIR_VALUE_BOUNDS;
+    }
+    if (!admission->work) return XR_XIR_VALUE_LIMIT;
+    --admission->work;
+    StorageSpan span={array->element,array_slot(array,(size_t)index)};
+    return storage_unpack(span,admission,output);
+}
+XR_FUNC XrXirValueStatus xr_xir_array_observe(const XrXirValue *array, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=array_observe_operation(array,index,admission,output,fault);
+    xr_xir_value_graph_end();return status;
+}
 
 static XrXirValueStatus array_grow(XirArray *array, size_t capacity) {
     XrXirDomain *domain = array->object.domain;
