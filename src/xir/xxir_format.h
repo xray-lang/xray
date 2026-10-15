@@ -15,7 +15,7 @@
 #include "xxir_value.h"
 #include "../shared/xr_value_format_core.h"
 
-/* Nodes borrow actual owned values. Every parent must remain alive throughout
- * traversal; returned child pointers and metadata have that same lifetime. */
-XR_FUNC XrValueFormatReader xr_xir_value_format_reader(void);
+/* The root pins the arena and all backing storage throughout traversal.
+ * Neither the root nor its children may be mutated or dropped during a read. */
+XR_FUNC XrValueFormatReader xr_xir_value_format_reader(const XrXirValue *root);
 #endif // XXIR_FORMAT_H

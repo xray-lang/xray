@@ -66,6 +66,7 @@ typedef enum XrValueFormatKind {
     XR_VALUE_FORMAT_BYTES,
     XR_VALUE_FORMAT_ENUM,
     XR_VALUE_FORMAT_LITERAL,
+    XR_VALUE_FORMAT_ARRAY,
 } XrValueFormatKind;
 
 typedef struct XrValueFormatView {
@@ -159,6 +160,31 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
         }
         case XR_VALUE_FORMAT_LITERAL:
             return xr_value_format_write(sink, view.name, view.name_size);
+        case XR_VALUE_FORMAT_ARRAY: {
+            if (xr_value_format_depth_exceeded(depth))
+                return xr_value_format_text(sink, "...");
+            if (view.size > (uint64_t)INT64_MAX)
+                return 0;
+            uint32_t shown = view.size > XR_VALUE_FORMAT_MAX_ELEMENTS ?
+                XR_VALUE_FORMAT_MAX_ELEMENTS : (uint32_t)view.size;
+            if (!xr_value_format_text(sink, "[") || (shown && !reader.child))
+                return 0;
+            for (uint32_t index = 0u; index < shown; ++index) {
+                XrValueFormatNode child = {0};
+                if ((index && !xr_value_format_text(sink, ", ")) ||
+                    !reader.child(reader.context, node, index, &child) ||
+                    !xr_value_format_value(reader, child, sink, depth + 1))
+                    return 0;
+            }
+            if (view.size > shown) {
+                char suffix[64];
+                int count = xr_value_format_more_suffix(suffix, sizeof(suffix), (int64_t)view.size, shown);
+                if (count <= 0 || (size_t)count >= sizeof(suffix) ||
+                    !xr_value_format_write(sink, suffix, (size_t)count))
+                    return 0;
+            }
+            return xr_value_format_text(sink, "]");
+        }
         case XR_VALUE_FORMAT_ENUM:
             if (xr_value_format_depth_exceeded(depth))
                 return xr_value_format_text(sink, "...");

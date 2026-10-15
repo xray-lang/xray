@@ -30,6 +30,7 @@
 #include "xxir_tuple.h"
 #include "xxir_float.h"
 #include "xxir_atomic.h"
+#include "xxir_format_internal.h"
 #include "xxir_task_internal.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -1814,3 +1815,4 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_panic_value.inc.c"
 #include "xxir_value_equal.inc.c"
 #include "xxir_value_key.inc.c"
+#include "xxir_value_format.inc.c"

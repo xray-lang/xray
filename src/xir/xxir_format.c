@@ -12,14 +12,15 @@
  *   the same deterministic conversion as ordinary typed output.
  */
 #include "xxir_format.h"
-#include "xxir_enum.h"
+#include "xxir_format_internal.h"
 #include "xxir_float.h"
 #include "xxir_rune.h"
 
 static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
-    (void)context;
-    const XrXirValue *value = node.value;
-    if (!view || !xr_xir_value_valid(value)) return 0;
+    XrXirValue borrowed = {0};
+    if (!view || !xr_xir_value_format_storage(context, node, &borrowed, view)) return 0;
+    if (view->kind) return 1;
+    const XrXirValue *value = &borrowed;
     XrXirType type = (XrXirType)value->type;
     if (xr_xir_type_is_integer(type)) {
         view->kind = xr_xir_integer_signed(type) ? XR_VALUE_FORMAT_SIGNED : XR_VALUE_FORMAT_UNSIGNED;
@@ -50,25 +51,14 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
         view->kind = XR_VALUE_FORMAT_BYTES; view->bytes = view->scalar_bytes; view->quote = '\0';
         return 1;
     }
-    XrXirEnumBorrow borrowed;
-    if (xr_xir_enum_borrow(value, &borrowed) != XR_XIR_VALUE_OK) return 0;
-    view->kind = XR_VALUE_FORMAT_ENUM;
-    view->name = borrowed.name.bytes; view->name_size = borrowed.name.length;
-    view->member = borrowed.member.bytes; view->member_size = borrowed.member.length;
-    view->children = borrowed.field_count;
-    return 1;
+    return 0;
 }
 
 static int xir_format_child(const void *context, XrValueFormatNode node, uint32_t index,
     XrValueFormatNode *child) {
-    (void)context;
-    XrXirEnumBorrow borrowed;
-    if (!child || xr_xir_enum_borrow(node.value, &borrowed) != XR_XIR_VALUE_OK ||
-        index >= borrowed.field_count) return 0;
-    *child = (XrValueFormatNode){&borrowed.fields[index], 0};
-    return 1;
+    return xr_xir_value_format_child(context, node, index, child);
 }
 
-XR_FUNC XrValueFormatReader xr_xir_value_format_reader(void) {
-    return (XrValueFormatReader){NULL, xir_format_read, xir_format_child};
+XR_FUNC XrValueFormatReader xr_xir_value_format_reader(const XrXirValue *root) {
+    return (XrValueFormatReader){xr_xir_value_arena(root), xir_format_read, xir_format_child};
 }
