@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_export_query.h"
 #include "xaddressability.h"
 #include "xanalyzer_xrd.h"
 #include "xtype_ref_resolve.h"
@@ -311,7 +312,9 @@ static XaSymbol *xa_expected_enum_symbol(XaInferContext *ctx, AstNode *object) {
         uint32_t expected_layout_id = ctx->expected_type->enum_type.layout_id;
         for (int i = 0; i < graph->spec_count; i++) {
             XrHashMap *exports = graph->specs[i].export_symbols;
-            XaSymbol *candidate = exports ? (XaSymbol *) xr_hashmap_get(exports, enum_name) : NULL;
+            XaSymbol *candidate = NULL;
+            if (!xa_find_export_symbol(ctx->analyzer, exports, enum_name, &candidate))
+                return NULL;
             if (!candidate || candidate->kind != XA_SYM_ENUM)
                 continue;
             XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, candidate);
@@ -1256,7 +1259,9 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         const char *module_name = links->module_name;
         const char *member_name = links->import_member_name;
         XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
-        XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+        XaSymbol *export_sym = NULL;
+        if (!xa_find_export_symbol(ctx->analyzer, exports, member_name, &export_sym))
+            return xr_type_new_error(ctx->analyzer->isolate);
         XrType *export_type = export_sym ? export_sym->links.type : NULL;
         bool refresh_missing = export_sym && imported_type_missing;
         bool refresh_function =
@@ -2168,7 +2173,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 (sym_links && sym_links->module_name) ? sym_links->module_name : var_name;
             XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
             if (exports) {
-                XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+                XaSymbol *member_sym = NULL;
+                if (!xa_find_export_symbol(ctx->analyzer, exports, ma->name, &member_sym))
+                    return xr_type_new_error(ctx->analyzer->isolate);
                 if (member_sym) {
                     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
                     XrType *member_type = member_links ? member_links->type : NULL;
@@ -4397,7 +4404,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             }
             if (can_complete) {
                 XrCompilerSession *sess =
-                    xr_compiler_session_current_for_isolate(ctx->analyzer->isolate);
+                    ctx->analyzer->compiler_session;
                 AstNode **new_args = (AstNode **) xr_calloc((size_t) pc, sizeof(AstNode *));
                 XrCallArgAccess *new_accesses =
                     (XrCallArgAccess *) xr_calloc((size_t) pc, sizeof(XrCallArgAccess));

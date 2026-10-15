@@ -8,6 +8,7 @@
  */
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/analyzer/xanalyzer_storage.h"
+#include "frontend/analyzer/xanalyzer_export_query.h"
 #include "toolchain/xcompiler_session.h"
 #include "toolchain/xcompiler_arena_backing.h"
 #include "base/xarena.h"
@@ -156,6 +157,76 @@ static void occupied_output_and_foreign_state(void) {
     CHECK(!physical_live && !allocation_count);
 }
 
+static XrCompileResourceStatus export_query_pipeline(const XrCompileResourceLimits *limits,
+    XrCompileResourceStats *observed) {
+    XrCompileResources *resources = NULL;
+    XrCompilerSession *session = NULL;
+    XrHashMap *exports = NULL;
+    XaAnalyzer analyzer = {0}; XaSymbol expected = {0};
+    XaSymbol *output = &expected;
+    XrCompileResourceStatus status = xr_compile_resources_new(limits, &resources);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
+    status = session_result(xr_compile_session_new(resources, &session));
+    analyzer.compiler_session = session;
+    if (status == XR_COMPILE_RESOURCE_OK) {
+        XrOsIoPolicy policy = xr_compile_io_policy(resources);
+        XrOsIoStatus created = xr_hashmap_owned_new(&policy, &exports);
+        if (xa_accept_export_io(&analyzer, created)) {
+            CHECK(xa_accept_export_io(&analyzer, xr_hashmap_owned_set(exports, "answer", &expected)) ||
+                xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK);
+            if (xr_compile_session_resource_status(session) == XR_COMPILE_RESOURCE_OK) {
+                CHECK(xa_find_export_symbol(&analyzer, exports, "answer", &output) ||
+                    xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK);
+                if (xr_compile_session_resource_status(session) == XR_COMPILE_RESOURCE_OK) {
+                    CHECK(output == &expected);
+                    CHECK(xa_find_export_symbol(&analyzer, exports, "missing", &output) ||
+                        xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK);
+                    if (xr_compile_session_resource_status(session) == XR_COMPILE_RESOURCE_OK) CHECK(!output);
+                }
+            }
+        }
+        status = xr_compile_session_resource_status(session);
+        if (status != XR_COMPILE_RESOURCE_OK) {
+            XrCompileResourceStats failed = stats(resources);
+            size_t attempts = attempt_count;
+            output = &expected;
+            CHECK(!xa_find_export_symbol(&analyzer, exports, "answer", &output));
+            CHECK(output == &expected);
+            CHECK(!xa_find_export_symbol(&analyzer, NULL, NULL, &output));
+            CHECK(output == &expected && attempt_count == attempts);
+            XrCompileResourceStats retry = stats(resources);
+            CHECK(retry.work == failed.work && retry.allocated_bytes == failed.allocated_bytes);
+        }
+    }
+    *observed = stats(resources);
+    xr_hashmap_owned_free(exports);xr_compile_session_free(session);
+    XrCompileResourceStats after = stats(resources);
+    CHECK(after.work == observed->work && after.allocated_bytes == observed->allocated_bytes);
+    xr_compile_resources_release(resources);
+    CHECK(!physical_live && !allocation_count);
+    return status;
+}
+
+static void export_query_resources(void) {
+    reset();XrCompileResourceStats baseline = {0};
+    CHECK(export_query_pipeline(&generous, &baseline) == XR_COMPILE_RESOURCE_OK);
+    size_t sites = attempt_count;CHECK(sites > 0);
+    for (size_t ordinal = 0; ordinal < sites; ++ordinal) {
+        reset();fail_at = ordinal;XrCompileResourceStats observed = {0};
+        CHECK(export_query_pipeline(&generous, &observed) == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    }
+    for (unsigned axis = 0; axis < 3; ++axis) for (int delta = -1; delta <= 1; ++delta) {
+        reset();XrCompileResourceStats observed = {0};
+        XrCompileResourceLimits limits = {baseline.allocated_bytes, baseline.peak_bytes, baseline.work};
+        uint64_t *bound = axis == 0 ? &limits.allocated_bytes : axis == 1 ? &limits.live_bytes : &limits.work;
+        CHECK(*bound > 1);*bound = (uint64_t)((int64_t)*bound + delta);
+        CHECK(export_query_pipeline(&limits, &observed) ==
+            (delta < 0 ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OK));
+    }
+    printf("export query: %zu allocation faults, three exact/minus1/plus1 axes, "
+        "output preservation, sticky no-charge retry and physical zero passed\n", sites);
+}
+
 int main(void) {
     reset();
     XrCompileResourceStats baseline = {0};
@@ -184,6 +255,7 @@ int main(void) {
     }
     producer_death_and_shared_failure();
     occupied_output_and_foreign_state();
+    export_query_resources();
     printf("analyzer storage: %zu allocator faults, three exact/minus-one axes, "
         "producer death, shared sticky failure and occupied output passed\n", sites);
     return 0;

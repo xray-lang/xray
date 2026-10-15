@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_export_query.h"
 #include "xa_intrinsic_registry.h"
 #include "xa_node_table.h"
 #include "xaddressability.h"
@@ -46,6 +47,24 @@ static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links);
 static int object_shape_field_index_local(XrType *type, const char *name);
 
+static bool xa_accept_module_query(XaAnalyzer *analyzer, XrModuleStatus status) {
+    if (status == XR_MODULE_OK)
+        return true;
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY || status == XR_MODULE_INVALID) {
+        XrCompileResourceStatus failure = status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+            status == XR_MODULE_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+        (void) xr_compile_state_fail(xr_compile_session_compile_state(analyzer->compiler_session), failure);
+    }
+    return false;
+}
+
+static bool xa_module_owns_declaration(XaAnalyzer *analyzer, const XrModuleSpec *spec,
+                                       const AstNode *declaration) {
+    bool owned = false;
+    return xa_accept_module_query(analyzer, xr_compile_module_graph_owns_top_level_decl(
+        (XrModuleGraph *) analyzer->graph, spec, declaration, &owned)) && owned;
+}
+
 static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attrs, int count) {
     for (int i = 0; links && attrs && i < count; i++) {
         if (attrs[i] && attrs[i]->kind == ATTR_DEPRECATED) {
@@ -73,12 +92,16 @@ static void xa_reset_symbol_move_state_cb(const char *key, void *value, void *us
     sym->links.moved_column = 0;
 }
 
-static void xa_reset_scope_move_states(XaScope *scope) {
+static bool xa_reset_scope_move_states(XaAnalyzer *analyzer, XaScope *scope) {
     if (!scope)
-        return;
-    xr_hashmap_foreach((XrHashMap *) scope->symbols, xa_reset_symbol_move_state_cb, NULL);
+        return true;
+    if (scope->symbols && !xa_accept_export_io(analyzer, xr_hashmap_owned_foreach(
+            (XrHashMap *) scope->symbols, xa_reset_symbol_move_state_cb, NULL)))
+        return false;
     for (int i = 0; i < scope->child_count; i++)
-        xa_reset_scope_move_states(scope->children[i]);
+        if (!xa_reset_scope_move_states(analyzer, scope->children[i]))
+            return false;
+    return true;
 }
 
 XR_FUNC bool xa_expr_is_sys_thread_spawn_call(AstNode *expr) {
@@ -606,7 +629,9 @@ static XaSymbol *xa_parallel_import_target_symbol(XaInferContext *ctx, XaSymbol 
     if (!exports)
         return sym;
     const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
-    XaSymbol *target = member_name ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    XaSymbol *target = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, member_name, &target))
+        return NULL;
     return target ? target : sym;
 }
 
@@ -632,7 +657,9 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports)
         return NULL;
-    XaSymbol *member = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    XaSymbol *member = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, ma->name, &member))
+        return NULL;
     return xa_parallel_import_target_symbol(ctx, member);
 }
 
@@ -641,7 +668,9 @@ static XaSymbol *xa_parallel_module_export_symbol(XaInferContext *ctx, const cha
     if (!ctx || !ctx->analyzer || !module_name || !member_name)
         return NULL;
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
-    XaSymbol *member = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    XaSymbol *member = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, member_name, &member))
+        return NULL;
     return xa_parallel_import_target_symbol(ctx, member);
 }
 
@@ -3392,6 +3421,8 @@ bool xa_specifier_is_named_module(const char *spec) {
 }
 
 XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char *module_name) {
+    if (!analyzer)
+        return NULL;
     XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
     if (!graph || !graph->resolver)
         return NULL;
@@ -3419,18 +3450,19 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
      * uninitialized register. */
     if (!owner || !xr_module_identity_authority_valid(&owner->authority))
         return NULL;
-    XrModuleId mid;
+    XrModuleId mid = {0};
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, module_name, owner->source_path,
+    XrModuleStatus status = xr_compile_module_resolver_resolve(graph->resolver, module_name, owner->source_path,
                                         &owner->authority, &mid, &err);
-    xr_free(err);
-    if (rc != 0)
+    xr_compile_resources_free(err);
+    if (!xa_accept_module_query(analyzer, status))
         return NULL;
 
     /* Find the target module in the graph */
-    int idx = xr_module_graph_find(graph, mid.canonical);
-    xr_module_id_cleanup(&mid);
-    if (idx < 0)
+    int idx = -1;
+    status = xr_compile_module_graph_find(graph, mid.canonical, &idx);
+    xr_compile_module_id_cleanup(&mid);
+    if (!xa_accept_module_query(analyzer, status) || idx < 0)
         return NULL;
 
     if (graph->specs[idx].export_symbols_invalid)
@@ -3452,19 +3484,21 @@ static XaSymbol *resolve_private_import_target(XaAnalyzer *analyzer, const Impor
     XrModuleSpec *target = &graph->specs[member->private_target_spec_index];
     if (target->export_symbols_invalid || !target->export_symbols)
         return NULL;
-    XaSymbol *symbol = (XaSymbol *) xr_hashmap_get(target->export_symbols, member->name);
+    XaSymbol *symbol = NULL;
+    if (!xa_find_export_symbol(analyzer, target->export_symbols, member->name, &symbol))
+        return NULL;
     XaSymbolLinks *links = symbol ? xa_analyzer_get_links(analyzer, symbol) : NULL;
     if (!symbol || !links)
         return NULL;
     if (member->private_target_decl &&
-        (!xr_module_spec_owns_top_level_decl(target, member->private_target_decl) ||
+        (!xa_module_owns_declaration(analyzer, target, member->private_target_decl) ||
          (links->function_decl_node != member->private_target_decl &&
           links->nominal_decl_node != member->private_target_decl)))
         return NULL;
     if (member->private_generic_decl) {
         XaGenericSpecializationFact fact;
         if (!member->private_target_decl ||
-            !xr_module_spec_owns_top_level_decl(target, member->private_generic_decl) ||
+            !xa_module_owns_declaration(analyzer, target, member->private_generic_decl) ||
             !xa_analyzer_get_generic_specialization(analyzer, member->private_target_decl, &fact) ||
             fact.generic_decl != member->private_generic_decl)
             return NULL;
@@ -3525,7 +3559,9 @@ XR_FUNC ImportMember *xa_program_add_import_member(AstNode *root, XaAnalyzer *an
             return NULL;
         memset(private_stmt, 0, sizeof(*private_stmt));
         private_stmt->type = AST_IMPORT_STMT;
-        private_stmt->node_id = xr_compiler_session_next_ast_node_id(analyzer->compiler_session);
+        private_stmt->node_id = xr_compile_session_next_ast_node_id(analyzer->compiler_session);
+        if (!private_stmt->node_id)
+            return NULL;
         if (stmt) {
             private_stmt->line = stmt->line;
             private_stmt->column = stmt->column;
@@ -3600,10 +3636,11 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
             xa_freestanding_stdlib_member_reject_suggestion(import->module_name));
     }
     const char *local_name = member->alias ? member->alias : member->name;
-    XaSymbol *export_sym =
-        member->has_private_target
-            ? resolve_private_import_target(ctx->analyzer, member)
-            : (graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL);
+    XaSymbol *export_sym = NULL;
+    if (member->has_private_target)
+        export_sym = resolve_private_import_target(ctx->analyzer, member);
+    else if (!xa_find_export_symbol(ctx->analyzer, graph_exports, member->name, &export_sym))
+        return NULL;
     const XaBuiltinObjectShape *builtin_object_shape =
         export_sym || member->has_private_target
             ? NULL
@@ -4781,10 +4818,11 @@ static void xa_visit_comptime_block_compound_assignment(XaInferContext *ctx, Ast
         return;
     }
 
-    compound->symbol_id = sym->id;
     AstNode lhs = {0};
     lhs.type = AST_VARIABLE;
-    lhs.node_id = xr_compiler_session_next_ast_node_id(session);
+    lhs.node_id = xr_compile_session_next_ast_node_id(session);
+    if (!lhs.node_id)
+        return;
     lhs.line = stmt->line;
     lhs.column = stmt->column;
     lhs.as.variable.name = compound->name;
@@ -4792,7 +4830,10 @@ static void xa_visit_comptime_block_compound_assignment(XaInferContext *ctx, Ast
 
     AstNode binary = {0};
     binary.type = binary_type;
-    binary.node_id = xr_compiler_session_next_ast_node_id(session);
+    binary.node_id = xr_compile_session_next_ast_node_id(session);
+    if (!binary.node_id)
+        return;
+    compound->symbol_id = sym->id;
     binary.line = stmt->line;
     binary.column = stmt->column;
     binary.as.binary.left = &lhs;
@@ -5476,7 +5517,9 @@ static XrType *xa_visit_regex_literal(XaInferContext *ctx, AstNode *node) {
                                        "regex compilation is hosted-only");
 
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, "regex");
-    XaSymbol *regex_class = exports ? (XaSymbol *) xr_hashmap_get(exports, "Regex") : NULL;
+    XaSymbol *regex_class = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, "Regex", &regex_class))
+        return xr_type_new_error(ctx->analyzer->isolate);
     XaSymbolLinks *links = regex_class && regex_class->kind == XA_SYM_CLASS
                                ? xa_analyzer_get_links(ctx->analyzer, regex_class)
                                : NULL;
@@ -8454,8 +8497,10 @@ static void xa_validate_freestanding_payload_error_catches(XaAnalyzer *analyzer,
  *   Pass 5   -> Suspend-effect validation for typed contracts and entry plans
  * ========================================================================== */
 
-void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
+XR_FUNC void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     if (!analyzer || !ast)
+        return;
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
         return;
 
     XaInferContext *ctx = xa_infer_context_new(analyzer);
@@ -8464,7 +8509,10 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     ctx->file_path = analyzer->current_file;
     ctx->program = ast->type == AST_PROGRAM ? ast : NULL;
 
-    xa_reset_scope_move_states(analyzer->global_scope);
+    if (!xa_reset_scope_move_states(analyzer, analyzer->global_scope)) {
+        xa_infer_context_free(ctx);
+        return;
+    }
 
     // Pass 1: Collect all symbols
     xa_visit_collect(ctx, ast);
