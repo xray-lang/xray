@@ -80,8 +80,77 @@ static void single_run_base_copy_controls(void) {
     CHECK(effect_body_instruction_ref_value(&read,&run,7,NULL)==XR_XIR_BAD_STRUCTURE && !probe.calls);
     puts("base-row copy: all1024 masks, complete ten fields,12 malformed, exact work cuts and sparse span fees passed");
 }
+/* Three-run controls include both unselected physical neighbors in every read. */
+static void three_run_reader_controls(void) {
+    EffectBodyRun runs[3]={0};
+    for (uint32_t r=0;r<3;++r) {
+        runs[r]=(EffectBodyRun){.first=2*r,.count=r==2?4u:2u,.mask=(1u<<6)|(1u<<7)|(1u<<8),
+            .base={.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={17+12*r,23+r},
+                .targets={31+r,47+r},.immediate=-11,.type_arguments={0x7ffffff0u+r,0x80000001u}}};
+        runs[r].delta[6]=17;runs[r].delta[7]=0xfffffffcu;runs[r].delta[8]=9;
+    }
+    EffectBodyFunction function={.instruction_count=8,.runs=runs,.run_count=3,.run_capacity=3};
+    size_t sites=0;unsigned malformed=0;EffectBodyRun sentinel_ref={0};
+    for (uint32_t i=0;i<8;++i) {
+        uint32_t selected=i<2?0u:i<4?1u:2u,offset=i-2*selected;
+        SingleRunReadProbe probe={.refuse=SIZE_MAX};EffectBodyRead read={&probe,single_run_consume};
+        const EffectBodyRun *ref=NULL;
+        CHECK(effect_body_record_ref(&read,&function,i,&ref)==XR_XIR_OK && ref==&runs[selected]);
+        uint64_t locator_work=probe.work;size_t locator_sites=probe.calls;
+        XrXirInstruction output,sentinel;memset(&sentinel,0x5a,sizeof(sentinel));
+        probe=(SingleRunReadProbe){.refuse=SIZE_MAX};
+        CHECK(effect_body_instruction_get(&read,&function,i,&output)==XR_XIR_OK);
+        uint32_t low=0xfffffff5u+17*offset,high=0xffffffffu+0xfffffffcu*offset;
+        XrXirInstruction expected={.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={17+12*selected,23+selected},
+            .targets={31+selected,47+selected},.immediate=0,
+            .type_arguments={0x7ffffff0u+selected+9*offset,0x80000001u}};
+        uint64_t immediate=(uint64_t)high<<32|low;
+        memcpy(&expected.immediate,&immediate,sizeof(immediate));
+        CHECK(single_run_complete_same(&output,&expected));
+        uint64_t decoder_work=probe.work;size_t decoder_sites=probe.calls;
+        for (size_t fail=0;fail<decoder_sites;++fail) {
+            probe=(SingleRunReadProbe){.refuse=fail};output=sentinel;
+            CHECK(effect_body_instruction_get(&read,&function,i,&output)==XR_XIR_BUDGET &&
+                probe.calls==fail+1 && !memcmp(&output,&sentinel,sizeof(output)));++sites;
+        }
+        for (size_t fail=0;fail<locator_sites;++fail) {
+            probe=(SingleRunReadProbe){.refuse=fail};ref=&sentinel_ref;
+            CHECK(effect_body_record_ref(&read,&function,i,&ref)==XR_XIR_BUDGET &&
+                probe.calls==fail+1 && ref==&sentinel_ref);++sites;
+        }
+        for (uint32_t exact=0;exact<2;++exact) {
+            SingleRunLimitProbe limit={locator_work-(exact?0u:1u)};
+            EffectBodyRead bounded={&limit,single_run_limit_consume};ref=&sentinel_ref;
+            CHECK(effect_body_record_ref(&bounded,&function,i,&ref)==(exact?XR_XIR_OK:XR_XIR_BUDGET));
+            CHECK(exact?(!limit.remaining && ref==&runs[selected]):ref==&sentinel_ref);
+            limit.remaining=decoder_work-(exact?0u:1u);output=sentinel;
+            CHECK(effect_body_instruction_get(&bounded,&function,i,&output)==(exact?XR_XIR_OK:XR_XIR_BUDGET));
+            CHECK(exact?(!limit.remaining && (uint64_t)output.immediate==((uint64_t)high<<32|low)):
+                !memcmp(&output,&sentinel,sizeof(output)));
+        }
+    }
+    for (uint32_t r=0;r<3;++r) for (uint32_t mode=0;mode<6;++mode) for (uint32_t i=0;i<8;++i) {
+        EffectBodyRun bad[3]={runs[0],runs[1],runs[2]};function.runs=bad;
+        if (mode==0) ++bad[r].first;
+        else if (mode==1) bad[r].count=0;
+        else if (mode==2) bad[r].mask|=1u<<10;
+        else if (mode==3) bad[r].delta[7]=0;
+        else if (mode==4) bad[r].count=1;
+        else ++bad[r].count;
+        SingleRunReadProbe probe={.refuse=SIZE_MAX};EffectBodyRead read={&probe,single_run_consume};
+        const EffectBodyRun *ref=&sentinel_ref;
+        CHECK(effect_body_record_ref(&read,&function,i,&ref)==XR_XIR_BAD_STRUCTURE && ref==&sentinel_ref);
+        XrXirInstruction output,sentinel;memset(&sentinel,0x5a,sizeof(sentinel));output=sentinel;
+        CHECK(effect_body_instruction_get(&read,&function,i,&output)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&output,&sentinel,sizeof(output)));++malformed;
+    }
+    printf("three-run all8 rows/ten fields, %u malformed neighbor reads, %zu callback refusals and exact work cuts PASS\n",
+        malformed,sites);
+}
+
 static void single_run_reader_controls(void) {
     single_run_base_copy_controls();
+    three_run_reader_controls();
     EffectBodyRun run={.first=0,.count=8,.mask=(1u<<6)|(1u<<7)|(1u<<8),
         .base={.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={17,23},.targets={31,47},
             .immediate=-11,.type_arguments={0x7ffffff0u,0x80000001u}}};

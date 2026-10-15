@@ -319,6 +319,20 @@ static XrXirStatus effect_body_record_ref(const EffectBodyRead *read,
         if (function->runs[0].count!=boundary->first) return XR_XIR_BAD_STRUCTURE;
         *output=instruction<boundary->first?&function->runs[0]:boundary;return XR_XIR_OK;
     }
+    /* Three current runs have only one interior boundary. Read it once,
+     * check both joins, and select from the three validated physical records. */
+    if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+    if (function->run_count==3) {
+        if (!effect_body_read_work(read,2+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        const EffectBodyRun *middle;
+        status=effect_body_run_ref(read,function,1,function->runs[0].count,&middle);
+        if (status!=XR_XIR_OK) return status;
+        if (!effect_body_read_work(read,5+sizeof(*output))) return XR_XIR_BUDGET;
+        if (middle->first+middle->count!=boundary->first) return XR_XIR_BAD_STRUCTURE;
+        *output=instruction<middle->first?&function->runs[0]:
+            instruction<boundary->first?middle:boundary;
+        return XR_XIR_OK;
+    }
     while (low<high) {
         if (!effect_body_read_work(read,3+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         uint32_t middle=low+(high-low)/2;

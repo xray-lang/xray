@@ -124,7 +124,7 @@ static XrXirStatus sg_whole(const XrXirCompileContext *context,SgFixture *f,uint
         fprintf(stderr,"graph status%u diagnostic%u f%u b%u i%u\n",(unsigned)status,(unsigned)diagnostic.reason,diagnostic.function,diagnostic.block,diagnostic.instruction);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);return status;
 }
-static void sg_run(uint32_t blocks,unsigned kind,unsigned order,uint32_t width) {
+static uint64_t sg_run(uint32_t blocks,unsigned kind,unsigned order,uint32_t width) {
     SgFixture fixture;SgGraph graph;sg_graph(&graph,blocks,kind);
     uint32_t expected=sg_expected(&graph);sg_fixture(&fixture,&graph,order,width);
     XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
@@ -135,7 +135,7 @@ static void sg_run(uint32_t blocks,unsigned kind,unsigned order,uint32_t width) 
         "\"work\":%llu,\"allocated\":%llu,\"peak\":%llu,\"seconds\":%.6f}\n",
         blocks,kind,order,width,expected,(unsigned long long)stats.work,
         (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.peak_bytes,seconds);
-    CHECK(pc_stats(&context).live_bytes==baseline);pc_release(&context,baseline);
+    CHECK(pc_stats(&context).live_bytes==baseline);pc_release(&context,baseline);return stats.work;
 }
 static void sg_rejection(void) {
     SgFixture fixture;SgGraph graph;sg_graph(&graph,6,0);sg_fixture(&fixture,&graph,0,2);
@@ -259,9 +259,23 @@ int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--resources")){sg_resources();CHECK(!live && !live_bytes);return 0;}
     if(argc==2) {
         static const uint32_t sizes[]={16,32,64,128,256};
-        for(unsigned i=0;i<sizeof(sizes)/sizeof(*sizes);++i)
-            for(unsigned kind=0;kind<2;++kind)for(unsigned order=0;order<3;++order)
-                sg_run(sizes[i],kind,order,2);
+        uint64_t previous[2][3]={{0}};
+        for(unsigned i=0;i<sizeof(sizes)/sizeof(*sizes);++i) {
+            for(unsigned kind=0;kind<2;++kind) {
+                uint64_t minimum=UINT64_MAX,maximum=0;
+                for(unsigned order=0;order<3;++order) {
+                    uint64_t work=sg_run(sizes[i],kind,order,2);
+                    /* These fixed nonempty fixtures include complete check
+                     * and inference on one owner. Bound physical-order cost
+                     * and doubling growth without resetting their ledger. */
+                    if(previous[kind][order]) CHECK(work<3*previous[kind][order]);
+                    previous[kind][order]=work;
+                    if(work<minimum) minimum=work;
+                    if(work>maximum) maximum=work;
+                }
+                CHECK(maximum<2*minimum);
+            }
+        }
     } else {
         for(unsigned kind=0;kind<3;++kind)for(unsigned order=0;order<3;++order)sg_run(6,kind,order,2);
         static const uint32_t widths[]={61,62,63,64,65,127,128,129,130};

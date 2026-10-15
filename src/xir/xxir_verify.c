@@ -54,7 +54,7 @@ typedef struct VerifyContext {
     const XrXirModule *module;
     XirConstraintScratch scratch;
     XirTypeScratch pending;
-    /* Function graph views borrow this fully cleared verifier-local storage. */
+    /* Function graph views borrow this freshly rebuilt verifier-local storage. */
     void *graph_storage;
     size_t graph_capacity;
 } VerifyContext;
@@ -517,8 +517,58 @@ static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function,
     return XR_XIR_OK;
 }
 
+/* Reachability has already visited every current block. Reuse its bytes
+ * for DFS colors and the queue for an active stack followed by finished
+ * reverse postorder. The two regions never overlap, and no fact escapes this
+ * function's scratch storage or survives the next graph allocation. */
+static XrXirStatus graph_reverse_postorder(Graph *graph, const XrXirFunction *function,
+                                         VerifyContext *context) {
+    if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+    if (function->block_count <= 2) return XR_XIR_OK;
+    if (!xir_compile_work(&context->remaining, 2 * sizeof(uint32_t) + sizeof(uint8_t)))
+        return XR_XIR_BUDGET;
+    uint32_t top = 1, write = function->block_count;
+    graph->reachable[0] = 2;
+    for (;;) {
+        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+        if (!top) break;
+        if (!xir_compile_work(&context->remaining, 2 + sizeof(uint32_t) + sizeof(void *)))
+            return XR_XIR_BUDGET;
+        if (top > write) return XR_XIR_BAD_STRUCTURE;
+        uint32_t block = graph->queue[top - 1];
+        if (block >= function->block_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirInstruction *op = terminator(function, block);
+        uint32_t target = 0;
+        for (uint32_t i = 0; i <= op_rules[op->op].edges; ++i) {
+            if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t) + sizeof(uint8_t)))
+                return XR_XIR_BUDGET;
+            target = i < op_rules[op->op].edges ? op->targets[i] : function->blocks[block].panic;
+            if (target >= function->block_count) return XR_XIR_BAD_STRUCTURE;
+            if (target && graph->reachable[target] == 1) break;
+            target = 0;
+        }
+        if (target) {
+            if (!xir_compile_work(&context->remaining, 2 + sizeof(uint32_t) + sizeof(uint8_t)))
+                return XR_XIR_BUDGET;
+            if (top >= write) return XR_XIR_BAD_STRUCTURE;
+            graph->reachable[target] = 2;
+            graph->queue[top++] = target;
+        } else {
+            if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t) + sizeof(uint8_t)))
+                return XR_XIR_BUDGET;
+            --top;
+            graph->queue[--write] = block;
+            graph->reachable[block] = 3;
+        }
+    }
+    if (!xir_compile_work(&context->remaining, 2)) return XR_XIR_BUDGET;
+    return !write && !graph->queue[0] ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+}
+
 static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function,
                                   VerifyContext *context) {
+    XrXirStatus status = graph_reverse_postorder(graph, function, context);
+    if (status != XR_XIR_OK) return status;
     graph->dominators[0] = 1;
     for (uint32_t b = 1; b < function->block_count; ++b) {
         if (!xir_compile_work(&context->remaining, graph->words))
@@ -529,7 +579,15 @@ static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function,
     bool changed;
     do {
         changed = false;
-        for (uint32_t b = 1; b < function->block_count; ++b) {
+        for (uint32_t position = 1; position < function->block_count; ++position) {
+            if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+            uint32_t b = position;
+            if (function->block_count > 2) {
+                if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t)))
+                    return XR_XIR_BUDGET;
+                b = graph->queue[position];
+                if (!b || b >= function->block_count) return XR_XIR_BAD_STRUCTURE;
+            }
             if (!xir_compile_work(&context->remaining, (uint64_t) graph->words * 2))
                 return XR_XIR_BUDGET;
             for (uint32_t w = 0; w < graph->words; ++w)
