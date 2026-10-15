@@ -25670,6 +25670,141 @@
         "Complete original selected VM/C/MSVC and independent exact bytes.",
         "Full applicable FI/resources/lifetime/cancel/physical/safety/provider qualification."
       ]
+    },
+    {
+      "id": "complete_collection_protocols_array_fill_ref_cross_module",
+      "oracle_id": "complete_collection_protocols_array_fill_ref_cross_module",
+      "source": "tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr",
+      "source_lf_sha256": "4fd01f2b9b6c05e6ee17d09074871b621f46ee947a271a7cbf1928dde4005c35",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "3\n1\n4\n5\n3\n0\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",
+          "lf_sha256": "dba3bf1ee43bedfa5478ef7fac827ca7e52be0c3d840b2985d58d3ef197f1de0"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original callback indices,ordered typed bool Map,imported ref roots and exact integer endpoints;only explicit typed scalar text replaces the removed heterogeneous Array.No physical/FI/safety claim.",
+      "independent_observation_count": 6,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr",
+        "source_lf_sha256": "4fd01f2b9b6c05e6ee17d09074871b621f46ee947a271a7cbf1928dde4005c35"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and exact independent bytes.",
+        "All original applicable FI/resources/lifetime/cancel/physical/safety/provider obligations."
+      ]
+    },
+    {
+      "id": "complete_collection_protocols_generic_int_format_shared_core",
+      "oracle_id": "complete_collection_protocols_generic_int_format_shared_core",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr",
+      "source_lf_sha256": "e4d29133d335b1b0fda1c8dbcc417b1811e9d8b1c22c95c5e5c1e5bcef664193",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "-9223372036854775808\n9223372036854775807\nleft=-9223372036854775808\n9223372036854775807=right\n-9223372036854775808|9223372036854775807|-42\n[-9223372036854775808, 9223372036854775807, -42]\nn:-9223372036854775808:null:true:9223372036854775807\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P13"
+      ],
+      "independent_execution_model": "Complete original callback indices,ordered typed bool Map,imported ref roots and exact integer endpoints;only explicit typed scalar text replaces the removed heterogeneous Array.No physical/FI/safety claim.",
+      "independent_observation_count": 7,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr",
+        "source_lf_sha256": "ed37526163e9069a3973a2dd81152437fe286570829b76cf3caf5711591c2e62"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and exact independent bytes.",
+        "All original applicable FI/resources/lifetime/cancel/physical/safety/provider obligations."
+      ]
+    },
+    {
+      "id": "complete_collection_protocols_hof_index_param",
+      "oracle_id": "complete_collection_protocols_hof_index_param",
+      "source": "tests/diff/cases/semantics/collections/hof_index_param.xr",
+      "source_lf_sha256": "28e21028a5ad97a86dc000b385732d1594a01bd40679ecbb84ecefa295b88aaf",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "[1000, 2000, 3000]\n[1000, 2001, 3002]\n[10, 20]\n0:10\n1:20\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original callback indices,ordered typed bool Map,imported ref roots and exact integer endpoints;only explicit typed scalar text replaces the removed heterogeneous Array.No physical/FI/safety claim.",
+      "independent_observation_count": 5,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/hof_index_param.xr",
+        "source_lf_sha256": "28e21028a5ad97a86dc000b385732d1594a01bd40679ecbb84ecefa295b88aaf"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and exact independent bytes.",
+        "All original applicable FI/resources/lifetime/cancel/physical/safety/provider obligations."
+      ]
+    },
+    {
+      "id": "complete_collection_protocols_map_bool_key",
+      "oracle_id": "complete_collection_protocols_map_bool_key",
+      "source": "tests/diff/cases/semantics/collections/map_bool_key.xr",
+      "source_lf_sha256": "8aceac7a024ea4974980d51444c15fa8a458b81fd157cb5b55eb94a80c26b5bd",
+      "entry": "run",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "-- insert false then true --\nsize=2\nhas true=true has false=true\npair false=34\npair true=21\nkey false\nkey true\nval 34\nval 21\nget true=21 get false=34\n-- insert true then false --\nsize=2\nhas true=true has false=true\npair true=7\npair false=9\nkey true\nkey false\nval 7\nval 9\n-- update keeps position --\nsize=2\nhas true=true has false=true\npair true=70\npair false=9\nkey true\nkey false\nval 70\nval 9\n-- delete + reinsert moves to end --\nsize=2\nhas true=true has false=true\npair false=9\npair true=700\nkey false\nkey true\nval 9\nval 700\n-- delete to empty --\nsize=0 has true=false\n-- float32 narrowing --\ncsize=2\ncget true=1.5 cget false=2.25\ncf true=1.5\ncf false=2.25\n-- class field --\nfill=2\nprobe=55\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original callback indices,ordered typed bool Map,imported ref roots and exact integer endpoints;only explicit typed scalar text replaces the removed heterogeneous Array.No physical/FI/safety claim.",
+      "independent_observation_count": 47,
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/map_bool_key.xr",
+        "source_lf_sha256": "8aceac7a024ea4974980d51444c15fa8a458b81fd157cb5b55eb94a80c26b5bd"
+      },
+      "remaining_gates": [
+        "Complete original selected VM/C/MSVC and exact independent bytes.",
+        "All original applicable FI/resources/lifetime/cancel/physical/safety/provider obligations."
+      ]
     }
   ]
 }

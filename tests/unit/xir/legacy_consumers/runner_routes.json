@@ -8529,6 +8529,22 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/collection_protocols_complete/generic_int_format_shared_core/root.xr",
+        "lf_sha256": "e4d29133d335b1b0fda1c8dbcc417b1811e9d8b1c22c95c5e5c1e5bcef664193",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Frozen exact Array<T> and explicit scalar toString preserve all original integer endpoints,Array writes,joins and prints;heterogeneous any storage is not restored."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_EXPLICIT_SCALAR_TEXT_AFTER_HETEROGENEOUS_ARRAY_RETIREMENT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Frozen exact Array<T> and explicit scalar toString preserve all original integer endpoints,Array writes,joins and prints;heterogeneous any storage is not restored."
       }
     },
     {
