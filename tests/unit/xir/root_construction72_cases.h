@@ -152,12 +152,12 @@ static void root_construction72_attacks(void) {
         sizeof(root_construction74_checked),&decoded,NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
     CHECK(xr_xir_compile_checked_read(&context,root_construction74_instance,
         sizeof(root_construction74_instance),&decoded,NULL) == XR_XIR_BAD_STRUCTURE && !decoded);
-    CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous_current75,
-        sizeof(root_construction71_previous_current75),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous_current77,
+        sizeof(root_construction71_previous_current77),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded && attempts == before && live_count == 1);
     decoded = (XrXirArtifact *)(uintptr_t)1;
-    CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous_current75,
-        sizeof(root_construction71_previous_current75),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous_current77,
+        sizeof(root_construction71_previous_current77),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(decoded == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
     CHECK(xr_xir_compile_checked_read(&context,root_construction74_previous,
         sizeof(root_construction74_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);

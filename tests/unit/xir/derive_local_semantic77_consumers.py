@@ -33,6 +33,9 @@ def main():
     rows=[('root_construction77_checked',fields.frame(current_checked,29,77)),
           ('root_construction77_instance',fields.frame(current_recursive,29,77)),
           ('root_construction71_previous_current77',old['root_construction71_previous_current75'])]
+    historical74=fields.frame(checked,28,74)
+    assert historical74==arrays(HERE/'root_construction72_goldens.h')['root_construction74_previous']
+    rows.append(('root_construction74_previous',historical74))
     text=(HERE/'root_construction75_goldens.h').read_text(encoding='utf-8');macros=[]
     for name,value in re.findall(r'#define (ROOT_CONSTRUCTION75_\w+) (\d+)u',text):
         locations=positions['instance' if 'RECURSIVE' in name else 'checked']
