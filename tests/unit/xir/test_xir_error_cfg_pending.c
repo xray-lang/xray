@@ -61,6 +61,7 @@ static XrCompileResourceStats pc_stats(const XrXirCompileContext *c) {
 }
 /* The historical row extent remains exact; the queue has separate real bytes. */
 static size_t pc_cfg_storage_extent(size_t row_bytes,uint32_t blocks) {
+    if(blocks==1)return row_bytes;
     CHECK(row_bytes<=SIZE_MAX-3);
     size_t aligned=(row_bytes+3)&~(size_t)3;
     CHECK((uint64_t)blocks*sizeof(uint32_t)<=SIZE_MAX-aligned);
