@@ -149,6 +149,10 @@ static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *wor
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
         !facts || !output || *output || function>=effect_body_count(certificate->body) ||
         !certificate->final) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,2*sizeof(XrCompileResourceStats)+4*sizeof(uint64_t))) return XR_XIR_BUDGET;
+    XrCompileResourceStats before,after;
+    if (xr_compile_resources_stats(work->resources,&before)!=XR_COMPILE_RESOURCE_OK)
+        return XR_XIR_BAD_STRUCTURE;
     XrXirRootEffects expected={0};
     XrXirStatus fact_status=effect_invocation_certificate_facts(work,certificate,function,&expected);
     if (fact_status!=XR_XIR_OK) return fact_status;
@@ -163,6 +167,18 @@ static XrXirStatus effect_invocation_public_trace(const XrXirCompileContext *wor
     if (total>(SIZE_MAX-sizeof(*trace))/sizeof(XrXirRootCauseStep)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
         size_t bytes=sizeof(*trace)+(size_t)total*sizeof(XrXirRootCauseStep);
+        if (xr_compile_resources_stats(work->resources,&after)!=XR_COMPILE_RESOURCE_OK ||
+            after.work<before.work) return XR_XIR_BAD_STRUCTURE;
+        uint64_t replay=after.work-before.work;
+        uint64_t extra=bytes+total*sizeof(XrXirRootCauseStep)+sizeof(*trace)+
+            2*sizeof(XrXirRootEffectWitness);
+        if (replay>UINT64_MAX-extra) return XR_XIR_BUDGET;
+        /* Both immutable proofs are replayed after allocation. Only the two
+         * witness projections, owned step writes and header publication add
+         * work. This call's actual paid proof measures that replay; admission
+         * reserves nothing and all real post-allocation charges remain. */
+        status=xir_compile_resource_status(xr_compile_resources_admit(work->resources,bytes,replay+extra));
+        if (status!=XR_XIR_OK) return status;
         trace=xir_compile_calloc(work,1,bytes,&status);
         if (!trace) status=status==XR_XIR_OK?XR_XIR_OUT_OF_MEMORY:status;
     }
