@@ -1,0 +1,2 @@
+fn answer()->i64{var x=21;const f=fn(value:ref i64)->i64{return value*2};return f(ref x)+x-21}
+export fn run()->i64{return comptime answer()}

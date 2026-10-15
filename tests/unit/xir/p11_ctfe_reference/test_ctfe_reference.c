@@ -31,6 +31,26 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"ref_closure_result", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_return", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_explicit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_context", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_arrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_readonly", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_cell_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_projection", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_generic_context", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_alias", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"ref_closure_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"ref_closure_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
     {"array_identity_projected_root_refused", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
     {"array_identity_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"array_identity_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
@@ -856,6 +876,9 @@ int main(int argc, char **argv) {
         if (!strncmp(selected->name,"output_",7)) reference_output(&context,&source,selected);
         else if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
         else if (!strcmp(selected->name,"class_direct")) reference_class_direct(&context,&source);
+        else if (!strcmp(selected->name,"ref_closure_direct")) reference_dynamic_direct(&context,&source,false,false);
+        else if (!strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
+        else if (!strcmp(selected->name,"ref_closure_owning")) reference_dynamic_source_string(&context,&source);
         else if (!strcmp(selected->name,"array_identity_direct")) reference_dynamic_direct(&context,&source,false,false);
         else if (!strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
         else if (!strcmp(selected->name,"array_identity_owning")) reference_dynamic_source_string(&context,&source);
@@ -934,6 +957,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
     if (!strcmp(selected->name,"class_owning_direct")) reference_class_last_owner();
+    if (!strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_last_owner(selected->name);
     if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct") || !strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_last_owner(selected->name);
     if (!strcmp(selected->name,"output_fibonacci_direct") || !strcmp(selected->name,"output_pair_direct")) reference_output_last_owner(selected);
     if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();

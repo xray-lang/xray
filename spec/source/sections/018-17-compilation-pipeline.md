@@ -694,7 +694,7 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 每次投影访问预付根接收work乘以4×(根形状+1)，覆盖公共path操作的前缀、suffix及完整接收。修改还先读真实Domain live统计，预付live_bytes×根形状×32，覆盖同一无环路径可能发生的祖先COW与保留；Array叶增长另按真实容量及元素storage付费。所有乘法先检溢出，费用不可支付时在Value访问/修改前BUDGET，累计账本从不退款或重置。观察快照在修改之前释放，保留既有COW副本；可变拥有结果可在Source/Artifact/ledger调用者死亡后继续持有，最后drop不分配。
 
-临时selector、共同接收scratch和所有同时存活activation共享原frame；child分配后，参数接收和loan准备只能使用再扣除child字节的余额。Value的scratch不足可能沿既有LIMIT映射为BUDGET，显式frame检查仍返回FRAME_LIMIT；两者均保全空输出并释放已准备前缀，不能伪装为成功或放宽上限。所有step/depth/output与原128M/64MiB/8MiB及65536 frame不变。该族没有公共Value/Call/Instance/SourceContext或schema/opcode变更。Error cleanup遵守17.58，panic handler/cleanup遵守17.59；普通Source ref lambda、foreign/deep-variable接收、P12及完整共享/provider/安全资格仍为独立剩余责任。
+临时selector、共同接收scratch和所有同时存活activation共享原frame；child分配后，参数接收和loan准备只能使用再扣除child字节的余额。Value的scratch不足可能沿既有LIMIT映射为BUDGET，显式frame检查仍返回FRAME_LIMIT；两者均保全空输出并释放已准备前缀，不能伪装为成功或放宽上限。所有step/depth/output与原128M/64MiB/8MiB及65536 frame不变。该族没有公共Value/Call/Instance/SourceContext或schema/opcode变更。Error cleanup遵守17.58，panic handler/cleanup遵守17.59；普通Source ref lambda遵守17.65；foreign/deep-variable接收、P12及完整共享/provider/安全资格仍为独立剩余责任。
 
 ### 17.58 内部Error、显式错误continuation与有界cleanup
 
@@ -706,7 +706,7 @@ RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再�
 
 cleanup内部可有完整处理的try/catch与调用，但其定义仍须满足真实Source/Checker的不逃逸throw和不挂起规则；不能把NO_THROW或root标志当确定性证明。预算/OOM等编译作业失败从不进入语言catch，仍保全空输出并在不分配、不退款的终态路径释放全部frame、pending error、返回快照、lease与loan。未捕获语言错误在适用cleanup完成后返回compiler-only UNCAUGHT_ERROR，Source在原comptime站点报告编译错误；无限cleanup仍受原step/work/frame/depth上限而不能抢先发布未捕获错误。
 
-所有metadata、接收、retention、continuation与清理迁移费用计原累计128M work/64MiB allocated/8MiB live；steps65536、depth128、frame65536、17.61规定的输出上限不变，错误槽和同时存活child/receiving scratch计原frame。Error不授予外部输入快照、Error常量导出或宿主执行。panic handler/cleanup遵守17.59；普通Source ref lambda、外部私有物化/Unit前置、有界foreign/deep-variable接收、P12及完整共享/provider/正式安全资格仍为独立责任。本族不改变公共Value/Call/Instance/SourceContext布局、schema或opcode。
+所有metadata、接收、retention、continuation与清理迁移费用计原累计128M work/64MiB allocated/8MiB live；steps65536、depth128、frame65536、17.61规定的输出上限不变，错误槽和同时存活child/receiving scratch计原frame。Error不授予外部输入快照、Error常量导出或宿主执行。panic handler/cleanup遵守17.59；普通Source ref lambda遵守17.65；外部私有物化/Unit前置、有界foreign/deep-variable接收、P12及完整共享/provider/正式安全资格仍为独立责任。本族不改变公共Value/Call/Instance/SourceContext布局、schema或opcode。
 
 ### 17.59 有界panic handler、真实PanicInfo与cleanup传播
 
@@ -718,7 +718,7 @@ cleanup内部可有完整处理的try/catch与调用，但其定义仍须满足�
 
 cleanup可在内部完整捕获panic，包括外层已持有返回/Error/panic时；每帧payload防止内层捕获覆盖外层正在展开的消息。panic逃逸cleanup时，CTFE在无分配终态释放本作业全部拥有值和loan，返回compiler-only CLEANUP_PANIC并在原comptime站点报告编译错误，绝不调用运行期fatal/进程终止接口，也不能交给外层语言handler消费。此编译边界不修改运行期cleanup逃逸panic的既有fatal规则。未捕获普通panic完成适用cleanup后返回相应编译失败；无限cleanup先受原step/work上限，不能提前发布未捕获panic。
 
-真实PanicInfo可在已准入族内作内部参数/返回、Cell、PHI、Tuple、Nullable、Array、struct/enum和Function捕获，仍使用共同拥有/接收规则；它不是Sendable，不能由CTFE外部真实PanicInfo参数或含PanicInfo常量导出获得权限。普通Source独立recipe只接已准入可导出结果，不重放PanicInfo。原128M work/64MiB allocated/8MiB live、steps65536、depth128、frame65536及17.61规定的输出上限保持；失败输出为空，费用不退款/重置，最后拥有值释放不分配。外部私有物化/Unit前置、有界foreign/deep-variable接收、普通Source ref lambda、P12与完整共享/provider/正式安全资格仍独立。本族只追加compiler-only失败状态与私有执行状态，不改公共Value/Call/Instance/SourceContext布局、schema或opcode。
+真实PanicInfo可在已准入族内作内部参数/返回、Cell、PHI、Tuple、Nullable、Array、struct/enum和Function捕获，仍使用共同拥有/接收规则；它不是Sendable，不能由CTFE外部真实PanicInfo参数或含PanicInfo常量导出获得权限。普通Source独立recipe只接已准入可导出结果，不重放PanicInfo。原128M work/64MiB allocated/8MiB live、steps65536、depth128、frame65536及17.61规定的输出上限保持；失败输出为空，费用不退款/重置，最后拥有值释放不分配。外部私有物化/Unit前置、普通Source ref lambda遵守17.65；有界foreign/deep-variable接收、P12与完整共享/provider/正式安全资格仍独立。本族只追加compiler-only失败状态与私有执行状态，不改公共Value/Call/Instance/SourceContext布局、schema或opcode。
 
 ### 17.60 私有临时Class身份与有界实际字段图
 
@@ -775,6 +775,18 @@ Class根数据loan的实际无子权限证明也可观察Array包装：空Array�
 数据Cell根上的严格后代投影仍要求根类型通过外部纯数据准入。Array内部可执行含身份元素，并不能证明窄loan期间子身份不会经其他别名增长；因此此类根的缓存接收上界未闭合，初始loan准备在取得完整根快照之前拒绝。直接canonical Array Cell的整根ref不依赖该后代投影缓存，仍可执行；完整身份根投影的预算和权限是独立未完成项。
 
 原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出保持，类型/实际图/物化和独立Source重放都付原owner。没有公共Value/Call/Instance/SourceContext布局、schema、opcode或另一evaluator变化。固定提交的局部正例与FI不等于完整P11、完整类型组合、provider或正式安全资格。
+
+### 17.65 普通ref闭包与真实捕获前缀
+
+普通函数表达式、箭头闭包和局部嵌套函数可声明ref参数，完整callable上下文也可为省略模式的参数提供ref模式。参数标注和上下文的模式、类型及数量必须一致；READ与REF以外的参数模式、默认值、模式解构和rest仍不因本族开放。调用仍要求真实可变place和显式ref实参，不能用普通值或不可变绑定冒充借用。
+
+闭包体的物理参数行先放真实捕获前缀，再放callable参数后缀。REF后缀的存储为Cell<元素>；共同验证器、Cell来源推导、effects调用边和Instance均按capture_count+p定位同一真实formal。拥有Cell捕获保持OWNED_CAPTURE来源，REF后缀保持SCOPED_REF来源；函数签名不授予捕获、拥有或访问权限。把scoped借用保存到拥有闭包仍拒绝，错配的前缀、后缀或实际捕获仍拒绝。
+
+Source查询显示参数的逻辑元素类型、可变绑定和真实源码范围，callable查询参数同样显示元素类型；只有实际写出的ref token产生REF marker，上下文推导不能伪造token。查询、完整Checked及packet接收独立拥有所需事实，Source文本和parser/session死亡后仍可使用；特化、Lowered和Program/Instance继续共同完整复验，不保留Source借用地址。
+
+CTFE复用同一Lowered执行和既有Function/Cell/loan协议，可执行真实ref闭包的直接、返回后调用、重借用、Array及投影place、cleanup和已准入panic组合。捕获同一可变Cell又传作ref实参仍须通过真实loan排他检查，签名合法不能消除运行权限冲突。拥有返回值保留求值快照及独立Source重放；没有第二evaluator、宿主Instance执行或保存的CTFE指针。
+
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出保持，失败保留空输出和原owner累计费用。完整物理FI、原owner重试、exact/minus-one、最后拥有者释放与正式安全资格仍分别提供实测证据。此族不改变公共Value/Call/Instance/SourceContext布局、schema或opcode，也不补授foreign/deep-variable接收、身份根投影、私有Source物化或完整P11资格。
 
 <!-- /xr-spec:cn -->
 
@@ -1581,7 +1593,7 @@ Only a closure actually containing CELL_PROJECT scans reachable Cell creation si
 
 Each projected access prepays root receiving work times4*(root shape+1), covering common path prefixes, suffixes and complete receiving. Before mutation, authentic Domain live statistics supply an additional live_bytes*root shape*32 reserve for possible ancestor COW and retention on one acyclic path. Array leaf growth separately pays actual capacity and element storage. All products check overflow and unpayable reserves return BUDGET before Value access or mutation. Cumulative charges never refund or reset. Observation snapshots drop before mutation, preserving existing COW copies. An owned mutated result can outlive Source/Artifact/ledger callers and its final drop allocates nothing.
 
-Temporary selectors, common receiving scratch and all simultaneous activations share the original frame limit. After allocating a child, argument receiving and loan preparation receive only the balance after subtracting that child's bytes. Common Value scratch exhaustion may retain its existing LIMIT-to-BUDGET mapping; explicit frame checks return FRAME_LIMIT. Both preserve empty output and release every prepared prefix, without widening limits or reporting success. Original steps/depth/output,128M/64MiB/8MiB and65536 frame remain unchanged. This family changes no public Value/Call/Instance/SourceContext layout or schema/opcode. Error cleanup follows17.58 and panic handlers/cleanup follow17.59. Ordinary Source ref lambdas, foreign/deep-variable receiving, P12 and complete shared/provider/safety qualification remain independent responsibilities.
+Temporary selectors, common receiving scratch and all simultaneous activations share the original frame limit. After allocating a child, argument receiving and loan preparation receive only the balance after subtracting that child's bytes. Common Value scratch exhaustion may retain its existing LIMIT-to-BUDGET mapping; explicit frame checks return FRAME_LIMIT. Both preserve empty output and release every prepared prefix, without widening limits or reporting success. Original steps/depth/output,128M/64MiB/8MiB and65536 frame remain unchanged. This family changes no public Value/Call/Instance/SourceContext layout or schema/opcode. Error cleanup follows17.58 and panic handlers/cleanup follow17.59. Ordinary Source ref lambdas follow17.65. Foreign/deep-variable receiving, P12 and complete shared/provider/safety qualification remain independent responsibilities.
 
 ### 17.58 Internal Error values, explicit continuations and bounded cleanup
 
@@ -1593,7 +1605,7 @@ Successful INVOKE follows its actual normal edge to the dedicated INVOKE_RESULT 
 
 Cleanup bodies may contain fully handled try/catch and calls, while their definitions still satisfy authentic Source/Checker restrictions on escaping throw and suspension. NO_THROW and root flags do not prove determinism. Compiler budget/OOM failures never enter language catch: they preserve empty output and release all frames, pending errors, return snapshots, leases and loans on allocation-free terminal paths without refunds. An uncaught language error returns compiler-only UNCAUGHT_ERROR after applicable cleanup completes, and Source reports a compile error at the original comptime site. Infinite cleanup remains bounded by original step/work/frame/depth limits and cannot prematurely publish an uncaught error.
 
-Metadata, receiving, retention, continuation and cleanup transitions share original cumulative128M work/64MiB allocated/8MiB live. Steps65536, depth128, frame65536 and the output ceiling in17.61 remain; error slots and simultaneous child/receiving scratch count toward the same frame. Error grants no external snapshots, Error constant exports or host execution. Panic handlers/cleanup follow17.59. Ordinary Source ref lambdas, external private materialization/Unit prerequisites, bounded foreign/deep-variable receiving, P12 and complete shared/provider/formal safety qualification remain independent responsibilities. This family changes no public Value/Call/Instance/SourceContext layout, schema or opcode.
+Metadata, receiving, retention, continuation and cleanup transitions share original cumulative128M work/64MiB allocated/8MiB live. Steps65536, depth128, frame65536 and the output ceiling in17.61 remain; error slots and simultaneous child/receiving scratch count toward the same frame. Error grants no external snapshots, Error constant exports or host execution. Panic handlers/cleanup follow17.59. Ordinary Source ref lambdas follow17.65. External private materialization/Unit prerequisites, bounded foreign/deep-variable receiving, P12 and complete shared/provider/formal safety qualification remain independent responsibilities. This family changes no public Value/Call/Instance/SourceContext layout, schema or opcode.
 
 ### 17.59 Bounded panic handlers, authentic PanicInfo and cleanup propagation
 
@@ -1605,7 +1617,7 @@ A same-frame fault selects the handler of its actual faulting instruction's bloc
 
 Cleanup may fully handle its own panic while an outer return/Error/panic is pending. Per-frame payloads prevent inner handling from replacing the outer message being unwound. If panic escapes cleanup, CTFE releases every owned value and loan on allocation-free terminal paths and returns compiler-only CLEANUP_PANIC, reported at the original comptime site. It never invokes a runtime fatal/process-abort interface or delivers that escaping panic to an outer language handler. This compiler boundary does not change the runtime fatal rule for escaping cleanup panic. Ordinary uncaught panic reports its corresponding compiler failure after applicable cleanup; infinite cleanup hits the original step/work limit before uncaught publication.
 
-Authentic PanicInfo may occur in internal parameters/returns, Cells, PHI, Tuples, Nullable, Arrays, structs/enums and Function captures within admitted families, using common ownership/receiving. It is not Sendable. Authentic external PanicInfo arguments and PanicInfo-bearing constant exports remain refused. Ordinary independent Source recipes receive only admitted exportable results and do not replay PanicInfo. Original128M work/64MiB allocated/8MiB live, steps65536, depth128, frame65536 and the output ceiling in17.61 remain. Failure preserves empty output, never refunds/resets charges, and final owned release allocates nothing. External private materialization/Unit prerequisites, bounded foreign/deep-variable receiving, ordinary Source ref lambdas, P12 and complete shared/provider/formal safety qualification remain independent. This family only adds compiler-only failure and private execution state; public Value/Call/Instance/SourceContext layouts, schema and opcodes remain unchanged.
+Authentic PanicInfo may occur in internal parameters/returns, Cells, PHI, Tuples, Nullable, Arrays, structs/enums and Function captures within admitted families, using common ownership/receiving. It is not Sendable. Authentic external PanicInfo arguments and PanicInfo-bearing constant exports remain refused. Ordinary independent Source recipes receive only admitted exportable results and do not replay PanicInfo. Original128M work/64MiB allocated/8MiB live, steps65536, depth128, frame65536 and the output ceiling in17.61 remain. Failure preserves empty output, never refunds/resets charges, and final owned release allocates nothing. Ordinary Source ref lambdas follow17.65. External private materialization/Unit prerequisites, bounded foreign/deep-variable receiving, P12 and complete shared/provider/formal safety qualification remain independent. This family only adds compiler-only failure and private execution state; public Value/Call/Instance/SourceContext layouts, schema and opcodes remain unchanged.
 
 ### 17.60 Private temporary Class identities and bounded actual field graphs
 
@@ -1662,5 +1674,17 @@ Data loans on Class roots may also prove actual absence through Array wrappers: 
 Proper descendant projections on data Cell roots still require the root type to pass external data-only admission. Executing identity elements inside an Array does not prove that descendant identities cannot grow through another alias during a narrow loan. Their cached root receiving bound remains incomplete, so initial loan preparation rejects before acquiring a whole-root snapshot. Whole-root ref on a direct canonical Array Cell does not use that descendant-projection cache and remains executable. Complete identity-root projections retain separate unfinished budget and authority obligations.
 
 Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB logical output remain. Type/actual graph traversal, materialization and independent Source replay pay the original owner. Public Value/Call/Instance/SourceContext layouts, schema and opcodes remain unchanged, with no alternative evaluator. Scoped positives and FI on a fixed commit establish neither complete P11, every type combination nor provider/formal safety qualification.
+
+### 17.65 Ordinary ref closures and authentic capture prefixes
+
+Ordinary function expressions, arrow closures and local nested functions may declare ref parameters. A complete callable context may supply ref mode when the parameter omits its mode. Annotated modes, types and arity must match that context. Other parameter modes, defaults, patterns and rest parameters gain no admission. Calls still require a real mutable place and an explicit ref argument; ordinary values and immutable bindings cannot impersonate a loan.
+
+The closure body's physical parameter row contains authentic captures followed by the callable suffix. A REF suffix stores Cell<element>. The common verifier, Cell provenance derivation, effects edges and Instance locate the same actual formal at capture_count+p. Owned Cell captures retain OWNED_CAPTURE origins and REF suffixes retain SCOPED_REF origins; a signature grants neither capture ownership nor access authority. Saving a scoped borrow into an owned closure remains refused, as do mismatched prefixes, suffixes or actual captures.
+
+Source queries expose each parameter's logical element type, mutable binding and authentic range; callable query parameters also expose element types. Only an actual ref token produces a REF marker; contextual inference invents no token. Queries, complete Checked artifacts and packet receiving independently own their required facts after caller text and parser/session death. Specialization, Lowered and Program/Instance retain complete common verification rather than borrowing Source addresses.
+
+CTFE reuses the sole Lowered execution and existing Function/Cell/loan protocol for direct and returned ref closures, reborrowing, Array and projection places, cleanup and admitted panic combinations. Capturing the same mutable Cell also passed as a ref argument still undergoes real exclusive-loan checks; a valid signature cannot erase an authority conflict. Owned returns retain evaluated snapshots and independent Source replay, without a second evaluator, host Instance execution or saved CTFE pointers.
+
+Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB logical output remain. Failure preserves empty output and original-owner cumulative charges. Complete physical FI, same-owner retry, exact/minus-one, final-owner release and formal safety qualification require their own measured evidence. This family changes no public Value/Call/Instance/SourceContext layout, schema or opcode and grants no foreign/deep-variable receiving, identity-root projections, private Source materialization or complete P11 qualification.
 
 <!-- /xr-spec:en -->

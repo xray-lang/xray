@@ -148,3 +148,10 @@ set_tests_properties(test_xir_source_comptime_array_identity PROPERTIES
 add_test(NAME test_xir_source_comptime_array_identity_resources COMMAND test_xir_source_comptime --array-identity-resources)
 set_tests_properties(test_xir_source_comptime_array_identity_resources PROPERTIES
     TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources")
+
+add_test(NAME test_xir_source_comptime_ref_closure COMMAND test_xir_source_comptime --ref-closure)
+set_tests_properties(test_xir_source_comptime_ref_closure PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;ctfe;source;ownership;callable")
+add_test(NAME test_xir_source_comptime_ref_closure_resources COMMAND test_xir_source_comptime --ref-closure-resources)
+set_tests_properties(test_xir_source_comptime_ref_closure_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources;callable")

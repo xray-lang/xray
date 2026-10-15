@@ -1,0 +1,2 @@
+fn inc(x:ref i64){x+=2}
+export fn run()->i64{var x=40;const f=fn(value:ref i64)->i64{defer{inc(ref value)};return 42};return f(ref x)+x-42}

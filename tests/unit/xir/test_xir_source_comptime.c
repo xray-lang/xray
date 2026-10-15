@@ -55,6 +55,10 @@ static const char source_comptime_array_identity_text[]=
     "fn grow(xs:ref Array<Box>){xs.push(Box(41));xs[0]=Box(1)}\n"
     "fn answer()->i64{var xs=[Box(0)];grow(ref xs);return xs[0].value+xs[1].value}\n"
     "export fn run()->i64{return comptime answer()}\n";
+static const char source_comptime_ref_closure_text[]=
+    "fn answer()->i64{var n=2;var x=38;"
+    "const f:fn(ref i64)->i64=fn(value)->i64{value+=n;defer{value+=2};return value};f(ref x);return x}\n"
+    "export fn run()->i64{return comptime answer()}\n";
 static const char source_comptime_panic_text[]=
     "fn fail(x:ref i64)->i64{defer{x=x+2};assert(false,\"ab\");return 0}\n"
     "fn answer()->i64{var xs=[40];try{return fail(ref xs[0])}catch panic(p){return p.code==445 && p.message==\"ab\" ? xs[0] : 0}}\n"
@@ -208,7 +212,18 @@ static bool source_comptime_array_identity_case(int argc,char **argv) {
     source_comptime_test_answer(source_comptime_array_identity_text,XR_XIR_I64,42);
     fprintf(stderr,"Source typed Array identities/ref growth independent recipe Checked/query normal physical0\n");return true;
 }
+static bool source_comptime_ref_closure_case(int argc,char **argv) {
+    if (argc!=2) return false;
+    if (!strcmp(argv[1],"--ref-closure-resources")) {
+        source_comptime_resource_text=source_comptime_ref_closure_text;
+        source_comptime_test_resources();return true;
+    }
+    if (strcmp(argv[1],"--ref-closure")) return false;
+    source_comptime_test_answer(source_comptime_ref_closure_text,XR_XIR_I64,42);
+    fprintf(stderr,"Source contextual ref closure/owned Cell prefix/scoped suffix/cleanup independent recipe normal physical0\n");return true;
+}
 int main(int argc,char **argv) {
+    if (source_comptime_ref_closure_case(argc,argv)) return 0;
     if (source_comptime_array_identity_case(argc,argv)) return 0;
     if (source_comptime_inactive_case(argc,argv)) return 0;
     if (argc==2 && !strcmp(argv[1],"--dynamic-loan")) {
