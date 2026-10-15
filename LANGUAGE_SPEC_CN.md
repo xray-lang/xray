@@ -7841,7 +7841,7 @@ export fn run()->i64 {
 
 ### 17.66 显式普通库派生的 Source 启动与接收
 
-具名 struct、class 或 enum 使用 `@derive(Protocol, generator, describe: ["field"], read: ["field"], write: ["field"], construct: true)` 选择一个普通协议应用和普通可见函数。generator 可为已导入的名字或 `module.name`。选项可省略；construct 默认 false；字段列表中名称必须真实存在，各操作独立，不从 READ 推得 DESCRIBE 或从编码推得构造。相同选项、字段操作或目标上的相同协议应用重复时拒绝。`@derive(JSON)` 等旧固定位集语法不保留；没有编译器专属协议白名单或隐含 Hash→Eq 授权。
+具名 struct、class 或 enum 使用 `@derive(Protocol, generator, describe: ["field"], read: ["field"], write: ["field"], construct: true)` 选择一个普通协议应用和普通可见函数。generator 可为已导入的名字或 `module.name`。选项可省略；construct 默认 false；字段列表中名称必须真实存在，各操作独立，不从 READ 推得 DESCRIBE 或从编码推得构造。相同选项、字段操作或目标上的相同协议应用重复时拒绝。每个未限定的字段名称必须唯一解析到目标的一个真实字段；enum 不同 case 的同名 payload 造成歧义时在 g 执行前拒绝，不能静默选择最后一个或扩大到全部字段。`@derive(JSON)` 等旧固定位集语法不保留；没有编译器专属协议白名单或隐含 Hash→Eq 授权。
 
 Source 在真实声明、字段和签名建立后、普通用户 body 构造前建立并独立验证定义策略，再执行生成器。当前闭合目标首族从完整 Checked 依赖取得 g 及其私有帮助函数；依赖源码移除后仍能处理未来用户类型。启动代码只使用真实依赖 body 和真实结果 thunk，经普通 Built 全检、专用化、Checked 身份、Lowered 与唯一 CTFE；i64 Program 入口真实调用 thunk 并读取结果版本字段。未检查用户 body 不进入假 Checked 模块，也不以空 body 解开生成次序。
 
@@ -7851,7 +7851,7 @@ DeriveContext 为 `(Array<MethodInfo>, Array<CalleeInfo>, Array<i64> parameters,
 
 Generated 为版本1普通8元Tuple `(version,functions,parameters,blocks,instructions,operands,literals,typeArguments)`，后七项均为平面 Array。FunctionRow14为 `(name,member,root,resultType,parameterBegin,parameterCount,blockBegin,blockCount,instructionBegin,instructionCount,operandBegin,operandCount,typeArgumentBegin,typeArgumentCount)`；BlockRow4为 `first/count/panic/frontier`；InstructionRow10为 `opcode/type/arg0/arg1/target0/target1/immediate/typeArgumentBegin/typeArgumentCount/originField`。区间精确按序分割对应表；不接受未使用尾部。非负类型引用由接收方当前图解析，负数 `-builtin-1` 只接受唯一服务承认的 builtin；调用非负数索引本输出函数，负数 `-calleeIndex-1` 索引接收方 callee 表；CONST_STRING 只索引本输出 literal。
 
-接收方强制定义模块、目标、export、普通 READ 方法/内部 helper 角色、真实协议 requirement/root、显式策略及每条指令的用户字段 origin。member=-1 为 helper，否则必须对应实际 requirement；root 必须最终绑定该协议方法。新函数不携带 g 的 Checked/NONE 证明；生成内容与完整用户 Built 一起重新检查实现见证、类型、约束、私有访问、借用、所有权、初始化、构造和根效果。失败不发布 Checked 或查询快照，字段错误指向用户字段路径。第二次独立 Source 按原 occurrence/属性/真实库 g 身份接收拥有式结果，在自己的当前池重建逻辑引用，不复用第一次池的整数 ID。
+接收方强制定义模块、目标、export、普通 READ 方法/内部 helper 角色、真实协议 requirement/root、显式策略及每条指令的用户字段 origin。member=-1 为 helper，否则必须对应实际 requirement；root 必须最终绑定该协议方法。新函数不携带 g 的 Checked/NONE 证明；生成内容与完整用户 Built 一起重新检查实现见证、类型、约束、私有访问、借用、所有权、初始化、构造和根效果。失败不发布 Checked 或查询快照，字段错误指向用户字段路径；enum payload 使用真实 `Type.Case.field` 路径和该字段名字的源码位置。第二次独立 Source 按原 occurrence/属性/真实库 g 身份接收拥有式结果，在自己的当前池重建逻辑引用，不复用第一次池的整数 ID。
 
 生成方法的查询角色是 DERIVED_METHOD，选区指向真实 derive token；没有伪造的方法名或参数词法选区。LSP 在调用处按普通方法显示，definition 指向触发派生的属性，reference/hover/semantic 消费拥有式快照。这个闭合 Checked 依赖首族不宣称完整泛型模板、同源码依赖启动、JSON/enum/Regex 各库消费者或全部 FI/安全/provider 资格已经完成；这些仍须沿相同边界实现。原8MiB每请求逻辑结果政策和全部其它预算/验证门不变。
 

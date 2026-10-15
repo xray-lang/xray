@@ -31,8 +31,47 @@ static void source_derivations_free(SourceContext *ctx) {
         xr_xir_compile_interface_closure_free(job->closure);
     }
 }
+static XrXirGeneratedOrigin source_derive_enum_origin(SourceContext *ctx,SourceDeriveJob *job,uint32_t field) {
+    SourceName *owner=job->owner;EnumDeclNode *decl=&owner->node->as.enum_decl;
+    const XrModuleSpec *spec=&ctx->graph->specs[owner->module];
+    for(int v=0;v<decl->member_count;++v) {
+        AstNode *node=decl->members[v];
+        if(!source_work(ctx,node)) return (XrXirGeneratedOrigin){0};
+        if(!node || node->type!=AST_ENUM_MEMBER || node->as.enum_member.payload_count<0) {
+            source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"derived enum payload origin is malformed");
+            return (XrXirGeneratedOrigin){0};
+        }
+        EnumMemberNode *member=&node->as.enum_member;uint32_t count=(uint32_t)member->payload_count;
+        if(field>=count) {field-=count;continue;}
+        if(!member->payload_names || !member->payload_name_spans || !member->payload_names[field]) {
+            source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"derived enum field origin is absent");
+            return (XrXirGeneratedOrigin){0};
+        }
+        const char *name=member->payload_names[field];XrNameSpan span=member->payload_name_spans[field];
+        size_t owner_length=source_text_size(ctx,owner->name),variant_length=source_text_size(ctx,member->name);
+        size_t field_length=source_text_size(ctx,name);
+        if(owner_length>SIZE_MAX-3 || variant_length>SIZE_MAX-owner_length-3 ||
+            field_length>SIZE_MAX-owner_length-variant_length-3) {
+            source_fail(ctx,node,XR_XIR_BUDGET,"derived enum field path size exhausted");
+            return (XrXirGeneratedOrigin){0};
+        }
+        size_t capacity=owner_length+variant_length+field_length+3;char *path=source_alloc(ctx,capacity,1);
+        if(!path) return (XrXirGeneratedOrigin){0};
+        if(source_format(ctx,path,capacity,"%s.%s.%s",owner->name,member->name,name)!=XR_DIAG_OK) {
+            source_fail(ctx,node,XR_XIR_BUDGET,"derived enum field path formatting exhausted");
+            return (XrXirGeneratedOrigin){0};
+        }
+        return (XrXirGeneratedOrigin){
+            {spec->canonical,(uint32_t)source_text_size(ctx,spec->canonical)},
+            {spec->source_path,(uint32_t)source_text_size(ctx,spec->source_path)},
+            {path,(uint32_t)(capacity-1)},(uint32_t)span.line,(uint32_t)span.column};
+    }
+    source_fail(ctx,owner->node,XR_XIR_BAD_STRUCTURE,"derived enum field origin is outside its declaration");
+    return (XrXirGeneratedOrigin){0};
+}
 static XrXirGeneratedOrigin source_derive_origin(SourceContext *ctx,SourceDeriveJob *job,int32_t field) {
     SourceName *owner=job->owner;AstNode *node=owner->node;
+    if(field>=0 && node->type==AST_ENUM_DECL) return source_derive_enum_origin(ctx,job,(uint32_t)field);
     const XrModuleSpec *spec=&ctx->graph->specs[owner->module];
     const char *path=owner->name;
     if (field>=0 && node->type!=AST_ENUM_DECL) {
@@ -75,7 +114,11 @@ static bool source_derive_members(SourceContext *ctx,SourceDeriveJob *job,XrXirD
             const XrXirLiteral name=nominal->fields[f].name;
             size_t length=source_text_size(ctx,intent->name);
             if (!source_work(ctx,job->owner->node)) return false;
-            if (length==name.length && source_span_same(ctx,job->owner->node,name.bytes,intent->name,length)) found=f;
+            if (length==name.length && source_span_same(ctx,job->owner->node,name.bytes,intent->name,length)) {
+                if (found!=UINT32_MAX)
+                    return source_fail(ctx,job->owner->node,XR_XIR_BAD_TYPE,"ambiguous derive field name");
+                found=f;
+            }
         }
         if (found==UINT32_MAX)
             return source_fail(ctx,job->owner->node,XR_XIR_BAD_TYPE,"derive intent names no field of its target");

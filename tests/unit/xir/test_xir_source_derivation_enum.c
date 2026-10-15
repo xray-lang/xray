@@ -37,6 +37,7 @@ static void enum_source(const XrXirCompileContext *context,const char *text,
     CHECK(status==XR_XIR_OK && output->checked && output->snapshot);xr_compile_session_free(session);
     memset(path,0xa5,sizeof(path));
 }
+#include "xir_source_derivation_enum_negative.h"
 static uint32_t enum_function(const XrXirModule *module,const char *name) {
     uint32_t found=UINT32_MAX;size_t length=strlen(name);
     for(uint32_t f=0;f<module->function_count;++f)
@@ -83,6 +84,7 @@ static void enum_execute(const XrXirCompileContext *context,XrXirSourceResult *s
 int main(int argc,char **argv) {
     bool emit=argc==4 && !strcmp(argv[1],"--emit-native"),faults=argc==2 && !strcmp(argv[1],"--runtime-resources");
     CHECK(argc==1 || emit || faults);
+    if(!emit && !faults) enum_negative_cases();
     const XrCompileResourceLimits caps={67108864,8388608,128000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0},after={0};
