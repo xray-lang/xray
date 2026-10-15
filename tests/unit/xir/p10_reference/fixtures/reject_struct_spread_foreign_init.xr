@@ -1,0 +1,5 @@
+import "./init_types" as declared
+export fn referenceAnswer() -> i64 {
+    const value = declared.Box{...declared.Box(41)}
+    return value.value
+}

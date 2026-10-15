@@ -3349,6 +3349,7 @@ class Vector2 {
 - The constructor implicitly returns `this` (compiler-injected).
 - An explicit struct constructor evaluates declaration defaults in field declaration order before its body. Fields without a declaration default remain uninitialized, including numeric fields. A legal default constructor is synthesized only when no explicit constructor is declared.
 - A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
+- During construction, an initialized mutable field can root ordinary value operations and further projections through struct fields or Array elements without publishing the whole `this`. Every projection still checks visibility, const and initialization state, and selectors and arguments evaluate once in source order. Stable private construction storage is not a complete object identity and does not independently grant escaping `ref`, capture or whole-receiver authority. Failure cleanup releases only fields that were actually initialized.
 - Constructor fallthrough and bare `return` both execute exit cleanup before assembling and publishing the complete `this` from initialized fields. Permitted cleanup updates to mutable fields become part of the constructed result; failure publishes no result. This does not change ordinary explicit return expressions, whose values are evaluated and snapshotted before cleanup.
 - A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
 - A struct declaring explicit `init` admits field literals only in its declaring module; outside callers use `Type(...)` or a named factory. Structs without explicit `init` retain ordinary field-literal rules. Spread cannot bypass this boundary, and neither form grants private-field permission.
@@ -3559,6 +3560,7 @@ b.x = 99.0
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
 - Struct field defaults are checked in the declaring module and type-parameter scope, including unused declarations; they cannot capture a construction caller's locals. Literals evaluate explicit fields in written order, followed by omitted fields' defaults in declaration order. An explicitly supplied field does not run its default. Defaults permit ordinary admitted function effects; failure preserves earlier side effects but publishes no partial struct value.
+- Named literals support field shorthand `Point{x}` (meaning `Point{x: x}`) and spread `Point{...base, x: value}`. Every explicit field and spread source is evaluated exactly once at its written position. A later entry replaces the same field, but two explicit entries naming the same field are still an error. A spread may supply only fields declared by the target, using the ordinary checked field-assignment conversion for each value. Source-field reads and target-field construction retain their separate visibility checks; spread cannot bypass the module boundary of `init`. Fields supplied by spread do not run declaration defaults, and container fields retain ordinary value-copy semantics.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
 - **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 
@@ -8164,7 +8166,7 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  QuotedLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
-         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrayLit | MapLit | SetLit | ObjectLit | NamedStructLit
          |  ArrowLambda
          |  FnExpression
          |  ComptimeExpr
@@ -8179,6 +8181,7 @@ MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+NamedStructLit ::= QualifiedIdent TypeArgs? '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
 
 ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)

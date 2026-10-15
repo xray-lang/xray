@@ -1,0 +1,21 @@
+fn seed() -> Array<i8> {
+    var items: Array<i8> = [7, 11, 13]
+    return items.reserve(8)
+}
+struct Batch {
+    items: Array<i8> = comptime seed()
+    last: i8
+    init(last) { this.last = last }
+}
+struct Holder<T> {
+    value: T
+    init(value) { this.value = value }
+}
+export fn referenceAnswer() -> i64 {
+    const first = Batch(17)
+    const second = Batch(19)
+    const held = Holder<Array<i8>>(first.items)
+    var changed = held.value
+    changed.push(first.last)
+    return (changed[0] as i64) + (changed[1] as i64) + (changed[2] as i64) + (changed[3] as i64) + (second.last as i64) + held.value.capacity * 100 + len(second.items) * 1000
+}

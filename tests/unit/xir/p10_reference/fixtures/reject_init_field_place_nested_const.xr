@@ -1,0 +1,6 @@
+struct Inner { const items: Array<i64> }
+struct Batch {
+    inner: Inner = Inner{items: [1]}
+    init() { this.inner.items.push(7) }
+}
+export fn referenceAnswer() -> i64 { return len(Batch().inner.items) }

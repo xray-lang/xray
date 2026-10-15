@@ -1,0 +1,5 @@
+struct Pair { x: i64 }
+export fn referenceAnswer() -> i64 {
+    const value = Pair{x: 1, ...Pair{x: 2}, x: 3}
+    return value.x
+}

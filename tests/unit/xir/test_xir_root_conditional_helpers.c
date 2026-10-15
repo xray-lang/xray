@@ -1538,7 +1538,7 @@ static void conditional_new_literals(void) {
             which<36 ? conditional_invocation_publish(&context,which-34,true) :
             which<38 ? conditional_invocation_template_publish(&context,which-36,true) :
             which<41 ? conditional_lowered_snapshot(&context,which-38,true) :
-            which<49 ? conditional_invocation_returned(&context,which-41,true) :
+            which<49 ? conditional_invocation_returned(&context,which-41,true,false) :
             which<51 ? conditional_invocation_producer(&context,which-49,true) :
             which<53 ? conditional_invocation_runtime_edge(&context,which-51,true) :
             which<56 ? conditional_invocation_runtime_direct(&context,which-53,true) :
@@ -1600,7 +1600,7 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         which<36 ? conditional_invocation_publish(context,which-34,false) :
         which<38 ? conditional_invocation_template_publish(context,which-36,false) :
         which<41 ? conditional_lowered_snapshot(context,which-38,false) :
-        which<49 ? conditional_invocation_returned(context,which-41,false) :
+        which<49 ? conditional_invocation_returned(context,which-41,false,false) :
         which<51 ? conditional_invocation_producer(context,which-49,false) :
         which<53 ? conditional_invocation_runtime_edge(context,which-51,false) :
         which<56 ? conditional_invocation_runtime_direct(context,which-53,false) :
@@ -1742,6 +1742,13 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        CHECK(conditional_invocation_returned(&context,0,true,true)==XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+        CHECK(!rp_live && !rp_live_bytes && !rp_allocation_observer);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-resources")) {
         conditional_nonroot_seed_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

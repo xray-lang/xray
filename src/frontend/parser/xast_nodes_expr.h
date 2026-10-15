@@ -196,6 +196,7 @@ typedef struct StructLiteralNode {
      * second analysis pass. */
     struct AstNode *type_path;
     char *struct_name;
+    /* A spread entry has a NULL name and an AST_SPREAD_EXPR value. */
     char **field_names;
     AstNode **field_values;
     int field_count;
@@ -203,8 +204,8 @@ typedef struct StructLiteralNode {
     int type_arg_count;
 } StructLiteralNode;
 
-/* Named payload enum construction. Field names and values retain source order;
- * the analyzer owns the declaration-slot permutation. */
+/* Qualified braces retain source order until declaration lookup distinguishes
+ * a struct literal from an enum payload. A spread has a NULL field name. */
 typedef struct EnumConstructNode {
     AstNode *variant_path;
     char **field_names;

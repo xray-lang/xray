@@ -567,6 +567,7 @@ class Vector2 {
 - 构造器隐式返回 `this`（编译期注入）。
 - struct 显式构造器按字段声明顺序先执行声明处的默认表达式；无声明默认表达式的字段保持未初始化（包括数值字段），由构造体负责初始化。只有没有显式构造器时才生成合法的默认构造器。
 - 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
+- 构造期间，已初始化的 mutable 字段可作为普通值操作的存储根，继续投影其 struct 字段或 Array 元素；这不要求先发布整个 `this`。每一级投影仍核字段可见性、const 和初始化状态，选择器及实参依序求值一次。私有构造字段的稳定存储不构成完整对象身份，不单独授予 `ref` 逃逸、闭包捕获或整体接收者权限；失败清理仍只释放实际已初始化的字段。
 - const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
 - 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
 - 有显式 `init` 的 struct 只允许在其声明模块内使用字段字面量；外部经 `Type(...)` 或具名工厂构造。无显式 `init` 的 struct 保留正常字段字面量规则。展开字面量不能绕过此权限，任何形式均不扩大私有字段权限。
@@ -777,6 +778,7 @@ b.x = 99.0
 - 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
 - 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
 - struct 字段默认表达式在声明模块和声明类型参数作用域内检查，包括未使用的声明；不能捕获构造调用方的局部变量。字面量先按书写顺序求值显式字段，再按字段声明顺序求值被省略字段的默认表达式；显式提供的字段不执行其默认表达式。默认表达式允许普通已准入函数效应，失败不撤销之前的副作用，但不发布部分结构体值。
+- 具名字面量支持字段简写 `Point{x}`（即 `Point{x: x}`）与展开 `Point{...base, x: value}`。所有显式字段和展开源在其书写位置各求值一次；同名字段由后写条目覆盖，但两个显式条目重复指定同一字段仍是错误。展开只能提供目标已声明的字段，各字段沿普通字段赋值的已检查类型转换接收；源字段读取与目标字段构造分别遵守可见性，不能借展开绕过 `init` 的模块边界。展开已提供的字段不再执行声明默认表达式，容器字段保留普通值复制语义。
 - 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
 - **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
 
@@ -1818,6 +1820,7 @@ class Vector2 {
 - The constructor implicitly returns `this` (compiler-injected).
 - An explicit struct constructor evaluates declaration defaults in field declaration order before its body. Fields without a declaration default remain uninitialized, including numeric fields. A legal default constructor is synthesized only when no explicit constructor is declared.
 - A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
+- During construction, an initialized mutable field can root ordinary value operations and further projections through struct fields or Array elements without publishing the whole `this`. Every projection still checks visibility, const and initialization state, and selectors and arguments evaluate once in source order. Stable private construction storage is not a complete object identity and does not independently grant escaping `ref`, capture or whole-receiver authority. Failure cleanup releases only fields that were actually initialized.
 - Constructor fallthrough and bare `return` both execute exit cleanup before assembling and publishing the complete `this` from initialized fields. Permitted cleanup updates to mutable fields become part of the constructed result; failure publishes no result. This does not change ordinary explicit return expressions, whose values are evaluated and snapshotted before cleanup.
 - A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
 - A struct declaring explicit `init` admits field literals only in its declaring module; outside callers use `Type(...)` or a named factory. Structs without explicit `init` retain ordinary field-literal rules. Spread cannot bypass this boundary, and neither form grants private-field permission.
@@ -2028,6 +2031,7 @@ b.x = 99.0
 - Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
 - Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
 - Struct field defaults are checked in the declaring module and type-parameter scope, including unused declarations; they cannot capture a construction caller's locals. Literals evaluate explicit fields in written order, followed by omitted fields' defaults in declaration order. An explicitly supplied field does not run its default. Defaults permit ordinary admitted function effects; failure preserves earlier side effects but publishes no partial struct value.
+- Named literals support field shorthand `Point{x}` (meaning `Point{x: x}`) and spread `Point{...base, x: value}`. Every explicit field and spread source is evaluated exactly once at its written position. A later entry replaces the same field, but two explicit entries naming the same field are still an error. A spread may supply only fields declared by the target, using the ordinary checked field-assignment conversion for each value. Source-field reads and target-field construction retain their separate visibility checks; spread cannot bypass the module boundary of `init`. Fields supplied by spread do not run declaration defaults, and container fields retain ordinary value-copy semantics.
 - Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
 - **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
 

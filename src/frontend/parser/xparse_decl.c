@@ -2003,23 +2003,9 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
         int field_capacity = 0;
 
         while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
-            do {
-                xr_parser_consume(parser, TK_NAME, "expected field name in payload enum constructor");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            Token field_token = parser->previous;
-            char *field_name =
-                (char *) ast_alloc(parser->compiler_session, (size_t) field_token.length + 1);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do { if (!ast_copy(parser->compiler_session, field_name, field_token.start, (size_t) field_token.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; field_name[field_token.length] = '\0'; } while (0);
-            do {
-                xr_parser_consume(parser, TK_COLON,
-                              "payload enum constructors require 'field: expression'");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            AstNode *field_value = xr_parse_expression(parser);
-            if (!xr_parser_healthy(parser)) return NULL;
+            Token field_token = parser->current;
+            char *field_name = NULL; AstNode *field_value = NULL;
+            if (!xr_parse_struct_literal_entry(parser,&field_name,&field_value)) return NULL;
 
             if (field_count >= field_capacity) {
                 int old_capacity = field_capacity;

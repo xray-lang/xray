@@ -1,0 +1,25 @@
+struct Inner {
+    items: Array<i64>
+}
+struct Generic<T> {
+    items: Array<T>
+    init(first: T, last: T) { this.items = [first]; this.items.push(last) }
+}
+struct Batch {
+    inner: Inner = Inner{items: [7, 11]}
+    init(last: i64) {
+        this.inner.items.push(last)
+        this.inner.items[0] = 13
+    }
+}
+class ObjectBatch {
+    items: Array<i64> = [17]
+    init(last: i64) { this.items.push(last) }
+}
+export fn referenceAnswer() -> i64 {
+    const first = Batch(19)
+    const second = Batch(23)
+    const object = ObjectBatch(29)
+    const generic = Generic<i64>(31, 37)
+    return first.inner.items[0] * 10000 + first.inner.items[1] * 100 + first.inner.items[2] + second.inner.items[2] + object.items[0] + object.items[1] + generic.items[0] + generic.items[1]
+}

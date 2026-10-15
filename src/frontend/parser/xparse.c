@@ -1609,11 +1609,10 @@ AstNode *xr_parse_variable(Parser *parser) {
     }
 
     // Check for struct literal: Name{field: value, ...}
-    // Conditions: '{' on same line, no leading space, followed by 'name:' pattern
+    // An adjacent brace starts a literal when its first entry is a field or spread.
     if (xr_parser_check(parser, TK_LBRACE) && !parser->current.has_leading_space &&
         parser->current.line == line) {
-        // Lookahead: check if this is { name: ... } pattern (struct literal)
-        // vs block statement (which would have statements, not name:value pairs)
+        // Distinguish literal entries from a block's first statement.
         XrParserStreamState saved_stream = xr_parser_stream_save(parser);
         if (!xr_parser_healthy(parser)) return NULL;
         int saved_had_error = parser->had_error;
@@ -1631,11 +1630,12 @@ AstNode *xr_parse_variable(Parser *parser) {
                 xr_parser_advance(parser);
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);  // consume field name
-            if (xr_parser_check(parser, TK_COLON)) {
+            if (xr_parser_check(parser, TK_COLON) || xr_parser_check(parser, TK_COMMA) ||
+                xr_parser_check(parser, TK_RBRACE)) {
                 is_struct_literal = true;
             }
-        } else if (xr_parser_check(parser, TK_RBRACE)) {
-            // Empty struct literal: Point{}
+        } else if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+            // Empty or spread-first literal.
             is_struct_literal = true;
         }
 

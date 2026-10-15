@@ -154,6 +154,8 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
     const XrXirNominalType *instance = &xr_xir_type_node(&ctx->types,selected->type)->nominal;
     SourceSubstitution substitution = {instance->arguments,instance->argument_count};
     for (int i = 0; i < count; ++i) {
+        if (!provided->names[i])
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"enum payload spread is not admitted");
         uint32_t at = 0;
         for (; at < variant.field_count; ++at) {
             if (!source_work(ctx,node)) return false;
