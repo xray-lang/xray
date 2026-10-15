@@ -81,6 +81,20 @@ add_custom_command(OUTPUT "${XIR_LIBRARY_COUNTER_GENERATED}"
     DEPENDS test_xir_mixed_library_producer xir/fixtures/p20_library_counter/root.xr xir/fixtures/p20_library_counter/library.xr
     VERBATIM)
 add_executable(test_xir_mixed_library_counter xir/test_xir_mixed_library_counter.c "${XIR_LIBRARY_COUNTER_GENERATED}")
+add_executable(test_xir_mixed_program_publication xir/test_xir_mixed_program_publication.c "${XIR_LIBRARY_COUNTER_GENERATED}")
+target_link_libraries(test_xir_mixed_program_publication PRIVATE xray_xir_vm xray_xir_scalar)
+set_target_properties(test_xir_mixed_program_publication PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_program_publication PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_program_publication PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(publication_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_program_publication_${publication_backend}
+        COMMAND test_xir_mixed_program_publication ${publication_backend})
+    set_tests_properties(test_xir_mixed_program_publication_${publication_backend} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;program;correspondence;ownership;callback;generated-c;lifecycle")
+endforeach()
 target_link_libraries(test_xir_mixed_library_counter PRIVATE xray_xir_vm xray_xir_scalar)
 add_executable(test_xir_mixed_library_resources xir/test_xir_mixed_library_resources.c "${XIR_LIBRARY_COUNTER_GENERATED}")
 target_link_libraries(test_xir_mixed_library_resources PRIVATE xray_xir_vm xray_xir_scalar)

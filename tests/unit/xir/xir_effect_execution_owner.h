@@ -33,6 +33,9 @@ static void *effects_compile_malloc(size_t bytes) {
     while (effects_compile_allocations[slot].pointer) slot = (slot + 1) & 32767;
     effects_compile_allocations[slot] = (EffectsCompileAllocation){pointer, bytes};
     ++effects_compile_live; effects_compile_bytes += bytes;
+#ifdef XIR_EFFECT_COMPILE_ALLOCATED
+    XIR_EFFECT_COMPILE_ALLOCATED();
+#endif
     return pointer;
 }
 static void effects_compile_free(void *pointer) {
