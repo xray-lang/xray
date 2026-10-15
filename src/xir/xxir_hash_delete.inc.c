@@ -6,38 +6,27 @@
  *
  * xxir_hash_delete.inc.c - Dense removal with preflighted bucket backshift
  */
-static XrXirValueStatus hash_delete_preflight(const XirHash *map, size_t hole,
-    XrXirValueAdmission *admission, size_t *last_bucket) {
-    size_t mask = map->capacity - 1, bucket = (hole + 1) & mask;
+static XrXirValueStatus hash_delete_preflight(const XirHash *map, size_t entry,
+    XrXirValueAdmission *admission) {
+    XR_CHECK(entry < map->length, "ordered deletion requires a present dense entry");
+    uint64_t moved = (uint64_t)(map->length - entry - 1) * map->stride;
+    if (map->capacity > (UINT64_MAX - moved) / 3) return XR_XIR_VALUE_LIMIT;
+    /* Admission pays validation, bucket backshift, index rebasing and every
+     * moved byte before the first visible change to insertion-ordered storage. */
+    XrXirValueStatus status = hash_charge(admission, moved + (uint64_t)map->capacity * 3);
+    if (status != XR_XIR_VALUE_OK) return status;
     bool terminated = false;
-    for (size_t count = 0; count < map->capacity; ++count) {
-        XrXirValueStatus status = hash_charge(admission, 1);
-        if (status != XR_XIR_VALUE_OK) return status;
+    for (size_t bucket = 0; bucket < map->capacity; ++bucket) {
         uint64_t slot = hash_buckets(map)[bucket];
-        if (!slot) { terminated = true; break; }
+        if (!slot) terminated = true;
         if (slot > map->length) return XR_XIR_VALUE_BAD_ARGUMENT;
-        bucket = (bucket + 1) & mask;
     }
-    if (!terminated) return XR_XIR_VALUE_BAD_ARGUMENT;
-    bucket = (size_t)hash_entry_hash(map, map->length - 1) & mask;
-    for (size_t count = 0; count < map->capacity; ++count) {
-        XrXirValueStatus status = hash_charge(admission, 1);
-        if (status != XR_XIR_VALUE_OK) return status;
-        uint64_t slot = hash_buckets(map)[bucket];
-        if (!slot || slot > map->length) return XR_XIR_VALUE_BAD_ARGUMENT;
-        if (slot == map->length) { *last_bucket = bucket; return XR_XIR_VALUE_OK; }
-        bucket = (bucket + 1) & mask;
-    }
-    return XR_XIR_VALUE_BAD_ARGUMENT;
+    return terminated ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
 }
-static void hash_delete_commit(XirHash *map, const HashProbe *probe, size_t last_bucket) {
+static void hash_delete_commit(XirHash *map, const HashProbe *probe) {
     size_t last = map->length - 1, mask = map->capacity - 1, hole = probe->bucket;
     XirObject *pending = NULL;
     hash_queue_entry(map, probe->entry, &pending);
-    if (probe->entry != last) {
-        memcpy(hash_entry(map, probe->entry), hash_entry(map, last), map->stride);
-        hash_buckets(map)[last_bucket] = probe->entry + 1;
-    }
     size_t bucket = (hole + 1) & mask;
     while (hash_buckets(map)[bucket]) {
         size_t entry = (size_t)hash_buckets(map)[bucket] - 1;
@@ -47,7 +36,13 @@ static void hash_delete_commit(XirHash *map, const HashProbe *probe, size_t last
         }
         bucket = (bucket + 1) & mask;
     }
-    hash_buckets(map)[hole] = 0; --map->length;
+    hash_buckets(map)[hole] = 0;
+    if (probe->entry != last)
+        memmove(hash_entry(map, probe->entry), hash_entry(map, probe->entry + 1),
+            (last - probe->entry) * map->stride);
+    for (size_t i = 0; i < map->capacity; ++i)
+        if (hash_buckets(map)[i] > probe->entry + 1) --hash_buckets(map)[i];
+    --map->length;
     release_pending(pending);
 }
 static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirValue *key,
@@ -61,13 +56,13 @@ static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirVal
     if (status != XR_XIR_VALUE_OK) return status;
     if (!probe.found) { *removed = false; return XR_XIR_VALUE_OK; }
     if (atomic_load_explicit(&map->object.references, memory_order_acquire) == 1) {
-        size_t last_bucket = 0;
-        status = hash_delete_preflight(map, probe.bucket, admission, &last_bucket);
+        status = hash_delete_preflight(map, probe.entry, admission);
         if (status != XR_XIR_VALUE_OK) return status;
-        hash_delete_commit(map, &probe, last_bucket);
+        hash_delete_commit(map, &probe);
     } else {
         XirHash *copy = NULL;
-        status = hash_clone(map, map->capacity, probe.entry, admission, &copy);
+        HashCloneEdit edit = {probe.entry, SIZE_MAX, NULL};
+        status = hash_clone(map, map->capacity, &edit, admission, &copy);
         if (status != XR_XIR_VALUE_OK) return status;
         XrXirValue replacement = hash_value(copy);
         memcpy(place->payload, &replacement.payload, sizeof(replacement.payload));

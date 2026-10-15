@@ -24,6 +24,11 @@ static XrXirTypeArena *hash_test_arena(void) {
     return arena;
 }
 static XrXirValue integer(int64_t value) { return (XrXirValue){XR_XIR_I64, 0, value}; }
+static XrXirValue hash_test_key(const XirHash *map, size_t index) {
+    XrXirLayout layout = {0};
+    CHECK(xr_xir_compile_type_arena_layout(map->object.arena, map->key_type, &layout));
+    return storage_leaf_value(map->key_type, hash_span(map, index, false).bytes, layout.size);
+}
 static void hash_expect(const XrXirValue *map, int64_t key, int64_t expected,
     bool exists, XrXirValueAdmission *admission) {
     XrXirValue input = integer(key), result = {0}; bool found = !exists;
@@ -82,6 +87,43 @@ static void hash_ieee_cases(XrXirValueAdmission *admission) {
     CHECK(xr_xir_set_add(&place, &elements[0], admission) == XR_XIR_VALUE_OK);
     xr_xir_value_drop(&set);
 }
+static void hash_order_cases(XrXirValueAdmission *admission) {
+    XrXirValue keys[] = {{XR_XIR_I64, 0, 1}, {XR_XIR_I64, 0, 2}, {XR_XIR_I64, 0, 3}};
+    XrXirValue values[] = {{XR_XIR_I64, 0, 7}, {XR_XIR_I64, 0, 14}, {XR_XIR_I64, 0, 21}};
+    for (unsigned operation = 0; operation < 3; ++operation) {
+        XrXirValue map = {0}, alias = {0};
+        CHECK(xr_xir_map_new((XrXirType)256, keys, values, 3, admission, &map) == XR_XIR_VALUE_OK);
+        XrXirValuePlace place = {(XrXirType)256, &map.payload};
+        if (operation) CHECK(xr_xir_value_copy(&map, &alias) == XR_XIR_VALUE_OK);
+        if (operation == 1) {
+            XrXirValue replacement = integer(91);
+            CHECK(xr_xir_map_set(&place, &keys[1], &replacement, admission) == XR_XIR_VALUE_OK);
+        } else {
+            bool removed = false;
+            CHECK(xr_xir_hash_delete(&place, &keys[0], admission, &removed) == XR_XIR_VALUE_OK && removed);
+        }
+        XirHash *storage = (XirHash *)object_pointer(&map);
+        const int64_t *expected = operation == 1 ? (int64_t[]){1,2,3} : (int64_t[]){2,3};
+        for (size_t i = 0; i < storage->length; ++i) {
+            XrXirValue stored = hash_test_key(storage, i);
+            CHECK(stored.payload == expected[i]);
+        }
+        if (operation != 1) {
+            CHECK(xr_xir_map_set(&place, &keys[0], &values[0], admission) == XR_XIR_VALUE_OK);
+            storage = (XirHash *)object_pointer(&map);
+            const int64_t reinserted[] = {2,3,1};
+            CHECK(storage->length == 3);
+            for (size_t i = 0; i < storage->length; ++i)
+                CHECK(hash_test_key(storage, i).payload == reinserted[i]);
+        }
+        if (alias.type) {
+            XirHash *original = (XirHash *)object_pointer(&alias);
+            for (size_t i = 0; i < original->length; ++i)
+                CHECK(hash_test_key(original, i).payload == (int64_t)i + 1);
+        }
+        xr_xir_value_drop(&alias); xr_xir_value_drop(&map);
+    }
+}
 static void hash_string_cases(XrXirValueAdmission *admission) {
     XrXirDomain *producer = NULL; XrXirValue keys[3] = {{0}}, values[3] = {{0}}, map = {0}, alias = {0};
     CHECK(xr_xir_domain_new(65536, &producer) == XR_XIR_VALUE_OK);
@@ -115,7 +157,7 @@ int main(int argc, char **argv) {
     XrXirTypeArena *arena = hash_test_arena(); XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
     XrXirValueAdmission admission = {arena, domain, NULL, NULL, 100000000, 1048576};
-    hash_dense_cases(&admission); hash_ieee_cases(&admission); hash_string_cases(&admission);
+    hash_dense_cases(&admission); hash_ieee_cases(&admission); hash_string_cases(&admission); hash_order_cases(&admission);
     if (argc == 2 && !strcmp(argv[1], "full")) hash_faults(arena, domain);
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(!live && !value_compile_live && !value_compile_bytes);

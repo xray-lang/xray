@@ -12,12 +12,6 @@ static XrXirValueStatus hash_admit_field(const XrXirValue *value, XrXirType type
     if (type != XR_XIR_UNIT) return value_admit_summary(value, type, admission, sensitive);
     return unit_value(value) ? hash_charge(admission, 1) : XR_XIR_VALUE_BAD_ARGUMENT;
 }
-static XrXirValue hash_stored_key(const XirHash *map, size_t index) {
-    XrXirLayout layout = {0};
-    XR_CHECK(xr_xir_compile_type_arena_layout(map->object.arena, map->key_type, &layout),
-        "sealed hash keys have compact leaf storage");
-    return storage_leaf_value(map->key_type, hash_span(map, index, false).bytes, layout.size);
-}
 static void hash_publish_prepared(XirHash *map, uint64_t hash, size_t bucket,
     StoragePrepared *key, StoragePrepared *value) {
     size_t index = map->length;
@@ -57,9 +51,8 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
     bool detach = map->object.domain != admission->domain && sensitive;
     bool inplace = unique && !detach && (!grow || map->object.domain == admission->domain);
     StoragePrepared prepared_key = {0}, prepared_value = {0};
-    XrXirValue stored = probe.found ? hash_stored_key(map, probe.entry) : *key;
-    if (!probe.found || !inplace) {
-        status = hash_prepare_field(&prepared_key, &stored, map->key_type, admission);
+    if (!probe.found) {
+        status = hash_prepare_field(&prepared_key, key, map->key_type, admission);
         if (status != XR_XIR_VALUE_OK) return status;
     }
     if (value) status = hash_prepare_field(&prepared_value, value, map->value_type, admission);
@@ -77,10 +70,12 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
         hash_transfer(&prepared_value, map, probe.entry, true);
     } else {
         XirHash *replacement = NULL;
-        status = hash_clone(map, capacity, probe.found ? probe.entry : SIZE_MAX, admission, &replacement);
+        HashCloneEdit edit = {SIZE_MAX, probe.found ? probe.entry : SIZE_MAX, &prepared_value};
+        status = hash_clone(map, capacity, &edit, admission, &replacement);
         if (status == XR_XIR_VALUE_OK) {
             XrXirValue result = hash_value(replacement);
-            status = hash_append_prepared(replacement, probe.hash, &prepared_key, &prepared_value, admission);
+            if (!probe.found)
+                status = hash_append_prepared(replacement, probe.hash, &prepared_key, &prepared_value, admission);
             if (status == XR_XIR_VALUE_OK) {
                 memcpy(place->payload, &result.payload, sizeof(result.payload));
                 xr_xir_value_drop(&current);

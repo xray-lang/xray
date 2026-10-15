@@ -6,7 +6,11 @@
  *
  * xxir_hash_clone.inc.c - Atomic dense backing relocation and shared copies
  */
-static XrXirValueStatus hash_clone(const XirHash *source, size_t capacity, size_t omit,
+typedef struct HashCloneEdit {
+    size_t omit, replace;
+    StoragePrepared *value;
+} HashCloneEdit;
+static XrXirValueStatus hash_clone(const XirHash *source, size_t capacity, const HashCloneEdit *edit,
     XrXirValueAdmission *admission, XirHash **out) {
     XirHash *copy = NULL;
     XrXirValueStatus status = hash_allocate(source->object.type, capacity, admission, &copy);
@@ -17,14 +21,17 @@ static XrXirValueStatus hash_clone(const XirHash *source, size_t capacity, size_
     if (status == XR_XIR_VALUE_OK) status = storage_pack_begin(admission, source->value_type, &value);
     if (status == XR_XIR_VALUE_OK) {
         for (size_t i = 0; i < source->length; ++i) {
-            if (i == omit) continue;
+            if (edit && i == edit->omit) continue;
             status = hash_charge(admission, 1);
             if (status != XR_XIR_VALUE_OK) break;
             size_t index = copy->length;
             status = storage_pack_copy(&key, hash_span(source, i, false).bytes,
                 (unsigned char *)hash_span(copy, index, false).bytes);
             if (status != XR_XIR_VALUE_OK) break;
-            if (source->value_type != XR_XIR_UNIT)
+            /* Replacing a value retains its original key position and never
+             * acquires the discarded value, including a saturated old owner. */
+            if (edit && i == edit->replace) hash_transfer(edit->value, copy, index, true);
+            else if (source->value_type != XR_XIR_UNIT)
                 status = storage_pack_copy(&value, hash_span(source, i, true).bytes,
                     (unsigned char *)hash_span(copy, index, true).bytes);
             if (status != XR_XIR_VALUE_OK) {

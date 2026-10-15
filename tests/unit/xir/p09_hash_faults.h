@@ -21,13 +21,13 @@ static void hash_fault_setup(HashFaultCase *test, unsigned operation,
     XrXirValue keys[4], values[4];
     for (int64_t i = 0; i < 4; ++i) { keys[i] = integer(i); values[i] = integer(i * 7); }
     CHECK(xr_xir_map_new((XrXirType)256, keys, values, 4, &test->admission, &test->root) == XR_XIR_VALUE_OK);
-    if (operation) CHECK(xr_xir_value_copy(&test->root, &test->alias) == XR_XIR_VALUE_OK);
+    if (operation && operation != 4) CHECK(xr_xir_value_copy(&test->root, &test->alias) == XR_XIR_VALUE_OK);
     test->place = (XrXirValuePlace){(XrXirType)256, &test->root.payload};
     test->key = integer(operation ? 2 : 42); test->value = integer(91);
 }
 static XrXirValueStatus hash_fault_operation(HashFaultCase *test) {
     bool removed = false;
-    if (test->operation == 2)
+    if (test->operation == 2 || test->operation == 4)
         return xr_xir_hash_delete(&test->place, &test->key, &test->admission, &removed);
     if (test->operation == 3) return xr_xir_hash_clear(&test->place, &test->admission);
     return xr_xir_map_set(&test->place, &test->key, &test->value, &test->admission);
@@ -40,17 +40,18 @@ static void hash_fault_unchanged(HashFaultCase *test, int64_t root, const unsign
     CHECK(test->root.payload == root);
     XirHash *map = (XirHash *)object_pointer(&test->root);
     CHECK(map->length == 4 && map->capacity == 8 && map->data == data && !memcmp(data, bytes, size));
-    if (test->operation) CHECK(test->alias.payload == root);
+    if (test->operation && test->operation != 4) CHECK(test->alias.payload == root);
     test->admission.work = 1000000;
     for (int64_t i = 0; i < 4; ++i) hash_expect(&test->root, i, i * 7, true, &test->admission);
 }
 static void hash_faults(XrXirTypeArena *arena, XrXirDomain *domain) {
-    for (unsigned operation = 0; operation < 4; ++operation) {
+    for (unsigned operation = 0; operation < 5; ++operation) {
         HashFaultCase baseline; hash_fault_setup(&baseline, operation, arena, domain);
         size_t before = calls; uint64_t work = baseline.admission.work;
         CHECK(hash_fault_operation(&baseline) == XR_XIR_VALUE_OK);
         size_t sites = calls - before; uint64_t exact = work - baseline.admission.work;
-        hash_fault_finish(&baseline); CHECK(sites > 0 && exact > 1);
+        hash_fault_finish(&baseline); CHECK((sites > 0 || operation == 4) && exact > 1);
+        if (operation == 4) CHECK(!sites);
         for (size_t site = 0; site < sites; ++site) {
             HashFaultCase test; hash_fault_setup(&test, operation, arena, domain);
             XirHash *map = (XirHash *)object_pointer(&test.root); unsigned char bytes[256]; size_t size = 0;
