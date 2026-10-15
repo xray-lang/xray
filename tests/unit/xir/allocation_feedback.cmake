@@ -9,6 +9,9 @@ endforeach()
 add_test(NAME test_xir_allocations_first_case COMMAND test_xir_allocations --first-case)
 set_tests_properties(test_xir_allocations_first_case PROPERTIES
     LABELS "unit;xir;memory;ownership;feedback;equivalence")
+add_test(NAME test_xir_allocation_bookkeeping COMMAND test_xir_allocations --bookkeeping)
+set_tests_properties(test_xir_allocation_bookkeeping PROPERTIES
+    LABELS "unit;xir;memory;ownership;feedback")
 
 # Scheduling estimates come from the current Windows Release and Debug ASan/UBSan runs.
 # They do not change the aggregate runner deadline or any resource limit.

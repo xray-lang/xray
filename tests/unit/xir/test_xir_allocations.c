@@ -93,6 +93,8 @@ static void *counted_realloc(void *pointer, size_t size) {
     return replacement;
 }
 
+#include "xir_allocation_bookkeeping_cases.h"
+
 #undef xr_malloc
 #undef xr_calloc
 #undef xr_free
@@ -736,7 +738,8 @@ static void allocation_phase_matrix(void) {
 int main(int argc,char **argv) {
     CHECK(argc<=2);
     if(argc==2) {
-        if(!strcmp(argv[1],"--semantics"))allocation_phase_selection=0;
+        if(!strcmp(argv[1],"--bookkeeping")) {allocation_bookkeeping_cases();return 0;}
+        else if(!strcmp(argv[1],"--semantics"))allocation_phase_selection=0;
         else if(!strcmp(argv[1],"--producer"))allocation_phase_selection=ALLOCATION_PHASE_COMPILER;
         else if(!strcmp(argv[1],"--runtime"))allocation_phase_selection=ALLOCATION_PHASE_RUNTIME;
         else if(!strcmp(argv[1],"--first-case")) {
