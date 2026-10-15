@@ -139,6 +139,10 @@ int main(int argc,char **argv) {
     CHECK(source_lines[2] && source_lines[3] && source_lines[4] && source_lines[5]);
     CHECK(mapped->points[at].range.line==5 && mapped->points[at].statement);
     CHECK(mapped->points[string-function->parameters].range.line==3);
+    XrXirSourceDebugPoint copied={{123,4,5,6,7},99},preserved=copied;
+    CHECK(xdap_launch_source_point(launch,UINT32_MAX,at,&copied)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!memcmp(&copied,&preserved,sizeof(copied)));
+    CHECK(xdap_launch_source_point(launch,leaf,at,&copied)==XR_XIR_OK && copied.range.line==5 && copied.range.column==5);
     CHECK(xdap_current_breakpoint(launch->control,leaf,at,true)==XR_XIR_VALUE_OK);
     xr_source_compiler_free(compiler);compiler=NULL;
     CHECK(xr_xir_compile_source_product_debug(launch->source)==debug && mapped->points[at].range.line==5);

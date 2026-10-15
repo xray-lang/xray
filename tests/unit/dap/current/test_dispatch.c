@@ -79,7 +79,8 @@ int main(void) {
     request(adapter,"{\"seq\":5,\"type\":\"request\",\"command\":\"stackTrace\",\"arguments\":{\"threadId\":1}}");
     reply=last_response("stackTrace",true);XrJsonValue *frames=xjson_get_array(xjson_get_object(reply,"body"),"stackFrames");
     CHECK(xjson_array_len(frames)==2);XrJsonValue *frame=xjson_array_get(frames,0);
-    CHECK(!strcmp(xjson_get_string(frame,"name"),"leaf") && xjson_get_int(frame,"line")==0 && xjson_get_int(frame,"column")==0);
+    CHECK(!strcmp(xjson_get_string(frame,"name"),"leaf") && xjson_get_int(frame,"line")==2 && xjson_get_int(frame,"column")==9);
+    CHECK(xjson_get_int(xjson_array_get(frames,1),"line")==7);
     XrJsonValue *source=xjson_get_object(frame,"source");
     CHECK(!strcmp(xjson_get_string(source,"name"),"wire_fixture.xr") && strstr(xjson_get_string(source,"path"),"wire_fixture.xr"));
     int64_t handle=xjson_get_int(frame,"id");char position[64];snprintf(position,sizeof(position),"%s",xjson_get_string(frame,"instructionPointerReference"));xjson_free(reply);

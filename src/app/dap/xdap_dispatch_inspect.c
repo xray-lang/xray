@@ -39,6 +39,17 @@ static bool inspect_source(XdapAdapter *s,XdapJsonWriter *body,uint32_t function
     XDAP_TEXT(body,",\"path\":");xdap_json_quote(body,module->path,module->path_length);XDAP_TEXT(body,"}");
     return body->status==XR_XIR_OK;
 }
+static bool inspect_source_position(XdapAdapter *s,XdapJsonWriter *body,uint32_t function,uint32_t instruction,bool required) {
+    XrXirSourceDebugPoint point={0};
+    XrXirStatus status=instruction==UINT32_MAX ? XR_XIR_UNRESOLVED :
+        xdap_launch_source_point(s->launch,function,instruction,&point);
+    if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) { body->status=status;return false; }
+    if (status==XR_XIR_OK || required) {
+        XDAP_TEXT(body,",\"line\":");xdap_json_unsigned(body,(uint32_t)point.range.line);
+        XDAP_TEXT(body,",\"column\":");xdap_json_unsigned(body,(uint32_t)point.range.column);
+    }
+    return body->status==XR_XIR_OK;
+}
 static XrXirStatus inspect_threads(XdapAdapter *s,const XdapRequest *r) {
     uint64_t ids[65]={0};uint32_t count=0;
     if (s->launch && s->configured && !s->terminal) {
@@ -75,7 +86,8 @@ static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {
         if (!xr_xir_string_view(&name,&text,&length)) body.status=XR_XIR_BAD_STRUCTURE;
         if (shown++) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,s->frames[i].handle);
         XDAP_TEXT(&body,",\"name\":");xdap_json_quote(&body,text,length);
-        XDAP_TEXT(&body,",\"line\":0,\"column\":0");
+        if (!inspect_source_position(s,&body,info.function,
+            info.code==XR_XIR_VM_DEBUG_VM ? info.instruction : UINT32_MAX,true)) { xr_xir_value_drop(&name);break; }
         if (!inspect_source(s,&body,info.function,false)) { xr_xir_value_drop(&name);break; }
         if (info.code==XR_XIR_VM_DEBUG_VM && info.instruction!=UINT32_MAX) {
             XDAP_TEXT(&body,",\"instructionPointerReference\":");inspect_position(s,&body,info.function,info.instruction);
@@ -363,6 +375,7 @@ static XrXirStatus inspect_disassemble(XdapAdapter *s,const XdapRequest *r) {
             const XdapCodeFunction *code=&s->launch->functions[function];
             if (resolve && !inspect_symbol(&body,code)) break;
             if (previous_module!=code->module) { if (!inspect_source(s,&body,function,true)) break;previous_module=code->module; }
+            if (!inspect_source_position(s,&body,function,(uint32_t)at-code->first,false)) break;
         }
         XDAP_TEXT(&body,"}");
     }

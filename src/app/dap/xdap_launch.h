@@ -18,6 +18,7 @@ typedef struct XdapCodeFunction {
 typedef struct XdapCodeModule {
     char *identity,*path;
     size_t identity_length,path_length,name_offset;
+    uint32_t query_module;
     XrFingerprint fingerprint;
 } XdapCodeModule;
 typedef struct XdapLaunch {
@@ -55,4 +56,7 @@ XR_FUNC XrXirCallStatus xdap_launch_free(XdapLaunch *);
  * Ambiguous declarations or an overfull bounded result preserve outputs. */
 XR_FUNC XrXirStatus xdap_launch_function_rules(const XdapLaunch *,const XdapFunctionSelection *,
     XrXirVmDebugRule *,uint32_t,uint32_t *);
+/* Copies one authentic source site without driving the target. Unmapped
+ * synthetic instructions return UNRESOLVED and preserve the output. */
+XR_FUNC XrXirStatus xdap_launch_source_point(const XdapLaunch *,uint32_t,uint32_t,XrXirSourceDebugPoint *);
 #endif // XDAP_LAUNCH_H

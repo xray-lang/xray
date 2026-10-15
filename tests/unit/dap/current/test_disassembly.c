@@ -112,7 +112,8 @@ static void disassembly_stopped(DisassemblyFixture *fixture) {
     reply=disassembly_page(fixture,address,0,1,true);frame=xjson_array_get(disassembly_items(reply,1),0);
     CHECK(!strcmp(xjson_get_string(frame,"address"),expected) && !strcmp(xjson_get_string(frame,"symbol"),"leaf"));
     CHECK(!strcmp(xjson_get_string(xjson_get_object(frame,"location"),"name"),"wire_fixture.xr"));
-    CHECK(!xjson_get(frame,"line") && !xjson_get(frame,"column") && !xjson_get(frame,"instructionBytes"));xjson_free(reply);capture.count=0;
+    CHECK(xjson_get_int(frame,"line")==2 && xjson_get_int(frame,"column")==9);
+    CHECK(!xjson_get(frame,"instructionBytes"));xjson_free(reply);capture.count=0;
 }
 static void disassembly_faults(DisassemblyFixture *fixture,bool resources) {
     const char text[]="{\"seq\":7,\"type\":\"request\",\"command\":\"disassemble\",\"arguments\":{\"memoryReference\":\"0\",\"instructionCount\":32,\"resolveSymbols\":true}}";

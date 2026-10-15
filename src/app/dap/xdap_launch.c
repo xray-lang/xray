@@ -92,7 +92,7 @@ static XrXirStatus launch_modules(XdapLaunch *launch,const XrXirModule *module) 
             if (xr_compile_resources_work(launch->resources,length)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
             if (length!=owned->name_length || memcmp(candidate->identity,owned->name,length)) continue;
             if (matched) return XR_XIR_BAD_STRUCTURE;
-            matched=candidate;
+            matched=candidate;launch->modules[m].query_module=q;
         }
         if (!matched) return XR_XIR_BAD_STRUCTURE;
         XdapCodeModule *target=&launch->modules[m];
@@ -159,6 +159,23 @@ static XrXirStatus launch_code(XdapLaunch *launch,const XrXirModule *module) {
         memcpy(launch->instructions+first,source->instructions,(size_t)bytes);first+=source->instruction_count;
     }
     return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xdap_launch_source_point(const XdapLaunch *launch,uint32_t function,uint32_t instruction,
+    XrXirSourceDebugPoint *output) {
+    if (!launch || !output || function>=launch->function_count || instruction>=launch->functions[function].instructions)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(launch->source);
+    if (!debug || debug->function_count!=launch->function_count || !debug->functions) return XR_XIR_BAD_STRUCTURE;
+    const XrXirSourceDebugFunction *mapped=&debug->functions[function];
+    if (mapped->function!=function || mapped->instruction_count!=launch->functions[function].instructions)
+        return XR_XIR_BAD_STRUCTURE;
+    if (xr_compile_resources_work(launch->resources,sizeof(*output))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    if (!mapped->points || !mapped->points[instruction].statement) return XR_XIR_UNRESOLVED;
+    XrXirSourceDebugPoint point=mapped->points[instruction];
+    uint32_t module=launch->functions[function].module;
+    if (module>=launch->module_count || point.range.module!=launch->modules[module].query_module ||
+        point.range.line<=0 || point.range.column<=0) return XR_XIR_BAD_STRUCTURE;
+    *output=point;return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xdap_launch_function_rules(const XdapLaunch *launch,const XdapFunctionSelection *selection,
     XrXirVmDebugRule *output,uint32_t capacity,uint32_t *count) {
