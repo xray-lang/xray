@@ -129,7 +129,8 @@ static bool program_phase(const char *argument,ProgramTrial *trial,unsigned *pha
     return false;
 }
 int main(int argc,char **argv) {
-    bool comptime=false,baseline=false,history=false,program_binding=false;ProgramTrial trial={0};unsigned phase=0;
+    bool comptime=false,baseline=false,history=false,program_binding=false,focused=false;
+    ProgramTrial trial={0};unsigned phase=0;
     for (int i=1;i<argc;++i) {
         if (!strcmp(argv[i],"--comptime")) {CHECK(!comptime);comptime=true;}
         else if (!strcmp(argv[i],"--history")) {CHECK(!history);history=true;}
@@ -138,10 +139,12 @@ int main(int argc,char **argv) {
         else if (!strcmp(argv[i],"--program-array")) {CHECK(!program_binding);program_binding=true;trial.storage=2;history=true;}
         else if (!strcmp(argv[i],"--program-array-const")) {CHECK(!program_binding);program_binding=true;trial.storage=3;history=true;}
         else if (program_phase(argv[i],&trial,&phase)) {CHECK(!program_binding);program_binding=true;history=true;}
+        else if (!strcmp(argv[i],"--focused-fault")) {CHECK(!focused);focused=true;}
         else {CHECK(!strcmp(argv[i],"--baseline") && !baseline);baseline=true;}
     }
     XrCompileResourceStats normal={0},observed={0};
     CHECK(!comptime || !history);
+    CHECK(!focused || (phase && !baseline));
     CHECK(pipeline(&limits,&normal,comptime,history,program_binding,&trial)==XR_XIR_OK);
     size_t total=attempts,first=0,last=total;
     if (phase) {
@@ -158,6 +161,7 @@ int main(int argc,char **argv) {
     CHECK(sites && sites<20000);
     if (baseline) return 0;
     for (size_t i=first;i<last;++i) {
+        if (focused && i!=first && i!=last-1) continue;
         attempts=0;fail_at=i;XrXirStatus status=pipeline(&limits,&observed,comptime,history,program_binding,&trial);
         if (status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"site=%zu status=%u\n",i,(unsigned)status);
         CHECK(status==XR_XIR_OUT_OF_MEMORY);
@@ -174,6 +178,7 @@ int main(int argc,char **argv) {
         attempts=0;CHECK(pipeline(&short_limit,&observed,comptime,history,program_binding,&trial)==XR_XIR_BUDGET);
     }
     CHECK(!physical);
-    puts("Source generation full physical FI, staged old-binding preservation, exact/minus-one budgets and zero physical allocations passed");
+    if (focused) printf("Source generation phase boundary faults at %zu/%zu, exact/minus-one budgets and zero physical allocations passed\n",first,last-1);
+    else puts("Source generation full physical FI, staged old-binding preservation, exact/minus-one budgets and zero physical allocations passed");
     return 0;
 }

@@ -708,4 +708,10 @@ foreach(storage_kind IN ITEMS array array-const class-first class-abort class-pu
         COMMAND test_xir_p10_source_generation_resources --program-${storage_kind} --baseline)
     set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_baseline PROPERTIES
         TIMEOUT 60 LABELS "unit;xir;p10;source;resources;generation;ownership;baseline")
+    if(storage_kind MATCHES "^class")
+        add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_boundary_fault
+            COMMAND test_xir_p10_source_generation_resources --program-${storage_kind} --focused-fault)
+        set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_boundary_fault PROPERTIES
+            TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+    endif()
 endforeach()
