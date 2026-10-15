@@ -18,18 +18,23 @@ static uint32_t inspect_frame(const XdapAdapter *s,uint64_t handle,bool scope) {
         if ((scope ? s->frames[i].scope : s->frames[i].handle)==handle) return i;
     return UINT32_MAX;
 }
-static bool inspect_position(XdapJsonWriter *w,uint32_t function,uint32_t instruction) {
-    char position[64];int count=snprintf(position,sizeof(position),"f%u:i%u",function,instruction);
-    return count>0 && xdap_json_quote(w,position,(size_t)count);
+static bool inspect_position(XdapAdapter *s,XdapJsonWriter *w,uint32_t function,uint32_t instruction) {
+    if (!s->launch || function>=s->launch->function_count || instruction>=s->launch->functions[function].instructions) {
+        w->status=XR_XIR_BAD_STRUCTURE;return false;
+    }
+    char position[32];uint64_t address=(uint64_t)s->launch->functions[function].first+instruction;
+    if (xr_compile_resources_work(w->resources,sizeof(position))!=XR_COMPILE_RESOURCE_OK) { w->status=XR_XIR_BUDGET;return false; }
+    int count=snprintf(position,sizeof(position),"%llu",(unsigned long long)address);
+    return count>0 && (size_t)count<sizeof(position) && xdap_json_quote(w,position,(size_t)count);
 }
-static bool inspect_source(XdapAdapter *s,XdapJsonWriter *body,uint32_t function) {
+static bool inspect_source(XdapAdapter *s,XdapJsonWriter *body,uint32_t function,bool location) {
     if (!s->launch || function>=s->launch->function_count) { body->status=XR_XIR_BAD_STRUCTURE;return false; }
     uint32_t index=s->launch->functions[function].module;
     if (index>=s->launch->module_count) { body->status=XR_XIR_BAD_STRUCTURE;return false; }
     const XdapCodeModule *module=&s->launch->modules[index];
     if (!module->path || !module->path_length) return true;
     if (module->name_offset>module->path_length) { body->status=XR_XIR_BAD_STRUCTURE;return false; }
-    XDAP_TEXT(body,",\"source\":{\"name\":");
+    if (location) XDAP_TEXT(body,",\"location\":{\"name\":");else XDAP_TEXT(body,",\"source\":{\"name\":");
     xdap_json_quote(body,module->path+module->name_offset,module->path_length-module->name_offset);
     XDAP_TEXT(body,",\"path\":");xdap_json_quote(body,module->path,module->path_length);XDAP_TEXT(body,"}");
     return body->status==XR_XIR_OK;
@@ -71,9 +76,9 @@ static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {
         if (shown++) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,s->frames[i].handle);
         XDAP_TEXT(&body,",\"name\":");xdap_json_quote(&body,text,length);
         XDAP_TEXT(&body,",\"line\":0,\"column\":0");
-        if (!inspect_source(s,&body,info.function)) { xr_xir_value_drop(&name);break; }
+        if (!inspect_source(s,&body,info.function,false)) { xr_xir_value_drop(&name);break; }
         if (info.code==XR_XIR_VM_DEBUG_VM && info.instruction!=UINT32_MAX) {
-            XDAP_TEXT(&body,",\"instructionPointerReference\":");inspect_position(&body,info.function,info.instruction);
+            XDAP_TEXT(&body,",\"instructionPointerReference\":");inspect_position(s,&body,info.function,info.instruction);
         } else XDAP_TEXT(&body,",\"presentationHint\":\"subtle\"");
         XDAP_TEXT(&body,"}");xr_xir_value_drop(&name);
     }
@@ -274,41 +279,91 @@ static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest
     s->function_breakpoint_count=logical_count;status=xdap_dispatch_send_prepared(s,&response);
     xdap_json_writer_free(&response);return status;
 }
+/* Instruction addresses are indices in the owned flattened VM display code,
+ * not host pointers or byte offsets into a native code lease. */
+static XrXirStatus inspect_address(const XdapRequest *r,uint32_t reference,uint32_t *output) {
+    const XdapJsonNode *node=&r->document.nodes[reference];
+    if (node->kind!=XDAP_JSON_STRING || !node->length || node->length>10) return XR_XIR_BAD_STRUCTURE;
+    if (xr_compile_resources_work(r->document.resources,node->length+sizeof(*output))!=XR_COMPILE_RESOURCE_OK)
+        return XR_XIR_BUDGET;
+    size_t at=0;uint32_t base=10,value=0;
+    if (node->length>=2 && node->text[0]=='0' && node->text[1]=='x') { base=16;at=2; }
+    if (at==node->length) return XR_XIR_BAD_STRUCTURE;
+    for (;at<node->length;++at) {
+        unsigned char byte=(unsigned char)node->text[at];uint32_t digit=UINT32_MAX;
+        if (byte>='0' && byte<='9') digit=(uint32_t)(byte-'0');
+        else if (base==16 && byte>='a' && byte<='f') digit=(uint32_t)(byte-'a')+10;
+        else if (base==16 && byte>='A' && byte<='F') digit=(uint32_t)(byte-'A')+10;
+        if (digit>=base || value>(UINT32_MAX-digit)/base) return XR_XIR_BAD_STRUCTURE;
+        value=value*base+digit;
+    }
+    *output=value;return XR_XIR_OK;
+}
+static bool inspect_symbol(XdapJsonWriter *body,const XdapCodeFunction *code) {
+    size_t length=0;
+    for (;;) {
+        if (xr_compile_resources_work(body->resources,1)!=XR_COMPILE_RESOURCE_OK) { body->status=XR_XIR_BUDGET;return false; }
+        if (!code->name[length]) break;
+        ++length;
+    }
+    XDAP_TEXT(body,",\"symbol\":");return xdap_json_quote(body,code->name,length);
+}
 static XrXirStatus inspect_disassemble(XdapAdapter *s,const XdapRequest *r) {
     if (!s->launch) return xdap_dispatch_response(s,r,false,NULL,"No admitted program");
-    uint32_t reference=0,offset=0;uint64_t count=0;
+    uint32_t reference=0,offset=0,count_node=0,byte_offset=0,symbols=0;uint64_t count=0;
     XrXirStatus status=xdap_dispatch_argument(r,"memoryReference",&reference);
-    if (status==XR_XIR_OK) status=xdap_dispatch_number(r,"instructionCount",0,&count);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"instructionCount",&count_node);
+    if (status==XR_XIR_OK && count_node) status=xdap_json_u64(&r->document,count_node,&count);
     if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"instructionOffset",&offset);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"offset",&byte_offset);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"resolveSymbols",&symbols);
     if (status!=XR_XIR_OK) return status;
-    if (!reference || r->document.nodes[reference].kind!=XDAP_JSON_STRING || count>256)
+    if (!reference || !count_node || count>256 || (symbols && r->document.nodes[symbols].kind!=XDAP_JSON_BOOL))
         return xdap_dispatch_response(s,r,false,NULL,"Invalid instruction request");
-    uint32_t function=0,instruction=0;char extra=0;
-    if (sscanf(r->document.nodes[reference].text,"f%u:i%u%c",&function,&instruction,&extra)!=2 ||
-        function>=s->launch->function_count)
+    uint32_t instruction=0;status=inspect_address(r,reference,&instruction);
+    if (status==XR_XIR_BUDGET) return status;
+    if (status!=XR_XIR_OK || instruction>=s->launch->instruction_count)
         return xdap_dispatch_response(s,r,false,NULL,"Unknown instruction reference");
-    int64_t displacement=0;
+    int64_t displacement=0,bytes=0;
     if (offset) { status=xdap_json_i64(&r->document,offset,&displacement);if (status!=XR_XIR_OK) return status; }
-    uint64_t bytes=0;status=xdap_dispatch_number(r,"offset",0,&bytes);
+    if (byte_offset) status=xdap_json_i64(&r->document,byte_offset,&bytes);
     if (status!=XR_XIR_OK) return status;
     if (bytes || displacement<-256 || displacement>256)
         return xdap_dispatch_response(s,r,false,NULL,"IR positions accept bounded instruction offsets");
-    XdapCodeFunction *code=&s->launch->functions[function];
+    bool resolve=symbols && r->document.nodes[symbols].boolean;
+    uint32_t function=0,previous_module=UINT32_MAX;
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"instructions\":[");
     for (uint64_t i=0;i<count;++i) {
+        if (xr_compile_resources_work(s->resources,384)!=XR_COMPILE_RESOURCE_OK) { body.status=XR_XIR_BUDGET;break; }
         int64_t at=(int64_t)instruction+displacement+(int64_t)i;
-        char address[64],description[160];
-        int address_size=snprintf(address,sizeof(address),"f%u:i%lld",function,(long long)at);
-        bool valid=at>=0 && (uint64_t)at<code->instructions;int text_size=0;
+        char address[32],description[384];int address_size=snprintf(address,sizeof(address),"%lld",(long long)at);
+        bool valid=at>=0 && (uint64_t)at<s->launch->instruction_count;int text_size=0;
         if (valid) {
-            const XrXirInstruction *op=&s->launch->instructions[code->first+(uint32_t)at];
-            text_size=snprintf(description,sizeof(description),"%s type=%u args=(%u,%u) immediate=%lld",
-                xr_xir_op_name(op->op),op->type,op->args[0],op->args[1],(long long)op->immediate);
+            while (function<s->launch->function_count) {
+                if (xr_compile_resources_work(s->resources,1)!=XR_COMPILE_RESOURCE_OK) { body.status=XR_XIR_BUDGET;break; }
+                const XdapCodeFunction *code=&s->launch->functions[function];
+                if ((uint64_t)at>=code->first && (uint64_t)at-code->first<code->instructions) break;
+                ++function;
+            }
+            if (body.status!=XR_XIR_OK) break;
+            if (function==s->launch->function_count) { body.status=XR_XIR_BAD_STRUCTURE;break; }
+            const XrXirInstruction *op=&s->launch->instructions[(uint32_t)at];
+            text_size=snprintf(description,sizeof(description),"%s type=%u args=(%u,%u) targets=(%u,%u) immediate=%lld type_arguments=(%u,%u)",
+                xr_xir_op_name(op->op),op->type,op->args[0],op->args[1],op->targets[0],op->targets[1],
+                (long long)op->immediate,op->type_arguments[0],op->type_arguments[1]);
         } else { memcpy(description,"invalid",8);text_size=7; }
+        if (address_size<0 || (size_t)address_size>=sizeof(address) || text_size<0 || (size_t)text_size>=sizeof(description)) {
+            body.status=XR_XIR_BAD_STRUCTURE;break;
+        }
         if (i) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"address\":");
         xdap_json_quote(&body,address,(size_t)address_size);XDAP_TEXT(&body,",\"instruction\":");
         xdap_json_quote(&body,description,(size_t)text_size);
         if (!valid) XDAP_TEXT(&body,",\"presentationHint\":\"invalid\"");
+        else {
+            const XdapCodeFunction *code=&s->launch->functions[function];
+            if (resolve && !inspect_symbol(&body,code)) break;
+            if (previous_module!=code->module) { if (!inspect_source(s,&body,function,true)) break;previous_module=code->module; }
+        }
         XDAP_TEXT(&body,"}");
     }
     XDAP_TEXT(&body,"]}");return inspect_finish(s,r,&body);
