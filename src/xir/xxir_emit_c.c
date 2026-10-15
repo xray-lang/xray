@@ -684,8 +684,9 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
         if(op->op == XR_XIR_CLASS_SET) {
             EMIT_LITERAL(buffer," value = ");emit_value(buffer,function,layout,op->args[1]);EMIT_LITERAL(buffer,";\n");
             EMIT_FORMAT(buffer, et_105640b30c89915c," status=xr_xir_class_set(&receiver,%uu,&value,xr_xir_call_admission(view));\n",(uint32_t)op->immediate);
-        } else EMIT_FORMAT(buffer, et_a81a2bf8209a647d," status=xr_xir_value_admit(&receiver,(XrXirType)receiver.type,xr_xir_call_admission(view));\n"
-            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",(uint32_t)op->immediate);
+        } else append(buffer," status=xr_xir_value_admit(&receiver,(XrXirType)%uu,xr_xir_call_admission(view));\n"
+            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",
+            (uint32_t)xr_xir_operand_type(function,op->args[0]),(uint32_t)op->immediate);
     }
     EMIT_STATIC(buffer, es_ee88b60d69c79771," if(status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         " status == XR_XIR_VALUE_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"

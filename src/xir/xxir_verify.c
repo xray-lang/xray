@@ -108,7 +108,7 @@ static uint32_t operand_count(const XrXirFunction *function,const XrXirInstructi
 #include "xxir_cell_provenance.inc.c"
 
 static XrXirStatus declaration_instruction(const XrXirFunction *function,
-                                           const XrXirInstruction *op, const XrXirModule *module) {
+    const XrXirInstruction *op,const XrXirModule *module,XrXirCompileContext *remaining) {
     const XrXirDeclarations *d = module->declarations;
     if (op->op == XR_XIR_CONST_STRING)
         return d && op->immediate >= 0 && (uint64_t) op->immediate < d->literal_count ?
@@ -119,7 +119,13 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     if (!d || op->immediate < 0 || (uint64_t) op->immediate >= d->slot_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirSlot *slot = &d->slots[op->immediate];
     uint32_t caller = (uint32_t) (function - module->functions);
-    if (d->functions[caller].module != slot->module) return XR_XIR_BAD_STRUCTURE;
+    uint32_t from=d->functions[caller].module;
+    if (from!=slot->module) {
+        if (op->op==XR_XIR_SLOT_INIT || !xr_xir_module_same_scope(d,from,slot->module))
+            return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(remaining,(uint64_t)d->modules[from].dependency_count+1)) return XR_XIR_BUDGET;
+        if (!xr_xir_module_imports(d,from,slot->module)) return XR_XIR_BAD_STRUCTURE;
+    }
     if ((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_SLOT_PLACE) && op->type != slot->type) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_SLOT_INIT && d->modules[slot->module].initializer != caller)
         return XR_XIR_BAD_STRUCTURE;
@@ -141,7 +147,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     const OpRule *rule = &op_rules[op->op];
     if (!(rule->stages & stage))
         return XR_XIR_BAD_STAGE;
-    XrXirStatus declared = declaration_instruction(function, op, module);
+    XrXirStatus declared = declaration_instruction(function,op,module,remaining);
     if (declared != XR_XIR_OK) return declared;
     if(op->op==XR_XIR_SLOT_GROUP_INIT) {
         XrXirStatus grouped=slot_group_shape(function,op,module,remaining);

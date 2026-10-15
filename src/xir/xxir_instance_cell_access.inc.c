@@ -15,6 +15,14 @@ static bool instance_cell_work(XrXirCallView *view, uint64_t work) {
     admission->work -= work;
     return admission->domain && xr_xir_domain_work(admission->domain, work);
 }
+static XrXirCallStatus instance_slot_scope(XrXirCallView *view,const XrXirInstance *instance,uint32_t module) {
+    const XrXirDeclarations *d=instance->program->declarations;
+    uint32_t from=d->functions[xr_xir_call_current_entry(view->activation)].module;
+    if (from==module) return XR_XIR_CALL_READY;
+    if (!xr_xir_module_same_scope(d,from,module)) return XR_XIR_CALL_BAD_STATE;
+    if (!instance_cell_work(view,(uint64_t)d->modules[from].dependency_count+1)) return XR_XIR_CALL_LIMIT;
+    return xr_xir_module_imports(d,from,module) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
+}
 static bool instance_cell_published(const XrXirInstance *instance, uint32_t slot,
     const XrXirValue *cell) {
     const XrXirDeclarations *d = instance->program->declarations;
