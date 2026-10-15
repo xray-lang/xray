@@ -21,7 +21,10 @@ struct XrCompileResources {
     XrCompileResourceLimits limits;
     XrCompileResourceStats stats;
     uint64_t references;
+    XrCompileCancelPoll cancel_poll;
+    const void *cancel_context;
     atomic_bool locked;
+    bool cancelled;
 };
 
 /* Every caller already owns a reference while waiting for this lock. */
@@ -79,6 +82,9 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
     resources->limits = *limits;
     resources->stats = (XrCompileResourceStats) {1, sizeof(*resources), sizeof(*resources), sizeof(*resources), 1};
     resources->references = 1;
+    resources->cancel_poll = NULL;
+    resources->cancel_context = NULL;
+    resources->cancelled = false;
     atomic_init(&resources->locked, false);
     *output = resources;
     return XR_COMPILE_RESOURCE_OK;
@@ -114,7 +120,44 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
     return XR_COMPILE_RESOURCE_OK;
 }
 
+static bool compile_cancelled_locked(XrCompileResources *resources) {
+    if (resources->cancel_poll && !resources->cancelled)
+        resources->cancelled = resources->cancel_poll(resources->cancel_context);
+    return resources->cancelled;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_begin_cancel(XrCompileResources *resources,
+    XrCompileCancelPoll poll, const void *context) {
+    if (!resources || !poll) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    compile_lock(resources);
+    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    if (!resources->cancel_poll) {
+        resources->cancel_poll = poll;
+        resources->cancel_context = context;
+        resources->cancelled = false;
+        status = XR_COMPILE_RESOURCE_OK;
+    }
+    compile_unlock(resources);
+    return status;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_end_cancel(XrCompileResources *resources,
+    XrCompileCancelPoll poll, const void *context) {
+    if (!resources || !poll) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    compile_lock(resources);
+    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    if (resources->cancel_poll == poll && resources->cancel_context == context) {
+        status = compile_cancelled_locked(resources) ? XR_COMPILE_RESOURCE_CANCELLED : XR_COMPILE_RESOURCE_OK;
+        resources->cancel_poll = NULL;
+        resources->cancel_context = NULL;
+        resources->cancelled = false;
+    }
+    compile_unlock(resources);
+    return status;
+}
+
 static XrCompileResourceStatus compile_work_locked(XrCompileResources *resources, uint64_t units) {
+    if (compile_cancelled_locked(resources)) return XR_COMPILE_RESOURCE_CANCELLED;
     if (units > resources->limits.work - resources->stats.work) return XR_COMPILE_RESOURCE_BUDGET;
     resources->stats.work += units;
     return XR_COMPILE_RESOURCE_OK;
@@ -155,6 +198,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileRes
 
 static XrCompileResourceStatus compile_allocation_admit_locked(
     XrCompileResources *resources, size_t bytes, uint64_t payload_work) {
+    if (compile_cancelled_locked(resources)) return XR_COMPILE_RESOURCE_CANCELLED;
     if (bytes > SIZE_MAX - sizeof(CompileAllocation)) return XR_COMPILE_RESOURCE_BUDGET;
     size_t charged = sizeof(CompileAllocation) + bytes;
     uint64_t remaining_work = resources->limits.work - resources->stats.work;
