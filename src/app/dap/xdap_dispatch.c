@@ -103,8 +103,12 @@ XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *s) {
     xdap_dispatch_clear_stop(s);XrXirCallStatus status=xdap_launch_free(s->launch);
     if (status==XR_XIR_CALL_BUSY) return status;
     xr_xir_call_result_drop(&s->outcome);
-    for (uint32_t i=0;i<s->function_breakpoint_count;++i) xr_compile_resources_free(s->function_breakpoints[i]);
-    for (uint32_t i=0;i<s->source_breakpoint_count;++i) xr_compile_resources_free(s->source_breakpoints[i].identity);
+    for (uint32_t i=0;i<s->function_breakpoint_count;++i) {
+        xr_compile_resources_free(s->function_breakpoints[i]);xdap_predicate_free(&s->function_predicates[i]);
+    }
+    for (uint32_t i=0;i<s->source_breakpoint_count;++i) {
+        xr_compile_resources_free(s->source_breakpoints[i].identity);xdap_predicate_free(&s->source_breakpoints[i].predicate);
+    }
     xr_source_compiler_free(s->compiler);
     xr_xir_domain_drop(s->config.observer_metadata);xr_compile_resources_free(s);return status;
 }
@@ -140,6 +144,7 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
     XDAP_TEXT(&body,"{\"supportsConfigurationDoneRequest\":true,\"supportsFunctionBreakpoints\":true,"
         "\"supportsTerminateRequest\":true,\"supportsRestartRequest\":true,\"supportsSteppingGranularity\":true,\"supportsDisassembleRequest\":true,"
         "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,\"supportsHitConditionalBreakpoints\":true,"
+        "\"supportsConditionalBreakpoints\":true,\"supportsLogPoints\":true,"
         "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false}]}");
     XrXirStatus status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }
@@ -343,6 +348,11 @@ XR_FUNC XrXirStatus xdap_adapter_step(XdapAdapter *s,uint64_t quantum) {
     if (status!=XR_XIR_OK) goto done;
     if (result.state==XDAP_CURRENT_STOPPED) {
         status=dispatch_value(xdap_current_snapshot(s->launch->control,&s->snapshot));if (status!=XR_XIR_OK) goto done;
+        bool visible=false;status=xdap_predicates_probe(s,&visible);
+        if (status!=XR_XIR_OK || !visible) {
+            if (status==XR_XIR_OK) status=dispatch_value(xdap_current_continue_filtered(s->launch->control,result.debug_epoch));
+            xr_xir_vm_debug_snapshot_drop(s->snapshot);s->snapshot=NULL;goto done;
+        }
         s->depth=xr_xir_vm_debug_snapshot_depth(s->snapshot);
         if (s->depth>64 || s->next_handle>INT32_MAX-s->depth*2) { status=XR_XIR_BUDGET;goto done; }
         for (uint32_t i=0;i<s->depth;++i) {

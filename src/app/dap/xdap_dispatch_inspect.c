@@ -209,78 +209,6 @@ static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
     }
     return inspect_lexical(s,r,frame,start,count);
 }
-static XrXirStatus inspect_function_breakpoints(XdapAdapter *s,const XdapRequest *r) {
-    if (!s->launch || s->running || s->terminal) return xdap_dispatch_response(s,r,false,NULL,"No configurable program");
-    uint32_t list=0;XrXirStatus status=xdap_dispatch_argument(r,"breakpoints",&list);if (status!=XR_XIR_OK) return status;
-    if (!list || r->document.nodes[list].kind!=XDAP_JSON_ARRAY || r->document.nodes[list].count>32)
-        return xdap_dispatch_response(s,r,false,NULL,"Invalid function breakpoint list");
-    XrXirVmDebugRule rules[32]={{0}},saved[32]={{0}};uint32_t location_count=0,logical_count=0;
-    bool verified[32]={0};uint32_t item_number=0;
-    XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"breakpoints\":[");
-    for (uint32_t item=r->document.nodes[list].first;item;item=r->document.nodes[item].next,++item_number) {
-        uint32_t name=0,condition=0,hits=0;
-        status=xdap_json_member(&r->document,item,"name",&name);
-        if (status==XR_XIR_OK) status=xdap_json_member(&r->document,item,"condition",&condition);
-        if (status==XR_XIR_OK) status=xdap_json_member(&r->document,item,"hitCondition",&hits);
-        if (status!=XR_XIR_OK || !name || r->document.nodes[name].kind!=XDAP_JSON_STRING) {
-            xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Invalid function breakpoint"); }
-        if ((condition && r->document.nodes[condition].kind!=XDAP_JSON_STRING) ||
-            (hits && r->document.nodes[hits].kind!=XDAP_JSON_STRING)) {
-            xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Invalid function breakpoint predicate");
-        }
-        XrXirVmDebugRule rule={0};
-        if (hits) {
-            status=xdap_hit_parse(s->resources,r->document.nodes[hits].text,r->document.nodes[hits].length,&rule);
-            if (status!=XR_XIR_OK) { xdap_json_writer_free(&body);
-                return status==XR_XIR_BAD_STRUCTURE ? xdap_dispatch_response(s,r,false,NULL,"Invalid hit count predicate") : status; }
-        }
-        uint32_t matches=0;rule.group=logical_count+1;
-        if (!condition || !r->document.nodes[condition].length) {
-            XdapFunctionSelection selection={r->document.nodes[name].text,r->document.nodes[name].length,rule};
-            status=xdap_launch_function_rules(s->launch,&selection,rules+location_count,32-location_count,&matches);
-            if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) { xdap_json_writer_free(&body);return status; }
-            if (status==XR_XIR_UNRESOLVED) matches=0;
-        }
-        if (matches) {
-            verified[item_number]=true;saved[logical_count++]=rules[location_count];location_count+=matches;
-        }
-        if (item_number) XDAP_TEXT(&body,",");
-        if (verified[item_number]) XDAP_TEXT(&body,"{\"verified\":true}");
-        else XDAP_TEXT(&body,"{\"verified\":false,\"message\":\"Unknown, ambiguous, or conditional function breakpoint\"}");
-    }
-    XDAP_TEXT(&body,"]}");
-    if (body.status!=XR_XIR_OK) { status=body.status;xdap_json_writer_free(&body);return status; }
-    char *names[32]={0};
-    for (uint32_t i=0;i<logical_count;++i) {
-        const char *source=s->launch->functions[saved[i].location.function].source_name;size_t length=strlen(source);
-        XrCompileResourceStatus allocated=xr_compile_resources_alloc(s->resources,length+1,(void **)&names[i]);
-        if (allocated!=XR_COMPILE_RESOURCE_OK || xr_compile_resources_work(s->resources,length+1)!=XR_COMPILE_RESOURCE_OK) {
-            for (uint32_t j=0;j<=i;++j) xr_compile_resources_free(names[j]);xdap_json_writer_free(&body);
-            return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
-        }
-        memcpy(names[i],source,length+1);
-    }
-    XdapBreakpointSet combined={names,saved,logical_count,s->source_breakpoints,s->source_breakpoint_count};
-    status=xdap_breakpoints_collect(s->launch,&combined,rules,&location_count);
-    if (status!=XR_XIR_OK) {
-        for (uint32_t i=0;i<logical_count;++i) xr_compile_resources_free(names[i]);xdap_json_writer_free(&body);return status;
-    }
-    XdapJsonWriter response={0};status=xdap_dispatch_prepare_response(s,r,true,&body,NULL,&response);
-    xdap_json_writer_free(&body);
-    if (status!=XR_XIR_OK) { for (uint32_t i=0;i<logical_count;++i) xr_compile_resources_free(names[i]);return status; }
-    XrXirValueStatus installed=xdap_current_rules_replace(s->launch->control,rules,location_count);
-    if (installed!=XR_XIR_VALUE_OK) {
-        for (uint32_t i=0;i<logical_count;++i) xr_compile_resources_free(names[i]);xdap_json_writer_free(&response);
-        return xdap_dispatch_response(s,r,false,NULL,"Breakpoint admission failed");
-    }
-    for (uint32_t i=0;i<s->function_breakpoint_count;++i) xr_compile_resources_free(s->function_breakpoints[i]);
-    memset(s->function_breakpoints,0,sizeof(s->function_breakpoints));
-    memset(s->function_rules,0,sizeof(s->function_rules));
-    for (uint32_t i=0;i<logical_count;++i) s->function_breakpoints[i]=names[i];
-    memcpy(s->function_rules,saved,(size_t)logical_count*sizeof(*saved));
-    s->function_breakpoint_count=logical_count;status=xdap_dispatch_send_prepared(s,&response);
-    xdap_json_writer_free(&response);return status;
-}
 /* Instruction addresses are indices in the owned flattened VM display code,
  * not host pointers or byte offsets into a native code lease. */
 static XrXirStatus inspect_address(const XdapRequest *r,uint32_t reference,uint32_t *output) {
@@ -413,7 +341,7 @@ XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,co
     if (!strcmp(command,"stackTrace")) return inspect_stack(s,r);
     if (!strcmp(command,"scopes")) return inspect_scopes(s,r);
     if (!strcmp(command,"variables")) return inspect_variables(s,r);
-    if (!strcmp(command,"setFunctionBreakpoints")) return inspect_function_breakpoints(s,r);
+    if (!strcmp(command,"setFunctionBreakpoints")) return xdap_dispatch_function_breakpoints(s,r);
     if (!strcmp(command,"setBreakpoints")) return xdap_dispatch_source_breakpoints(s,r);
     if (!strcmp(command,"evaluate")) return inspect_evaluate(s,r);
     if (!strcmp(command,"setVariable"))

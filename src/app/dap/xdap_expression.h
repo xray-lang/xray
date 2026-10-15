@@ -19,4 +19,7 @@ typedef struct XdapExpressionRequest {
  * inference, closed proof and finite CTFE. No target execution or write occurs.
  * Unsupported expressions fail with the empty output unchanged. */
 XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *,XrXirValue *);
+/* Syntax and supported expression shape only. Name/type admission still uses
+ * the actual stopped frame; this check never supplies placeholder values. */
+XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *,const char *,size_t);
 #endif // XDAP_EXPRESSION_H

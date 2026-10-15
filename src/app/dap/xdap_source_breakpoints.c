@@ -141,14 +141,19 @@ static XrXirStatus source_request_point(XdapAdapter *s,const XdapRequest *reques
     SourceSelection selection={module,row,col,{0}};
     if (hits) status=xdap_hit_parse(s->resources,request->document.nodes[hits].text,request->document.nodes[hits].length,&selection.rule);
     if (status!=XR_XIR_OK) return status;
-    if ((condition && request->document.nodes[condition].length) || (log && request->document.nodes[log].length) || module==UINT32_MAX)
-        return XR_XIR_UNRESOLVED;
+    if (module==UINT32_MAX) return XR_XIR_UNRESOLVED;
     XrXirVmDebugRule rules[32]={{0}};uint32_t matches=0;
     status=source_rules(s->launch,&selection,rules,32,&matches,resolved);
     if (status!=XR_XIR_OK || !matches) return status==XR_XIR_OK ? XR_XIR_UNRESOLVED : status;
+    XdapBreakpointPredicate predicate={0};status=xdap_predicate_prepare(s,request,condition,log,&predicate);
+    if (status!=XR_XIR_OK) return status;
     const XdapCodeModule *source=&s->launch->modules[module];char *identity=NULL;
-    status=source_identity_copy(s,module,&identity);if (status!=XR_XIR_OK) return status;
-    *output=(XdapSourceBreakpoint){identity,source->identity_length,(uint32_t)row,(uint32_t)col,selection.rule};return XR_XIR_OK;
+    status=source_identity_copy(s,module,&identity);
+    if (status!=XR_XIR_OK) { xdap_predicate_free(&predicate);return status; }
+    *output=(XdapSourceBreakpoint){identity,source->identity_length,row,col,selection.rule,predicate};return XR_XIR_OK;
+}
+static void source_breakpoint_free(XdapSourceBreakpoint *entry) {
+    xr_compile_resources_free(entry->identity);xdap_predicate_free(&entry->predicate);*entry=(XdapSourceBreakpoint){0};
 }
 static bool source_same_module(const XdapSourceBreakpoint *entry,const XdapCodeModule *module) {
     return module && entry->identity_length==module->identity_length &&
@@ -188,10 +193,13 @@ XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *s,const XdapRe
     for (uint32_t item=request->document.nodes[list].first;item;item=request->document.nodes[item].next,++number) {
         XdapSourceBreakpoint entry={0};XrXirSourceDebugPoint point={0};
         status=source_request_point(s,request,item,module,&entry,&point);
-        if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) goto done;
+        if (status!=XR_XIR_OK && status!=XR_XIR_UNRESOLVED) {
+            if (status==XR_XIR_BAD_TYPE) status=xdap_dispatch_response(s,request,false,NULL,"Invalid source breakpoint expression or log template");
+            goto done;
+        }
         if (number) XDAP_TEXT(&body,",");
         if (status==XR_XIR_OK) {
-            if (used==32-s->function_breakpoint_count) { xr_compile_resources_free(entry.identity);status=XR_XIR_BUDGET;goto done; }
+            if (used==32-s->function_breakpoint_count) { source_breakpoint_free(&entry);status=XR_XIR_BUDGET;goto done; }
             fresh[used++]=entry;XDAP_TEXT(&body,"{\"verified\":true,\"line\":");xdap_json_unsigned(&body,(uint32_t)point.range.line);
             XDAP_TEXT(&body,",\"column\":");xdap_json_unsigned(&body,(uint32_t)point.range.column);XDAP_TEXT(&body,"}");
         } else XDAP_TEXT(&body,"{\"verified\":false,\"message\":\"No admitted executable source site or predicate\"}");
@@ -206,12 +214,12 @@ XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *s,const XdapRe
     if (status==XR_XIR_OK && xdap_current_rules_replace(s->launch->control,rules,count)!=XR_XIR_VALUE_OK) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
         for (uint32_t i=0;i<s->source_breakpoint_count;++i)
-            if (replaced[i]) xr_compile_resources_free(s->source_breakpoints[i].identity);
+            if (replaced[i]) source_breakpoint_free(&s->source_breakpoints[i]);
         memcpy(s->source_breakpoints,fresh,(size_t)used*sizeof(*fresh));s->source_breakpoint_count=used;kept=used;
         status=xdap_dispatch_send_prepared(s,&response);
     }
     xdap_json_writer_free(&response);
 done:
-    for (uint32_t i=kept;i<used;++i) xr_compile_resources_free(fresh[i].identity);
+    for (uint32_t i=kept;i<used;++i) source_breakpoint_free(&fresh[i]);
     xdap_json_writer_free(&body);return status;
 }

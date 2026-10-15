@@ -42,17 +42,42 @@ static bool expression_binding(ExpressionState *state,const char *name) {
     }
     state->status=XR_XIR_UNRESOLVED;return false;
 }
+static bool expression_node_allowed(const AstNode *node) {
+    return node && (node->type==AST_VARIABLE || node->type==AST_LITERAL_INT || node->type==AST_LITERAL_TRUE || node->type==AST_LITERAL_FALSE ||
+        node->type==AST_GROUPING || node->type==AST_TERNARY ||
+        (node->type>=AST_BINARY_ADD && node->type<=AST_BINARY_OR) ||
+        (node->type>=AST_UNARY_NEG && node->type<=AST_UNARY_BNOT));
+}
 static bool expression_visit(AstNode *node,void *context) {
     ExpressionState *state=context;
     if (!node || state->depth==128) { state->status=XR_XIR_BUDGET;return false; }
     if (xr_compile_resources_work(state->request->lexical->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
     if (node->type==AST_VARIABLE) return expression_binding(state,node->as.variable.name);
-    bool allowed=node->type==AST_LITERAL_INT || node->type==AST_LITERAL_TRUE || node->type==AST_LITERAL_FALSE ||
-        node->type==AST_GROUPING || node->type==AST_TERNARY ||
-        (node->type>=AST_BINARY_ADD && node->type<=AST_BINARY_OR) ||
-        (node->type>=AST_UNARY_NEG && node->type<=AST_UNARY_BNOT);
-    if (!allowed) { state->status=XR_XIR_BAD_TYPE;return false; }
+    if (!expression_node_allowed(node)) { state->status=XR_XIR_BAD_TYPE;return false; }
     ++state->depth;bool ok=xr_ast_for_each_child(node,expression_visit,state);--state->depth;return ok;
+}
+typedef struct ExpressionSyntax { XrCompileResources *resources;uint32_t depth;XrXirStatus status; } ExpressionSyntax;
+static bool expression_syntax(AstNode *node,void *context) {
+    ExpressionSyntax *syntax=context;
+    if (syntax->depth==128 || xr_compile_resources_work(syntax->resources,1)!=XR_COMPILE_RESOURCE_OK) { syntax->status=XR_XIR_BUDGET;return false; }
+    if (!expression_node_allowed(node)) { syntax->status=XR_XIR_BAD_TYPE;return false; }
+    ++syntax->depth;bool ok=xr_ast_for_each_child(node,expression_syntax,syntax);--syntax->depth;return ok;
+}
+XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const char *text,size_t length) {
+    if (!compiler || !text || !length) return XR_XIR_BAD_TYPE;
+    XrCompileResources *resources=xr_source_compiler_resources(compiler);
+    if (length>(UINT64_MAX-1)/2 || xr_compile_resources_work(resources,(uint64_t)length*2+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    if (memchr(text,0,length)) return XR_XIR_BAD_TYPE;
+    char *owned=NULL;XrCompileResourceStatus allocated=xr_compile_resources_alloc(resources,length+1,(void **)&owned);
+    if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    memcpy(owned,text,length);owned[length]=0;AstNode *program=NULL;
+    XrParseStatus parsed=xr_compile_parse_expression_string(xr_source_compiler_session(compiler),owned,"<breakpoint-expression>",&program);
+    ExpressionSyntax syntax={resources,0,XR_XIR_OK};
+    if (parsed!=XR_PARSE_OK) syntax.status=parsed==XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : parsed==XR_PARSE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
+    else if (program->type!=AST_PROGRAM || program->as.program.count!=1 || !expression_syntax(program->as.program.statements[0],&syntax)) {
+        if (syntax.status==XR_XIR_OK) syntax.status=XR_XIR_BAD_TYPE;
+    }
+    xr_program_destroy(program);xr_compile_resources_free(owned);return syntax.status;
 }
 static XrXirStatus expression_scalar(ExpressionState *state,XrXirValue *output) {
     const XdapExpressionRequest *request=state->request;const XdapLexicalView *view=request->lexical;
