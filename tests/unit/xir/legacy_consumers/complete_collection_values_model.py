@@ -32,7 +32,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'tests/diff/cases/semantics/collections/stringbuilder_append_shared_core.xr': 'f6e3a712e0684d7f00778d72574e101bdb69f07058044d5bd16b8a967f4cee6d',
  'tests/diff/cases/semantics/collections/stringbuilder_scalar_known_append_shared_core.xr': '7df35f335e589d2d8d5ce883264c5903b7451231c3fdf9cbd94e82bdeba095ea',
  'tests/diff/cases/semantics/user_hashable_map_set_key.xr': '285463b944b53a2353f6ac394f47296fc18a5ec90b958efcb6f85aff7c4438da',
- 'tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/method_self_return_ownership/root.xr': '971db515ea477d006500a2f1d3ded64eeaf24e9dea13b50a3200caa5595ba0c3',
+ 'tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/method_self_return_ownership/root.xr': '9cc0f45a28f3b5c1632524e5c099d91ba36d770bcf2d51a8da1d8b0523007bc4',
  'tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/stringbuilder_append_shared_core/root.xr': 'e7f0d02f512dea48805717a5c661e210b663fa0457f8f264a1ab65c491a3fac7',
  'tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/stringbuilder_scalar_known_append_shared_core/root.xr': 'a0a030b6590679d153be469971ec2e7867e748a6a534db3c8dd16766f041bebe'}
 _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
@@ -152,7 +152,7 @@ def port_text(name,text):
             if text.count(before)!=count:raise ValueError('Owned string retirement lost the exact full original body')
             text=text.replace(before,after)
         if text.count('sb.toString()')!=3:raise ValueError('Retirement port lost owned string reads')
-        return text.replace('sb.toString()','sb')
+        return text.replace('    sb.toString()\n','    copy(sb)\n').replace('sb.toString()','sb')
     if text.count('var sb = StringBuilder()')!=1:raise ValueError('Scalar append port lost original constructor')
     text=text.replace('var sb = StringBuilder()','var sb = ""');result=[];count=0
     for line in text.splitlines(keepends=True):

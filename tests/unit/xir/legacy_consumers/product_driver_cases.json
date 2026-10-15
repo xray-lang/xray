@@ -25299,7 +25299,7 @@
       "id": "complete_collection_values_method_self_return_ownership",
       "oracle_id": "complete_collection_values_method_self_return_ownership",
       "source": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/method_self_return_ownership/root.xr",
-      "source_lf_sha256": "971db515ea477d006500a2f1d3ded64eeaf24e9dea13b50a3200caa5595ba0c3",
+      "source_lf_sha256": "9cc0f45a28f3b5c1632524e5c099d91ba36d770bcf2d51a8da1d8b0523007bc4",
       "entry": "run",
       "source_context": "materialized_complete_source",
       "stdout_utf8": "b0 2\na0 2\na0-again 3\nsb \ncleared \nt abcd\nu abcd\nv abcd\ns abcd\na0 1\nf 5 5\nr0 3\nb 104 105\nrows 1\nrows0-after-filter 3\ns a,b,c 1\nmap-value 1\nkept 3\nrows0 1\ny 6\ny 4\ny 2\ny 1\ny 4\ny 4\n",

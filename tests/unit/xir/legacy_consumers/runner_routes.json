@@ -89000,7 +89000,7 @@
       "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
       "target_source_port": {
         "fixture": "tests/unit/xir/legacy_consumers/fixtures/string_accumulation_complete/method_self_return_ownership/root.xr",
-        "lf_sha256": "971db515ea477d006500a2f1d3ded64eeaf24e9dea13b50a3200caa5595ba0c3",
+        "lf_sha256": "9cc0f45a28f3b5c1632524e5c099d91ba36d770bcf2d51a8da1d8b0523007bc4",
         "owner_package": "P09",
         "qualification": "NOT_RUN",
         "frozen_basis": [

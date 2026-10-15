@@ -31,7 +31,7 @@ fn aliased_clear() {
     var same = sb
     same += "world"
     print("sb " + sb)
-    sb
+    copy(sb)
     sb = ""
     print("cleared " + sb)
 }
