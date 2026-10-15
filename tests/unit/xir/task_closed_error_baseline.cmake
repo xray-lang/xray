@@ -21,9 +21,9 @@ foreach(target test_xir_task_closed_error_emit test_xir_task_closed_error_baseli
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
-add_test(NAME test_xir_task_closed_error_source_task_field_gap COMMAND test_xir_task_closed_error_baseline source-task-field)
-set_tests_properties(test_xir_task_closed_error_source_task_field_gap PROPERTIES TIMEOUT 60
-    LABELS "unit;xir;task;ownership;source;capability-gap")
+add_test(NAME test_xir_task_closed_error_source_task_field COMMAND test_xir_task_closed_error_baseline source-task-field)
+set_tests_properties(test_xir_task_closed_error_source_task_field PROPERTIES TIMEOUT 60
+    LABELS "unit;xir;task;ownership;source;typed-error")
 foreach(backend vm native vm-native native-vm)
     string(REPLACE "-" "_" name "${backend}")
     add_test(NAME test_xir_task_closed_error_baseline_${name} COMMAND test_xir_task_closed_error_baseline ${backend})

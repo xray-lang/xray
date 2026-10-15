@@ -68,7 +68,7 @@ static void closed_error_build(ClosedErrorFixture *fixture, const char *backend)
     for (unsigned n = 0; n < CLOSED_ERROR_CASES; ++n) for (unsigned mode = 0; mode < 2; ++mode)
         CHECK(fixture->entry[n][mode] == closed_error_entries[n][mode]);
 }
-static void closed_error_task_field_gap(void) {
+static void closed_error_task_field_source(void) {
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
@@ -77,13 +77,30 @@ static void closed_error_task_field_gap(void) {
         context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
-    if (status != XR_XIR_BAD_TYPE) fprintf(stderr,"Task field Source status=%u %s\n",status,diagnostic.message);
-    CHECK(status == XR_XIR_BAD_TYPE);
+    if (status != XR_XIR_OK) fprintf(stderr,"Task field Source status=%u %s\n",status,diagnostic.message);
+    CHECK(status == XR_XIR_OK && result.checked && result.snapshot && !failure);
     xr_compile_session_free(session);
-    CHECK(!result.checked && !result.snapshot && !strcmp(diagnostic.message,"source declaration type structure is invalid"));
+    const XrXirModule *module=xr_xir_compile_artifact_module(result.checked);
+    bool field=false;
+    for (uint32_t n=0;n<module->types->nominals->count;++n) {
+        const XrXirNominalDeclaration *nominal=&module->types->nominals->declarations[n];
+        for (uint32_t f=0;f<nominal->field_count;++f) {
+            const XrXirTypeNode *node=xr_xir_type_node(module->types,nominal->fields[f].type);
+            if (node && node->kind==XR_XIR_TYPE_TASK && node->element==XR_XIR_I64) field=true;
+        }
+    }
+    CHECK(field);
+    XrXirCheckedPacket packet={0};XrXirArtifact *decoded=NULL,*closed=NULL,*lowered=NULL;
+    CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK);
     xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result);
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+    memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(decoded,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
+    XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(lowered);
     effects_source_owners_free(); CHECK(!effects_compile_live && !effects_compile_bytes && !runtime_live && !runtime_bytes);
-    printf("TASK_ERROR_TASK_FIELD_GAP Source=BAD_TYPE nominalFieldTaskMissing noArtifact physical=0/0\n");
+    printf("TASK_ERROR_TASK_FIELD Source/Checked/Lowered directTaskField producerDeath physical=0/0\n");
 }
 static bool closed_error_value(const XrXirValue *error,unsigned family) {
     XrXirValue concrete=*error;
@@ -105,7 +122,7 @@ static bool closed_error_value(const XrXirValue *error,unsigned family) {
 }
 int main(int argc, char **argv) {
     CHECK(argc == 2);
-    if (!strcmp(argv[1],"source-task-field")) { closed_error_task_field_gap(); return 0; }
+    if (!strcmp(argv[1],"source-task-field")) { closed_error_task_field_source(); return 0; }
     CHECK(argc == 2); ClosedErrorFixture fixture = {0}; closed_error_build(&fixture, argv[1]);
     XrXirType problem = XR_XIR_UNIT;
     for (uint32_t t = 0; t < fixture.program->types->count; ++t) {
