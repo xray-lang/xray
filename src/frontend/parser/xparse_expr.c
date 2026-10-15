@@ -1320,6 +1320,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_fn_expression: NULL parser");
     int line = parser->previous.line;
+    int column = parser->previous.column;
 
     XrTypeScope *saved_scope = parser->type_scope;
     int type_param_count = 0;
@@ -1393,6 +1394,9 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     func_expr->as.function_expr.return_type = return_type;
     func_expr->as.function_expr.type_params = type_params;
     func_expr->as.function_expr.type_param_count = type_param_count;
+    func_expr->column = column;
+    func_expr->end_line = body->end_line;
+    func_expr->end_column = body->end_column;
 
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
