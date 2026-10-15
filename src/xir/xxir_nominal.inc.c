@@ -47,7 +47,7 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
     return kind == XR_XIR_NOMINAL_ENUM && end != fields ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
 static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
-    return kind == XR_XIR_NOMINAL_CLASS ? flags == XR_XIR_NOMINAL_FINAL || flags == 0 : flags == 0;
+    return kind == XR_XIR_NOMINAL_CLASS ? !(flags & ~(XR_XIR_NOMINAL_FINAL | XR_XIR_NOMINAL_SENDABLE)) : flags == 0;
 }
 static XrXirStatus nominal_field_begin(uint32_t kind, const XrXirNominalVariant *variants,
     uint32_t count, uint32_t field, XrXirCompileContext *b, uint32_t *begin) {
@@ -102,6 +102,8 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     }
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
+        if ((d->flags & XR_XIR_NOMINAL_SENDABLE) && (field->flags & XR_XIR_FIELD_MUTABLE))
+            return XR_XIR_BAD_TYPE;
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
         if (d->kind == XR_XIR_NOMINAL_CLASS && !xr_xir_type_span(types,field->type)) {
             status=xr_xir_compile_class_field_verify(b, types, field->type);

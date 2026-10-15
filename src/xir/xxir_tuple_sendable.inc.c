@@ -24,7 +24,9 @@ static XrXirStatus sendable_nominal_shape(const XrXirConstraintEnvironment *envi
     uint32_t arity = d ? d->parameter_count : identity->arity;
     uint32_t variant_count = d ? d->variant_count : identity->variant_count;
     const XrXirNominalVariant *variants = d ? d->variants : identity->variants;
-    if ((kind != XR_XIR_NOMINAL_ENUM && kind != XR_XIR_NOMINAL_STRUCT) ||
+    uint32_t flags=d?d->flags:identity->flags;
+    bool shared_class=kind==XR_XIR_NOMINAL_CLASS && (flags & XR_XIR_NOMINAL_SENDABLE);
+    if ((kind != XR_XIR_NOMINAL_ENUM && kind != XR_XIR_NOMINAL_STRUCT && !shared_class) ||
         (kind == XR_XIR_NOMINAL_ENUM ? (!variant_count || !variants) : (variant_count || variants)) ||
         node->nominal.argument_count != arity || (!!node->nominal.arguments != !!arity) ||
         (!!node->nominal.fields != !!node->nominal.field_count)) return XR_XIR_BAD_TYPE;
@@ -40,6 +42,12 @@ static XrXirStatus sendable_nominal_shape(const XrXirConstraintEnvironment *envi
         end += variants[v].field_count;
     }
     if (kind == XR_XIR_NOMINAL_ENUM && end != count) return XR_XIR_BAD_STRUCTURE;
+    if (count && (d ? !d->fields : !identity->fields)) return XR_XIR_BAD_STRUCTURE;
+    if (shared_class) for (uint32_t f=0;f<count;++f) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        uint32_t field_flags=d?d->fields[f].flags:identity->fields[f].flags;
+        if (field_flags & XR_XIR_FIELD_MUTABLE) return XR_XIR_BAD_TYPE;
+    }
     if (d && node->nominal.field_count) {
         if (!d->fields) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t f = 0; f < count; ++f) {
