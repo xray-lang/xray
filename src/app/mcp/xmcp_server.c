@@ -128,7 +128,8 @@ static void mcp_send_response(XmcpServer *s, XrJsonValue *id, XrJsonValue *resul
     if (error) {
         xmcp_json_set(resp, "error", error);
     } else {
-        xmcp_json_set(resp, "result", result ? result : xjson_new_object());
+        /* A missing owned result is a handler failure, never an empty success. */
+        xmcp_json_set(resp, "result", result);
     }
 
     resp = xmcp_json_finish(resp);
