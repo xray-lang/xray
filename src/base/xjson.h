@@ -117,12 +117,13 @@ XR_FUNC XrJsonValue *xjson_new_string_n(const char *value, size_t len);
 XR_FUNC XrJsonValue *xjson_new_array(void);
 XR_FUNC XrJsonValue *xjson_new_object(void);
 
-XR_FUNC void xjson_array_push(XrJsonValue *arr, XrJsonValue *value);
+/* Insertion takes the child only on success; failure preserves both owners. */
+XR_FUNC bool xjson_array_push(XrJsonValue *arr, XrJsonValue *value);
 XR_FUNC void xjson_array_truncate(XrJsonValue *arr, int max_len);
-XR_FUNC void xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value);
+XR_FUNC bool xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value);
 
 /* Fast append: skip key dedup check (use when building new objects with unique keys) */
-XR_FUNC void xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value);
+XR_FUNC bool xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value);
 
 /* ========== Serialization ========== */
 

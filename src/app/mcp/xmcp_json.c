@@ -26,24 +26,14 @@ XR_FUNC bool xmcp_json_set(XrJsonValue *object, const char *key, XrJsonValue *ow
     if (builder_failed || !xjson_is_object(object) || !key || !owned) {
         xjson_free(owned); builder_failed = true; return false;
     }
-    int before = object->as.object.count;
-    xjson_object_set(object, key, owned);
-    if (object->as.object.count == before + 1) {
-        XrJsonMember *member = &object->as.object.members[before];
-        if (member->key) return true;
-        /* The base setter can publish a NULL key when copying it fails. */
-        --object->as.object.count;
-        memset(member, 0, sizeof(*member));
-    } else if (xjson_get(object, key) == owned) return true;
+    if (xjson_object_set(object, key, owned)) return true;
     xjson_free(owned); builder_failed = true; return false;
 }
 XR_FUNC bool xmcp_json_push(XrJsonValue *array, XrJsonValue *owned) {
     if (builder_failed || !xjson_is_array(array) || !owned) {
         xjson_free(owned); builder_failed = true; return false;
     }
-    int before = array->as.array.count;
-    xjson_array_push(array, owned);
-    if (array->as.array.count == before + 1) return true;
+    if (xjson_array_push(array, owned)) return true;
     xjson_free(owned); builder_failed = true; return false;
 }
 static XrJsonValue *clone_value(const XrJsonValue *value, unsigned depth) {

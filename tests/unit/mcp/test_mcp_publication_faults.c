@@ -174,9 +174,93 @@ static int parser_array_one(void) {
     for(size_t i=0;i<32768;++i) if(owned[i].pointer)mcp_fault_free(owned[i].pointer);
     released();return failed?1:0;
 }
+static void base_builder_faults(void) {
+    for (int mode=0; mode<3; ++mode) {
+        size_t sites=0;
+        for (size_t probe=0; probe<=sites; ++probe) {
+            reset_fault(SIZE_MAX);
+            XrJsonValue *parent=mode?xjson_new_object():xjson_new_array(); CHECK(parent);
+            for (int i=0; i<8; ++i) {
+                XrJsonValue *child=xjson_new_number(42+i); CHECK(child);
+                char key[16]; CHECK(snprintf(key,sizeof(key),"keep%d",i)>0);
+                CHECK(mode?xjson_object_set_new(parent,key,child):xjson_array_push(parent,child));
+            }
+            XrJsonValue *kept=mode?xjson_get(parent,"keep0"):xjson_array_get(parent,0);
+            if (mode) { CHECK(xjson_object_set(parent,"keep0",kept)); CHECK(kept->as.number==42); }
+            void *storage=mode?(void *)parent->as.object.members:(void *)parent->as.array.items;
+            XrJsonValue *child=xjson_new_number(99); CHECK(child);
+            reset_fault(probe?probe-1:SIZE_MAX);
+            bool accepted=mode==0?xjson_array_push(parent,child):
+                mode==1?xjson_object_set(parent,"added",child):xjson_object_set_new(parent,"added",child);
+            if (!probe) {
+                CHECK(accepted); sites=attempts;
+                CHECK(mode?xjson_get(parent,"added")==child:xjson_array_get(parent,8)==child);
+            } else {
+                CHECK(injected && !accepted && child->as.number==99);
+                CHECK(mode?parent->as.object.count==8:parent->as.array.count==8);
+                CHECK(mode?parent->as.object.capacity==8:parent->as.array.capacity==8);
+                CHECK(storage==(mode?(void *)parent->as.object.members:(void *)parent->as.array.items));
+                CHECK(mode?xjson_get(parent,"keep0")==kept:xjson_array_get(parent,0)==kept);
+                CHECK(kept->as.number==42);
+                fail_at=SIZE_MAX; xjson_free(child);
+            }
+            fail_at=SIZE_MAX; xjson_free(parent); released();
+        }
+        printf("Base JSON insertion%d: %zu complete faults; failure preserves both owners; physical0\n",mode,sites);
+    }
+}
+static void check_parsed_case(XrJsonValue *value,int index) {
+    CHECK(value);
+    if (index<2) {
+        CHECK(xjson_array_len(value)==(index?9:1));
+        XrJsonValue *last=xjson_array_get(value,index?8:0);
+        CHECK(last && last->is_integer && last->as.integer==(index?9:42));
+    } else {
+        CHECK(xjson_get_int(value,"tail")==7);
+        XrJsonValue *items=xjson_get(value,"items"); CHECK(xjson_array_len(items)==3);
+        XrJsonValue *text=xjson_get(xjson_array_get(items,1),"text");
+        CHECK(text && text->string_len==3 && !memcmp(text->as.string,"a\0b",3));
+        CHECK(xjson_array_len(xjson_array_get(items,2))==3);
+    }
+}
+static void base_parser_faults(void) {
+    const char *cases[]={"[42]","[1,2,3,4,5,6,7,8,9]",
+        "{\"items\":[42,{\"text\":\"a\\u0000b\"},[true,null,-9]],\"tail\":7}"};
+    for (int index=0; index<3; ++index) {
+        size_t sites=0;
+        for (size_t probe=0; probe<=sites; ++probe) {
+            reset_fault(probe?probe-1:SIZE_MAX);
+            XrJsonValue *value=xjson_parse(cases[index],strlen(cases[index]));
+            if (!probe) { check_parsed_case(value,index); sites=attempts; }
+            else CHECK(injected && !value);
+            fail_at=SIZE_MAX; xjson_free(value); released();
+            reset_fault(SIZE_MAX);
+            value=xjson_parse(cases[index],strlen(cases[index])); check_parsed_case(value,index);
+            xjson_free(value); released();
+        }
+        printf("Base JSON parser%d: %zu complete faults; no partial publication; physical0 and recovery\n",index,sites);
+    }
+}
+static void base_clone_faults(void) {
+    const char *text="{\"items\":[42,{\"text\":\"a\\u0000b\"},[true,null,-9]],\"tail\":7}";
+    size_t sites=0;
+    for (size_t probe=0; probe<=sites; ++probe) {
+        reset_fault(SIZE_MAX); XrJsonValue *value=xjson_parse(text,strlen(text)); check_parsed_case(value,2);
+        reset_fault(probe?probe-1:SIZE_MAX); XrJsonValue *copy=xjson_clone(value);
+        if (!probe) { check_parsed_case(copy,2); sites=attempts; }
+        else CHECK(injected && !copy);
+        fail_at=SIZE_MAX; check_parsed_case(value,2); xjson_free(copy); xjson_free(value); released();
+    }
+    printf("Base JSON clone: %zu complete faults; source preserved; physical0\n",sites);
+}
+static void base_json_faults(void) {
+    CHECK(parser_array_one()==0);
+    base_builder_faults(); base_parser_faults(); base_clone_faults();
+}
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();
     if(argc==2 && !strcmp(argv[1],"--factory-one")){factory_one();return 0;}
     if(argc==2 && !strcmp(argv[1],"--parse-array-one"))return parser_array_one();
-    factory_faults();clone_faults();notification_faults();response_faults();return 0;
+    if(argc==2 && !strcmp(argv[1],"--base-json")){base_json_faults();return 0;}
+    factory_faults();clone_faults();notification_faults();response_faults();base_json_faults();return 0;
 }

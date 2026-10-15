@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <math.h>
+#include <limits.h>
 
 /* ========== Parser State ========== */
 
@@ -388,7 +389,11 @@ static XrJsonValue *parse_array(JsonParser *p) {
             return NULL;
         }
 
-        xjson_array_push(arr, elem);
+        if (!xjson_array_push(arr, elem)) {
+            xjson_free(elem);
+            xjson_free(arr);
+            return NULL;
+        }
 
         skip_whitespace(p);
         if (p->pos < p->end && *p->pos == ']') {
@@ -612,7 +617,11 @@ XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value) {
                     xjson_free(arr);
                     return NULL;
                 }
-                xjson_array_push(arr, child);
+                if (!xjson_array_push(arr, child)) {
+                    xjson_free(child);
+                    xjson_free(arr);
+                    return NULL;
+                }
             }
             return arr;
         }
@@ -626,7 +635,11 @@ XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value) {
                     xjson_free(obj);
                     return NULL;
                 }
-                xjson_object_set_new(obj, value->as.object.members[i].key, child);
+                if (!xjson_object_set_new(obj, value->as.object.members[i].key, child)) {
+                    xjson_free(child);
+                    xjson_free(obj);
+                    return NULL;
+                }
             }
             return obj;
         }
@@ -777,20 +790,25 @@ XR_FUNC XrJsonValue *xjson_new_object(void) {
     return alloc_value(XR_JSON_OBJECT);
 }
 
-XR_FUNC void xjson_array_push(XrJsonValue *arr, XrJsonValue *value) {
+XR_FUNC bool xjson_array_push(XrJsonValue *arr, XrJsonValue *value) {
     if (!arr || arr->type != XR_JSON_ARRAY || !value)
-        return;
+        return false;
 
     if (arr->as.array.count >= arr->as.array.capacity) {
+        if (arr->as.array.capacity > INT_MAX / 2)
+            return false;
         int new_cap = arr->as.array.capacity < 8 ? 8 : arr->as.array.capacity * 2;
+        if ((size_t) new_cap > SIZE_MAX / sizeof(XrJsonValue *))
+            return false;
         XrJsonValue **tmp = (XrJsonValue **) xr_realloc(arr->as.array.items,
                                                         (size_t) new_cap * sizeof(XrJsonValue *));
         if (!tmp)
-            return;
+            return false;
         arr->as.array.items = tmp;
         arr->as.array.capacity = new_cap;
     }
     arr->as.array.items[arr->as.array.count++] = value;
+    return true;
 }
 
 XR_FUNC void xjson_array_truncate(XrJsonValue *arr, int max_len) {
@@ -802,55 +820,57 @@ XR_FUNC void xjson_array_truncate(XrJsonValue *arr, int max_len) {
     }
 }
 
-XR_FUNC void xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
-    if (!obj || obj->type != XR_JSON_OBJECT || !key)
-        return;
-
-    /* Check for existing key (dedup) */
-    for (int i = 0; i < obj->as.object.count; i++) {
-        if (strcmp(obj->as.object.members[i].key, key) == 0) {
-            xjson_free(obj->as.object.members[i].value);
-            obj->as.object.members[i].value = value;
-            return;
-        }
-    }
-
-    /* Append new member */
+static bool object_append(XrJsonValue *obj, const char *key, XrJsonValue *value) {
+    char *owned_key = xr_strdup(key);
+    if (!owned_key)
+        return false;
     if (obj->as.object.count >= obj->as.object.capacity) {
+        if (obj->as.object.capacity > INT_MAX / 2) {
+            xr_free(owned_key);
+            return false;
+        }
         int new_cap = obj->as.object.capacity < 8 ? 8 : obj->as.object.capacity * 2;
+        if ((size_t) new_cap > SIZE_MAX / sizeof(XrJsonMember)) {
+            xr_free(owned_key);
+            return false;
+        }
         XrJsonMember *tmp = (XrJsonMember *) xr_realloc(obj->as.object.members,
                                                         (size_t) new_cap * sizeof(XrJsonMember));
-        if (!tmp)
-            return;
+        if (!tmp) {
+            xr_free(owned_key);
+            return false;
+        }
         obj->as.object.members = tmp;
         obj->as.object.capacity = new_cap;
     }
-
-    XrJsonMember *m = &obj->as.object.members[obj->as.object.count++];
-    m->key = xr_strdup(key);
-    m->key_len = strlen(key);
-    m->value = value;
+    XrJsonMember *member = &obj->as.object.members[obj->as.object.count];
+    member->key = owned_key;
+    member->key_len = strlen(key);
+    member->value = value;
+    ++obj->as.object.count;
+    return true;
 }
 
-XR_FUNC void xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value) {
-    if (!obj || obj->type != XR_JSON_OBJECT || !key)
-        return;
+XR_FUNC bool xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
+    if (!obj || obj->type != XR_JSON_OBJECT || !key || !value)
+        return false;
 
-    /* No dedup check — caller guarantees unique keys */
-    if (obj->as.object.count >= obj->as.object.capacity) {
-        int new_cap = obj->as.object.capacity < 8 ? 8 : obj->as.object.capacity * 2;
-        XrJsonMember *tmp = (XrJsonMember *) xr_realloc(obj->as.object.members,
-                                                        (size_t) new_cap * sizeof(XrJsonMember));
-        if (!tmp)
-            return;
-        obj->as.object.members = tmp;
-        obj->as.object.capacity = new_cap;
+    for (int i = 0; i < obj->as.object.count; i++) {
+        if (strcmp(obj->as.object.members[i].key, key) == 0) {
+            if (obj->as.object.members[i].value != value) {
+                xjson_free(obj->as.object.members[i].value);
+                obj->as.object.members[i].value = value;
+            }
+            return true;
+        }
     }
+    return object_append(obj, key, value);
+}
 
-    XrJsonMember *m = &obj->as.object.members[obj->as.object.count++];
-    m->key = xr_strdup(key);
-    m->key_len = strlen(key);
-    m->value = value;
+XR_FUNC bool xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value) {
+    if (!obj || obj->type != XR_JSON_OBJECT || !key || !value)
+        return false;
+    return object_append(obj, key, value);
 }
 
 /* ========== Serialization ========== */
