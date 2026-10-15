@@ -168,6 +168,20 @@ static void source_array_reorder_transactions(XrXirProgram *program, const uint3
 
 
 /* Runtime implementation structs are visible through the existing allocation observer. */
+static const XrXirValue *source_array_reorder_root_observe(XrXirInstance *instance, XrXirType type) {
+    const XrXirValue *root = NULL;
+    for (uint32_t slot = 0; slot < instance->program->declarations->slot_count; ++slot) {
+        const XrXirSlot *declaration = &instance->program->declarations->slots[slot];
+        if (xr_xir_cell_element(instance->program->types, declaration->type) != type) continue;
+        CHECK(!root && declaration->mutable);
+        const XirCell *cell = (const XirCell *) object_pointer(&instance->slots[slot]);
+        CHECK(cell && cell->object.kind == XIR_OBJECT_CELL && cell->initialized && cell->module_storage);
+        CHECK(cell->module_owner == instance && cell->module_slot == slot);
+        root = &cell->value;
+    }
+    CHECK(root && root->type == (uint32_t) type);
+    return root;
+}
 static void source_array_reorder_limits(XrXirProgram *program, const uint32_t *functions) {
     const size_t baseline_live = runtime_live, baseline_bytes = runtime_bytes;
     const unsigned methods[] = {REORDER_ROOT_REVERSE, REORDER_ROOT_UNSHIFT};
@@ -197,11 +211,14 @@ static void source_array_reorder_limits(XrXirProgram *program, const uint32_t *f
             printf("Array method %u limit mode %u start=%u final=%u\n",
                 method, mode, (unsigned) started, (unsigned) status);
             XrXirValue absent = {0};
-            CHECK(xr_xir_instance_take_result(instance, &absent) == XR_XIR_CALL_BAD_STATE && !absent.type && !absent.payload);
-            XrXirValue state = source_array_run(instance, functions[REORDER_ROOT_STATE]);
-            CHECK(!source_array_reorder_state_kind(&state, method != 0)); xr_xir_value_drop(&state);
+            XrXirCallStatus expected_terminal = mode < 3 ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE;
+            CHECK(xr_xir_instance_take_result(instance, &absent) == expected_terminal && !absent.type && !absent.payload);
+            /* Resource exhaustion is sticky. Observe the authentic module Cell
+             * without starting a new epoch or granting it execution authority. */
+            const XrXirValue *state = source_array_reorder_root_observe(instance, (XrXirType) saved.type);
+            CHECK(state->payload == saved.payload && !source_array_reorder_state_kind(state, method != 0));
             CHECK(!source_array_reorder_state_kind(&saved, method != 0)); xr_xir_value_drop(&saved);
-            CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_free(instance) == (mode < 3 ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_READY));
             CHECK(runtime_live == baseline_live && runtime_bytes == baseline_bytes);
         }
     }
