@@ -38,7 +38,7 @@ static XrXirOutputStatus print_provider(void *context, const XrXirOutputGroup *g
     PrintFixture *fixture=context;
     ++fixture->providers;
     CHECK(group->line && group->count==3 && group->values[0].type==XR_XIR_STRING &&
-        group->values[1].type==(fixture->unit ? XR_XIR_UNIT : XR_XIR_I64) && group->values[2].type==XR_XIR_STRING);
+        group->values[1].type==(uint32_t)(fixture->unit ? XR_XIR_UNIT : XR_XIR_I64) && group->values[2].type==XR_XIR_STRING);
     XrXirOutputSink sink={XR_XIR_CALL_ABI_VERSION,0,print_sink,fixture,512};
     return xr_xir_output_render(&sink,group);
 }
