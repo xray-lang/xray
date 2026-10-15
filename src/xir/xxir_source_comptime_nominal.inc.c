@@ -54,9 +54,37 @@ static bool source_comptime_nominal_work(SourceContext *ctx,AstNode *node,XrXirT
     return source_work_units(ctx,node,shape.work*32);
 }
 typedef struct SourceComptimeNominalShape { uint32_t count,begin,variant; } SourceComptimeNominalShape;
+static bool source_comptime_nominal_fields(SourceContext *ctx,AstNode *node,XrXirType type) {
+    if (!source_work_units(ctx,node,sizeof(XrXirTypeNode)+sizeof(XrXirNominalDeclaration))) return false;
+    const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,type);
+    if (!found || found->kind!=XR_XIR_TYPE_NOMINAL || found->parameter_span || found->nominal.declaration>=ctx->nominals.count)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime nominal type is not closed");
+    XrXirNominalType nominal=found->nominal;
+    const XrXirNominalDeclaration *declaration=&ctx->nominals.declarations[nominal.declaration];
+    if (nominal.argument_count!=declaration->parameter_count)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime nominal arguments changed");
+    if (nominal.field_count==declaration->field_count) return true;
+    if (nominal.field_count || nominal.fields)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime nominal field inventory is incomplete");
+    uint32_t count=declaration->field_count;
+    XrXirType *fields=source_alloc(ctx,count,sizeof(*fields));
+    if (count && !fields) return false;
+    SourceSubstitution substitution={nominal.arguments,nominal.argument_count};
+    /* Only current declaration types and actual closed arguments derive the
+     * cache. A value arena supplies neither Source fields nor access rights. */
+    for (uint32_t f=0;f<count;++f) {
+        if (!source_work_units(ctx,node,sizeof(XrXirNominalField)) ||
+            !source_substitute(ctx,&substitution,declaration->fields[f].type,0,&fields[f])) return false;
+        if (xr_xir_type_span(&ctx->types,fields[f]))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime nominal field remains open");
+    }
+    /* Substitution may intern types and move the pool. Reacquire by identity. */
+    XrXirTypeNode *owned=(XrXirTypeNode *)&ctx->types.nodes[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE];
+    owned->nominal.fields=fields;owned->nominal.field_count=count;return true;
+}
 static bool source_comptime_nominal_shape(SourceContext *ctx,AstNode *node,const XrXirValue *value,
     XrXirType target,SourceComptimeNominalShape *output) {
-    if (!source_comptime_nominal_work(ctx,node,target)) return false;
+    if (!source_comptime_nominal_fields(ctx,node,target) || !source_comptime_nominal_work(ctx,node,target)) return false;
     const XrXirTypeArena *arena=xr_xir_value_arena(value);const XrXirTypes *source=xr_xir_compile_type_arena_types(arena);
     const XrXirTypeNode *from=xr_xir_type_node(source,(XrXirType)value->type),*to=xr_xir_type_node(&ctx->types,target);
     if (!from || !to || from->kind!=XR_XIR_TYPE_NOMINAL || to->kind!=XR_XIR_TYPE_NOMINAL ||

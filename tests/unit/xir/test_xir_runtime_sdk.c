@@ -107,9 +107,16 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
+#define current_sdk_kat_preimage previous73_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous73_sdk_kat_file_digest
+#define current_sdk_kat_digest previous73_sdk_kat_digest
+#include "sdk_previous73_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
 
 static void sdk_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==73 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==29 && XR_XIR_CHECKED_CONTRACT==74 &&
         XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 && XR_XIR_PROGRAM_ABI_VERSION==30,
         "SDK known bytes require the independently framed public contract");
     uint8_t old_hash[32];xr_sha256(sdk_kat_preimage,sizeof(sdk_kat_preimage),old_hash);
@@ -152,7 +159,9 @@ static void sdk_known_bytes(void) {
         previous70_sdk_kat_preimage[semantic_offset]==70 && previous72_sdk_kat_preimage[semantic_offset]==72);
     xr_sha256((const uint8_t *)"hi",2,old_hash);CHECK(!memcmp(old_hash,previous66_sdk_kat_file_digest,32) &&
         !memcmp(old_hash,previous67_sdk_kat_file_digest,32) && !memcmp(old_hash,previous68_sdk_kat_file_digest,32) && !memcmp(old_hash,previous69_sdk_kat_file_digest,32) && !memcmp(old_hash,previous70_sdk_kat_file_digest,32) && !memcmp(old_hash,previous71_sdk_kat_file_digest,32));
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,28,73,24,29,30,1,1,1,11,2,0,1,0,3,1,1};
+    xr_sha256(previous73_sdk_kat_preimage,sizeof(previous73_sdk_kat_preimage),old_hash);
+    CHECK(!memcmp(old_hash,previous73_sdk_kat_digest,32) && !memcmp(previous73_sdk_kat_file_digest,current_sdk_kat_file_digest,32));
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,29,74,24,29,30,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";
@@ -198,6 +207,12 @@ static void sdk_known_bytes(void) {
     XrXirSdkManifest saved23=manifest;size_t attempts23=runtime_attempts;
     CHECK(!sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_INVALID);
     CHECK(!memcmp(&manifest,&saved23,sizeof(manifest)) && runtime_attempts==attempts23);
+    memcpy(manifest.prefix,prefix,sizeof(prefix));
+    manifest.prefix[1]=28;manifest.prefix[2]=73;json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
+    memcpy(manifest.digest,previous73_sdk_kat_digest,32);
+    XrXirSdkManifest saved73=manifest;size_t attempts73=runtime_attempts;
+    CHECK(!sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_INVALID);
+    CHECK(!memcmp(&manifest,&saved73,sizeof(manifest)) && runtime_attempts==attempts73);
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     const uint32_t crossed[][2]={{1,25},{1,26},{1,27},{2,70},{2,71},{2,72},{3,22},{3,23},{4,28},{5,29}};
     for (uint32_t prior=0;prior<sizeof(crossed)/sizeof(crossed[0]);++prior) {

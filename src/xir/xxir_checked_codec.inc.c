@@ -532,6 +532,16 @@ static void checked_construction(CheckedCursor *c, XrXirModule *module,
             if (c->reading) values[f] = value;
         }
     }
+    uint32_t edges=checked_u32(c,c->reading?0:owner->materialization_count);
+    if (c->status!=XR_XIR_OK) return;
+    XrXirMaterializationBinding *bindings=checked_array(c,owner->materializations,edges,sizeof(*bindings),16);
+    if (c->reading) { owner->materializations=bindings;owner->materialization_count=bindings?edges:0; }
+    for (uint32_t i=0;i<edges && c->status==XR_XIR_OK;++i) {
+        XrXirMaterializationBinding row=bindings[i];
+        row.caller=checked_u32(c,row.caller);row.instruction=checked_u32(c,row.instruction);
+        row.function=checked_u32(c,row.function);row.nominal=checked_u32(c,row.nominal);
+        if (c->reading) bindings[i]=row;
+    }
 }
 
 static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit);

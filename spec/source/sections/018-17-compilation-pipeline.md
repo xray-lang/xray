@@ -798,6 +798,22 @@ CTFE复用同一Lowered执行和既有Function/Cell/loan协议，可执行真实
 
 外部含身份struct参数或常量导出、未具备有界观察的foreign/deep-variable接收以及私有值Source重放的合法声明owner/函数库存仍未获准。原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和policy2/8MiB逻辑输出保持；失败保全空输出、原owner费用及全部已准备前缀。无公共布局、ABI、schema、opcode或替代evaluator变化；完整FI、同owner重试、资源/寿命、共同/provider/正式安全仍需各自真实资格，不能由本族正例替代。
 
+### 17.67 私有固定数据物化与精确调用边
+
+独立 Source 接收允许已经求值的封闭 struct/enum 常量含有私有字段。接收者不能因此取得字段权限。Source 在当前真实 nominal 声明库存下创建私有、零参数的 MATERIALIZER 函数，只重建该固定常量；函数结果和每条指令只含已准入的封闭数据，函数体为单个基本块，只允许字面量、数据构造、局部 Array 容量重建及到其他已绑定物化函数的直接调用。禁止用户计算调用、外部输入、身份值、函数引用、默认参数绑定、实现绑定和物化调用环。
+
+拥有的 construction 目录保存每条边的实际 caller、instruction、function、nominal 坐标，按 caller/instruction 严格排序。完整普通 Checker 复验全部函数库存、每条实际使用、声明归属、数据类型、调用图及普通模块导入；只有匹配精确目录的直接 CALL 可调用未导出的物化函数。MATERIALIZER 角色或结果类型本身不构成权限。直接 CTFE/VM 入口及公开 Instance 调用不允许选择物化函数，普通函数中的已绑定内部调用仍可执行。
+
+Source 先完成普通函数库存，再迭代生成尾部物化函数，避免改变两次普通构造中的函数及 comptime occurrence 身份。生成声明的父级和作用域来自当前真实 Source/Checked nominal 声明；没有 AST 的 Checked 声明也必须有完整的接收库存。常量快照只在同步构造期间拥有，最终产物仅保存普通字面量 recipe。Checked 重读、特化及 Lowered 接收分别拥有并复验目录；库导入按真实 caller/callee/nominal 映射重定位精确边，不复制旧编号作为权限。
+
+封闭泛型 nominal 缺少派生字段缓存时，Source 只用当前声明的字段类型和真实泛型实参，经普通类型替换补齐缓存；求值 ValueArena 不提供 Source 字段或权限。替换可能扩容类型池，接收者必须按稳定 ID 重新获取节点。物化数据类型必须保留完整声明字段分母。目录边数不等同于函数数，坐标按实际模块/函数体复验，不拿已消耗后的剩余函数预算当作输入编号上界。
+
+派生字段可能在接收时引入类型节点，因此后续 comptime occurrence 的期望类型必须在两个同步存活的真实 Source 类型池之间完整匹配，不能跨 owner 比较本地 type ID。期望上下文的标志、实际语法、模块、声明及函数库存仍逐项复验；类型池借用在同步 Source 构造结束前终止，不进入发布的 Artifact 或查询快照。
+
+库内 comptime 由同一不可变源码图独立构造普通 Program，经过完整 Built/Checked/特化/Lowered 路径后使用唯一 CTFE 求值器。库模板不改标为可执行产物。结果按实际语法 occurrence、模块、声明祖先、期望上下文和完整跨池结果类型接收，再由独立 Library Source 构造复验。所有临时 Program、目录、快照和失败前缀使用原 ledger，不重置预算。
+
+该原子切换采用 Checked schema29、contract74，construction C 接口 revision2 统一由 xr_xir_compile_construction_new_v2 接收 XrXirConstructionSpec；旧无版本构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1706,5 +1722,21 @@ The common Value operation xr_xir_struct_observe observes one field of an alread
 Construction, whole replacement and authorized writes first admit actual incoming graphs. A struct cannot hide a back-edge to the destination Cell or Class; acyclic replacement remains legal. Struct copies retain value semantics and COW while their Class children retain identity aliases. Returned String snapshots survive cleanup replacing the original struct, and final release allocates nothing. Authentic whole-root Class loans may prove actual absence of descendant authority through struct fields; active identities still refuse and borrowed leaves must be exportable data. Proper descendant projections on identity-bearing data Cell roots retain independent unfinished budget/authority obligations and remain refused; whole ref on a direct canonical Cell has separate admission.
 
 External identity-bearing struct arguments or constant exports, foreign/deep-variable receiving without bounded observation, and legal declaration owners/function inventory for private Source materialization gain no admission. Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB logical output remain. Failure preserves empty output, original-owner charges and every prepared prefix. No public layout, ABI, schema, opcode or alternate evaluator changes. Complete FI, same-owner retry, resources/lifetimes and shared/provider/formal safety still require their own measured qualification; scoped positives cannot substitute for them.
+
+### 17.67 Private fixed-data materialization and exact call edges
+
+Independent Source receiving permits an already evaluated closed struct/enum constant to contain private fields without granting the receiver field access. Source creates private zero-argument MATERIALIZER functions beneath current real nominal declarations. Each rebuilds only its fixed constant: its result and instruction types contain admitted closed data, and its single-block body permits literals, data construction, local Array capacity reconstruction and direct calls to other bound materializers. User computation calls, external inputs, identities, function references, default/implementation bindings and materializer call cycles are forbidden.
+
+The owned construction catalogue records actual caller, instruction, function and nominal coordinates, strictly ordered by caller/instruction. Complete ordinary checking revalidates the entire function inventory, every actual use, declaration ancestry, data types, call graph and ordinary module imports. Only a direct CALL matching its exact catalogue edge may call an unexported materializer. Neither a MATERIALIZER role nor a result type grants authority. Direct CTFE/VM entry and public Instance calls cannot select a materializer; registered internal calls from ordinary functions remain executable.
+
+Source finishes its ordinary function inventory before iteratively generating materializers at the tail, preserving ordinary function and comptime occurrence identities across both constructions. Generated parent and scope come from current real Source/Checked nominal declarations; a Checked declaration without an AST still needs its complete receiving inventory. Owning constant snapshots survive only synchronous construction; the final artifact contains ordinary literal recipes. Checked rereading, specialization and Lowered receiving independently own and revalidate the catalogue. Library import relocates exact edges through actual caller/callee/nominal mappings, never retaining old ordinals as authority.
+
+When a closed generic nominal lacks derived field caches, ordinary Source type substitution derives them solely from current declaration fields and actual generic arguments. The evaluated ValueArena supplies neither Source fields nor authority. Substitution can grow the type pool, so receivers reacquire nodes by stable ID. Materializer data types retain the complete declared field denominator. Catalogue edge counts differ from function counts; exact module/body coordinates are revalidated rather than bounded by an already consumed remaining function quota.
+
+Derived fields can introduce receiving type nodes, so later comptime occurrences compare expected types completely across both synchronously live real Source pools, never by cross-owner local type ID. Expected flags, actual syntax, module, declarations and function inventory remain independently checked. Pool borrows end with synchronous Source construction and never enter published artifacts or query snapshots.
+
+Library comptime independently constructs an ordinary Program from the same immutable source graph, follows complete Built/Checked/specialization/Lowered transitions and uses the sole CTFE evaluator. A library template is never relabelled executable. Results match actual syntax occurrences, modules, declaration ancestry, expected contexts and complete cross-pool result types before independent Library Source reconstruction. Every temporary Program, catalogue, snapshot and failed prefix uses the original ledger without resetting budgets.
+
+This atomic cutover uses Checked schema29/contract74 and construction C interface revision2: xr_xir_compile_construction_new_v2 alone receives XrXirConstructionSpec. The old unversioned symbol is retired without an alias, so old compiled objects fail to link instead of binding the changed signature. Old wire is also refused. Value/Call/Instance layouts and opcodes remain unchanged; private Source construction inventory gains materialization requests. Original128M work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB logical output remain. Complete FI, same-owner retry, resources/lifetimes and shared/provider/formal safety require separate measured evidence. This mechanism grants neither foreign/identity-bearing exports nor complete P11 qualification.
 
 <!-- /xr-spec:en -->

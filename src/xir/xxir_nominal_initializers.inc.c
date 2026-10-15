@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Helper bindings are jointly checked with the authentic graph and declaration authority.
  */
+#include "xxir_materialization.inc.c"
 /* Definition-owned construction facts. These bindings are not exported names.
  * Common signature/constraint/effect verification still checks each target. */
 static XrXirStatus nominal_initializer_signature(const XrXirCompileContext *context,
@@ -87,6 +88,8 @@ XR_FUNC XrXirStatus xir_construction_verify(
     if (!xir_compile_context_valid(context) || !m) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus shape = xir_construction_shape(context, m->types, construction);
     if (shape != XR_XIR_OK) return shape;
+    shape=xir_materialization_verify(context,m,construction);
+    if (shape!=XR_XIR_OK) return shape;
     const XrXirNominalTable *table = m->types ? m->types->nominals : NULL;
     if (!table || m->stage == XR_XIR_LOWERED) return XR_XIR_OK;
     if (table->count && !table->declarations) return XR_XIR_BAD_STRUCTURE;

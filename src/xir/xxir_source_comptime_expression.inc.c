@@ -101,8 +101,11 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     if (ok) *output=f;
     return ok;
 }
-static bool source_comptime_expected_same(SourceExpectedType left,SourceExpectedType right) {
-    return left.present==right.present && left.type==right.type && left.infer_result==right.infer_result && left.inferred==right.inferred;
+static bool source_comptime_expected_same(SourceContext *ctx,AstNode *node,SourceExpectedType left,SourceExpectedType right) {
+    if (left.present!=right.present || left.infer_result!=right.infer_result || left.inferred!=right.inferred) return false;
+    if (!ctx->comptime_input_types)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime expected context has no live Source type owner");
+    return source_comptime_type_matches(ctx,node,ctx->comptime_input_types,left.type,right.type);
 }
 static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value) {
     uint32_t owner=ctx->function,module=ctx->module,helper=UINT32_MAX;
@@ -123,7 +126,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     for (const SourceComptimeSite *original=ctx->comptime_input;original;original=original->next) {
         if (!source_work_units(ctx,node,8)) return false;
         if (original->syntax==node && original->module==module && original->owner==owner && original->declaration==declaration && original->helper==helper &&
-            source_comptime_expected_same(original->expected,expected)) {
+            source_comptime_expected_same(ctx,node,original->expected,expected)) {
             if (matched) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence is ambiguous");
             matched=original;
         }

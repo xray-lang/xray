@@ -223,6 +223,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             (!d->functions[f].nominal_owner && d->functions[f].method_kind!=XR_XIR_NON_MEMBER) ||
             (d->functions[f].nominal_owner && d->functions[f].method_kind!=XR_XIR_CONSTRUCTOR &&
              d->functions[f].method_kind!=XR_XIR_MEMBER_HELPER &&
+             d->functions[f].method_kind!=XR_XIR_MATERIALIZER &&
              d->functions[f].method_kind!=XR_XIR_READ_METHOD &&
              d->functions[f].method_kind!=XR_XIR_STATIC_METHOD))
             return XR_XIR_BAD_STAGE;

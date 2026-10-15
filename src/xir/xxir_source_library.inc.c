@@ -352,6 +352,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if (helper || index == library->declarations->modules[original_module].initializer) return true;
     if (ctx->identities[target].nominal_owner &&
         (ctx->identities[target].method_kind==XR_XIR_CONSTRUCTOR ||
+         ctx->identities[target].method_kind==XR_XIR_MATERIALIZER ||
          ctx->identities[target].method_kind==XR_XIR_MEMBER_HELPER)) {
         uint32_t owner=ctx->identities[target].nominal_owner-1;
         ctx->bodies[target].declaration=ctx->nominal_sources[owner]->declaration;
@@ -506,13 +507,14 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
     return true;
 }
 
+#include "xxir_source_library_materialization.inc.c"
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
     if (!source_library_slots(ctx,library,map) || !source_library_literals(ctx, library, map)) return false;
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
     }
-    if (!source_library_initializers(ctx,library,map) ||
+    if (!source_library_initializers(ctx,library,map) || !source_library_materializations(ctx,map) ||
         !source_library_implementations(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {

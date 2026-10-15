@@ -324,9 +324,10 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
         XrXirCompileContext projection_budget = limits;
         status = lower_nominal_types(&copy->module, &projection_budget);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return transition_error(status, diagnostic); }
-        xr_xir_compile_construction_free(copy->construction); copy->construction = NULL;
-        status = xir_construction_empty(budget, copy->module.types, &copy->construction);
+        XrXirConstruction *physical=NULL;
+        status = xir_construction_lower(budget,copy->module.types,copy->construction,&physical);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return transition_error(status, diagnostic); }
+        xr_xir_compile_construction_free(copy->construction);copy->construction=physical;
         copy->target = *target;
         for (uint32_t f = 0; f < copy->module.function_count; ++f) {
             const XrXirFunction *function = &copy->module.functions[f];

@@ -9,6 +9,8 @@ struct SourceLibraryUnit {
     XrXirType *types;
     uint32_t type_count;
     XrXirImplementationTable implementations;
+    XrXirMaterializationBinding *materializations;
+    uint32_t materialization_count;
 };
 static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,
     const char *b, uint32_t count) {

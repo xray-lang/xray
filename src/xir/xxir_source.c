@@ -197,6 +197,7 @@ typedef struct SourceRootQuery {
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
 typedef struct SourceComptimeSite SourceComptimeSite;
+typedef struct SourceMaterialization SourceMaterialization;
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrXirLinkageKind linkage_kind;
@@ -246,7 +247,10 @@ typedef struct SourceContext {
     uint32_t function, module, depth;
     SourceComptimeSite *comptime_sites;
     const SourceComptimeSite *comptime_input;
+    const XrXirTypes *comptime_input_types;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
+    SourceMaterialization *materializations,*materialization_tail;
+    uint32_t materialization_begin,materialization_count;
     SourceExpressionPlan *active_expression;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
@@ -2816,6 +2820,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_array_recipes.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
+#include "xxir_source_materialization_finish.inc.c"
 static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
     for (int t = 0; t < ctx->graph->topo_count; ++t) {

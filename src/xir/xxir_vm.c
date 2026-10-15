@@ -952,7 +952,8 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
     XrXirStatus verified = xr_xir_compile_artifact_verify(artifact, NULL);
     if (verified != XR_XIR_OK)
         return verified == XR_XIR_OUT_OF_MEMORY ? XR_XIR_RUN_OUT_OF_MEMORY : XR_XIR_RUN_BAD_ARTIFACT;
-    if (module->declarations && module->declarations->functions[function].cleanup_owner) return XR_XIR_RUN_BAD_ARTIFACT;
+    if (module->declarations && (module->declarations->functions[function].cleanup_owner ||
+        module->declarations->functions[function].method_kind==XR_XIR_MATERIALIZER)) return XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunction *body = &module->functions[function];
     if (xr_xir_type_is_owned(module->types, body->result)) return XR_XIR_RUN_BAD_ARTIFACT;
     for (uint32_t i = 0; i < body->parameter_count; ++i)

@@ -7839,6 +7839,22 @@ CTFE复用同一Lowered执行和既有Function/Cell/loan协议，可执行真实
 
 外部含身份struct参数或常量导出、未具备有界观察的foreign/deep-variable接收以及私有值Source重放的合法声明owner/函数库存仍未获准。原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和policy2/8MiB逻辑输出保持；失败保全空输出、原owner费用及全部已准备前缀。无公共布局、ABI、schema、opcode或替代evaluator变化；完整FI、同owner重试、资源/寿命、共同/provider/正式安全仍需各自真实资格，不能由本族正例替代。
 
+### 17.67 私有固定数据物化与精确调用边
+
+独立 Source 接收允许已经求值的封闭 struct/enum 常量含有私有字段。接收者不能因此取得字段权限。Source 在当前真实 nominal 声明库存下创建私有、零参数的 MATERIALIZER 函数，只重建该固定常量；函数结果和每条指令只含已准入的封闭数据，函数体为单个基本块，只允许字面量、数据构造、局部 Array 容量重建及到其他已绑定物化函数的直接调用。禁止用户计算调用、外部输入、身份值、函数引用、默认参数绑定、实现绑定和物化调用环。
+
+拥有的 construction 目录保存每条边的实际 caller、instruction、function、nominal 坐标，按 caller/instruction 严格排序。完整普通 Checker 复验全部函数库存、每条实际使用、声明归属、数据类型、调用图及普通模块导入；只有匹配精确目录的直接 CALL 可调用未导出的物化函数。MATERIALIZER 角色或结果类型本身不构成权限。直接 CTFE/VM 入口及公开 Instance 调用不允许选择物化函数，普通函数中的已绑定内部调用仍可执行。
+
+Source 先完成普通函数库存，再迭代生成尾部物化函数，避免改变两次普通构造中的函数及 comptime occurrence 身份。生成声明的父级和作用域来自当前真实 Source/Checked nominal 声明；没有 AST 的 Checked 声明也必须有完整的接收库存。常量快照只在同步构造期间拥有，最终产物仅保存普通字面量 recipe。Checked 重读、特化及 Lowered 接收分别拥有并复验目录；库导入按真实 caller/callee/nominal 映射重定位精确边，不复制旧编号作为权限。
+
+封闭泛型 nominal 缺少派生字段缓存时，Source 只用当前声明的字段类型和真实泛型实参，经普通类型替换补齐缓存；求值 ValueArena 不提供 Source 字段或权限。替换可能扩容类型池，接收者必须按稳定 ID 重新获取节点。物化数据类型必须保留完整声明字段分母。目录边数不等同于函数数，坐标按实际模块/函数体复验，不拿已消耗后的剩余函数预算当作输入编号上界。
+
+派生字段可能在接收时引入类型节点，因此后续 comptime occurrence 的期望类型必须在两个同步存活的真实 Source 类型池之间完整匹配，不能跨 owner 比较本地 type ID。期望上下文的标志、实际语法、模块、声明及函数库存仍逐项复验；类型池借用在同步 Source 构造结束前终止，不进入发布的 Artifact 或查询快照。
+
+库内 comptime 由同一不可变源码图独立构造普通 Program，经过完整 Built/Checked/特化/Lowered 路径后使用唯一 CTFE 求值器。库模板不改标为可执行产物。结果按实际语法 occurrence、模块、声明祖先、期望上下文和完整跨池结果类型接收，再由独立 Library Source 构造复验。所有临时 Program、目录、快照和失败前缀使用原 ledger，不重置预算。
+
+该原子切换采用 Checked schema29、contract74，construction C 接口 revision2 统一由 xr_xir_compile_construction_new_v2 接收 XrXirConstructionSpec；旧无版本构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)

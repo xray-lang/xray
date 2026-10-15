@@ -192,7 +192,8 @@ static XrXirCtfeStatus ctfe_call_prepare(const XrXirCtfeCallRequest *request,boo
     if (artifact->module.stage!=XR_XIR_LOWERED || input->function>=artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;
     if (artifact->module.declarations && artifact->module.declarations->functions &&
-        artifact->module.declarations->functions[input->function].cleanup_owner) return XR_XIR_CTFE_NOT_SUPPORTED;
+        (artifact->module.declarations->functions[input->function].cleanup_owner ||
+         artifact->module.declarations->functions[input->function].method_kind==XR_XIR_MATERIALIZER)) return XR_XIR_CTFE_NOT_SUPPORTED;
     const XrXirCompileContext *work=&artifact->context;
     if (!xir_compile_work(work,1)) return XR_XIR_CTFE_BUDGET;
     const XrXirTarget *target=xr_xir_compile_artifact_target(artifact);

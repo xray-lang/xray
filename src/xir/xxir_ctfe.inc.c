@@ -109,6 +109,7 @@ static XrXirCtfeStatus ctfe_admit(const XrXirArtifact *artifact, uint32_t select
     if (!xir_compile_work(context, 1)) return XR_XIR_CTFE_BUDGET;
     if (!module->declarations || !module->declarations->functions) return XR_XIR_CTFE_NOT_LEAF;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[selected];
+    if (identity->method_kind==XR_XIR_MATERIALIZER) return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus owner=ctfe_nominal_owner_admit(artifact,identity->nominal_owner);
     if (owner!=XR_XIR_CTFE_OK) return owner==XR_XIR_CTFE_NOT_SUPPORTED?XR_XIR_CTFE_NOT_LEAF:owner;
     if (identity->cleanup_owner ||

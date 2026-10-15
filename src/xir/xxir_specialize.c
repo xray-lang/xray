@@ -464,6 +464,7 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     xr_compile_resources_free(origins);
     return status;
 }
+#include "xxir_specialize_materialization.inc.c"
 XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     if (!checked || !output || *output) {
         if (diagnostic) *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
@@ -540,7 +541,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     specialized.provenance = provenance;
     XrXirConstruction *projected = NULL;
-    c.diagnostic.status = xir_construction_empty(&limits, specialized.types, &projected);
+    c.diagnostic.status = spec_materialization_construction(&c,&specialized,&projected);
     if (c.diagnostic.status == XR_XIR_OK) {
         if (!xir_compile_work(&limits,sizeof(XirProvenanceReceiving))) c.diagnostic.status=XR_XIR_BUDGET;
         else {

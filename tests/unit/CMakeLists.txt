@@ -4567,3 +4567,4 @@ add_subdirectory(xir/p11_array_observe)
 add_subdirectory(xir/p11_ref_closure_source)
 
 add_subdirectory(xir/p11_struct_observe)
+add_subdirectory(xir/p11_materialization)

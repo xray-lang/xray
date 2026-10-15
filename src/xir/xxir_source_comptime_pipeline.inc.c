@@ -51,7 +51,9 @@ static bool source_comptime_helper(SourceContext *ctx,const XrXirArtifact *lower
     if (found==UINT32_MAX) return source_fail(ctx,site->syntax,XR_XIR_BAD_STRUCTURE,"comptime helper is absent after specialization");
     *output=found;return true;
 }
+static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtifact *checked);
 static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *checked) {
+    if (ctx->linkage_kind==XR_XIR_LIBRARY) return source_comptime_evaluate_library(ctx,checked);
     AstNode *entry=ctx->comptime_sites ? ctx->comptime_sites->syntax : NULL;
     if (ctx->comptime_sites) ctx->module=ctx->comptime_sites->module;
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};uint8_t identity[32]={0};
@@ -105,12 +107,14 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
  * or immutable manifest rows held by the original synchronous Source owner. */
 static void source_comptime_values_free(SourceContext *ctx) {
     for (SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) xr_xir_value_drop(&site->value);
+    for (SourceMaterialization *site=ctx->materializations;site;site=site->next) xr_xir_value_drop(&site->value);
 }
 static void source_comptime_context_free(SourceContext *ctx) {
     source_comptime_values_free(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     while (ctx->memory) { SourceMemory *next=ctx->memory->next;xr_compile_resources_free(ctx->memory);ctx->memory=next; }
 }
+#include "xxir_source_comptime_library.inc.c"
 static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output) {
     if (!ctx->comptime_count || ctx->diagnostic.status!=XR_XIR_OK) return;
     if (!source_comptime_evaluate(ctx,output->checked)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
@@ -119,6 +123,9 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
     received.comptime_input=ctx->comptime_sites;
+    /* Both Source owners stay live for this synchronous receiving pass. */
+    received.comptime_input_types=&ctx->types;
+    received.materialization_begin=ctx->function_count;
     XrXirSourceResult result={0};source_construct(&received,&result);
     if (received.diagnostic.status==XR_XIR_OK &&
         (received.comptime_count!=ctx->comptime_count || received.comptime_matched!=ctx->comptime_count))
