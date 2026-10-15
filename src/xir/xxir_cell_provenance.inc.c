@@ -13,7 +13,7 @@
 #include "xxir_cell_provenance_internal.h"
 
 typedef struct CellProofFunction {
-    uint32_t begin, count, parameters, scope_begin, scopes, words, stored;
+    uint32_t begin, count, parameters, scope_begin, scopes, words, stored, role_calls;
     size_t dependency_begin;
     uint32_t class_begin,class_count,class_words;
     size_t class_dependency_begin;
@@ -144,11 +144,18 @@ static bool cell_proof_inventory_parameter(CellProofBuild *build,uint32_t f,
 }
 /* Both readers validate the physical range and independent actual type before
  * this shared instruction inventory; no shape temporary or permission is passed. */
+static bool cell_proof_inventory_calls(CellProofBuild *build,uint32_t f,XrXirOp opcode) {
+    if (opcode!=XR_XIR_FUNCTION_REF && opcode!=XR_XIR_CALL &&
+        opcode!=XR_XIR_INVOKE && opcode!=XR_XIR_CLEANUP_REGISTER) return true;
+    if (!cell_proof_work(build,1)) return false;
+    build->proof->functions[f].role_calls=1;return true;
+}
 static bool cell_proof_inventory_instruction(CellProofBuild *build,uint32_t f,
     uint32_t i,XrXirType type,XrXirOp opcode,bool *tracked) {
     if (!tracked) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
     if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT)
         return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    if (!cell_proof_inventory_calls(build,f,opcode)) return false;
     *tracked|=cell_proof_place(opcode);
     if (opcode==XR_XIR_CELL_PROJECT) {
         if (!cell_proof_work(build,2)) return false;
@@ -248,6 +255,7 @@ static bool cell_proof_inventory_run(CellProofBuild *build,uint32_t f,
     if (run->first>=head->instruction_count || run->count>head->instruction_count-run->first)
         return cell_proof_error(build,f,run->first,XR_XIR_BAD_STRUCTURE);
     if (build->body->range && !(run->varying&UINT32_C(3))) {
+        if (!cell_proof_inventory_calls(build,f,run->operation.op)) return false;
         *tracked|=cell_proof_place(run->operation.op) || cell_proof_cell(&build->body->domain,run->operation.type);
         if (run->operation.op==XR_XIR_CELL_PROJECT) {
             if (run->count>UINT32_MAX-build->proof->project_count)
@@ -327,7 +335,7 @@ static bool cell_proof_inventory(CellProofBuild *build) {
         if (!cell_proof_work(build,8)) return false;
         proof->functions[f] = (CellProofFunction){.begin=(uint32_t)values,
             .count=(uint32_t)count,.parameters=function->parameter_count,
-            .stored=tracked?(uint32_t)count:0};
+            .stored=tracked?(uint32_t)count:0,.role_calls=proof->functions[f].role_calls};
         if (tracked) values += count;
         if (values > UINT32_MAX)
             return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
@@ -390,6 +398,10 @@ static bool cell_proof_roles(CellProofBuild *build) {
     XrXirCellProvenance *proof = build->proof;
     const XirMetadataDomain *module = &build->body->domain;
     for (uint32_t f = 0; f < module->function_count; ++f) {
+        /* Opcode inventory includes unbound references with no local Cell.
+         * Only a body with none of the four role-producing calls is empty. */
+        if (!cell_proof_work(build,1)) return false;
+        if (!proof->functions[f].role_calls) continue;
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
         const XrXirCellProofBodyHead *function=&head;
         if (!build->body->range) {
@@ -1117,7 +1129,7 @@ XR_FUNC XrXirStatus xir_cell_proof_builder_function(XrXirCellProofBuilder *build
         return build->status;
     build->proof->functions[f]=(CellProofFunction){.begin=(uint32_t)builder->values,
         .count=(uint32_t)count,.parameters=builder->head.parameter_count,
-        .stored=builder->tracked?(uint32_t)count:0};
+        .stored=builder->tracked?(uint32_t)count:0,.role_calls=build->proof->functions[f].role_calls};
     if (builder->tracked) builder->values+=count;
     ++builder->function;builder->open=false;return XR_XIR_OK;
 }
