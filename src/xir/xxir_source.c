@@ -254,6 +254,8 @@ typedef struct SourceContext {
     bool returned, has_generics, query_ready;
     XrXirSourceView query;
     XrXirSourceSyntaxView syntax;
+    XrXirSourceCalls calls;
+    uint32_t call_capacity;
     uint32_t syntax_declaration_capacity, syntax_reference_capacity, syntax_marker_capacity;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
     uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
@@ -1344,6 +1346,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             SourceName *root = source_ref_binding(ctx,call->arguments[p]);
             if (!root || !source_fact_push(ctx,root,0)) return false;
         }
+        if (!source_query_call(ctx, UINT32_MAX, source_query_token_range(ctx, call->callee))) return false;
         return source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_CALL_INDIRECT, signature.result, {0}, {0}, indirect.id, {0}},
             args, (uint32_t) call->arg_count, value);
     }
@@ -2930,6 +2933,7 @@ static bool source_query_modules(SourceContext *ctx) {
     return true;
 }
 #include "xxir_source_dependencies.inc.c"
+#include "xxir_source_calls_publish.inc.c"
 static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) {
     if (!output || !ctx->query_ready || ctx->diagnostic.status != XR_XIR_OK) {
         if (output) xr_xir_compile_source_result_free(output);
@@ -2944,6 +2948,10 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     if (status == XR_XIR_OK) {
         failure = "source syntax snapshot publication failed";
         status = xr_xir_compile_source_snapshot_syntax_copy(output->snapshot, &ctx->syntax);
+    }
+    if (status == XR_XIR_OK) {
+        failure = "source call snapshot publication failed";
+        status = source_calls_publish(ctx, output->snapshot);
     }
     if (status == XR_XIR_OK) {
         failure = "source dependency snapshot publication failed";

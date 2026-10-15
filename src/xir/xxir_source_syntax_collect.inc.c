@@ -57,11 +57,33 @@ static bool source_query_syntax_role(SourceContext *ctx,uint32_t declaration,XrX
         changed.name=(XrXirSourceRange){fact->name.module,0,0,0,0};
     return source_copy_bytes(ctx,NULL,fact,&changed,sizeof(changed));
 }
+static bool source_query_callable(SourceContext *ctx,uint32_t declaration) {
+    if(!declaration||declaration>ctx->query.declaration_count)return false;
+    const XrXirSourceDeclaration *decl=&ctx->query.declarations[declaration-1];
+    return decl->kind==XR_XIR_SOURCE_FUNCTION||(decl->kind==XR_XIR_SOURCE_MEMBER&&
+        ctx->syntax.declarations[declaration-1].role==XR_XIR_SOURCE_SYNTAX_METHOD);
+}
+static bool source_query_call(SourceContext *ctx,uint32_t reference,XrXirSourceRange range) {
+    if(ctx->function>=ctx->function_count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source call body is invalid");
+    uint32_t declaration=ctx->bodies[ctx->function].declaration;
+    bool known=range.line>0&&range.column>0&&range.end_line==range.line&&range.end_column>range.column;
+    XrXirSourceCall call={reference,source_query_callable(ctx,declaration)?declaration:0,
+        known?range:(XrXirSourceRange){range.module,0,0,0,0},
+        ctx->function<ctx->module_count&&ctx->function==ctx->module,known};
+    XrXirSourceCall *facts=source_query_append(ctx,ctx->calls.items,&ctx->calls.count,
+        &ctx->call_capacity,sizeof(*facts));
+    if(!facts)return false;ctx->calls.items=facts;
+    return source_copy_bytes(ctx,NULL,&facts[ctx->calls.count-1],&call,sizeof(call));
+}
 static bool source_query_syntax_reference(SourceContext *ctx,XrXirSourceRange range) {
     XrXirSourceRange *facts=source_query_append(ctx,ctx->syntax.references,
         &ctx->syntax.reference_count,&ctx->syntax_reference_capacity,sizeof(*facts));
     if(!facts)return false;ctx->syntax.references=facts;
-    return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.reference_count-1],&range,sizeof(range));
+    if(!source_copy_bytes(ctx,NULL,&facts[ctx->syntax.reference_count-1],&range,sizeof(range)))return false;
+    if(ctx->syntax.reference_count!=ctx->query.reference_count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source reference observations diverged");
+    uint32_t reference=ctx->query.reference_count-1;
+    return ctx->query.references[reference].access!=XR_XIR_SOURCE_CALL||source_query_call(ctx,reference,range);
 }
 static bool source_query_pattern_binding(SourceContext *ctx,uint32_t declaration,XrXirSourceRange range) {
     XrXirSourceMarker *facts=source_query_append(ctx,ctx->syntax.markers,&ctx->syntax.marker_count,
