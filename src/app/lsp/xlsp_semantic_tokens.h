@@ -18,45 +18,7 @@
 #include "xlsp_server.h"
 #include "../../base/xjson.h"
 
-// LSP Semantic Token Types (indices into legend)
-typedef enum {
-    XLSP_TOKEN_NAMESPACE = 0,
-    XLSP_TOKEN_TYPE,
-    XLSP_TOKEN_CLASS,
-    XLSP_TOKEN_ENUM,
-    XLSP_TOKEN_INTERFACE,
-    XLSP_TOKEN_STRUCT,
-    XLSP_TOKEN_TYPE_PARAMETER,
-    XLSP_TOKEN_PARAMETER,
-    XLSP_TOKEN_VARIABLE,
-    XLSP_TOKEN_PROPERTY,
-    XLSP_TOKEN_ENUM_MEMBER,
-    XLSP_TOKEN_EVENT,
-    XLSP_TOKEN_FUNCTION,
-    XLSP_TOKEN_METHOD,
-    XLSP_TOKEN_MACRO,
-    XLSP_TOKEN_KEYWORD,
-    XLSP_TOKEN_MODIFIER,
-    XLSP_TOKEN_COMMENT,
-    XLSP_TOKEN_STRING,
-    XLSP_TOKEN_NUMBER,
-    XLSP_TOKEN_REGEXP,
-    XLSP_TOKEN_OPERATOR,
-    XLSP_TOKEN_COUNT
-} XlspSemanticTokenType;
-
-// LSP Semantic Token Modifiers (bit flags)
-typedef enum {
-    XLSP_MOD_DECLARATION = 1 << 0,
-    XLSP_MOD_DEFINITION = 1 << 1,
-    XLSP_MOD_READONLY = 1 << 2,
-    XLSP_MOD_STATIC = 1 << 3,
-    XLSP_MOD_DEPRECATED = 1 << 4,
-    XLSP_MOD_ASYNC = 1 << 5,
-    XLSP_MOD_MODIFICATION = 1 << 6,
-    XLSP_MOD_DOCUMENTATION = 1 << 7,
-    XLSP_MOD_DEFAULT_LIBRARY = 1 << 8
-} XlspSemanticTokenModifier;
+#include "xlsp_semantic_legend.h"
 
 // Semantic token entry
 typedef struct XlspSemanticToken {

@@ -3,6 +3,7 @@
 #include "xlsp_server.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_request.h"
+#include "xlsp_source_code_lens.h"
 #include "../../api/xsource_compile.h"
 #include <string.h>
 #include <stdio.h>
@@ -93,7 +94,9 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     status=xlsp_source_workspace_build(&context,documents,count,&fresh,&server->source_failure.stage,NULL);
     if(status!=XR_XIR_OK)goto done;
     server->source_failure.stage=7;
-    if(mode>=4) {
+    if(mode==7) {
+        status=xlsp_source_code_lens_json(resources,fresh,doc->uri,selected_length,&result);
+    } else if(mode>=4) {
         status=xlsp_source_workspace_tokens(fresh,doc->uri,selected_length,range,&tokens);
         if(status!=XR_XIR_OK)goto done;
         if(!range&&doc->sem_token_result_id==UINT32_MAX){status=XR_XIR_BUDGET;goto done;}
@@ -128,6 +131,14 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server,XrLspDocument *doc,XrLs
 }
 XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server,XrLspDocument *doc,XrLspPosition pos) {
     return navigation_request(server,doc,pos,2,true,NULL,NULL);
+}
+XrJsonValue *xlsp_code_lens_handle(XrLspServer *server,XrJsonValue *params) {
+    if(!server)return NULL;
+    server->source_failure.stage=12;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
+    XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri");
+    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
+    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
+    return navigation_request(server,doc,(XrLspPosition){0},7,false,NULL,NULL);
 }
 /* Strict protocol UInteger/URI admission is shared by navigation and typed hover handlers. */
 XrJsonValue *xlsp_navigation_handle(XrLspServer *server,XrJsonValue *params,unsigned mode) {

@@ -36,5 +36,6 @@ XR_FUNC XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspD
 XR_FUNC XrJsonValue *xlsp_navigation_handle(XrLspServer *, XrJsonValue *, unsigned mode);
 
 XR_FUNC XrJsonValue *xlsp_semantic_handle(XrLspServer *,XrJsonValue *,unsigned mode);
+XR_FUNC XrJsonValue *xlsp_code_lens_handle(XrLspServer *,XrJsonValue *);
 
 #endif  // XLSP_NAVIGATION_H

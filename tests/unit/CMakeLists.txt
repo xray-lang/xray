@@ -3815,6 +3815,7 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_navigation.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_workspace.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_request.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_code_lens.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_syntax.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_buffer.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_open.c
@@ -4492,6 +4493,10 @@ if(WIN32)
         $<TARGET_FILE:test_lsp_source_workspace> ${PROJECT_SOURCE_DIR}/stdlib)
     set_tests_properties(test_lsp_source_workspace PROPERTIES TIMEOUT 300 COST 40
         RUN_SERIAL TRUE LABELS "unit;lsp;xir;ownership;budget")
+    add_subdirectory(xir/lsp_source_index)
+    add_subdirectory(xir/lsp_source_index_store)
+    add_subdirectory(xir/lsp_index_pool)
+    add_subdirectory(xir/lsp_code_lens)
 endif()
 
 add_executable(test_lsp_document_store xir/test_lsp_document_store.c)
