@@ -99,3 +99,24 @@ set_tests_properties(test_xir_source_comptime_projection PROPERTIES
 add_test(NAME test_xir_source_comptime_projection_resources COMMAND test_xir_source_comptime --projection-resources)
 set_tests_properties(test_xir_source_comptime_projection_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;projection" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_error COMMAND test_xir_source_comptime --error)
+set_tests_properties(test_xir_source_comptime_error PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;error" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_error_resources COMMAND test_xir_source_comptime --error-resources)
+set_tests_properties(test_xir_source_comptime_error_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;error" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_panic COMMAND test_xir_source_comptime --panic)
+set_tests_properties(test_xir_source_comptime_panic PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;panic" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_panic_resources COMMAND test_xir_source_comptime --panic-resources)
+set_tests_properties(test_xir_source_comptime_panic_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;panic" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_class COMMAND test_xir_source_comptime --class)
+set_tests_properties(test_xir_source_comptime_class PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;class" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_class_resources COMMAND test_xir_source_comptime --class-resources)
+set_tests_properties(test_xir_source_comptime_class_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;class" TIMEOUT 600 RUN_SERIAL TRUE)

@@ -20,8 +20,9 @@ static XrXirCtfeStatus ctfe_projection_step(ScalarRun *run,VmState *vm,CtfeOwned
     const XrXirInstruction *root=&run->function->instructions[root_id-run->function->parameter_count];
     XrXirValue cell=ctfe_array_operand(run,root->args[0]),result={0};
     status=ctfe_validation_work(run,&bounded,op->type);
-    if (status==XR_XIR_CTFE_OK && !scalar_compile_work(run,state->cell_header_work)) status=XR_XIR_CTFE_BUDGET;
-    if (status==XR_XIR_CTFE_OK && (!xr_xir_cell_in_domain(&cell,state->domain) || xr_xir_cell_module_storage(&cell))) status=XR_XIR_CTFE_NOT_SUPPORTED;
+    if (status==XR_XIR_CTFE_OK && !scalar_compile_work(run,state->value_header_work)) status=XR_XIR_CTFE_BUDGET;
+    if (status==XR_XIR_CTFE_OK && root->op==XR_XIR_OBJECT_PLACE) status=ctfe_admission_work(run,&bounded,&cell);
+    else if (status==XR_XIR_CTFE_OK && (!xr_xir_cell_in_domain(&cell,state->domain) || xr_xir_cell_module_storage(&cell))) status=XR_XIR_CTFE_NOT_SUPPORTED;
     if (status==XR_XIR_CTFE_OK) {
         XrXirValueAdmission admission=ctfe_value_admission(&bounded);
         status=ctfe_value_status(xr_xir_cell_project_authorized(op->type,&cell,&path,&state->authority,&admission,&result));

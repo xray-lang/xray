@@ -1,0 +1,4 @@
+enum E{Bad}
+fn fail(value:Error?)->i64{throw value!}
+fn answer()->i64{const missing:Error?=null;if(missing!=null){return 0};const e:Error=E.Bad;const value:Error?=e;try{return fail(value)}catch(e:E){return 42}}
+export fn run()->i64{return comptime answer()}

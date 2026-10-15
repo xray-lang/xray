@@ -1,0 +1,5 @@
+enum E{Bad}
+fn make()->Error{return E.Bad}
+fn fail(e:Error)->i64{throw e}
+fn answer()->i64{const e=make();const pair=(e,e);try{return fail(pair.0)}catch(e:E){return 42}}
+export fn run()->i64{return comptime answer()}

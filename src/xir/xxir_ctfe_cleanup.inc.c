@@ -11,15 +11,7 @@
  *   use the common predecessor-aware kernel; pending returns retain snapshots.
  */
 static XrXirCtfeStatus ctfe_cleanup_edge(CtfeCallExecution *execution,uint32_t target) {
-    CtfeCallFrame *frame=execution->top;const XrXirFunction *body=frame->run.function;
-    if (target>=body->block_count) return XR_XIR_CTFE_BAD_ARTIFACT;
-    if (!scalar_compile_work(&frame->run,16)) return XR_XIR_CTFE_BUDGET;
-    XrXirInstruction edge={.op=XR_XIR_JUMP,.targets={target}};
-    XrXirCtfeStatus status=ctfe_tuple_flow_work(&frame->run,&edge,&execution->owned);
-    if (status!=XR_XIR_CTFE_OK) return status;
-    XrXirRunStatus moved=xir_scalar_core_edge(&frame->run,frame->state.instruction,target);
-    if (moved!=XR_XIR_RUN_OK) return moved==XR_XIR_RUN_STEP_LIMIT?XR_XIR_CTFE_BUDGET:XR_XIR_CTFE_BAD_ARTIFACT;
-    frame->state.instruction=body->blocks[target].first;return XR_XIR_CTFE_OK;
+    return ctfe_frame_edge(execution,execution->top,target);
 }
 static XrXirCtfeStatus ctfe_cleanup_step(CtfeCallExecution *execution,const XrXirInstruction *op) {
     CtfeCallFrame *frame=execution->top;uint32_t registration=frame->state.instruction+1;
@@ -36,10 +28,14 @@ static XrXirCtfeStatus ctfe_cleanup_continue(CtfeCallExecution *execution,XrXirV
     CtfeCallFrame *frame=execution->top;const XrXirFunction *body=frame->run.function;
     if (!scalar_compile_work(&frame->run,64)) return XR_XIR_CTFE_BUDGET;
     if (frame->state.frontier==frame->state.exit_target) {
-        if (frame->returning) {
+        if (frame->exit_kind==CTFE_EXIT_PANIC) return ctfe_panic_continue(execution,done);
+        if (frame->exit_kind==CTFE_EXIT_ERROR) return ctfe_error_unwind(execution,done);
+        if (frame->exit_kind==CTFE_EXIT_RETURN) {
             *done=!frame->parent;return ctfe_call_return(execution,&frame->returned,output);
         }
-        frame->state.leaving=false;return ctfe_cleanup_edge(execution,frame->state.exit_block);
+        frame->state.leaving=false;XrXirCtfeStatus status=ctfe_cleanup_edge(execution,frame->state.exit_block);
+        if (frame->exit_kind==CTFE_EXIT_LOCAL_ERROR) { xr_xir_value_drop(&frame->returned);frame->exit_kind=CTFE_EXIT_NONE; }
+        return status;
     }
     if (!frame->state.frontier || frame->state.frontier>body->instruction_count || frame->state.cleanup_waiting)
         return XR_XIR_CTFE_BAD_ARTIFACT;

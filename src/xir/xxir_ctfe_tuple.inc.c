@@ -17,6 +17,8 @@
 #include "xxir_enum.h"
 static XrXirCtfeStatus ctfe_validation_work(ScalarRun *run,CtfeOwnedState *state,XrXirType type) {
     if (xr_xir_type_is_cell(run->module->types,type)) type=xr_xir_cell_element(run->module->types,type);
+    if (type==XR_XIR_ERROR) return scalar_compile_work(run,64+state->value_header_work)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
+    if (type==XR_XIR_PANIC_INFO) return scalar_compile_work(run,512)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
     if (!ctfe_execution_node(run->module->types,type,true)) return XR_XIR_CTFE_OK;
     uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
     if (!state->tuple_costs) {
@@ -57,6 +59,9 @@ static XrXirCtfeStatus ctfe_tuple_step(ScalarRun *run,VmState *state,CtfeOwnedSt
     XrXirType receiver_type=op->op==XR_XIR_TUPLE_NEW?op->type:xr_xir_operand_type(run->function,op->args[0]);
     XrXirCtfeStatus status=ctfe_validation_work(run,owned,receiver_type);
     if (status!=XR_XIR_CTFE_OK) return status;
+    if (op->op==XR_XIR_TUPLE_FIELD && op->type==XR_XIR_ERROR) {
+        status=ctfe_validation_work(run,owned,op->type);if (status!=XR_XIR_CTFE_OK) return status;
+    }
     if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,op->type);uint32_t payload=0;
         if (!tuple || !state->arguments || tuple->parameter_count>run->layout->outgoing_count) return XR_XIR_CTFE_BAD_ARTIFACT;

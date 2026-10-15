@@ -1,0 +1,3 @@
+enum E{Bad}
+fn answer()->i64{var x=0;defer{x=x+99};try{defer{x=x*10+1};{defer{x=x*10+2};throw E.Bad}}catch(e:E){return x==21 ? 42 : 0}}
+export fn run()->i64{return comptime answer()}

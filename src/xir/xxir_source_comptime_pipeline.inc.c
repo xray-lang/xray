@@ -24,6 +24,10 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_NUMERIC_RANGE?"comptime value range violation":
         status==XR_XIR_CTFE_NULL_UNWRAP?"comptime null unwrap":
         status==XR_XIR_CTFE_BOUNDS?"comptime index out of bounds":
+        status==XR_XIR_CTFE_UNCAUGHT_ERROR?"comptime uncaught error":
+        status==XR_XIR_CTFE_ASSERTION_FAILURE?"comptime assertion failed":
+        status==XR_XIR_CTFE_MATCH_FAILURE?"comptime non-exhaustive match":
+        status==XR_XIR_CTFE_CLEANUP_PANIC?"comptime panic escaped defer cleanup":
         "comptime requires an admitted deterministic scalar direct-call closure";
     return source_fail(ctx,node,mapped,message);
 }

@@ -22,7 +22,7 @@ static uint32_t ctfe_composite_fields(const XrXirTypeNode *node) {
 }
 static const XrXirTypeNode *ctfe_execution_node(const XrXirTypes *types,XrXirType type,bool internal) {
     const XrXirTypeNode *node=ctfe_composite_node(types,type);
-    if (!node && internal) { node=xr_xir_type_node(types,type);if (node && node->kind!=XR_XIR_TYPE_CALLABLE) node=NULL; }
+    if (!node && internal) { node=xr_xir_type_node(types,type);if (node && node->kind!=XR_XIR_TYPE_CALLABLE && !xr_xir_type_is_class(types,type)) node=NULL; }
     return node;
 }
 static uint32_t ctfe_type_fields(const XrXirTypeNode *node) {
@@ -42,6 +42,8 @@ static XrXirCtfeStatus ctfe_nominal_owner_admit(const XrXirArtifact *artifact,ui
 static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type,bool internal,XrXirCtfeTypeShape *output) {
     if (!xir_compile_context_valid(context)) return XR_XIR_CTFE_BAD_ARGUMENT;
+    if (internal && type==XR_XIR_ERROR) { *output=(XrXirCtfeTypeShape){1,true,false};return XR_XIR_CTFE_OK; }
+    if (internal && type==XR_XIR_PANIC_INFO) { *output=(XrXirCtfeTypeShape){32,false,true};return XR_XIR_CTFE_OK; }
     if (ctfe_result_type(type)) { *output=(XrXirCtfeTypeShape){1,false,type!=XR_XIR_UNIT};return XR_XIR_CTFE_OK; }
     const XrXirTypeNode *root=ctfe_execution_node(types,type,internal);
     if (!root || !types || !types->count) return XR_XIR_CTFE_NOT_SUPPORTED;
@@ -55,7 +57,8 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
     uint8_t *colors=(uint8_t *)(costs+types->count);uint32_t depth=1;
     if (!xir_compile_work(context,sizeof(*stack)+1)) { status=XR_XIR_CTFE_BUDGET;goto done; }
     uint32_t index=(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE;
-    stack[0]=(CtfeTypeFrame){(uint64_t)ctfe_type_fields(root)+1,index,0,root->kind==XR_XIR_TYPE_CALLABLE,root->kind==XR_XIR_TYPE_ARRAY};colors[index]=1;
+    bool identity=internal && xr_xir_type_is_class(types,type);
+    stack[0]=(CtfeTypeFrame){(uint64_t)ctfe_type_fields(root)+1+(identity?32:0),index,0,identity || root->kind==XR_XIR_TYPE_CALLABLE,root->kind==XR_XIR_TYPE_ARRAY};colors[index]=1;
     while (depth) {
         if (!xir_compile_work(context,4)) { status=XR_XIR_CTFE_BUDGET;break; }
         CtfeTypeFrame *frame=&stack[depth-1];
@@ -98,6 +101,20 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             field.type=xr_xir_cell_element(types,field.type);
         }
         if (single && field.type==XR_XIR_UNIT) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+        if (internal && field.type==XR_XIR_ERROR) {
+            if (frame->work==UINT64_MAX) { status=XR_XIR_CTFE_BUDGET;break; }
+            ++frame->work;frame->dynamic=true;frame->pure_arrays=false;continue;
+        }
+        if (internal && field.type==XR_XIR_PANIC_INFO) {
+            if (frame->work>UINT64_MAX-32) { status=XR_XIR_CTFE_BUDGET;break; }
+            frame->work+=32;continue;
+        }
+        if (internal && xr_xir_type_is_class(types,field.type)) {
+            if (frame->work>UINT64_MAX-32) { status=XR_XIR_CTFE_BUDGET;break; }
+            /* An identity validates its fixed header, not its field graph.
+             * Actual fields are observed separately before shared receiving. */
+            frame->work+=32;frame->dynamic=true;frame->pure_arrays=false;continue;
+        }
         if (ctfe_result_type(field.type)) {
             if (frame->work==UINT64_MAX) { status=XR_XIR_CTFE_BUDGET;break; }
             ++frame->work;if (node->kind==XR_XIR_TYPE_ARRAY) frame->pure_arrays=field.type!=XR_XIR_UNIT;continue;
@@ -152,19 +169,20 @@ static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifac
         const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&body->operands[op->args[0]]:op->args;
         XrXirPlaceKind kind=xr_xir_place_kind(body,ids[0]);
         if ((op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_STRUCT_SET) &&
-            kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX && kind!=XR_XIR_PLACE_FIELD) return XR_XIR_CTFE_NOT_SUPPORTED;
-        if (kind!=XR_XIR_PLACE_NONE && kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX && kind!=XR_XIR_PLACE_FIELD) return XR_XIR_CTFE_NOT_SUPPORTED;
+            kind!=XR_XIR_PLACE_OBJECT && kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX && kind!=XR_XIR_PLACE_FIELD) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (kind!=XR_XIR_PLACE_NONE && kind!=XR_XIR_PLACE_OBJECT && kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX && kind!=XR_XIR_PLACE_FIELD) return XR_XIR_CTFE_NOT_SUPPORTED;
         uint32_t root=ids[0],depth=0;
         while (xr_xir_place_kind(body,root)==XR_XIR_PLACE_INDEX || xr_xir_place_kind(body,root)==XR_XIR_PLACE_FIELD) {
             if (!xir_compile_work(&artifact->context,4)) return XR_XIR_CTFE_BUDGET;
             if (++depth>body->instruction_count) return XR_XIR_CTFE_BAD_ARTIFACT;
             root=body->instructions[root-body->parameter_count].args[0];
         }
-        if (depth && xr_xir_place_kind(body,root)!=XR_XIR_PLACE_CELL) return XR_XIR_CTFE_NOT_SUPPORTED;
+        if (depth && xr_xir_place_kind(body,root)!=XR_XIR_PLACE_CELL && xr_xir_place_kind(body,root)!=XR_XIR_PLACE_OBJECT) return XR_XIR_CTFE_NOT_SUPPORTED;
         XrXirCtfeStatus receiver=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,ids[0]),false);
         if (receiver!=XR_XIR_CTFE_OK) return receiver;
     }
     if (op->op==XR_XIR_CELL_PLACE && !xr_xir_type_is_cell(artifact->module.types,xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
+    if (op->op==XR_XIR_OBJECT_PLACE && !xr_xir_type_is_class(artifact->module.types,xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirType type=op->type;
     if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         type=xr_xir_operand_type(body,op->args[0]);
@@ -172,7 +190,7 @@ static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifac
         type=xr_xir_cell_element(artifact->module.types,type);
     XrXirCtfeStatus status=ctfe_body_type_admit(artifact,type,false);
     if (status==XR_XIR_CTFE_OK && (op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_IS_SOME || op->op==XR_XIR_NULLABLE_UNWRAP ||
-        op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_TAG || op->op==XR_XIR_ENUM_GET))
+        op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_CLASS_SET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_TAG || op->op==XR_XIR_ENUM_GET))
         status=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,op->args[0]),false);
     return status;
 }
@@ -182,7 +200,7 @@ static XrXirCtfeStatus ctfe_tuple_scratch(const XrXirArtifact *artifact,uint32_t
     const XrXirFunction *body=&artifact->module.functions[function];uint32_t count=0;
     for (uint32_t i=0;i<body->instruction_count;++i) {
         if (!xir_compile_work(&artifact->context,1)) return XR_XIR_CTFE_BUDGET;
-        if (body->instructions[i].op==XR_XIR_ARRAY_NEW || body->instructions[i].op==XR_XIR_STRUCT_NEW || body->instructions[i].op==XR_XIR_ENUM_NEW || body->instructions[i].op==XR_XIR_FUNCTION_REF) {
+        if (body->instructions[i].op==XR_XIR_ARRAY_NEW || body->instructions[i].op==XR_XIR_CLASS_NEW || body->instructions[i].op==XR_XIR_STRUCT_NEW || body->instructions[i].op==XR_XIR_ENUM_NEW || body->instructions[i].op==XR_XIR_FUNCTION_REF) {
             uint32_t arity=body->instructions[i].args[1];
             if (arity>count) count=arity;continue;
         }

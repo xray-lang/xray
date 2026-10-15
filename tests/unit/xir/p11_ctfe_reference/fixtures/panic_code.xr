@@ -1,0 +1,2 @@
+fn answer()->i64{try{return 1%0}catch panic(p){return p.code-379}}
+export fn run()->i64{return comptime answer()}

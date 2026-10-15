@@ -13,6 +13,7 @@
 #include "xxir_ctfe_projection_bounds.inc.c"
 static void ctfe_call_frame_free(CtfeCallFrame *frame) {
     xr_xir_value_drop(&frame->returned);
+    xr_xir_panic_drop(&frame->panic);
     while (frame->loan_count) {
         XrXirCellLoan *loan=&frame->loans[--frame->loan_count].loan;
         if (frame->loans_committed) xr_xir_cell_loan_release(loan);else xr_xir_cell_loan_abort(loan);
@@ -31,7 +32,7 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
         XrXirCtfeStatus paid=ctfe_validation_work(&frame->run,state,body->parameters[p]);if (paid!=XR_XIR_CTFE_OK) return paid;
         XrXirValue value=ctfe_nominal_operand(&frame->run,p);
         XrXirCellProofRole role=xr_xir_cell_provenance_role(state->cells,frame->function,p);
-        if (!scalar_compile_work(&frame->run,state->cell_header_work)) return XR_XIR_CTFE_BUDGET;
+        if (!scalar_compile_work(&frame->run,state->value_header_work)) return XR_XIR_CTFE_BUDGET;
         if (!xr_xir_cell_in_domain(&value,state->domain) || xr_xir_cell_module_storage(&value)) return XR_XIR_CTFE_NOT_SUPPORTED;
         bool projected=xr_xir_cell_is_projection(&value);
         if (role==XR_XIR_CELL_PROOF_OWNED_CAPTURE) {
@@ -45,7 +46,7 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
             if (!xr_xir_type_is_cell(module->types,body->parameters[prior])) continue;
             paid=ctfe_validation_work(&frame->run,state,body->parameters[p]);if (paid!=XR_XIR_CTFE_OK) return paid;
             paid=ctfe_validation_work(&frame->run,state,body->parameters[prior]);if (paid!=XR_XIR_CTFE_OK) return paid;
-            if (!scalar_compile_work(&frame->run,state->cell_header_work*2)) return XR_XIR_CTFE_BUDGET;
+            if (!scalar_compile_work(&frame->run,state->value_header_work*2)) return XR_XIR_CTFE_BUDGET;
             XrXirValue other=ctfe_nominal_operand(&frame->run,prior);
             if (xr_xir_cell_same_owner(&value,&other)) return XR_XIR_CTFE_NOT_SUPPORTED;
         }
@@ -55,7 +56,7 @@ static XrXirCtfeStatus ctfe_call_loans_prepare(CtfeCallExecution *execution,Ctfe
         XrXirValueAdmission admission=ctfe_value_admission(state);XrXirFaultDetail fault={0};
         XrXirValueStatus status=projected?xr_xir_cell_loan_prepare_path(&value,&state->authority,&admission,&fault,&record->loan):
             xr_xir_cell_loan_prepare(&value,&state->authority,&record->loan);
-        if (status==XR_XIR_VALUE_BOUNDS) return XR_XIR_CTFE_BOUNDS;
+        if (status==XR_XIR_VALUE_BOUNDS) return ctfe_bounds_fault(&frame->run,state,fault);
         if (status!=XR_XIR_VALUE_OK) return ctfe_value_status(status);
         ++frame->loan_count;
     }

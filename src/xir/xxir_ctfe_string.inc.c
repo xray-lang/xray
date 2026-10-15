@@ -18,7 +18,7 @@ static XrXirCtfeStatus ctfe_argument_store(ScalarRun *run,uint32_t offset,
     XrXirCtfeStatus validation=ctfe_validation_work(run,state,(XrXirType)value->type);
     if (validation!=XR_XIR_CTFE_OK) return validation;
     if (xr_xir_type_is_cell(run->module->types,(XrXirType)value->type)) {
-        if (!scalar_compile_work(run,state->cell_header_work)) return XR_XIR_CTFE_BUDGET;
+        if (!scalar_compile_work(run,state->value_header_work)) return XR_XIR_CTFE_BUDGET;
         if (xr_xir_cell_is_projection(value)) {
             if (!xr_xir_cell_in_domain(value,state->domain) || xr_xir_cell_module_storage(value)) return XR_XIR_CTFE_NOT_SUPPORTED;
             /* A new descendant descriptor is not readable until its real loan
