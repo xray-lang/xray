@@ -216,6 +216,7 @@ static void graph_drain(void) {
             domain = domain->closed_next;
         }
         if (value_graph_operations || !domain) {
+            if (!domain) value_graph_pending = false;
             value_graph_draining = false;
             graph_unlock(); return;
         }
