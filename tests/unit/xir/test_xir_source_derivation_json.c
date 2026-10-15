@@ -25,6 +25,7 @@
 #include "xir_source_derivation_json_runtime.h"
 #include "xir_generated_schema.h"
 #include "xir_source_derivation_json_source.h"
+#include "xir_source_derivation_json_resources.h"
 static void json_source(const XrXirCompileContext *context,const char *text,
     XrXirLinkageKind kind,const XrXirLibraryCatalog *catalog,XrXirSourceResult *output,XrXirStatus expected) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
@@ -98,8 +99,11 @@ static void json_execute(const XrXirCompileContext *context,XrXirSourceResult *s
     printf("ordinary JSON VM census: constant=%zu string=%zu; full runtime FI=%u\n",constant_sites,text_sites,faults);
 }
 int main(int argc,char **argv) {
+    if (argc==7 && !strcmp(argv[1],"--compiler-fi")) {json_compiler_partition(argv);return 0;}
+    bool generator_packet=argc==3 && !strcmp(argv[1],"--emit-generator");
+    bool compiler=argc==2 && (!strcmp(argv[1],"--compiler-controls") || !strcmp(argv[1],"--compiler-resources"));
     bool emit=argc==4 && !strcmp(argv[1],"--emit-native"),faults=argc==2 && !strcmp(argv[1],"--runtime-resources");
-    CHECK(argc==1 || emit || faults);
+    CHECK(argc==1 || emit || faults || compiler || generator_packet);
     XrCompileResourceLimits caps={67108864,8388608,128000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0},after={0};
@@ -110,6 +114,16 @@ int main(int argc,char **argv) {
     json_source(&context,text,XR_XIR_LIBRARY,NULL,&producer,XR_XIR_OK);memset(text,0xa5,sizeof(text));
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&producer);
+    if (generator_packet || compiler) {
+        if (generator_packet) {
+            FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+        } else {
+            char path[2048];n=snprintf(path,sizeof(path),"%s/future_json.xr",XR_SOURCE_DERIVATION_JSON_WORK);
+            CHECK(n>0 && n<(int)sizeof(path));json_compiler_resources(&packet,path,!strcmp(argv[1],"--compiler-resources"));
+        }
+        xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_release(context.resources);
+        CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);return 0;
+    }
     if (!emit && !faults) json_refuse_ungranted_public(&packet);
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_DERIVATION_JSON_WORK},"generator_json.xr"};
     XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
