@@ -55,14 +55,11 @@ static void source_array_mixed(bool root_native, const char *packet_path,
     CHECK(!memcmp(proof.bytes, native_program->proof.bytes, proof.length));
     uint32_t functions[ARRAY_FUNCTION_COUNT]; find(module, functions);
     CHECK(!memcmp(functions, native_functions, function_count * sizeof(functions[0])));
-    CHECK(xr_compile_resources_calloc(compiler.context.resources, module->function_count,
-        sizeof(*owner->entries), (void **) &owner->entries) == XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_calloc(compiler.context.resources, module->function_count,
-        sizeof(*owner->bindings), (void **) &owner->bindings) == XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_vm_bind_table(owner->artifact, &owner->bindings, &owner->entries) == XR_XIR_OK);
     CHECK(owner->entries && owner->bindings);
     unsigned native = 0, vm = 0;
     for (uint32_t i = 0; i < module->function_count; ++i) {
-        CHECK(xr_xir_compile_vm_bind(owner->artifact, i, &owner->bindings[i], &owner->entries[i]) == XR_XIR_OK);
+        CHECK(owner->bindings[i].artifact == owner->artifact && owner->bindings[i].function == i);
         bool root = module->declarations->functions[i].module == module->declarations->root_module;
         if (root == root_native) { owner->entries[i] = native_program->entries[i]; ++native; }
         else ++vm;
