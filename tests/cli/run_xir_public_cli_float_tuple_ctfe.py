@@ -75,18 +75,21 @@ def main():
             result=invoke(name+'-source-absent',binary,['run',str(output/(name+'.xr'))],hidden)
             assert (result.returncode,result.stdout,result.stderr)==(0,expected,b''),result
         negative=[('range',prefix+'print(comptime trunc(1.0/0.0))\n',b'comptime value range violation'),
-                  ('numeric-text','fn text(x:f64)->string{return x.toString()}\nprint(comptime text(1.5))\n',b'admitted deterministic scalar direct-call closure'),
                   ('io','fn forbidden()->f64{print(1);return 1.5}\nprint(comptime forbidden())\n',b'admitted deterministic scalar direct-call closure'),
                   ('private-import','import {label} from "./scope-a"\nprint(label())\n',b'import requires an exported declaration')]
         for name,text,message in negative:
             entry=output/(name+'.xr');entry.write_text(text,encoding='utf-8');result=invoke(name,binary,['run',str(entry)],hidden)
             assert result.returncode==1 and not result.stdout and message in result.stderr,result
+        entry=output/'numeric-text.xr'
+        entry.write_text('fn text(x:f64)->string{return x.toString()}\nprint(comptime text(1.5))\n',encoding='utf-8')
+        result=invoke('numeric-text',binary,['run',str(entry)],hidden)
+        assert (result.returncode,result.stdout,result.stderr)==(0,b'1.5\n',b''),result
         (output/'summary.json').write_text(json.dumps(dict(status='FLOAT_TUPLE_CTFE_IMPORT_PASS',commands=len(records),
             binary64_rational_cases=20,float_method_calls=120,IEEE_nan_infinity_positive_zero=True,
             owning_Tuple_cases=4,Tuple_logical_output_max_bytes=8,private_Tuple_Cell=True,Tuple_generic_echo=True,
             duplicate_private_helper_names_isolated=True,duplicate_generic_parameter_names_isolated=True,private_import_refused=True,
             source_absent_and_poisoned=True,Windows_absolute_child_denial=policy.control,
-            numeric_TO_STRING_ctfe=False,user_class_CTFE=False,authorized_derivation=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
+            Float_TO_STRING_ctfe=True,user_class_CTFE=False,authorized_derivation=False,complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('Float/Tuple CTFE: exact rational Float methods, IEEE and owned nested/generic table literals PASS');return 0
     finally:
         if temporary:temporary.cleanup()
