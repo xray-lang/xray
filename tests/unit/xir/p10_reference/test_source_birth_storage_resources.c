@@ -57,7 +57,7 @@ static XrXirCallStatus birth_drive(XrXirInstance *instance,uint32_t entry) {
     CHECK(value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
     return XR_XIR_CALL_READY;
 }
-static bool birth_trial(size_t ordinal,bool publish,bool text_value,BirthCost *cost) {
+static bool birth_trial(size_t ordinal,bool publish,bool text_value,bool cell_value,BirthCost *cost) {
     CHECK(!runtime_live && !runtime_bytes && !instance_compile_live && !instance_compile_bytes);
     runtime_fail_at=SIZE_MAX;
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
@@ -65,7 +65,8 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,BirthCost *c
     XrXirSourceGenerations *owner=NULL;
     CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
     XrXirProgram *first_program=NULL,*next_program=NULL;uint32_t first_entry=0,next_entry=0;
-    const char *source=text_value ?
+    const char *source=cell_value ?
+        "var value:i64=41\nfn old()->i64{return value+1}\nprint(17)\nexport fn seed()->i64{return old()}" : text_value ?
         "const value=\"birth\"\nfn old()->i64{if (value==\"birth\"){return 42}else{return 0}}\nprint(17)\nexport fn seed()->i64{return old()}" :
         "const value=41\nfn old()->i64{return value+1}\nprint(17)\nexport fn seed()->i64{return old()}";
     uint64_t first=birth_source(owner,source,
@@ -113,18 +114,19 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,BirthCost *c
 int main(int argc,char **argv) {
     bool baseline=argc==2;
     CHECK(argc==1 || (baseline && !strcmp(argv[1],"--baseline")));
-    for (unsigned mode=0;mode<4;++mode) {
+    for (unsigned mode=0;mode<6;++mode) {
         bool publish=(mode&1)!=0,text_value=(mode&2)!=0;
-        BirthCost normal={0};CHECK(birth_trial(SIZE_MAX,publish,text_value,&normal));
+        bool cell_value=mode>=4;
+        BirthCost normal={0};CHECK(birth_trial(SIZE_MAX,publish,text_value,cell_value,&normal));
         CHECK(normal.sites && normal.sites<20000);
-        printf("BIRTH_STORAGE_BASELINE mode=%u publish=%u string=%u sites=%zu compiler_and_runtime_physical=0/0\n",
-            mode,(unsigned)publish,(unsigned)text_value,normal.sites);
+        printf("BIRTH_STORAGE_BASELINE mode=%u publish=%u string=%u cell=%u sites=%zu compiler_and_runtime_physical=0/0\n",
+            mode,(unsigned)publish,(unsigned)text_value,(unsigned)cell_value,normal.sites);
         if (baseline) continue;
         for (size_t ordinal=0;ordinal<normal.sites;++ordinal) {
-            BirthCost failure={0};CHECK(!birth_trial(ordinal,publish,text_value,&failure));
+            BirthCost failure={0};CHECK(!birth_trial(ordinal,publish,text_value,cell_value,&failure));
             CHECK(failure.status==XR_XIR_CALL_OOM && failure.sites>ordinal);
         }
-        BirthCost retry={0};CHECK(birth_trial(SIZE_MAX,publish,text_value,&retry) && retry.sites==normal.sites);
+        BirthCost retry={0};CHECK(birth_trial(SIZE_MAX,publish,text_value,cell_value,&retry) && retry.sites==normal.sites);
         printf("BIRTH_STORAGE_FI mode=%u sites=%zu all=OOM old42_preserved=1 retry42=1 initialization_once=1 physical=0/0\n",mode,normal.sites);
     }
     return 0;

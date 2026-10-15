@@ -9,6 +9,7 @@
 #include "xxir_source_generation.h"
 #include "xxir_instance_generation_internal.h"
 #include "xxir_value_internal.h"
+#include "xxir_type_arena_internal.h"
 typedef struct SourceGenerationRecord {
     struct SourceGenerationRecord *previous;
     XrXirSourceGenerationView view;
@@ -276,6 +277,39 @@ static XrXirStatus generation_program_correspondence(const XrXirCompileContext *
     }
     return XR_XIR_OK;
 }
+static XrXirStatus generation_type_identities(const XrXirCompileContext *context,
+    const SourceGenerationRecord *record,XrXirProgram *program) {
+    const SourceHistoryCorrespondence *map=&record->capture.semantic->history;
+    if (!map->unit || !map->slot_count) return XR_XIR_OK;
+    uint32_t count=0;
+    for (uint32_t i=0;i<map->slot_count;++i) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        XrXirType from=map->unit->program->declarations->slots[i].type;
+        XrXirType to=program->declarations->slots[map->slots[i]].type;
+        if (from==XR_XIR_ERROR || (uint32_t)from>=XR_XIR_CONSTRUCTED_TYPE_BASE) ++count;
+        else if (from!=to) return XR_XIR_BAD_TYPE;
+    }
+    if (!count) return XR_XIR_OK;
+    if (atomic_load_explicit(&program->references,memory_order_acquire)!=2) return XR_XIR_BAD_STAGE;
+    XrXirStatus status=XR_XIR_OK;
+    XirTypeReceivingRoot *roots=xir_compile_calloc(context,count,sizeof(*roots),&status);
+    if (!roots) return status;
+    uint32_t at=0;
+    for (uint32_t i=0;i<map->slot_count;++i) {
+        if (!xir_compile_work(context,sizeof(*roots))) {status=XR_XIR_BUDGET;break;}
+        XrXirType from=map->unit->program->declarations->slots[i].type;
+        if (from!=XR_XIR_ERROR && (uint32_t)from<XR_XIR_CONSTRUCTED_TYPE_BASE) continue;
+        roots[at++]=(XirTypeReceivingRoot){from,
+            program->declarations->slots[map->slots[i]].type};
+    }
+    if (status==XR_XIR_OK) {
+        XrXirValueStatus received=xir_compile_type_arena_receive(context,program->arena,map->unit->program->arena,
+            roots,count);
+        status=received==XR_XIR_VALUE_OK ? XR_XIR_OK : received==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+            received==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
+    }
+    xr_compile_resources_free(roots);return status;
+}
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGenerations *owner,
     uint64_t serial,XrXirProgram *program) {
     if (!owner || !program || !serial) return XR_XIR_BAD_STRUCTURE;
@@ -298,6 +332,8 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGen
     status=generation_program_correspondence(&owner->config.context,record,program);
     if (status!=XR_XIR_OK) return status;
     if (!xr_xir_compile_program_retain(program)) return XR_XIR_BUDGET;
+    status=generation_type_identities(&owner->config.context,record,program);
+    if (status!=XR_XIR_OK) {xr_xir_compile_program_drop(program);return status;}
     record->unit.program=program;return XR_XIR_OK;
 }
 XR_FUNC XrXirCallStatus xr_xir_source_generation_prepare_instance(XrXirSourceGenerations *owner,
