@@ -46,10 +46,10 @@ static bool toolchain_target(const char *text) {
     if(xtc_target_parse(text,&target,error,sizeof(error)))return true;
     xr_cli_error("toolchain","%s",error);return false;
 }
-static int toolchain_read(const XrCliInvocation *inv,XrCompileResources *resources,bool path_only) {
+static int toolchain_read(const XrCliInvocation *inv,XrCompileState *state,bool path_only) {
     const char *target=xr_cli_opt_string(&inv->options,"target",NULL);
     if(path_only) {
-        char *path=NULL;XrCliToolchainConfigStatus status=xr_cli_toolchain_config_path(resources,NULL,&path);
+        char *path=NULL;XrCliToolchainConfigStatus status=xr_cli_toolchain_config_path(state,NULL,&path);
         if(status!=XR_CLI_TOOLCHAIN_CONFIG_OK)return toolchain_config_error(status);
         if(toolchain_json(inv)){fputs("{\"schema\":1,\"path\":",stdout);toolchain_string(path);puts("}");}
         else puts(path);
@@ -57,7 +57,7 @@ static int toolchain_read(const XrCliInvocation *inv,XrCompileResources *resourc
     }
     if(!toolchain_target(target))return XR_CLI_EXIT_USAGE;
     XrCliToolchainConfig *owner=NULL;
-    XrCliToolchainConfigStatus status=xr_cli_toolchain_config_open(resources,NULL,&owner);
+    XrCliToolchainConfigStatus status=xr_cli_toolchain_config_open(state,NULL,&owner);
     if(status!=XR_CLI_TOOLCHAIN_CONFIG_OK)return toolchain_config_error(status);
     const XrCliToolchainConfigView *view=xr_cli_toolchain_config_view(owner);bool json=toolchain_json(inv),first=true;
     if(json) {
@@ -103,15 +103,20 @@ XR_FUNC int cmd_toolchain(const XrCliInvocation *inv) {
     if(opened!=XR_COMPILE_RESOURCE_OK) {
         xr_cli_error("toolchain","preference resource owner creation failed");return XR_CLI_EXIT_UNAVAILABLE;
     }
+    XrCompileState *state=NULL;opened=xr_compile_state_new(resources,&state);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_resources_release(resources);
+        xr_cli_error("toolchain","preference state creation failed");return XR_CLI_EXIT_UNAVAILABLE;
+    }
     int result;
-    if(list || path_only)result=toolchain_read(inv,resources,path_only);
+    if(list || path_only)result=toolchain_read(inv,state,path_only);
     else {
 #ifdef XR_OS_WINDOWS
-        result=toolchain_update(inv,resources,reset);
+        result=toolchain_update(inv,state,reset);
 #else
         xr_cli_error("toolchain","persistent preference updates are unavailable on this host");
         result=XR_CLI_EXIT_UNAVAILABLE;
 #endif
     }
-    xr_compile_resources_release(resources);return result;
+    xr_compile_state_release(state);xr_compile_resources_release(resources);return result;
 }

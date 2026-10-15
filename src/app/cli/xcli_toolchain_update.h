@@ -33,8 +33,10 @@ typedef struct XrCliToolchainUpdateView {
 
 /* Windows implementation. Copies and validates the entire borrowed request on
  * the mandatory original ledger, without writing or locking files. The default
- * locator is resolved now. Failure preserves the initially NULL output. */
-XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileResources *,
+ * locator is resolved now. Failure preserves the initially NULL output. The
+ * original caller state is retained and owns sticky resource failure across
+ * construction, nested config reads and later retries on the same state. */
+XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileState *,
     const XrCliToolchainUpdateRequest *, XrCliToolchainUpdate **);
 /* Exactly once. Locks the persistent sibling lock file, then reads the latest
  * strict snapshot and atomically publishes a complete replacement. A reset-all

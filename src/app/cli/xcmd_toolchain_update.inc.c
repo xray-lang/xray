@@ -27,7 +27,7 @@ static int toolchain_close(XrCliToolchainUpdate **owner) {
      * cleanup. Terminal process exit releases the unrecoverable OS handles. */
     fflush(stdout);fflush(stderr);_Exit(XR_CLI_EXIT_INTERNAL);
 }
-static int toolchain_update(const XrCliInvocation *inv,XrCompileResources *resources,bool reset) {
+static int toolchain_update(const XrCliInvocation *inv,XrCompileState *state,bool reset) {
     XrCliToolchainUpdateRequest request={.target=xr_cli_opt_string(&inv->options,"target",NULL),.reset=reset};
     if(!reset) {
         char error[256];
@@ -39,7 +39,7 @@ static int toolchain_update(const XrCliInvocation *inv,XrCompileResources *resou
         request.zig=xr_cli_opt_string(&inv->options,"zig",NULL);
     }
     XrCliToolchainUpdate *owner=NULL;
-    XrCliToolchainUpdateStatus status=xr_cli_toolchain_update_new(resources,&request,&owner);
+    XrCliToolchainUpdateStatus status=xr_cli_toolchain_update_new(state,&request,&owner);
     bool request_rejected=status==XR_CLI_TOOLCHAIN_UPDATE_INVALID;
     if(status==XR_CLI_TOOLCHAIN_UPDATE_OK)status=xr_cli_toolchain_update_execute(owner);
     int result=status==XR_CLI_TOOLCHAIN_UPDATE_OK ? XR_CLI_EXIT_OK : toolchain_update_error(status);

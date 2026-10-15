@@ -16,7 +16,7 @@
 #define CONFIG_INPUT_LIMIT (256 * 1024)
 #define CONFIG_TARGET_LIMIT 17
 struct XrCliToolchainConfig {
-    XrCompileResources *resources;
+    XrCompileState *state;
     XrOsIoPolicy policy;
     XrTomlValue *root;
     char *path;
@@ -24,6 +24,17 @@ struct XrCliToolchainConfig {
     XrCliToolchainPreference preferences[CONFIG_TARGET_LIMIT];
     XrCliToolchainConfigStatus status;
 };
+static XrCliToolchainConfigStatus config_resource_status(XrCompileResourceStatus status) {
+    return status==XR_COMPILE_RESOURCE_OK ? XR_CLI_TOOLCHAIN_CONFIG_OK :
+        status==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET :
+        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_CONFIG_INVALID;
+}
+static XrCliToolchainConfigStatus config_capture(XrCompileState *state,XrCliToolchainConfigStatus status) {
+    if(status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET || status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY)
+        return config_resource_status(xr_compile_state_fail(state,status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET ?
+            XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
+    return status;
+}
 static XrCliToolchainConfigStatus config_io_status(XrOsIoStatus status) {
     return status == XR_OS_IO_OK ? XR_CLI_TOOLCHAIN_CONFIG_OK :
         status == XR_OS_IO_BUDGET ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET :
@@ -186,14 +197,18 @@ static bool config_path(XrCliToolchainConfig *owner, const char *path) {
     xr_compile_resources_free(base); return okay;
 }
 XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_open(
-    XrCompileResources *resources, const char *path, XrCliToolchainConfig **output) {
-    if (!resources || !output || *output) return XR_CLI_TOOLCHAIN_CONFIG_INVALID;
+    XrCompileState *state, const char *path, XrCliToolchainConfig **output) {
+    if (!state || !output || *output) return XR_CLI_TOOLCHAIN_CONFIG_INVALID;
     XrCliToolchainConfig *owner = NULL;
-    XrCompileResourceStatus status = xr_compile_resources_calloc(resources, 1, sizeof(*owner), (void **)&owner);
-    if (status != XR_COMPILE_RESOURCE_OK) return status == XR_COMPILE_RESOURCE_BUDGET ?
-        XR_CLI_TOOLCHAIN_CONFIG_BUDGET : status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ?
-        XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_CONFIG_INVALID;
-    owner->resources = resources; owner->policy = xr_compile_io_policy(resources);
+    XrCompileResourceStatus status = xr_compile_state_calloc(state, 1, sizeof(*owner), (void **)&owner);
+    if (status != XR_COMPILE_RESOURCE_OK) return config_resource_status(status);
+    status=xr_compile_state_retain(state);
+    if(status!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_state_free(owner);return config_resource_status(xr_compile_state_fail(state,status));
+    }
+    owner->state=state;
+    XrCompileResources *resources=xr_compile_state_resources(state);
+    owner->policy = xr_compile_io_policy(resources);
     owner->view.preferences = owner->preferences;
     owner->view.allow_fallback = owner->view.prefer_external_native = owner->view.auto_probe = true;
     uint8_t *bytes = NULL; size_t length = 0;
@@ -214,22 +229,26 @@ XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_open(
     if (okay && config_work(owner, sizeof(owner->view))) {
         owner->view.path = owner->path; *output = owner; return XR_CLI_TOOLCHAIN_CONFIG_OK;
     }
-    XrCliToolchainConfigStatus failure = owner->status;
+    XrCliToolchainConfigStatus failure = config_capture(state,owner->status);
     xr_cli_toolchain_config_free(owner); return failure;
 }
 XR_FUNC const XrCliToolchainConfigView *xr_cli_toolchain_config_view(const XrCliToolchainConfig *owner) {
     return owner ? &owner->view : NULL;
 }
 XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_path(
-    XrCompileResources *resources, const char *path, char **output) {
-    if (!resources || !output || *output) return XR_CLI_TOOLCHAIN_CONFIG_INVALID;
+    XrCompileState *state, const char *path, char **output) {
+    if (!state || !output || *output) return XR_CLI_TOOLCHAIN_CONFIG_INVALID;
+    XrCompileResourceStatus status=xr_compile_state_status(state);
+    if(status!=XR_COMPILE_RESOURCE_OK)return config_resource_status(status);
+    XrCompileResources *resources=xr_compile_state_resources(state);
     XrCliToolchainConfig temporary = {0};
-    temporary.resources = resources; temporary.policy = xr_compile_io_policy(resources);
+    temporary.policy = xr_compile_io_policy(resources);
     if (config_path(&temporary, path)) { *output = temporary.path; return XR_CLI_TOOLCHAIN_CONFIG_OK; }
-    xr_compile_resources_free(temporary.path); return temporary.status;
+    xr_compile_resources_free(temporary.path); return config_capture(state,temporary.status);
 }
 XR_FUNC void xr_cli_toolchain_config_free(XrCliToolchainConfig *owner) {
     if (!owner) return;
+    XrCompileState *state=owner->state;
     xtoml_owned_free(owner->root); xr_compile_resources_free(owner->path);
-    xr_compile_resources_free(owner);
+    xr_compile_resources_free(owner);xr_compile_state_release(state);
 }

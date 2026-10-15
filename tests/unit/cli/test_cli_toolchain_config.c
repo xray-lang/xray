@@ -43,15 +43,20 @@ static XrCliToolchainConfigStatus run(const char *path,size_t fault,
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus allocation=xr_compile_resources_new(limits,&resources);
     if (allocation!=XR_COMPILE_RESOURCE_OK) { CHECK(!physical_live);return XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY; }
+    XrCompileState *state=NULL;allocation=xr_compile_state_new(resources,&state);
+    if(allocation!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_resources_release(resources);CHECK(!physical_live);
+        return allocation==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET : XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY;
+    }
     XrCliToolchainConfig *owner=NULL;
-    XrCliToolchainConfigStatus status=xr_cli_toolchain_config_open(resources,path,&owner);
+    XrCliToolchainConfigStatus status=xr_cli_toolchain_config_open(state,path,&owner);
     CHECK((status==XR_CLI_TOOLCHAIN_CONFIG_OK)==(owner!=NULL));
     CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
     if (status==XR_CLI_TOOLCHAIN_CONFIG_OK) {
         const XrCliToolchainConfigView *view=xr_cli_toolchain_config_view(owner);
         CHECK(view && view->path && view->preferences);
         XrCliToolchainConfig *occupied=owner;
-        CHECK(xr_cli_toolchain_config_open(resources,path,&occupied)==XR_CLI_TOOLCHAIN_CONFIG_INVALID);
+        CHECK(xr_cli_toolchain_config_open(state,path,&occupied)==XR_CLI_TOOLCHAIN_CONFIG_INVALID);
         CHECK(occupied==owner);
         if(check) {
             CHECK(view->exists && view->count==2 && !view->allow_fallback && view->auto_probe);
@@ -61,18 +66,21 @@ static XrCliToolchainConfigStatus run(const char *path,size_t fault,
             CHECK(!strcmp(view->preferences[1].target,"aarch64-linux-gnu"));
             CHECK(view->preferences[1].selector==XR_TOOLCHAIN_SELECTOR_ZIG);
         }
+        xr_compile_state_release(state);state=NULL;
         xr_compile_resources_release(resources); resources=NULL;
         CHECK(xr_cli_toolchain_config_view(owner)==view && view->path[0]);
     } else {
         CHECK(!owner);
         XrCompileResourceStats before=*stats, after;
         if(status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET || status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY) {
-            CHECK(xr_cli_toolchain_config_open(resources,path,&owner)==status && !owner);
+            size_t attempts=calls;char *locator=NULL;
+            CHECK(xr_cli_toolchain_config_open(state,path,&owner)==status && !owner);
+            CHECK(xr_cli_toolchain_config_path(state,path,&locator)==status && !locator && calls==attempts);
             CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
             CHECK(before.allocated_bytes==after.allocated_bytes && before.work==after.work);
         }
     }
-    xr_cli_toolchain_config_free(owner);xr_compile_resources_release(resources);
+    xr_cli_toolchain_config_free(owner);xr_compile_state_release(state);xr_compile_resources_release(resources);
     CHECK(!physical_live);return status;
 }
 static int test_main(int argc,char **argv) {

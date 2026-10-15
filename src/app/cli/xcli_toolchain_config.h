@@ -8,7 +8,7 @@
  */
 #ifndef XCLI_TOOLCHAIN_CONFIG_H
 #define XCLI_TOOLCHAIN_CONFIG_H
-#include "../../base/xcompile_resources.h"
+#include "../../base/xcompile_state.h"
 #include "../toolchain/xtc_model.h"
 
 typedef struct XrCliToolchainConfig XrCliToolchainConfig;
@@ -28,19 +28,21 @@ typedef enum XrCliToolchainConfigStatus {
     XR_CLI_TOOLCHAIN_CONFIG_IO, XR_CLI_TOOLCHAIN_CONFIG_UNRESOLVED
 } XrCliToolchainConfigStatus;
 
-/* Read one bounded regular-file snapshot on the required original ledger.
+/* Read one bounded regular-file snapshot on the required original state/ledger.
  * NULL path selects the actual platform preference path. Missing files are an
  * empty configuration; malformed files never become an automatic selection.
  * Failure preserves output. All request borrows end on return. A snapshot
- * outlives its input bytes and the caller's ledger reference. Preferences are
- * configuration facts, not provider readiness or execution authority. */
+ * outlives its input bytes and the caller's state/ledger references. Preferences are
+ * configuration facts, not provider readiness or execution authority. Fatal
+ * resource errors latch in the caller's state even if construction fails;
+ * subsequent entries on that state perform no new work or allocation. */
 XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_open(
-    XrCompileResources *resources, const char *path, XrCliToolchainConfig **output);
+    XrCompileState *state, const char *path, XrCliToolchainConfig **output);
 /* Resolve the same preference locator without reading its contents. This lets
  * an explicit reset repair a corrupt configuration. Output must be NULL; the
  * returned string owns its original ledger and uses resources_free. */
 XR_FUNC XrCliToolchainConfigStatus xr_cli_toolchain_config_path(
-    XrCompileResources *resources, const char *path, char **output);
+    XrCompileState *state, const char *path, char **output);
 /* Immutable borrows remain valid until free and do not consume work. */
 XR_FUNC const XrCliToolchainConfigView *xr_cli_toolchain_config_view(const XrCliToolchainConfig *owner);
 XR_FUNC void xr_cli_toolchain_config_free(XrCliToolchainConfig *owner);

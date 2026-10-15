@@ -104,6 +104,11 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
     if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+    XrCompileState *state=NULL;opened=xr_compile_state_new(resources,&state);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_resources_release(resources);
+        return opened==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+    }
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     XrSourcePaths paths={0}; XrSourcePathsDiagnostic path_diagnostic={0};
     XrSourceCompileDiagnostic diagnostic={0}; XrXirSourceProduct *product=NULL;
@@ -129,7 +134,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         goto cleanup;
     }
     if (!c_only) {
-        result=build_native_prepare(resources,inv,projection,&artifact);
+        result=build_native_prepare(state,inv,projection,&artifact);
         if (result!=XR_CLI_EXIT_OK) goto cleanup;
     }
     XtcXirPublicationRequest publish={output,{XR_PATH_LIMIT_MAX_PATH,8,BUILD_C_LIMIT}};
@@ -148,6 +153,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     xr_xir_compile_source_product_free(product);product=NULL;
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_source_paths_free(&paths);
+    xr_compile_state_release(state);state=NULL;
     xr_compile_resources_release(resources);resources=NULL;
     if (status==XTC_XIR_PUBLICATION_OK) status=xtc_xir_publication_commit(publication);
     if (status!=XTC_XIR_PUBLICATION_OK) {
@@ -162,7 +168,7 @@ cleanup:
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_source_paths_free(&paths);
-    xr_compile_resources_release(resources);
+    xr_compile_state_release(state);xr_compile_resources_release(resources);
     bool published=publication && xtc_xir_publication_diagnostic(publication)->published;
     int closed=build_publication_close(&publication);
     if (closed>result) result=closed;

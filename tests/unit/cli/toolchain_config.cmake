@@ -90,6 +90,11 @@ if(WIN32)
     add_test(NAME cli_toolchain_update COMMAND "${XRAY_PYTHON}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update.py" $<TARGET_FILE:test_cli_toolchain_update>
         "${CMAKE_CURRENT_BINARY_DIR}/toolchain-update")
+    add_test(NAME cli_toolchain_state COMMAND "${XRAY_PYTHON}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_state.py" $<TARGET_FILE:test_cli_toolchain_update>
+        "${CMAKE_CURRENT_BINARY_DIR}/toolchain-state")
+    set_tests_properties(cli_toolchain_state PROPERTIES TIMEOUT 120
+        LABELS "unit;cli;toolchain;ownership;budget")
     add_test(NAME cli_toolchain_update_resources COMMAND "${XRAY_PYTHON}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update.py" $<TARGET_FILE:test_cli_toolchain_update>
         "${CMAKE_CURRENT_BINARY_DIR}/toolchain-update-resources" --resources)

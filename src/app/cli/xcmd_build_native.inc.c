@@ -33,10 +33,11 @@ static int build_operation_close(XtcXirNativeOperation **owner) {
     /* A command must not return while abandoning a private workspace owner. */
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
-static int build_native_prepare(XrCompileResources *resources, const XrCliInvocation *inv,
+static int build_native_prepare(XrCompileState *state, const XrCliInvocation *inv,
     const XrXirNativeProjection *projection, XrXirNativeArtifact **artifact) {
     XrCliToolchainConfig *config = NULL;
-    XrCliToolchainConfigStatus configured = xr_cli_toolchain_config_open(resources, NULL, &config);
+    XrCompileResources *resources=xr_compile_state_resources(state);
+    XrCliToolchainConfigStatus configured = xr_cli_toolchain_config_open(state, NULL, &config);
     if (configured != XR_CLI_TOOLCHAIN_CONFIG_OK) {
         fprintf(stderr, "XR_BUILD_6010: toolchain preference snapshot failed (status=%u)\n", (unsigned)configured);
         return configured == XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
@@ -46,7 +47,7 @@ static int build_native_prepare(XrCompileResources *resources, const XrCliInvoca
     const char *provider = xr_cli_opt_string(&inv->options, "toolchain", NULL);
     for (size_t i = 0; !provider && i < preferences->count; ++i) {
         const XrCliToolchainPreference *preference = &preferences->preferences[i];
-        XrCompileResourceStatus work = xr_compile_resources_work(resources, 7);
+        XrCompileResourceStatus work = xr_compile_state_work(state, 7);
         if (work != XR_COMPILE_RESOURCE_OK) {
             xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
         }
