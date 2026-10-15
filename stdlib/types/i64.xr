@@ -22,6 +22,7 @@ class i64 {
     max(other: i64) -> i64
     // @native-operation INTEGER_MIN allocation=no_heap failures=none ownership=owned
     min(other: i64) -> i64
+    // @native-operation INTEGER_SQRT allocation=no_heap failures=none ownership=owned
     sqrt() -> f64
     pow(exp: f64) -> f64
     // @native-operation INTEGER_CHECKED_ADD allocation=may_heap failures=allocation,retain,limit ownership=owned

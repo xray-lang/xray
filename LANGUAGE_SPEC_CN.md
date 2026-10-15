@@ -6284,7 +6284,7 @@ BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>`
 
 `abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
 
-Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身份、完整签名、READ 接收者及生成的操作契约共同决定。当前准入 `abs`、`toString`、`toF64`、`toHex`、`min/max`、三项 `wrapping*`、三项 `checked*`、三项 `saturating*`、三项溢出谓词，以及六项位方法 `popcount/leadingZeros/trailingZeros/byteswap/rotateLeft/rotateRight`。这些调用产生普通受验证 XIR，不查询标准库 native 缓存。六项位方法要求 i64 接收者，按完整64位二补码位表示计算；两个零计数方法对零返回64；旋转量包括负数和i64端点，统一按模64处理。它们使用现有无符号整数中间值及普通位运算，无新增公共 opcode。`wrapping*` 在接收者的原整数位宽中运算，声明的 i64 参数先按该位宽归约；`toString` 保留原整数符号性。其余已准入方法当前要求 i64 接收者。`parse/tryParse`、`toBigInt`、`sqrt/pow` 保留声明但尚未具有 Checked Source 操作准入，调用时明确拒绝；这不是完整整数族资格。
+Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身份、完整签名、READ 接收者及生成的操作契约共同决定。当前准入 `abs`、`toString`、`toF64`、`toHex`、`min/max`、三项 `wrapping*`、三项 `checked*`、三项 `saturating*`、三项溢出谓词，以及六项位方法 `popcount/leadingZeros/trailingZeros/byteswap/rotateLeft/rotateRight`。这些调用产生普通受验证 XIR，不查询标准库 native 缓存。六项位方法要求 i64 接收者，按完整64位二补码位表示计算；两个零计数方法对零返回64；旋转量包括负数和i64端点，统一按模64处理。它们使用现有无符号整数中间值及普通位运算，无新增公共 opcode。`wrapping*` 在接收者的原整数位宽中运算，声明的 i64 参数先按该位宽归约；`toString` 保留原整数符号性。其余已准入方法当前要求 i64 接收者。`sqrt()` 亦由固定治理声明准入：先将i64按普通转换舍入为f64，再返回正确舍入的f64平方根；负数为canonical NaN、零为正零。普通标量配方见§17.55，不依赖宿主FPU或libm。`parse/tryParse`、`toBigInt`、`pow` 保留声明但尚未具有 Checked Source 操作准入，调用时明确拒绝；这不是完整整数族资格。
 
 ### 14.2 `f64` 方法
 
@@ -7730,6 +7730,12 @@ Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；�
 Checked特化及完整Lowered接收之后，helper查找须匹配模块、唯一名称、零参数、关闭结果类型、真实nominal owner及member kind，并拒绝cleanup身份变化，不能假定所有helper都是无owner的顶层函数。观察与比较先付原累计work，任何错配失败保全已有结果和临时owner。
 
 声明owner本身不是class值或效果授权。纯class静态普通函数可在完整闭包准入下计算；class值、CLASS_NEW等身份操作、I/O/native/外部状态仍不获准。私有字段构造/调用只在真实声明owner中合法，独立Source重放保留该普通Checker权限。已经得到私有拥有值不授予外部函数私有构造权限；此类结果的完整物化机制仍属原目标，未实现处须拒绝，不能借反射/内存写入或runtime fallback绕过。
+
+### 17.55 整数平方根的普通标量配方
+
+固定治理的 `i64.sqrt() -> f64` 先沿共同数值转换将输入舍入为 binary64，再计算其平方根并按最近偶数规则舍入结果。负数返回 canonical NaN，零返回正零。正数的 binary64 整数表示至多为 2^63；53 轮逐二位恢复算法只用现有无符号整数、比较、PHI、移位和数值转换。所有动态移位量在求值前归约至0..63，越界输入位返回零；根、余数及中间值不超过64位。
+
+末轮整型余数与根比较决定唯一舍入；整数被开方数不可能落在相邻整数根的平方中点。最终精确可表示的整数尾数除以2的幂，复用共同 IEEE 位内核，不调用宿主 FPU/libm、AST/native缓存或新增 opcode。循环只携带标量 PHI，不创建运行期 Cell 或托管对象。完整 Source/Checked/Lowered 复验、CTFE闭包/步骤/帧/输出限制及原累计分配/live/work账本仍适用；该单方法不授予 `pow`、解析、BigInt或完整标准库资格。
 
 ---
 

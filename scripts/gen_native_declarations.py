@@ -357,6 +357,7 @@ def parse_source(source, prelude):
                      'INTEGER_TO_STRING': ('toString', '() -> string'),
                      'INTEGER_TO_HEX': ('toHex', '() -> string'),
                      'INTEGER_TO_F64': ('toF64', '() -> f64'),
+                     'INTEGER_SQRT': ('sqrt', '() -> f64'),
                      'INTEGER_MIN': ('min', '(other: i64) -> i64'),
                      'INTEGER_MAX': ('max', '(other: i64) -> i64'),
                      'INTEGER_POPCOUNT': ('popcount', '() -> i64'),

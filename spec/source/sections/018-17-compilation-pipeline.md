@@ -670,6 +670,12 @@ Checked特化及完整Lowered接收之后，helper查找须匹配模块、唯一
 
 声明owner本身不是class值或效果授权。纯class静态普通函数可在完整闭包准入下计算；class值、CLASS_NEW等身份操作、I/O/native/外部状态仍不获准。私有字段构造/调用只在真实声明owner中合法，独立Source重放保留该普通Checker权限。已经得到私有拥有值不授予外部函数私有构造权限；此类结果的完整物化机制仍属原目标，未实现处须拒绝，不能借反射/内存写入或runtime fallback绕过。
 
+### 17.55 整数平方根的普通标量配方
+
+固定治理的 `i64.sqrt() -> f64` 先沿共同数值转换将输入舍入为 binary64，再计算其平方根并按最近偶数规则舍入结果。负数返回 canonical NaN，零返回正零。正数的 binary64 整数表示至多为 2^63；53 轮逐二位恢复算法只用现有无符号整数、比较、PHI、移位和数值转换。所有动态移位量在求值前归约至0..63，越界输入位返回零；根、余数及中间值不超过64位。
+
+末轮整型余数与根比较决定唯一舍入；整数被开方数不可能落在相邻整数根的平方中点。最终精确可表示的整数尾数除以2的幂，复用共同 IEEE 位内核，不调用宿主 FPU/libm、AST/native缓存或新增 opcode。循环只携带标量 PHI，不创建运行期 Cell 或托管对象。完整 Source/Checked/Lowered 复验、CTFE闭包/步骤/帧/输出限制及原累计分配/live/work账本仍适用；该单方法不授予 `pow`、解析、BigInt或完整标准库资格。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1450,5 +1456,11 @@ A comptime helper inside an ordinary member inherits the actual lexical nominal 
 After Checked specialization and complete Lowered receiving, helper lookup matches module, unique name, zero parameters, closed result type, actual nominal owner and member kind, rejecting changed cleanup identity. It must not assume all helpers are ownerless top-level functions. Observation and comparison prepay the original cumulative work; mismatch preserves existing results and releases temporary owners.
 
 A declaration owner is neither a class value nor an effect grant. Pure ordinary class static functions may compute after complete closure admission. Class values, CLASS_NEW and other identity operations, I/O/native/external state remain unadmitted. Private field construction/calls remain legal only under the actual declaration owner, including independent Source replay through the ordinary Checker. Receiving a private owned value grants no external private construction access. Complete materialization of such results remains part of the original objective; missing mechanisms must fail closed without reflection/memory-write or runtime fallback bypasses.
+
+### 17.55 Ordinary scalar recipe for integer square roots
+
+The fixed governed `i64.sqrt() -> f64` first rounds its input to binary64 through the common numeric conversion, then rounds that value's square root to nearest, ties to even. Negative inputs return canonical NaN and zero returns positive zero. The positive binary64 integer representation is at most 2^63. A 53-round restoring algorithm consumes two bits per round using existing unsigned integer, comparison, PHI, shift and conversion operations. Every dynamic shift count is reduced to 0..63 before evaluation; out-of-range input bits yield zero. Roots, remainders and intermediates fit in 64 bits.
+
+Comparing the final integer remainder with the root determines the sole rounding step; an integral radicand cannot equal the squared midpoint between adjacent integer roots. Dividing the exactly representable integer significand by a power of two uses the common IEEE bit kernel, without host FPU/libm, AST/native-cache fallback or a new opcode. Only scalar PHIs cross the loop; no runtime Cell or managed object is created. Complete Source/Checked/Lowered reverification, CTFE closure/step/frame/output limits and the original cumulative allocated/live/work ledger still apply. This single method grants no admission for `pow`, parsing, BigInt or the complete standard library.
 
 <!-- /xr-spec:en -->

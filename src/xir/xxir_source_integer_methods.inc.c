@@ -253,6 +253,7 @@ static bool source_integer_hex(SourceContext *ctx,AstNode *node,SourceValue rece
     *value=output; return true;
 }
 #include "xxir_source_integer_bits.inc.c"
+#include "xxir_source_integer_sqrt.inc.c"
 static bool source_integer_call(SourceContext *ctx,AstNode *node,
     SourceValue receiver,SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -266,6 +267,7 @@ static bool source_integer_call(SourceContext *ctx,AstNode *node,
     bool text = member->operation == XR_NATIVE_OPERATION_INTEGER_TO_STRING;
     bool hex = member->operation == XR_NATIVE_OPERATION_INTEGER_TO_HEX;
     bool floating = member->operation == XR_NATIVE_OPERATION_INTEGER_TO_F64;
+    bool square_root = member->operation == XR_NATIVE_OPERATION_INTEGER_SQRT;
     bool extreme = member->operation == XR_NATIVE_OPERATION_INTEGER_MIN || member->operation == XR_NATIVE_OPERATION_INTEGER_MAX;
     bool bits=source_integer_bit_operation(member->operation);
     bool rotation=member->operation==XR_NATIVE_OPERATION_INTEGER_ROTATE_LEFT ||
@@ -276,12 +278,12 @@ static bool source_integer_call(SourceContext *ctx,AstNode *node,
     SourceIntegerControl control=SOURCE_INTEGER_ORDINARY;
     XrXirOp controlled=source_integer_control_operation(member->operation,&control);
     if (controlled!=XR_XIR_INVALID) operation=controlled;
-    bool unary = absolute || text || hex || floating || (bits && !rotation);
-    XrNativeTypeTerm result = text || hex ? XR_NATIVE_TERM_STRING : floating ? XR_NATIVE_TERM_F64 :
+    bool unary = absolute || text || hex || floating || square_root || (bits && !rotation);
+    XrNativeTypeTerm result = text || hex ? XR_NATIVE_TERM_STRING : floating || square_root ? XR_NATIVE_TERM_F64 :
         control==SOURCE_INTEGER_CHECKED ? XR_NATIVE_TERM_NULLABLE_I64 :
         control==SOURCE_INTEGER_OVERFLOW ? XR_NATIVE_TERM_BOOL : XR_NATIVE_TERM_I64;
     if ((!unary && !extreme && !bits && operation == XR_XIR_INVALID) ||
-        ((absolute || extreme || floating || hex || bits || control!=SOURCE_INTEGER_ORDINARY) && receiver.type != XR_XIR_I64) || member->result != result ||
+        ((absolute || extreme || floating || square_root || hex || bits || control!=SOURCE_INTEGER_ORDINARY) && receiver.type != XR_XIR_I64) || member->result != result ||
         member->parameter_count != (unary ? 0u : 1u) ||
         (!unary && member->parameters[0].type != XR_NATIVE_TERM_I64) ||
         call->type_arg_count || call->default_arg_count || call->arg_count != (unary ? 0 : 1))
@@ -292,6 +294,7 @@ static bool source_integer_call(SourceContext *ctx,AstNode *node,
     if (hex) return source_integer_hex(ctx,node,receiver,value);
     if (text) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TO_STRING,XR_XIR_STRING,{receiver.id,0},{0},0,{0}},value);
     if (floating) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONVERT_NUMBER,XR_XIR_F64,{receiver.id,0},{0},0,{0}},value);
+    if (square_root) return source_integer_sqrt(ctx,receiver,value);
     if (!call->arguments || (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"integer operation requires a READ i64 argument");
     SourceValue other;

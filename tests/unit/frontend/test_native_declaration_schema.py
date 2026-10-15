@@ -36,7 +36,8 @@ class NativeDeclarations(unittest.TestCase):
         header, members = schema.parse_source(source, self.prelude)
         self.assertEqual(header[:3], (6, 'i64', ''))
         executable = [m for m in members if m.operation != 'NONE']
-        self.assertEqual(len(executable), 24)
+        self.assertEqual(len(executable), 25)
+        self.assertEqual(next(m for m in members if m.name == 'sqrt').operation, 'INTEGER_SQRT')
         self.assertEqual(next(m for m in members if m.name == 'toBigInt').operation, 'NONE')
         for changed in [source.replace('wrappingAdd(other: i64)', 'wrappingAdd(other: f64)'),
                         source.replace('abs() -> i64', 'abs() -> f64'),
@@ -48,6 +49,10 @@ class NativeDeclarations(unittest.TestCase):
                         source.replace('INTEGER_BYTESWAP allocation=no_heap', 'INTEGER_BYTESWAP allocation=may_heap'),
                         source.replace('rotateLeft(n: i64)', 'rotateLeft(n: u64)'),
                         source.replace('rotateRight(n: i64)', 'rotateRight(n?: i64)'),
+                        source.replace('sqrt() -> f64', 'sqrt() -> i64'),
+                        source.replace('sqrt() -> f64', 'sqrt(n: i64) -> f64'),
+                        source.replace('sqrt() -> f64', 'ref sqrt() -> f64'),
+                        source.replace('INTEGER_SQRT allocation=no_heap', 'INTEGER_SQRT allocation=may_heap'),
                         source.replace('// @native-type id=6', '// @native-type id=7')]:
             with self.assertRaises(ValueError):
                 schema.parse_source(changed, self.prelude)

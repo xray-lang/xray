@@ -137,6 +137,8 @@ foreach(mode IN ITEMS measure faults)
         TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;ownership;stdlib;resources;scalar")
 endforeach()
 
+include(${CMAKE_CURRENT_LIST_DIR}/integer_sqrt.cmake)
+
 add_test(NAME test_xir_public_cli_integer_bits
     COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_integer_bits.py
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
