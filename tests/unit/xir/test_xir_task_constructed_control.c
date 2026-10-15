@@ -53,9 +53,20 @@ static void constructed_control_build(ConstructedControl *control, const char *b
         module->declarations, {fixture, constructed_code_drop}, module->types, proof};
     CHECK(xr_xir_compile_program_seal(context, &spec, &fixture->program) == XR_XIR_OK);
 }
-static bool constructed_control_frontier(ConstructedControl *control, unsigned instance, unsigned frontier) {
+static XirTask *constructed_control_task(ConstructedControl *control,unsigned instance,unsigned family) {
+    const XrXirModule *module=xr_xir_compile_artifact_module(control->base.lowered);
+    for (XirTask *task=control->instances[instance]->executor->active;task;task=task->active_next) {
+        uint32_t entry=task->activation.entry;CHECK(entry<module->function_count);
+        const XrXirFunction *function=&module->functions[entry];
+        if (function->name_length==7+strlen(constructed_names[family]) &&
+            !memcmp(function->name,"worker_",7) &&
+            !memcmp(function->name+7,constructed_names[family],strlen(constructed_names[family]))) return task;
+    }
+    return NULL;
+}
+static bool constructed_control_frontier(ConstructedControl *control,unsigned instance,unsigned family,unsigned frontier) {
     if (!frontier) return true;
-    XirTask *task = control->instances[instance]->executor->active;
+    XirTask *task=constructed_control_task(control,instance,family);
     return task && (frontier == 1 ? !control->worker_steps[instance] : control->worker_steps[instance] == 1);
 }
 static void constructed_control_pair(ConstructedControl *control, unsigned family, unsigned frontier, bool stop) {
@@ -69,12 +80,12 @@ static void constructed_control_pair(ConstructedControl *control, unsigned famil
     }
     for (unsigned i = 0; i < 2; ++i) {
         XrXirInstance *instance = control->instances[i]; unsigned polls = 0;
-        while (!constructed_control_frontier(control, i, frontier)) {
+        while (!constructed_control_frontier(control, i, family, frontier)) {
             CHECK(xr_xir_instance_poll_bounded(instance, 1).outcome.status == XR_XIR_CALL_READY && ++polls < 4096);
         }
         if (frontier) {
-            CHECK(instance->executor->active && !instance->executor->active->active_next);
-            XrXirValue handle = task_core_task_value(instance->executor->active);
+            XirTask *task=constructed_control_task(control,i,family);CHECK(task);
+            XrXirValue handle=task_core_task_value(task);
             CHECK(xr_xir_value_copy(&handle, &tasks[i]) == XR_XIR_VALUE_OK);
             XrXirCallResult pending = {0}; const size_t attempts = runtime_attempts;
             CHECK(xr_xir_task_copy_outcome(&tasks[i], &pending) == XR_XIR_CALL_BAD_STATE);

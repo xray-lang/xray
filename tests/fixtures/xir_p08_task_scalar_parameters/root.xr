@@ -1,0 +1,43 @@
+fn worker_i8(value:i8) -> i8 { Coro.yield(); return value }
+export fn await_i8() -> i8 { const task: Task<i8> = go worker_i8(-128); const first = await task; return await task }
+export fn handle_i8() -> Task<i8> { return go worker_i8(-128) }
+fn worker_i16(value:i16) -> i16 { Coro.yield(); return value }
+export fn await_i16() -> i16 { const task: Task<i16> = go worker_i16(-32768); const first = await task; return await task }
+export fn handle_i16() -> Task<i16> { return go worker_i16(-32768) }
+fn worker_i32(value:i32) -> i32 { Coro.yield(); return value }
+export fn await_i32() -> i32 { const task: Task<i32> = go worker_i32(-2147483648); const first = await task; return await task }
+export fn handle_i32() -> Task<i32> { return go worker_i32(-2147483648) }
+fn worker_u8(value:u8) -> u8 { Coro.yield(); return value }
+export fn await_u8() -> u8 { const task: Task<u8> = go worker_u8(255); const first = await task; return await task }
+export fn handle_u8() -> Task<u8> { return go worker_u8(255) }
+fn worker_u16(value:u16) -> u16 { Coro.yield(); return value }
+export fn await_u16() -> u16 { const task: Task<u16> = go worker_u16(65535); const first = await task; return await task }
+export fn handle_u16() -> Task<u16> { return go worker_u16(65535) }
+fn worker_u32(value:u32) -> u32 { Coro.yield(); return value }
+export fn await_u32() -> u32 { const task: Task<u32> = go worker_u32(4294967295); const first = await task; return await task }
+export fn handle_u32() -> Task<u32> { return go worker_u32(4294967295) }
+fn worker_u64(value:u64) -> u64 { Coro.yield(); return value }
+export fn await_u64() -> u64 { const task: Task<u64> = go worker_u64(18446744073709551615); const first = await task; return await task }
+export fn handle_u64() -> Task<u64> { return go worker_u64(18446744073709551615) }
+fn worker_f32(value:f32) -> f32 { Coro.yield(); return value }
+export fn await_f32() -> f32 { const task: Task<f32> = go worker_f32(1.5); const first = await task; return await task }
+export fn handle_f32() -> Task<f32> { return go worker_f32(1.5) }
+fn worker_f64(value:f64) -> f64 { Coro.yield(); return value }
+export fn await_f64() -> f64 { const task: Task<f64> = go worker_f64(1.5); const first = await task; return await task }
+export fn handle_f64() -> Task<f64> { return go worker_f64(1.5) }
+fn worker_rune(value:rune) -> rune { Coro.yield(); return value }
+export fn await_rune() -> rune { const task: Task<rune> = go worker_rune('x'); const first = await task; return await task }
+export fn handle_rune() -> Task<rune> { return go worker_rune('x') }
+fn worker_i64(value:i64) -> i64 { Coro.yield(); return value }
+export fn await_i64() -> i64 { const task: Task<i64> = go worker_i64(-42); const first = await task; return await task }
+export fn handle_i64() -> Task<i64> { return go worker_i64(-42) }
+fn worker_bool(value:bool) -> bool { Coro.yield(); return value }
+export fn await_bool() -> bool { const task: Task<bool> = go worker_bool(true); const first = await task; return await task }
+export fn handle_bool() -> Task<bool> { return go worker_bool(true) }
+fn worker_string(value:string) -> string { Coro.yield(); return value }
+export fn await_string() -> string { const task: Task<string> = go worker_string("owned"); const first = await task; return await task }
+export fn handle_string() -> Task<string> { return go worker_string("owned") }
+fn worker_unit(value:bool) { Coro.yield(); if(value){return} }
+export fn await_unit() { const task: Task<null> = go worker_unit(true); await task; await task }
+export fn handle_unit() -> Task<null> { return go worker_unit(true) }
+export fn main() -> i64 { return 7 }
