@@ -112,7 +112,7 @@ static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContex
     if (!result || result->resources!=work->resources || result->count!=count ||
         fresh->resources!=work->resources || result->capacity!=count ||
         !result->functions || !result->facts || !result->witnesses || !effects->contracts ||
-        !effects->root || !effects->root_witnesses || !effects->unresolved_witnesses)
+        !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses || !effects->outcomes_work.unresolved_witnesses)
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_invocation_publication_match(work,fresh,result);
     if (status!=XR_XIR_OK) return status;
@@ -125,10 +125,10 @@ static XrXirStatus effect_invocation_publication_commit(const XrXirCompileContex
         if (!old_result) xr_compile_resources_free((void *)effects->contracts[f].formula.terms);
         effects->contracts[f].formula=result->functions[f].formula;
     }
-    memcpy(effects->root,result->facts,(size_t)count*sizeof(*effects->root));
-    memcpy(effects->root_witnesses,result->witnesses,(size_t)count*sizeof(*effects->root_witnesses));
-    memcpy(effects->unresolved_witnesses,result->witnesses+count,
-        (size_t)count*sizeof(*effects->unresolved_witnesses));
+    memcpy(effects->outcomes_work.root,result->facts,(size_t)count*sizeof(*effects->outcomes_work.root));
+    memcpy(effects->outcomes_work.root_witnesses,result->witnesses,(size_t)count*sizeof(*effects->outcomes_work.root_witnesses));
+    memcpy(effects->outcomes_work.unresolved_witnesses,result->witnesses+count,
+        (size_t)count*sizeof(*effects->outcomes_work.unresolved_witnesses));
     if (!old_result) {
         xr_compile_resources_free(effects->formula_terminals);
         xr_compile_resources_free(effects->constant_witnesses);
@@ -270,7 +270,7 @@ static XrXirStatus effect_context_dense_stable_read(const XrXirCompileContext *c
     if (!xir_compile_context_valid(context) || !dense->dense ||
         !ordinary || ordinary->dense || ordinary->base_count!=source->function_count ||
         dense->base_count!=source->function_count || ordinary->uses.resources!=context->resources ||
-        dense->uses.resources!=context->resources || dense->uses.count!=dense->count || !dense->uses.root ||
+        dense->uses.resources!=context->resources || dense->uses.count!=dense->count || !dense->uses.outcomes_work.root ||
         !certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=context->resources || !certificate->final ||
         !certificate->final || certificate->final->summary.count!=dense->count ||

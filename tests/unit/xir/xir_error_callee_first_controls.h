@@ -196,7 +196,7 @@ static void cf_whole_golden(const XrXirEffects *e,CalleeWholeMode mode) {
         CHECK(effect_final_outcomes(e)->errors[f]==bits);
         CHECK(effect_final_outcomes(e)->functions[f].throws==(bits==1 ? XR_XIR_EFFECT_UNKNOWN : bits ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
         CHECK(effect_final_outcomes(e)->task_errors[f]==(bits==1 ? XR_XIR_BAD_TYPE : XR_XIR_OK));
-        CHECK(e->root[f].requires_root==(f==0) && e->root[f].unresolved==(mode==CF_UNKNOWN && f==2));
+        CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && effect_roots_read(e)->root[f].unresolved==(mode==CF_UNKNOWN && f==2));
         CHECK(effect_final_outcomes(e)->functions[f].suspend==(f==2 && mode==CF_GO ? XR_XIR_EFFECT_MAY :
             f==2 && mode==CF_UNKNOWN ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE));
     }

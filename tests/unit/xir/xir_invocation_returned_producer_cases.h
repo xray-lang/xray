@@ -280,7 +280,7 @@ static XrXirStatus invocation_returned_lowered(const XrXirCompileContext *contex
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
         uint32_t entry=module->declarations->entry_function;
         CHECK(module->stage==XR_XIR_LOWERED && !module->provenance && entry<effects->count && certificate);
-        CHECK(!effects->root[entry].requires_root && !effects->root[entry].unresolved);
+        CHECK(!effect_roots_read(effects)->root[entry].requires_root && !effect_roots_read(effects)->root[entry].unresolved);
         const EffectInvocationFinal *owner=certificate->final;
         uint32_t node=owner->roots[entry];bool found=false;
         for (uint32_t e=owner->nodes[node].edge_head;e!=UINT32_MAX;e=owner->edges[e].next) {
@@ -353,7 +353,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
         uint32_t mask=UINT32_MAX;
         CHECK(effect_invocation_certificate_node_mask(context,certificate,owned->roots[0],&mask)==XR_XIR_OK &&
             mask==(mode==2?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0));
-        CHECK(published->root[0].unresolved==(mode==2) && !published->root[0].requires_root);
+        CHECK(effect_roots_read(published)->root[0].unresolved==(mode==2) && !effect_roots_read(published)->root[0].requires_root);
         CHECK(effect_body_count(certificate->body)==5 && published->count==5);
         uint32_t callback=mode==3?2:1;bool found=false;
         const EffectInvocationNode *entry=&owned->nodes[owned->roots[0]];

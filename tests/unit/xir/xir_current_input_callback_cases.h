@@ -56,9 +56,9 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         XrXirInstruction saved=rows[4];XrXirEffects old=*effects;
         XrXirRootEffects facts[3];XrXirRootEffectWitness witnesses[6];
         XrXirFunctionEffectContract contracts[3];
-        memcpy(facts,effects->root,sizeof(facts));memcpy(contracts,effects->contracts,sizeof(contracts));
-        memcpy(witnesses,effects->root_witnesses,sizeof(witnesses)/2);
-        memcpy(witnesses+3,effects->unresolved_witnesses,sizeof(witnesses)/2);
+        memcpy(facts,effect_roots_read(effects)->root,sizeof(facts));memcpy(contracts,effects->contracts,sizeof(contracts));
+        memcpy(witnesses,effect_roots_read(effects)->root_witnesses,sizeof(witnesses)/2);
+        memcpy(witnesses+3,effect_roots_read(effects)->unresolved_witnesses,sizeof(witnesses)/2);
         XrCompileResourceStats before=pc_stats(context);
         pc_current_input_row=&rows[4];pc_current_input_mutation=mutation;pc_current_input_calls=0;
         if (mutation) pc_allocate_hook=pc_current_input_mutate;
@@ -67,10 +67,10 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         if (oracle) fprintf(stderr,"current raw publication mutation%u callbacks%u status%u retained%u\n",
             mutation,pc_current_input_calls,status,effects->invocations==old.invocations);
         if (status==XR_XIR_BAD_STRUCTURE && mutation && pc_current_input_calls==1) {
-            CHECK(!memcmp(effects,&old,sizeof(old)) && !memcmp(effects->root,facts,sizeof(facts)) &&
+            CHECK(!memcmp(effects,&old,sizeof(old)) && !memcmp(effect_roots_read(effects)->root,facts,sizeof(facts)) &&
                 !memcmp(effects->contracts,contracts,sizeof(contracts)) &&
-                !memcmp(effects->root_witnesses,witnesses,sizeof(witnesses)/2) &&
-                !memcmp(effects->unresolved_witnesses,witnesses+3,sizeof(witnesses)/2));
+                !memcmp(effect_roots_read(effects)->root_witnesses,witnesses,sizeof(witnesses)/2) &&
+                !memcmp(effect_roots_read(effects)->unresolved_witnesses,witnesses+3,sizeof(witnesses)/2));
             CHECK(pc_stats(context).work>before.work &&
                 pc_stats(context).allocated_bytes>before.allocated_bytes);
             status=XR_XIR_OK;
@@ -82,7 +82,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
             XrXirCompileContext copy=*context;status=effect_graph_build(&source,effects,&graph,&copy);
         }
         if (status==XR_XIR_OK) status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);
-        if (status==XR_XIR_OK) CHECK(effects->root[0].requires_root &&
+        if (status==XR_XIR_OK) CHECK(effect_roots_read(effects)->root[0].requires_root &&
             pc_stats(context).work>before.work && pc_stats(context).allocated_bytes>before.allocated_bytes);
     }
     effect_graph_free(&graph);

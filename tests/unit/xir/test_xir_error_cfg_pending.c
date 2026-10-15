@@ -67,18 +67,18 @@ static void pc_release(XrXirCompileContext *c, uint64_t baseline) {
  * supplies its actual owner; this fixture supplies an owned local Cell. */
 static void pc_lexical_cleanup_root(const XrXirEffects *e) {
     CHECK(e && e->count==4 && e->contracts && e->cells);
-    CHECK(!e->root[3].requires_root && e->root[3].unresolved);
+    CHECK(!effect_roots_read(e)->root[3].requires_root && effect_roots_read(e)->root[3].unresolved);
     const XrXirRootFormula *child=&e->contracts[3].formula;
     CHECK(!child->constant_mask && child->term_count==1 && child->terms);
     CHECK(child->terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && child->terms[0].index==0);
     CHECK(e->contracts[3].parameter_count==1);
     CHECK(xr_xir_cell_provenance_role(e->cells,3,0)==XR_XIR_CELL_PROOF_LEXICAL_CLEANUP);
     CHECK(xr_xir_cell_provenance_origin(e->cells,3,0)==XR_XIR_CELL_ORIGIN_SCOPED);
-    CHECK(e->root_witnesses[3].cause==XR_XIR_ROOT_CAUSE_NONE);
-    CHECK(e->unresolved_witnesses[3].cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER &&
-        e->unresolved_witnesses[3].callee==UINT32_MAX &&
-        e->unresolved_witnesses[3].slot==0 && !e->unresolved_witnesses[3].distance);
-    CHECK(!e->root[1].requires_root && !e->root[1].unresolved);
+    CHECK(effect_roots_read(e)->root_witnesses[3].cause==XR_XIR_ROOT_CAUSE_NONE);
+    CHECK(effect_roots_read(e)->unresolved_witnesses[3].cause==XR_XIR_ROOT_CAUSE_CELL_PARAMETER &&
+        effect_roots_read(e)->unresolved_witnesses[3].callee==UINT32_MAX &&
+        effect_roots_read(e)->unresolved_witnesses[3].slot==0 && !effect_roots_read(e)->unresolved_witnesses[3].distance);
+    CHECK(!effect_roots_read(e)->root[1].requires_root && !effect_roots_read(e)->root[1].unresolved);
     CHECK(!e->contracts[1].formula.constant_mask && !e->contracts[1].formula.term_count);
 }
 static void pc_golden(const XrXirEffects *e,PendingCase mode,bool snapshot) {
@@ -94,7 +94,7 @@ static void pc_golden(const XrXirEffects *e,PendingCase mode,bool snapshot) {
     for (uint32_t f=0;f<e->count;++f) {
         CHECK(effect_final_outcomes(e)->task_errors[f]==XR_XIR_OK);
         if (e->count==4 && f==3) pc_lexical_cleanup_root(e);
-        else CHECK(e->root[f].requires_root==(f==0) && !e->root[f].unresolved);
+        else CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && !effect_roots_read(e)->root[f].unresolved);
         CHECK(effect_final_outcomes(e)->functions[f].suspend==XR_XIR_EFFECT_NONE);
     }
 }
@@ -301,7 +301,7 @@ static void pc_empty_records(const XrXirEffects *e,const EffectFinalOutcomes *fa
     for (uint32_t f=0;f<e->count;++f) {
         CHECK(facts->task_errors[f]==XR_XIR_OK);
         if (e->count==4 && f==3) pc_lexical_cleanup_root(e);
-        else CHECK(e->root[f].requires_root==(f==0) && !e->root[f].unresolved);
+        else CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && !effect_roots_read(e)->root[f].unresolved);
     }
 }
 static void pc_empty_golden(const XrXirEffects *effects,unsigned mode) {
@@ -483,7 +483,7 @@ static void pc_local_callback_boundary(void) {
         certificate && !probe.receiving && probe.calls==3 && !graph.physical_owned);
     CHECK(effect_invocation_current_input_match(&c,source,certificate->body)==XR_XIR_OK);
     CHECK(effect_invocation_publication_commit(&c,effects,&certificate)==XR_XIR_BAD_STRUCTURE &&
-        certificate && effects->invocations==old && effects->root[0].requires_root);
+        certificate && effects->invocations==old && effect_roots_read(effects)->root[0].requires_root);
     pc_empty_constructed(effects,0);effect_invocation_certificate_free(certificate);effect_graph_free(&graph);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
 }
@@ -524,8 +524,8 @@ static void pc_local_release_boundary(void) {
     XrXirStatus status=effect_invocation_publication_commit(&c,effects,&certificate);
     pc_free_hook=NULL;pc_release_target=NULL;
     printf("allocator release ROOT pollution: callbacks%u status%u publishedRoot%u\n",
-        pc_release_poison_calls,(unsigned)status,(unsigned)effects->root[0].requires_root);
-    CHECK(pc_release_poison_calls<=1 && effects->root[0].requires_root);
+        pc_release_poison_calls,(unsigned)status,(unsigned)effect_roots_read(effects)->root[0].requires_root);
+    CHECK(pc_release_poison_calls<=1 && effect_roots_read(effects)->root[0].requires_root);
     if (pc_release_poison_calls)
         CHECK(status==XR_XIR_BAD_STRUCTURE && certificate && effects->invocations==old);
     else

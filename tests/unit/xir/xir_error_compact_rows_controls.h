@@ -313,7 +313,7 @@ static XrXirStatus pc_compact_whole(const XrXirCompileContext *c,unsigned mode) 
             CHECK(effect_final_outcomes(e)->errors[4]==8 && effect_final_outcomes(e)->errors[5]==0 && xr_xir_effects_error(e,1,(XrXirType)EE_ENUM,62));
         } else CHECK(effect_final_outcomes(e)->words==1 && effect_final_outcomes(e)->atom_count==2 && effect_final_outcomes(e)->errors[1]==8 && effect_final_outcomes(e)->errors[2]==8);
         for (uint32_t i=0;i<3;++i) {
-            CHECK(e->root[i].requires_root==(i==0) && !e->root[i].unresolved && effect_final_outcomes(e)->task_errors[i]==XR_XIR_OK);
+            CHECK(effect_roots_read(e)->root[i].requires_root==(i==0) && !effect_roots_read(e)->root[i].unresolved && effect_final_outcomes(e)->task_errors[i]==XR_XIR_OK);
             CHECK(effect_final_outcomes(e)->functions[i].suspend==XR_XIR_EFFECT_NONE);
         }
     } else CHECK(!e);
