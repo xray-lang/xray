@@ -48,6 +48,18 @@ add_test(NAME test_dap_launch_resources COMMAND test_dap_launch --resources)
 set_tests_properties(test_dap_launch_resources PROPERTIES TIMEOUT 1800 COST 120 LABELS "dap;source;resources;fault-injection;ownership")
 set_tests_properties(test_dap_launch PROPERTIES TIMEOUT 120 LABELS "dap;source;execution;ownership")
 
+add_executable(test_dap_source_globals test_source_globals.c)
+target_link_libraries(test_dap_source_globals PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_source_globals PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_GLOBAL_SLOTS_FIXTURE="${XR_DAP_FIXTURE_DIR}/global_slots.xr")
+if(MSVC)
+    target_compile_options(test_dap_source_globals PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_source_globals PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_source_globals COMMAND test_dap_source_globals)
+set_tests_properties(test_dap_source_globals PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership")
+
 add_executable(test_dap_dispatch test_dispatch.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_dispatch PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_dispatch PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr")

@@ -26,7 +26,8 @@ static size_t launch_fault(size_t fail) {
     xr_source_compile_diagnostic_free(&diagnostic);
     XrXirDomain *domain=NULL;XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&domain)==XR_XIR_VALUE_OK);
-    const char text[]="fn leaf(value:i64)->string { return \"owned\\0value\" }\nleaf(20)\n";
+    const char text[]="const fixed:i64=73\nvar changing:i64=11\nconst nothing=()\nvar empty=()\n"
+        "fn leaf(value:i64)->string { return \"owned\\0value\" }\nleaf(20)\n";
     XrSourceCompilerText input={NULL,"dap-launch-fault",text,sizeof(text)-1};
     XdapLaunchRequest request={.compiler=compiler,.text=&input,.observer_metadata=domain};
     CHECK(xr_xir_instance_config_init(&request.instance,sizeof(request.instance))==XR_XIR_CALL_READY);

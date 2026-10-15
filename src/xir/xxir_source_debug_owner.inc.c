@@ -10,8 +10,31 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
     const XrXirSourceDebugView *debug,const XrXirModule *module) {
     if (!snapshot || snapshot->debug_ready || !debug || !module || !snapshot->view.complete ||
         debug->function_count!=module->function_count ||
-        (debug->function_count && (!debug->functions || !module->functions))) return XR_XIR_BAD_STRUCTURE;
+        (debug->function_count && (!debug->functions || !module->functions)) ||
+        (!!debug->global_count != !!debug->globals) ||
+        (debug->global_count && (!module->declarations || !module->declarations->slots || !module->declarations->modules ||
+         debug->global_count>module->declarations->slot_count))) return XR_XIR_BAD_STRUCTURE;
     SourceQueryCopy copy={snapshot,XR_XIR_OK};
+    for (uint32_t g=0;g<debug->global_count;++g) {
+        if (!query_work(&copy,sizeof(*debug->globals))) return copy.status;
+        const XrXirSourceDebugGlobal *global=&debug->globals[g];
+        if (!global->declaration || global->declaration>snapshot->view.declaration_count ||
+            global->slot>=module->declarations->slot_count ||
+            (g && (global->slot<=debug->globals[g-1].slot ||
+             global->declaration<=debug->globals[g-1].declaration))) return XR_XIR_BAD_STRUCTURE;
+        const XrXirSourceDeclaration *declaration=&snapshot->view.declarations[global->declaration-1];
+        const XrXirSlot *slot=&module->declarations->slots[global->slot];
+        if (declaration->kind!=XR_XIR_SOURCE_BINDING || declaration->parent || !declaration->type.known ||
+            declaration->range.module>=snapshot->view.module_count || slot->module>=module->declarations->module_count ||
+            slot->mutable>1 || declaration->mutable!=!!slot->mutable ||
+            declaration->type.type!=(slot->mutable ? xr_xir_cell_element(module->types,slot->type) : slot->type) ||
+            (slot->mutable && !xr_xir_type_is_cell(module->types,slot->type))) return XR_XIR_BAD_STRUCTURE;
+        const XrXirSourceModule *owner=&module->declarations->modules[slot->module];
+        const char *identity=snapshot->view.modules[declaration->range.module].identity;
+        size_t bytes=query_length(&copy,identity);
+        if (!query_work(&copy,bytes)) return copy.status;
+        if (!bytes || !owner->name || bytes-1!=owner->name_length || memcmp(identity,owner->name,bytes-1)) return XR_XIR_BAD_STRUCTURE;
+    }
     for (uint32_t f=0;f<debug->function_count;++f) {
         if (!query_work(&copy,1)) return copy.status;
         const XrXirSourceDebugFunction *function=&debug->functions[f];
@@ -41,6 +64,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         }
     }
     SourceQueryMemory *previous=snapshot->memory;
+    XrXirSourceDebugGlobal *globals=query_copy(&copy,debug->globals,debug->global_count,sizeof(*globals));
     XrXirSourceDebugFunction *functions=query_copy(&copy,debug->functions,debug->function_count,sizeof(*functions));
     for (uint32_t f=0;functions && f<debug->function_count && copy.status==XR_XIR_OK;++f) {
         if (debug->functions[f].points)
@@ -56,7 +80,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         }
         return copy.status;
     }
-    snapshot->debug=(XrXirSourceDebugView){functions,debug->function_count};snapshot->debug_ready=true;
+    snapshot->debug=(XrXirSourceDebugView){functions,debug->function_count,globals,debug->global_count};snapshot->debug_ready=true;
     return XR_XIR_OK;
 }
 XR_FUNC const XrXirSourceDebugView *xr_xir_compile_source_snapshot_debug(const XrXirSourceSnapshot *snapshot) {

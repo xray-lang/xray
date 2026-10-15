@@ -17,6 +17,21 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
             module->functions[f].parameter_count,module->functions[f].instruction_count,ctx->bodies[f].debug_points,
             ctx->bodies[f].debug_bindings,ctx->bodies[f].debug_binding_count};
     }
-    XrXirSourceDebugView debug={functions,ctx->function_count};
+    XrXirSourceDebugGlobal *globals=ctx->slot_count ? source_alloc(ctx,ctx->slot_count,sizeof(*globals)) : NULL;
+    if (ctx->slot_count && !globals) return ctx->diagnostic.status;
+    for (uint32_t m=0;m<(uint32_t)ctx->graph->spec_count;++m) {
+        for (const SourceName *name=ctx->names[m];name;name=name->next) {
+            if (!source_work_units(ctx,NULL,sizeof(*name))) return ctx->diagnostic.status;
+            if ((name->kind!=SOURCE_SLOT && name->kind!=SOURCE_UNIT_SLOT) || !name->declaration) continue;
+            if (name->index>=ctx->slot_count || globals[name->index].declaration) return XR_XIR_BAD_STRUCTURE;
+            globals[name->index]=(XrXirSourceDebugGlobal){name->declaration,name->index};
+        }
+    }
+    uint32_t count=0;
+    for (uint32_t s=0;s<ctx->slot_count;++s) {
+        if (!source_work_units(ctx,NULL,sizeof(*globals))) return ctx->diagnostic.status;
+        if (globals[s].declaration) globals[count++]=globals[s];
+    }
+    XrXirSourceDebugView debug={functions,ctx->function_count,count ? globals : NULL,count};
     return xr_xir_compile_source_snapshot_debug_copy(output->snapshot,&debug,module);
 }

@@ -44,9 +44,16 @@ typedef struct XrXirSourceDebugFunction {
     uint32_t binding_count;
 } XrXirSourceDebugFunction;
 
+/* A producer-selected slot is a display coordinate, never a module grant. */
+typedef struct XrXirSourceDebugGlobal {
+    uint32_t declaration, slot;
+} XrXirSourceDebugGlobal;
+
 typedef struct XrXirSourceDebugView {
     const XrXirSourceDebugFunction *functions;
     uint32_t function_count;
+    const XrXirSourceDebugGlobal *globals;
+    uint32_t global_count;
 } XrXirSourceDebugView;
 typedef struct XrXirSourceType {
     XrXirType type;
