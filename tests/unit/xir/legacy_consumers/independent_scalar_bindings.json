@@ -27,7 +27,7 @@
     },
     {
       "path": "spec/source/sections/004-3-expressions.md",
-      "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945"
+      "lf_sha256": "1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c"
     }
   ],
   "semantic_basis": "Same-sign mixed integer operands use the wider operand type; operations wrap there before any return widening. Explicit casts truncate modulo the target width. Unsigned right shifts zero extend.",

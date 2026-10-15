@@ -252,11 +252,11 @@
     },
     {
       "path": "spec/source/sections/004-3-expressions.md",
-      "lf_sha256": "3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945"
+      "lf_sha256": "1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c"
     },
     {
       "path": "spec/source/sections/006-5-declarations.md",
-      "lf_sha256": "4b07469dd5109d4c6d0b99896e72c735e60e1821f716352ffd0e4da4e75d563b"
+      "lf_sha256": "17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d"
     },
     {
       "path": "spec/source/sections/009-8-error-handling.md",
@@ -268,7 +268,7 @@
     },
     {
       "path": "spec/source/sections/018-17-compilation-pipeline.md",
-      "lf_sha256": "05a13a6f6989ccd5a43db3de2a85c94ed70226f6a01d055cd2cedd48b969972d"
+      "lf_sha256": "bc22c7fac3b5f60e5477776fc5bcb95db75633f57601d6915bb2bc59385442dd"
     },
     {
       "path": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",

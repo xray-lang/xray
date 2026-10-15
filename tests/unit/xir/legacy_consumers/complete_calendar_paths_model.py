@@ -5,14 +5,14 @@ import calendar,hashlib,posixpath
 
 ROOT=Path(__file__).resolve().parents[4]
 _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
- 'spec/source/sections/004-3-expressions.md': '3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945',
+ 'spec/source/sections/004-3-expressions.md': '1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c',
  'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
- 'spec/source/sections/006-5-declarations.md': '4b07469dd5109d4c6d0b99896e72c735e60e1821f716352ffd0e4da4e75d563b',
+ 'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
  'spec/source/sections/009-8-error-handling.md': '3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b',
  'spec/source/sections/012-11-modules.md': '3c32493b1e22d29c459362a9f465a6f5316856b5b375c3d1c1e06025756eecd8',
  'spec/source/sections/015-14-built-in-type-methods.md': '2e5cba69a0dc07fd91bbe6d6968dafb518f765296c4597e3541cc6d9de2b445b',
  'spec/source/sections/016-15-standard-library.md': 'c776ecb898f3dfbbac76e6e9eb08da0697041af5b118eb55bfd294a9630ba2fa',
- 'spec/source/sections/018-17-compilation-pipeline.md': '05a13a6f6989ccd5a43db3de2a85c94ed70226f6a01d055cd2cedd48b969972d',
+ 'spec/source/sections/018-17-compilation-pipeline.md': 'bc22c7fac3b5f60e5477776fc5bcb95db75633f57601d6915bb2bc59385442dd',
  'stdlib/datetime/datetime.xr': 'cd05dfebf4afb1d5a1bf2326aa84afd2dbe17825d90ca6f9a340751db596197d',
  'stdlib/io/io.xr': 'cbb670fe3a25e42a3fa96a3bf3460f9696f459c0fac059b82ba8bc99c4d17096',
  'stdlib/log/log.xr': 'd6f32e59f72cbaf35df46ce3438f576756b7fb0a2820e1c98bbc03bebdfea835',

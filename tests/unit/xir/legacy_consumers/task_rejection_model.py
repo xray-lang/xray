@@ -12,7 +12,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94af
  'src/base/xmalloc.h': 'bc5038d87f8c37ff556fbd1ecc1b086c3f35c21d3cd3571eaae957ec8f4b4557',
  'src/program/xr_xir_source_product.h': 'e77fbc930a2a1ef5b327146bc94d808d9dfb54feb8c319ce41aed51e6994c240',
  'src/xir/xxir.h': 'e6983cd7c792820e0ae214f27143990b3f6e14d62f25995ff203f0b67b1c5225',
- 'src/xir/xxir_checked.h': '7baa4e8c63c6d1de14224ebedf5619fd0c761ccabbe67dbfc5e0f388c77afe4e',
+ 'src/xir/xxir_checked.h': '6314627d5507640030ba920f770e2548f196300d2c20f86822e28095518b100b',
  'src/xir/xxir_constraint_proof.h': 'c0f066ec2dd991fa02bdd6f7735b4c85255145e75f821b8a46f33fe7a45536d5',
  'src/xir/xxir_nominal.h': '15c3df9255b0f728abac6ef3eb89af80fdc6c66b8b2d4331948f11db5e1ce354',
  'src/xir/xxir_source_task_type.inc.c': '852ff5ef2805b79190ae526def85d544d64708472d1b7902cdbc49dd7e2197bf',

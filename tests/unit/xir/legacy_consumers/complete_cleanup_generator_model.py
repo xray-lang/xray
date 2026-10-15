@@ -4,9 +4,9 @@ import hashlib
 
 ROOT=Path(__file__).resolve().parent.parents[3]
 _INPUTS = {'spec/source/sections/003-2-type-system.md': '916835c38312eccdada94aff018d22d79f3c15ed998048754759764c53fc8620',
- 'spec/source/sections/004-3-expressions.md': '3aeabb14d154ef235fe51c665a7d367c2e51dc2c6f5261a9e0b194b228a9b945',
+ 'spec/source/sections/004-3-expressions.md': '1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c',
  'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
- 'spec/source/sections/006-5-declarations.md': '4b07469dd5109d4c6d0b99896e72c735e60e1821f716352ffd0e4da4e75d563b',
+ 'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
  'spec/source/sections/009-8-error-handling.md': '3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b',
  'spec/source/sections/011-10-concurrency-and-coroutines.md': '27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea',
  'spec/source/sections/019-18-error-codes.md': '2c4416085d5d38f37fb0e434d863cba1ff5d5758d44efb29402fa5158282d9ad',
