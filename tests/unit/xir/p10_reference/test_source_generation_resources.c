@@ -73,6 +73,7 @@ static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResou
     if (program_storage==4) first="const value=5\nvar cell:Box=Box(40)\nfn old()->i64{cell.value+=1;return cell.value}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nclass Box{value:i64 init(first:i64){this.value=first}}\nexport fn seed()->i64{return 0}";
     if (program_storage==5) first="const value=5\nvar cell:Box=Box(40)\nfn old()->i64{cell.value.set(0,cell.value[0]+1);return cell.value[0]}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nclass Box{value:Array<i64> init(first:i64){this.value=[first]}}\nexport fn seed()->i64{return 0}";
     if (program_storage==6) first="const value=5\nvar cell:Array<i64> = [40]\nfn old()->i64{if(cell==[40]){return 41}else{return 0}}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nexport fn seed()->i64{return 0}";
+    if (program_storage==7) first="const value=5\nvar cell:Box=Box(\"a\")\nfn old()->i64{return counter+1}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nclass Box{value:string init(first:string){this.value=first}}\nfn fetch()->Box{return cell}\nvar counter:i64=40\nexport fn seed()->i64{return 0}";
     XrXirSourceText text={NULL,first,strlen(first)};uint64_t serial=0;
     status=xr_xir_compile_source_generation_prepare(owner,&text,&serial,NULL);
     if (status!=XR_XIR_OK) { CHECK(!serial);goto done; }
@@ -92,6 +93,7 @@ static XrXirStatus pipeline(const XrCompileResourceLimits *bounds,XrCompileResou
     trial->after_publish=attempts;
     const char *second=history ? "const value=\"next\"\nexport fn answer()->i64{const item=Item{value:identity<i64>(old()+1)};return item.value}" :
         "const value=\"next\"\nexport fn answer()->string{return value}";
+    if (program_storage==7) second="struct Padding{flag:bool}\nconst value=\"next\"\nfn append(slot:ref string){slot+=\"x\";slot+=\"${1}\"}\nexport fn answer()->i64{var object=fetch();append(ref object.value);const item=Item{value:identity<i64>(old()+1)};return item.value}";
     text=(XrXirSourceText){NULL,second,strlen(second)};uint64_t candidate=0;
     status=xr_xir_compile_source_generation_prepare(owner,&text,&candidate,NULL);
     if (status!=XR_XIR_OK) {
@@ -123,9 +125,11 @@ done:
 }
 static bool program_phase(const char *argument,ProgramTrial *trial,unsigned *phase) {
     static const char *const names[]={"--program-class-first","--program-class-abort","--program-class-publish",
-        "--program-class-array-first","--program-class-array-abort","--program-class-array-publish"};
-    for (unsigned i=0;i<6;++i) if (!strcmp(argument,names[i])) {
-        trial->storage=4+i/3;*phase=1+i%3;return true;
+        "--program-class-array-first","--program-class-array-abort","--program-class-array-publish",
+        "--program-class-ref-first","--program-class-ref-abort","--program-class-ref-publish"};
+    static const unsigned storage[]={4,5,7};
+    for (unsigned i=0;i<9;++i) if (!strcmp(argument,names[i])) {
+        trial->storage=storage[i/3];*phase=1+i%3;return true;
     }
     return false;
 }

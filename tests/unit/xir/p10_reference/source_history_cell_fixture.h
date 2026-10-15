@@ -9,7 +9,16 @@
 #ifndef SOURCE_HISTORY_CELL_FIXTURE_H
 #define SOURCE_HISTORY_CELL_FIXTURE_H
 static inline const char *source_history_cell_input(unsigned generation,unsigned kind) {
-    bool mutating=kind==1 || kind==2 || kind==4 || kind==5;
+    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==7;
+    if (kind==7) {
+        switch(generation) {
+        case 1:return "var value:Item = Item(\"a\")\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nclass Item{value:string init(first:string){this.value=first}}\nfn fetch()->Item{return value}\nprint(17)\nexport fn seed()->i64{return 0}";
+        case 2:return "struct Padding{flag:bool}\nconst value=\"shadow\"\nfn append(value:Item,slot:ref string)->Item{slot+=\"x\";slot+=\"${1}\";return value}\nexport fn answer()->string{var object=fetch();const copy=append(object,ref object.value);return copy.value}";
+        case 3:return "struct Later{flag:bool}\nconst value=true\nexport fn answer()->string{var object=fetch();const copy=append(object,ref object.value);return copy.value}";
+        case 4:return "const value=99\nexport fn fail()->string{var object=fetch();const copy=append(object,ref object.value);assert(false);return copy.value}";
+        default:return NULL;
+        }
+    }
     if (generation==1 && kind==2) return
         "var value:Array<i64> = [41]\nfn old()->i64{value[0]=value[0]+1;return value[0]}\nfn identity<T>(value:T)->T{return value}\nstruct Item{value:i64}\nprint(17)\nexport fn seed()->i64{return 0}";
     if (generation==1 && kind==3) return
