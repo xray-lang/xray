@@ -246,7 +246,8 @@ static size_t capacity_core_fault(unsigned mode, size_t offset) {
     XirArray *backing = (XirArray *)identity;
     CHECK(backing->length == 2);
     for (size_t i = 0; i < 2; ++i) {
-        XrXirValue value = storage_leaf_value(XR_XIR_STRING, array_slot(backing, i), backing->stride);
+        XrXirValue value = {0};
+        CHECK(storage_leaf_value(backing->object.arena,XR_XIR_STRING,array_slot(backing,i),backing->stride,&value));
         const char *data = NULL; size_t length = 0;
         CHECK(xr_xir_string_view(&value, &data, &length) && length == 3 && !memcmp(data, "A\0B", 3));
     }
