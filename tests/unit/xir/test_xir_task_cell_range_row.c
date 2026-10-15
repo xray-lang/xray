@@ -35,8 +35,32 @@ static void range_row_rejections(const XrXirCompileContext *context,
     rp_owner_free(&foreign,before.live_bytes);
 }
 
+static void range_row_varying_types(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).live_bytes;
+    CellIndexFixture fixture;ci_fixture(&fixture,CI_CALL,false,true);
+    fixture.subject[4]=(XrXirInstruction){.op=XR_XIR_CONST_BOOL,.type=XR_XIR_BOOL,.immediate=1};
+    fixture.subject[5]=(XrXirInstruction){.op=XR_XIR_CONST_FLOAT,.type=XR_XIR_F64};
+    XrXirCellProvenance *independent=NULL;EffectBodyMaterial *material=NULL;
+    CHECK(xir_fixture_verify(&context,&fixture.module,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_cell_provenance_verified(&context,&fixture.module,&independent,NULL)==XR_XIR_OK);
+    CHECK(effect_body_material_create(&context,&fixture.module,&material)==XR_XIR_OK);
+    memset(&fixture,0xCE,sizeof(fixture));
+    EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
+    CHECK(effect_cell_body_owned(&context,material,&adapter,&read)==XR_XIR_OK);
+    XrXirCellProofRunCursor cursor={.function=1};bool varying=false;
+    while (cursor.next<material->functions[1].instruction_count) {
+        XrXirCellProofRun run={0};CHECK(read.range(&context,&read,&cursor,&run)==XR_XIR_OK);
+        varying|=run.count>1 && !!(run.varying&UINT32_C(2));
+    }
+    CHECK(varying && xr_xir_compile_cell_provenance_body_matches(&context,independent,&read,NULL)==XR_XIR_OK);
+    xr_xir_compile_cell_provenance_free(independent);effect_body_material_free(material);
+    rp_owner_free(&context,baseline);rp_balanced(physical);
+}
+
 int main(void) {
     cell_owned_run_literals();
+    range_row_varying_types();
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;
     InvocationDeferredFixture fixture;invocation_deferred_fixture(&fixture,0);
