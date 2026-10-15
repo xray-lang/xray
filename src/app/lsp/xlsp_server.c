@@ -13,7 +13,7 @@
 #include "xlsp_method_table.h"
 #include "xlsp_pending_requests.h"
 #include "xlsp_request_cancel.h"
-#include "xlsp_source_completion.h"
+#include "xlsp_source_task.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_request.h"
 #include "xlsp_navigation.h"
@@ -729,28 +729,6 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 // LSP error codes
 #define LSP_ERROR_REQUEST_CANCELLED -32800
 
-typedef struct XlspSourceTask {
-    XrLspServer *server;
-    XlspRequestId id;
-    XlspSourceRequest *request;
-    XrLspTask *task;
-    XlspSourceRequestResult result;
-    uint64_t revision;
-} XlspSourceTask;
-static void source_task_execute(void *data) {
-    XlspSourceTask *source=data;
-    XrXirStatus status=xlsp_source_request_run(source->request,&source->task->cancel_requested,&source->result);
-    if(status!=XR_XIR_OK){source->result.status=status;source->result.stage=1;}
-    source->task->result=source;
-}
-static void source_task_complete(void *data, void *result) {
-    XlspSourceTask *source = data;
-    XlspSourceCompletion completion = {.id = &source->id, .task_id = source->task->task_id,
-        .revision = source->revision, .worker_completed = result != NULL};
-    XrXirStatus status = xlsp_source_completion_publish(source->server, &completion, &source->result);
-    if (status != XR_XIR_OK) lsp_log("Source completion rejected (status=%u)", (unsigned)status);
-    xlsp_source_request_free(source->request); xlsp_request_id_free(&source->id); xr_free(source);
-}
 static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/definition"))return 0;
     if(!strcmp(method,"textDocument/references"))return 1;
@@ -758,27 +736,10 @@ static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/hover"))return 3;
     return -1;
 }
-static bool source_request_submit(XrLspServer *server,const XlspRequestId *id,XrJsonValue *params,unsigned mode) {
-    if(!server->async){send_error(server,id,-32603,"Source worker unavailable");return false;}
-    if(server->source_revision==UINT64_MAX){send_error(server,id,-32603,"Source revision exhausted");return false;}
-    XlspSourceTask *source=xr_calloc(1,sizeof(*source));
-    if(!source){send_error(server,id,-32603,"Source request allocation failed");return false;}
-    source->server=server;source->revision=server->source_revision;
-    if(xlsp_request_id_clone(id,&source->id)!=XLSP_PROTOCOL_OK)goto failed;
-    if(xlsp_navigation_capture(server,params,mode,&source->request)!=XR_XIR_OK)goto failed;
-    source->task=xlsp_task_new(source_task_execute,source_task_complete,source,XLSP_TASK_NORMAL);
-    if(!source->task)goto failed;
-    uint64_t task_id=xlsp_async_submit(server->async,source->task);
-    if(!task_id){xlsp_task_free(source->task);goto failed;}
-    for(int i=0;i<MAX_PENDING_REQUESTS;++i) {
-        XlspPendingRequest *pending=&server->pending_requests.requests[i];
-        if(xlsp_request_id_equals(&pending->id,id)){pending->source_task_id=task_id;return true;}
-    }
-    // The admission slot was reserved on this same dispatch thread.
-    XR_CHECK(false,"Source request must retain its pending slot");return true;
-failed:
-    xlsp_source_request_free(source->request);xlsp_request_id_free(&source->id);xr_free(source);
-    send_error(server,id,-32603,"Source request admission failed");return false;
+static bool source_request_submit(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params, unsigned mode) {
+    XrXirStatus status = xlsp_source_task_submit(server, id, params, mode);
+    if (status == XR_XIR_OK) return true;
+    send_error(server, id, -32603, "Source request admission failed"); return false;
 }
 
 // Publish diagnostics for a document
