@@ -1,0 +1,11 @@
+fn build()->string {
+    var text="A\0é"
+    const old=text
+    text+="中"
+    text+=text
+    text+=""
+    if(old!="A\0é"){return "wrong"}
+    return text
+}
+fn scalar(value:f64)->string {var text="";text+="${value}";return text}
+export fn run()->i64{return 42}

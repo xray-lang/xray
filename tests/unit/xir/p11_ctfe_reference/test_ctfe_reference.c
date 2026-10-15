@@ -31,6 +31,7 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"string_append_direct",XR_XIR_I64,42,XR_XIR_OK,NULL,0},
     {"class_ref_dynamic_fields", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_dynamic_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_dynamic_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -791,6 +792,7 @@ static void reference_string_late_owner(void) {
 #include "xir_ctfe_array_cases.h"
 #include "xir_ctfe_equal_cases.h"
 #include "xir_ctfe_text_cases.h"
+#include "xir_ctfe_string_append_cases.h"
 #include "xir_ctfe_nominal_cases.h"
 #include "xir_ctfe_function_cases.h"
 #include "xir_ctfe_cleanup_cases.h"
@@ -847,6 +849,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(selected->name,"cleanup_direct")) reference_cleanup_direct(&context,&source);
         else if (!strcmp(selected->name,"function_cycle_direct")) reference_function_cycle(&context,&source);
         else if (!strcmp(selected->name,"function_direct")) reference_function_direct(&context,&source);
+        else if (!strcmp(selected->name,"string_append_direct")) reference_append_direct(&context,&source);
         else if (!strcmp(selected->name,"text_direct")) reference_text_direct(&context,&source);
         else if (!strcmp(selected->name,"equal_array_direct")) reference_owned_equal(&context,&source);
         else if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
@@ -908,6 +911,7 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
     if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) reference_array_late_owner(selected->name);
     if (!strcmp(selected->name,"text_direct")) reference_text_last_owner();
+    if (!strcmp(selected->name,"string_append_direct")) reference_append_last_owner();
     if (!strcmp(selected->name,"nominal_struct_direct") || !strcmp(selected->name,"nominal_enum_direct") || !strcmp(selected->name,"lexical_private_direct")) reference_nominal_last_owner(selected);
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,

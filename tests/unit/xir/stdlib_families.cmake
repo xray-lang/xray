@@ -109,6 +109,28 @@ foreach(mode IN ITEMS measure faults)
         TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;ownership;stdlib;resources;string")
 endforeach()
 
+add_test(NAME test_xir_public_cli_string_append_ctfe
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_public_cli_string_append_ctfe.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
+set_tests_properties(test_xir_public_cli_string_append_ctfe PROPERTIES
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    LABELS "cli;xir;stdlib;native;execution;ownership;string;ctfe")
+foreach(mode IN ITEMS measure faults)
+    if(mode STREQUAL "measure")
+        set(string_append_binding_mode binding-measure)
+    else()
+        set(string_append_binding_mode faults)
+    endif()
+    add_test(NAME test_xir_string_append_ctfe_preparation_${mode}
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/string_append_ctfe_resources.py
+            $<TARGET_FILE:test_xir_stdlib_preparation> ${PROJECT_SOURCE_DIR} ${mode})
+    add_test(NAME test_xir_string_append_ctfe_binding_${mode}
+        COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/unit/xir/string_append_ctfe_resources.py
+            $<TARGET_FILE:test_xir_stdlib_resources> ${PROJECT_SOURCE_DIR} ${string_append_binding_mode})
+    set_tests_properties(test_xir_string_append_ctfe_preparation_${mode} test_xir_string_append_ctfe_binding_${mode} PROPERTIES
+        TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;stdlib;resources;ownership;string;ctfe")
+endforeach()
+
 add_executable(test_xir_scalar_methods_vm ${CMAKE_CURRENT_LIST_DIR}/test_xir_scalar_methods_vm.c)
 target_include_directories(test_xir_scalar_methods_vm PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(test_xir_scalar_methods_vm PRIVATE xray_xir_stdlib_catalog xray_xir_vm)

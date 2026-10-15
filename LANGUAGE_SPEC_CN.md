@@ -6303,7 +6303,7 @@ Checked Source 的整数方法准入由 `stdlib/types/i64.xr` 的固定声明身
 
 当前 Checked Source 以固定 f64 声明身份及完整 READ/signature/allocation/failure/ownership 契约准入 `abs`、`toString`、`toI64`、`floor`、`ceil`、`round`、`isNaN`，并生成普通已有 XIR。`abs` 对零返回正零，NaN 结果遵循普通浮点转换/取反的 canonical 规则。`toI64` 向零截断；`floor/ceil` 向负/正无穷取整；`round` 最近取整且半值远离零，使用精确小数差比较而非给输入加减0.5。NaN、Infinity及无法转换为i64的输入沿共同数值转换发出E0422范围panic，不伪造值或 typed Error。除已有 f32 文本化外，这些准入方法当前要求 f64 接收者。`parse/tryParse/toFixed/sqrt/pow` 五项声明仍无 Checked 操作准入，完整浮点方法族未获资格。
 
-接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source使用§17.61的版本化8MiB逻辑输出上限；Class身份仍不可导出，完整资源/全族资格另证。接收共同标量文本接口后，bool、所有整数宽度、Rune及f32/f64的TO_STRING也可在同一有界CTFE账本执行；唯一既有标量文本内核决定位串和最短往返文本，预付完整formatter work/frame上界，真实String复制仍收费。String导出按所选的逻辑限额检查；直接求值请求选择8字节时仍拒绝更长结果。当前Array join已改为CELL_STRING_APPEND路径，该opcode尚未准入CTFE，String74组合中的join正例仍拒绝，不能用标量文本成功替代其完整资格；剩余未治理的方法、未知native、I/O及String追加opcode不因此准入。
+接收编译器Float执行接口后，上述非文本化的六项f64方法可在原有界CTFE路径执行：既有整数IEEE内核决定位级结果，每条浮点操作先支付1024 work，不依赖宿主FPU、VM或native执行。数值转换越界保范围拒绝；普通用户模块/闭合泛型可调用这些治理方法。Tuple常量按真实字段逻辑字节接收（Unit为0），当前Source使用§17.61的版本化8MiB逻辑输出上限；Class身份仍不可导出，完整资源/全族资格另证。接收共同标量文本接口后，bool、所有整数宽度、Rune及f32/f64的TO_STRING也可在同一有界CTFE账本执行；唯一既有标量文本内核决定位串和最短往返文本，预付完整formatter work/frame上界，真实String复制仍收费。String导出按所选的逻辑限额检查；直接求值请求选择8字节时仍拒绝更长结果。Array join通过私有String Cell的受认证追加进入同一有界CTFE路径，保留完整整数/IEEE文本与Unicode/NUL字节；该追加opcode只接收编译器Domain中的直接私有String Cell，模块状态和投影Cell仍拒绝。剩余未治理的方法、未知native及I/O不因此准入，完整资源与全族资格另证。
 
 ### 14.3 `BigInt` 方法
 
@@ -6364,7 +6364,7 @@ Checked Source 的 `toString()` 与 `repeat(count:i64)` 由固定 string 声明�
 
 接收编译Domain与String执行接口后，String参数/结果、COPY、CONCAT、私有String Cell和上述七方法可由同一有界CTFE路径执行，源消费者把拥有结果复制为独立字面值。Unicode/NUL搜索和比较支付原compiler ledger的保守工作上界，保留范围/资源错误、步数/深度/输出帽，不借VM/Instance或native执行冒充CTFE。共同标量文本准入另有完整formatter预付与拥有结果接收，不从String类型或操作名推断权限。这些是当前开发准入，完整资源/全库资格仍须另证。
 
-普通 String `+=` 的受认证 root 追加路径保留已保存值的 COW 快照、完整 Unicode/NUL 字节、自追加和原有限 Domain 的失败清理。只有足以证明 RHS 不会重绑定接收者的语句才使用 `CELL_STRING_APPEND`；调用、getter 以及用作表达式的复合赋值保留原先读旧值、完成 RHS 后写回的求值顺序。单标量模板可直接追加其 i64/u64、bool、rune 或浮点文本，不先创建临时 String；这不授予额外类型、成员或 root 权限。该操作使用 semantic74，旧 semantic73 包拒绝，不保留双路径协议；它当前仍不属于已准入 CTFE opcode，也不意味着库私有 var、完整 StringBuilder 替代性能或全字符串族已获资格。
+普通 String `+=` 的受认证 root 追加路径保留已保存值的 COW 快照、完整 Unicode/NUL 字节、自追加和原有限 Domain 的失败清理。只有足以证明 RHS 不会重绑定接收者的语句才使用 `CELL_STRING_APPEND`；调用、getter 以及用作表达式的复合赋值保留原先读旧值、完成 RHS 后写回的求值顺序。单标量模板可直接追加其 i64/u64、bool、rune 或浮点文本，不先创建临时 String；这不授予额外类型、成员或 root 权限。该操作使用 semantic74，旧 semantic73 包拒绝，不保留双路径协议；它可在原有界CTFE执行器中通过真实Value place追加到直接私有String Cell，按§17.66支付原账本；模块状态和投影Cell不获该opcode准入，也不意味着库私有 var、完整 StringBuilder 替代性能或全字符串族已获资格。
 
 `len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
 
@@ -7846,6 +7846,14 @@ map/filter/reduce/forEach/find/findIndex/every/some的普通READ实参及Tuple�
 Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展开传递相应字段上下文并在原位置求值，原Tuple值来源保一次求值与真实投影。共同完成器按顺序消费同一计划，零字段展开不擦除副作用，普通Unit仍是逻辑参数。闭包参数上下文可以保持返回结果开放，最终转换仅填入实际结果，原参数模式、完整callable执行契约和效果/ROOT检查仍生效；无上下文或开放结果字段保真实ROOT合并证据。所有存储、观察、效果及转换向原账本计费，不预执行或用AST替身改变求值。
 
 回调中的局部可变捕获仍按真实Cell/借用、cleanup及CTFE闭包权限处理；脚本运行期副作用例不授库var或编译期外部状态。上述参数路径不代表全部库模板、未准入Array成员、完整资源/性能/安全门、P12或322保护已经完成。
+
+### 17.66 私有String Cell的有界原位追加
+
+原有CTFE leaf/calls执行器接收Checked的CELL_STRING_APPEND，要求接收者为编译器Domain中的直接私有String Cell，并使用当前真实Cell authority取得同步Value place。模块状态、外部Cell和投影Cell不从该opcode获得权限。追加复用唯一共同String place操作，不预先持有前缀String；真实别名保留COW，自追加在可能移动的分配前保存字节偏移，空后缀、完整UTF-8与内嵌NUL语义不变。合法Source ref投影仍可由既有受授权读/CONCAT/写路径执行，不代表本追加opcode支持投影。
+
+每条指令和类型/元数据观察支付原compiler ledger。接收者认证、后缀复制与实际增长由共同Value/Domain收费；标量模板继续使用唯一scalar_text内核及完整formatter work/frame预付，不借宿主FPU或另一个求值器。原steps/frame/depth、64MiB累计分配、8MiB live、128M work及版本化逻辑输出帽保持。工作、帧、输出或OOM失败只返回空结果并释放本次拥有值，不退款、不重置账本，也不把资源失败交给语言catch。
+
+完整结果独立拥有String并可在Source、Artifact及账本调用方死亡后存活，最后释放不分配。准入不等于完整标准库、库私有var、StringBuilder性能或全部FI/安全资格；整消费者和原分配故障序列仍须在原预算内完成。
 
 ---
 

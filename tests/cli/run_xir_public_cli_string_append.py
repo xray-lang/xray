@@ -32,7 +32,8 @@ def main():
                  'var text="q"\nconst old=text\nconst result=referenced(ref text)\ntext+="s"\nprint(old,result,text)\n')
         answer='L\0Ω\n3 8 4 7 11 13 17\nA\0é\n'.encode()+('A\0é中😀'*2+'\n').encode()+ '-17|true|Ω|1.5|18446744073709551615\nq qr qrs\n'.encode()
         repetitions=prefix+'print(repeated(64))\n';repeat_answer=('x\0Ω'*64+'\n').encode()
-        cases=[('content',content,answer),('repetitions',repetitions,repeat_answer)]
+        cases=[('content',content,answer),('repetitions',repetitions,repeat_answer),
+               ('ctfe','fn text()->string{var value="a";value+="b";return value}\nprint(comptime text())\n',b'ab\n')]
         def invoke(name,executable,arguments,environment):
             argv=[str(executable),*arguments]
             result=policy.run(name,argv,environment) if environment is hidden else subprocess.run(argv,cwd=root,env=environment,capture_output=True,timeout=60)
@@ -53,8 +54,7 @@ def main():
         for name,_,expected in cases:
             result=invoke(name+'-source-absent',binary,['run',str(output/(name+'.xr'))],hidden)
             assert (result.returncode,result.stdout,result.stderr)==(0,expected,b''),result
-        negatives=[('immutable','const text="a"\ntext+="b"\nprint(text)\n',b'compound assignment requires a mutable binding'),
-                   ('ctfe','fn text()->string{var value="a";value+="b";return value}\nprint(comptime text())\n',b'admitted deterministic scalar direct-call closure')]
+        negatives=[('immutable','const text="a"\ntext+="b"\nprint(text)\n',b'compound assignment requires a mutable binding')]
         for name,text,message in negatives:
             entry=output/(name+'.xr');entry.write_text(text,encoding='utf-8');result=invoke(name,binary,['run',str(entry)],hidden)
             assert result.returncode==1 and not result.stdout and message in result.stderr,result
@@ -63,7 +63,7 @@ def main():
             imported_generic_user_struct=True,nongeneric_owning_Array_CTFE_default_and_capacity8=True,retained_Array_COW=True,
             open_generic_CTFE_default=False,
             full_repeated_UTF8_bytes=256,source_absent_and_poisoned=True,Windows_absolute_child_denial=policy.control,
-            immutable_root_refused=True,append_CTFE=False,library_private_var_opened=False,Builder_performance_qualified=False,
+            immutable_root_refused=True,append_CTFE=True,library_private_var_opened=False,Builder_performance_qualified=False,
             complete_standard_library=False),indent=2)+'\n',encoding='utf-8')
         print('String append: full Unicode/NUL COW, scalar templates and owned generic fields PASS');return 0
     finally:

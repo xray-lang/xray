@@ -784,6 +784,14 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 回调中的局部可变捕获仍按真实Cell/借用、cleanup及CTFE闭包权限处理；脚本运行期副作用例不授库var或编译期外部状态。上述参数路径不代表全部库模板、未准入Array成员、完整资源/性能/安全门、P12或322保护已经完成。
 
+### 17.66 私有String Cell的有界原位追加
+
+原有CTFE leaf/calls执行器接收Checked的CELL_STRING_APPEND，要求接收者为编译器Domain中的直接私有String Cell，并使用当前真实Cell authority取得同步Value place。模块状态、外部Cell和投影Cell不从该opcode获得权限。追加复用唯一共同String place操作，不预先持有前缀String；真实别名保留COW，自追加在可能移动的分配前保存字节偏移，空后缀、完整UTF-8与内嵌NUL语义不变。合法Source ref投影仍可由既有受授权读/CONCAT/写路径执行，不代表本追加opcode支持投影。
+
+每条指令和类型/元数据观察支付原compiler ledger。接收者认证、后缀复制与实际增长由共同Value/Domain收费；标量模板继续使用唯一scalar_text内核及完整formatter work/frame预付，不借宿主FPU或另一个求值器。原steps/frame/depth、64MiB累计分配、8MiB live、128M work及版本化逻辑输出帽保持。工作、帧、输出或OOM失败只返回空结果并释放本次拥有值，不退款、不重置账本，也不把资源失败交给语言catch。
+
+完整结果独立拥有String并可在Source、Artifact及账本调用方死亡后存活，最后释放不分配。准入不等于完整标准库、库私有var、StringBuilder性能或全部FI/安全资格；整消费者和原分配故障序列仍须在原预算内完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1678,5 +1686,13 @@ Ordinary READ arguments and Tuple spreads of map/filter/reduce/forEach/find/find
 Tuple literal fields keep their original syntax, owner and expression plans. Nested spreads receive the corresponding field contexts and evaluate in place; existing Tuple value sources evaluate once and supply authentic projections. The common completion worker consumes the same plans in order. Zero-field spreads retain effects and ordinary Unit retains logical arity. A closure parameter context may leave the result open; final conversion fills only the actual result while preserving parameter modes, the complete callable execution contract and effect/ROOT checks. Uncontextualized or open-result fields retain authentic ROOT join evidence. Original ledgers charge storage, observation, effects and conversion without pre-execution or synthetic AST evaluation.
 
 Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closure authority. Runtime script effects grant neither library private variables nor compiler external-state access. This argument path does not complete all library templates, unadmitted Array members, full resource/performance/safety gates, P12 or322 protection.
+
+### 17.66 Bounded in-place append to private String Cells
+
+The existing CTFE leaf/calls evaluator admits Checked CELL_STRING_APPEND only for a direct private String Cell in the compiler Domain and obtains its synchronous Value place using authentic current Cell authority. This opcode grants no access to module state, external Cells or projected Cells. Append reuses the sole common String place operation without retaining the prefix first. Real aliases retain COW; self append preserves a byte offset before an allocation can move. Empty suffixes, complete UTF-8 and embedded NUL retain their existing semantics. Legal Source ref projections can still execute through existing authorized read/CONCAT/write operations; that does not establish projection support for this append opcode.
+
+Every instruction and type/metadata observation pays the original compiler ledger. Common Value/Domain operations charge authentication, suffix copying and actual growth. Scalar templates retain the sole scalar_text kernel and complete formatter work/frame prepayment, using neither host FPU nor another evaluator. Original steps/frame/depth,64MiB cumulative allocation,8MiB live,128M work and the versioned logical output ceiling remain. Work/frame/output/OOM failures return empty output and release the current owners without refunding or resetting the ledger or entering language catch.
+
+Complete results independently own their Strings after Source, Artifact and ledger caller death, and final release allocates nothing. Admission does not qualify the complete standard library, private library variables, StringBuilder performance or all FI/safety gates; whole consumers and original allocation fault sequences must still finish within original budgets.
 
 <!-- /xr-spec:en -->
