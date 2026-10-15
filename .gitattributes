@@ -57,3 +57,6 @@ tests/unit/xir/product_consumers/fixtures/** text eol=lf
 tests/unit/xir/product_consumers/*_cases.cmake text eol=lf
 tests/unit/xir/product_consumers/source_product_*_constructors.c text eol=lf
 tests/unit/xir/product_consumers/legacy_responsibilities.json text eol=lf
+
+# Private emitter tables are checked against the canonical generator bytes.
+src/xir/xxir_emit_literal_tables.inc.c text eol=lf
