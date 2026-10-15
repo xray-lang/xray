@@ -168,7 +168,6 @@ static XrXirStatus source_facts_build(XrXirArtifact *artifact,XrXirDiagnostic *d
         if (status==XR_XIR_OK) status=xir_construction_clone(context,artifact->module.types,
             artifact->construction,&facts->construction);
         if (status==XR_XIR_OK) status=source_facts_input_match(context,artifact,facts);
-        if (status==XR_XIR_OK) status=xir_effects_source_retire_generation(context,&artifact->module,facts->effects);
         if (status==XR_XIR_OK) status=xir_effects_source_terminal(context,&artifact->module,facts->effects);
     }
     xr_xir_compile_effects_free(effects);
