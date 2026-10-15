@@ -32,8 +32,10 @@ class CompleteRangeBindings(unittest.TestCase):
         for name, count in [('multiconcat', 6), ('strings', 56), ('interpolation_display_shapes', 2)]:
             row = rows['complete_original_text_range_' + name]
             self.assertEqual(row['observation_count'], count)
-            self.assertEqual(row['source'], ranges.PATHS[name])
-            self.assertEqual(row['source'], row['original_source'])
+            self.assertEqual(row['original_source'], ranges.PATHS[name])
+            self.assertEqual(row['source'],
+                             'tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr'
+                             if name == 'multiconcat' else row['original_source'])
             self.assertEqual(row['expected']['stdout_utf8'],
                              ''.join(ranges.scalar(value)+'\n' for value in values[name]))
         self.assertEqual(values['multiconcat'][:2], ['eval 1', 'eval 2'])

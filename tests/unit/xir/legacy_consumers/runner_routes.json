@@ -109880,7 +109880,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve the whole original positive/effect/stress responsibility. Published methods, witness/query metadata, borrow/layout/provider contracts and actual full execution remain unqualified."
+      "target_contract_review": "REQUIRED; preserve the whole original positive/effect/stress responsibility. Published methods, witness/query metadata, borrow/layout/provider contracts and actual full execution remain unqualified.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr",
+        "lf_sha256": "f8360e532803291985029168c023d29ced78672a1afe257294eafbc686fc8e4d",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec17.70 closed owned display and exact nullable context: preserve both null observations, the full six-output trace, part(1)/part(2) order and the original positive obligation."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_EXACT_NULLABLE_CONTEXT_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Spec17.70 closed owned display and exact nullable context: preserve both null observations, the full six-output trace, part(1)/part(2) order and the original positive obligation."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/string/rune_string_conversion.xr",

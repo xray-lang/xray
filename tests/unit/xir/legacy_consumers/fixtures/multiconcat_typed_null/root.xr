@@ -1,0 +1,17 @@
+// anchor: string-multiconcat
+enum Mode {
+    Ready
+}
+
+fn part(n: i64) -> string {
+    print("eval " + string(n))
+    return "p" + string(n)
+}
+
+const absent: i64? = null
+var s = "a${part(1)}b${part(2)}${true}${absent}${Mode.Ready}"
+print(s)
+
+print("${42}")
+print("${false}")
+print("${absent}")

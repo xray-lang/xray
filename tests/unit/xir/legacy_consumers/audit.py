@@ -30,6 +30,7 @@ FROZEN_TARGETS['tests/diff/cases/semantics/collections/method_self_return_owners
 FROZEN_TARGETS['tests/diff/cases/semantics/collections/stringbuilder_append_shared_core.xr'] = ('POSITIVE_OWNED_STRING_ACCUMULATION_AFTER_STRINGBUILDER_RETIREMENT', 'P09')
 FROZEN_TARGETS['tests/diff/cases/semantics/collections/stringbuilder_scalar_known_append_shared_core.xr'] = ('POSITIVE_OWNED_STRING_ACCUMULATION_AFTER_STRINGBUILDER_RETIREMENT', 'P09')
 FROZEN_TARGETS['tests/diff/cases/semantics/int/enum_ordinal_conversion.xr'] = ('POSITIVE_EXPLICIT_ENUM_ORDINAL_PORT', 'P09')
+FROZEN_TARGETS['tests/diff/cases/semantics/string/multiconcat.xr'] = ('POSITIVE_EXACT_NULLABLE_CONTEXT_PORT', 'P10')
 FROZEN_TARGETS['tests/diff/cases/semantics/modules/_classlib.xr'] = ('POSITIVE_ORDINARY_CLASS_RECEIVER_MODULE_PORT', 'P10')
 FROZEN_TARGETS['tests/diff/cases/semantics/modules/xmod_class.xr'] = ('POSITIVE_ORDINARY_CLASS_RECEIVER_MODULE_PORT', 'P10')
 FROZEN_TARGETS['tests/diff/cases/semantics/modules/_exported_struct_methods_lib.xr'] = ('POSITIVE_NAMED_STRUCT_FACTORY_MODULE_PORT', 'P10')

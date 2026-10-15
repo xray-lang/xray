@@ -544,8 +544,8 @@
       "id": "complete_original_text_range_multiconcat",
       "family": "text_range",
       "model_key": "multiconcat",
-      "source": "tests/diff/cases/semantics/string/multiconcat.xr",
-      "source_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr",
+      "source_lf_sha256": "f8360e532803291985029168c023d29ced78672a1afe257294eafbc686fc8e4d",
       "original_source": "tests/diff/cases/semantics/string/multiconcat.xr",
       "original_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5",
       "observation_suffix": "",
@@ -1126,6 +1126,10 @@
     {
       "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/closure_capture_blocks_rebind.xr",
       "lf_sha256": "073f7f9ef9ba342d98d547c45f165f20ae67c6cfb1f080a19ec55ee247f70369"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr",
+      "lf_sha256": "f8360e532803291985029168c023d29ced78672a1afe257294eafbc686fc8e4d"
     },
     {
       "path": "tests/unit/xir/legacy_consumers/independent_observation_format.py",

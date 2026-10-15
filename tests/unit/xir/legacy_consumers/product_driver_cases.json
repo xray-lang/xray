@@ -25977,8 +25977,8 @@
     {
       "id": "complete_original_text_range_multiconcat",
       "oracle_id": "complete_original_text_range_multiconcat",
-      "source": "tests/diff/cases/semantics/string/multiconcat.xr",
-      "source_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr",
+      "source_lf_sha256": "f8360e532803291985029168c023d29ced78672a1afe257294eafbc686fc8e4d",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "eval 1\neval 2\nap1bp2truenullMode.Ready\n42\nfalse\nnull\n",

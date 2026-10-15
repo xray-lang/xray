@@ -186,6 +186,7 @@ _BINDING_PATHS = frozenset(['spec/source/sections/002-1-lexical-structure.md',
  'tests/diff/cases/semantics/ownership/shared_freeze_go.xr',
  'tests/diff/cases/semantics/string/interpolation_display_shapes.xr',
  'tests/diff/cases/semantics/string/multiconcat.xr',
+ 'tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr',
  'tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr',
  'tests/diff/cases/semantics/string/string_surface_declared_methods.xr',
  'tests/unit/xir/legacy_consumers/complete_numeric_model.py',
@@ -464,7 +465,7 @@ _SOURCE_IDENTITIES = {'complete_original_text_range_ranges': ('tests/diff/cases/
                                                                  'text_range',
                                                                  'string_indexof_start_shared_core',
                                                                  False),
- 'complete_original_text_range_multiconcat': ('tests/diff/cases/semantics/string/multiconcat.xr', 'tests/diff/cases/semantics/string/multiconcat.xr', 'text_range', 'multiconcat', True),
+ 'complete_original_text_range_multiconcat': ('tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr', 'tests/diff/cases/semantics/string/multiconcat.xr', 'text_range', 'multiconcat', True),
  'complete_original_text_range_strings': ('tests/diff/cases/basic/strings.xr', 'tests/diff/cases/basic/strings.xr', 'text_range', 'strings', True),
  'complete_original_text_range_interpolation_display_shapes': ('tests/diff/cases/semantics/string/interpolation_display_shapes.xr', 'tests/diff/cases/semantics/string/interpolation_display_shapes.xr', 'text_range', 'interpolation_display_shapes', True)}
 
@@ -480,6 +481,10 @@ def require_owned_input_paths(paths):
 
 
 def expected_rows():
+    original = (ROOT / 'tests/diff/cases/semantics/string/multiconcat.xr').read_bytes().replace(b'\r\n', b'\n')
+    migrated = original.replace(b'var s = ', b'const absent: i64? = null\nvar s = ', 1).replace(b'${null}', b'${absent}')
+    if original.count(b'${null}') != 2 or migrated == original or (ROOT / 'tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr').read_bytes().replace(b'\r\n', b'\n') != migrated:
+        raise ValueError('Multiconcat port must retain the complete source and only supply an exact nullable context')
     bindings = json.loads((HERE / 'complete_program_bindings.json').read_text(encoding='utf-8'))
     input_paths = [item['path'] for item in bindings['inputs']]
     require_owned_input_paths(input_paths)
