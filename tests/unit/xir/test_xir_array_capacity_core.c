@@ -241,7 +241,9 @@ int main(void) {
         size_t count = capacity_core_fault(mode, SIZE_MAX); CHECK(count > 0);
         for (size_t site = 0; site < count; ++site) (void)capacity_core_fault(mode, site);
     }
-    capacity_core_retain_failure(); capacity_core_ledgers(); CHECK(original_value_allocation_main() == 0);
+    capacity_core_retain_failure(); capacity_core_ledgers();
+    char *arguments[]={"array-capacity-core",NULL};
+    CHECK(original_value_allocation_main(1,arguments) == 0);
     puts("Array capacity owned/cross-domain/nested/zero-sized/all-OOM/retain/exact-minus1/charged-retry physical0 PASS");
     return 0;
 }

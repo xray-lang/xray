@@ -13,6 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
+#include "xir_instance_compile_observer.h"
+#include "xir_runtime_allocations.h"
+#include "xir/xxir_task.c"
+#include "xir/xxir_vm.c"
 #include "xir_source_fixture_owner.h"
 static XrXirOutputStatus generation_output(void *context,const XrXirOutputGroup *group) {
     unsigned *calls=context;
@@ -49,13 +53,18 @@ static void source_publish(SourceFixtureOwner *compiler,XrXirSourceGenerations *
     CHECK(xr_compile_resources_stats(compiler->context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(before.work==after.work && before.allocated_bytes==after.allocated_bytes && after.live_bytes<=before.live_bytes);
 }
-int main(void) {
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--shift")));
     const char *inputs[]={
         "final class Counter{n:i64 constructor(n:i64){this.n=n} add()->i64{this.n+=1;return this.n}}\nvar value=Counter(41)\nfn old()->i64{return value.add()}\nprint(17)\nexport fn seed()->i64{return 0}",
         "const value=\"shadow\"\nexport fn answer()->i64{return old()}",
         "const value=true\nexport fn answer()->i64{return old()}",
         "const value=99\nexport fn fail()->i64{const seen=old();assert(false);return seen}"
     };
+    if(argc==2) {
+        inputs[1]="final class Padding{x:bool constructor(x:bool){this.x=x}}\nconst padding=Padding(true)\nconst value=\"shadow\"\nexport fn answer()->i64{return old()}";
+        inputs[2]="final class Other{x:string constructor(x:string){this.x=x}}\nconst padding=Other(\"gap\")\nconst value=true\nexport fn answer()->i64{return old()}";
+    }
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig source_config={compiler.context,"class-history",NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;
@@ -99,5 +108,8 @@ int main(void) {
     xr_xir_compile_source_generations_free(owner);
     for(unsigned i=0;i<4;++i)xr_xir_compile_program_drop(programs[i]);
     source_fixture_owner_free(&compiler);puts("Class birth identity and committed side effects survived three generations and a failed candidate");
+    instance_compile_zero();
+    CHECK(!runtime_live && !runtime_bytes);
+    printf("Class history compiler/runtime physical0; runtime sites=%zu shifted=%u\n",runtime_attempts,argc==2);
     return 0;
 }
