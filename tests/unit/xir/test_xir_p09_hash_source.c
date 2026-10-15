@@ -19,7 +19,7 @@ static void hash_source_cases(const XrXirCompileContext *context) {
         {"fn echo<T:Hashable>(x:Set<T>)->Set<T>{return x}\nconst f=echo<bool>\n", XR_XIR_OK},
         {"fn echo<V>(x:Map<string,V>)->Map<string,V>{return x}\nconst f=echo<i64>\n", XR_XIR_OK},
         {"fn echo(x:Map<i64,Map<string,Array<i64>>>)->Map<i64,Map<string,Array<i64>>>{return x}\n", XR_XIR_OK},
-        {"fn echo(x:Map<string,()>)->Map<string,()>{return x}\n", XR_XIR_OK},
+        {"fn echo(x:Map<string,()>)->Map<string,()>{return x}\n", XR_XIR_BAD_TYPE},
         {"struct Map<K,V>{}\nfn echo(x:Map<Array<i64>,i64>)->Map<Array<i64>,i64>{return x}\n", XR_XIR_OK},
         {"struct Set<T>{}\nfn echo(x:Set<Array<i64>>)->Set<Array<i64>>{return x}\n", XR_XIR_OK},
         {"fn echo<K,V>(x:Map<K,V>)->Map<K,V>{return x}\n", XR_XIR_BAD_TYPE},
@@ -35,6 +35,7 @@ static void hash_source_cases(const XrXirCompileContext *context) {
         {"fn echo<K:Hashable,V>(x:Map<K,Array<V>>)->Map<K,Array<V>>{return x}\nconst f=echo<string,i64>\n", XR_XIR_OK},
         {"fn missing(x:Map<string,i64>)->i64?{return x.get(\"key\")}\n", XR_XIR_BAD_TYPE},
         {"fn missing(x:Set<i64>)->bool{return x.contains(1)}\n", XR_XIR_BAD_TYPE},
+        {"fn echo<V>(x:Map<string,V>)->Map<string,V>{return x}\nconst f=echo<()>\n", XR_XIR_BAD_TYPE},
     };
     unsigned failures = 0;
     for (unsigned i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {

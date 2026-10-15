@@ -58,8 +58,11 @@ static bool source_native_hash_type(SourceContext *ctx, XrTypeRef *ref, XrXirTyp
     XrXirType arguments[2] = {XR_XIR_UNIT, XR_XIR_UNIT};
     ++ctx->depth;
     bool ok = true;
-    for (uint32_t p = 0; ok && p < native->parameter_count; ++p)
+    for (uint32_t p = 0; ok && p < native->parameter_count; ++p) {
         ok = source_type(ctx, ref->children[p], &arguments[p]);
+        if (ok && (arguments[p] == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types, arguments[p])))
+            ok = source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "hash container argument must be an ordinary copyable storable type");
+    }
     --ctx->depth;
     if (!ok) return false;
     XrXirTypeKind kind = native->id == XR_NATIVE_DECLARATION_MAP ? XR_XIR_TYPE_MAP : XR_XIR_TYPE_SET;
