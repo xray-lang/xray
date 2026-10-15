@@ -121,8 +121,15 @@ XrXirStatus xr_xir_compile_generics_clone(const XrXirCompileContext *compile_con
         copy[f].parameter_count = from->parameter_count; copy[f].argument_count = from->argument_count;
         XrXirConstraint *constraints = NULL;
         XrXirStatus status = xr_xir_compile_constraint_array_copy_verified(compile_context, from->constraints, from->parameter_count, &constraints);
+        copy[f].constraints = constraints;
+        /* Constraint copying has its own failure status. Propagate it before
+         * sibling copies can allocate through the still-successful status. */
+        if (status != XR_XIR_OK) {
+            xr_xir_compile_generics_free(copy, module->function_count);
+            return status;
+        }
         XrXirType *arguments = xir_compile_copy(compile_context, from->arguments, (size_t) from->argument_count * sizeof(*arguments), &allocation_status);
-        copy[f].constraints = constraints; copy[f].arguments = arguments;
+        copy[f].arguments = arguments;
         uint32_t *kinds = from->parameter_kinds ? xir_compile_copy(compile_context, from->parameter_kinds, (size_t)from->parameter_count * sizeof(*kinds), &allocation_status) : NULL;
         copy[f].parameter_kinds = kinds;
         if (status != XR_XIR_OK || allocation_status != XR_XIR_OK || (from->argument_count && !arguments) || (from->parameter_kinds && !kinds)) {
