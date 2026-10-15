@@ -8,6 +8,7 @@
  */
 #include "../../api/xsource_compiler.h"
 #include "../../api/xsource_paths.h"
+#include "../../shared/xr_path_limit.h"
 #include "../toolchain/xtc_xir_local_toolchain.h"
 #include "../toolchain/xtc_xir_native_admission.h"
 #include "xray_version.h"
