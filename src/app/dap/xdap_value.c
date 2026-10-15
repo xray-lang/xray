@@ -71,7 +71,11 @@ XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t ind
         XrXirValueAdmission admission=value_admission(value,domain);XrXirFaultDetail fault={0};
         child.selector=(XrXirValuePathStep){XR_XIR_PATH_INDEX,(XrXirType)value->type,(int64_t)index};child.selected=true;
         status=xir_value_observe_child(value,&child.selector,&admission,output,&fault);
-    } else if (xr_xir_tuple_signature(types,(XrXirType)value->type)) status=xr_xir_tuple_get(value,(uint32_t)index,output);
+    } else if (xr_xir_tuple_signature(types,(XrXirType)value->type)) {
+        XrXirValueAdmission admission=value_admission(value,domain);XrXirFaultDetail fault={0};
+        child.selector=(XrXirValuePathStep){XR_XIR_PATH_TUPLE_FIELD,(XrXirType)value->type,(int64_t)index};child.selected=true;
+        status=xir_value_observe_child(value,&child.selector,&admission,output,&fault);
+    }
     else if (value_nominal(value,types)) {
         const XrXirNominalIdentity *identity=value_nominal(value,types);uint64_t ordinal=0;uint32_t field=UINT32_MAX;
         if (!xr_xir_domain_work(domain,identity->field_count)) return XR_XIR_VALUE_LIMIT;
@@ -91,10 +95,13 @@ XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t ind
     } else if (xr_xir_type_is_nullable(types,(XrXirType)value->type)) {
         bool some=false;const XrXirValue *payload=NULL;
         if (!xr_xir_nullable_view(value,&some,&payload) || !some) return XR_XIR_VALUE_BAD_ARGUMENT;
-        status=xr_xir_value_copy(payload,output);child.name="value";child.name_length=5;
+        XrXirValueAdmission admission=value_admission(value,domain);XrXirFaultDetail fault={0};
+        child.selector=(XrXirValuePathStep){XR_XIR_PATH_NULLABLE_VALUE,(XrXirType)value->type,0};child.selected=true;
+        status=xir_value_observe_child(value,&child.selector,&admission,output,&fault);child.name="value";child.name_length=5;
     } else {
-        XrXirEnumBorrow borrow={0};status=xr_xir_enum_borrow(value,&borrow);
-        if (status==XR_XIR_VALUE_OK) status=xr_xir_value_copy(&borrow.fields[index],output);
+        XrXirValueAdmission admission=value_admission(value,domain);XrXirFaultDetail fault={0};
+        child.selector=(XrXirValuePathStep){XR_XIR_PATH_ENUM_FIELD,(XrXirType)value->type,(int64_t)index};child.selected=true;
+        status=xir_value_observe_child(value,&child.selector,&admission,output,&fault);
     }
     if (status==XR_XIR_VALUE_OK) *info=child;
     return status;

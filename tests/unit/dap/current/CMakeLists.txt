@@ -492,7 +492,9 @@ target_compile_definitions(test_dap_class_write PRIVATE XR_DAP_STDLIB="${PROJECT
     XR_DAP_THREADS_FIXTURE="${XR_DAP_FIXTURE_DIR}/threads_fixture.xr" XR_DAP_ORIGIN_FIXTURE="${XR_DAP_FIXTURE_DIR}/write_projection.xr"
     XR_DAP_CHILD_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/child_write.xr" XR_DAP_CLASS_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/class_write.xr"
     XR_DAP_CLASS_CHILD_FIXTURE="${XR_DAP_FIXTURE_DIR}/class_child_write.xr" XR_DAP_CLASS_MODULE_FIXTURE="${XR_DAP_FIXTURE_DIR}/class_module_write.xr"
-    XR_DAP_CLASS_LOAN_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_class.xr" XR_DAP_CLASS_ALIAS_FIXTURE="${XR_DAP_FIXTURE_DIR}/class_alias_write.xr")
+    XR_DAP_CLASS_LOAN_FIXTURE="${XR_DAP_FIXTURE_DIR}/ref_class.xr" XR_DAP_CLASS_ALIAS_FIXTURE="${XR_DAP_FIXTURE_DIR}/class_alias_write.xr"
+    XR_DAP_CLASS_WRAPPER_FIXTURE="${XR_DAP_FIXTURE_DIR}/class_wrapper_write.xr"
+    XR_DAP_CLASS_WRAPPER_CHILD_FIXTURE="${XR_DAP_FIXTURE_DIR}/class_wrapper_child_write.xr")
 if(MSVC)
     target_compile_options(test_dap_class_write PRIVATE /W4 /WX)
 else()

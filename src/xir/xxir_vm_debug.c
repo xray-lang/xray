@@ -18,6 +18,7 @@
 #include "xxir_cell_owner_internal.h"
 #include "xxir_instance_debug_internal.h"
 #include "xxir_value_path_internal.h"
+#include "xxir_value_observe_internal.h"
 #include <stdatomic.h>
 #include <string.h>
 

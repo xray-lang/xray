@@ -32,6 +32,8 @@ static XrXirValueStatus debug_class_write_read(XrXirCallView *view,const XrXirVa
     XrXirValueAdmission *admission=xr_xir_call_admission(view);XrXirFaultDetail fault={0};
     const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);XrXirValuePath path={step,1};
     if (!xr_xir_type_is_class(types,(XrXirType)value->type)) {
+        if (step->kind==XR_XIR_PATH_TUPLE_FIELD || step->kind==XR_XIR_PATH_NULLABLE_VALUE || step->kind==XR_XIR_PATH_ENUM_FIELD)
+            return xir_value_observe_child(value,step,admission,output,&fault);
         XrXirValue borrowed=*value;XrXirValuePlace place={(XrXirType)value->type,&borrowed.payload};
         return xr_xir_value_path_read(&place,&path,admission,output,&fault);
     }

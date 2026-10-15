@@ -249,6 +249,7 @@ static void class_projection_aliases(void) {
     xr_xir_vm_debug_snapshot_drop(old);xr_xir_value_drop(&box);write_finish(&fixture);
     printf("Class field: actual projected aliases=%u, bounds unavailable/restored100, escaped old11/stdout100-11-13-17/physical0 PASS\n",count);
 }
+#include "test_class_wrapper_write.h"
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     for (uint32_t kind=0;kind<4;++kind) {
@@ -268,5 +269,10 @@ int main(int argc,char **argv) {
     for (size_t i=0;i<sites;++i) if (resources || !i || i==sites-1) class_observer_fault(i);
     printf("Observer Array/Struct foreign Class identity materialization sites=%zu injection=%s preserves stop/owners/physical0 PASS\n",sites,resources ? "ALL" : "FIRST_LAST_ONLY");
     class_projection_aliases();
+    for (uint32_t kind=0;kind<12;++kind) {
+        size_t count=class_wrapper_case(kind,SIZE_MAX);CHECK(count);
+        for (size_t i=0;i<count;++i) if (resources || !i || i==count-1) class_wrapper_case(kind,i);
+        printf("Immutable wrapper Class: kind=%u sites=%zu injection=%s Source123/old11/pure-denied/wrapper-denied/physical0 PASS\n",kind,count,resources ? "ALL" : "FIRST_LAST_ONLY");
+    }
     return 0;
 }
