@@ -22,7 +22,7 @@ export const MAX_SIZE = 1024
 export class Calculator {
     value: i64
 
-    constructor(initial) {
+    init(initial) {
         this.value = initial
     }
 

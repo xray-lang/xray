@@ -4,7 +4,7 @@
 class Holder {
     data: Array<i64>
     n: i64
-    constructor() {
+    init() {
         this.data = [0]
         this.n = 0
     }

@@ -5,7 +5,7 @@
 // to Array<int>".
 class Array {
     tag: string
-    constructor(tag: string) { this.tag = tag }
+    init(tag: string) { this.tag = tag }
 }
 
 print(Array("mine").tag)

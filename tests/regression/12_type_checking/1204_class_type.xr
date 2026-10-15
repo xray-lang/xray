@@ -7,7 +7,7 @@ class Point {
     x: i64
     y: i64
 
-    constructor(x: i64, y: i64) {
+    init(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
@@ -55,7 +55,7 @@ fn test_class_method_return_type() {
 class Animal {
     name: string
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 
@@ -67,7 +67,7 @@ class Animal {
 class Dog extends Animal {
     breed: string
 
-    constructor(name: string, breed: string) {
+    init(name: string, breed: string) {
         super(name)
         this.breed = breed
     }
@@ -153,7 +153,7 @@ fn test_static_method() {
 class Box {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 
@@ -207,7 +207,7 @@ class Rectangle {
     width: i64
     height: i64
 
-    constructor(w: i64, h: i64) {
+    init(w: i64, h: i64) {
         this.width = w
         this.height = h
     }
@@ -220,7 +220,7 @@ class Rectangle {
 class Circle {
     radius: f64
 
-    constructor(r: f64) {
+    init(r: f64) {
         this.radius = r
     }
 

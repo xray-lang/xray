@@ -368,7 +368,7 @@ void xr_register_panic_info_class(XrVMRuntime *X) {
     xr_class_builder_add_field(builder, "code", 0);
     xr_class_builder_add_field(builder, "data", 0);
 
-    xr_class_builder_add_method(builder, XR_KEYWORD_CONSTRUCTOR, exception_primitive_constructor,
+    xr_class_builder_add_method(builder, XR_INIT_MEMBER_NAME, exception_primitive_constructor,
                                 /* param_count */ -1, XMETHOD_FLAG_CONSTRUCTOR);
     xr_class_builder_add_method(builder, "toString", exception_primitive_to_string,
                                 /* param_count */ 0, 0);

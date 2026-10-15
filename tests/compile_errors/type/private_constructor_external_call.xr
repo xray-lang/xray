@@ -1,5 +1,5 @@
 class Hidden {
-    private constructor(v: i64) {}
+    private init(v: i64) {}
 
     static make(v: i64) -> Hidden {
         return Hidden(v)

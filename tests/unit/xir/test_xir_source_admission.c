@@ -311,7 +311,7 @@ static const char *const rejected[] = {
     "struct C { static value(x:i64=\"bad\")->i64 { return x } }\n",
 
     "fn value(x:i64=caller)->i64 { return x }\nfn use()->i64 { const caller=7; return value() }\n",
-    "struct C { const value:i64\n private constructor(value:i64=7) { this.value=value } }\nconst c=C()\n",
+    "struct C { const value:i64\n private init(value:i64=7) { this.value=value } }\nconst c=C()\n",
     "struct C { value:i64=7\n private get(x:i64=7)->i64 { return x } }\nprint(C().get())\n",
     "struct C { value:i64=7\n get(x:i64=7)->i64 { return x } }\nconst get=C().get\nprint(get())\n",
     "fn f(x:i64=\"bad\")->i64 { return x }\n",
@@ -319,25 +319,25 @@ static const char *const rejected[] = {
     "fn f(a:i64,b:i64=a)->i64 { return b }\n",
     "fn f<T>(x:T=1)->T { return x }\n",
     "fn f(x:i64=1)->i64 { return x }\nconst g=f\nprint(g())\n",
-    "struct C { value:i64\n constructor(value=this.value) { this.value=value } }\n",
+    "struct C { value:i64\n init(value=this.value) { this.value=value } }\n",
     "struct C { value:i64=2\n f(x:i64=this.value)->i64 { return x } }\n",
-    "struct C { const value:string\n constructor(value,n:i64) { var i=0\n while(i<n) { this.value=value\n i=i+1 }\n this.value=value } }\n",
-    "struct C { const value:string\n constructor(value,flag:bool) { if(flag) { return }\n this.value=value } }\n",
-    "struct C { const value:string\n constructor(value) { this.get()\n this.value=value }\n get()->string{return this.value} }\n",
-    "struct C<T> { const value:T\n constructor(value) { this.value=value+value } }\n",
-    "struct C { private const value:string\n constructor(value){this.value=value} }\nconst bad=C{value:\"hidden\"}\n",
-    "struct C { const value:string\n constructor(value){this.value=value} }\nconst bad=C()\n",
+    "struct C { const value:string\n init(value,n:i64) { var i=0\n while(i<n) { this.value=value\n i=i+1 }\n this.value=value } }\n",
+    "struct C { const value:string\n init(value,flag:bool) { if(flag) { return }\n this.value=value } }\n",
+    "struct C { const value:string\n init(value) { this.get()\n this.value=value }\n get()->string{return this.value} }\n",
+    "struct C<T> { const value:T\n init(value) { this.value=value+value } }\n",
+    "struct C { private const value:string\n init(value){this.value=value} }\nconst bad=C{value:\"hidden\"}\n",
+    "struct C { const value:string\n init(value){this.value=value} }\nconst bad=C()\n",
 
-    "struct C { const value:string\n constructor(value) {} }\n",
-    "struct C { const value:string\n constructor(value) { this.value=value\n this.value=value } }\n",
-    "struct C { const value:string\n constructor(value, ok:bool) { if(ok) { this.value=value } } }\n",
-    "struct C { const value:string\n constructor(value) { return\n this.value=value } }\n",
-    "struct C { const value:string\n constructor(other) { this.value=other } }\n",
-    "struct C { const value:string\n constructor(value) { const capture=fn()->string { return this.value }\n this.value=value } }\n",
-    "struct C { const value:string=\"default\"\n constructor(value) { this.value=value } }\n",
-    "struct C { const value:string\n private constructor(value) { this.value=value } }\nconst c=C(\"bad\")\n",
-    "struct C { const value:string\n constructor(value) { this.value=value } }\nconst c=C(1)\n",
-    "struct C { const value:string\n constructor(value) { this.value=value\n return this } }\n",
+    "struct C { const value:string\n init(value) {} }\n",
+    "struct C { const value:string\n init(value) { this.value=value\n this.value=value } }\n",
+    "struct C { const value:string\n init(value, ok:bool) { if(ok) { this.value=value } } }\n",
+    "struct C { const value:string\n init(value) { return\n this.value=value } }\n",
+    "struct C { const value:string\n init(other) { this.value=other } }\n",
+    "struct C { const value:string\n init(value) { const capture=fn()->string { return this.value }\n this.value=value } }\n",
+    "struct C { const value:string=\"default\"\n init(value) { this.value=value } }\n",
+    "struct C { const value:string\n private init(value) { this.value=value } }\nconst c=C(\"bad\")\n",
+    "struct C { const value:string\n init(value) { this.value=value } }\nconst c=C(1)\n",
+    "struct C { const value:string\n init(value) { this.value=value\n return this } }\n",
 
     "var values=[]\n",
     "const values:Array<i64>=[\"wrong\"]\n",
@@ -545,7 +545,7 @@ static const char *const rejected[] = {
 static void static_import_authority(const XrXirSourceRequest *request, const char *root, const char *library) {
     AdmissionCase case_owner={0};
     write_source(library,
-        "export struct Factory<T> { const value:T\n private constructor(value){this.value=value}\n"
+        "export struct Factory<T> { const value:T\n private init(value){this.value=value}\n"
         " static make(value:T)->Factory<T>{return Factory<T>(value)}\n"
         " private static secret()->i64{return 7}\n }\n"
         "struct Hidden {static value()->i64{return 1}}\n");
@@ -587,24 +587,24 @@ static void constructor_admission(const XrXirSourceRequest *request, const char 
 
         "struct C { static value(x:i64=7)->i64 { return x } }\nprint(C.value(),C.value(9))\nconst f=C.value\nprint(f(8))\n",
         "struct C<T> { static value(x:T)->T { return x } }\nprint(C<i64>.value(7))\nconst f=C<string>.value\nprint(f(\"yes\"))\n",
-        "struct C { const value:string\n private constructor(value) { this.value=value }\n private static secret()->string { return \"private\" }\n static make(value:string=C.secret())->C { return C(value) }\n static capture()->fn()->string { return C.secret } }\nprint(C.make().value)\nconst f=C.capture()\nprint(f())\n",
+        "struct C { const value:string\n private init(value) { this.value=value }\n private static secret()->string { return \"private\" }\n static make(value:string=C.secret())->C { return C(value) }\n static capture()->fn()->string { return C.secret } }\nprint(C.make().value)\nconst f=C.capture()\nprint(f())\n",
         "struct C<T> { static value(x:T, f:fn(T)->T=fn(y:T)->T { return y })->T { return f(x) } }\nprint(C<i64>.value(7))\n",
         "struct C { static value()->i64 { return 7 } }\nfn shadow()->i64 { const C=fn()->i64 { return 9 }\nreturn C() }\nprint(shadow())\n",
 
-        "struct C { const value:i64\n private constructor(value:i64=7) { this.value=value }\n get(other:C=C())->i64 { return other.value } }\n",
+        "struct C { const value:i64\n private init(value:i64=7) { this.value=value }\n get(other:C=C())->i64 { return other.value } }\n",
         "fn value(x:string=\"ok\")->string { return x }\nprint(value())\nprint(value(\"explicit\"))\n",
         "fn make<T>(x:fn()->T)->T { return x() }\nfn value<T>(x:fn()->T=fn()->T { var items:Array<T> = []\n return items[0] })->T { return x() }\n",
-        "struct C { const value:string\n constructor(value=\"ok\") { this.value=value }\n read(s:string=\"method\")->string { return s+this.value } }\nconst c=C()\nprint(c.read())\n",
+        "struct C { const value:string\n init(value=\"ok\") { this.value=value }\n read(s:string=\"method\")->string { return s+this.value } }\nconst c=C()\nprint(c.read())\n",
         "fn privateValue()->string { return \"private\" }\nexport fn value(x:string=privateValue())->string { return x }\nprint(value())\n",
         "fn nested(x:i64=3)->i64 { return x }\nfn outer(x:i64=nested())->i64 { return x }\nprint(outer())\n",
         "const a:i64=9\nfn f(a:i64,b:i64=a)->i64 { return b }\nprint(f(1))\n",
-        "struct C { const factory:fn()->string=fn()->string { return \"ready\" }\n const value:string\n constructor() { this.value=this.factory() } }\nconst c=C()\n",
-        "struct C { const value:string\n constructor(value) { this.value=value } }\nconst c=C(\"yes\")\nprint(c.value)\n",
-        "struct C<T> { const value:T\n constructor(value) { this.value=value } }\nconst c=C<string>(\"yes\")\nprint(c.value)\n",
-        "struct C { const value:string\n constructor(value,ok:bool) { if(ok) { this.value=value } else { this.value=\"no\" } } }\nconst c=C(\"yes\",true)\n",
-        "struct C { const value:string=\"default\"\n constructor() {} }\nconst c=C()\n",
-        "struct C { const first:string\n const second:string\n constructor(first) { this.first=first\n this.second=this.first } }\nconst c=C(\"yes\")\n",
-        "struct C { const value:string\n constructor(value) { this.value=value\n const capture=fn()->string { return this.value }\n print(capture())\n return } }\nconst c=C(\"yes\")\n",
+        "struct C { const factory:fn()->string=fn()->string { return \"ready\" }\n const value:string\n init() { this.value=this.factory() } }\nconst c=C()\n",
+        "struct C { const value:string\n init(value) { this.value=value } }\nconst c=C(\"yes\")\nprint(c.value)\n",
+        "struct C<T> { const value:T\n init(value) { this.value=value } }\nconst c=C<string>(\"yes\")\nprint(c.value)\n",
+        "struct C { const value:string\n init(value,ok:bool) { if(ok) { this.value=value } else { this.value=\"no\" } } }\nconst c=C(\"yes\",true)\n",
+        "struct C { const value:string=\"default\"\n init() {} }\nconst c=C()\n",
+        "struct C { const first:string\n const second:string\n init(first) { this.first=first\n this.second=this.first } }\nconst c=C(\"yes\")\n",
+        "struct C { const value:string\n init(value) { this.value=value\n const capture=fn()->string { return this.value }\n print(capture())\n return } }\nconst c=C(\"yes\")\n",
     };
     for (unsigned i = 0; i < sizeof(sources)/sizeof(sources[0]); ++i) {
         write_source(root, sources[i]);

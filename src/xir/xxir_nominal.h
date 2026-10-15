@@ -24,6 +24,9 @@ typedef struct XrXirNominalField {
  * without it is an open root: no declaration may name it as a parent yet, so it
  * executes exactly like a final one and carries no dispatch state. */
 #define XR_XIR_NOMINAL_FINAL 1u
+/* An explicit struct initializer limits field literals to its declaring module.
+ * Calls retain their own constructor permissions; this flag grants none. */
+#define XR_XIR_NOMINAL_MODULE_LITERAL 2u
 
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {
@@ -81,6 +84,20 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_clone(const XrXirCompileContext *comp
 /* Projection requires a verified declaration table and owns only identities. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrXirNominalTable **output);
 XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table);
+/* A synchronous compiler view borrows its canonical pool. The record must
+ * already satisfy structural admission; this query grants no field, method,
+ * construction or generic authority and does not certify the whole pool.
+ * One ledger work unit is consumed per query, with no allocation or refund.
+ * Failure preserves output. All references die with the original pool. */
+typedef struct XrXirEnumDescription {
+    XrXirLiteral module, name;
+    const XrXirNominalVariant *variants;
+    uint32_t variant_count, declaration;
+    const XrXirNominalType *instance;
+    const XrXirNominalDeclaration *definition;
+} XrXirEnumDescription;
+XR_FUNC XrXirStatus xr_xir_compile_enum_description(const XrXirCompileContext *context,
+    const XrXirTypes *types, XrXirType type, XrXirEnumDescription *output);
 typedef enum XrXirNominalAccess {
     XR_XIR_NOMINAL_CONSTRUCT, XR_XIR_NOMINAL_READ, XR_XIR_NOMINAL_WRITE, XR_XIR_NOMINAL_TYPE
 } XrXirNominalAccess;

@@ -1,0 +1,11 @@
+fn init() -> i64 { return 7 }
+fn callInit() -> i64 { return init() }
+struct Box {
+    value: i64
+    init(value) { this.value = value }
+    get() -> i64 { return this.value }
+}
+export fn referenceAnswer() -> i64 {
+    const init = 3
+    return Box(41).get() + init + callInit()
+}

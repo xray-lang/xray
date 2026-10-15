@@ -551,7 +551,7 @@ static void alloc_scan_call(XaAllocScan *scan, AstNode *node) {
         if (intrinsic_contract == XA_ALLOCATION_CONTRACT_NO_HEAP)
             return;
         if (intrinsic_contract == XA_ALLOCATION_CONTRACT_MAY_HEAP) {
-            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_HEAP_CONSTRUCT, "constructor", name);
+            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_HEAP_CONSTRUCT, "init", name);
             return;
         }
         XaSymbol *symbol = alloc_variable_symbol(scan->pass->analyzer, callee);
@@ -715,14 +715,14 @@ static void alloc_scan_node_pre(AstNode *node, void *userdata) {
             alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_CONTAINER, "literal", "JSON");
             break;
         case AST_NEW_EXPR:
-            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_HEAP_CONSTRUCT, "constructor",
+            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_HEAP_CONSTRUCT, "init",
                               node->as.new_expr.class_name);
             break;
         case AST_RANGE:
             alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_HEAP_CONSTRUCT, "op", "RANGE");
             break;
         case AST_CHANNEL_NEW:
-            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_RUNTIME, "constructor", "Channel");
+            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_RUNTIME, "init", "Channel");
             break;
         case AST_GO_EXPR:
             alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_RUNTIME, "operation", "go");

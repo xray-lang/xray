@@ -1,14 +1,14 @@
 class RefBox {
     value: i64 = 0
 
-    constructor(value: ref i64) {
+    init(value: ref i64) {
         value = value + 1
         this.value = value
     }
 }
 
 class RefChild extends RefBox {
-    constructor(value: ref i64) {
+    init(value: ref i64) {
         super(ref value)
     }
 }

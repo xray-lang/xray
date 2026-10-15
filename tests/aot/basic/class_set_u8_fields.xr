@@ -1,7 +1,7 @@
 class ByteSetBag implements Lengthable {
     values: Set<u8>
 
-    constructor() {
+    init() {
         var values: Set<u8> = #[]
         this.values = values
     }

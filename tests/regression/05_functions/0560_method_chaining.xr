@@ -46,7 +46,7 @@ fn test_string_split_join() {
 class Builder {
     value: string
 
-    constructor() {
+    init() {
         this.value = ""
     }
 

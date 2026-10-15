@@ -108,7 +108,7 @@ static XrXirStatus conditional_owned_error(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) {
         CHECK(effects->count==5 && effects->errors && effects->words==1);
         CHECK(error_bit(effects->errors,0)==(mode!=0) && !error_bit(effects->errors,1));
-        CHECK(!effects->invocations->equations->body.read.owner && !effects->invocations->equations->work);
+        CHECK((effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL));
     }
     error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
     effect_terms_free(&terms);xr_xir_compile_effects_free(effects);return status;
@@ -492,7 +492,7 @@ static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *cont
             !xr_xir_effects_error_unknown(effects,1) && !xr_xir_effects_error_unidentified(effects,1));
         CHECK(ci_expected(CI_CALL,mode!=0)==(mode?UINT64_C(4):UINT64_C(12)));
         CHECK(flow.cell_count==3 && flow.cell_type_count==3 && flow.cell_material==flow.body.owner &&
-            !effects->invocations->equations->body.read.owner && !effects->invocations->equations->work);
+            (effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL));
         if (oracle) {
             owned_error_cell_identity_controls(context,&flow);
             uint8_t *storage=flow.storage;size_t capacity=flow.storage_capacity;

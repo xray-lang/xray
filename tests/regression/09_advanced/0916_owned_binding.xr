@@ -95,7 +95,7 @@ fn choose_owned_return_buffer(flag: bool) -> Array<u8> {
     return flag ? make_owned_return_buffer() : make_owned_return_buffer_alt()
 }
 
-fn make_shared_return_buffer() -> const Array<u8> {
+fn make_shared_return_buffer() -> Array<u8> {
     var bytes = Array<u8>(2, 0)
     bytes[0] = 21
     bytes[1] = 22

@@ -25,7 +25,7 @@ fn _spinAcquire(flag: Atomic<bool>) {
 export class OsMutex {
     private _locked: Atomic<bool>
 
-    constructor() {
+    init() {
         this._locked = Atomic<bool>(false)
     }
 
@@ -43,7 +43,7 @@ export class OsMutex {
 export class OsRwLock {
     private _state: Atomic<i64>
 
-    constructor() {
+    init() {
         this._state = Atomic<i64>(0)
     }
 
@@ -77,7 +77,7 @@ export class OsRwLock {
 export class OsCondvar {
     private _epoch: Atomic<i64>
 
-    constructor() {
+    init() {
         this._epoch = Atomic<i64>(0)
     }
 
@@ -114,7 +114,7 @@ export class OsBarrier {
     private _arrived: Atomic<i64>
     private _generation: Atomic<i64>
 
-    constructor(parties: i64) {
+    init(parties: i64) {
         if (parties <= 0) { throw _SysError.InvalidBarrierParties }
         this._parties = parties
         this._arrived = Atomic<i64>(0)
@@ -138,7 +138,7 @@ export class OsOnce {
     private _gate: Atomic<bool>
     private _done: Atomic<bool>
 
-    constructor() {
+    init() {
         this._gate = Atomic<bool>(false)
         this._done = Atomic<bool>(false)
     }
@@ -188,7 +188,7 @@ export class Pipe {
     _readHandle: i64
     _writeHandle: i64
 
-    constructor(readHandle: i64, writeHandle: i64) {
+    init(readHandle: i64, writeHandle: i64) {
         this._readHandle = readHandle
         this._writeHandle = writeHandle
     }
@@ -245,7 +245,7 @@ export class ProcessOptions {
     stderr: i64?
     detached: bool
 
-    constructor(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null,
+    init(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null,
                 stdout: i64? = null, stderr: i64? = null, detached: bool = false) {
         this.cwd = cwd
         this.env = env
@@ -260,7 +260,7 @@ export class Process {
     _id: i64
     _open: bool
 
-    constructor(id: i64, detached: bool = false) {
+    init(id: i64, detached: bool = false) {
         this._id = id
         this._open = id > 0 && !detached
     }
@@ -351,7 +351,7 @@ export class ThreadLocal<T> {
     _initializing: Map<i64, bool>
     _init: fn() -> T
 
-    constructor(init: fn() -> T) {
+    init(init: fn() -> T) {
         this._lock = OsMutex()
         this._values = #{}
         this._initializing = #{}
@@ -418,7 +418,7 @@ export class Dylib {
     _handle: i64
     _open: bool
 
-    constructor(handle: i64) {
+    init(handle: i64) {
         this._handle = handle
         this._open = handle != 0
     }

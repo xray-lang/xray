@@ -1,0 +1,2 @@
+fn total(n:i64)->i64 { if(n==0) { return 10 }; const kept=n+100; const child=total(n-1); return kept+child }
+export fn run()->i64 { return comptime total(3) }

@@ -148,7 +148,7 @@ fn test_reverse_string() {
 fn test_counter_class() {
     class Counter {
         value: i64
-        constructor() { this.value = 0 }
+        init() { this.value = 0 }
         ref inc() { this.value += 1 }        ref dec() { this.value -= 1 }        getValue() -> i64 { return this.value }    }
     
     var c = Counter()
@@ -165,7 +165,7 @@ fn test_counter_class() {
 fn test_stack() {
     class Stack implements Lengthable {
         items: Array<i64>
-        constructor() { this.items = [] }
+        init() { this.items = [] }
         ref push(x: i64) { this.items.push(x) }
         ref pop() -> i64? { return this.items.pop() }
         peek() -> i64 { return this.items[len(this.items) - 1] }

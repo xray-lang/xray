@@ -90,7 +90,7 @@ export struct Construct<T> {
     copy:T
     const label:string
     const stamp:i64=5
-    constructor(value, yes:bool) {
+    init(value, yes:bool) {
         this.value=value
         this.copy=value
         if(yes) { this.label="ctor" } else { this.label="fallback" }
@@ -102,7 +102,7 @@ export struct Construct<T> {
 
 export struct ConstructorControl {
     const value:string
-    constructor(value, branch:i64) {
+    init(value, branch:i64) {
         if(branch<0) { this.value="early"; return }
         var i=0
         while(i<branch) { i=i+1 }
@@ -119,12 +119,12 @@ export struct ConstructorOrder {
     private const first:i64=constructorStep(1)
     private const second:i64=constructorStep(2)
     const order:i64
-    constructor() { constructorStep(3); this.order=constructorOrder.load() }
+    init() { constructorStep(3); this.order=constructorOrder.load() }
 }
 export struct ConstructorFault {
     private const held:string
     const value:i64
-    constructor(left:i64,right:i64) {
+    init(left:i64,right:i64) {
         this.held="partial"+"owned"
         Coro.yield()
         this.value=left/right
@@ -145,7 +145,7 @@ export fn argumentIdentity<T>(value:T,identity:fn(T)->T=fn(item:T)->T { return i
 export struct ArgumentBox<T> {
     const value:T
     const label:string
-    constructor(value,label:string=argumentDefault()) { this.value=value; this.label=label }
+    init(value,label:string=argumentDefault()) { this.value=value; this.label=label }
     suffix(text:string=argumentDefault())->string { return "v"+text }
 }
 
@@ -163,7 +163,7 @@ export fn argumentFailure(first:string,second:i64=argumentFault())->i64 {
 
 export struct StaticFactory<T> {
     const value:T
-    private constructor(value) { this.value=value }
+    private init(value) { this.value=value }
     static failure(first:string, second:i64=argumentFault())->i64 {
         argumentOrder.fetchAdd(1000000)
         return second

@@ -4,7 +4,7 @@
 
 class Animal {
     name: string
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
     speak() -> string {
@@ -14,7 +14,7 @@ class Animal {
 
 class Dog extends Animal {
     breed: string
-    constructor(name: string, breed: string) {
+    init(name: string, breed: string) {
         super(name)
         this.breed = breed
     }
@@ -42,7 +42,7 @@ print(d.parent_speak())
 class Person {
     name: string
     age: i64
-    constructor(name: string, age: i64) {
+    init(name: string, age: i64) {
         this.name = name
         this.age = age
     }

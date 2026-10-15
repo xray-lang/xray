@@ -18,7 +18,7 @@
 
 class Box<T> {
     value: T
-    constructor(value: T) { this.value = value }
+    init(value: T) { this.value = value }
     get() -> T { return this.value }
 }
 
@@ -30,7 +30,7 @@ struct Pt<T> {
 // 1 + 2 + 3
 class Holder {
     boxed: Box<i64>
-    constructor(boxed: Box<i64>) { this.boxed = boxed }
+    init(boxed: Box<i64>) { this.boxed = boxed }
     combine(other: Box<i64>) -> i64 { return this.boxed.get() + other.get() }
 }
 

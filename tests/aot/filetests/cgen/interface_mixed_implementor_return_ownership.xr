@@ -3,7 +3,7 @@ interface EchoLike {
 }
 
 class EchoBorrow implements EchoLike {
-    constructor() {
+    init() {
     }
 
     idText(text: string) -> string {
@@ -12,7 +12,7 @@ class EchoBorrow implements EchoLike {
 }
 
 class EchoFresh implements EchoLike {
-    constructor() {
+    init() {
     }
 
     idText(text: string) -> string {

@@ -32,7 +32,7 @@ class ArrayNode {
     children: Array<ArrayNode>
     tag: i64
 
-    constructor(tag) {
+    init(tag) {
         this.children = []
         this.tag = tag
     }
@@ -42,7 +42,7 @@ class MapNode {
     children: Map<string, MapNode>
     tag: i64
 
-    constructor(tag) {
+    init(tag) {
         this.children = #{}
         this.tag = tag
     }
@@ -140,7 +140,7 @@ class StructNode {
     data: ScalarLink
     tag: i64
 
-    constructor(tag) {
+    init(tag) {
         this.data = ScalarLink(tag, "n")
         this.tag = tag
     }

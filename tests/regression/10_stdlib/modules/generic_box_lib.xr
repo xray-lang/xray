@@ -2,7 +2,7 @@
 
 export class Box<T> {
     value: T
-    constructor(value: T) { this.value = value }
+    init(value: T) { this.value = value }
     get() -> T { return this.value }
     lock<U>(f: fn(T) -> U) -> U { return f(this.value) }
 }
@@ -14,7 +14,7 @@ export fn boxOf(value: i64) -> Box<i64> {
 export class Pair<A, B> {
     first: A
     second: B
-    constructor(first: A, second: B) {
+    init(first: A, second: B) {
         this.first = first
         this.second = second
     }

@@ -63,10 +63,9 @@ XR_FUNC XrXirStatus xir_effects_class_access(const XrXirEffects *effects,
     if (!effects || !effects->invocations || !request || !request->read.work)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCertificate *certificate=effects->invocations;
-    const EffectInvocationOwner *owner=certificate->equations;
-    if (!effect_body_material_shape(certificate->body) || !owner || owner->work ||
-        owner->graph || owner->pending || certificate->resources!=effects->resources ||
-        certificate->body->resources!=certificate->resources || (!certificate->projection_atoms || !certificate->result) ||
+    const EffectInvocationFinal *owner=certificate->final;
+    if (!effect_body_material_shape(certificate->body) || !owner || certificate->resources!=effects->resources ||
+        certificate->body->resources!=certificate->resources || (!certificate->final) ||
         request->caller>=effect_body_count(certificate->body) ||
         !xr_xir_type_is_class(certificate->body->domain.types,request->root_type))
         return XR_XIR_BAD_STRUCTURE;

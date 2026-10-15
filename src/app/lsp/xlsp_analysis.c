@@ -42,7 +42,7 @@
 #include "../../module/xmodule_identity.h"
 #include "../../module/xmodule_graph.h"
 #include "../../runtime/xisolate_api.h"
-#include "../cli/xcli_graph_authority.h"
+#include "../../api/xsource_authority.h"
 
 // AST formatter (lives in frontend/format).
 #include "../../frontend/format/xfmt.h"
@@ -145,8 +145,8 @@ typedef struct {
 
 static const XlspDocEntry keyword_docs[] = {
     {"var", "```xray\nvar <name> = <value>\n```\n\nDeclares a mutable variable."},
-    {"const", "```xray\nconst <name> = <value>\nvar snapshot: const Config = "
-              "load()\n```\n\nDeclares a stable binding or a deep-read-only type capability."},
+    {"const", "```xray\nconst <name> = <value>\nconst snapshot: Config = "
+              "load()\n```\n\nDeclares a binding whose value components are read-only; identity-bearing objects retain their declared permissions."},
     {"fn", "```xray\nfn <name>(<params>) { <body> }\n```\n\nDeclares a function."},
     {"class", "```xray\nclass <name> { <members> }\n```\n\nDeclares a class."},
     {"go", "```xray\ngo <expr>\n```\n\nSpawns a new coroutine."},
@@ -346,7 +346,7 @@ static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
     if (!entry_path || !entry_path[0])
         return;
 
-    XrCliGraphAuthority *authority = xr_malloc(sizeof(*authority));
+    XrSourceAuthority *authority = xr_malloc(sizeof(*authority));
     if (!authority)
         return;
 

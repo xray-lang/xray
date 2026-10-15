@@ -12,8 +12,9 @@
  *   Program outlives every temporary producer and uses the shared host policy.
  */
 #include "xcli.h"
-#include "xcli_canonical_source.h"
-#include "xcli_source_paths.h"
+#include "../../api/xsource_compile.h"
+#include "../../api/xsource_paths.h"
+#include "../../api/xsource_api.h"
 #include "../../execution/xr_xir_host_cli.h"
 #include <stdio.h>
 #include <string.h>
@@ -30,14 +31,14 @@ static bool is_exact_source_path(const char *path) {
 }
 
 #if defined(XR_ARCH_X86_64)
-static int source_exit(XrCliCompileSourceStatus status) {
-    return status == XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY ||
-        status == XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
+static int source_exit(XrSourceCompileStatus status) {
+    return status == XR_SOURCE_COMPILE_OUT_OF_MEMORY ||
+        status == XR_SOURCE_COMPILE_BAD_ARGUMENT ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
 }
 
-static int report_source_failure(const XrCliCompileSourceDiagnostic *diagnostic) {
+static int report_source_failure(const XrSourceCompileDiagnostic *diagnostic) {
     char text[1024];
-    bool located = xr_cli_compile_source_diagnostic_format(diagnostic, text, sizeof(text));
+    bool located = xr_source_compile_diagnostic_format(diagnostic, text, sizeof(text));
     fprintf(stderr, located ? "%s\n" : "XR_RUN_6001: %s\n", text);
     return source_exit(diagnostic->status);
 }
@@ -71,7 +72,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     fprintf(stderr, "XR_RUN_6002: source VM does not support this host architecture\n");
     return XR_CLI_EXIT_FAIL;
 #else
-    XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
     XrCompileResources *resources = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
     if (opened != XR_COMPILE_RESOURCE_OK) {
@@ -79,44 +80,45 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         return opened == XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
     }
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
-    XrCliSourcePaths paths = {0};
-    XrCliSourcePathsDiagnostic path_diagnostic = {0};
-    XrCliCompileSourceStatus status = xr_cli_compile_source_paths(resources, source_path,
+    XrSourcePaths paths = {0};
+    XrSourcePathsDiagnostic path_diagnostic = {0};
+    XrSourceCompileStatus status = xr_source_paths(resources, source_path,
         &paths, &path_diagnostic);
     XrXirSourceProduct *product = NULL;
-    XrCliCompileSourceDiagnostic diagnostic = {0};
+    XrSourceCompileDiagnostic diagnostic = {0};
+    XrSourceProgram *owned = NULL;
     XrXirProgram *program = NULL;
     uint32_t entry = 0;
     int result = XR_CLI_EXIT_FAIL;
-    if (status != XR_CLI_COMPILE_SOURCE_OK) {
+    if (status != XR_SOURCE_COMPILE_OK) {
         fprintf(stderr, "XR_RUN_6001: source path lookup failed (stage=%u status=%s io=%u)\n",
-            (unsigned)path_diagnostic.stage, xr_cli_compile_source_status_name(status),
+            (unsigned)path_diagnostic.stage, xr_source_compile_status_name(status),
             (unsigned)path_diagnostic.io_status);
         result = source_exit(status);
     } else {
-        XrCliCompileSourceRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_cli_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
-        status = xr_cli_compile_source_build(&request, &product, &diagnostic);
-        if (status != XR_CLI_COMPILE_SOURCE_OK) {
+        XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
+            xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+        status = xr_source_compile_build(&request, &product, &diagnostic);
+        if (status != XR_SOURCE_COMPILE_OK) {
             result = report_source_failure(&diagnostic);
         } else {
-            const XrXirSourceProductFacts *facts = xr_xir_compile_source_product_facts(product);
-            if (!facts) {
-                fprintf(stderr, "XR_RUN_6002: source product has no admitted entry\n");
-                result = XR_CLI_EXIT_INTERNAL;
+            XrSourceStatus wrapped = xr_source_program_take_product(&product, &owned);
+            if (wrapped != XR_SOURCE_OK) {
+                fprintf(stderr, "XR_RUN_6002: cannot admit owned API program (status=%u)\n", (unsigned)wrapped);
+                result = wrapped == XR_SOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
             } else {
-                entry = facts->entry;
-                XrXirStatus taken = xr_xir_compile_source_product_vm_take(product, &program);
-                if (taken != XR_XIR_OK) {
+                XrSourceStatus taken = xr_source_program_take_vm(&owned, &program, &entry);
+                if (taken != XR_SOURCE_OK) {
                     fprintf(stderr, "XR_RUN_6002: cannot prepare VM program (status=%u)\n", (unsigned)taken);
-                    result = taken == XR_XIR_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+                    result = taken == XR_SOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
                 }
             }
         }
     }
-    xr_cli_compile_source_paths_free(&paths);
+    xr_source_paths_free(&paths);
+    xray_source_program_free(owned);
     xr_xir_compile_source_product_free(product);
-    xr_cli_compile_source_diagnostic_free(&diagnostic);
+    xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);
     return program ? xr_xir_host_program_main(program, entry) : result;
 #endif

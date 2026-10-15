@@ -232,7 +232,6 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | `type` | type alias |
 | `new` | reserved; construct objects with `T(...)` (see §3.14) |
 | `this` `super` | self / parent reference |
-| `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
 | `final` | `final class` cannot be inherited |
@@ -279,6 +278,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 
 | Token | Where it appears |
 |--|--|
+| `init` | class/struct initializer member declaration; ordinary identifier elsewhere |
 | `from` | `select` receive arm (`x from ch`); also in named import / re-export (`import { x } from "module"`) |
 | `to` | `select` send arm (`value to ch`) |
 | `default` | reserved, currently disabled |
@@ -949,7 +949,7 @@ The old `[N]T` syntax is not part of the Xray language.
 
 Slicing uses an explicit target view type. `array[start:end]` and `fixedArray[start:end]` may form shared views. Forming a `MutSlice<T>` additionally requires an exclusively writable owner place and completion of any necessary COW detachment before publishing the view. The string byte view `str.bytes()` is a `Slice<u8>` and cannot mutate the string.
 
-`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; the unsettled type-position `const T` spelling must not redefine writable views.
+`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; type positions reject `const T`: read-only views use `Slice<T>` and writable views use `MutSlice<T>`.
 
 An owner must be a named local place, parameter, or receiver field path with a proven lifetime; a temporary cannot be borrowed. Nested projections protect their root and the necessary access path. Borrowing a class field must retain the object and check exclusive access dynamically. A local proof of no conflict may eliminate that dynamic check.
 
@@ -1489,9 +1489,9 @@ Rules `N-1` … `N-13` in this section are normative. Each has a conformance cas
 
 ```xray
 class Address { city: string
-    constructor(city: string) { this.city = city } }
+    init(city: string) { this.city = city } }
 class User { address: Address?
-    constructor(address: Address?) { this.address = address } }
+    init(address: Address?) { this.address = address } }
 
 fn show(u: User) {
     var addr = u.address          // extract into a simple binding
@@ -1643,7 +1643,7 @@ Ordinary closures capture outer `var` bindings through shared cells; `const` and
 
 Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
 
-Copyable types, including Array, cannot declare `move` parameters or receivers. Whether a standalone `move x` expression is allowed for copyable values, whether ordinary `copy(array)` retains a public spelling, and the identity and conversions of type-position `const T` are outside this frozen subset and require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Whether a standalone `move x` expression is allowed for copyable values and whether ordinary `copy(array)` retains a public spelling still require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
 
 #### 2.14.6 Struct-field copying and initialization
 
@@ -2856,7 +2856,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-This section freezes read-only binding and value-component permissions, not the distinct type identity, conversions, or permitted positions of type-position `const T`. That surface is outside this frozen subset and requires a separate decision before admission; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
@@ -3236,11 +3236,11 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl | StaticBlock
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
+InitDecl ::= 'init' '(' ParamList? ')' Block          // parameter types may be omitted
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -3260,7 +3260,7 @@ class Animal {
     name: string                       // field
     private _age: i64 = 0              // private field with default value
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 
@@ -3282,7 +3282,7 @@ print(Animal.create("Bob").name)
 
 ```xray
 class Dog extends Animal {
-    constructor(name: string) {
+    init(name: string) {
         super(name)                    // **must** be the first statement (derived classes only)
     }
 
@@ -3326,7 +3326,7 @@ Direct static calls obey the trailing default-argument, left-to-right evaluation
 class Point {
     x: f64
     y: f64
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -3336,14 +3336,14 @@ class Point {
 class Vector2 {
     x: f64
     y: f64
-    constructor(x, y) {         // equivalent to (x: f64, y: f64)
+    init(x, y) {         // equivalent to (x: f64, y: f64)
         this.x = x
         this.y = y
     }
 }
 ```
 
-- The keyword is `constructor` (not `init`, not the class name).
+- `init` is contextual at a type member declaration. The retired `constructor` declaration spelling is rejected without an alias. Elsewhere `init` remains an ordinary identifier.
 - A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
 - Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise an explicit type is required; call sites do not infer definition types or capabilities.
 - The constructor implicitly returns `this` (compiler-injected).
@@ -3351,7 +3351,7 @@ class Vector2 {
 - A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
 - Constructor fallthrough and bare `return` both execute exit cleanup before assembling and publishing the complete `this` from initialized fields. Permitted cleanup updates to mutable fields become part of the constructed result; failure publishes no result. This does not change ordinary explicit return expressions, whose values are evaluated and snapshotted before cleanup.
 - A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
-- Field literals and constructor calls obey field and constructor permissions respectively. Declaring an explicit constructor neither disables otherwise legal struct field literals nor grants private-field construction permission.
+- A struct declaring explicit `init` admits field literals only in its declaring module; outside callers use `Type(...)` or a named factory. Structs without explicit `init` retain ordinary field-literal rules. Spread cannot bypass this boundary, and neither form grants private-field permission.
 - Derived class constructors must call `super(...)` first.
 - A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 
@@ -3362,7 +3362,7 @@ class Vec2 {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -3439,7 +3439,7 @@ A field name followed by an accessor block declares a **computed property**: it 
 class Rect {
     _w: i64
     _h: i64
-    constructor(w: i64, h: i64) { this._w = w; this._h = h }
+    init(w: i64, h: i64) { this._w = w; this._h = h }
 
     // Read-only: getter alone
     area: i64 { fn() { return this._w * this._h } }
@@ -3477,12 +3477,12 @@ Inheritance with explicit override:
 ```xray
 class Animal {
     name: string
-    constructor(name: string) { this.name = name }
+    init(name: string) { this.name = name }
     speak() -> string { return "..." }
 }
 
 class Dog extends Animal {
-    constructor(name: string) { super(name) }
+    init(name: string) { super(name) }
     override speak() -> string { return "woof" }
 }
 
@@ -3501,7 +3501,7 @@ Operator overloading (call with named values):
 class Vec2 {
     x: i64
     y: i64
-    constructor(x: i64, y: i64) { this.x = x; this.y = y }
+    init(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -3585,7 +3585,7 @@ var c = Config{host: "localhost"}    // OK
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
-| Constructor | `constructor(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
+| Constructor | `init(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
 | Literal | none | `TypeName{field: value, ...}` |
 
 **When to use**:
@@ -3640,7 +3640,7 @@ interface Greeter {
 
 class Circle implements Shape {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
 }
@@ -3648,7 +3648,7 @@ class Circle implements Shape {
 // Implement multiple interfaces
 class Logger implements Shape, Greeter {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
@@ -3700,7 +3700,7 @@ interface SizedCollection<T> extends HasLength {
 class Buffer implements SizedCollection<i64> {
     length: i64                       // implements the property signature
     private data: Array<i64>
-    constructor(n: i64) {
+    init(n: i64) {
         this.length = n
         this.data = []
     }
@@ -3719,7 +3719,7 @@ interface Shape {
 
 class Circle implements Shape {
     r: f64
-    constructor(r: f64) { this.r = r }
+    init(r: f64) { this.r = r }
     area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
@@ -3797,7 +3797,7 @@ enum NetEvent {
 // A recursive enum payload must be indirected through a class node
 class ExprNode {
     expr: Expr
-    constructor(expr: Expr) { this.expr = expr }
+    init(expr: Expr) { this.expr = expr }
     get() -> Expr { return this.expr }
 }
 
@@ -4712,7 +4712,7 @@ class PanicInfo {
     code: i64                   // error code
     data: JSON.Value            // additional data; JSON null when absent
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -4884,7 +4884,7 @@ enum ConnErr { Refused, Timeout }
 // A tiny stand-in "connection" so the example runs on its own.
 class Conn {
     alive: bool
-    constructor(alive: bool) { this.alive = alive }
+    init(alive: bool) { this.alive = alive }
     isAlive() -> bool { return this.alive }
     close() { print("closed") }
 }
@@ -5051,7 +5051,7 @@ var b = identity("hello")               // T inferred as string
 // Generic class
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
     get() -> T { return this.value }
 }
 
@@ -5062,7 +5062,7 @@ var b2 = Box<string>("hi")
 class Pair<K, V> {
     key: K
     value: V
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k; this.value = v
     }
 }
@@ -5136,7 +5136,7 @@ Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a
 class Token implements Hashable {
     value: i64
 
-    constructor(value: i64) { this.value = value }
+    init(value: i64) { this.value = value }
 
     // the parameter is spelled Token, not Self
     operator==(other: Token) -> bool { return this.value == other.value }
@@ -5976,7 +5976,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 export fn helper() { return }
 export final class MyClass {
     value: i64
-    constructor() { this.value = 1 }
+    init() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
@@ -6646,7 +6646,7 @@ The `datetime` module provides factory functions through `import datetime`: `now
 
 ### 14.16 `PanicInfo`
 
-The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
+The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `init(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
 ### 14.17 `Task<T>` and Enum Values
 
@@ -6980,7 +6980,7 @@ class PanicInfo {
     code: i64                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: JSON.Value            // structured data for a runtime fault; JSON null when absent
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -7732,6 +7732,14 @@ Prepared ordinary reference refinement records owned INFERRED/FIXED value identi
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
 
+### 17.39 Bounded CTFE scalar local storage and short circuiting
+
+Compiler execution receives completely reverified Lowered input. It admits the entire reachable direct-call closure of bool/integer ordinary functions before execution. SCALAR_LOCAL_NEW, SCALAR_LOCAL_READ and SCALAR_LOCAL_WRITE use the same scalar step and target frame offsets as the VM. A local write produces Unit and falls through; it is not a control-flow terminator. Actual frame accesses consume work. Existing steps, whole-stack depth/frame bytes, output bytes and cumulative compiler ledger limits remain; a callee does not reset them, failures refund no charges and preserve canonical Unit output.
+
+Source &&/|| preserve short-circuit semantics through this storage, the ordinary Checked→specialization reverification→Lowered CTFE pipeline, and an independent complete Source replay that checks ordinary constant recipes. An unexecuted pure arithmetic error may be skipped; reachable I/O in an unexecuted branch still rejects the entire closure. Root authority or effect=NONE grants no determinism.
+
+This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
+
 ---
 
 ## 18. Error Codes
@@ -7966,8 +7974,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
-ConstType ::= 'const' PrimaryType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -8202,11 +8209,11 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -8257,7 +8264,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-These **64 keywords** are the union of the 52 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+These **63 keywords** are the union of the 51 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `init`, `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|
@@ -8269,7 +8276,6 @@ These **64 keywords** are the union of the 52 general keywords in `src/frontend/
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
-| `constructor` | §5.3 |
 | `continue` | §4.6 |
 | `defer` | §4.9 |
 | `else` | §4.2 |

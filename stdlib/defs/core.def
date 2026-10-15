@@ -1698,7 +1698,7 @@ module mem {
   }
 
   fn __bufferAsBytes {
-    signature: "(storage: __BufferStorage): const Slice<u8>"
+    signature: "(storage: __BufferStorage): Slice<u8>"
     doc: "Borrow a readonly byte view from a private Buffer storage handle"
     vm: "mem_buffer_as_bytes"
     aot: "xrt_mem_buffer_as_bytes"

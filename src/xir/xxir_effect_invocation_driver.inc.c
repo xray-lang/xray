@@ -67,7 +67,7 @@ static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
  * failed collection status is converted to a structural error or retried. */
 static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *work,
     const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
-    const EffectInvocationDeclaredBounds *declared,EffectInvocationOwner **output) {
+    const EffectInvocationDeclaredBounds *declared,EffectInvocationWorkspace **output) {
     if (!output || *output || !xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(EffectBodyRequest))) return XR_XIR_BUDGET;
     EffectBodyRequest input={0};
@@ -83,11 +83,11 @@ static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *
  * a completely sealed computation; publication belongs to the common caller. */
 static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverInput *input,
     EffectInvocationCertificate **output,const EffectInvocationProjectionSink *sink,
-    EffectInvocationResult **receiving) {
+    EffectFinalFunctions **receiving) {
     if (!input || !output || *output || !receiving || *receiving || !xir_compile_context_valid(input->work) || !input->body ||
         !effect_invocation_projection_sink_matches(input->work,sink,input->body->domain.function_count))
         return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationOwner *equations=NULL;
+    EffectInvocationWorkspace *equations=NULL;
     XrXirStatus status=effect_invocations_create(input->work,input->body,input->effects,
         input->graph,input->declared,&equations);
     if (status==XR_XIR_OK) status=effect_invocations_solve(equations);

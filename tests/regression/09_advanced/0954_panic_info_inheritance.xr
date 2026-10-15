@@ -7,7 +7,7 @@
 
 class HttpError extends PanicInfo {
     statusCode: i64
-    constructor(msg: string, statusCode: i64) {
+    init(msg: string, statusCode: i64) {
         super(msg)
         this.statusCode = statusCode
     }
@@ -15,7 +15,7 @@ class HttpError extends PanicInfo {
 
 class DbError extends PanicInfo {
     table: string
-    constructor(msg: string, table: string) {
+    init(msg: string, table: string) {
         super(msg)
         this.table = table
     }

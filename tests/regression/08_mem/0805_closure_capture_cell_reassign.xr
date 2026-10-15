@@ -14,12 +14,12 @@
 class Parent {
     children: Array<Child>
     tag: i64
-    constructor(tag) { this.children = []; this.tag = tag }
+    init(tag) { this.children = []; this.tag = tag }
 }
 
 class Child {
     tag: i64
-    constructor(tag) { this.tag = tag }
+    init(tag) { this.tag = tag }
 }
 
 // The reported repro: a hoisted closure captures an instance-typed local that

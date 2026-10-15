@@ -1,7 +1,7 @@
 class IntSetBag {
     values: Set<i64>
 
-    constructor() {
+    init() {
         var values: Set<i64> = #[]
         this.values = values
     }

@@ -12,19 +12,19 @@ static XrXirStatus enum_uses(const Graph *graph, const XrXirFunction *function,
     bool construct = op->op == XR_XIR_ENUM_NEW, tag = op->op == XR_XIR_ENUM_TAG;
     XrXirType type = construct ? op->type : xr_xir_operand_type(function, op->args[0]);
     const XrXirTypes *types = context->module->types;
-    if (!xr_xir_type_is_enum(types, type)) return XR_XIR_BAD_TYPE;
-    const XrXirNominalType *instance = &xr_xir_type_node(types, type)->nominal;
-    const XrXirNominalTable *table = types->nominals;
-    const XrXirNominalDeclaration *d = table->declarations ? &table->declarations[instance->declaration] : NULL;
-    const XrXirNominalIdentity *identity = d ? NULL : &table->identities[instance->declaration];
-    const XrXirNominalVariant *variants = d ? d->variants : identity->variants;
-    uint32_t variant_count = d ? d->variant_count : identity->variant_count;
+    XrXirEnumDescription description = {0};
+    XrXirStatus status = xr_xir_compile_enum_description(&context->remaining, types, type, &description);
+    if (status != XR_XIR_OK) return status;
+    const XrXirNominalType *instance = description.instance;
+    const XrXirNominalDeclaration *d = description.definition;
+    const XrXirNominalVariant *variants = description.variants;
+    uint32_t variant_count = description.variant_count;
     if (!tag && (op->immediate < 0 || (uint64_t) op->immediate >= variant_count)) return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalVariant *variant = tag ? NULL : &variants[(uint32_t) op->immediate];
     if (!tag && (construct ? op->args[1] != variant->field_count : op->args[1] >= variant->field_count))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t first = tag || construct ? 0 : variant->field_begin + op->args[1];
-    XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, first, construct ? XR_XIR_NOMINAL_CONSTRUCT : tag ? XR_XIR_NOMINAL_TYPE : XR_XIR_NOMINAL_READ);
+    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, first, construct ? XR_XIR_NOMINAL_CONSTRUCT : tag ? XR_XIR_NOMINAL_TYPE : XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;
     if (!construct) {
         status = local_operand(types, function, op, op->args[0], 0);

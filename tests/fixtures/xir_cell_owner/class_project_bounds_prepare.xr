@@ -2,7 +2,7 @@ var selectors: i64 = 0;
 var bodyCalls: i64 = 0;
 final class Holder {
     values: Array<i64>
-    constructor(values: Array<i64>) { this.values = values; }
+    init(values: Array<i64>) { this.values = values; }
 }
 var storage = Holder([40]);
 fn index() -> i64 { selectors += 1; return 0; }

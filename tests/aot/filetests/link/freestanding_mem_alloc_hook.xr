@@ -11,7 +11,7 @@ fn xray_alloc_hook_score(n: i64) -> i64 {
     }
 
     var z = mem.allocZeroed(8)
-    var zs: const Slice<u8> = z.asBytes()
+    var zs: Slice<u8> = z.asBytes()
 
     var aligned = mem.allocAligned(32, 16)
     if (!aligned.resize(64)) {

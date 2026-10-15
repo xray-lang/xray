@@ -10,7 +10,7 @@ struct Reader<A> {
     read<B>(value:i64=fail())->i64 { return value }
     static make<B>(value:i64=fail())->i64 { return value }
 }
-final class Box { value:i64; constructor(value:i64=fail()) { this.value=value } }
+final class Box { value:i64; init(value:i64=fail()) { this.value=value } }
 fn failClean()->i64 { defer { cleaned.fetchAdd(1) }; throw Failure.Bad{message:"held"+"-error"} }
 fn mustNotEnter(value:i64=failClean())->i64 { entered.fetchAdd(1); return value }
 export fn plain()->i64 { try { return receive() } catch(e) { return 41 } }

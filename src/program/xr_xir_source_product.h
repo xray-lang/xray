@@ -66,6 +66,13 @@ typedef struct XrXirSourceProductDiagnostic {
  * any complete query snapshot retained after a later projection failure. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output,XrXirSourceProductDiagnostic *diagnostic);
+/* Explicit text has exactly the source_check_text authority/path contract.
+ * The buffer and all request fields are borrowed synchronously. No file is
+ * created or read for the entry. Successful products own the same Checked,
+ * specialization, Lowered, queries and transferable Program as file products.
+ * Failure preserves output and owns any published diagnostic path/snapshot. */
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build_text(const XrXirSourceProductRequest *request,
+    const XrXirSourceText *text, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);
 XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
 /* Public execution admission reads the owner's authentic Program root and all
@@ -76,6 +83,11 @@ XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDia
  * plain value and receives the result; no storage is allocated or published. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_public_admit(
     const XrXirSourceProduct *product, XrXirSourceDiagnostic *diagnostic);
+/* Applies the identical public state policy to an actual owned Lowered image.
+ * The image supplies its real context and declaration authority. No caller
+ * flags, names or query facts can grant admission. */
+XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
+    const XrXirArtifact *lowered, XrXirSourceDiagnostic *diagnostic);
 /* Borrowed immutable facts and packets remain valid after VM code transfer. */
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product);
 /* The borrowed context is the owner's actual ledger, including after VM take. */

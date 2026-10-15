@@ -6,7 +6,7 @@
  *
  * test_cli_source_owner.c - Real CLI source, diagnostics and resource ownership
  */
-#include "app/cli/xcli_canonical_source.h"
+#include "api/xsource_compile.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_output.h"
 #include "base/xfileio.h"
@@ -53,29 +53,29 @@ static void execute(XrXirSourceProduct *product,const char *expected) {
     }
     xr_xir_compile_program_drop(program);
 }
-static void input_rejections(const XrCliCompileSourceRequest *original) {
+static void input_rejections(const XrSourceCompileRequest *original) {
     XrCompileResourceStats before=sdk_stats(original->context->resources);
     XrXirSourceProduct *sentinel=(XrXirSourceProduct *)(uintptr_t)1;
-    XrCliCompileSourceDiagnostic diagnostic={0};
-    CHECK(xr_cli_compile_source_build(original,&sentinel,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT);
+    XrSourceCompileDiagnostic diagnostic={0};
+    CHECK(xr_source_compile_build(original,&sentinel,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
     CHECK(sentinel==(XrXirSourceProduct *)(uintptr_t)1);
-    XrCliCompileSourceRequest wrong=*original;wrong.target.abi_version=17;
+    XrSourceCompileRequest wrong=*original;wrong.target.abi_version=17;
     XrXirSourceProduct *output=NULL;
-    CHECK(xr_cli_compile_source_build(&wrong,&output,&diagnostic)==XR_CLI_COMPILE_SOURCE_UNSUPPORTED && !output);
+    CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_UNSUPPORTED && !output);
     CHECK(runtime_attempts==0);
     XrCompileResourceStats after=sdk_stats(original->context->resources);
     CHECK(after.work==before.work && after.allocation_count==before.allocation_count);
     const char *relative[]={"main.xr","C:main.xr","\\main.xr","/main.xr",""};
     for (size_t i=0;i<sizeof(relative)/sizeof(*relative);++i) {
         wrong=*original;wrong.absolute_entry_path=relative[i];
-        CHECK(xr_cli_compile_source_build(&wrong,&output,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT && !output);
+        CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
         CHECK(runtime_attempts==0);
     }
     wrong=*original;wrong.absolute_stdlib_path="stdlib";
-    CHECK(xr_cli_compile_source_build(&wrong,&output,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT && !output);
-    CHECK(runtime_attempts==0);xr_cli_compile_source_diagnostic_free(&diagnostic);
+    CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
+    CHECK(runtime_attempts==0);xr_source_compile_diagnostic_free(&diagnostic);
 }
-static XrXirLibraryCatalog *catalog(const XrCliCompileSourceRequest *request) {
+static XrXirLibraryCatalog *catalog(const XrSourceCompileRequest *request) {
     XrOsIoPolicy policy=xr_compile_io_policy(request->context->resources);
     char *root=NULL,*path=NULL;
     CHECK(xr_path_dirname_owned(&policy,request->absolute_entry_path,&root)==XR_OS_IO_OK);
@@ -124,13 +124,13 @@ static XrXirLibraryCatalog *catalog(const XrCliCompileSourceRequest *request) {
     xr_compile_resources_free(script_root);xr_compile_resources_free(path);xr_compile_resources_free(root);
     return result;
 }
-static void catalog_rejections(const XrCliCompileSourceRequest *request) {
+static void catalog_rejections(const XrSourceCompileRequest *request) {
     XrCompileResources *foreign=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={foreign,request->context->limits};
-    XrCliCompileSourceRequest wrong=*request;wrong.context=&context;
-    XrXirSourceProduct *output=NULL;XrCliCompileSourceDiagnostic diagnostic={0};
+    XrSourceCompileRequest wrong=*request;wrong.context=&context;
+    XrXirSourceProduct *output=NULL;XrSourceCompileDiagnostic diagnostic={0};
     size_t attempts=runtime_attempts;XrCompileResourceStats before=sdk_stats(foreign);
-    CHECK(xr_cli_compile_source_build(&wrong,&output,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT && !output);
+    CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
     CHECK(runtime_attempts==attempts && sdk_stats(foreign).work==before.work);
     for (unsigned axis=0;axis<5;++axis) {
         context=*request->context;
@@ -140,7 +140,7 @@ static void catalog_rejections(const XrCliCompileSourceRequest *request) {
         if(axis==3)--context.limits.instructions;
         if(axis==4)--context.limits.frame_bytes;
         XrCompileResourceStats own_before=sdk_stats(context.resources);
-        CHECK(xr_cli_compile_source_build(&wrong,&output,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT && !output);
+        CHECK(xr_source_compile_build(&wrong,&output,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !output);
         CHECK(runtime_attempts==attempts && sdk_stats(context.resources).work==own_before.work);
     }
     xr_compile_resources_release(foreign);
@@ -148,39 +148,39 @@ static void catalog_rejections(const XrCliCompileSourceRequest *request) {
 static void fault_scan(const char *entry,const char *stdlib) {
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrCliCompileSourceRequest request={&context,entry,stdlib,NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    XrXirSourceProduct *product=NULL;XrCliCompileSourceDiagnostic diagnostic={0};
-    runtime_attempts=0;CHECK(xr_cli_compile_source_build(&request,&product,&diagnostic)==XR_CLI_COMPILE_SOURCE_OK);
+    XrSourceCompileRequest request={&context,entry,stdlib,NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
+    XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    runtime_attempts=0;CHECK(xr_source_compile_build(&request,&product,&diagnostic)==XR_SOURCE_COMPILE_OK);
     size_t sites=runtime_attempts;XrCompileResourceStats total=sdk_stats(resources);
-    xr_xir_compile_source_product_free(product);xr_cli_compile_source_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
+    xr_xir_compile_source_product_free(product);xr_source_compile_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
     CHECK(!runtime_live && !runtime_bytes);DWORD baseline=handles();
     /* One ledger creation, then six charged prefix reads precede allocation. */
     for (uint64_t cap=1;cap<=6;++cap) {
         XrCompileResourceLimits limits=sdk_unlimited;limits.work=cap;
         resources=sdk_ledger(&limits);context.resources=resources;product=NULL;runtime_attempts=0;
-        CHECK(xr_cli_compile_source_build(&request,&product,&diagnostic)==XR_CLI_COMPILE_SOURCE_BUDGET);
+        CHECK(xr_source_compile_build(&request,&product,&diagnostic)==XR_SOURCE_COMPILE_BUDGET);
         CHECK(!product && !runtime_attempts && sdk_stats(resources).work==cap);
-        CHECK(diagnostic.stage==XR_CLI_COMPILE_SOURCE_PATH);
-        xr_cli_compile_source_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
+        CHECK(diagnostic.stage==XR_SOURCE_COMPILE_PATH);
+        xr_source_compile_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
         CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     }
     size_t snapshots=0;
     for (size_t i=0;i<sites;++i) {
         resources=sdk_ledger(&sdk_unlimited);context.resources=resources;product=NULL;
         runtime_attempts=0;runtime_fail_at=i;
-        XrCliCompileSourceStatus status=xr_cli_compile_source_build(&request,&product,&diagnostic);
+        XrSourceCompileStatus status=xr_source_compile_build(&request,&product,&diagnostic);
         runtime_fail_at=SIZE_MAX;
-        CHECK(status==XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY && !product && runtime_attempts>i);
+        CHECK(status==XR_SOURCE_COMPILE_OUT_OF_MEMORY && !product && runtime_attempts>i);
         CHECK(diagnostic.status==status);xr_compile_resources_release(resources);
         if(diagnostic.source.snapshot) {
             ++snapshots;
             const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(diagnostic.source.snapshot);
             CHECK(view && view->complete && view->module_count && view->modules[0].path[0]);
-            XrCliCompileSourceDiagnostic saved=diagnostic;
-            CHECK(xr_cli_compile_source_build(NULL,&product,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT);
+            XrSourceCompileDiagnostic saved=diagnostic;
+            CHECK(xr_source_compile_build(NULL,&product,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
             CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
         }
-        xr_cli_compile_source_diagnostic_free(&diagnostic);
+        xr_source_compile_diagnostic_free(&diagnostic);
         CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     }
     for (unsigned axis=0;axis<3;++axis) for (unsigned minus=0;minus<2;++minus) {
@@ -189,10 +189,10 @@ static void fault_scan(const char *entry,const char *stdlib) {
         if (axis==1) limits.live_bytes=total.peak_bytes-minus;
         if (axis==2) limits.work=total.work-minus;
         resources=sdk_ledger(&limits);context.resources=resources;product=NULL;
-        XrCliCompileSourceStatus status=xr_cli_compile_source_build(&request,&product,&diagnostic);
-        CHECK(status==(minus?XR_CLI_COMPILE_SOURCE_BUDGET:XR_CLI_COMPILE_SOURCE_OK));
+        XrSourceCompileStatus status=xr_source_compile_build(&request,&product,&diagnostic);
+        CHECK(status==(minus?XR_SOURCE_COMPILE_BUDGET:XR_SOURCE_COMPILE_OK));
         CHECK(minus?!product:product!=NULL);
-        xr_xir_compile_source_product_free(product);xr_cli_compile_source_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
+        xr_xir_compile_source_product_free(product);xr_source_compile_diagnostic_free(&diagnostic);xr_compile_resources_release(resources);
         CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     }
     CHECK(snapshots);
@@ -247,7 +247,7 @@ static FailureObservation source_failure(const char *entry,const char *stdlib,
     return observation;
 }
 static void failure_path_scan(const char *entry,const char *stdlib) {
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     FailureObservation absent=source_failure(entry,stdlib,&limits,false,SIZE_MAX);
     FailureObservation owned=source_failure(entry,stdlib,&limits,true,SIZE_MAX);
     CHECK(owned.status==XR_XIR_BAD_VALUE && owned.has_path && !absent.has_path);
@@ -257,7 +257,7 @@ static void failure_path_scan(const char *entry,const char *stdlib) {
     FailureObservation budget=source_failure(entry,stdlib,&limits,true,SIZE_MAX);
     CHECK(budget.status==XR_XIR_BUDGET && budget.has_path && budget.attempts==owned.attempts);
     CHECK(budget.stats.work<=limits.work);
-    limits=xr_cli_compile_default_resource_limits();
+    limits=xr_source_compile_default_resource_limits();
     for(size_t point=0;point<owned.attempts;++point) {
         FailureObservation failed=source_failure(entry,stdlib,&limits,true,point);
         CHECK(failed.status==XR_XIR_OUT_OF_MEMORY && failed.attempts>point);
@@ -269,26 +269,26 @@ static int source_owner_main(int argc,char **argv) {
     CHECK(argc==4 || argc==5);DWORD baseline=handles();
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrCliCompileSourceRequest request={&context,argv[1],argv[2],NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+    XrSourceCompileRequest request={&context,argv[1],argv[2],NULL,{1048576,64},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
     runtime_attempts=0;input_rejections(&request);
     bool library=!strcmp(argv[3],"catalog") || !strcmp(argv[3],"catalog-state-reject");
     XrXirLibraryCatalog *libraries=library?catalog(&request):NULL;
     request.libraries=libraries;if(library)catalog_rejections(&request);
     if(!strcmp(argv[3],"limit"))request.manifest_limits.input_bytes=1;
-    XrXirSourceProduct *product=NULL;XrCliCompileSourceDiagnostic diagnostic={0};
-    XrCliCompileSourceStatus status=xr_cli_compile_source_build(&request,&product,&diagnostic);
+    XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    XrSourceCompileStatus status=xr_source_compile_build(&request,&product,&diagnostic);
     printf("CLI %s status=%s stage=%u source=%u authority=%u message=%s %s\n",argv[3],
-        xr_cli_compile_source_status_name(status),(unsigned)diagnostic.stage,(unsigned)diagnostic.source.status,
+        xr_source_compile_status_name(status),(unsigned)diagnostic.stage,(unsigned)diagnostic.source.status,
         (unsigned)diagnostic.authority_status,diagnostic.source.source.message,diagnostic.authority.message);
-    XrCliCompileSourceStatus expected=XR_CLI_COMPILE_SOURCE_OK;
+    XrSourceCompileStatus expected=XR_SOURCE_COMPILE_OK;
     bool semantic=!strcmp(argv[3],"reject") || !strcmp(argv[3],"failure-path");
-    if(semantic || !strcmp(argv[3],"parse-reject"))expected=XR_CLI_COMPILE_SOURCE_REJECTED;
+    if(semantic || !strcmp(argv[3],"parse-reject"))expected=XR_SOURCE_COMPILE_REJECTED;
     bool state_rejected=!strcmp(argv[3],"state-reject") || !strcmp(argv[3],"catalog-state-reject");
-    if(state_rejected)expected=XR_CLI_COMPILE_SOURCE_REJECTED;
-    if(!strcmp(argv[3],"graph-reject"))expected=XR_CLI_COMPILE_SOURCE_NOT_FOUND;
-    if(!strcmp(argv[3],"not-found"))expected=XR_CLI_COMPILE_SOURCE_NOT_FOUND;
-    if(!strcmp(argv[3],"invalid"))expected=XR_CLI_COMPILE_SOURCE_INVALID;
-    if(!strcmp(argv[3],"limit"))expected=XR_CLI_COMPILE_SOURCE_LIMIT;
+    if(state_rejected)expected=XR_SOURCE_COMPILE_REJECTED;
+    if(!strcmp(argv[3],"graph-reject"))expected=XR_SOURCE_COMPILE_NOT_FOUND;
+    if(!strcmp(argv[3],"not-found"))expected=XR_SOURCE_COMPILE_NOT_FOUND;
+    if(!strcmp(argv[3],"invalid"))expected=XR_SOURCE_COMPILE_INVALID;
+    if(!strcmp(argv[3],"limit"))expected=XR_SOURCE_COMPILE_LIMIT;
     CHECK(status==expected && diagnostic.status==status);
     if(state_rejected) {
         CHECK(!product && diagnostic.source.status==XR_XIR_BAD_STRUCTURE);
@@ -297,7 +297,7 @@ static int source_owner_main(int argc,char **argv) {
     }
     xr_xir_compile_library_catalog_free(libraries);xr_compile_resources_release(resources);
     memset(&context,0xcc,sizeof(context));memset(&request,0xcc,sizeof(request));
-    if(status==XR_CLI_COMPILE_SOURCE_OK)execute(product,library?"cli-owner 42\n":"cli-owner 41\n");
+    if(status==XR_SOURCE_COMPILE_OK)execute(product,library?"cli-owner 42\n":"cli-owner 41\n");
     else CHECK(!product);
     if(semantic) {
         CHECK(!diagnostic.source.snapshot);
@@ -305,15 +305,15 @@ static int source_owner_main(int argc,char **argv) {
         CHECK(diagnostic.source.source.line==1 && diagnostic.source.source.column==13);
         CHECK(!strcmp(diagnostic.source.source.message,"name is not an initialized value"));
         if(argc==5) CHECK(diagnostic.source.source.module!=0);
-        XrCliCompileSourceDiagnostic saved=diagnostic;
-        CHECK(xr_cli_compile_source_build(NULL,&product,&diagnostic)==XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT);
+        XrSourceCompileDiagnostic saved=diagnostic;
+        CHECK(xr_source_compile_build(NULL,&product,&diagnostic)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
         CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
         CHECK(xr_xir_compile_source_product_build(NULL,&product,&diagnostic.source)==XR_XIR_BAD_STRUCTURE);
         CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
     }
     if(!strcmp(argv[3],"parse-reject") || !strcmp(argv[3],"graph-reject"))
         CHECK(!diagnostic.source.source_path && !diagnostic.source.snapshot && !diagnostic.source.source.line);
-    xr_cli_compile_source_diagnostic_free(&diagnostic);xr_cli_compile_source_diagnostic_free(&diagnostic);
+    xr_source_compile_diagnostic_free(&diagnostic);xr_source_compile_diagnostic_free(&diagnostic);
     CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     if(!strcmp(argv[3],"scan"))fault_scan(argv[1],argv[2]);
     if(!strcmp(argv[3],"reject"))failure_path_scan(argv[1],argv[2]);

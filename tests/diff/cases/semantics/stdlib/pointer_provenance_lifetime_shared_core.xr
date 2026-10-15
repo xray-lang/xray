@@ -3,15 +3,15 @@
 const MODULE_BYTES = c"AZ"
 const MODULE_PTR = unsafe { MODULE_BYTES.ptr() }
 
-fn modulePtr() -> const Ptr<u8> {
+fn modulePtr() -> Ptr<u8> {
     return MODULE_PTR
 }
 
-fn literalPtr() -> const Ptr<u8> {
+fn literalPtr() -> Ptr<u8> {
     return unsafe { c"ok".ptr() }
 }
 
-fn read(ptr: const Ptr<u8>) -> u8 {
+fn read(ptr: Ptr<u8>) -> u8 {
     return unsafe { ptr.deref() }
 }
 

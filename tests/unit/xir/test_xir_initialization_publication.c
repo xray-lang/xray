@@ -17,6 +17,9 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_instance_compile_observer.h"
 #include "xir_runtime_allocations.h"
+#define XIR_INSTANCE_IMPLEMENTATION_PRESENT
+#include "xir_instance_retirement_probe.c"
+#undef XIR_INSTANCE_IMPLEMENTATION_PRESENT
 #undef CHECK
 #define main original_instance_regressions
 #include "test_xir_instances.c"

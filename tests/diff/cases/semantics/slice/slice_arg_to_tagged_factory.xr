@@ -4,7 +4,7 @@ class Snapshot {
     first: u8
     owned: Array<u8>
 
-    constructor(size: i64, first: u8) {
+    init(size: i64, first: u8) {
         this.size = size
         this.first = first
         this.owned = Array<u8>(1)

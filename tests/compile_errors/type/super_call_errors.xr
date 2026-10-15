@@ -4,7 +4,7 @@
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 }
@@ -12,7 +12,7 @@ class Animal {
 class Dog1 extends Animal {
     breed: string
 
-    constructor(name, breed) {
+    init(name, breed) {
         this.breed = breed
         // ERROR: this before super
         super(name)
@@ -23,7 +23,7 @@ class Dog1 extends Animal {
 class Dog2 extends Animal {
     breed: string
 
-    constructor(name, breed) {
+    init(name, breed) {
         var x = this.name
         // ERROR: this before super
         super(name)
@@ -35,7 +35,7 @@ class Dog2 extends Animal {
 class Dog3 extends Animal {
     breed: string
 
-    constructor(name, breed) {
+    init(name, breed) {
         // ERROR: missing super() call
         this.breed = breed
     }
@@ -45,7 +45,7 @@ class Dog3 extends Animal {
 class Standalone {
     value: i64
 
-    constructor(v) {
+    init(v) {
         super()
         // ERROR: no parent class
         this.value = v
@@ -56,7 +56,7 @@ class Standalone {
 class Dog4 extends Animal {
     breed: string
 
-    constructor(name, breed) {
+    init(name, breed) {
         super(name)
         // OK: first statement
         this.breed = breed

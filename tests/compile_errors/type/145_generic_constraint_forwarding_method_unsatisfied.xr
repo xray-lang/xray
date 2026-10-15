@@ -5,7 +5,7 @@
 // Positive coverage: tests/regression/12_type_checking/1251_generic_constraint_forwarding.xr
 
 class Forwarder {
-    constructor() {}
+    init() {}
 
     pick<U: Hashable>(y: U) -> U {
         return y

@@ -93,7 +93,7 @@ static inline void invocation_rotation_fixture(InvocationRotationFixture *f) {
 static XrXirStatus invocation_rotation_derive(const XrXirCompileContext *context,
     const XrXirModule *module,EffectInvocationCertificate **output) {
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationResult *receiving=NULL;
+    EffectFinalFunctions *receiving=NULL;
     XrXirStatus status=invocation_core_storage(context,module,&effects);
     if (status==XR_XIR_OK) status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context);
     if (status==XR_XIR_OK) status=effect_parameters_derive(module,&effects,&graph,context);
@@ -116,16 +116,16 @@ static XrXirStatus invocation_rotation_masks(const XrXirCompileContext *context,
     const EffectInvocationCertificate *certificate,bool oracle) {
     static const uint32_t expected[5]={XR_XIR_CALLABLE_ROOT_REQUIRED,
         XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,XR_XIR_CALLABLE_ROOT_REQUIRED,XR_XIR_CALLABLE_ROOT_REQUIRED};
-    if (!certificate || effect_body_count(certificate->body)!=5 || !certificate->result ||
-        certificate->result->count!=5) return XR_XIR_BAD_STRUCTURE;
+    if (!certificate || effect_body_count(certificate->body)!=5 || !certificate->final ||
+        certificate->final->summary.count!=5) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t f=0;f<5 && status==XR_XIR_OK;++f) {
         uint32_t mask=UINT32_MAX;
         status=effect_invocation_certificate_node_mask(context,certificate,
-            certificate->equations->roots[f],&mask);
+            certificate->final->roots[f],&mask);
         if (status==XR_XIR_OK && oracle) {
             CHECK(mask==expected[f]);
-            const XrXirRootFormula *formula=&certificate->result->functions[f].formula;
+            const XrXirRootFormula *formula=&certificate->final->summary.functions[f].formula;
             CHECK(formula->constant_mask==(f==1?0:expected[f]));
             CHECK(formula->term_count==(f==1?5u:0u));
             for (uint32_t p=0;p<formula->term_count;++p)
@@ -149,7 +149,7 @@ static void invocation_rotation_trace_oracle(const EffectInvocationCertificate *
     CHECK(certificate->body->stage==XR_XIR_CHECKED && effect_body_count(certificate->body)==5);
     CHECK(trace && trace->facts.requires_root && !trace->facts.unresolved &&
         trace->counts[0]==7 && !trace->counts[1] && trace->counts[0]>effect_body_count(certificate->body));
-    const EffectInvocationOwner *equations=certificate->equations;
+    const EffectInvocationFinal *equations=certificate->final;
     CHECK(equations && equations->site_count==2 && !equations->binding_count);
     CHECK(equations->sites[0].function==0 && !equations->sites[0].instruction &&
         equations->sites[0].target==2 && equations->sites[1].function==0 &&

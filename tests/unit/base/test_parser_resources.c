@@ -591,7 +591,7 @@ static void this_positions(void) {
 static const char this_ref_source[] =
     "final class Holder {\n"
     " value:i64\n"
-    " constructor(){this.value=0}\n"
+    " init(){this.value=0}\n"
     " update()->i64 {\n"
     "  touch(ref this.value)\n"
     "  return this.value\n"

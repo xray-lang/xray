@@ -13,7 +13,7 @@ export enum ParallelError {
 export class Options {
     workers: i64
 
-    constructor(workers: i64 = 0) {
+    init(workers: i64 = 0) {
         this.workers = workers
     }
 }
@@ -68,7 +68,7 @@ export class Plan<S> {
     private _active: bool
     private _releasePending: bool
 
-    constructor(options: Options, init: fn(i64) -> S) {
+    init(options: Options, init: fn(i64) -> S) {
         var laneCount = _referenceLaneCount(options)
         var states: Array<S> = []
         for (lane in 0..laneCount) {

@@ -21,7 +21,7 @@ export const delimiter = ":"
 export class Path {
     raw: string
 
-    constructor(raw: string) {
+    init(raw: string) {
         this.raw = raw
     }
 
@@ -40,7 +40,7 @@ export class PathInfo {
     name: string
     ext: string
 
-    constructor(root: string, dir: Path, base: string, name: string, ext: string) {
+    init(root: string, dir: Path, base: string, name: string, ext: string) {
         this.root = root
         this.dir = dir
         this.base = base

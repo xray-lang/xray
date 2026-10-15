@@ -1,0 +1,9 @@
+struct Box {
+    const value: i64
+    init(value) { this.value = value }
+}
+export fn referenceAnswer() -> i64 {
+    var box = Box(3)
+    box.value = 8
+    return box.value
+}

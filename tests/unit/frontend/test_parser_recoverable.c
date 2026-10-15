@@ -567,8 +567,8 @@ TEST(invalid_loop_label_recovers_without_revisiting_tokens) {
 TEST(override_modifier_has_exact_declaration_scope) {
     static const char *const rejected[] = {
         "class A { override static value() {} }",
-        "class A { override static constructor() {} }",
-        "class A { override constructor() {} }",
+        "class A { override static init() {} }",
+        "class A { override init() {} }",
         "class A { override value: i64 }",
         "class A { override override value() {} }",
         "struct A { override value() {} }",

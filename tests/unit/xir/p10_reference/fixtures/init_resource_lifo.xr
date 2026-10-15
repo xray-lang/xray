@@ -1,0 +1,15 @@
+var trace: i64 = 0
+class Resource {
+    code: i64
+    init(code) { this.code = code; trace = trace * 10 + code }
+    close() { trace = trace * 10 + this.code }
+}
+fn useResources() {
+    const a = Resource(1)
+    defer { a.close() }
+    const b = Resource(2)
+    defer { b.close() }
+    const c = Resource(3)
+    defer { c.close() }
+}
+export fn referenceAnswer() -> i64 { useResources(); return trace }
