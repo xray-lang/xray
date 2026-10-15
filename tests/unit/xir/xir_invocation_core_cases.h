@@ -144,14 +144,14 @@ static void invocation_final_trace_callback(const XrXirCompileContext *work,
     RootParameterMark retained=rp_mark();XrCompileResourceStats before=rp_stats(work);
     invocation_trace_callback_target=certificate;invocation_trace_callback_count=0;
     rp_allocation_observer=invocation_trace_allocation_erase;XrXirRootCauseTrace *output=NULL;
-    CHECK(effect_invocation_public_trace(work,certificate,summary->count,3,&facts,&output)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_BAD_STRUCTURE &&
         !output && !rp_allocation_observer && invocation_trace_callback_count==1);
     invocation_trace_callback_target=NULL;rp_balanced(retained);
     XrCompileResourceStats paid=rp_stats(work);CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes);
     *node=saved;memcpy(node->causes,causes,sizeof(causes));
     summary->facts[3]=facts;summary->functions[3].formula.constant_mask=constant;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=witnesses[d];
-    CHECK(effect_invocation_public_trace(work,certificate,summary->count,3,&facts,&output)==XR_XIR_OK && output);
+    CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_OK && output);
     CHECK(output->counts[0]==1 && !output->counts[1] && output->facts.requires_root);
     CHECK(rp_stats(work).allocated_bytes>paid.allocated_bytes && rp_stats(work).work>paid.work);
     xr_xir_compile_root_cause_trace_free(output);rp_balanced(retained);
@@ -229,10 +229,8 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             certificate->final->roots[1],&formal_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_edge_mask(context,certificate,0,2,1,&edge_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,
-            certificate->final->summary.count,1,&certificate->final->summary.facts[1],&public_trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,
-            certificate->final->summary.count,3,&certificate->final->summary.facts[3],&root_trace);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,1,&certificate->final->summary.facts[1],&public_trace);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,3,&certificate->final->summary.facts[3],&root_trace);
         if (status==XR_XIR_OK && oracle) {
             if (primitive_slot) invocation_nonroot_slot_erasure(context,certificate);
             invocation_final_initializer_erasure(context,certificate);

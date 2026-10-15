@@ -140,13 +140,12 @@ static XrXirStatus effect_source_atoms(const XrXirCompileContext *work,
 
 static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
-    uint32_t count=effect_body_count(certificate->body);
     const EffectFinalFunctions *result=(&certificate->final->summary);
     /* This same independent receiving core checks all canonical terms,
      * selected atoms, current causes and final transformed witnesses. */
     XrXirStatus status=effect_invocation_publication_match(work,certificate,result);
     if (status!=XR_XIR_OK) return status;
-    return effect_invocation_public_gate(work,certificate,count);
+    return effect_invocation_public_gate(work,certificate);
 }
 
 /* Only verification modes consume this shallow request view. The stack owner

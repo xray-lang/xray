@@ -63,7 +63,7 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
         effect_context_owner_free(owner);owner=NULL;
         CHECK(ordinary->references==1 && initial->references==references+1);
         status=ordinary_material_cell_match(context,dense,tracked);
-        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations,source->function_count);
+        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations);
         if (status==XR_XIR_OK) status=effect_invocation_forest_match(context,forest);
     }
     effect_context_forest_free(forest);effect_context_owner_free(owner);return status;

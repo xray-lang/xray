@@ -221,12 +221,12 @@ static void conditional_compact_null_body(const XrXirCompileContext *context,XrX
     XirEffectInvocationSelection sentinel={effects,11,12,13,14,15,16,17},selection=sentinel;
     CHECK(xir_effects_execution_edge(effects,&request,&selection)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&selection,&sentinel,sizeof(selection)));
-    CHECK(effect_invocation_public_gate(context,certificate,effects->count)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_public_gate(context,certificate)==XR_XIR_BAD_STRUCTURE);
     XrXirRootCauseTrace *trace=NULL;
-    CHECK(effect_invocation_public_trace(context,certificate,effects->count,0,&effects->root[0],&trace)==
+    CHECK(effect_invocation_public_trace(context,certificate,0,&effects->root[0],&trace)==
         XR_XIR_BAD_STRUCTURE && !trace);
     certificate->body=owned;
-    CHECK(effect_body_material_shape(owned) && effect_invocation_public_gate(context,certificate,effects->count)==XR_XIR_OK);
+    CHECK(effect_body_material_shape(owned) && effect_invocation_public_gate(context,certificate)==XR_XIR_OK);
 }
 
 /* This genuine Checked producer has already died. Every trace request must
@@ -239,7 +239,7 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
         certificate->final->summary.functions[1].formula.terms[0].index==0);
     for (uint32_t f=0;f<2;++f) for (uint32_t d=0;d<4;++d) {
         EffectInvocationTraceRequest request={.function=f,.domain=d};uint32_t length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length,NULL)==XR_XIR_OK &&
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_OK &&
             length==((f==1 && d==1)?1u:0u));
     }
     EffectInvocationTraceRequest request={.function=1,.domain=1};
@@ -262,7 +262,7 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
         else if (damage==2) certificate->final->summary.facts[1].unresolved=false;
         else term[0].index=1;
         length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
         if (damage<3) {
             selected=sentinel;length=77;
             CHECK(effect_invocation_trace_walk_selected(context,certificate,&request,&length,&selected)==
@@ -272,10 +272,12 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
         entry->causes[atom]=saved;certificate->final->summary.witnesses[at]=witness;
         certificate->final->summary.facts[1].unresolved=fact;term[0].index=index;
         length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length,NULL)==XR_XIR_OK && length==1);
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_OK && length==1);
     }
     length=77;
-    CHECK(effect_invocation_public_walk(context,certificate,&request,0,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
+    uint32_t key_count=certificate->final->count;certificate->final->count=0;
+    CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
+    certificate->final->count=key_count;
 }
 
 /* Genuine owned CONTEXT_CALL terminal; the producer and raw fixture have
@@ -305,13 +307,13 @@ static void conditional_compact_cause_opcode(const XrXirCompileContext *context,
         else function->run_count=0;
         CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_BAD_STRUCTURE);
         uint32_t length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
         function->runs[0].first=first;function->runs[0].count=count;function->runs[0].mask=mask;function->runs[0].base.op=(XrXirOp)opcode;
         function->run_count=words;function->run_capacity=capacity;function->run_count=runs;
         CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_OK);
     }
     uint32_t length=77;
-    CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length,NULL)==XR_XIR_OK && length==1);
+    CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_OK && length==1);
 }
 
 /* Literal domains of the genuine four-function Checked producer. ROOT
@@ -355,7 +357,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
          * preserves its output when the same damaged proof is rejected. */
         EffectInvocationTraceRequest request={.function=1,.domain=damage==4?4u:1u};
         uint32_t length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length,NULL)==
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==
             XR_XIR_BAD_STRUCTURE && length==77);
         cause->witness=saved;local->witness=local_saved;
         certificate->body->functions[1].runs[0].first=stream_first;certificate->final->roots[1]=root;

@@ -424,7 +424,7 @@ static void pc_local_transfer_positive(void) {
     CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK);pc_empty_golden(effects,0);
     EffectInvocationLocalInput *inputs=NULL;
     CHECK(effect_invocation_local_inputs(&c,effects->invocations->body,&inputs)==XR_XIR_OK && !inputs);
-    CHECK(effect_invocation_public_gate(&c,effects->invocations,effects->count)==XR_XIR_OK);
+    CHECK(effect_invocation_public_gate(&c,effects->invocations)==XR_XIR_OK);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
 }
 
@@ -637,7 +637,7 @@ static void pc_local_equation_controls(void) {
     CHECK(effect_invocation_local_inputs(&c,certificate->body,&inputs)==XR_XIR_OK && inputs);
     CHECK(effect_invocation_local_equations_match(&c,certificate->final,inputs)==XR_XIR_OK);
     CHECK(effect_invocation_certificate_result_match(&c,certificate,(&certificate->final->summary))==XR_XIR_OK);
-    CHECK(effect_invocation_public_gate(&c,certificate,effects->count)==XR_XIR_OK);pc_empty_golden(effects,0);
+    CHECK(effect_invocation_public_gate(&c,certificate)==XR_XIR_OK);pc_empty_golden(effects,0);
     xr_compile_resources_free(inputs);xr_xir_compile_effects_free(effects);
     pc_local_formal_preflight(&c);pc_release(&c,baseline);
     pc_local_transfer_positive();pc_local_callback_boundary();pc_local_release_boundary();
