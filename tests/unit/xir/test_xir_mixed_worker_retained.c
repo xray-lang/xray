@@ -99,4 +99,6 @@ static int worker_retained_main(int argc, char **argv) {
         oracle->name, worker_backends[backend], worker_retained_pending);
     return 0;
 }
+#ifndef XR_WORKER_RETAINED_RESOURCE_MAIN
 int main(int argc, char **argv) { return worker_retained_main(argc, argv); }
+#endif
