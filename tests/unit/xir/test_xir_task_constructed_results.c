@@ -64,7 +64,11 @@ static void constructed_build(ConstructedFixture *fixture, const char *backend) 
     for (unsigned n = 0; n < CONSTRUCTED_CASES; ++n) for (unsigned mode = 0; mode < 2; ++mode)
         CHECK(fixture->entry[n][mode] == constructed_entries[n][mode]);
 }
+#ifdef XR_TASK_STRUCT_FIXTURE
+#include "xir_task_struct_expect.h"
+#else
 #include "xir_task_result_expect.h"
+#endif
 static bool constructed_operation(ConstructedFixture *fixture, unsigned family, bool consume_program,
     const XrXirInstanceConfig *limits, XrXirDomainBudgetStats *cost) {
     XrXirInstance *instances[2] = {0}; XrXirDomain *domains[2] = {0}; XrXirValue tasks[2] = {{0}};

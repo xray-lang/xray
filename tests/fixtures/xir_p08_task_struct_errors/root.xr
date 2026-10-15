@@ -1,0 +1,16 @@
+struct Payload { values:Array<i64>; counter:Atomic<i64> }
+enum Problem { Struct { value:Payload } }
+fn worker_structure(value:Payload) { Coro.yield(); value.counter.fetchAdd(41); throw Problem.Struct{value:value} }
+export fn await_structure() {
+    var input=Payload{values:[10,20],counter:Atomic<i64>(1)}
+    const task=go worker_structure(input)
+    input.values[0]=99
+    await task
+}
+export fn handle_structure()->Task<null> {
+    var input=Payload{values:[10,20],counter:Atomic<i64>(1)}
+    const task=go worker_structure(input)
+    input.values[0]=99
+    return task
+}
+export fn main()->i64 { return 7 }

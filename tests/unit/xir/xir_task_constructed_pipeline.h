@@ -10,7 +10,11 @@
 #ifndef XIR_TASK_CONSTRUCTED_PIPELINE_H
 #define XIR_TASK_CONSTRUCTED_PIPELINE_H
 #include "xir/xxir_types.h"
+#ifdef XR_TASK_STRUCT_FIXTURE
+static const char *constructed_names[]={"structure"};
+#else
 static const char *constructed_names[] = {"array", "nested", "nullable", "nullable_array", "tuple", "enum", "atomic", "task"};
+#endif
 enum { CONSTRUCTED_CASES = sizeof(constructed_names) / sizeof(*constructed_names) };
 static XrXirArtifact *constructed_lower(const XrXirCompileContext *context,
     uint32_t entries[CONSTRUCTED_CASES][2], bool baseline) {

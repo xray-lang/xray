@@ -26,7 +26,11 @@
 #include "xir/xxir_enum.h"
 #include "xir/xxir_atomic.h"
 #include "task_closed_error_generated.h"
+#ifdef XR_TASK_STRUCT_FIXTURE
+#include "xir_task_struct_expect.h"
+#else
 #include "xir_task_result_expect.h"
+#endif
 
 enum { CLOSED_ERROR_FUNCTIONS = 128 };
 typedef struct ClosedErrorFixture {
@@ -114,7 +118,11 @@ static bool closed_error_value(const XrXirValue *error,unsigned family) {
     }
     XrXirEnumBorrow record={0};
     CHECK(xr_xir_enum_borrow(&concrete,&record)==XR_XIR_VALUE_OK);
+#ifdef XR_TASK_STRUCT_FIXTURE
+    const char *members[]={"Struct"};
+#else
     const char *members[]={"Array","Nested","Nullable","NullableArray","Tuple","Enum","Atomic","TaskArray","Task"};
+#endif
     CHECK(family<CLOSED_ERROR_CASES && record.name.length==7 && !memcmp(record.name.bytes,"Problem",7) &&
         record.member.length==strlen(members[family]) && !memcmp(record.member.bytes,members[family],record.member.length) && record.field_count==1);
     if (family==8) return constructed_value(&record.fields[0],7);

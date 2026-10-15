@@ -10,12 +10,12 @@
     {
       "heading_level": 2,
       "heading": "Owned Task errors",
-      "markdown": "Task terminal errors use the actual worker entry's certificate in the same Program. Complete bounded graph admission precedes exact enum type/variant membership; the same runtime Domain prepays the immutable Effects scan bound without debiting compiler resources. Current payload families include Array, Nullable, Tuple, enum, Atomic and Task fields, including direct Tasks and Arrays of Tasks. Repeated owned copies survive Instance and final code-lease retirement without consuming the sticky result. Compiler Sendable proof still covers every Error variant. Full parameter, generator, scheduler and product safety qualification remain separate (spec 10.12/17)."
+      "markdown": "Task terminal errors use the actual worker entry's certificate in the same Program. Complete bounded graph admission precedes exact enum type/variant membership; the same runtime Domain prepays the immutable Effects scan bound without debiting compiler resources. Current payload families include Array, Nullable, Tuple, enum, struct, Atomic and Task fields, including direct Tasks and Arrays of Tasks. Repeated owned copies survive Instance and final code-lease retirement without consuming the sticky result. Compiler Sendable proof still covers every Error variant. Full parameter, generator, scheduler and product safety qualification remain separate (spec 10.12/17)."
     },
     {
       "heading_level": 2,
       "heading": "Closed Task argument carriers",
-      "markdown": "Task arguments use the same closed copyable scalar, Array, Nullable, Tuple, enum, Atomic and Task carriers as executable results, with Unit excluded from the ordinary argument domain. Complete Checked Sendable and worker root-effect proof remain mandatory. Call prepares owned graphs before child publication; later parent Array mutation preserves the child's logical copy, while Atomic and Task retain identity. Struct/class carriers, full argument fault injection and product safety remain separately qualified (spec 10.12/17)."
+      "markdown": "Task arguments use the same closed copyable scalar, Array, Nullable, Tuple, enum, struct, Atomic and Task carriers as executable results, with Unit excluded from the ordinary argument domain. Complete Checked Sendable and worker root-effect proof remain mandatory. Call prepares owned graphs before child publication; later parent Array mutation preserves the child's logical copy, while Atomic and Task retain identity. Class carriers, full argument fault injection and product safety remain separately qualified (spec 10.12/17)."
     },
     {
       "heading_level": 2,

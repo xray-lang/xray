@@ -119,12 +119,13 @@ static void closed_error_control_pair(ClosedErrorControl *control,unsigned famil
     }
     CHECK(!runtime_live && !runtime_bytes);
 }
-static void closed_error_control_reject(ClosedErrorControl *control,unsigned forged) {
+static void closed_error_control_reject(ClosedErrorControl *control,unsigned forged,unsigned family) {
+    CHECK(family<CLOSED_ERROR_CASES);
     control->forged=forged;
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_new(control->base.program,&config,&control->instances[0])==XR_XIR_CALL_READY);
     XrXirInstance *instance=control->instances[0];
-    CHECK(xr_xir_instance_start(instance,control->base.entry[1][0],NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start(instance,control->base.entry[family][0],NULL,0)==XR_XIR_CALL_READY);
     unsigned polls=0;XrXirValue task={0};XrXirInstanceResult result={0};
     do {
         result=xr_xir_instance_poll_bounded(instance,1);CHECK(++polls<4096);
@@ -149,7 +150,7 @@ int main(int argc,char **argv) {
     if (!strcmp(argv[1],"reject")) {
         CHECK(xr_xir_compile_type_arena_new(xr_xir_compile_artifact_context(control.base.lowered),
             control.base.program->types,&control.foreign)==XR_XIR_VALUE_OK);
-        for (unsigned forged=1;forged<=3;++forged) closed_error_control_reject(&control,forged);
+        for (unsigned forged=1;forged<=3;++forged) closed_error_control_reject(&control,forged,1);
         CHECK(control.replacements==3);xr_xir_compile_type_arena_drop(control.foreign);
     } else {
         unsigned family=CLOSED_ERROR_CASES;

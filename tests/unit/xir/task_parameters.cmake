@@ -61,7 +61,8 @@ if(MSVC)
 else()
     target_compile_options(test_xir_task_parameter_rejects PRIVATE -Wall -Wextra -Werror)
 endif()
-foreach(case array_invariance tuple_invariance class nested_class root_worker generic_bound ref)
+foreach(case array_invariance tuple_invariance class nested_class root_worker generic_bound ref
+    struct_class struct_callable struct_error_variant)
     add_test(NAME test_xir_task_parameter_reject_${case} COMMAND test_xir_task_parameter_rejects ${case})
     set_tests_properties(test_xir_task_parameter_reject_${case} PROPERTIES
         TIMEOUT 60 LABELS "unit;xir;task;ownership;source;reject;parameters")

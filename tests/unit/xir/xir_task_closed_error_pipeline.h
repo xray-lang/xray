@@ -10,7 +10,11 @@
 #ifndef XIR_TASK_CLOSED_ERROR_PIPELINE_H
 #define XIR_TASK_CLOSED_ERROR_PIPELINE_H
 #include "xir/xxir_types.h"
+#ifdef XR_TASK_STRUCT_FIXTURE
+static const char *closed_error_names[]={"structure"};
+#else
 static const char *closed_error_names[] = {"array", "nested", "nullable", "nullable_array", "tuple", "enum", "atomic", "task_array", "task"};
+#endif
 enum { CLOSED_ERROR_CASES = sizeof(closed_error_names) / sizeof(*closed_error_names) };
 static XrXirArtifact *closed_error_lower(const XrXirCompileContext *context,
     uint32_t entries[CLOSED_ERROR_CASES][2]) {
