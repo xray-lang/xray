@@ -254,6 +254,55 @@ static inline XrXirStatus effect_body_records_copy(const XrXirCompileContext *wo
     return effect_body_records_write(work,source,target,NULL);
 }
 
+/* Five actual physical slots have only 32 selection patterns. Direct
+ * dispatch retains every selected nonzero check in ascending field order. */
+static XrXirStatus effect_body_delta_group(const EffectBodyRead *read,uint32_t mask,
+    const uint32_t *delta,uint64_t *units) {
+    if (!mask) return XR_XIR_OK;
+    if (mask>31 || !delta) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+#define EFFECT_BODY_DELTA_CHECK(I) do { \
+    if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET; \
+    if (!delta[I]) return XR_XIR_BAD_STRUCTURE; \
+} while (0)
+    switch (mask) {
+    case 1:EFFECT_BODY_DELTA_CHECK(0);if (units) *units+=4;break;
+    case 2:EFFECT_BODY_DELTA_CHECK(1);if (units) *units+=4;break;
+    case 3:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);if (units) *units+=8;break;
+    case 4:EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=4;break;
+    case 5:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=8;break;
+    case 6:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=8;break;
+    case 7:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);if (units) *units+=12;break;
+    case 8:EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=4;break;
+    case 9:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=8;break;
+    case 10:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=8;break;
+    case 11:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=12;break;
+    case 12:EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=8;break;
+    case 13:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=12;break;
+    case 14:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=12;break;
+    case 15:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);if (units) *units+=16;break;
+    case 16:EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=4;break;
+    case 17:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
+    case 18:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
+    case 19:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
+    case 20:EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
+    case 21:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
+    case 22:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
+    case 23:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
+    case 24:EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=8;break;
+    case 25:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
+    case 26:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
+    case 27:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
+    case 28:EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=12;break;
+    case 29:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
+    case 30:EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=16;break;
+    case 31:EFFECT_BODY_DELTA_CHECK(0);EFFECT_BODY_DELTA_CHECK(1);EFFECT_BODY_DELTA_CHECK(2);EFFECT_BODY_DELTA_CHECK(3);EFFECT_BODY_DELTA_CHECK(4);if (units) *units+=20;break;
+    default:return XR_XIR_BAD_STRUCTURE;
+    }
+#undef EFFECT_BODY_DELTA_CHECK
+    return XR_XIR_OK;
+}
+
 /* The same bounded reader serves compile and runtime ledger callbacks. A
  * local run reference cannot outlive this request or acquire body permission. */
 static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
@@ -267,11 +316,11 @@ static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
         run->mask&~EFFECT_BODY_MASK || (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
     /* A selected physical delta must be nonzero. The array is full length,
      * so there is no packed-column directory or rank to reconstruct. */
-    for (uint32_t w=0;run->mask && w<EFFECT_BODY_WORDS;++w) {
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (!(run->mask&(UINT32_C(1)<<w))) continue;
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (!run->delta[w]) return XR_XIR_BAD_STRUCTURE;
+    if (run->mask) {
+        if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+        XrXirStatus status=effect_body_delta_group(read,run->mask&31,run->delta,NULL);
+        if (status==XR_XIR_OK) status=effect_body_delta_group(read,run->mask>>5,run->delta+5,NULL);
+        if (status!=XR_XIR_OK) return status;
     }
     if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=run;return XR_XIR_OK;
@@ -517,13 +566,11 @@ static XrXirStatus effect_body_instruction_ref_prepare(const EffectBodyRead *rea
         ref->delta[0]*(instruction-ref->first):0);
     if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
     uint64_t units=EFFECT_BODY_WORDS+sizeof(XrXirInstruction)+2;
-    for (uint32_t w=0;ref->mask && w<EFFECT_BODY_WORDS;++w) {
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (ref->mask&(UINT32_C(1)<<w)) {
-            if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-            if (!ref->delta[w]) return XR_XIR_BAD_STRUCTURE;
-            units+=4;
-        }
+    if (ref->mask) {
+        if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+        XrXirStatus status=effect_body_delta_group(read,ref->mask&31,ref->delta,&units);
+        if (status==XR_XIR_OK) status=effect_body_delta_group(read,ref->mask>>5,ref->delta+5,&units);
+        if (status!=XR_XIR_OK) return status;
     }
     if (!effect_body_read_work(read,units+EFFECT_BODY_WORDS)) return XR_XIR_BUDGET;
     return XR_XIR_OK;
