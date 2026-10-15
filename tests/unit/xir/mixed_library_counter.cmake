@@ -10,6 +10,33 @@ endif()
 add_test(NAME test_xir_mixed_array_query_types COMMAND test_xir_mixed_array_query_types)
 set_tests_properties(test_xir_mixed_array_query_types PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
     LABELS "unit;xir;mixed;source;ownership;array;query;generated-c")
+add_executable(test_xir_mixed_array_query_resources xir/test_xir_mixed_array_query_resources.c)
+target_link_libraries(test_xir_mixed_array_query_resources PRIVATE xray_xir_source xray_xir_cgen)
+set_target_properties(test_xir_mixed_array_query_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_array_query_resources PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_array_query_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(array_query_mode IN ITEMS baseline axes)
+    add_test(NAME test_xir_mixed_array_query_resources_${array_query_mode}
+        COMMAND test_xir_mixed_array_query_resources ${array_query_mode})
+    set_tests_properties(test_xir_mixed_array_query_resources_${array_query_mode} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;source;ownership;array;query;generated-c;${array_query_mode}")
+endforeach()
+set(array_query_fi_begin 0)
+while(array_query_fi_begin LESS 10258)
+    math(EXPR array_query_fi_end "${array_query_fi_begin} + 64")
+    if(array_query_fi_end GREATER 10258)
+        set(array_query_fi_end 10258)
+    endif()
+    add_test(NAME test_xir_mixed_array_query_resources_fi_${array_query_fi_begin}_${array_query_fi_end}
+        COMMAND test_xir_mixed_array_query_resources fi ${array_query_fi_begin} ${array_query_fi_end} 10258)
+    set_tests_properties(test_xir_mixed_array_query_resources_fi_${array_query_fi_begin}_${array_query_fi_end}
+        PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 1
+        LABELS "unit;xir;mixed;source;ownership;array;query;generated-c;fi")
+    set(array_query_fi_begin ${array_query_fi_end})
+endwhile()
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/p20-library-counter-absent")
 target_link_libraries(test_xir_mixed_library_producer PRIVATE xray_xir_source xray_xir_cgen)
 target_compile_definitions(test_xir_mixed_library_producer PRIVATE
