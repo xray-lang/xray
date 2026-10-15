@@ -752,6 +752,10 @@ static bool cell_proof_prepare_edges(CellProofBuild *build) {
     bool counted = cell_proof_build_edges(build);
     build->counting_edges = false;
     if (!counted) return false;
+    /* The complete counting walk already seeds every real value. With no
+     * edges there is nothing to write; solve and sink validation still run. */
+    if (!cell_proof_work(build,1)) return false;
+    if (!build->edge_count) return true;
     build->edge_capacity = build->edge_count; build->edge_count = 0;
     size_t bytes = 0;
     if (!cell_proof_edge_storage_bytes(build->edge_capacity,&bytes))

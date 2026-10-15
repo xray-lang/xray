@@ -11,6 +11,7 @@
 #include "xir/xxir_types.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_value_compile_owner.h"
 #include "xir_cell_provenance_fixture.h"
@@ -239,7 +240,11 @@ static void cell_proof_indirect_ref(void) {
 #include "xir_cell_zero_tracked_cases.h"
 #include "xir_cell_class_fact_cases.h"
 #include "xir_cell_body_read_cases.h"
-int main(void) {
+#include "xir_cell_zero_edge_cases.h"
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--zero-edge-literals")));
+    if (argc==2) {cell_zero_edge_literals();return 0;}
+    cell_zero_edge_literals();cell_zero_edge_resources();
     cell_body_read_cases();
     cell_class_fact_cases();
     cell_zero_tracked_cases();

@@ -57,6 +57,11 @@ add_test(NAME test_xir_root_conditional_new_literals
 set_tests_properties(test_xir_root_conditional_new_literals PROPERTIES
     LABELS "unit;xir;root-effects;compiler;ownership;physical-reader" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
 
+add_test(NAME test_xir_cell_zero_edge_literals
+    COMMAND test_xir_cell_provenance --zero-edge-literals)
+set_tests_properties(test_xir_cell_zero_edge_literals PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership;cell-provenance" TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
 # These literals remain reachable before the complete helper cost gate.
 add_test(NAME test_xir_root_conditional_class_rows
     COMMAND test_xir_root_conditional_helpers --class-rows)
