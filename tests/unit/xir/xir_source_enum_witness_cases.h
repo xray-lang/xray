@@ -85,20 +85,17 @@ static void source_enum_ref_declaration_facts(const XrXirSourceResult *result) {
     }
     CHECK(matches == 1);
 }
-static void source_enum_ref_permission_rejections(XrXirSourceRequest *request) {
+static void source_generic_requirement_run(XrXirSourceRequest *request,const char *source);
+static void source_enum_ref_permission_cases(XrXirSourceRequest *request) {
     const char *sources[] = {
         "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{const e=E.V;return e.f()}\n",
         "enum E { V ref f()->i64{return 41} }\nfn bad(e:E)->i64{return e.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{return E.V.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nvar e=E.V\nfn bad()->i64{return e.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{var es=[E.V];return es[0].f()}\n"
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{return E.V.f()}\n"
     };
     const char *reasons[] = {
-        "ref receiver requires a mutable local binding",
-        "ref receiver requires a mutable local binding",
-        "expression cannot satisfy its declared type",
-        "ref receiver of module state is not implemented in XIR",
-        "ref receiver place is not implemented in XIR"
+        "ref requires a mutable stored binding",
+        "ref requires a mutable stored binding",
+        "expression cannot satisfy its declared type"
     };
     unsigned mismatches = 0;
     for (uint32_t i = 0; i < sizeof(sources)/sizeof(*sources); ++i) {
@@ -112,6 +109,18 @@ static void source_enum_ref_permission_rejections(XrXirSourceRequest *request) {
         xr_xir_compile_source_result_free(&result);
     }
     CHECK(!mismatches);
+    /* Module variables and indexed value elements already use the canonical
+     * writable-place path. Keep the original inputs as real execution cases. */
+    const char *positive[]={
+        "enum E { V ref f()->i64{return 41} }\nvar e=E.V\nfn bad()->i64{return e.f()}\n",
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{var es=[E.V];return es[0].f()}\n"
+    };
+    for(uint32_t i=0;i<2;++i){
+        char program[512];int length=snprintf(program,sizeof(program),"%s%s",positive[i],
+            "export fn genericMethodNumber()->i64{return bad()}\nexport fn genericMethodText()->string{return \"mapped\"}\n");
+        CHECK(length>0&&(size_t)length<sizeof(program));
+        source_generic_requirement_run(request,program);
+    }
 }
 static void source_enum_witness_rejections(XrXirSourceRequest *request) {
     const char *rejected[] = {
@@ -177,7 +186,7 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
     source_enum_witness_run(request,
         "enum E { V ref f()->i64{return 41} }\n"
         "export fn enumWitness()->i64{var e=E.V;return e.f()}\n");
-    source_enum_ref_permission_rejections(request);
+    source_enum_ref_permission_cases(request);
 }
 static void source_enum_witness_cases(XrXirSourceRequest *request) {
     source_enum_witness_run(request,
