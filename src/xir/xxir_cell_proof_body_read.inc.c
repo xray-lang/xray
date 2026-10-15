@@ -154,11 +154,12 @@ static XrXirStatus cell_proof_matches(const XrXirCompileContext *context,
         (!!stored->functions!=!!fresh->function_count)) return XR_XIR_BAD_STRUCTURE;
     size_t words=0;
     for (uint32_t f=0;f<fresh->function_count;++f) {
-        if (!xir_compile_work(context,12)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(context,13)) return XR_XIR_BUDGET;
         const CellProofFunction *a=&stored->functions[f],*b=&fresh->functions[f];
         if (a->begin!=b->begin || a->count!=b->count || a->parameters!=b->parameters ||
             a->scope_begin!=b->scope_begin || a->scopes!=b->scopes || a->words!=b->words ||
-            a->stored!=b->stored || a->dependency_begin!=b->dependency_begin || a->class_begin!=b->class_begin ||
+            a->stored!=b->stored || a->role_calls!=b->role_calls ||
+            a->dependency_begin!=b->dependency_begin || a->class_begin!=b->class_begin ||
             a->class_count!=b->class_count || a->class_words!=b->class_words ||
             a->class_dependency_begin!=b->class_dependency_begin) return XR_XIR_BAD_STRUCTURE;
         if (b->words && b->stored>(SIZE_MAX-words)/b->words) return XR_XIR_BAD_STRUCTURE;

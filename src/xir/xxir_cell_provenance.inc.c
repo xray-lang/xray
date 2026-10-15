@@ -726,7 +726,7 @@ static bool cell_proof_edges_range(CellProofBuild *build,uint32_t f,
 static bool cell_proof_build_edges(CellProofBuild *build) {
     for (uint32_t f=0;f<build->body->domain.function_count;++f) {
         /* Complete inventory found no Cell or access-place node in this body.
-         * Global call-role checks still visit it before edge construction. */
+         * Every inventoried call still receives global role checks. */
         if (!cell_proof_work(build,1)) return false;
         if (!build->proof->functions[f].stored) continue;
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
