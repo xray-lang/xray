@@ -125,7 +125,7 @@ static void pc_compact_two_words(void) {
         uint64_t baseline=pc_stats(&c).live_bytes;
         XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
         pc_private_begin(&c,&f,&e,&terms,&flow);
-        CHECK(error_function(&flow,1)==XR_XIR_OK && e.atom_count==70 && e.outcomes_work.words==2);
+        CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.atom_count==70 && e.outcomes_work.words==2);
         CHECK(e.outcomes_work.errors[2]==0 && e.outcomes_work.errors[3]==1 && flow.active_count==1 && flow.active[0]==512);
         CHECK(flow.stride==2 && flow.storage_capacity==pc_cfg_storage_extent(4972,EE_BLOCKS));
         CHECK(flow.zero[0]==0 && flow.zero[1]==0 && error_read(&flow,flow.work,0)==flow.zero);
