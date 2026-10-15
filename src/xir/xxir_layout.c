@@ -46,7 +46,8 @@ static XrXirStatus path_capacity(const XrXirFunction *function, const XrXirCompi
             if (depth == function->instruction_count) return XR_XIR_BAD_VALUE;
             ++depth; id = function->instructions[id - function->parameter_count].args[0];
         }
-        if (depth && (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET)) {
+        if (xr_xir_op_uses_value_path(function, op) &&
+            (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET)) {
             if (depth == UINT32_MAX) return XR_XIR_BUDGET;
             ++depth;
         }
