@@ -12,7 +12,7 @@
  */
 static XrXirValueStatus storage_admission_begin(const XrXirValue *value,
     XrXirValueAdmission *admission,XrXirValueAdmission *local) {
-    if (!admission_domain_current(admission) || !local || !xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!admission || !admission_domain_current(admission) || !local || !xr_xir_value_valid(value)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *local=*admission;
     if (!owned_carrier_type((XrXirType)value->type)) return XR_XIR_VALUE_OK;
     const XirObject *owner=object_pointer(value);

@@ -73,6 +73,12 @@ int main(void) {
     XrXirValueAdmission admission={source,domain,NULL,NULL,UINT64_C(4000000),128*1024};
     XrXirValue values[]={{XR_XIR_I64,0,41},{XR_XIR_I64,0,42}},array={0},cell={0};
     CHECK(xr_xir_array_new(type(0),values,2,&admission,&array)==XR_XIR_VALUE_OK);
+    XrXirValue refused={0};XrXirFaultDetail invalid_fault={0};
+    CHECK(xr_xir_array_get(&array,0,NULL,&refused,&invalid_fault)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(refused.type==XR_XIR_UNIT && !refused.payload);
+    CHECK(xr_xir_array_reserve(&array,2,NULL,&refused)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(refused.type==XR_XIR_UNIT && !refused.payload);
+
     CHECK(xr_xir_cell_new(domain,source,type(1),&array,&admission,&cell)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_value_argument(&cell,target,type(2)) && xr_xir_value_argument(&cell,third,type(3)));
     CHECK(!xr_xir_value_argument(&cell,unrelated,type(2)));
