@@ -10,6 +10,7 @@
  *   Instances substitute verified types and calls without retaining or revisiting AST.
  */
 #include "xxir_generic.h"
+#include "xxir_specialization_bindings.h"
 #include "xxir_compile_memory.h"
 #include "xxir_operand_roles.h"
 #include "xxir_types.h"
@@ -464,8 +465,9 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     xr_compile_resources_free(origins);
     return status;
 }
-XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
-    if (!checked || !output || *output) {
+static XrXirStatus specialize_receive(const XrXirArtifact *checked,
+    const XrXirSpecializationReceiver *receiver, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    if (!checked || !output || *output || (receiver && !receiver->receive)) {
         if (diagnostic) *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
             UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
         return XR_XIR_BAD_STRUCTURE;
@@ -473,6 +475,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     XrXirCompileContext compile_state = checked->context;
     XrXirCompileContext *budget = &compile_state;
     SpecContext c = {0};
+    XrXirArtifact *built = NULL;
     c.diagnostic = (XrXirDiagnostic) {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     c.source = xr_xir_compile_artifact_module(checked);c.source_artifact=checked;c.cleanup_owner=UINT32_MAX;
     c.remaining = *budget;
@@ -486,7 +489,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     c.effects=xir_source_facts_effects(c.source_facts);
     if (xir_effect_evidence_is_instance(c.source)) {
-        c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, checked->construction, output, &c.diagnostic); goto done;
+        c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, checked->construction, &built, &c.diagnostic); goto done;
     }
     if (c.source->types && c.source->types->nominals) {
         c.diagnostic.status = spec_nominal_seed(&c);
@@ -498,7 +501,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
         if (c.diagnostic.status != XR_XIR_OK) goto done;
         XrXirModule specialized = *c.source;
         if (c.types.nominals) specialized.types = &c.types;
-        c.diagnostic.status = xr_xir_compile_recheck_v2(&limits, &specialized, checked->construction, output, &c.diagnostic);
+        c.diagnostic.status = xr_xir_compile_recheck_v2(&limits, &specialized, checked->construction, &built, &c.diagnostic);
         goto done;
     }
     if (c.source->types && !c.types.nominals) {
@@ -546,14 +549,38 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
         else {
             XirProvenanceReceiving receiving={projected,c.effects};
             c.diagnostic.status = xr_xir_compile_recheck_provenance_take(&limits, &specialized,
-                &receiving, &provenance, output, &c.diagnostic);
+                &receiving, &provenance, &built, &c.diagnostic);
         }
     }
     xr_xir_compile_construction_free(projected);
     xr_xir_compile_provenance_free(provenance);
 done:
+    if (c.diagnostic.status == XR_XIR_OK && receiver) {
+        const XrXirModule *closed = xr_xir_compile_artifact_module(built);
+        const XrXirDeclarations *a = c.source->declarations, *b = closed ? closed->declarations : NULL;
+        if (!closed || (!!a != !!b) || (a && a->slot_count != b->slot_count)) c.diagnostic.status = XR_XIR_BAD_STRUCTURE;
+        else {
+            XrXirSpecializationMapView mapping = {checked,built,c.ordinary,c.source->function_count,
+                a ? a->slot_count : 0,c.ordinary == NULL};
+            c.diagnostic.status = receiver->receive(receiver->context,&mapping);
+        }
+    }
+    if (c.diagnostic.status == XR_XIR_OK) { *output = built; built = NULL; }
+    xr_xir_compile_artifact_free(built);
     xir_source_facts_release(c.source_facts);
     while (c.memory) { SpecMemory *next = c.memory->next; xr_compile_resources_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked,
+    XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    return specialize_receive(checked,NULL,output,diagnostic);
+}
+XR_FUNC XrXirStatus xr_xir_compile_specialize_receive(const XrXirArtifact *checked,
+    const XrXirSpecializationReceiver *receiver, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    if (!receiver || !receiver->receive) {
+        if (diagnostic) *diagnostic=(XrXirDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    return specialize_receive(checked,receiver,output,diagnostic);
 }
