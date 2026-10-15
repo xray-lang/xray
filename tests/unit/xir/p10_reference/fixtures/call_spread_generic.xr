@@ -1,0 +1,20 @@
+var trace: i64 = 0
+fn duo<T>(first: T, last: T) -> (T, T) { return (first, last) }
+fn triple<T>(first: T, middle: T, last: T) -> (T, T, T) { return (first, middle, last) }
+fn saved() -> (i64,) { trace = trace * 10 + 1; return (3,) }
+fn mark() -> i64 { trace = trace * 10 + 2; return 11 }
+fn add(first: i64, last: i64 = mark()) -> i64 { return first * 10 + last }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    const small: i8 = 7
+    const numbers = duo(...(1, small))
+    const narrow: (i8, i8) = numbers
+    const missing: i8? = null
+    const optional = triple(...(null, 7), missing)
+    if (optional.0 != null || optional.2 != null) { return 0 }
+    const seven = optional.1
+    if (seven == null) { return 0 }
+    if ((seven as i64) != 7) { return 0 }
+    const called = add(...saved())
+    return trace * 100000 + called * 100 + (narrow.0 as i64) * 10 + (narrow.1 as i64)
+}

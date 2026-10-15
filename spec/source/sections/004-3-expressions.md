@@ -378,6 +378,7 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 仅在以下位置使用：
 - **函数 rest 参数声明**：`fn f(...args: i64)`
 - **函数调用展开**：`f(...args)`，展开源必须是静态 arity 已知的 tuple。
+- 调用展开按书写顺序单次求值并保存源 tuple，再将字段放入声明的逻辑参数位置；它不是运行期可变参数调用。展开后的总 arity、普通泛型推导、期望类型转换及尾部默认参数都由原调用声明检查，默认参数在所有显式实参之后执行。空 tuple/Unit 展开贡献零个实参但保留求值效果。展开字段是普通 READ 值，不能替代 `ref` 实参或凭存储实现获得借用权限；同一调用中另写的 `ref` 仍须指向真实具名 place，所有实参求值完成后才开始该调用的借用。挂起和错误沿普通调用规则，不重复求值已保存的展开源，也不撤销此前副作用。
 - **tuple 字面量展开**：`(head, ...tail)`，展开源必须是静态 arity 已知的 tuple。
 - tuple 展开在其书写位置单次求值，按源 tuple 的静态字段顺序接入结果；普通元素和每个展开字段仍按其结果位置执行既有上下文类型检查与转换。嵌套的 tuple 字面量展开可以消费外层对应位置的上下文，不能靠运行期值决定字段数。`()` 展开零个字段，但其求值副作用保留；一个普通 `()` 元素仍占一个 Unit 字段。展开后的总字段数须与期望 tuple 精确匹配；零字段结果为 Unit，单字段结果仍是单元素 tuple。值复制、class/同步身份、挂起、错误及失败清理沿普通规则，不发布部分结果或撤销此前副作用；无约束泛型不能凭实例化实参假设自己是 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
@@ -1099,6 +1100,7 @@ for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 Allowed in the following positions only:
 - **Function rest parameter declaration**: `fn f(...args: i64)`
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
+- Evaluate and retain each source tuple once in written order, then place its fields at the declaration's logical parameter positions. This is not runtime varargs. The original call declaration checks expanded total arity, ordinary generic inference, contextual conversions and trailing defaults; defaults execute after every explicit argument. An empty tuple/Unit spread contributes zero arguments while retaining evaluation effects. Expanded fields are ordinary READ values: they cannot replace `ref` arguments or acquire borrowing permission from a storage representation. Separately written `ref` arguments still require authentic named places, and the call's borrow starts after every argument has completed. Suspension and errors follow ordinary call rules without reevaluating retained spreads or rolling back prior effects.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
 - Evaluate a tuple spread once at its written position and append its statically ordered fields. Ordinary entries and expanded fields use the existing contextual type checks and conversions at their result positions. Nested tuple literal spreads may consume the corresponding outer positional context; runtime values never determine arity. Spreading `()` contributes zero fields while retaining its evaluation effects; an ordinary `()` entry still contributes one Unit field. The expanded total arity must exactly match an expected tuple; zero fields produce Unit, while one field remains a unary tuple. Ordinary value copying, class/synchronization identity, suspension, errors and failed cleanup apply without publishing a partial result or rolling back prior effects. An unconstrained generic cannot assume it is a tuple from a later instantiation.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).

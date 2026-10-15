@@ -1,0 +1,5 @@
+fn invalid<T>(value: T) -> i64 {
+    return target(...value)
+}
+fn target(value: i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 { return 0 }

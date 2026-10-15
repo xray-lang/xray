@@ -1,0 +1,5 @@
+fn target(first: ref i64, delta: i64, last: ref i64) -> i64 { return first + delta + last }
+export fn referenceAnswer() -> i64 {
+    var value: i64 = 3
+    return target(ref value, ...(7,), ref value)
+}
