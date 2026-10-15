@@ -1,0 +1,11 @@
+fn copy<T>(items: Array<T>, first: T, last: T) -> Array<T> {
+    return [first, ...items, last]
+}
+export fn referenceAnswer() -> i64 {
+    const empty: Array<string> = []
+    const seed: Array<string> = ["a\0b"]
+    const result = copy<string>([...empty, ...seed], "x", "y")
+    var changed = [...result]
+    changed[1] = "z"
+    return len(result) * 1000 + len(result[1]) * 100 + (result[1] == "a\0b" ? 41 : 0) + len(changed[1])
+}

@@ -21,6 +21,9 @@
 #ifndef XR_LANGUAGE_RUNTIME_CROSSINGS
 #define XR_LANGUAGE_RUNTIME_CROSSINGS 4
 #endif
+#ifndef XR_LANGUAGE_RUNTIME_SUSPENSIONS
+#define XR_LANGUAGE_RUNTIME_SUSPENSIONS 0
+#endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 #include "../xir_instance_compile_observer.h"
@@ -30,8 +33,18 @@ typedef struct PlaceRuntimeCost { size_t sites;XrXirCallStatus status; } PlaceRu
 
 static XrXirCallStatus place_answer(XrXirInstance *instance,uint32_t answer) {
     XrXirCallStatus status=xr_xir_instance_start(instance,answer,NULL,0);
-    while (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+    unsigned resumed=0;
+    while (status==XR_XIR_CALL_READY) {
+        XrXirInstanceResult observed=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+        status=observed.outcome.status;
+        if (status==XR_XIR_CALL_SUSPENDED) {
+            CHECK(resumed++<XR_LANGUAGE_RUNTIME_SUSPENSIONS);
+            status=xr_xir_instance_resume(instance,observed.epoch,observed.outcome.wake);
+            CHECK(status==XR_XIR_CALL_READY);
+        }
+    }
     if (status==XR_XIR_CALL_RETURNED) {
+        CHECK(resumed==XR_LANGUAGE_RUNTIME_SUSPENSIONS);
         XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==status);
         CHECK(value.type==XR_XIR_I64 && value.payload==XR_LANGUAGE_RUNTIME_EXPECTED);xr_xir_value_drop(&value);
     }
@@ -69,29 +82,59 @@ static XrXirInstance *place_open(XrXirProgram *program) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);return instance;
 }
+static void place_cancel_step(XrXirInstance *instance,XrXirInstanceResult *observed,unsigned *resumed) {
+    if (observed->outcome.status==XR_XIR_CALL_SUSPENDED) {
+        CHECK((*resumed)++<XR_LANGUAGE_RUNTIME_SUSPENSIONS);
+        CHECK(xr_xir_instance_resume(instance,observed->epoch,observed->outcome.wake)==XR_XIR_CALL_READY);
+    } else CHECK(observed->outcome.status==XR_XIR_CALL_READY);
+    *observed=xr_xir_instance_poll_bounded(instance,1);
+}
 static void place_cancel(XrXirProgram *program,uint32_t answer,unsigned mode) {
     size_t blocks=runtime_live,bytes=runtime_bytes,compiler_blocks=instance_compile_live,compiler_bytes=instance_compile_bytes;
     XrXirInstance *first=place_open(program);CHECK(xr_xir_instance_start(first,answer,NULL,0)==XR_XIR_CALL_READY);
-    size_t ticks=0;XrXirCallStatus status=XR_XIR_CALL_READY;
-    while (status==XR_XIR_CALL_READY) { CHECK(++ticks<4096);status=xr_xir_instance_poll_bounded(first,1).outcome.status; }
-    CHECK(status==XR_XIR_CALL_RETURNED);XrXirValue result={0};
+    size_t ticks=0;unsigned resumed=0;
+    XrXirInstanceResult observed={0};observed.outcome.status=XR_XIR_CALL_READY;
+    while (observed.outcome.status==XR_XIR_CALL_READY || observed.outcome.status==XR_XIR_CALL_SUSPENDED) {
+        CHECK(++ticks<4096);place_cancel_step(first,&observed,&resumed);
+    }
+    CHECK(observed.outcome.status==XR_XIR_CALL_RETURNED && resumed==XR_LANGUAGE_RUNTIME_SUSPENSIONS);
+    XrXirValue result={0};
     CHECK(xr_xir_instance_take_result(first,&result)==XR_XIR_CALL_RETURNED && result.type==XR_XIR_I64 && result.payload==XR_LANGUAGE_RUNTIME_EXPECTED);
     xr_xir_value_drop(&result);CHECK(xr_xir_instance_free(first)==XR_XIR_CALL_READY);
+    size_t initialization=0,retries=0,suspended=0;
     for (size_t prefix=0;prefix<ticks;++prefix) {
         first=place_open(program);XrXirInstance *second=place_open(program);
         CHECK(xr_xir_instance_start(first,answer,NULL,0)==XR_XIR_CALL_READY);
-        for (size_t i=0;i<prefix;++i) CHECK(xr_xir_instance_poll_bounded(first,1).outcome.status==XR_XIR_CALL_READY);
+        observed=(XrXirInstanceResult){0};observed.outcome.status=XR_XIR_CALL_READY;resumed=0;
+        for (size_t i=0;i<prefix;++i) {
+            place_cancel_step(first,&observed,&resumed);
+            CHECK(observed.outcome.status==XR_XIR_CALL_READY || observed.outcome.status==XR_XIR_CALL_SUSPENDED);
+        }
+        bool initializing=xr_xir_instance_state(first)==XR_XIR_INSTANCE_INITIALIZING;
+        CHECK(initializing || xr_xir_instance_state(first)==XR_XIR_INSTANCE_READY);
+        suspended+=observed.outcome.status==XR_XIR_CALL_SUSPENDED;
         runtime_attempts=0;CHECK(xr_xir_instance_cancel_current(first)==XR_XIR_CALL_CANCEL_REQUESTED);
         CHECK(xr_xir_instance_poll_bounded(first,UINT64_MAX).outcome.status==XR_XIR_CALL_CANCELLED && !runtime_attempts);
         XrXirValue empty={0};result=empty;
         CHECK(xr_xir_instance_take_result(first,&result)==XR_XIR_CALL_BAD_STATE && !memcmp(&result,&empty,sizeof(result)));
-        CHECK(place_answer(second,answer)==XR_XIR_CALL_RETURNED && place_answer(first,answer)==XR_XIR_CALL_RETURNED);
+        CHECK(place_answer(second,answer)==XR_XIR_CALL_RETURNED);
+        if (initializing) {
+            ++initialization;CHECK(xr_xir_instance_state(first)==XR_XIR_INSTANCE_FAILED);
+            XrXirCallResult failure={0};runtime_attempts=0;
+            CHECK(xr_xir_instance_copy_failure(first,&failure)==XR_XIR_CALL_CANCELLED);
+            CHECK(failure.status==XR_XIR_CALL_CANCELLED);xr_xir_call_result_drop(&failure);
+            CHECK(place_answer(first,answer)==XR_XIR_CALL_CANCELLED && !runtime_attempts);
+        } else {
+            ++retries;CHECK(xr_xir_instance_state(first)==XR_XIR_INSTANCE_READY);
+            CHECK(place_answer(first,answer)==XR_XIR_CALL_RETURNED);
+        }
         CHECK(xr_xir_instance_free(first)==XR_XIR_CALL_READY && xr_xir_instance_free(second)==XR_XIR_CALL_READY);
         CHECK(runtime_live==blocks && runtime_bytes==bytes);
         CHECK(instance_compile_live==compiler_blocks && instance_compile_bytes==compiler_bytes);
     }
-    printf("INIT_PLACES_CANCEL mode=%u prefixes=%zu cancel_allocations=0 same_instance_retry=%lld dual_physical_baselines=1\n",
-        mode,ticks,(long long)XR_LANGUAGE_RUNTIME_EXPECTED);
+    CHECK(initialization && retries && initialization+retries==ticks && suspended==XR_LANGUAGE_RUNTIME_SUSPENSIONS);
+    printf("INIT_PLACES_CANCEL mode=%u prefixes=%zu init_sticky=%zu ready_retry=%zu suspended=%zu cancel_allocations=0 same_instance_retry=%lld dual_physical_baselines=1\n",
+        mode,ticks,initialization,retries,suspended,(long long)XR_LANGUAGE_RUNTIME_EXPECTED);
 }
 static void place_axis_limit(XrXirInstanceConfig *config,unsigned axis,uint64_t cap) {
     switch(axis) {

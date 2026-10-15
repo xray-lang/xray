@@ -1,0 +1,4 @@
+fn unused<T>(source: T) -> Array<i64> {
+    return [...source]
+}
+export fn referenceAnswer() -> i64 { return 1 }

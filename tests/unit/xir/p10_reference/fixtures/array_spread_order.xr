@@ -1,0 +1,24 @@
+var trace: i64 = 0
+var source: Array<i64> = [3, 7]
+fn saved() -> Array<i64> {
+    trace = trace * 10 + 1
+    return source
+}
+fn replace() -> i64 {
+    trace = trace * 10 + 2
+    source[0] = 11
+    source.push(13)
+    return 17
+}
+fn tail() -> Array<i64> {
+    trace = trace * 10 + 3
+    return [19, 23]
+}
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3, 7]
+    const result = [...saved(), replace(), ...tail()]
+    var copied = result
+    copied[0] = 29
+    return trace * 100000000 + result[0] * 1000000 + result[1] * 10000 + result[2] * 100 + result[3] + result[4] + copied[0] + source[0] + len(source) * 1000
+}
