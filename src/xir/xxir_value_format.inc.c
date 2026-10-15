@@ -23,7 +23,6 @@ typedef struct FormatStorage {
 
 static bool format_storage_resolve(const XrXirTypeArena *arena,
     XrValueFormatNode node, FormatStorage *out) {
-    if (!arena) return false;
     *out = (FormatStorage){0};
     for (uint32_t hop = 0; hop < XR_XIR_CONSTRUCTED_TYPE_LIMIT; ++hop) {
         if (node.owner) arena = node.owner;
@@ -32,6 +31,7 @@ static bool format_storage_resolve(const XrXirTypeArena *arena,
             if (!xr_xir_value_valid(value)) return false;
             out->leaf = *value;
             const XrXirTypeArena *owner = xr_xir_value_arena(value);
+            if (owner && !arena) return false;
             if (owner) arena = owner;
             const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
             bool some = false; const XrXirValue *payload = NULL;
@@ -42,6 +42,7 @@ static bool format_storage_resolve(const XrXirTypeArena *arena,
             }
             out->node = node; out->arena = arena; return true;
         }
+        if (!arena) return false;
         const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
         XrXirType type = (XrXirType)node.type;
         XrXirLayout physical = {0};

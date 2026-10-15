@@ -118,8 +118,20 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     } else if (*inlined) {
         const XirArray *array = (const XirArray *)frame->boxed.object;
         *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
-    } else if (*tuple_field) *value=((XirTuple *)frame->boxed.object)->fields[index];
-    else *value = ((XirNominalValue *)frame->boxed.object)->fields[index];
+    } else {
+        const XirObject *object=frame->boxed.object;
+        const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
+        const XrXirTypeNode *node=xr_xir_type_node(types,object->type);
+        if (*tuple_field) {
+            *value=((XirTuple *)object)->fields[index];span->type=node->parameters[index].type;
+        } else {
+            const XirNominalValue *record=(const XirNominalValue *)object;
+            *value=record->fields[index];
+            uint32_t begin=node->kind==XR_XIR_TYPE_NOMINAL && xr_xir_type_is_enum(types,object->type) ?
+                types->nominals->identities[node->nominal.declaration].variants[record->variant].field_begin : 0;
+            span->type=node->kind==XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[begin+index];
+        }
+    }
 }
 static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     StorageSpan span,const XrXirTypeArena *arena,XrXirValueAdmission *admission) {
@@ -248,7 +260,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
         if (!stack.depth) break;
         arena=admission_frame_arena(&stack.frames[stack.depth-1]);
         admission_child(&stack.frames[stack.depth - 1], arena, &current, &span, &inlined, &tuple_field);
-        type = inlined ? span.type : (XrXirType)current.type;
+        type = span.type;
     }
     if (stack.frames) {
         if (stack.frames != &stack.first)
