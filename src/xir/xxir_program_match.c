@@ -14,6 +14,7 @@
 #include "xxir_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_operand_roles.h"
+#include "xxir_value_place.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_contract_internal.h"
@@ -226,7 +227,12 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
             permissions->parameter_offsets, permissions->cell_roles, NULL);
     uint32_t reference_at = 0, root_parameter_at = 0;
     for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
-        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
+        if (!xir_compile_work(context, 8)) { status = XR_XIR_BUDGET; break; }
+        const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(lowered,f);
+        if (!layout) {status=XR_XIR_BAD_LAYOUT;break;}
+        uint64_t frame=layout->frame_bytes+(uint64_t)layout->outgoing_count*sizeof(XrXirValue)+
+            (uint64_t)layout->path_count*sizeof(XrXirValuePathStep);
+        if (frame>permissions->frame_bytes) permissions->frame_bytes=frame;
         const XrXirRootEffects *root = xr_xir_effects_root(effects, f);
         if (!root) { status = XR_XIR_BAD_STRUCTURE; break; }
         permissions->entries[f].requires_root = root->requires_root;
