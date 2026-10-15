@@ -58,17 +58,18 @@ XR_FUNC XrXirValueStatus xdap_value_shape(const XdapValueView *view,XdapValueSha
     *output=shape;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t index,
-    XrXirValue *output,const char **name,size_t *length) {
-    if (!view || !output || output->type || output->reserved || output->payload || !name || !length) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue *output,XdapValueChildInfo *info) {
+    if (!view || !output || output->type || output->reserved || output->payload || !info) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirValue *value=view->value;XrXirDomain *domain=view->domain;
     XdapValueShape shape={0};XrXirValueStatus status=xdap_value_shape(view,&shape);
     if (status!=XR_XIR_VALUE_OK) return status;
     if (index>=shape.children || index>UINT32_MAX) return XR_XIR_VALUE_BOUNDS;
     const XrXirTypes *types=xr_xir_compile_type_arena_types(xr_xir_value_arena(value));
-    const char *label=NULL;size_t bytes=0;
+    XdapValueChildInfo child={0};
     if (xr_xir_type_is_array(types,(XrXirType)value->type)) {
         XrXirValueAdmission admission=value_admission(value,domain);XrXirFaultDetail fault={0};
         status=xr_xir_array_get(value,(int64_t)index,&admission,output,&fault);
+        child.selector=(XrXirValuePathStep){XR_XIR_PATH_INDEX,(XrXirType)value->type,(int64_t)index};child.selected=true;
     } else if (xr_xir_tuple_signature(types,(XrXirType)value->type)) status=xr_xir_tuple_get(value,(uint32_t)index,output);
     else if (value_nominal(value,types)) {
         const XrXirNominalIdentity *identity=value_nominal(value,types);uint64_t ordinal=0;uint32_t field=UINT32_MAX;
@@ -83,15 +84,16 @@ XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t ind
         XrXirValueAdmission admission=value_admission(value,domain);
         status=xr_xir_type_is_class(types,(XrXirType)value->type) ? xr_xir_class_get(value,field,&admission,output) :
             xr_xir_struct_get(value,field,&admission,output);
-        label=identity->fields[field].name.bytes;bytes=identity->fields[field].name.length;
+        child.name=identity->fields[field].name.bytes;child.name_length=identity->fields[field].name.length;
+        child.selector=(XrXirValuePathStep){XR_XIR_PATH_FIELD,(XrXirType)value->type,field};child.selected=true;
     } else if (xr_xir_type_is_nullable(types,(XrXirType)value->type)) {
         bool some=false;const XrXirValue *payload=NULL;
         if (!xr_xir_nullable_view(value,&some,&payload) || !some) return XR_XIR_VALUE_BAD_ARGUMENT;
-        status=xr_xir_value_copy(payload,output);label="value";bytes=5;
+        status=xr_xir_value_copy(payload,output);child.name="value";child.name_length=5;
     } else {
         XrXirEnumBorrow borrow={0};status=xr_xir_enum_borrow(value,&borrow);
         if (status==XR_XIR_VALUE_OK) status=xr_xir_value_copy(&borrow.fields[index],output);
     }
-    if (status==XR_XIR_VALUE_OK) { *name=label;*length=bytes; }
+    if (status==XR_XIR_VALUE_OK) *info=child;
     return status;
 }

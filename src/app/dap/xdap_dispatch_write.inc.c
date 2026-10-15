@@ -21,8 +21,9 @@ static XrXirStatus inspect_write_binding(const XdapLexicalView *lexical,const Xd
     }
     return XR_XIR_UNRESOLVED;
 }
-static XrXirStatus inspect_write_body(XdapAdapter *s,const XrXirValue *value,uint32_t frame,uint32_t *reference,XdapJsonWriter *body) {
-    XdapValueShape shape={0};body->status=inspect_reference(s,value,frame,reference,&shape);
+#include "xdap_dispatch_write_target.inc.c"
+static XrXirStatus inspect_write_body(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapCellOrigin *origin,uint32_t *reference,XdapJsonWriter *body) {
+    XdapValueShape shape={0};body->status=inspect_reference(s,value,frame,origin,reference,&shape);
     XDAP_TEXT(body,"{\"value\":");if (!inspect_value(body,value) && body->status==XR_XIR_OK) body->status=XR_XIR_BAD_STRUCTURE;
     if (s->variable_types && body->status==XR_XIR_OK) {
         XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XdapTypeText type={0};
@@ -36,28 +37,34 @@ static XrXirStatus inspect_write_body(XdapAdapter *s,const XrXirValue *value,uin
     }
     XDAP_TEXT(body,"}");return body->status;
 }
-static void inspect_write_retire_values(XdapAdapter *s,uint32_t reference) {
+static void inspect_write_retire_values(XdapAdapter *s,uint32_t reference,uint64_t epoch) {
     XdapValueRef kept={0};
     for (uint32_t i=0;i<s->value_count;++i) {
-        if (s->values[i].handle==reference) { kept=s->values[i];s->values[i].value=(XrXirValue){0}; }
-        xr_xir_value_drop(&s->values[i].value);
+        if (s->values[i].handle==reference) { kept=s->values[i];s->values[i]=(XdapValueRef){0}; }
+        xdap_value_ref_drop(&s->values[i]);
     }
-    memset(s->values,0,sizeof(s->values));s->value_count=kept.handle ? 1 : 0;if (kept.handle) s->values[0]=kept;
+    memset(s->values,0,sizeof(s->values));s->value_count=kept.handle ? 1 : 0;
+    if (kept.handle) { if (kept.origin.epoch) kept.origin.epoch=epoch;s->values[0]=kept; }
 }
 static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     uint64_t scope=0;uint32_t name=0,text=0;XrXirStatus status=xdap_dispatch_number(r,"variablesReference",0,&scope);
     if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"name",&name);
     if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"value",&text);
     if (status!=XR_XIR_OK) return status;
-    uint32_t frame=inspect_frame(s,scope,true);
+    uint32_t frame=inspect_frame(s,scope,true);const XdapValueRef *parent=NULL;
+    if (frame==UINT32_MAX) for (uint32_t i=0;i<s->value_count;++i) if (s->values[i].handle==scope) { parent=&s->values[i];frame=parent->frame;break; }
     if (!s->snapshot || s->running || frame>=s->depth || !name || !text || r->document.nodes[name].kind!=XDAP_JSON_STRING ||
         r->document.nodes[text].kind!=XDAP_JSON_STRING || !r->document.nodes[name].length || !r->document.nodes[text].length)
-        return xdap_dispatch_response(s,r,false,NULL,"A current lexical scope, writable name and complete value expression are required");
-    XdapLexicalView lexical={0};status=xdap_lexical_open(s->launch,s->snapshot,frame,&lexical);uint32_t operand=0;
-    if (status==XR_XIR_OK) status=inspect_write_binding(&lexical,&r->document.nodes[name],&operand);
-    XrXirVmDebugFrameInfo info={0};XrXirValue function_name={0},value={0};
-    if (status==XR_XIR_OK) status=inspect_write_status(xr_xir_vm_debug_snapshot_frame(s->snapshot,frame,&info,&function_name));
-    xr_xir_value_drop(&function_name);
+        return xdap_dispatch_response(s,r,false,NULL,"A current Cell scope or child reference, writable name and complete value expression are required");
+    if (s->stop_epoch==UINT64_MAX) return XR_XIR_BUDGET;
+    XdapLexicalView lexical={0};status=xdap_lexical_open(s->launch,s->snapshot,frame,&lexical);
+    XrXirValuePathStep steps[128];XdapCellOrigin target={0};XrXirValue value={0};
+    if (status==XR_XIR_OK && parent) status=inspect_write_child(s,parent,&r->document.nodes[name],steps,&target);
+    else if (status==XR_XIR_OK) {
+        uint32_t operand=0;status=inspect_write_binding(&lexical,&r->document.nodes[name],&operand);
+        if (status==XR_XIR_OK) target=(XdapCellOrigin){lexical.epoch,lexical.frame_id,operand,{0}};
+    }
+    if (status==XR_XIR_OK && (target.epoch!=s->stop_epoch || target.frame!=lexical.frame_id)) status=XR_XIR_BAD_TYPE;
     if (status==XR_XIR_OK) {
         const XdapJsonNode *expression=&r->document.nodes[text];
         XdapExpressionRequest request={s->compiler,&lexical,expression->text,expression->length,s->config.message_limit};
@@ -69,11 +76,12 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     }
     uint32_t before=s->value_count,next=s->next_handle,reference=0;bool applied=false,armed=false;
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit),success={0},failure={0};
-    status=inspect_write_body(s,&value,frame,&reference,&body);
+    XdapCellOrigin returned=target;returned.epoch=s->stop_epoch+1;
+    status=inspect_write_body(s,&value,frame,&returned,&reference,&body);
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,true,&body,NULL,&success);
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,false,NULL,"The paused write was not admitted",&failure);
     if (status==XR_XIR_OK) {
-        XrXirValuePath path={0};XrXirValueStatus begun=xdap_current_write_begin(s->launch->control,s->stop_epoch,info.id,operand,&path,&value);
+        XrXirValueStatus begun=xdap_current_write_begin(s->launch->control,s->stop_epoch,target.frame,target.operand,&target.path,&value);
         armed=begun==XR_XIR_VALUE_OK;status=inspect_write_status(begun);
     }
     if (armed) {
@@ -82,7 +90,7 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
         XrXirValueStatus written=xdap_current_write_finish(s->launch->control,&visited,&fresh);
         applied=written==XR_XIR_VALUE_OK && fresh!=NULL;
         if (applied) {
-            uint64_t epoch=xdap_current_stopped_epoch(s->launch->control);inspect_write_retire_values(s,reference);
+            uint64_t epoch=xdap_current_stopped_epoch(s->launch->control);inspect_write_retire_values(s,reference,epoch);
             xr_xir_vm_debug_snapshot_drop(s->snapshot);s->snapshot=fresh;s->stop_epoch=epoch;
             status=xdap_dispatch_send_staged(s,&success);
         } else {

@@ -67,9 +67,10 @@ static void cow_array(const XdapValueView *view,int64_t middle) {
     XdapValueShape shape={0};CHECK(xdap_value_shape(view,&shape)==XR_XIR_VALUE_OK && shape.indexed && shape.children==3);
     const int64_t expected[]={10,middle,30};
     for (uint32_t i=0;i<3;++i) {
-        XrXirValue value={0};const char *name=NULL;size_t length=0;
-        CHECK(xdap_value_child(view,i,&value,&name,&length)==XR_XIR_VALUE_OK);
-        CHECK(value.type==XR_XIR_I64 && value.payload==expected[i] && !name && !length);xr_xir_value_drop(&value);
+        XrXirValue value={0};XdapValueChildInfo info={0};
+        CHECK(xdap_value_child(view,i,&value,&info)==XR_XIR_VALUE_OK);
+        CHECK(value.type==XR_XIR_I64 && value.payload==expected[i] && !info.name && !info.name_length);
+        CHECK(info.selected && info.selector.kind==XR_XIR_PATH_INDEX && info.selector.selector==(int64_t)i);xr_xir_value_drop(&value);
     }
 }
 static uint32_t cow_values(CowFixture *fixture,XrXirVmDebugSnapshot *snapshot,XrXirValue arrays[2],XrXirValue *text) {

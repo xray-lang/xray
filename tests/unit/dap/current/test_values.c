@@ -21,16 +21,16 @@ static void values_faults(XdapAdapter *adapter,uint64_t handle) {
         XrXirDomainBudgetStats before=xr_xir_domain_budget_stats(domain);
         XrXirDomainStats value_before=xr_xir_domain_stats(domain);
         size_t begin=runtime_attempts;runtime_fail_at=point ? begin+point-1 : SIZE_MAX;
-        XrXirValue child={0};const char *name=(const char *)(uintptr_t)1;size_t length=777;
-        XrXirValueStatus status=xdap_value_child(&view,0,&child,&name,&length);
+        XrXirValue child={0};XdapValueChildInfo info={.name=(const char *)(uintptr_t)1,.name_length=777};
+        XrXirValueStatus status=xdap_value_child(&view,0,&child,&info);
         size_t count=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
         if (!point) { CHECK(status==XR_XIR_VALUE_OK);sites=count;CHECK(sites); }
         else {
             CHECK(status==XR_XIR_VALUE_OOM && count>=point && !child.type && !child.payload);
-            CHECK(name==(const char *)(uintptr_t)1 && length==777);
+            CHECK(info.name==(const char *)(uintptr_t)1 && info.name_length==777 && !info.selected);
             XrXirDomainBudgetStats failed=xr_xir_domain_budget_stats(domain);
             CHECK(failed.metadata_live==before.metadata_live && xr_xir_domain_stats(domain).live_bytes==value_before.live_bytes);
-            CHECK(xdap_value_child(&view,0,&child,&name,&length)==XR_XIR_VALUE_OK);
+            CHECK(xdap_value_child(&view,0,&child,&info)==XR_XIR_VALUE_OK);
         }
         xr_xir_value_drop(&child);XrXirDomainBudgetStats after=xr_xir_domain_budget_stats(domain);
         CHECK(after.metadata_live==before.metadata_live && xr_xir_domain_stats(domain).live_bytes==value_before.live_bytes);

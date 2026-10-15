@@ -81,8 +81,11 @@ XR_FUNC XrXirStatus xdap_dispatch_number(const XdapRequest *r,const char *key,ui
     if (!index) { *output=fallback;return XR_XIR_OK; }
     return xdap_json_u64(&r->document,index,output);
 }
+XR_FUNC void xdap_value_ref_drop(XdapValueRef *ref) {
+    if (!ref) return;xr_xir_value_drop(&ref->value);xr_compile_resources_free((void *)ref->origin.path.steps);*ref=(XdapValueRef){0};
+}
 XR_FUNC void xdap_dispatch_clear_stop(XdapAdapter *s) {
-    for (uint32_t i=0;i<s->value_count;++i) xr_xir_value_drop(&s->values[i].value);
+    for (uint32_t i=0;i<s->value_count;++i) xdap_value_ref_drop(&s->values[i]);
     memset(s->values,0,sizeof(s->values));s->value_count=0;
     xr_xir_vm_debug_snapshot_drop(s->snapshot);s->snapshot=NULL;s->depth=0;s->stop_epoch=0;
     memset(s->frames,0,sizeof(s->frames));

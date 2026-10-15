@@ -15,6 +15,7 @@ typedef struct XdapLexicalView {
     const XrXirSourceView *source;
     const XrXirVmDebugSnapshot *snapshot;
     uint32_t frame,environment;
+    uint64_t frame_id,epoch;
 } XdapLexicalView;
 /* The view borrows its launch and snapshot. Source facts select a value ordinal;
  * only the owned snapshot can admit a read. Failure preserves the output. */

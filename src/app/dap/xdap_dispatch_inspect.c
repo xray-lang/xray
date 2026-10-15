@@ -124,22 +124,30 @@ static bool inspect_value(XdapJsonWriter *body,const XrXirValue *value) {
     /* An owned handle is observed as opaque until its typed child projection is admitted. */
     return xdap_json_quote(body,"<owned value>",13);
 }
-static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t frame,uint32_t *handle,XdapValueShape *shape) {
+#include "xdap_dispatch_origin.inc.c"
+static XrXirStatus inspect_reference(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapCellOrigin *origin,uint32_t *handle,XdapValueShape *shape) {
     XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XrXirValueStatus status=xdap_value_shape(&view,shape);
     if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
     *handle=0;if (!shape->children) return XR_XIR_OK;
+    uint32_t depth=origin ? origin->path.count : 0;
+    if (depth>128 || xr_compile_resources_work(s->resources,(uint64_t)s->value_count*(depth+1))!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     for (uint32_t i=0;i<s->value_count;++i) {
         const XdapValueRef *ref=&s->values[i];
-        if (ref->frame==frame && ref->value.type==value->type && ref->value.payload==value->payload) { *handle=ref->handle;return XR_XIR_OK; }
+        if (ref->frame==frame && ref->value.type==value->type && ref->value.payload==value->payload && inspect_origin_equal(&ref->origin,origin)) {
+            *handle=ref->handle;return XR_XIR_OK;
+        }
     }
     if (s->value_count==128 || s->next_handle==INT32_MAX) return XR_XIR_BUDGET;
-    XdapValueRef *ref=&s->values[s->value_count];status=xr_xir_value_copy(value,&ref->value);
+    XdapValueRef candidate={0};status=xr_xir_value_copy(value,&candidate.value);
     if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
-    ref->handle=s->next_handle++;ref->frame=frame;ref->shape=*shape;++s->value_count;*handle=ref->handle;return XR_XIR_OK;
+    XrXirStatus copied=inspect_origin_copy(s,origin,&candidate.origin);
+    if (copied!=XR_XIR_OK) { xdap_value_ref_drop(&candidate);return copied; }
+    candidate.handle=s->next_handle++;candidate.frame=frame;candidate.shape=*shape;
+    s->values[s->value_count++]=candidate;*handle=candidate.handle;return XR_XIR_OK;
 }
-static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value,uint32_t frame) {
-    uint32_t handle=0;XdapValueShape shape={0};XrXirStatus status=inspect_reference(s,value,frame,&handle,&shape);
+static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *name,size_t length,const XrXirValue *value,uint32_t frame,const XdapCellOrigin *origin) {
+    uint32_t handle=0;XdapValueShape shape={0};XrXirStatus status=inspect_reference(s,value,frame,origin,&handle,&shape);
     if (status!=XR_XIR_OK) { body->status=status;return false; }
     XDAP_TEXT(body,"{\"name\":");xdap_json_quote(body,name,length);XDAP_TEXT(body,",\"value\":");
     if (!inspect_value(body,value) && body->status==XR_XIR_OK) body->status=XR_XIR_BAD_STRUCTURE;
@@ -157,7 +165,7 @@ static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *nam
 }
 static void inspect_rollback_values(XdapAdapter *s,uint32_t before) {
     while (s->value_count>before) {
-        XdapValueRef *ref=&s->values[--s->value_count];xr_xir_value_drop(&ref->value);*ref=(XdapValueRef){0};
+        xdap_value_ref_drop(&s->values[--s->value_count]);
     }
 }
 static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const XdapValueRef *ref,uint64_t start,uint64_t count) {
@@ -167,9 +175,9 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
     if (count && available>count) available=count;
     if (available>256) { xdap_json_writer_free(&body);return xdap_dispatch_response(s,r,false,NULL,"Request a bounded child page"); }
     for (uint64_t i=0;i<available;++i) {
-        XrXirValue value={0};const char *name=NULL;size_t length=0;
+        XrXirValue value={0};XdapValueChildInfo child={0};
         XdapValueView view={&ref->value,s->config.observer_metadata,s->snapshot,ref->frame};
-        XrXirValueStatus status=xdap_value_child(&view,start+i,&value,&name,&length);
+        XrXirValueStatus status=xdap_value_child(&view,start+i,&value,&child);
         if (status!=XR_XIR_VALUE_OK) {
             if (status==XR_XIR_VALUE_BAD_ARGUMENT || status==XR_XIR_VALUE_UNSUPPORTED || status==XR_XIR_VALUE_BOUNDS) {
                 xdap_json_writer_free(&body);inspect_rollback_values(s,before);
@@ -177,8 +185,11 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
             }
             body.status=status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;break;
         }
-        char index[32];if (!name) { int bytes=snprintf(index,sizeof(index),"[%llu]",(unsigned long long)(start+i));name=index;length=(size_t)bytes; }
-        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,name,length,&value,ref->frame);xr_xir_value_drop(&value);
+        XrXirValuePathStep steps[128];XdapCellOrigin origin={0};
+        body.status=inspect_origin_child(s,ref,&child,steps,&origin);
+        if (body.status!=XR_XIR_OK) { xr_xir_value_drop(&value);break; }
+        char index[32];if (!child.name) { int bytes=snprintf(index,sizeof(index),"[%llu]",(unsigned long long)(start+i));child.name=index;child.name_length=(size_t)bytes; }
+        if (shown++) XDAP_TEXT(&body,",");bool emitted=inspect_variable(s,&body,child.name,child.name_length,&value,ref->frame,&origin);xr_xir_value_drop(&value);
         if (!emitted) break;
     }
     XDAP_TEXT(&body,"]}");XrXirStatus status=inspect_finish(s,r,&body);
@@ -319,7 +330,7 @@ static XrXirStatus inspect_evaluate(XdapAdapter *s,const XdapRequest *r) {
         return xdap_dispatch_response(s,r,false,NULL,"Expression is not admitted in the selected stopped frame");
     }
     uint32_t before=s->value_count,reference=0;XdapValueShape shape={0};
-    status=inspect_reference(s,&value,frame,&reference,&shape);
+    status=inspect_reference(s,&value,frame,NULL,&reference,&shape);
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);body.status=status;
     XDAP_TEXT(&body,"{\"result\":");
     if (!inspect_value(&body,&value) && body.status==XR_XIR_OK) body.status=XR_XIR_BAD_STRUCTURE;

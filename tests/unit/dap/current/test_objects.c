@@ -105,7 +105,7 @@ static void objects_children_fi(XdapAdapter *adapter,uint64_t handle) {
         CHECK(adapter->snapshot==snapshot && adapter->stop_epoch==epoch);
         XrJsonValue *reply=last_response("variables",true);CHECK(xjson_array_len(xjson_get_array(xjson_get_object(reply,"body"),"variables"))==5);xjson_free(reply);
         while (adapter->value_count>before_refs) {
-            XdapValueRef *ref=&adapter->values[--adapter->value_count];xr_xir_value_drop(&ref->value);*ref=(XdapValueRef){0};
+            xdap_value_ref_drop(&adapter->values[--adapter->value_count]);
         }
         CHECK(xr_xir_domain_budget_stats(adapter->config.observer_metadata).metadata_live==metadata.metadata_live);
         CHECK(xr_xir_domain_stats(adapter->config.observer_metadata).live_bytes==values.live_bytes);
@@ -157,10 +157,14 @@ int main(int argc,char **argv) {
     request(adapter,"{\"seq\":20,\"type\":\"request\",\"command\":\"continue\",\"arguments\":{\"threadId\":1}}");CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && event_count("terminated")==1);
     CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);adapter=NULL;
     CHECK(xr_xir_vm_debug_snapshot_member(snapshot,1,&escaped,1,&allowed)==XR_XIR_VALUE_OK && allowed);
-    XdapValueView view={&escaped,domain,snapshot,1};XrXirValue secret={0};const char *name=NULL;size_t length=0;
+    XdapValueView view={&escaped,domain,snapshot,1};XrXirValue secret={0};XdapValueChildInfo info={0};
     XdapTypeText type={0};CHECK(xdap_value_type_text(&view,&type)==XR_XIR_VALUE_OK && type.length==5 && !memcmp(type.bytes,"Vault",5));
-    CHECK(xdap_value_child(&view,1,&secret,&name,&length)==XR_XIR_VALUE_OK && length==6 && !memcmp(name,"secret",6));
-    CHECK(secret.type==XR_XIR_I64 && secret.payload==22);xr_xir_value_drop(&secret);xr_xir_value_drop(&escaped);xr_xir_vm_debug_snapshot_drop(snapshot);
+    CHECK(xdap_value_child(&view,1,&secret,&info)==XR_XIR_VALUE_OK && info.name_length==6 && !memcmp(info.name,"secret",6));
+    CHECK(info.selected && info.selector.kind==XR_XIR_PATH_FIELD && info.selector.selector==1);
+    CHECK(secret.type==XR_XIR_I64 && secret.payload==22);xr_xir_value_drop(&secret);view.frame=0;
+    CHECK(xdap_value_child(&view,1,&secret,&info)==XR_XIR_VALUE_OK && info.name_length==6 && !memcmp(info.name,"nested",6));
+    CHECK(info.selected && info.selector.selector==3);xr_xir_value_drop(&secret);
+    xr_xir_value_drop(&escaped);xr_xir_vm_debug_snapshot_drop(snapshot);
     CHECK(!xr_xir_domain_budget_stats(domain).metadata_live);xr_xir_domain_drop(domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(ledger,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==baseline.live_bytes);
     xr_compile_resources_release(ledger);CHECK(!runtime_live && !runtime_bytes);

@@ -12,7 +12,9 @@
 #include "../../xir/xxir_output.h"
 #include "xdap_value.h"
 typedef struct XdapStopFrame { uint32_t handle, scope; } XdapStopFrame;
-typedef struct XdapValueRef { uint32_t handle,frame;XrXirValue value;XdapValueShape shape; } XdapValueRef;
+/* Source Cell provenance is a selector fact, never a cached Call permission. */
+typedef struct XdapCellOrigin { uint64_t epoch,frame;uint32_t operand;XrXirValuePath path; } XdapCellOrigin;
+typedef struct XdapValueRef { uint32_t handle,frame;XrXirValue value;XdapValueShape shape;XdapCellOrigin origin; } XdapValueRef;
 typedef struct XdapBreakpointPredicate {
     char *condition,*log;
     size_t condition_length,log_length;
@@ -76,6 +78,7 @@ XR_FUNC XrXirStatus xdap_dispatch_number(const XdapRequest *,const char *,uint64
 XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *,const XdapRequest *,const char *);
 XR_FUNC XrXirStatus xdap_dispatch_exception(XdapAdapter *,const XdapRequest *,bool configure);
 XR_FUNC void xdap_dispatch_clear_stop(XdapAdapter *);
+XR_FUNC void xdap_value_ref_drop(XdapValueRef *);
 XR_FUNC XrXirStatus xdap_breakpoints_collect(const XdapLaunch *,const XdapBreakpointSet *,XrXirVmDebugRule *,uint32_t *);
 XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *,const XdapRequest *);
 XR_FUNC XrXirStatus xdap_dispatch_function_breakpoints(XdapAdapter *,const XdapRequest *);

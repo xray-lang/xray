@@ -22,7 +22,7 @@ XR_FUNC XrXirStatus xdap_lexical_open(const XdapLaunch *launch,const XrXirVmDebu
     if (info.instruction==UINT32_MAX) return XR_XIR_UNRESOLVED;
     if (!function->points || info.instruction>=function->instruction_count ||
         function->points[info.instruction].environment>function->binding_count) return XR_XIR_BAD_STRUCTURE;
-    *output=(XdapLexicalView){launch,function,source,snapshot,frame,function->points[info.instruction].environment};
+    *output=(XdapLexicalView){launch,function,source,snapshot,frame,function->points[info.instruction].environment,info.id,info.epoch};
     return XR_XIR_OK;
 }
 XR_FUNC XrXirValueStatus xdap_lexical_read(const XdapLexicalView *view,uint32_t id,

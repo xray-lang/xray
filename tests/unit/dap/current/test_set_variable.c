@@ -127,8 +127,9 @@ static void set_managed(void) {
     uint32_t original=set_evaluate(adapter,"values"),replacement=set_evaluate(adapter,"snapshot");CHECK(original && replacement && original!=replacement);
     XrXirValue owned=set_owned(adapter,adapter->snapshot,"values");set_array_page(adapter,original,true,42);
     XrJsonValue *reply=set_request(adapter,adapter->frames[0].scope,"values","snapshot",true);
-    CHECK(xjson_get_int(xjson_get_object(reply,"body"),"variablesReference")==replacement);xjson_free(reply);capture.count=0;
-    CHECK(adapter->value_count==1);set_array_page(adapter,original,false,0);set_array_page(adapter,replacement,true,20);
+    uint32_t written=(uint32_t)xjson_get_int(xjson_get_object(reply,"body"),"variablesReference");CHECK(written && written!=replacement);xjson_free(reply);capture.count=0;
+    CHECK(adapter->value_count==1 && adapter->values[0].origin.epoch==adapter->stop_epoch);
+    set_array_page(adapter,original,false,0);set_array_page(adapter,replacement,false,0);set_array_page(adapter,written,true,20);
     set_resume(adapter);CHECK(event_count("output")==3);set_output(0,"20\n",3);set_output(1,"20\n",3);set_output(2,"owned\0value\n",12);
     CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);XrXirValue element={0};
     XrXirValueAdmission admission={.arena=xr_xir_value_arena(&owned),.domain=fixture.domain,.work=65536,.scratch_bytes=65536};

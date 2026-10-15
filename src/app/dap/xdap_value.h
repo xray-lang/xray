@@ -9,7 +9,16 @@
 #ifndef XDAP_VALUE_H
 #define XDAP_VALUE_H
 #include "../../xir/xxir_vm_debug.h"
+#include "../../xir/xxir_value_place.h"
 typedef struct XdapValueShape { uint64_t children;bool indexed; } XdapValueShape;
+/* A selector describes the observed typed child, including its real nominal
+ * field ordinal after visibility filtering. It grants no write authority. */
+typedef struct XdapValueChildInfo {
+    const char *name;
+    size_t name_length;
+    XrXirValuePathStep selector;
+    bool selected;
+} XdapValueChildInfo;
 typedef struct XdapValueView {
     const XrXirValue *value;
     XrXirDomain *domain;
@@ -22,7 +31,7 @@ typedef struct XdapTypeText { char bytes[XDAP_TYPE_TEXT_BYTES];size_t length; } 
  * returned child owns its value; names borrow only the parent's type arena. */
 XR_FUNC XrXirValueStatus xdap_value_shape(const XdapValueView *,XdapValueShape *);
 XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *,uint64_t,
-    XrXirValue *,const char **name,size_t *name_length);
+    XrXirValue *,XdapValueChildInfo *);
 /* Static display from retained type metadata; failure preserves output. Hidden
  * nominal names are redacted with the authentic frame's TYPE permission. */
 XR_FUNC XrXirValueStatus xdap_value_type_text(const XdapValueView *,XdapTypeText *);
