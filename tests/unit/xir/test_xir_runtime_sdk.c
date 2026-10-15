@@ -274,6 +274,13 @@ static void sdk_locked_files(const XrXirRuntimeSdk *sdk) {
     CHECK(xr_xir_runtime_sdk_file(sdk,"../lib/xray_xir_admission.lib",&missing)==XR_XIR_SDK_UNRESOLVED && !missing);
     CHECK(xr_xir_runtime_sdk_file(sdk,"LIB/xray_xir_admission.lib",&missing)==XR_XIR_SDK_UNRESOLVED && !missing);
 }
+static void sdk_admission_order(const XrXirRuntimeSdk *sdk) {
+    for (uint32_t i=0;i<sdk->manifest.file_count;++i) {
+        const XrXirSdkFile *file=&sdk->manifest.files[i];
+        CHECK(file->handle && file->absolute_path);
+        if (i) CHECK(sdk->manifest.files[i-1].length<=file->length);
+    }
+}
 static void sdk_io_faults(const XrXirRuntimeSdkRequest *original,size_t first,size_t sites,
     size_t live,size_t bytes,DWORD handles) {
     for (size_t i=first;i<sites;++i) {
@@ -302,6 +309,7 @@ static void sdk_actual_faults(const XrXirRuntimeSdkRequest *original) {
     CHECK(xr_xir_runtime_sdk_load(original,&sdk)==XR_XIR_SDK_OK && sdk);
     size_t sites=runtime_attempts,io_sites=sdk_io_attempts;
     XrXirRuntimeSdkFacts facts=*xr_xir_runtime_sdk_facts(sdk);
+    sdk_admission_order(sdk);
     XrCompileResourceStats used=sdk_stats(original->resources);
     CHECK(facts.file_count==sizeof(sdk_recipe_files)/sizeof(sdk_recipe_files[0]));
     CHECK(facts.metadata_bytes==runtime_bytes-bytes && facts.work_used>facts.file_bytes*2);
@@ -340,6 +348,7 @@ static void sdk_io_profile(const XrXirRuntimeSdkRequest *request) {
     CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK && sdk);
     size_t allocations=runtime_attempts,ios=sdk_io_attempts;
     XrXirRuntimeSdkFacts facts=*xr_xir_runtime_sdk_facts(sdk);
+    sdk_admission_order(sdk);
     XrCompileResourceStats used=sdk_stats(request->resources);
     printf("SDK baseline files=%u bytes=%llu allocations=%zu ios=%zu work=%llu allocated=%llu peak=%llu\n",
         facts.file_count,(unsigned long long)facts.file_bytes,allocations,ios,

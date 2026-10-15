@@ -175,8 +175,38 @@ static bool sdk_file_hash(XrXirRuntimeSdk *sdk,XrXirSdkFile *file) {
     if (!sdk_work(sdk,32)) return false;
     return !memcmp(digest,file->digest,32) || sdk_fail(sdk,XR_XIR_SDK_INVALID);
 }
+static bool sdk_file_order_swap(XrXirRuntimeSdk *sdk,uint32_t left,uint32_t right) {
+    if (!sdk_work(sdk,3*sizeof(XrXirSdkFile))) return false;
+    XrXirSdkFile held=sdk->manifest.files[left];
+    sdk->manifest.files[left]=sdk->manifest.files[right];sdk->manifest.files[right]=held;
+    return true;
+}
+static bool sdk_file_order_sift(XrXirRuntimeSdk *sdk,uint32_t root,uint32_t count) {
+    XrXirSdkFile *files=sdk->manifest.files;
+    while (root<count/2) {
+        uint32_t child=root*2+1;
+        if (!sdk_work(sdk,2*sizeof(files[0].length))) return false;
+        if (child+1<count && files[child].length<files[child+1].length) ++child;
+        if (!sdk_work(sdk,2*sizeof(files[0].length))) return false;
+        if (files[root].length>=files[child].length) break;
+        if (!sdk_file_order_swap(sdk,root,child)) return false;
+        root=child;
+    }
+    return true;
+}
+/* File records are private and still own no handles. Source identity has already
+ * been checked. Admit shorter files first so failed requests need not hash
+ * unrelated large archives; every successful request still pins every file. */
+static bool sdk_file_order(XrXirRuntimeSdk *sdk) {
+    uint32_t count=sdk->manifest.file_count;
+    for (uint32_t start=count/2;start;--start)
+        if (!sdk_file_order_sift(sdk,start-1,count)) return false;
+    for (uint32_t end=count;end>1;--end)
+        if (!sdk_file_order_swap(sdk,0,end-1) || !sdk_file_order_sift(sdk,0,end-1)) return false;
+    return true;
+}
 static bool sdk_files_admit(XrXirRuntimeSdk *sdk,const char *root) {
-    if (!sdk_root_admit(sdk,root)) return false;
+    if (!sdk_root_admit(sdk,root) || !sdk_file_order(sdk)) return false;
     for (uint32_t i=0;i<sdk->manifest.file_count;++i) {
         size_t length=0;XrXirSdkFile *file=&sdk->manifest.files[i];
         wchar_t *path=sdk_file_path(sdk,file->path,&length);
