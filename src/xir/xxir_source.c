@@ -10,6 +10,7 @@
  *   Source names are resolved before lowering and never rediscovered at runtime.
  */
 #include "xxir_source.h"
+#include "xxir_source_corpus.h"
 #include "xxir_ctfe.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
