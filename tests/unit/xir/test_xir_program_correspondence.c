@@ -75,7 +75,7 @@ static XrXirArtifact *program_variant(const XrXirCompileContext *context, int64_
         {"init", 4, NULL, 0, XR_XIR_UNIT, blocks, 1, &init, 1, NULL, 0},
         {"main", 4, NULL, 0, XR_XIR_I64, blocks + 1, 1, body, instructions, NULL, 0}
     };
-    const XrXirSourceModule source = {"root", 4, NULL, 0, 0};
+    const XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0};
     const XrXirFunctionIdentity identities[] = {
         {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},
         {0, varied ? 1 : 0, 0, 0, 0, varied ? XR_XIR_FUNCTION_NO_SUSPEND : 0, XR_XIR_NON_MEMBER, 0, 0}
