@@ -2,6 +2,7 @@ add_executable(test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/test_language_r
 target_link_libraries(test_xir_p10_reference PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 add_executable(test_xir_p10_source_generations "${CMAKE_CURRENT_LIST_DIR}/test_source_generations.c")
 target_link_libraries(test_xir_p10_source_generations PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_p10_source_generations PRIVATE XR_GENERATION_STDLIB="${CMAKE_CURRENT_LIST_DIR}/fixtures/generation_stdlib")
 set_target_properties(test_xir_p10_source_generations PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_xir_p10_source_generations PRIVATE /W4 /WX /utf-8)
@@ -17,6 +18,12 @@ foreach(fact IN ITEMS function generic type)
         TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept")
 endforeach()
 
+foreach(kind IN ITEMS definitions definitions-comptime definitions-import)
+    string(REPLACE "-" "_" suffix "${kind}")
+    add_test(NAME test_xir_p10_source_${suffix} COMMAND test_xir_p10_source_generations --${kind})
+    set_tests_properties(test_xir_p10_source_${suffix} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;semantic-binding")
+endforeach()
 add_executable(test_xir_p10_source_generation_resources "${CMAKE_CURRENT_LIST_DIR}/test_source_generation_resources.c")
 target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source)
 set_target_properties(test_xir_p10_source_generation_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
@@ -27,6 +34,16 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generation_resources COMMAND test_xir_p10_source_generation_resources)
 set_tests_properties(test_xir_p10_source_generation_resources PROPERTIES TIMEOUT 300 COST 80 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_generation_comptime_resources
+    COMMAND test_xir_p10_source_generation_resources --comptime)
+set_tests_properties(test_xir_p10_source_generation_comptime_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ctfe;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_generation_semantic_baseline
+    COMMAND test_xir_p10_source_generation_resources --baseline)
+add_test(NAME test_xir_p10_source_generation_comptime_baseline
+    COMMAND test_xir_p10_source_generation_resources --comptime --baseline)
+set_tests_properties(test_xir_p10_source_generation_semantic_baseline test_xir_p10_source_generation_comptime_baseline
+    PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;generation;ownership;resource-control")
 add_executable(test_xir_p10_initializer_surface "${CMAKE_CURRENT_LIST_DIR}/test_initializer_surface.c")
 add_executable(test_xir_p10_type_surface "${CMAKE_CURRENT_LIST_DIR}/test_type_surface.c")
 target_link_libraries(test_xir_p10_type_surface PRIVATE xray_xir_source xray_frontend_format)
