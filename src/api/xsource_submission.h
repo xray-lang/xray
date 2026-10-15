@@ -47,5 +47,11 @@ XR_FUNC XrSourceStatus xr_source_submission_lookup(const XrSourceSubmission *, c
  * Output must be empty and is preserved on failure. */
 XR_FUNC XrSourceStatus xr_source_submission_lookup_runtime(const XrSourceSubmission *, const char *,
     const XrXirInstanceBinding **output);
+/* Reads the latest published binding by executing its actual checked reader in
+ * its birth Program. No candidate may be pending. Output must be canonical Unit
+ * and remains unchanged on refusal. The owned value keeps its real arena and
+ * survives the coordinator; its normal runtime ownership rules still apply.
+ * Reading performs no initializer replay or metadata-based slot access. */
+XR_FUNC XrSourceStatus xr_source_submission_read(XrSourceSubmission *, const char *, XrXirValue *output);
 XR_FUNC XrSourceStatus xr_source_submission_drop(XrSourceSubmission **, XrXirCallStatus *cleanup);
 #endif // XSOURCE_SUBMISSION_H
