@@ -85,6 +85,9 @@ static void config_guards(void) {
     CHECK(xr_xir_call_new(NULL,0,NULL,0,NULL)==XR_XIR_CALL_BAD_ARGUMENT);
     XrXirInstance *owned=(XrXirInstance *)(uintptr_t)1;
     prefix.version=20;
+    CHECK(xr_xir_instance_new((XrXirProgram *)(uintptr_t)1,(const XrXirInstanceConfig *)&prefix,&owned)==XR_XIR_CALL_BAD_ARGUMENT &&
+        owned==(XrXirInstance *)(uintptr_t)1 && !runtime_attempts && !runtime_live && !runtime_bytes);
+    owned=NULL;
     CHECK(xr_xir_instance_new((XrXirProgram *)(uintptr_t)1,(const XrXirInstanceConfig *)&prefix,&owned)==XR_XIR_CALL_BAD_ABI);
     CHECK(!owned && !runtime_attempts);
     prefix.version=25;
@@ -200,6 +203,6 @@ int main(void) {
     _Static_assert(sizeof(XrXirProgramSpec)==96 && sizeof(XrXirValue)==16 && sizeof(XrXirCallEntry)==64 &&
         sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 && sizeof(XrXirCallView)==216,"unchanged provider payload layout");
     config_guards();renderer_channels();call_channels();
-    printf("Call29 Provider24 Sink32 CallConfig136 InstanceConfig144; Value24/Program30; retired full prefixes, typed channels, cancel, physical PASS\n");
+    printf("Call29 Provider24 Sink32 CallConfig136 InstanceConfig144; Value24/Program31; retired full prefixes, typed channels, cancel, physical PASS\n");
     return 0;
 }
