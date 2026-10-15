@@ -230,7 +230,10 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
         xr_xir_callable_signature(&ctx->types,expected.type);
     if (callback) {
         arguments[a].value->conversion_ready = false;
-        ctx->effect_argument = arguments[a].value;
+        /* Native READ values keep the instantiated storage signature. Actual
+         * higher-order callbacks use an indirect plan and retain their facts. */
+        ctx->effect_argument = plan->family==SOURCE_CALL_NATIVE ||
+            plan->family==SOURCE_CALL_VARIADIC_READ ? NULL : arguments[a].value;
     }
     bool completed = source_plan_complete(ctx,arguments[a].value,value);
     ctx->effect_argument = previous_argument;
