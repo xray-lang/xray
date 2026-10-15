@@ -58,7 +58,10 @@ add_executable(test_xir_mixed_task_fault_compiler xir/test_xir_mixed_task_source
 target_link_libraries(test_xir_mixed_task_fault_compiler PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm xray_xir_scalar)
 target_compile_definitions(test_xir_mixed_task_fault_compiler PRIVATE XR_MIXED_TASK_RESULT_MODULES=3
     XR_MIXED_TASK_RESULT_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_task_faults")
-foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_mixed_task_fault_lifetime test_xir_mixed_task_fault_resources test_xir_mixed_task_fault_compiler)
+add_executable(test_xir_mixed_task_fault_prefix xir/test_xir_mixed_task_fault_prefix.c "${XIR_MIXED_TASK_FAULT_C}")
+target_link_libraries(test_xir_mixed_task_fault_prefix PRIVATE xray_xir_vm xray_xir_scalar)
+target_compile_definitions(test_xir_mixed_task_fault_prefix PRIVATE XR_MIXED_TASK_RESULT_MODULES=3)
+foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_mixed_task_fault_lifetime test_xir_mixed_task_fault_resources test_xir_mixed_task_fault_compiler test_xir_mixed_task_fault_prefix)
     set_target_properties(${task_fault_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     if(MSVC)
         target_compile_options(${task_fault_target} PRIVATE /W4 /WX /utf-8)
@@ -67,6 +70,10 @@ foreach(task_fault_target IN ITEMS test_xir_mixed_task_fault_producer test_xir_m
     endif()
 endforeach()
 foreach(task_fault_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_task_fault_prefix_${task_fault_backend}
+        COMMAND test_xir_mixed_task_fault_prefix ${task_fault_backend})
+    set_tests_properties(test_xir_mixed_task_fault_prefix_${task_fault_backend} PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;ownership;generated-c;lifecycle;throw;panic;cancel")
     foreach(task_fault_compiler_mode IN ITEMS baseline axes)
         add_test(NAME test_xir_mixed_task_fault_compiler_${task_fault_backend}_${task_fault_compiler_mode}
             COMMAND test_xir_mixed_task_fault_compiler ${task_fault_backend} ${task_fault_compiler_mode})
