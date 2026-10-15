@@ -60,10 +60,13 @@ static void init_compiler_faults(void){
  }
  printf("sticky initialization source %zu real Source-check OOM ordinals; max allocated=%llu peak=%llu work=%llu; every physical baseline restored\n",sites,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_work);
 }
-XR_FUNC void xr_test_initialization_source_run(XrXirArtifact **checked);
+XR_FUNC void xr_test_initialization_source_run(XrXirArtifact **checked,bool fault_sweeps);
 XR_FUNC size_t xr_test_initialization_runtime_live(void);
 XR_FUNC size_t xr_test_initialization_runtime_bytes(void);
 int main(int argc,char **argv){
+ bool generate_only=argc==3;
+ if(generate_only){CHECK(!strcmp(argv[1],"--generate-only"));++argv;--argc;}
+ CHECK(argc==1 || (argc==2 && strcmp(argv[1],"--generate-only")));
  CHECK(argc==1||argc==2);const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
@@ -77,9 +80,9 @@ int main(int argc,char **argv){
  xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&result);
  const size_t retained_live=effects_compile_live,retained_bytes=effects_compile_bytes;
  const size_t runtime_blocks=xr_test_initialization_runtime_live(),runtime_bytes=xr_test_initialization_runtime_bytes();
- CHECK(retained_live&&retained_bytes);init_compiler_faults();
+ CHECK(retained_live&&retained_bytes);if(!generate_only)init_compiler_faults();
  CHECK(effects_compile_live==retained_live&&effects_compile_bytes==retained_bytes);
  CHECK(xr_test_initialization_runtime_live()==runtime_blocks&&xr_test_initialization_runtime_bytes()==runtime_bytes);
- xr_compile_session_free(session);CHECK(owned);xr_test_initialization_source_run(&owned);CHECK(!owned);
- effects_source_owners_free();puts("sticky initialization Source producer destroyed; actual compiler/runtime physical zero");return 0;
+ xr_compile_session_free(session);CHECK(owned);xr_test_initialization_source_run(&owned,!generate_only);CHECK(!owned);
+ effects_source_owners_free();puts(generate_only ? "sticky initialization Source artifact producer normal; physical zero" : "sticky initialization Source producer destroyed; all original compiler/runtime fault sweeps physical zero");return 0;
 }

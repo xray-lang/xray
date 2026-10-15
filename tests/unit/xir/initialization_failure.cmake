@@ -11,7 +11,7 @@ target_compile_definitions(test_xir_initialization_failure_source PRIVATE
     XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 add_custom_command(OUTPUT ${XIR_INITIALIZATION_CHECKED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_initialization_failure_source> ${XIR_INITIALIZATION_CHECKED}
+    COMMAND $<TARGET_FILE:test_xir_initialization_failure_source> --generate-only ${XIR_INITIALIZATION_CHECKED}
     DEPENDS test_xir_initialization_failure_source
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_initialization_failure/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_initialization_failure/base.xr
@@ -21,7 +21,7 @@ add_executable(test_xir_initialization_failure_packet xir/test_xir_initializatio
 target_link_libraries(test_xir_initialization_failure_packet PRIVATE xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_initialization_failure_packet PRIVATE XR_CHECKED_FIXTURE="${XIR_INITIALIZATION_CHECKED}")
 add_custom_command(OUTPUT ${XIR_INITIALIZATION_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_initialization_failure_packet> ${XIR_INITIALIZATION_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_initialization_failure_packet> --generate-only ${XIR_INITIALIZATION_GENERATED}
     DEPENDS test_xir_initialization_failure_packet ${XIR_INITIALIZATION_CHECKED}
     VERBATIM)
 foreach(initialization_failure_mode IN ITEMS native mixed)
@@ -45,3 +45,11 @@ foreach(initialization_failure_test IN ITEMS test_xir_initialization_publication
     set_tests_properties(${initialization_failure_test} PROPERTIES LABELS "unit;xir;execution;ownership;abi" TIMEOUT 300)
 endforeach()
 set_tests_properties(test_xir_initialization_failure_native test_xir_initialization_failure_mixed PROPERTIES TIMEOUT 600)
+
+# Artifact producers retain literal execution without running fault sweeps in a build slot.
+add_test(NAME test_xir_initialization_failure_source_literals COMMAND test_xir_initialization_failure_source
+    --generate-only ${CMAKE_CURRENT_BINARY_DIR}/initialization-source-normal.xrc)
+add_test(NAME test_xir_initialization_failure_packet_literals COMMAND test_xir_initialization_failure_packet
+    --generate-only ${CMAKE_CURRENT_BINARY_DIR}/initialization-packet-normal.c)
+set_tests_properties(test_xir_initialization_failure_source_literals test_xir_initialization_failure_packet_literals
+    PROPERTIES LABELS "unit;xir;execution;ownership;initialization;artifact-producer" TIMEOUT 300)
