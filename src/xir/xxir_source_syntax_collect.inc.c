@@ -53,7 +53,7 @@ static bool source_query_syntax_role(SourceContext *ctx,uint32_t declaration,XrX
     if(!declaration||declaration>ctx->syntax.declaration_count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"syntax declaration identity is invalid");
     XrXirSourceDeclarationSyntax *fact=(XrXirSourceDeclarationSyntax *)&ctx->syntax.declarations[declaration-1];
     XrXirSourceDeclarationSyntax changed=*fact;changed.role=role;changed.flags=flags;
-    if(role==XR_XIR_SOURCE_SYNTAX_CLOSURE||role==XR_XIR_SOURCE_SYNTAX_RECEIVER)
+    if(role==XR_XIR_SOURCE_SYNTAX_NONE||role==XR_XIR_SOURCE_SYNTAX_CLOSURE||role==XR_XIR_SOURCE_SYNTAX_RECEIVER)
         changed.name=(XrXirSourceRange){fact->name.module,0,0,0,0};
     return source_copy_bytes(ctx,NULL,fact,&changed,sizeof(changed));
 }
@@ -66,8 +66,10 @@ static bool source_query_callable(SourceContext *ctx,uint32_t declaration) {
 static bool source_query_call(SourceContext *ctx,uint32_t reference,XrXirSourceRange range) {
     if(ctx->function>=ctx->function_count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source call body is invalid");
     uint32_t declaration=ctx->bodies[ctx->function].declaration;
+    uint32_t body=source_query_callable(ctx,declaration)?declaration:0;
+    uint32_t caller=body&&ctx->syntax.declarations[body-1].role!=XR_XIR_SOURCE_SYNTAX_NONE?body:0;
     bool known=range.line>0&&range.column>0&&range.end_line==range.line&&range.end_column>range.column;
-    XrXirSourceCall call={.reference=reference,.caller=source_query_callable(ctx,declaration)?declaration:0,
+    XrXirSourceCall call={.reference=reference,.caller=caller,.body=body,
         .range=known?range:(XrXirSourceRange){range.module,0,0,0,0},
         .module_initializer=ctx->function<ctx->module_count&&ctx->function==ctx->module,.selection_known=known};
     XrXirSourceCall *facts=source_query_append(ctx,ctx->calls.items,&ctx->calls.count,

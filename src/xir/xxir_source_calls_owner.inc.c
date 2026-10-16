@@ -27,7 +27,8 @@ static XrXirStatus query_call_functions(SourceQueryCopy *copy,const XrXirSourceC
             if(range.module||range.line||range.column||range.end_line||range.end_column)return XR_XIR_BAD_STRUCTURE;
             continue;
         }
-        if(!query_call_callable(copy->snapshot,i+1)||range.module>=view->module_count||
+        if(!query_call_callable(copy->snapshot,i+1)||copy->snapshot->syntax.declarations[i].role==XR_XIR_SOURCE_SYNTAX_NONE||
+            range.module>=view->module_count||
             range.module!=view->declarations[i].range.module||range.line<=0||range.column<=0||
             range.end_line<range.line||range.end_column<=0||
             (range.end_line==range.line&&range.end_column<=range.column))return XR_XIR_BAD_STRUCTURE;
@@ -104,7 +105,7 @@ static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceC
     if(signature->type_parameter_owner&&view->declarations[signature->type_parameter_owner-1].generic_parameter_count!=
         signature->type_parameter_count)return XR_XIR_BAD_STRUCTURE;
     if(signature->type_parameter_owner) {
-        uint32_t owner=call->caller,remaining=view->declaration_count;
+        uint32_t owner=call->body,remaining=view->declaration_count;
         while(owner&&owner<=view->declaration_count&&owner!=signature->type_parameter_owner&&remaining--) {
             if(!query_work(copy,sizeof(uint32_t)))return copy->status;
             owner=view->declarations[owner-1].generic_parent;
@@ -167,9 +168,11 @@ static XrXirStatus query_call_items(SourceQueryCopy *copy,const XrXirSourceCalls
     for(uint32_t i=0;i<calls->count;++i) {
         if(!query_work(copy,sizeof(calls->items[i])))return copy->status;
         const XrXirSourceCall *call=&calls->items[i];
-        if(!query_syntax_range(view,call->range,!call->selection_known)||(call->caller&&
-            (!query_call_callable(snapshot,call->caller)||call->module_initializer||
-                view->declarations[call->caller-1].range.module!=call->range.module)))return XR_XIR_BAD_STRUCTURE;
+        if(!query_syntax_range(view,call->range,!call->selection_known)||(call->body&&
+            (!query_call_callable(snapshot,call->body)||call->module_initializer||
+                view->declarations[call->body-1].range.module!=call->range.module)))return XR_XIR_BAD_STRUCTURE;
+        uint32_t caller=call->body&&snapshot->syntax.declarations[call->body-1].role!=XR_XIR_SOURCE_SYNTAX_NONE?call->body:0;
+        if(call->caller!=caller)return XR_XIR_BAD_STRUCTURE;
         if(call->caller&&call->selection_known&&calls->functions[call->caller-1].known&&
             !query_call_contains(calls->functions[call->caller-1].range,call->range))return XR_XIR_BAD_STRUCTURE;
         XrXirStatus signature=query_call_signature(copy,call);if(signature!=XR_XIR_OK)return signature;

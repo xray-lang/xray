@@ -39,6 +39,9 @@ typedef struct XrXirSourceCall {
     XrXirSourceRange range;
     bool module_initializer, selection_known;
     XrXirSourceCallSignature signature;
+    /* Exact checked body for generic scope, including unnamed helpers.
+     * This identity never grants a lexical caller or executable authority. */
+    uint32_t body;
 } XrXirSourceCall;
 typedef struct XrXirSourceFunctionRange {
     XrXirSourceRange range;

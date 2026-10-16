@@ -52,7 +52,7 @@ static void native_fixture(NativeFixture *f) {
     f->nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64};
     f->nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ARRAY,.element=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,.parameter_span=1};
     f->types.nodes=f->nodes;f->types.count=2;
-    f->call=(XrXirSourceCall){.reference=0,.caller=3,.range=f->selection,.selection_known=true,
+    f->call=(XrXirSourceCall){.reference=0,.caller=3,.body=3,.range=f->selection,.selection_known=true,
         .signature={.parameters=f->parameters,.parameter_count=1,.result={XR_XIR_UNIT,0,true},.known=true,
             .owner_type={(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE,0,true},.parameter_flags=f->flags}};
     f->calls=(XrXirSourceCalls){&f->call,1,f->functions,4};
