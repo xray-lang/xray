@@ -9,7 +9,16 @@
 #ifndef SOURCE_HISTORY_CELL_FIXTURE_H
 #define SOURCE_HISTORY_CELL_FIXTURE_H
 static inline const char *source_history_cell_input(unsigned generation,unsigned kind) {
-    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==7;
+    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==7 || kind==8;
+    if (kind==8) {
+        switch(generation) {
+        case 1:return "var value:Item = Item(41)\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nclass Item{value:Leaf init(first:i64){this.value=Leaf{value:first}}}\nstruct Leaf{value:i64}\nfn fetch()->Item{return value}\nprint(17)\nexport fn seed()->i64{return 0}";
+        case 2:return "struct Padding{flag:bool}\nconst value=\"shadow\"\nfn bump(value:Item,slot:ref Leaf)->Item{slot.value+=1;return value}\nexport fn answer()->i64{var object=fetch();const copy=bump(object,ref object.value);return copy.value.value}";
+        case 3:return "struct Later{flag:bool}\nconst value=true\nexport fn answer()->i64{var object=fetch();const copy=bump(object,ref object.value);return copy.value.value}";
+        case 4:return "const value=99\nexport fn fail()->i64{var object=fetch();const copy=bump(object,ref object.value);assert(false);return copy.value.value}";
+        default:return NULL;
+        }
+    }
     if (kind==7) {
         switch(generation) {
         case 1:return "var value:Item = Item(\"a\")\nfn old()->i64{return 41}\nfn identity<T>(value:T)->T{return value}\nclass Item{value:string init(first:string){this.value=first}}\nfn fetch()->Item{return value}\nprint(17)\nexport fn seed()->i64{return 0}";
