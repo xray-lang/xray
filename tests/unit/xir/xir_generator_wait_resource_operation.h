@@ -123,7 +123,9 @@ static void resource_dispose(WaitResourceRun *run,size_t fault,bool limited) {
         if(expected==XR_XIR_CALL_READY && limited && disposed==XR_XIR_CALL_LIMIT) expected=XR_XIR_CALL_LIMIT;
         if(disposed!=expected) fprintf(stderr,"Dispose pass%u before%u actual%u expected%u faulted%u\n",run->pass,before,disposed,expected,faulted ? 1u : 0u);
         CHECK(disposed==expected);run->cost->disposed[run->pass]=disposed;
-        if(disposed!=XR_XIR_CALL_READY && run->cost->failure==XR_XIR_CALL_READY) run->cost->failure=disposed;
+        /* Cancellation does not replace an allocation failure discovered during drain. */
+        if(disposed!=XR_XIR_CALL_READY && (run->cost->failure==XR_XIR_CALL_READY || run->cost->failure==XR_XIR_CALL_CANCELLED))
+            run->cost->failure=disposed;
     }
     if(run->inner.type) {CHECK(xr_xir_value_valid(&run->inner));xr_xir_value_drop(&run->inner);}
     if(run->outer.type) {CHECK(xr_xir_value_valid(&run->outer));xr_xir_value_drop(&run->outer);}
