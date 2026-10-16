@@ -29861,6 +29861,426 @@
         "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
       ],
       "independent_observation_count": 0
+    },
+    {
+      "id": "complete_byte_pod_byte_array_append_repeat_safe_shared_core",
+      "oracle_id": "complete_byte_pod_byte_array_append_repeat_safe_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_array_append_repeat_safe_shared_core.xr",
+      "source_lf_sha256": "c9f7d305d10ccf5d89daf12c1f48bf370571d09d65862a92542c25c1c8ea08e8",
+      "entry": "run",
+      "stdout_utf8": "3\n[66, 67, 68]\n9\n[66, 67, 68, 66, 67, 68, 66, 67, 68]\n4\n[88, 89, 88, 89]\n430\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_array_append_repeat_safe_shared_core.xr",
+        "source_lf_sha256": "c9f7d305d10ccf5d89daf12c1f48bf370571d09d65862a92542c25c1c8ea08e8"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 8
+    },
+    {
+      "id": "complete_byte_pod_byte_array_constructor_shared_core",
+      "oracle_id": "complete_byte_pod_byte_array_constructor_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_array_constructor_shared_core.xr",
+      "source_lf_sha256": "524eb46f9dff2610a119f7f51e132020c07dd894e8e3868775e3d4b9ffb69634",
+      "entry": "run",
+      "stdout_utf8": "4\n1\n255\n0\n128\n1\n0\n1\n3\n254\n4\n1\n1\n0\n2\n1\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_array_constructor_shared_core.xr",
+        "source_lf_sha256": "524eb46f9dff2610a119f7f51e132020c07dd894e8e3868775e3d4b9ffb69634"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 17
+    },
+    {
+      "id": "complete_byte_pod_byte_array_range_arg_shared_core",
+      "oracle_id": "complete_byte_pod_byte_array_range_arg_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_array_range_arg_shared_core.xr",
+      "source_lf_sha256": "15eb8e566fa4bf8c1c940df8bbf1d441fbb242efab4cc9765ac3d92fe624314c",
+      "entry": "run",
+      "stdout_utf8": "before-range\n",
+      "stderr_utf8": "[Uncaught Panic] E0430: Slice<u8>.load<u32>() offset out of bounds\n",
+      "expected_exit_code": 1,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_array_range_arg_shared_core.xr",
+        "source_lf_sha256": "15eb8e566fa4bf8c1c940df8bbf1d441fbb242efab4cc9765ac3d92fe624314c"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_byte_pod_byte_slice_bulk_ops_shared_core",
+      "oracle_id": "complete_byte_pod_byte_slice_bulk_ops_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr",
+      "source_lf_sha256": "2e810fec2662c62b3edb8a68109e44eacd9b4832aaf7efb71d66a37a9aefe20a",
+      "entry": "run",
+      "stdout_utf8": "1\n1\n7\n8\n9\n7\n1\n1\n4\n0\n-1\n1\n-1\n1\n4\n3\n0\n0\n65\n66\n65\n66\n65\n66\n65\n66\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr",
+        "source_lf_sha256": "2e810fec2662c62b3edb8a68109e44eacd9b4832aaf7efb71d66a37a9aefe20a"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 26
+    },
+    {
+      "id": "complete_byte_pod_byte_slice_float_load_store_shared_core",
+      "oracle_id": "complete_byte_pod_byte_slice_float_load_store_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_slice_float_load_store_shared_core.xr",
+      "source_lf_sha256": "b050a62c73acba153e72a1b785d08947acab61140f10e7b496ca1246daf5e009",
+      "entry": "run",
+      "stdout_utf8": "0\n0\n192\n63\n192\n32\n0\n0\n2\n192\n1.5\n-2.5\n-2.25\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_slice_float_load_store_shared_core.xr",
+        "source_lf_sha256": "b050a62c73acba153e72a1b785d08947acab61140f10e7b496ca1246daf5e009"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 13
+    },
+    {
+      "id": "complete_byte_pod_byte_slice_load_store_endian_shared_core",
+      "oracle_id": "complete_byte_pod_byte_slice_load_store_endian_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_slice_load_store_endian_shared_core.xr",
+      "source_lf_sha256": "f0bf016f7ea22f8a9464ec5d77e6338d6e9cdc00b173c4f5e6174c478b3ccec7",
+      "entry": "run",
+      "stdout_utf8": "52\n18\n18\n52\n1\n4\n4660\n4660\n16909060\n2569\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_slice_load_store_endian_shared_core.xr",
+        "source_lf_sha256": "f0bf016f7ea22f8a9464ec5d77e6338d6e9cdc00b173c4f5e6174c478b3ccec7"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_byte_pod_byte_slice_signed_load_store_shared_core",
+      "oracle_id": "complete_byte_pod_byte_slice_signed_load_store_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_slice_signed_load_store_shared_core.xr",
+      "source_lf_sha256": "166159df2170574962c1314221480e715e97563d6b3d49f2909f1e07bfbd53e9",
+      "entry": "run",
+      "stdout_utf8": "254\n255\n255\n253\n-2\n-3\n-12345678\n-16909060\n-1\n65534\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_slice_signed_load_store_shared_core.xr",
+        "source_lf_sha256": "166159df2170574962c1314221480e715e97563d6b3d49f2909f1e07bfbd53e9"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_byte_pod_byte_uint8_specialization_shared_core",
+      "oracle_id": "complete_byte_pod_byte_uint8_specialization_shared_core",
+      "source": "tests/diff/cases/semantics/collections/byte_uint8_specialization_shared_core.xr",
+      "source_lf_sha256": "de380a8bb11f1ad4107a5eaebcf762bb79b8de8b24f6f4cf120f4ff93cd6230d",
+      "entry": "run",
+      "stdout_utf8": "8\n513\n1\n2\n7\n7\n7\n7\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/byte_uint8_specialization_shared_core.xr",
+        "source_lf_sha256": "de380a8bb11f1ad4107a5eaebcf762bb79b8de8b24f6f4cf120f4ff93cd6230d"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 8
+    },
+    {
+      "id": "complete_byte_pod_span_compare_pod_shared_core",
+      "oracle_id": "complete_byte_pod_span_compare_pod_shared_core",
+      "source": "tests/diff/cases/semantics/collections/span_compare_pod_shared_core.xr",
+      "source_lf_sha256": "e9d229e6ff96d64ae9caef01129b3f857eee174e8eb6e69d54b17adb57c7203c",
+      "entry": "run",
+      "stdout_utf8": "0\n-1\n1\n1\n-1\n-1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/span_compare_pod_shared_core.xr",
+        "source_lf_sha256": "e9d229e6ff96d64ae9caef01129b3f857eee174e8eb6e69d54b17adb57c7203c"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_byte_pod_span_copyfrom_pod_shared_core",
+      "oracle_id": "complete_byte_pod_span_copyfrom_pod_shared_core",
+      "source": "tests/diff/cases/semantics/collections/span_copyfrom_pod_shared_core.xr",
+      "source_lf_sha256": "abd92e8f536320a88854872c83afed7b8af3cc58c04a9a6d9a0887c683b33012",
+      "entry": "run",
+      "stdout_utf8": "0\n17\n42\n0\n2\n1\n1\n2\n3\nSlice.copyFrom(src) range out of bounds\n430\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/span_copyfrom_pod_shared_core.xr",
+        "source_lf_sha256": "abd92e8f536320a88854872c83afed7b8af3cc58c04a9a6d9a0887c683b33012"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
+    },
+    {
+      "id": "complete_byte_pod_span_fill_pod_shared_core",
+      "oracle_id": "complete_byte_pod_span_fill_pod_shared_core",
+      "source": "tests/diff/cases/semantics/collections/span_fill_pod_shared_core.xr",
+      "source_lf_sha256": "f9f8e422e846c6ac1fbac467d40e99736b43db251424fe53b34abda04a77bf40",
+      "entry": "run",
+      "stdout_utf8": "2\n0\n9\n9\n0\ntrue\ntrue\ntrue\nzzz\n0\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/span_fill_pod_shared_core.xr",
+        "source_lf_sha256": "f9f8e422e846c6ac1fbac467d40e99736b43db251424fe53b34abda04a77bf40"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_byte_pod_span_reinterpret_asbytes_shared_core",
+      "oracle_id": "complete_byte_pod_span_reinterpret_asbytes_shared_core",
+      "source": "tests/diff/cases/semantics/collections/span_reinterpret_asbytes_shared_core.xr",
+      "source_lf_sha256": "84ad42893b32a488608cd0bdf44eacd02f8572d12d657783de9c05ef6968eb81",
+      "entry": "run",
+      "stdout_utf8": "8\n16843009\n16843009\n3\n119\n119\n6\n2313\n2313\nSlice<u8>.reinterpret<T>() length is not divisible by target size\n430\nSlice<u8>.reinterpret<T>() source address is not aligned for target type\n404\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original byte/POD values and exact termination;independent byte store,IEEE scalar representation,unsigned lexicographic bytes,memmove snapshot,live repetition and relative view alignment. Array<u8>.toString uses current container format. Old Slice mutation/borrow/call admission and all original FI/resource/lifetime/physical/provider duties remain OPEN;no source port or guessed API.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/span_reinterpret_asbytes_shared_core.xr",
+        "source_lf_sha256": "84ad42893b32a488608cd0bdf44eacd02f8572d12d657783de9c05ef6968eb81"
+      },
+      "remaining_gates": [
+        "All twelve complete original byte/POD programs,133 observations,overlapping/self-alias copies,mutable writes,full-width scalar conversions and all five original fault paths retained.",
+        "Atomic migration of legacy Slice writes/overlap borrow/call admission;actual runtime side effects,all original compiler/runtime FI,resources/lifetime/safety/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 13
     }
   ]
 }
