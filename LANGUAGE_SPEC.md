@@ -1837,26 +1837,25 @@ unsafe {
 
 #### `comptime expr` / `comptime { ... }`
 
-`comptime` requires an expression or block to evaluate during analysis; failure is a compile error and never falls back to runtime. Constant expressions are not limited to integers: the current evaluator supports scalar constants, TypeIds, fixed arrays, tuples, struct aggregates and their member/index accesses, plus const-evaluable unary and binary operations. Static integer positions such as fixed-array lengths still require a positive integer result.
+`comptime` requires a closed expression or block to evaluate during compilation. Ordinary Source constructs authentic XIR through complete Built/Checked, specialization reverification and Lowered, then enters the sole bounded CTFE service. Independent ordinary Source replays and completely checks the result. Failure is a positioned compile error, with no runtime, AST-evaluator or host-execution fallback. Ordinary runtime call legality does not depend on CTFE admission.
+
+Admitted ordinary and higher-order calls, finite recursion and loops use the same numeric/CFG kernel. The complete reachable closure includes actual Function and cleanup targets; unexecuted reachable bodies still require admission, and effect flags such as requires_root=NONE grant no determinism. Compiler-private locals, temporary allocation, authentic refs and cleanup retain the same ownership, loan and resource checks. External mutable module state, clock/entropy/environment, file/network/process I/O, scheduling/synchronization, unknown extern and arbitrary native calls are unadmitted.
+
+Exportable results are admitted scalars, String, Unit, Tuple, Nullable, Array and closed struct/enum data; finite recursive nominal data follows17.68. Internal Class/Function/Cell values may participate under their specific rules, but their identities or external resource handles cannot become constant results. Private-field constant replay uses authentic declaration bindings from17.67 without granting private construction authority to consumers. Type-description and derivation services do not thereby become arbitrary CTFE values or field permissions.
 
 ```xray
-const SCALE = comptime 8 * 4
-var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
+fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
+export fn run()->i64 { return comptime fact(6) }
 ```
 
-`comptime { ... }` has a restricted interpreter. A block supports local `const`/`var` declarations, local assignments and compound assignments, `if`/`while`, C-style `for`, fixed-array `for-in`, labeled or unlabeled `break`/`continue` inside loops, `compile_assert(...)`, and `compile_error(...)`. A statement block is erased from runtime; use `return <consteval-expression>` when the block must produce a value. Function calls are not currently consteval-safe, and unsupported statements are rejected during analysis.
+Ordinary block locals, assignments, conditions and loops retain ordinary Source checking. A trailing expression statement produces the block value; an empty block or a block ending in an ordinary statement produces Unit. Return cannot jump from a comptime block into its enclosing function or substitute for its trailing expression. A block does not implicitly capture enclosing runtime locals or parameters. Current Source sites require a closed type environment and explicitly reject comptime in open generic source scopes; the execution entry may receive a closed Lowered function after ordinary specialization.
 
 ```xray
-const TABLE_SIZE = comptime 4 * 8
-
-comptime {
-    var sum = comptime 0
-    for (var i = 0; i < 4; i += 1) {
-        sum += i
-    }
-    compile_assert(sum == 6, "comptime loop")
-}
+fn noop() {}
+export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+
+Steps, whole-stack depth/frame, temporary heap, logical output and type/field traversal all charge the original compiler job; returns and failures reset no cumulative quota. Infinite loops, excessive recursion and huge output deterministically refuse while preserving an empty result; the wall-clock watchdog records a separate environment failure. Admission, target/profile, complete budgets, output policy2, failure cleanup and independent replay follow the CTFE execution provisions in section17.
 
 ### 3.3 Binary Expressions
 

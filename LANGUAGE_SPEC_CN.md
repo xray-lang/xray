@@ -1813,26 +1813,25 @@ unsafe {
 
 #### `comptime expr` / `comptime { ... }`
 
-`comptime` 要求表达式或块在分析阶段求值；失败是编译错误，不会退回运行期。常量表达式不限于整数：当前支持标量常量、TypeId、定长数组、tuple、struct 聚合及其成员/索引访问，以及可求值的一元/二元运算。固定数组长度等静态整数位置仍要求最终值是正整数。
+`comptime` 要求一个关闭的表达式或块在编译期间求值。普通Source先构造真实XIR，经完整Built/Checked、特化复验和Lowered后，进入唯一有界CTFE服务；结果再由独立普通Source重放并完整检查。失败是带源位置的编译错误，不退回运行期、AST evaluator或宿主执行。普通函数能否在运行期调用，不由它是否通过CTFE准入决定。
+
+允许的普通函数调用、高阶调用、有限递归与循环使用同一数值/CFG核。完整可达闭包包括实际函数值和cleanup目标；尚未执行的可达body也必须准入，`requires_root=NONE`等效果标志不授予确定性。编译期私有局部状态、临时分配、真实ref与cleanup受相同拥有、借用和资源检查。外部可变模块状态、时钟/熵/环境、文件/网络/进程I/O、调度同步、未知extern及任意native调用不准入。
+
+可导出结果是准入的标量、String、Unit、Tuple、Nullable、Array及关闭的struct/enum数据；有限递归nominal数据遵守§17.68。内部Class/Function/Cell等可以按其专属规则参与计算，但其身份或外部资源句柄不能成为常量结果。私有字段的常量重放使用§17.67的真实声明绑定，不给使用方私有构造权。类型描述与派生服务不由此成为任意CTFE值或字段权限。
 
 ```xray
-const SCALE = comptime 8 * 4
-var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
+fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
+export fn run()->i64 { return comptime fact(6) }
 ```
 
-`comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
+块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。当前Source站点要求关闭的类型环境，开放泛型源作用域中的comptime明确拒绝；本执行入口可接收已完成普通特化的关闭Lowered函数。
 
 ```xray
-const TABLE_SIZE = comptime 4 * 8
-
-comptime {
-    var sum = comptime 0
-    for (var i = 0; i < 4; i += 1) {
-        sum += i
-    }
-    compile_assert(sum == 6, "comptime loop")
-}
+fn noop() {}
+export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+
+步骤、整个调用栈的深度/frame、临时堆、逻辑输出和类型/字段遍历都向原编译作业收费，返回与失败不重置累计费用。无限循环、深递归或巨大输出会确定性地拒绝并保全空结果，墙钟watchdog另记环境失败。准入、target/profile、完整预算、输出policy2、失败清理及独立重放细则见§17的CTFE执行条款。
 
 ### 3.3 二元表达式
 

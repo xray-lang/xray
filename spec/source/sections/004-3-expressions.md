@@ -136,26 +136,25 @@ unsafe {
 
 #### `comptime expr` / `comptime { ... }`
 
-`comptime` 要求表达式或块在分析阶段求值；失败是编译错误，不会退回运行期。常量表达式不限于整数：当前支持标量常量、TypeId、定长数组、tuple、struct 聚合及其成员/索引访问，以及可求值的一元/二元运算。固定数组长度等静态整数位置仍要求最终值是正整数。
+`comptime` 要求一个关闭的表达式或块在编译期间求值。普通Source先构造真实XIR，经完整Built/Checked、特化复验和Lowered后，进入唯一有界CTFE服务；结果再由独立普通Source重放并完整检查。失败是带源位置的编译错误，不退回运行期、AST evaluator或宿主执行。普通函数能否在运行期调用，不由它是否通过CTFE准入决定。
+
+允许的普通函数调用、高阶调用、有限递归与循环使用同一数值/CFG核。完整可达闭包包括实际函数值和cleanup目标；尚未执行的可达body也必须准入，`requires_root=NONE`等效果标志不授予确定性。编译期私有局部状态、临时分配、真实ref与cleanup受相同拥有、借用和资源检查。外部可变模块状态、时钟/熵/环境、文件/网络/进程I/O、调度同步、未知extern及任意native调用不准入。
+
+可导出结果是准入的标量、String、Unit、Tuple、Nullable、Array及关闭的struct/enum数据；有限递归nominal数据遵守§17.68。内部Class/Function/Cell等可以按其专属规则参与计算，但其身份或外部资源句柄不能成为常量结果。私有字段的常量重放使用§17.67的真实声明绑定，不给使用方私有构造权。类型描述与派生服务不由此成为任意CTFE值或字段权限。
 
 ```xray
-const SCALE = comptime 8 * 4
-var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
+fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
+export fn run()->i64 { return comptime fact(6) }
 ```
 
-`comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
+块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。当前Source站点要求关闭的类型环境，开放泛型源作用域中的comptime明确拒绝；本执行入口可接收已完成普通特化的关闭Lowered函数。
 
 ```xray
-const TABLE_SIZE = comptime 4 * 8
-
-comptime {
-    var sum = comptime 0
-    for (var i = 0; i < 4; i += 1) {
-        sum += i
-    }
-    compile_assert(sum == 6, "comptime loop")
-}
+fn noop() {}
+export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+
+步骤、整个调用栈的深度/frame、临时堆、逻辑输出和类型/字段遍历都向原编译作业收费，返回与失败不重置累计费用。无限循环、深递归或巨大输出会确定性地拒绝并保全空结果，墙钟watchdog另记环境失败。准入、target/profile、完整预算、输出policy2、失败清理及独立重放细则见§17的CTFE执行条款。
 
 ### 3.3 二元表达式
 
@@ -855,26 +854,25 @@ unsafe {
 
 #### `comptime expr` / `comptime { ... }`
 
-`comptime` requires an expression or block to evaluate during analysis; failure is a compile error and never falls back to runtime. Constant expressions are not limited to integers: the current evaluator supports scalar constants, TypeIds, fixed arrays, tuples, struct aggregates and their member/index accesses, plus const-evaluable unary and binary operations. Static integer positions such as fixed-array lengths still require a positive integer result.
+`comptime` requires a closed expression or block to evaluate during compilation. Ordinary Source constructs authentic XIR through complete Built/Checked, specialization reverification and Lowered, then enters the sole bounded CTFE service. Independent ordinary Source replays and completely checks the result. Failure is a positioned compile error, with no runtime, AST-evaluator or host-execution fallback. Ordinary runtime call legality does not depend on CTFE admission.
+
+Admitted ordinary and higher-order calls, finite recursion and loops use the same numeric/CFG kernel. The complete reachable closure includes actual Function and cleanup targets; unexecuted reachable bodies still require admission, and effect flags such as requires_root=NONE grant no determinism. Compiler-private locals, temporary allocation, authentic refs and cleanup retain the same ownership, loan and resource checks. External mutable module state, clock/entropy/environment, file/network/process I/O, scheduling/synchronization, unknown extern and arbitrary native calls are unadmitted.
+
+Exportable results are admitted scalars, String, Unit, Tuple, Nullable, Array and closed struct/enum data; finite recursive nominal data follows17.68. Internal Class/Function/Cell values may participate under their specific rules, but their identities or external resource handles cannot become constant results. Private-field constant replay uses authentic declaration bindings from17.67 without granting private construction authority to consumers. Type-description and derivation services do not thereby become arbitrary CTFE values or field permissions.
 
 ```xray
-const SCALE = comptime 8 * 4
-var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
+fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
+export fn run()->i64 { return comptime fact(6) }
 ```
 
-`comptime { ... }` has a restricted interpreter. A block supports local `const`/`var` declarations, local assignments and compound assignments, `if`/`while`, C-style `for`, fixed-array `for-in`, labeled or unlabeled `break`/`continue` inside loops, `compile_assert(...)`, and `compile_error(...)`. A statement block is erased from runtime; use `return <consteval-expression>` when the block must produce a value. Function calls are not currently consteval-safe, and unsupported statements are rejected during analysis.
+Ordinary block locals, assignments, conditions and loops retain ordinary Source checking. A trailing expression statement produces the block value; an empty block or a block ending in an ordinary statement produces Unit. Return cannot jump from a comptime block into its enclosing function or substitute for its trailing expression. A block does not implicitly capture enclosing runtime locals or parameters. Current Source sites require a closed type environment and explicitly reject comptime in open generic source scopes; the execution entry may receive a closed Lowered function after ordinary specialization.
 
 ```xray
-const TABLE_SIZE = comptime 4 * 8
-
-comptime {
-    var sum = comptime 0
-    for (var i = 0; i < 4; i += 1) {
-        sum += i
-    }
-    compile_assert(sum == 6, "comptime loop")
-}
+fn noop() {}
+export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+
+Steps, whole-stack depth/frame, temporary heap, logical output and type/field traversal all charge the original compiler job; returns and failures reset no cumulative quota. Infinite loops, excessive recursion and huge output deterministically refuse while preserving an empty result; the wall-clock watchdog records a separate environment failure. Admission, target/profile, complete budgets, output policy2, failure cleanup and independent replay follow the CTFE execution provisions in section17.
 
 ### 3.3 Binary Expressions
 
