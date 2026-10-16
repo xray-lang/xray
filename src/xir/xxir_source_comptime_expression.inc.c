@@ -139,7 +139,31 @@ static bool source_comptime_expected_same(SourceContext *ctx,AstNode *node,Sourc
     if (left.present!=right.present || left.infer_result!=right.infer_result || left.inferred!=right.inferred) return false;
     if (!ctx->comptime_input_types)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime expected context has no live Source type owner");
+    if (xr_xir_type_span(ctx->comptime_input_types,left.type) || xr_xir_type_span(&ctx->types,right.type)) {
+        uint32_t count=ctx->generics[ctx->function].parameter_count;
+        XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
+        if (count && !arguments) return false;
+        for (uint32_t i=0;i<count;++i) {
+            if (!source_work_units(ctx,node,sizeof(*arguments))) return false;
+            arguments[i]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+i);
+        }
+        XrXirStatus status=xr_xir_compile_type_substitution_matches_between(&ctx->compile,
+            ctx->comptime_input_types,&ctx->types,arguments,count,left.type,right.type);
+        return status==XR_XIR_OK || source_fail(ctx,node,status,"comptime symbolic expected context changed");
+    }
     return source_comptime_type_matches(ctx,node,ctx->comptime_input_types,left.type,right.type);
+}
+static bool source_comptime_call(SourceContext *ctx,AstNode *node,uint32_t helper,SourceValue *value) {
+    XrXirInstruction call={XR_XIR_CALL,ctx->functions[helper].result,{0},{0},helper,{0}};
+    uint32_t count=ctx->generics[helper].parameter_count;
+    XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
+    if (count && !arguments) return false;
+    for (uint32_t a=0;a<count;++a) {
+        if (!source_work_units(ctx,node,sizeof(*arguments))) return false;
+        arguments[a]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
+    }
+    if (count && !source_type_arguments(ctx,node,arguments,count,&call)) return false;
+    return source_recipe_record(ctx,call,value);
 }
 static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value) {
     uint32_t owner=ctx->function,module=ctx->module,helper=UINT32_MAX;
@@ -154,18 +178,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count)+2)) return false;
     *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0},0,0};
     ctx->comptime_sites=site;++ctx->comptime_count;
-    if (!ctx->comptime_input) {
-        XrXirInstruction call={XR_XIR_CALL,ctx->functions[helper].result,{0},{0},helper,{0}};
-        uint32_t count=ctx->generics[helper].parameter_count;
-        XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
-        if (count && !arguments) return false;
-        for (uint32_t a=0;a<count;++a) {
-            if (!source_work_units(ctx,node,sizeof(*arguments))) return false;
-            arguments[a]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
-        }
-        if (count && !source_type_arguments(ctx,node,arguments,count,&call)) return false;
-        return source_recipe_record(ctx,call,value);
-    }
+    if (!ctx->comptime_input) return source_comptime_call(ctx,node,helper,value);
     const SourceComptimeSite *matched=NULL;
     for (const SourceComptimeSite *original=ctx->comptime_input;original;original=original->next) {
         if (!source_work_units(ctx,node,8)) return false;
@@ -174,6 +187,10 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
             if (matched) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime occurrence is ambiguous");
             matched=original;
         }
+    }
+    if (matched && ctx->generics[helper].parameter_count) {
+        if (!source_work_units(ctx,node,sizeof(ctx->comptime_matched))) return false;
+        ++ctx->comptime_matched;return source_comptime_call(ctx,node,helper,value);
     }
     if (!matched || !source_comptime_result_value(ctx,node,&matched->value,matched->result_arity,matched->result_work))
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence or canonical result changed");

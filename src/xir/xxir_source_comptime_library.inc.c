@@ -57,7 +57,7 @@ static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtif
     program.manifests=ctx->manifests;program.prelude_module=ctx->prelude_module;program.core_factory=ctx->core_factory;
     program.remaining_blocks=ctx->remaining_blocks;program.remaining_instructions=ctx->remaining_instructions;
     XrXirSourceResult output={0};source_construct(&program,&output);
-    bool ok=program.diagnostic.status==XR_XIR_OK && source_comptime_evaluate(&program,output.checked);
+    bool ok=program.diagnostic.status==XR_XIR_OK && source_comptime_evaluate(&program,output.checked,false);
     ctx->remaining_blocks=program.remaining_blocks;ctx->remaining_instructions=program.remaining_instructions;
     if (ok) ok=source_comptime_library_results(ctx,&program);
     else { ctx->diagnostic=program.diagnostic;ctx->module=program.module; }

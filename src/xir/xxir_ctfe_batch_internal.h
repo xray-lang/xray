@@ -29,4 +29,8 @@ typedef struct XirCtfeBatchRequest {
  * Output has count canonical Unit slots. Any failure restores every slot. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *request,
     XrXirValue *output);
+/* The index starts at UINT32_MAX. A root-local failure reports its actual
+ * selection without retrying. Global admission and success preserve it. */
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch_at(const XirCtfeBatchRequest *request,
+    XrXirValue *output,uint32_t *failed_index);
 #endif // XXIR_CTFE_BATCH_INTERNAL_H

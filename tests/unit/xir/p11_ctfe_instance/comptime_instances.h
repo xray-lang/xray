@@ -35,7 +35,10 @@ static XrXirStatus comptime_instances_operation(XrXirCompileContext *context,con
         xr_xir_compile_source_comptime_instances(&request,output,&diagnostic);
     if (status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
         fprintf(stderr,"Typed comptime Source=%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
-    CHECK(!unpublished.checked && !unpublished.snapshot);xr_compile_session_free(session);return status;
+    if (public_source && status==XR_XIR_OK) {
+        CHECK(unpublished.checked && unpublished.snapshot);xr_xir_compile_source_result_free(&unpublished);
+    } else CHECK(!unpublished.checked && !unpublished.snapshot);
+    xr_compile_session_free(session);return status;
 }
 static XrXirCtfeLimits comptime_instances_limits(void) {
     return (XrXirCtfeLimits){XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES};
@@ -60,7 +63,7 @@ static void comptime_instances_normal(const char *kind) {
         if (!strcmp(kind,"scalar")) CHECK(views[i].value->type==XR_XIR_I64 && views[i].value->payload==42);
         CHECK(xr_xir_value_copy(views[i].value,&values[i])==XR_XIR_VALUE_OK);
     }
-    CHECK(comptime_instances_operation(&context,text,NULL,comptime_instances_limits(),XR_XIR_CTFE_MAX_CALL_DEPTH,true)==XR_XIR_BAD_TYPE);
+    CHECK(comptime_instances_operation(&context,text,NULL,comptime_instances_limits(),XR_XIR_CTFE_MAX_CALL_DEPTH,true)==XR_XIR_OK);
     xr_compile_resources_release(context.resources);memset(views,0,sizeof(views));memset(bindings,0,sizeof(bindings));
     CHECK(xr_xir_compile_source_comptime_instances_view(&result,views,bindings,result.count)==XR_XIR_CTFE_OK);
     uint32_t count=result.count;xr_xir_compile_source_comptime_instances_free(&result);CHECK(!result.owner && !result.count);
@@ -68,7 +71,7 @@ static void comptime_instances_normal(const char *kind) {
     for (uint32_t i=0;i<count;++i) { CHECK(xr_xir_value_valid(&values[i]));xr_xir_value_drop(&values[i]); }
     CHECK(source_fixture_compile_attempts==attempts);source_fixture_compile_fail_at=SIZE_MAX;
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
-    fprintf(stderr,"Typed comptime %s actual syntax/closed-call bindings=%u two substitutions producer-dead physical0 public remains unbound\n",kind,count);
+    fprintf(stderr,"Typed comptime %s actual syntax/closed-call bindings=%u two substitutions producer-dead physical0 public receiving checked\n",kind,count);
 }
 static void comptime_instances_controls(void) {
     XrXirCompileContext context;context_new(&context);XirSourceComptimeInstances result={0};

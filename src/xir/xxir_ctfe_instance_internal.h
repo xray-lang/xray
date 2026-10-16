@@ -60,6 +60,10 @@ XR_FUNC void xr_xir_compile_ctfe_instance_free(XirCtfeInstanceResult *owner);
  * storage remains immutable until return. Failure publishes no owner. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch(
     const XirCtfeInstanceBatchRequest *request,XirCtfeInstanceBatch **output);
+/* Same ownership and admission. The index starts at UINT32_MAX and reports
+ * the actual failed selection. Global admission and success preserve it. */
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_batch_at(
+    const XirCtfeInstanceBatchRequest *request,XirCtfeInstanceBatch **output,uint32_t *failed_index);
 /* Complete current correspondence is checked once during this synchronous
  * borrow, followed by every real definition and result. All count views must
  * initially be zero; a failure publishes none. No validation hint survives. */

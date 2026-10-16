@@ -1824,7 +1824,7 @@ fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
 
-块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。泛型源作用域可以包含自身完全关闭、无运行期捕获的comptime thunk；外围类型参数保留原lexical含义，不能用于尚未关闭的指令或调用类型实参。依赖外围类型实参、需要逐关闭实例结果的comptime仍明确拒绝，不能复用一个站点结果冒充该能力；见17.71。本执行入口可接收已完成普通特化的关闭Lowered函数。
+块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。泛型源作用域中的comptime不捕获外围运行期值。外围类型参数保留原lexical含义；依赖它们的Program表达式先进入普通泛型检查，经实际特化和唯一Lowered CTFE逐关闭实例执行，再以完整规范键接回私有literal provider（17.78）。自身完全关闭的thunk仍按17.71执行。Library未来泛型实例仍待完整重定位，不能以一个站点单一Value或运行期fallback代替实际结果。
 
 ```xray
 fn noop() {}
@@ -7906,7 +7906,7 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 类型名继续沿实际外围lexical上下文解析，包括泛型参数对同名全局类型的遮蔽；不通过清空类型作用域把开放类型误解成另一声明。真实nominal owner和MEMBER_HELPER规则保持。thunk不继承外围运行期参数、局部变量或this；无权从类型描述、helper名称或关闭结果推导额外访问权限。封装后的真实指令类型和完整调用类型实参表逐项付原ledger work检查，含开放类型参数的条目在执行前拒绝；checker及完整可达闭包准入继续复验，不以该前置检查替代。
 
-本机制不实现依赖外围类型实参的逐实例comptime。需要在不同关闭T下产生Array<T>、T?或不同结果的表达式仍明确拒绝；一个语法站点的单一Value不能代表多个特化结果。普通泛型继续定义处按约束检查，不能在实例化时重解释AST、借宿主执行或保留运行期fallback。完整开放泛型执行仍是未闭合责任，不得因这里的上下文无关正例宣称完成。
+本节限定上下文无关的关闭thunk。依赖外围类型实参、在不同关闭T下产生Array<T>、T?或不同结果的Program表达式由17.78接回；一个语法站点的单一Value不能代表多个特化结果。普通泛型继续定义处按约束检查，不能在实例化时重解释AST、借宿主执行或保留运行期fallback。Library未来泛型实例及完整资格仍是未闭合责任，不得因这里的上下文无关正例宣称完成。
 
 每次Source构造、关闭性扫描、CTFE及独立接收共同消费同一原compiler ledger；失败不退work/累计分配，输出和可释放前缀保持。原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth、policy2/8MiB输出和原错误映射不变。共同Value的scratch LIMIT仍沿既有映射报告CTFE BUDGET；frame直接拒绝可报告FRAME_LIMIT。正常、预算边界和首末故障控制不替代完整逐分配FI、provider、正式安全或整包资格；公共布局、schema、opcode及构造接口2保持。
 
@@ -7916,7 +7916,7 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 所有者同时保留独立拥有的关闭Checked、Lowered、真实原泛型定义/替换以及拥有式Value；它们可以长于原Source、packet、输入Artifact与ledger调用者的寿命。借用视图发布前完整验证当前拥有的两份产物，并重新写出当前Checked字节，与Lowered实际来源packet逐字对应。相同签名或结果类型、另一合法替换、摘要或先前验证成功都不能代替当前输入对应。观察仅标识真实来源，不授予构造、成员、私有调用、loan或指令改写权限；调用者必须在整个借用期间保活且排除修改。
 
-所有准备、复制、完整复验与观察先付同一原ledger费用，失败保全空输出、不退work或累计分配；最终释放不分配。原work/allocated/live、steps/frame/depth/output上限、错误映射、Value/SourceContext布局、schema、opcode与构造接口保持。本入口只完成关闭实例执行结果的拥有和对应边界；依赖类型实参的逐实例Source comptime接回仍未实现，17.71的拒绝边界不变。完整逐分配故障、原owner重试、精确边界、正式安全与provider资格必须分别绑定实际固定输入，不由小门或此接口的存在推导。
+所有准备、复制、完整复验与观察先付同一原ledger费用，失败保全空输出、不退work或累计分配；最终释放不分配。原work/allocated/live、steps/frame/depth/output上限、错误映射、Value/SourceContext布局、schema、opcode与构造接口保持。本入口只完成关闭实例执行结果的拥有和对应边界；公共Program逐实例Source接回另见17.78，Library未来泛型实例仍待完整实现。完整逐分配故障、原owner重试、精确边界、正式安全与provider资格必须分别绑定实际固定输入，不由小门或此接口的存在推导。
 
 ### 17.73 真实关闭实例结果的独立 Source 提供函数
 
@@ -7928,7 +7928,7 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 函数外的私有拥有式结果继续使用17.67的真实声明owner、literal-only materializer与精确调用绑定，不把数据观察升级为一般私有构造权。结果函数保持私有，获得其序号不授予运行期外部入口权限。所有Source、特化、工厂、类型接收、配方和发布共用原有限compiler ledger；失败保全空输出、全部前缀可释放，不退work/累计分配，最终释放不分配。公开SourceContext/Value/Call/Instance布局、schema、opcode、构造接口和预算不变。
 
-该入口建立普通Program Source中真实关闭实例的结果接收与提供函数，不把提供函数自动接回某个comptime语法站点。目前含comptime站点的输入、Library模板后续绑定和无当前Source声明节点的定义仍拒绝；依赖外围T的逐实例comptime语法接线继续OPEN，17.71不变。这些限制不是完整C0/C1完成定义的缩减。完整物理FI、原owner重试、精确边界、当前完整矩阵、正式安全和provider证据必须分别取得，不能由定向正例推导。
+该入口建立普通Program Source中真实关闭实例的结果接收与提供函数，不把提供函数自动接回某个comptime语法站点。目前含comptime站点的输入、Library模板后续绑定和无当前Source声明节点的定义仍拒绝；公共Program逐实例comptime由17.78另行接回，不由本手工选择入口获得。这些限制不是完整C0/C1完成定义的缩减。完整物理FI、原owner重试、精确边界、当前完整矩阵、正式安全和provider证据必须分别取得，不能由定向正例推导。
 
 ### 17.74 同步批次中的独立有界执行
 
@@ -7944,7 +7944,7 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 内部执行入口自动收集本次Program图中实际形成的泛型comptime调用，无调用者函数序号、外池类型ID、Value或PASS。每项保留当前原定义/原调用指令与关闭caller/callee/指令坐标，经17.74拥有批次独立接收和执行。视图完整复验当前产物及实际来源packet，再逐项核真实调用和全部有序替换，最后原子发布。Checked与Lowered的类型ID各属自己的池；类型关系按完整结构检查，不能直接比较外池ordinal。结果与原定义在AST、session及生产者死亡后仍保活，最终释放不分配。
 
-这些结果是编译器内部的站点执行数据，不发布含未绑定comptime的Source程序。公共Source入口在逐实例常量替换尚未接通时继续编译失败；Library未来实例与无当前Source节点的站点也没有由此获得权限。全部收费来自原有限ledger，原steps/frame/output/depth和work/allocated/live不变。完整语法接回、规范站点/结果绑定、独立packet、完整FI与正式安全仍须各自完成，不以此准备接点关闭C0/C1。
+这些结果是编译器内部的站点执行数据，不发布含未绑定comptime的Source程序。公共Program入口的完整常量接回见17.78；Library未来实例与无当前Source节点的站点没有由本执行入口获得权限。全部收费来自原有限ledger，原steps/frame/output/depth和work/allocated/live不变。完整语法接回、规范站点/结果绑定、独立packet、完整FI与正式安全仍须各自完成，不以此准备接点关闭C0/C1。
 
 ### 17.76 泛型编译期调用的规范站点与关闭结果绑定
 
@@ -7954,7 +7954,7 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked原子切到schema30/contract75；construction C接口revision3只提供xr_xir_compile_construction_new_v3，旧无版本和v2构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
 
-本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Source仍未接回逐实例常量，继续拒绝依赖外围类型实参的comptime。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。未来Library实例、公共语法接回、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
+本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Program逐实例常量接回见17.78。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。未来Library实例、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
 
 ### 17.77 无AST的拥有式实例字面量接收
 
@@ -7964,7 +7964,19 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原配方语义。私有字段值在其实际声明库存中解析唯一模块及nominal owner，通过17.67同一literal materializer及精确调用绑定接收；不伪造AST/query声明，不由结果类型授予一般私有访问。既有materializer绑定和comptime表完整复制。最终Checked拥有全部函数、类型、字符串、契约及构造信息，批次和生产者死亡后仍可独立packet写读、普通特化、Lowered和唯一CTFE。知道私有provider ordinal仍不授外部运行期入口权限。
 
-整个操作、当前复验、类型接收、配方、契约和最终检查计入原work128000000、累计分配64MiB、live8MiB；不重置、退款或提高steps/frame65536、depth128、policy2/8MiB输出及替换深度128。任一失败不发布部分结果，所有前缀可回收，最后析构不分配。公开布局、schema30/contract75、construction C3和opcode保持。本内部核尚未把provider绑定到公共逐实例comptime语法，也未完成Library未来实例收集与重定位。完整FI、原owner重试、当前全矩阵、正式安全/provider及原C0/C1退出门仍各需真实固定输入证据。
+整个操作、当前复验、类型接收、配方、契约和最终检查计入原work128000000、累计分配64MiB、live8MiB；不重置、退款或提高steps/frame65536、depth128、policy2/8MiB输出及替换深度128。任一失败不发布部分结果，所有前缀可回收，最后析构不分配。公开布局、schema30/contract75、construction C3和opcode保持。本内部核只负责literal接收；公共Program组合流程见17.78，Library未来实例收集与重定位仍未完成。完整FI、原owner重试、当前全矩阵、正式安全/provider及原C0/C1退出门仍各需真实固定输入证据。
+
+### 17.78 公共Program的完整逐实例comptime接回
+
+文件、文本和overlay的公共Program Source入口接受依赖实际外围类型实参的comptime。源定义始终按真实约束、词法模块/nominal owner及完整TEMPLATE检查；不按实例重解释AST，不隐式捕获外围运行期参数、局部或this。初始Source是未发布的准备输入。自身关闭的表达式仍由唯一Lowered CTFE执行，再在另一真实Source owner中按普通recipe重建；开放helper保留真实符号调用，跨这两个Source库存的预期类型以完整有序binder恒等替换核对，不能把开放类型误当作零实参关闭匹配。
+
+随后普通特化收集当前真正出现的关闭caller/callee及原定义/指令坐标。每项按原独立执行限额进入同一拥有式CTFE批次，完整复验后由17.77接收私有literal provider及必要materializer。当前实参向量属于接收类型池，按完整有序结构去重，站点及键规范排序。没有实际关闭实例时不伪造执行或Value，仍保留所有符号站点。混合关闭/开放、多站点、方法、跨模块私有witness、实例化中新生类型和嵌套comptime遵守同一规则。
+
+最终construction拥有全部站点/当前键/provider绑定，全部原泛型、约束、原函数body、requirement/private witness和TEMPLATE保留。普通共同Checker重新完整验证body/effect/构造和规范对应，成功后才发布Checked及独立query/syntax/dependency快照；query类型池先接收最终新增类型头，已有语义类型ID保持原前缀，显示schema可在其后继续产生。所有函数、类型、契约、向量及字符串独立拥有，生产者和packet字节死亡后仍能独立读写、普通特化、Lowered及运行。
+
+普通特化只在真实站点和完整关闭键下选择provider；缺当前键编译失败，不留下运行期helper替代comptime。嵌套外层literal可消除内层运行期调用，但原Source仍保留完整站点和实际收集键。根局部CTFE失败报告真实批次选择位置，再对应原语法站点；不通过重执行猜失败位置。批次准备前的全局失败不伪造根编号。错误、预算或OOM不发布部分Source，失败/重试使用同一原ledger，所有前缀可清理，最终释放不分配。
+
+原work128000000、累计分配64MiB、live8MiB、steps/frame65536、depth128、policy2/8MiB输出、替换深度128和显式支持target保持。公开布局、schema30/contract75、construction C3及opcode不变。本节实现公共Program接回；Library泛型模板的未来调用、无原AST站点的完整收集及函数/类型/nominal/站点/键重定位仍未实现，非空表Library导入继续明确拒绝。不得丢表后执行helper，也不以本流程或定向门替代完整C0/C1、全FI、原限额、VM/native/mixed、正式安全/provider及生产资格。
 
 ---
 

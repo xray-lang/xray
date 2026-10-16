@@ -2949,4 +2949,5 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 #include "xxir_source_instance_pipeline.inc.c"
 #include "xxir_source_comptime_instances.inc.c"
 #include "xxir_literal_pipeline.inc.c"
+#include "xxir_source_program_comptime.inc.c"
 #include "xxir_source_input.inc.c"

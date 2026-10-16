@@ -90,6 +90,7 @@ int main(int argc,char **argv) {
         generic_resources(positive[mode%5],mode>=5,!strcmp(argv[2],"--prefix"));return 0;
     }
     if (mode<10) generic_positive(positive[mode%5],mode>=5);
-    else generic_negative(mode==10?type_dependent:mode==11?runtime_capture:shadow_type);
+    else if (mode==11) generic_negative(runtime_capture);
+    else generic_positive(mode==10?type_dependent:shadow_type,false);
     return 0;
 }

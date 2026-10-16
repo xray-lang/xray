@@ -54,15 +54,18 @@ static bool source_comptime_helper(SourceContext *ctx,const XrXirArtifact *lower
     *output=found;return true;
 }
 static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtifact *checked);
-static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *checked) {
+static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *checked,bool defer_generic) {
+    uint32_t expected=0;
     for (const SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
         if (!source_work_units(ctx,site->syntax,2)) return false;
-        if (ctx->generics[site->helper].parameter_count) {
+        if (ctx->generics[site->helper].parameter_count && !defer_generic) {
             ctx->module=site->module;
             return source_fail(ctx,site->syntax,XR_XIR_BAD_TYPE,"comptime requires per-instance Source result binding");
         }
+        if (!ctx->generics[site->helper].parameter_count) ++expected;
     }
     if (ctx->linkage_kind==XR_XIR_LIBRARY) return source_comptime_evaluate_library(ctx,checked);
+    if (!expected) return true;
     AstNode *entry=ctx->comptime_sites ? ctx->comptime_sites->syntax : NULL;
     if (ctx->comptime_sites) ctx->module=ctx->comptime_sites->module;
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};uint8_t identity[32]={0};
@@ -83,6 +86,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
     if (status!=XR_XIR_OK) source_fail(ctx,entry,status,"comptime thunk pipeline failed complete receiving");
     uint32_t count=0;
     for (SourceComptimeSite *site=ctx->comptime_sites;ctx->diagnostic.status==XR_XIR_OK && site;site=site->next) {
+        if (ctx->generics[site->helper].parameter_count) continue;
         ctx->module=site->module;
         uint32_t f=UINT32_MAX;
         if (!source_comptime_helper(ctx,lowered,site,&f)) break;
@@ -107,7 +111,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         if (!source_work_units(ctx,site->syntax,sizeof(value)+1)) { xr_xir_value_drop(&value);break; }
         site->value=value;++count;
     }
-    if (ctx->diagnostic.status==XR_XIR_OK && count!=ctx->comptime_count)
+    if (ctx->diagnostic.status==XR_XIR_OK && count!=expected)
         source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"comptime result coverage is incomplete");
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(lowered);
     return ctx->diagnostic.status==XR_XIR_OK;
@@ -124,9 +128,14 @@ static void source_comptime_context_free(SourceContext *ctx) {
     while (ctx->memory) { SourceMemory *next=ctx->memory->next;xr_compile_resources_free(ctx->memory);ctx->memory=next; }
 }
 #include "xxir_source_comptime_library.inc.c"
+static void source_program_comptime_receive(SourceContext *ctx,XrXirSourceResult *output);
 static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output) {
     if (!ctx->comptime_count || ctx->diagnostic.status!=XR_XIR_OK) return;
-    if (!source_comptime_evaluate(ctx,output->checked)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
+    for (const SourceComptimeSite *site=ctx->comptime_sites;ctx->linkage_kind==XR_XIR_PROGRAM && site;site=site->next) {
+        if (!source_work_units(ctx,site->syntax,2)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
+        if (ctx->generics[site->helper].parameter_count) { source_program_comptime_receive(ctx,output);return; }
+    }
+    if (!source_comptime_evaluate(ctx,output->checked,false)) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
     if (!source_work_units(ctx,NULL,sizeof(SourceContext))) { xr_xir_compile_source_result_free(output);source_comptime_values_free(ctx);return; }
     SourceContext received={0};received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;

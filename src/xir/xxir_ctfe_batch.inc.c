@@ -6,12 +6,13 @@
  *
  * xxir_ctfe_batch.inc.c - Atomic results from one current immutable artifact
  */
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *request,
-    XrXirValue *output) {
+static XrXirCtfeStatus ctfe_batch_received(const XirCtfeBatchRequest *request,
+    XrXirValue *output,uint32_t *failed_index) {
     if (!request || !request->artifact || !request->functions || !request->count || !output ||
         request->limits.steps>XR_XIR_CTFE_MAX_STEPS || request->limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
         request->limits.output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES || request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH)
         return XR_XIR_CTFE_BAD_ARGUMENT;
+    if (failed_index && *failed_index!=UINT32_MAX) return XR_XIR_CTFE_BAD_ARGUMENT;
     const XrXirArtifact *artifact=request->artifact;
     if (!xir_compile_context_valid(&artifact->context)) return XR_XIR_CTFE_BAD_ARTIFACT;
     if (request->count>artifact->context.limits.functions) return XR_XIR_CTFE_BAD_ARGUMENT;
@@ -23,6 +24,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *req
     if (status!=XR_XIR_CTFE_OK) return status;
     for (uint32_t i=0;i<request->count;++i) {
         if (!xir_compile_work(&artifact->context,sizeof(XrXirCtfeCallRequest)+sizeof(uint32_t)+32)) {
+            if (failed_index) *failed_index=i;
             status=XR_XIR_CTFE_BUDGET;break;
         }
         XrXirCtfeCallRequest call={.evaluation={.artifact=artifact,.function=request->functions[i],
@@ -33,12 +35,20 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *req
         if (status==XR_XIR_CTFE_OK && artifact->module.functions[call.evaluation.function].parameter_count)
             status=XR_XIR_CTFE_BAD_ARGUMENT;
         if (status!=XR_XIR_CTFE_OK) {
+            if (failed_index) *failed_index=i;
             xr_xir_compile_cell_provenance_free(cells);xr_compile_resources_free(closure);break;
         }
         status=ctfe_call_run_received(&call,&output[i],owned,cells,closure,header_work);
-        if (status!=XR_XIR_CTFE_OK) break;
+        if (status!=XR_XIR_CTFE_OK) { if (failed_index) *failed_index=i;break; }
     }
     if (status!=XR_XIR_CTFE_OK)
         for (uint32_t i=0;i<request->count;++i) xr_xir_value_drop(&output[i]);
     return status;
+}
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch(const XirCtfeBatchRequest *request,XrXirValue *output) {
+    return ctfe_batch_received(request,output,NULL);
+}
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_batch_at(const XirCtfeBatchRequest *request,
+    XrXirValue *output,uint32_t *failed_index) {
+    return failed_index?ctfe_batch_received(request,output,failed_index):XR_XIR_CTFE_BAD_ARGUMENT;
 }

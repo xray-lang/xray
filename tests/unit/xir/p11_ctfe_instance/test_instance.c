@@ -169,8 +169,16 @@ static void instance_limits(void) {
 #include "literal_cases.h"
 #include "literal_controls.h"
 #include "literal_resources.h"
+#include "program_cases.h"
+#include "program_resources.h"
+#include "program_controls.h"
 int main(int argc,char **argv) {
     CHECK(argc>=2 && argc<=4);
+    if (!strcmp(argv[1],"program")) { CHECK(argc==3);program_normal(argv[2]);return 0; }
+    if (!strcmp(argv[1],"program-controls")) { CHECK(argc==2);program_controls();return 0; }
+    if (!strcmp(argv[1],"program-binding-controls")) { CHECK(argc==2);program_binding_controls();program_batch_controls();return 0; }
+    if (!strcmp(argv[1],"program-prefix")) { CHECK(argc==3);program_resources(argv[2],false);return 0; }
+    if (!strcmp(argv[1],"program-faults")) { CHECK(argc==3);program_resources(argv[2],true);return 0; }
     if (!strcmp(argv[1],"literal")) { CHECK(argc==3);literal_normal(argv[2]);return 0; }
     if (!strcmp(argv[1],"literal-controls")) { CHECK(argc==2);literal_controls();return 0; }
     if (!strcmp(argv[1],"literal-prefix")) { CHECK(argc==3);literal_resources(argv[2],false);return 0; }
