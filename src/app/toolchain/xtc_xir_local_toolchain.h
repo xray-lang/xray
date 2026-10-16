@@ -18,7 +18,8 @@ typedef enum XtcXirLocalStatus {
 } XtcXirLocalStatus;
 typedef enum XtcXirLocalStage {
     XTC_XIR_LOCAL_REQUEST, XTC_XIR_LOCAL_WORKSPACE, XTC_XIR_LOCAL_DISCOVERY,
-    XTC_XIR_LOCAL_ENVIRONMENT, XTC_XIR_LOCAL_PATHS, XTC_XIR_LOCAL_SDK
+    XTC_XIR_LOCAL_ENVIRONMENT, XTC_XIR_LOCAL_PATHS, XTC_XIR_LOCAL_SDK,
+    XTC_XIR_LOCAL_STARTUP
 } XtcXirLocalStage;
 typedef enum XtcXirLocalDomain {
     XTC_XIR_LOCAL_SELF, XTC_XIR_LOCAL_RESOURCE, XTC_XIR_LOCAL_FILESYSTEM,
@@ -48,7 +49,11 @@ typedef struct XtcXirLocalToolchainView {
 /* Windows x64 cl or clang-cl with the discovered MSVC SDK/linker. NULL paths
  * select discovery for the requested driver; explicit paths
  * never fall back. Discovery uses owned child output without modifying the
- * parent environment. SDK admission is real, but these paths do not grant
+ * parent environment. A charged startup command runs each selected executable
+ * before actual compilation; compiler help or Clang resource discovery and
+ * linker help consume the same ledger and bounded process owner. They grant
+ * no readiness: the native transaction still independently observes/replays
+ * every real compile/link image and all inputs. SDK admission is real, but these paths do not grant
  * Target or execution authority. All memory and work use the required caller
  * ledger. Output must be NULL and is preserved on failure. Diagnostics are
  * fixed values and retain the first failure without additional allocation.

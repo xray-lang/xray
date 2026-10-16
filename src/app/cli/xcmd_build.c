@@ -78,6 +78,7 @@ static int build_publication_close(XtcXirPublication **owner) {
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
 #if defined(XR_ARCH_X86_64) && XR_OS_WINDOWS
+#include "xcli_native_probe.h"
 #include "xcmd_build_native.inc.c"
 #endif
 XR_FUNC int cmd_build(const XrCliInvocation *inv) {

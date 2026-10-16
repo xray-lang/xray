@@ -198,10 +198,35 @@ static bool local_clang(XtcXirLocalToolchain *owner,const XtcXirLocalToolchainRe
         spec.env_keys[1]="TEMP";spec.env_values[1]=owner->view.workspace_parent;
         spec.env_keys[2]="TMP";spec.env_values[2]=owner->view.workspace_parent;
         spec.argv[1]="--no-default-config";spec.argv[2]="/clang:-print-resource-dir";
-        okay=local_process(owner,&spec,&result)&&local_output_path(owner,&result.stdout_bytes,false,&resource)&&
+        okay=local_process(owner,&spec,&result,0)&&local_output_path(owner,&result.stdout_bytes,false,&resource)&&
             local_join_path(owner,resource,"include",true,&owner->view.msvc.builtin_include);
     }
     xr_compile_resources_free(program_files);xr_compile_resources_free(resource);xtc_process_result_free(&result);return okay;
+}
+/* Cold loader initialization can load apphelp.dll only on the first launch.
+ * Explicit, metered startup precedes qualification rather than deleting that
+ * image from an observed run or retrying a failed replay until it passes. */
+static bool local_startup(XtcXirLocalToolchain *owner,const XtcXirLocalToolchainRequest *request) {
+    owner->diagnostic.stage=XTC_XIR_LOCAL_STARTUP;
+    for (unsigned i=0;i<2;++i) {
+        /* Clang's resource-directory command already performed its startup. */
+        if (!i && request->driver==XR_XIR_WINDOWS_CLANG_CL) continue;
+        XrProcessSpec spec;
+        if (!local_work(owner,sizeof(spec))) return false;
+        xtc_process_spec_init(&spec,i?owner->view.linker:owner->view.compiler,request->timeout_ms);
+        spec.cwd=owner->view.msvc.system_root;spec.output_limit=request->output_limit;
+        spec.extension_policy=request->driver==XR_XIR_WINDOWS_CLANG_CL ? XR_PROC_EXTENSIONS_DISABLED : XR_PROC_EXTENSIONS_DEFAULT;
+        spec.environment_source=XTC_PROCESS_ENV_EXPLICIT;spec.env_count=3;
+        spec.env_keys[0]="SystemRoot";spec.env_values[0]=owner->view.msvc.system_root;
+        spec.env_keys[1]="TEMP";spec.env_values[1]=owner->view.workspace_parent;
+        spec.env_keys[2]="TMP";spec.env_values[2]=owner->view.workspace_parent;
+        spec.argv[1]="/?";XrProcessResult result={0};
+        /* MSVC LINK prints its complete help and exits with LNK1100. This
+         * command-specific informational status never qualifies real linking. */
+        bool okay=local_process(owner,&spec,&result,i?1100:0);
+        xtc_process_result_free(&result);if (!okay) return false;
+    }
+    return true;
 }
 static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolchainRequest *request) {
     char *program_files = NULL, *system_root = NULL, *installation = NULL;
@@ -222,7 +247,7 @@ static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolcha
         spec.argv[4] = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64";
         spec.argv[5] = "-property"; spec.argv[6] = "installationPath";
         spec.argv[7] = "-format"; spec.argv[8] = "value"; spec.argv[9] = "-latest"; spec.argv[10] = "-utf8";
-        okay = local_process(owner, &spec, &result) &&
+        okay = local_process(owner, &spec, &result,0) &&
             local_output_path(owner,&result.stdout_bytes,true,&installation) &&
             local_join_path(owner, installation, "Common7/Tools/VsDevCmd.bat", false, &script);
     }
@@ -236,12 +261,13 @@ static bool local_discover(XtcXirLocalToolchain *owner, const XtcXirLocalToolcha
         spec.argv[1] = "/d"; spec.argv[2] = "/s"; spec.argv[3] = "/u"; spec.argv[4] = "/c";
         spec.argv[5] = "call"; spec.argv[6] = script; spec.argv[7] = "-no_logo";
         spec.argv[8] = "-arch=x64"; spec.argv[9] = "-host_arch=x64"; spec.argv[10] = "&&"; spec.argv[11] = "set";
-        okay = local_process(owner, &spec, &result) &&
+        okay = local_process(owner, &spec, &result,0) &&
             local_environment(owner, &result.stdout_bytes, values);
     }
     xtc_process_result_free(&result);
     if (okay) { owner->diagnostic.stage = XTC_XIR_LOCAL_PATHS; okay = local_paths(owner, values, request->compiler); }
     if(okay&&request->driver==XR_XIR_WINDOWS_CLANG_CL)okay=local_clang(owner,request);
+    if(okay)okay=local_startup(owner,request);
     xr_compile_resources_free(program_files); xr_compile_resources_free(system_root);
     xr_compile_resources_free(installation); return okay;
 }

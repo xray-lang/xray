@@ -2650,7 +2650,7 @@ target_link_libraries(xray PRIVATE xray_source_api xray_xir_runtime_host xray_fr
     xray_compile_resources)
 if(WIN32)
     target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
-        xray_xir_publication xray_toolchain_dependencies xray_cli_toolchain_update)
+        xray_xir_publication xray_toolchain_dependencies xray_cli_toolchain_update xray_cli_native_probe)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})

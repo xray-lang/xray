@@ -129,7 +129,8 @@ static bool local_join_path(XtcXirLocalToolchain *owner, const char *root, const
     if (!local_io(owner, xr_path_join_owned(&owner->policy, root, suffix, &joined))) return false;
     bool okay = local_path(owner, joined, directory, output); xr_compile_resources_free(joined); return okay;
 }
-static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec, XrProcessResult *output) {
+static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec, XrProcessResult *output,
+    int expected_exit) {
     XrToolchainProcess *process = NULL;
     XrProcessStatus status = xtc_process_prepare(owner->resources, spec, &process);
     if (status == XTC_PROCESS_OK) status = xtc_process_run(process, NULL, NULL, output);
@@ -145,7 +146,7 @@ static bool local_process(XtcXirLocalToolchain *owner, const XrProcessSpec *spec
     }
     if (output->stdout_bytes.truncated || output->stderr_bytes.truncated)
         return local_fail(owner, XTC_XIR_LOCAL_BUDGET, XTC_XIR_LOCAL_PROCESS, XTC_PROCESS_BUDGET);
-    if (output->exit_code) {
+    if (output->exit_code!=expected_exit) {
         owner->diagnostic.child_exit = output->exit_code;
         return local_fail(owner, XTC_XIR_LOCAL_CHILD_FAILED, XTC_XIR_LOCAL_PROCESS, output->exit_code);
     }

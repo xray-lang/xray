@@ -10,7 +10,7 @@ foreach(target build_source_driver build_source_faults)
         "${PROJECT_SOURCE_DIR}/src/os/win/fd_win.c"
         "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
     target_link_libraries(${target} PRIVATE xray_source_compile xray_xir_native_projection
-        xray_xir_local_toolchain xray_xir_native_admission xray_cli_toolchain_config)
+        xray_xir_local_toolchain xray_xir_native_admission xray_cli_toolchain_config xray_cli_native_probe)
     set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 endforeach()
 target_link_libraries(build_source_driver PRIVATE xray_xir_publication)

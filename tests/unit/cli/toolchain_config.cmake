@@ -80,6 +80,12 @@ if(WIN32)
         LABELS "unit;cli;toolchain;sdk;generated-c;ownership")
     find_program(XIR_CLI_CLANG NAMES clang-cl)
     if(XIR_CLI_CLANG)
+        add_test(NAME cli_toolchain_fallback COMMAND "${XRAY_PYTHON}" -X utf8
+            "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_fallback.py" $<TARGET_FILE:xray>
+            "${XIR_CLI_CLANG}" "${XIR_INVOCATION_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/toolchain-fallback")
+        set_tests_properties(cli_toolchain_fallback PROPERTIES TIMEOUT 300 COST 120 RUN_SERIAL TRUE
+            ENVIRONMENT "XRAY_STDLIB_PATH=${PROJECT_SOURCE_DIR}/stdlib"
+            LABELS "unit;cli;toolchain;sdk;generated-c;ownership")
         add_test(NAME cli_toolchain_clang COMMAND "${XRAY_PYTHON}" -X utf8
             "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_clang.py" $<TARGET_FILE:xray>
             "${XIR_CLI_CLANG}" "${XIR_INVOCATION_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/toolchain-clang" "${PROJECT_SOURCE_DIR}")
@@ -92,4 +98,18 @@ if(WIN32)
         "${CMAKE_CURRENT_BINARY_DIR}/toolchain-preferences")
     set_tests_properties(cli_toolchain_preferences PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE
         LABELS "unit;cli;toolchain;ownership")
+endif()
+if(WIN32)
+    add_executable(test_cli_native_probe "${CMAKE_CURRENT_LIST_DIR}/test_cli_native_probe.c")
+    target_link_libraries(test_cli_native_probe PRIVATE xray_cli_native_probe)
+    target_include_directories(test_cli_native_probe PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
+    target_compile_definitions(test_cli_native_probe PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    target_compile_features(test_cli_native_probe PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(test_cli_native_probe PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(test_cli_native_probe PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME cli_native_probe_owner COMMAND test_cli_native_probe)
+    set_tests_properties(cli_native_probe_owner PROPERTIES TIMEOUT 30 LABELS "unit;cli;xir;ownership;budget")
 endif()

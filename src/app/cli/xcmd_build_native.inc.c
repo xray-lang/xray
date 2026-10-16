@@ -33,6 +33,16 @@ static int build_operation_close(XtcXirNativeOperation **owner) {
     /* A command must not return while abandoning a private workspace owner. */
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
+static int build_probe_close(XrCliNativeProbe **owner) {
+    bool failed=false;
+    for (unsigned i=0;i<8;++i) {
+        XrCliNativeProbeStatus status=xr_cli_native_probe_close(owner);
+        if (status==XR_CLI_NATIVE_PROBE_OK) return failed ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+        if (status!=XR_CLI_NATIVE_PROBE_PENDING) failed=true;
+    }
+    fputs("XR_BUILD_6008: native probe cleanup remains pending\n",stderr);fflush(stderr);
+    _Exit(XR_CLI_EXIT_INTERNAL);
+}
 static int build_native_prepare(XrCompileResources *resources, const XrCliInvocation *inv,
     const XrXirNativeProjection *projection, XrXirNativeArtifact **artifact) {
     XrCliToolchainConfig *config = NULL;
@@ -42,43 +52,28 @@ static int build_native_prepare(XrCompileResources *resources, const XrCliInvoca
         return configured == XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
     }
     const XrCliToolchainConfigView *preferences = xr_cli_toolchain_config_view(config);
-    const char *compiler = xr_cli_opt_string(&inv->options, "cc", NULL);
-    const char *provider = xr_cli_opt_string(&inv->options, "toolchain", NULL);
-    XrToolchainSelector selector=XR_TOOLCHAIN_SELECTOR_AUTO;char error[256]={0};
-    if(provider&&!xtc_selector_parse(provider,&selector,error,sizeof(error))) {
-        fputs("XR_BUILD_6011: invalid native toolchain provider\n",stderr);
-        xr_cli_toolchain_config_free(config);return XR_CLI_EXIT_FAIL;
+    XrCliNativeProbeOptions options={preferences,"native",xr_cli_opt_string(&inv->options,"toolchain",NULL),
+        xr_cli_opt_string(&inv->options,"cc",NULL)};
+    XrCliNativeProbeRequest select;
+    XrCliNativeProbeStatus resolved=xr_cli_native_probe_resolve(resources,&options,&select);
+    if (resolved!=XR_CLI_NATIVE_PROBE_OK) {
+        fprintf(stderr,"XR_BUILD_6011: native toolchain selection failed (status=%u)\n",(unsigned)resolved);
+        xr_cli_toolchain_config_free(config);return resolved==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
     }
-    for (size_t i = 0; !provider && i < preferences->count; ++i) {
-        const XrCliToolchainPreference *preference = &preferences->preferences[i];
-        XrCompileResourceStatus work = xr_compile_resources_work(resources, 7);
-        if (work != XR_COMPILE_RESOURCE_OK) {
-            xr_cli_toolchain_config_free(config); return XR_CLI_EXIT_FAIL;
-        }
-        if (strcmp(preference->target, "native")) continue;
-        selector=preference->selector;
-        if (!compiler) compiler = preference->compiler;
-        break;
-    }
-    if(selector!=XR_TOOLCHAIN_SELECTOR_AUTO&&selector!=XR_TOOLCHAIN_SELECTOR_HOST&&
-        selector!=XR_TOOLCHAIN_SELECTOR_MSVC&&selector!=XR_TOOLCHAIN_SELECTOR_CLANG) {
-        fputs("XR_BUILD_6011: selected native toolchain provider is unsupported by this build\n",stderr);
-        xr_cli_toolchain_config_free(config);return XR_CLI_EXIT_FAIL;
-    }
-    XtcXirLocalToolchainRequest locate = {compiler,
-        NULL,NULL,30000,4*1024*1024,1024*1024,
-        selector==XR_TOOLCHAIN_SELECTOR_CLANG?XR_XIR_WINDOWS_CLANG_CL:XR_XIR_WINDOWS_MSVC};
-    XtcXirLocalDiagnostic local_diagnostic = {0};
-    XtcXirLocalToolchain *local = NULL;
-    XtcXirLocalStatus found = xtc_xir_local_toolchain_open(resources, &locate, &local, &local_diagnostic);
+    XrCliNativeProbe *selection=NULL;
+    XrCliNativeProbeStatus found=xr_cli_native_probe_new(resources,&selection);
+    if (found==XR_CLI_NATIVE_PROBE_OK) found=xr_cli_native_probe_run(selection,&select);
     xr_cli_toolchain_config_free(config);
-    if (found != XTC_XIR_LOCAL_OK) {
-        fprintf(stderr,
-            "XR_BUILD_6006: native toolchain lookup failed (status=%u stage=%u domain=%u code=%d os=%u child=%d)\n",
-            (unsigned)found, (unsigned)local_diagnostic.stage, (unsigned)local_diagnostic.domain,
-            local_diagnostic.code, local_diagnostic.os_error, local_diagnostic.child_exit);
-        return found == XTC_XIR_LOCAL_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
+    if (found!=XR_CLI_NATIVE_PROBE_OK) {
+        const XrCliNativeProbeReport *report=xr_cli_native_probe_report(selection);
+        fprintf(stderr,"%s: native capability probe failed (status=%u code=%s stage=%s)\n",
+            found==XR_CLI_NATIVE_PROBE_UNSUPPORTED ? "XR_BUILD_6011" : "XR_BUILD_6006",
+            (unsigned)found,report && report->failure.code ? report->failure.code : "PROBE_UNAVAILABLE",
+            report && report->failure.stage ? report->failure.stage : "capability");
+        int result=found==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
+        int closed=build_probe_close(&selection);return closed>result ? closed : result;
     }
+    const XtcXirLocalToolchain *local=xr_cli_native_probe_local(selection);
     const XtcXirLocalToolchainView *view = xtc_xir_local_toolchain_view(local);
     XtcXirWorkspaceRequest workspace = {view->workspace_parent, {XR_PATH_LIMIT_MAX_PATH, 32, 65536}};
     XtcXirNativeOperationLimits limits = {{{4 * 1024 * 1024, XR_PATH_LIMIT_MAX_PATH, 4096},
@@ -100,18 +95,25 @@ static int build_native_prepare(XrCompileResources *resources, const XrCliInvoca
             d ? d->invocation.exit_code : 0);
         result = build_operation_exit(status);
     } else {
+        XrCliNativeProbeStatus current=xr_cli_native_probe_check_inputs(selection,xtc_xir_native_operation_provider(operation),
+            xr_xir_runtime_sdk_facts(xtc_xir_local_toolchain_sdk(local)));
         XtcXirNativeAdmissionDiagnostic diagnostic = {0};
-        XtcXirNativeAdmissionStatus admitted = xtc_xir_native_admit(operation, projection,
+        XtcXirNativeAdmissionStatus admitted=XTC_XIR_ADMISSION_INVALID;
+        if (current!=XR_CLI_NATIVE_PROBE_OK) {
+            fprintf(stderr,"XR_BUILD_6009: native probe input correspondence failed (status=%u)\n",(unsigned)current);
+            result=current==XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
+        } else admitted=xtc_xir_native_admit(operation, projection,
             xtc_xir_local_toolchain_sdk(local), BUILD_C_LIMIT, artifact, &diagnostic);
-        if (admitted != XTC_XIR_ADMISSION_OK) {
+        if (current==XR_CLI_NATIVE_PROBE_OK && admitted != XTC_XIR_ADMISSION_OK) {
             fprintf(stderr, "XR_BUILD_6009: native admission failed (status=%u domain=%u code=%d stage=%u)\n",
                 (unsigned)admitted, (unsigned)diagnostic.domain, diagnostic.code, (unsigned)diagnostic.stage);
             result = admitted == XTC_XIR_ADMISSION_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
         }
     }
-    xtc_xir_local_toolchain_free(local);
     int closed = build_operation_close(&operation);
     if (closed > result) result = closed;
+    closed=build_probe_close(&selection);
+    if (closed>result) result=closed;
     if (result != XR_CLI_EXIT_OK) {
         xr_compile_native_artifact_free(*artifact); *artifact = NULL;
     }
