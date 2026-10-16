@@ -49,6 +49,24 @@ _INPUTS={'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e62
  'tests/unit/xir/legacy_consumers/complete_ffi_memory_model.py': 'd7b0623954a9631406a5190c4353bba37db96359bba9808c2a9b82e5cc629b95',
  'tests/unit/xir/legacy_consumers/independent_observation_format.py': '09843df7bf351411b39877696ae17e489ee982062827d3a6ab8e8cad7ab1f68b'}
 
+_ORIGINAL_NAMES=_NAMES
+_LAYOUT_PROGRAMS={
+ "repr_c_struct": "tests/diff/cases/semantics/oop/repr_c_struct.xr",
+ "repr_packed_aligned_struct_aggregate_param": "tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr",
+ "union_fixed_array_overlay": "tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr",
+ "union_fixed_layout_overlay": "tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr",
+ "fixed_width_type_tests": "tests/diff/cases/semantics/types/fixed_width_type_tests.xr"
+}
+_NAMES=_NAMES|frozenset(_LAYOUT_PROGRAMS)
+_PROGRAMS.update(_LAYOUT_PROGRAMS)
+_INPUTS.update({
+ "tests/diff/cases/semantics/oop/repr_c_struct.xr": "6cfaab1ce4b27dfc4b0114c37a7c033d6c688104af265f1f3cbf05c60bce7fc7",
+ "tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr": "16a2b48950ab5f89131f9584b8d239e58eb1294a1cc121503fc80a926adc9fc0",
+ "tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr": "33677c6d42770d0c36a43088f40a104d7232102212e73bebb328649c35b7143e",
+ "tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr": "13ec0936c0bbd633da9594b21f42dc6b0160cedd040e4ce11c23acd7af1d2e95",
+ "tests/diff/cases/semantics/types/fixed_width_type_tests.xr": "85d27bce99b5df61685c2afeed5157aacc5692c9583ac8489752ae675a206ca6"
+})
+
 
 class Region:
     def __init__(self,length,*,zeroed=False,page_aligned=False):
@@ -238,14 +256,121 @@ def volatile_trace():
     memory.freed=True;result.append('ok');return result
 
 
+def aligned_aggregate(fields,*,packed=False,alignment=0):
+    if type(alignment) is not int or alignment<0 or alignment and alignment&(alignment-1):raise ValueError('Invalid explicit alignment')
+    (size,natural),offsets=aggregate(fields,packed=packed)
+    align=max(natural,alignment)
+    return ((size+align-1)//align*align,align),offsets
+
+
+class RecordValue:
+    """Logical values for the selected scalar and nested-record declarations."""
+    def __init__(self,declaration,fields):
+        import copy
+        self.declaration,self.fields=declaration,copy.deepcopy(fields)
+    def copy(self):return RecordValue(self.declaration,self.fields)
+    def __eq__(self,other):return isinstance(other,RecordValue) and self.declaration==other.declaration and self.fields==other.fields
+
+
+class UnionValue:
+    """Explicit fixed bytes; reading an inactive member requires unsafe access."""
+    def __init__(self,members,active,value):
+        self.members=dict(members);self.active=None
+        size=max(width for width,_,_ in self.members.values());self.memory=Region(size)
+        self.store(active,value)
+    def store(self,name,value):
+        width,signed,array=self.members[name]
+        if array:
+            if len(value)!=width or any(type(x) is not int or not 0<=x<=255 for x in value):raise ValueError('Invalid fixed byte array')
+            self.memory.write(0,bytes(value))
+        else:
+            if type(value) is not int:raise ValueError('Integer union member requires its exact scalar family')
+            self.memory.store_int(0,width,value,signed=signed)
+        self.active=name
+    def read(self,name,*,unsafe=False):
+        if name!=self.active and not unsafe:raise ValueError('Inactive union access requires unsafe')
+        width,signed,array=self.members[name]
+        # A fixed array read returns a logical copy, even from shared union bytes.
+        return list(self.memory.read(0,width)) if array else self.memory.load_int(0,width,signed=signed)
+
+
+def exactly_representable(value,target):
+    integers={'i8':(8,True),'u8':(8,False),'i16':(16,True),'u16':(16,False),'i32':(32,True),'u32':(32,False),'i64':(64,True),'u64':(64,False)}
+    if target in integers:
+        bits,signed=integers[target];low=-(1<<(bits-1)) if signed else 0;high=(1<<(bits-int(signed)))-1
+        return type(value) is int and low<=value<=high
+    if target not in {'f32','f64'}:raise ValueError('Unknown fixed numeric type')
+    if type(value) is not float:return False
+    import math
+    if not math.isfinite(value):raise ValueError('Nonfinite values are outside the selected complete program')
+    if target=='f64':return True
+    try:return struct.unpack('<f',struct.pack('<f',value))[0]==value
+    except OverflowError:return False
+
+
+def checked_optional_cast(value,target):return value if exactly_representable(value,target) else None
+
+
+def record_value_trace():
+    def make_point():return RecordValue('CPoint',{'x':10,'y':20})
+    p=make_point();p.fields['x']+=2;q=RecordValue('CPoint',{'x':12,'y':20})
+    out=[p.fields['x'],p.fields['y'],p==q]
+    b=RecordValue('CBox',{'p':RecordValue('CPoint',{'x':1,'y':2}),'tag':3});b.fields['p'].fields['x']+=b.fields['tag']
+    return out+[b.fields['p'].fields['x'],b.fields['p'].fields['y'],b.fields['tag']]
+
+
+def aggregate_parameter_trace():
+    calls=[]
+    def make_packed(tag,value):calls.append('make_packed');return RecordValue('PackedPair',{'tag':tag,'value':value})
+    def make_aligned(value):calls.append('make_aligned');return RecordValue('AlignedWord',{'value':value})
+    def make_packed_aligned(tag,value):calls.append('make_packed_aligned');return RecordValue('PackedAligned',{'tag':tag,'value':value})
+    def sum_packed(value):calls.append('sum_packed');p=value.copy();return p.fields['tag']+p.fields['value']
+    def read_aligned(value):calls.append('read_aligned');p=value.copy();return p.fields['value']
+    def sum_packed_aligned(value):calls.append('sum_packed_aligned');p=value.copy();return p.fields['tag']+p.fields['value']
+    p=make_packed(5,37);a=make_aligned(42);pa=make_packed_aligned(6,36)
+    out=[sum_packed(p),read_aligned(a),sum_packed_aligned(pa)]
+    packed,po=aligned_aggregate([(1,1),(4,4)],packed=True)
+    aligned,_=aligned_aggregate([(4,4)],alignment=16)
+    packed_aligned,pao=aligned_aggregate([(1,1),(4,4)],packed=True,alignment=16)
+    return out+[*packed,po[1],*aligned,*packed_aligned,pao[1]],calls
+
+
+def erased_numeric_trace():
+    text=lambda value:'null' if value is None else render({'expected':value})
+    is_=lambda value,target:text(exactly_representable(value,target))
+    cast=lambda value,target:text(checked_optional_cast(value,target))
+    small,big,negative,exact,inexact,string=7,3000000000,-5,1.5,0.1,'s'
+    return ['7 is i32='+is_(small,'i32')+' is i8='+is_(small,'i8')+' is u8='+is_(small,'u8'),
+     '7 as i32='+cast(small,'i32'),'7 as i8?='+cast(small,'i8'),
+     '3e9 is i32='+is_(big,'i32')+' is i64='+is_(big,'i64'),'3e9 as i32?='+cast(big,'i32'),
+     '-5 is u8='+is_(negative,'u8')+' is i16='+is_(negative,'i16'),
+     '1.5 is f32='+is_(exact,'f32')+' is f64='+is_(exact,'f64'),'1.5 as f32?='+cast(exact,'f32'),
+     '0.1 is f32='+is_(inexact,'f32')+' is f64='+is_(inexact,'f64'),'0.1 as f32?='+cast(inexact,'f32'),
+     '"s" is i32='+is_(string,'i32')+' is f32='+is_(string,'f32')]
+
+
+def fixed_layout_observations():
+    bits=UnionValue({'i':(4,True,False),'u':(4,False,False)},'i',-1)
+    unsigned=bits.read('u',unsafe=True);bits.store('u',0x7fffffff)
+    x=UnionValue({'u':(4,False,False),'b':(4,False,True)},'u',0x01020304)
+    copied=x.read('b',unsafe=True);bytes_out=list(copied);copied[0]=255
+    rows={'repr_c_struct':record_value_trace(),'repr_packed_aligned_struct_aggregate_param':aggregate_parameter_trace()[0],
+     'union_fixed_layout_overlay':[unsigned,bits.read('i',unsafe=True)],'union_fixed_array_overlay':bytes_out+[x.read('u',unsafe=True)],
+     'fixed_width_type_tests':erased_numeric_trace()}
+    if set(rows)!=set(_LAYOUT_PROGRAMS) or sum(map(len,rows.values()))!=35:raise ValueError('Lost whole layout/numeric observations')
+    return rows
+
+
 def observations():
-    return {'mem_bulk_shared_core':bulk_trace(),'mem_from_address_shared_core':address_trace(),
+    rows={'mem_bulk_shared_core':bulk_trace(),'mem_from_address_shared_core':address_trace(),
             'mem_layout_introspection':layout_trace(),'mem_load_store_scalar_shared_core':scalar_trace(),
             'mem_volatile_shared_core':volatile_trace()}
+    rows.update(fixed_layout_observations());return rows
 
 
 def expected_rows():
-    if (set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items()) or
+    if (set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items() if name in _ORIGINAL_NAMES) or
+            any(_PROGRAMS.get(name)!=path for name,path in _LAYOUT_PROGRAMS.items()) or
             set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()) or
             (TARGET,NATIVE_ENDIAN,POINTER_BYTES,CACHE_LINE_BYTES)!=('windows-x86_64','little',8,64)):
         raise ValueError('Memory model lost an exact complete program, authority or target premise')
@@ -253,9 +378,13 @@ def expected_rows():
         if hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
             raise ValueError('Memory program or normative input changed: '+path)
     traces=observations()
-    if set(traces)!=_NAMES or sum(map(len,traces.values()))!=82:raise ValueError('Memory model lost complete original observations')
-    return [{'id':'complete_memory_primitives_'+name,'source':path,'original_source':path,'required_target':TARGET,
+    if set(traces)!=_NAMES or sum(map(len,traces.values()))!=117:raise ValueError('Memory model lost complete original observations')
+    rows=[{'id':'complete_memory_primitives_'+name,'source':path,'original_source':path,'required_target':TARGET,
              'expected':{'exit_code':0,'stdout_utf8':''.join(render({'expected':value})+'\n' for value in traces[name]),'stderr_utf8':''},
              'observation_count':len(traces[name]),
              'model':'Complete unchanged original normal allocation path;independent initialized bytes, symbolic typed pointer identity, explicit x64 little-endian scalar/layout facts and bulk policy. No host query or product-output oracle;all unsafe/volatile/resource/lifetime/provider duties remain open.'}
             for name,path in sorted(_PROGRAMS.items())]
+    for row in rows:
+        if row['original_source'] in _LAYOUT_PROGRAMS.values():
+            row['model']='Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.'
+    return rows

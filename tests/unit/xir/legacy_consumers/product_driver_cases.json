@@ -31086,6 +31086,186 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 10
+    },
+    {
+      "id": "complete_memory_primitives_fixed_width_type_tests",
+      "oracle_id": "complete_memory_primitives_fixed_width_type_tests",
+      "source": "tests/diff/cases/semantics/types/fixed_width_type_tests.xr",
+      "source_lf_sha256": "85d27bce99b5df61685c2afeed5157aacc5692c9583ac8489752ae675a206ca6",
+      "entry": "run",
+      "stdout_utf8": "7 is i32=true is i8=true is u8=true\n7 as i32=7\n7 as i8?=7\n3e9 is i32=false is i64=true\n3e9 as i32?=null\n-5 is u8=false is i16=true\n1.5 is f32=true is f64=true\n1.5 as f32?=1.5\n0.1 is f32=false is f64=true\n0.1 as f32?=null\n\"s\" is i32=false is f32=false\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/types/fixed_width_type_tests.xr",
+        "source_lf_sha256": "85d27bce99b5df61685c2afeed5157aacc5692c9583ac8489752ae675a206ca6"
+      },
+      "remaining_gates": [
+        "All complete nominal struct constructors,updates,equality,all6 aggregate calls,packed/align16 layout queries,unsafe union accesses and fixed-array logical copy,all original JSON scalar exact is/as/nullable interpolation retained.",
+        "All35 original observations;actual VM/C/native,typed fixed-layout ABI and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
+    },
+    {
+      "id": "complete_memory_primitives_repr_c_struct",
+      "oracle_id": "complete_memory_primitives_repr_c_struct",
+      "source": "tests/diff/cases/semantics/oop/repr_c_struct.xr",
+      "source_lf_sha256": "6cfaab1ce4b27dfc4b0114c37a7c033d6c688104af265f1f3cbf05c60bce7fc7",
+      "entry": "run",
+      "stdout_utf8": "12\n20\ntrue\n4\n2\n3\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/repr_c_struct.xr",
+        "source_lf_sha256": "6cfaab1ce4b27dfc4b0114c37a7c033d6c688104af265f1f3cbf05c60bce7fc7"
+      },
+      "remaining_gates": [
+        "All complete nominal struct constructors,updates,equality,all6 aggregate calls,packed/align16 layout queries,unsafe union accesses and fixed-array logical copy,all original JSON scalar exact is/as/nullable interpolation retained.",
+        "All35 original observations;actual VM/C/native,typed fixed-layout ABI and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_memory_primitives_repr_packed_aligned_struct_aggregate_param",
+      "oracle_id": "complete_memory_primitives_repr_packed_aligned_struct_aggregate_param",
+      "source": "tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr",
+      "source_lf_sha256": "16a2b48950ab5f89131f9584b8d239e58eb1294a1cc121503fc80a926adc9fc0",
+      "entry": "run",
+      "stdout_utf8": "42\n42\n42\n5\n1\n1\n16\n16\n16\n16\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/repr_packed_aligned_struct_aggregate_param.xr",
+        "source_lf_sha256": "16a2b48950ab5f89131f9584b8d239e58eb1294a1cc121503fc80a926adc9fc0"
+      },
+      "remaining_gates": [
+        "All complete nominal struct constructors,updates,equality,all6 aggregate calls,packed/align16 layout queries,unsafe union accesses and fixed-array logical copy,all original JSON scalar exact is/as/nullable interpolation retained.",
+        "All35 original observations;actual VM/C/native,typed fixed-layout ABI and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
+    },
+    {
+      "id": "complete_memory_primitives_union_fixed_array_overlay",
+      "oracle_id": "complete_memory_primitives_union_fixed_array_overlay",
+      "source": "tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr",
+      "source_lf_sha256": "33677c6d42770d0c36a43088f40a104d7232102212e73bebb328649c35b7143e",
+      "entry": "run",
+      "stdout_utf8": "4\n3\n2\n1\n16909060\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/union_fixed_array_overlay.xr",
+        "source_lf_sha256": "33677c6d42770d0c36a43088f40a104d7232102212e73bebb328649c35b7143e"
+      },
+      "remaining_gates": [
+        "All complete nominal struct constructors,updates,equality,all6 aggregate calls,packed/align16 layout queries,unsafe union accesses and fixed-array logical copy,all original JSON scalar exact is/as/nullable interpolation retained.",
+        "All35 original observations;actual VM/C/native,typed fixed-layout ABI and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 5
+    },
+    {
+      "id": "complete_memory_primitives_union_fixed_layout_overlay",
+      "oracle_id": "complete_memory_primitives_union_fixed_layout_overlay",
+      "source": "tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr",
+      "source_lf_sha256": "13ec0936c0bbd633da9594b21f42dc6b0160cedd040e4ce11c23acd7af1d2e95",
+      "entry": "run",
+      "stdout_utf8": "4294967295\n2147483647\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/union_fixed_layout_overlay.xr",
+        "source_lf_sha256": "13ec0936c0bbd633da9594b21f42dc6b0160cedd040e4ce11c23acd7af1d2e95"
+      },
+      "remaining_gates": [
+        "All complete nominal struct constructors,updates,equality,all6 aggregate calls,packed/align16 layout queries,unsafe union accesses and fixed-array logical copy,all original JSON scalar exact is/as/nullable interpolation retained.",
+        "All35 original observations;actual VM/C/native,typed fixed-layout ABI and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
     }
   ]
 }

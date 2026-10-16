@@ -13,9 +13,9 @@ class CompleteMemoryPrimitives(unittest.TestCase):
             'mem_layout_introspection':[1,1,2,2,4,4,8,8,4,4,8,8,8,8,6,2,12,4,0,2,4,8,7,1,0,1,5,4,2,20,4,0,12,16],
             'mem_load_store_scalar_shared_core':[-2,250,-1234,4660,-12345678,16909060,-5,72623859790382856,1.5,-2.25,True,True,270544960,270544960],
             'mem_volatile_shared_core':[305419896,120,255,43981,72623859790382856,'ok']}
-        self.assertEqual(m.observations(),expected)
+        self.assertEqual({name:m.observations()[name] for name in expected},expected)
         self.assertEqual(sum(map(len,expected.values())),82)
-        self.assertEqual(len(m.expected_rows()),5)
+        self.assertEqual(len([row for row in m.expected_rows() if row['original_source'] not in m._LAYOUT_PROGRAMS.values()]),5)
 
     def test_uninitialized_and_dead_bytes_never_supply_observations(self):
         memory=m.Region(4)
@@ -96,5 +96,74 @@ class CompleteMemoryPrimitives(unittest.TestCase):
         for attribute,value in [('_PROGRAMS',swapped),('_PROGRAMS',{}),('_INPUTS',{}),('NATIVE_ENDIAN','big'),('POINTER_BYTES',4),('CACHE_LINE_BYTES',128)]:
             with self.subTest(attribute=attribute),mock.patch.object(m,attribute,value),self.assertRaises(ValueError):m.expected_rows()
 
+
+
+    def test_five_complete_layout_and_numeric_traces(self):
+        expected={'repr_c_struct':[12,20,True,4,2,3],
+         'repr_packed_aligned_struct_aggregate_param':[42,42,42,5,1,1,16,16,16,16,1],
+         'union_fixed_array_overlay':[4,3,2,1,16909060],'union_fixed_layout_overlay':[4294967295,2147483647],
+         'fixed_width_type_tests':['7 is i32=true is i8=true is u8=true','7 as i32=7','7 as i8?=7',
+          '3e9 is i32=false is i64=true','3e9 as i32?=null','-5 is u8=false is i16=true',
+          '1.5 is f32=true is f64=true','1.5 as f32?=1.5','0.1 is f32=false is f64=true','0.1 as f32?=null','"s" is i32=false is f32=false']}
+        self.assertEqual(sum(map(len,expected.values())),35);self.assertEqual(m.fixed_layout_observations(),expected)
+        self.assertEqual(len(m.expected_rows()),10);self.assertEqual(sum(map(len,m.observations().values())),117)
+
+    def test_packing_and_requested_alignment_do_not_change_member_order(self):
+        fields=[(1,1),(4,4)]
+        self.assertEqual(m.aligned_aggregate(fields),((8,4),[0,4]))
+        self.assertEqual(m.aligned_aggregate(fields,packed=True),((5,1),[0,1]))
+        self.assertEqual(m.aligned_aggregate(fields,packed=True,alignment=16),((16,16),[0,1]))
+        self.assertEqual(m.aligned_aggregate([(4,4)],alignment=16),((16,16),[0]))
+        for alignment in [-1,3,True]:
+            with self.subTest(alignment=alignment),self.assertRaises(ValueError):m.aligned_aggregate(fields,alignment=alignment)
+
+    def test_record_values_keep_nominal_identity_and_nested_copy(self):
+        point=m.RecordValue('CPoint',{'x':1,'y':2});box=m.RecordValue('CBox',{'p':point,'tag':3});copy=box.copy()
+        copy.fields['p'].fields['x']=99
+        self.assertEqual(box.fields['p'].fields['x'],1);self.assertEqual(point.fields['x'],1)
+        self.assertNotEqual(box,copy);self.assertEqual(point,m.RecordValue('CPoint',{'x':1,'y':2}))
+        self.assertNotEqual(point,m.RecordValue('OtherPoint',{'x':1,'y':2}))
+
+    def test_every_original_aggregate_function_call_is_preserved(self):
+        values,calls=m.aggregate_parameter_trace()
+        self.assertEqual(calls,['make_packed','make_aligned','make_packed_aligned','sum_packed','read_aligned','sum_packed_aligned'])
+        self.assertEqual(values[:3],[42,42,42]);self.assertEqual(len(values),11)
+
+    def test_union_signedness_and_inactive_access_are_explicit(self):
+        value=m.UnionValue({'i':(4,True,False),'u':(4,False,False)},'i',-1)
+        self.assertEqual(value.memory.read(0,4),bytes([255]*4))
+        with self.assertRaises(ValueError):value.read('u')
+        self.assertEqual(value.read('u',unsafe=True),2**32-1)
+        value.store('u',0x80000000);self.assertEqual(value.read('i',unsafe=True),-(2**31))
+        with self.assertRaises(ValueError):value.store('i',True)
+
+    def test_union_fixed_array_member_read_is_a_logical_copy(self):
+        value=m.UnionValue({'u':(4,False,False),'b':(4,False,True)},'u',0x01020304)
+        copied=value.read('b',unsafe=True);self.assertEqual(copied,[4,3,2,1]);copied[0]=255
+        self.assertEqual(value.read('u'),0x01020304);self.assertEqual(value.read('b',unsafe=True),[4,3,2,1])
+        value.store('b',copied);self.assertEqual(value.read('u',unsafe=True),0x010203ff)
+
+    def test_erased_integer_width_checks_use_exact_range_and_family(self):
+        for signed in [False,True]:
+            for bits in [8,16,32,64]:
+                target=('i' if signed else 'u')+str(bits);lo=-(1<<(bits-1)) if signed else 0;hi=(1<<(bits-int(signed)))-1
+                for value in [lo,hi]:self.assertTrue(m.exactly_representable(value,target))
+                for value in [lo-1,hi+1,True,1.0,'1',None]:self.assertFalse(m.exactly_representable(value,target))
+        self.assertFalse(m.exactly_representable(3000000000,'i32'));self.assertTrue(m.exactly_representable(3000000000,'i64'))
+
+    def test_erased_floating_width_checks_do_not_silently_round(self):
+        for value in [1.5,-0.0,2.0**100]:self.assertTrue(m.exactly_representable(value,'f32'))
+        for value in [0.1,1e100]:self.assertFalse(m.exactly_representable(value,'f32'));self.assertTrue(m.exactly_representable(value,'f64'))
+        self.assertFalse(m.exactly_representable(1,'f32'));self.assertFalse(m.exactly_representable('s','f32'))
+        self.assertIsNone(m.checked_optional_cast(0.1,'f32'));self.assertEqual(m.checked_optional_cast(1.5,'f32'),1.5)
+        self.assertIsNone(m.checked_optional_cast(3000000000,'i32'));self.assertEqual(m.checked_optional_cast(7,'i8'),7)
+        with self.assertRaises(ValueError):m.exactly_representable(7,'unknown')
+        with self.assertRaises(ValueError):m.exactly_representable(float('nan'),'f64')
+
+    def test_new_bindings_retain_whole_sources_and_target_premises(self):
+        rows=[row for row in m.expected_rows() if row['original_source'] in m._LAYOUT_PROGRAMS.values()]
+        self.assertEqual(len(rows),5);self.assertEqual(sum(row['observation_count'] for row in rows),35)
+        for row in rows:
+            self.assertEqual(row['source'],row['original_source']);self.assertEqual(row['required_target'],'windows-x86_64');self.assertEqual(row['expected']['exit_code'],0)
 
 if __name__=='__main__':unittest.main()
