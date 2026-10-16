@@ -158,6 +158,10 @@ XR_FUNC XrXirStatus xr_xir_compile_effects_refine_verified(const XrXirCompileCon
 XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *context,
     const XrXirModule *built, const XrXirConstruction *construction, const XrXirRootRefiner *refiner,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+/* Reconstruct and fully check specialization privately, then encode that exact
+ * unexposed result. No caller-supplied verification fact is accepted. */
+XR_FUNC XrXirStatus xir_compile_specialized_packet(const XrXirArtifact *source,
+    XrXirCheckedPacket *output);
 /* A derived complete-outcome fact grants no call or source permissions.
  * Checked import and specialization rebuild it from authentic declarations. */
 XR_FUNC XrXirStatus xr_xir_effects_task_errors(const XrXirEffects *effects, uint32_t function);
