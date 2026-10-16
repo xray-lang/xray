@@ -299,7 +299,7 @@ static void print_help_syntax(ReplState *state) {
     print_colored(state, XR_CLR_BOLD, "Class:\n");
     printf("  class Point {\n");
     printf("    x = 0; y = 0\n");
-    printf("    constructor(x, y) { this.x = x; this.y = y }\n");
+    printf("    init(x, y) { this.x = x; this.y = y }\n");
     printf("    distance() { (this.x**2 + this.y**2)**0.5 }\n");
     printf("  }\n");
     printf("\n");

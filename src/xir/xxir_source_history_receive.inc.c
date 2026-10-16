@@ -122,22 +122,24 @@ static bool source_history_map_copy(SourceContext *ctx,const SourceLibraryMap *s
     if (!owned->modules || !owned->functions || (source->slot_count && !owned->slots)) return false;
     ctx->history->map=owned;return true;
 }
-static bool source_history_binding_accessor(SourceContext *ctx,const SourceName *symbol,bool write,uint32_t *output) {
+static bool source_history_binding_accessor(SourceContext *ctx,const SourceName *symbol,SourceBindingAccessor mode,uint32_t *output) {
     if (!ctx->history || !ctx->history->map || !symbol || symbol->index>=ctx->slot_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"foreign binding has no actual history accessor");
     const SourceLibraryMap *map=ctx->history->map;
     const SourceSemanticEnvironment *environment=ctx->history->unit->semantic;
-    const uint32_t *accessors=write ? environment->binding_writes : environment->binding_reads;
+    bool write=mode==SOURCE_ACCESS_WRITE,push=mode==SOURCE_ACCESS_PUSH;
+    const uint32_t *accessors=write ? environment->binding_writes : push ? environment->binding_pushes : environment->binding_reads;
     for (uint32_t s=0;accessors && s<map->slot_count && s<environment->slot_count;++s) {
         if (!source_work(ctx,NULL)) return false;
         if (map->slots[s]!=symbol->index) continue;
         uint32_t accessor=accessors[s];
         if (!accessor || accessor-1>=map->function_count) break;
         uint32_t function=map->functions[accessor-1];
-        XrXirType type=write ? XR_XIR_UNIT : symbol->type;
-        uint32_t parameters=write && symbol->type!=XR_XIR_UNIT ? 1u : 0u;
+        XrXirType type=write || push ? XR_XIR_UNIT : symbol->type;
+        XrXirType input=push ? xr_xir_array_element(&ctx->types,symbol->type) : symbol->type;
+        uint32_t parameters=(write || push) && input!=XR_XIR_UNIT ? 1u : 0u;
         if (function>=ctx->function_count || ctx->functions[function].parameter_count!=parameters ||
-            (parameters && ctx->functions[function].parameters[0]!=symbol->type) ||
+            (parameters && ctx->functions[function].parameters[0]!=input) ||
             ctx->functions[function].result!=type || ctx->identities[function].module!=symbol->module ||
             !ctx->identities[function].exported) break;
         /* The checked body performs storage access inside its authentic birth
@@ -146,14 +148,24 @@ static bool source_history_binding_accessor(SourceContext *ctx,const SourceName 
     }
     return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"foreign binding accessor is not in its exact received Checked owner");
 }
+/* Storage stays within the ordinary checked birth body. The caller supplies
+ * only the already evaluated element through its exact received signature. */
+static bool source_history_binding_push(SourceContext *ctx,const SourceName *symbol,SourceValue input,SourceValue *value) {
+    if(!symbol->mutable || !xr_xir_type_is_array(&ctx->types,symbol->type))
+        return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"push requires an actual mutable Array binding");
+    uint32_t function;
+    return source_history_binding_accessor(ctx,symbol,SOURCE_ACCESS_PUSH,&function) &&
+        source_recipe_group(ctx,(XrXirInstruction){XR_XIR_CALL,XR_XIR_UNIT,{0},{0},function,{0}},
+            &input,input.type==XR_XIR_UNIT ? 0u : 1u,value);
+}
 static bool source_history_binding_read(SourceContext *ctx,const SourceName *symbol,SourceValue *value) {
     uint32_t function;
-    return source_history_binding_accessor(ctx,symbol,false,&function) &&
+    return source_history_binding_accessor(ctx,symbol,SOURCE_ACCESS_READ,&function) &&
         source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CALL,symbol->type,{0},{0},function,{0}},value);
 }
 static bool source_history_binding_write(SourceContext *ctx,const SourceName *symbol,SourceValue value) {
     uint32_t function;
-    return source_history_binding_accessor(ctx,symbol,true,&function) &&
+    return source_history_binding_accessor(ctx,symbol,SOURCE_ACCESS_WRITE,&function) &&
         source_recipe_group(ctx,(XrXirInstruction){XR_XIR_CALL,XR_XIR_UNIT,{0},{0},function,{0}},
             &value,value.type==XR_XIR_UNIT ? 0u : 1u,NULL);
 }
@@ -162,16 +174,17 @@ static bool source_history_binding_accessors(SourceContext *ctx) {
     const SourceLibraryMap *map=ctx->history->map;
     const SourceSemanticEnvironment *environment=ctx->history->unit->semantic;
     if (!map || map->slot_count!=environment->slot_count ||
-        (map->slot_count && (!environment->binding_reads || !environment->binding_writes)))
+        (map->slot_count && (!environment->binding_reads || !environment->binding_writes || !environment->binding_pushes)))
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history binding accessors lost their complete slot owner");
     for (uint32_t s=0;s<map->slot_count;++s) {
         if (!source_work(ctx,NULL)) return false;
-        uint32_t slot=map->slots[s],reader=environment->binding_reads[s],cell=environment->binding_writes[s];
+        uint32_t slot=map->slots[s],reader=environment->binding_reads[s],writer=environment->binding_writes[s],push=environment->binding_pushes[s];
         if (slot>=ctx->slot_count || (reader && reader-1>=map->function_count) ||
-            (cell && cell-1>=map->function_count))
+            (writer && writer-1>=map->function_count) || (push && push-1>=map->function_count))
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history binding accessor ordinal is invalid");
         if (reader) ctx->binding_reads[slot]=map->functions[reader-1]+1;
-        if (cell) ctx->binding_writes[slot]=map->functions[cell-1]+1;
+        if (writer) ctx->binding_writes[slot]=map->functions[writer-1]+1;
+        if (push) ctx->binding_pushes[slot]=map->functions[push-1]+1;
     }
     return true;
 }

@@ -194,3 +194,13 @@ set_tests_properties(source_public_repl_file_probe source_public_repl_file_budge
 add_test(NAME source_public_repl_file_faults COMMAND test_source_public_faults --repl-file)
 set_tests_properties(source_public_repl_file_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
     LABELS "unit;api;source;repl;file;compiler-faults;runtime-faults;slow")
+
+add_test(NAME source_public_repl_array_history COMMAND test_source_public_repl --array-history)
+add_test(NAME source_public_repl_array_probe COMMAND test_source_public_faults --repl-array-probe)
+add_test(NAME source_public_repl_array_budget COMMAND test_source_public_faults --repl-array-budget)
+add_test(NAME source_public_repl_array_samples COMMAND test_source_public_faults --repl-array-samples)
+set_tests_properties(source_public_repl_array_history source_public_repl_array_probe source_public_repl_array_budget
+    source_public_repl_array_samples PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;array;ownership;budget")
+add_test(NAME source_public_repl_array_faults COMMAND test_source_public_faults --repl-array)
+set_tests_properties(source_public_repl_array_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
+    LABELS "unit;api;source;repl;array;compiler-faults;runtime-faults;slow")

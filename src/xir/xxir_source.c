@@ -205,7 +205,9 @@ typedef struct SourceComptimeSite SourceComptimeSite;
 static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment **output);
 static const XrXirModule *source_history_module(SourceContext *ctx,const SourceHistoryUnit *unit);
 static SourceName *source_history_name(SourceContext *ctx,const char *name);
+typedef enum SourceBindingAccessor { SOURCE_ACCESS_READ, SOURCE_ACCESS_WRITE, SOURCE_ACCESS_PUSH } SourceBindingAccessor;
 static bool source_history_binding_read(SourceContext *ctx,const SourceName *symbol,SourceValue *value);
+static bool source_history_binding_push(SourceContext *ctx,const SourceName *symbol,SourceValue input,SourceValue *value);
 static bool source_history_binding_write(SourceContext *ctx,const SourceName *symbol,SourceValue value);
 
 static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
@@ -2259,7 +2261,7 @@ static bool collect_declarations(SourceContext *ctx) {
                 if (slots==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                 ++slots;
                 if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) {
-                    uint32_t added=node->type==AST_VAR_DECL ? 2u : 1u;
+                    uint32_t added=node->type==AST_VAR_DECL ? 3u : 1u;
                     if (readers>UINT32_MAX-added) return source_fail(ctx,node,XR_XIR_BUDGET,"binding accessor inventory exhausted");
                     readers+=added;
                 }
@@ -2272,7 +2274,7 @@ static bool collect_declarations(SourceContext *ctx) {
                     if(slots==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                     ++slots;
                     if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) {
-                        uint32_t added=node->as.destructure_decl.is_const ? 1u : 2u;
+                        uint32_t added=node->as.destructure_decl.is_const ? 1u : 3u;
                         if (readers>UINT32_MAX-added) return source_fail(ctx,node,XR_XIR_BUDGET,"binding accessor inventory exhausted");
                         readers+=added;
                     }

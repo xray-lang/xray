@@ -24,7 +24,7 @@ struct SourceSemanticEnvironment {
     SourceName **names, *symbols, **latest;
     SourceName *implicit_result;
     uint32_t module_count, symbol_count, latest_count;
-    uint32_t *binding_reads, *binding_writes;
+    uint32_t *binding_reads, *binding_writes, *binding_pushes;
     uint32_t slot_count;
     SourceHistoryCorrespondence history;
 };
@@ -101,7 +101,7 @@ typedef struct SourceContext {
     AstNode *repl_tail;
     SourceName *repl_result;
     SourceFunctionValue *function_values;
-    uint32_t *binding_reads, *binding_writes;
+    uint32_t *binding_reads, *binding_writes, *binding_pushes;
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
