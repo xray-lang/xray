@@ -1,0 +1,52 @@
+if(TARGET test_lsp_json_decode)
+    return()
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/../lsp_json_clone/CMakeLists.txt")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(byte_dir "${CMAKE_CURRENT_BINARY_DIR}/lsp-json-decode")
+add_custom_command(OUTPUT "${byte_dir}/byte_frame.inc.c" "${byte_dir}/byte-source.json"
+    COMMAND "${Python3_EXECUTABLE}" -X utf8 "${CMAKE_CURRENT_LIST_DIR}/extract_frame.py"
+        "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_server.c" "${byte_dir}/byte_frame.inc.c"
+    DEPENDS "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_server.c" "${CMAKE_CURRENT_LIST_DIR}/extract_frame.py" VERBATIM)
+set_source_files_properties("${byte_dir}/byte_frame.inc.c" PROPERTIES HEADER_FILE_ONLY TRUE)
+foreach(target test_lsp_json_decode test_lsp_json_decode_before test_lsp_json_frame)
+    if(target STREQUAL "test_lsp_json_frame")
+        set(entry test_frame.c)
+    else()
+        set(entry test_decode.c)
+    endif()
+    add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/${entry}" "${CMAKE_CURRENT_LIST_DIR}/json_owner.c"
+        "${CMAKE_CURRENT_LIST_DIR}/../lsp_json_clone/test_allocator.c" "${PROJECT_SOURCE_DIR}/src/base/xutf8.c")
+    target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/base"
+        "${PROJECT_SOURCE_DIR}/src/app/lsp" "${PROJECT_SOURCE_DIR}/include" "${byte_dir}")
+    target_compile_features(${target} PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endforeach()
+target_compile_definitions(test_lsp_json_decode_before PRIVATE DECODE_BEFORE=1)
+target_sources(test_lsp_json_frame PRIVATE "${byte_dir}/byte_frame.inc.c" "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_framing.c")
+if(WIN32)
+    target_sources(test_lsp_json_frame PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/pipe_win.c"
+        "${PROJECT_SOURCE_DIR}/src/os/win/fd_win.c" "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
+else()
+    target_sources(test_lsp_json_frame PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/pipe_unix.c"
+        "${PROJECT_SOURCE_DIR}/src/os/unix/fd_unix.c" "${PROJECT_SOURCE_DIR}/src/os/unix/time_unix.c")
+endif()
+foreach(mode normal resources before)
+    if(mode STREQUAL "before")
+        set(image test_lsp_json_decode_before)
+    else()
+        set(image test_lsp_json_decode)
+    endif()
+    add_test(NAME test_lsp_json_decode_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_decode.py" "$<TARGET_FILE:${image}>" --${mode})
+    set_tests_properties(test_lsp_json_decode_${mode} PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;json;ownership;allocation")
+endforeach()
+foreach(mode normal resources)
+    add_test(NAME test_lsp_json_frame_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_frame.py" "$<TARGET_FILE:test_lsp_json_frame>" --${mode})
+    set_tests_properties(test_lsp_json_frame_${mode} PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;json;protocol;ownership;allocation")
+endforeach()

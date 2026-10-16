@@ -22,6 +22,7 @@
 #include <limits.h>
 #include "../../api/xsource_compile.h"
 #include "xlsp_cycle_report.h"
+#include "../../base/xjson_parse.h"
 #include "xlsp_analysis.h"
 #include "xlsp_ast_utils.h"
 #include "xlsp_workspace.h"
@@ -809,6 +810,16 @@ typedef struct {
 static XlspPollCtx g_stdin_ctx = {0};
 static XlspPollCtx g_async_ctx = {1};
 
+static void handle_json_frame(XrLspServer *server,const char *text,size_t length) {
+    if(!server||server->exit_received)return;
+    XrJsonValue *message=NULL;
+    XrJsonParseStatus status=xjson_parse_status(text,length,&message);
+    if(status==XR_JSON_PARSE_OK) {handle_message(server,message);xjson_free(message);return;}
+    if(status==XR_JSON_PARSE_INVALID_JSON) {send_error(server,NULL,-32700,"Parse error");return;}
+    server->exit_received=true;
+    lsp_log("JSON message decode failed: %u",(unsigned)status);
+}
+
 int xlsp_server_run(XrLspServer *server) {
     // Set thread-local server for logging
     xlsp_set_log_server(server);
@@ -898,16 +909,9 @@ int xlsp_server_run(XrLspServer *server) {
                 char *msg_str = xlsp_transport_try_read(server->transport, &len, &would_block);
 
                 if (msg_str) {
-                    XrJsonValue *msg = xjson_parse(msg_str, len);
+                    handle_json_frame(server,msg_str,len);
                     xr_free(msg_str);
-
-                    if (msg) {
-                        handle_message(server, msg);
-                        xjson_free(msg);
-                        if(server->exit_received)break;
-                    } else {
-                        lsp_log("Failed to parse JSON message");
-                    }
+                    if(server->exit_received)break;
                     continue;
                 }
 
