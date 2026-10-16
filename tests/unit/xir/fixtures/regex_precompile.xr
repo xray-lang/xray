@@ -1,0 +1,44 @@
+fn regexAtom(pattern:string,at:i64)->i64 {
+ if(pattern.indexOf("a",at)==at){return 97}
+ if(pattern.indexOf("b",at)==at){return 98}
+ assert(false,"unsupported regex atom");return 0
+}
+export fn compileRegex(pattern:string)->Array<i64> {
+ var code:Array<i64>=[1,0];var at:i64=0
+ while(at<len(pattern)) {
+  const atom=regexAtom(pattern,at);at=at+1;var repeat:i64=0
+  if(at<len(pattern) && pattern.indexOf("*",at)==at){repeat=1;at=at+1}
+  code.push(atom);code.push(repeat)
+ }
+ code[1]=(len(code)-2)/2;return code
+}
+export fn matchesRegex(code:Array<i64>,text:string)->bool {
+ assert(len(code)>=2,"regex image header")
+ assert(code[0]==1 && code[1]>=0 && code[1]<=(len(code)-2)/2,"regex image identity")
+ const count=code[1];assert(len(code)==2+2*count,"regex image length")
+ var current:Array<bool>=[true];var state:i64=0
+ while(state<count) {
+  assert((code[2+2*state]==97 || code[2+2*state]==98) && (code[3+2*state]==0 || code[3+2*state]==1),"regex image instruction")
+  current.push(false);state=state+1
+ }
+ state=0
+ while(state<count){if(current[state] && code[3+2*state]==1){current[state+1]=true};state=state+1}
+ var at:i64=0
+ while(at<len(text)) {
+  var next:Array<bool>=[];state=0
+  while(state<=count){next.push(false);state=state+1}
+  state=0
+  while(state<count) {
+   if(current[state]) {
+    const atom=code[2+2*state]
+    const accepts=(atom==97 && text.indexOf("a",at)==at) || (atom==98 && text.indexOf("b",at)==at)
+    if(accepts){if(code[3+2*state]==1){next[state]=true}else{next[state+1]=true}}
+   }
+   state=state+1
+  }
+  state=0
+  while(state<count){if(next[state] && code[3+2*state]==1){next[state+1]=true};state=state+1}
+  current=next;at=at+1
+ }
+ return current[count]
+}

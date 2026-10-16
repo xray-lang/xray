@@ -1,0 +1,15 @@
+add_executable(test_xir_regex_precompile "${CMAKE_CURRENT_LIST_DIR}/test_xir_regex_precompile.c")
+target_link_libraries(test_xir_regex_precompile PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+set_target_properties(test_xir_regex_precompile PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+set(XR_REGEX_PRECOMPILE_WORK "${CMAKE_CURRENT_BINARY_DIR}/regex-precompile-work")
+file(MAKE_DIRECTORY "${XR_REGEX_PRECOMPILE_WORK}")
+target_compile_definitions(test_xir_regex_precompile PRIVATE
+    XR_REGEX_PRECOMPILE_WORK="${XR_REGEX_PRECOMPILE_WORK}"
+    XR_REGEX_PRECOMPILE_SOURCE="${CMAKE_CURRENT_LIST_DIR}/fixtures/regex_precompile.xr")
+if(MSVC)
+    target_compile_options(test_xir_regex_precompile PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_regex_precompile PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_regex_precompile COMMAND test_xir_regex_precompile)
+set_tests_properties(test_xir_regex_precompile PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;regex;library;ownership")

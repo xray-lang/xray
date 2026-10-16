@@ -89,6 +89,15 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_DIV_INT:
     case XR_XIR_REM_INT:
     case XR_XIR_STRING_LEN:
+    case XR_XIR_STRING_CONTAINS:
+    case XR_XIR_STRING_STARTS_WITH:
+    case XR_XIR_STRING_ENDS_WITH:
+    case XR_XIR_STRING_INDEX_OF:
+    case XR_XIR_STRING_LAST_INDEX_OF:
+    case XR_XIR_ASSERT_CONDITION:
+    case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_INVOKE_DISCARD:
+    case XR_XIR_PANIC_CATCH:
     case XR_XIR_EQ_STRING:
     case XR_XIR_NE_STRING:
     case XR_XIR_EQUAL:
@@ -179,7 +188,8 @@ static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXi
     for (uint32_t p = 0; p < generic->parameter_count; ++p) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         const XrXirConstraint *constraint = &generic->constraints[p];
-        if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE ||
+        uint32_t kind=xr_xir_binder_kind(generic,p);
+        if ((kind!=XR_XIR_BINDER_TYPE && kind!=XR_XIR_BINDER_RESULT_VARIABLE) ||
             (constraint->markers & ~XR_XIR_CONSTRAINT_MASK)) return XR_XIR_BAD_STAGE;
     }
     for (uint32_t a = 0; a < generic->argument_count; ++a) {

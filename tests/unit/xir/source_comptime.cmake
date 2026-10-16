@@ -179,3 +179,5 @@ set_tests_properties(test_xir_source_comptime_output PROPERTIES
 add_test(NAME test_xir_source_comptime_output_resources COMMAND test_xir_source_comptime --output-resources)
 set_tests_properties(test_xir_source_comptime_output_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;output" TIMEOUT 600 RUN_SERIAL TRUE)
+
+include("${CMAKE_CURRENT_LIST_DIR}/regex_precompile.cmake")
