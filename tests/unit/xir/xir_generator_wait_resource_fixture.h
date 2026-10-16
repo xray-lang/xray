@@ -10,7 +10,14 @@
 #define XIR_GENERATOR_WAIT_RESOURCE_FIXTURE_H
 XR_DATA const XrXirProgramSpec generator_wait_program;
 XR_DATA const uint32_t generator_wait_ids[8];
+typedef struct WaitResourceProgram {
+    const XrXirProgramSpec *native;
+    const uint32_t *ids;
+    uint32_t factory;
+} WaitResourceProgram;
 typedef struct WaitResourceFixture {
+    const uint32_t *ids;
+    uint32_t factory;
     SourceFixtureOwner compiler;
     XrXirArtifact *lowered;
     XrXirVmBinding *bindings;
@@ -33,9 +40,11 @@ static void resource_code_release(void *owner) {
     xr_compile_resources_free(fixture->bindings);fixture->bindings=NULL;
     xr_xir_compile_artifact_free(fixture->lowered);fixture->lowered=NULL;
 }
-static void resource_fixture_new(WaitResourceFixture *fixture,const char *provider) {
+static void resource_fixture_new(WaitResourceFixture *fixture,const char *provider,const WaitResourceProgram *input) {
     CHECK(!resource_fixture);resource_fixture=fixture;source_fixture_owner_new(&fixture->compiler);
-    const XrXirProgramSpec *native=&generator_wait_program;
+    const XrXirProgramSpec *native=input ? input->native : &generator_wait_program;
+    fixture->ids=input ? input->ids : generator_wait_ids;
+    fixture->factory=input ? input->factory : generator_wait_ids[0];
     CHECK(native->entry_count<=64);
     bool all_native=!strcmp(provider,"native"),all_vm=!strcmp(provider,"vm");
     bool root_native=!strcmp(provider,"native-vm");

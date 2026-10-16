@@ -24,7 +24,7 @@ static bool source_generator_scan(AstNode *node,void *opaque) {
     return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"generator body structure is not admitted");
 }
 static bool source_generator_declaration(SourceContext *ctx,AstNode *node,uint32_t index,
-    XrXirFunctionIdentity *identity) {
+    XrXirFunctionIdentity *identity,uint32_t captures) {
     const XrXirFunction *function=&ctx->functions[index];
     const XrXirTypeNode *result=xr_xir_type_node(&ctx->types,function->result);
     if (!result || result->kind!=XR_XIR_TYPE_ITERATOR) return true;
@@ -35,7 +35,7 @@ static bool source_generator_declaration(SourceContext *ctx,AstNode *node,uint32
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot be a test or cleanup body");
     for (uint32_t p=0;p<function->parameter_count;++p) {
         if (!source_work(ctx,node)) return false;
-        if (xr_xir_type_is_cell(&ctx->types,function->parameters[p]))
+        if (p>=captures && xr_xir_type_is_cell(&ctx->types,function->parameters[p]))
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot retain an external ref parameter");
     }
     identity->promises|=XR_XIR_FUNCTION_GENERATOR;

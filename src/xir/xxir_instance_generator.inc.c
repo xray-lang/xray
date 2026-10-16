@@ -36,6 +36,6 @@ XR_FUNC XrXirCallStatus xr_xir_instance_generator_at(XrXirCallView *view,uint32_
     }
     if(!selected || selected->entry>=instance->program->entry_count || selected->arguments!=count)
         return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirCallRequest request={selected->entry,arguments,count,NULL,NULL};
+    XrXirCallRequest request={selected->entry,arguments,count,instance_cell_role,instance->program};
     return xr_xir_task_executor_generator(instance->executor,view,selected->type,&request,output);
 }

@@ -2224,7 +2224,7 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
         }
     }
-    if (!source_generator_declaration(ctx,node,index,&identity)) return false;
+    if (!source_generator_declaration(ctx,node,index,&identity,0)) return false;
     ctx->identities[index] = identity;
     return source_query_parameters(ctx, symbol->declaration);
 }
@@ -2813,10 +2813,11 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     /* A declaration states its result, so its signature is known before the body
      * and the body can name the function it belongs to. */
     uint32_t factory=index;
-    if(ok) ok=source_generator_declaration(ctx,node,index,&ctx->identities[index]);
+    if(ok) ok=source_generator_declaration(ctx,node,index,&ctx->identities[index],scan.count);
     if(ok && (ctx->identities[index].promises & XR_XIR_FUNCTION_GENERATOR)) {
         ctx->identities[index].promises&=~XR_XIR_FUNCTION_NO_SUSPEND;
-        ok=source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
+        ok=source_generator_closure_captures(ctx,node,&scan) &&
+            source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
     }
     bool nested_function = node->type == AST_FUNCTION_DECL;
     if (ok && nested_function) {

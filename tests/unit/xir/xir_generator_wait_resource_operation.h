@@ -25,6 +25,8 @@ typedef struct WaitResourceRequest {
 } WaitResourceRequest;
 typedef struct WaitResourceRun {
     XrXirInstance *instance;
+    const uint32_t *ids;
+    uint32_t factory;
     XrXirDomain *domain;
     XrXirValue inner,outer,held;
     WaitResourceCost *cost;
@@ -86,8 +88,8 @@ static bool resource_root(WaitResourceRun *run,uint32_t entry,const XrXirValue *
     }
 }
 static bool resource_instance_run(WaitResourceRun *run) {
-    const uint32_t *ids=generator_wait_ids;
-    if(!resource_root(run,ids[0],NULL,&run->inner)) return false;
+    const uint32_t *ids=run->ids;
+    if(!resource_root(run,run->factory,NULL,&run->inner)) return false;
     if(run->mode==1 && !resource_root(run,ids[4],&run->inner,&run->outer)) return false;
     const XrXirValue *iterator=run->mode==1 ? &run->outer : &run->inner;
     for(unsigned n=0;n<(run->mode==2 ? 1u : 2u);++n) {
@@ -139,7 +141,7 @@ static WaitResourceCost resource_operation(WaitResourceFixture *fixture,const Wa
     source_native_event_count=0;source_native_recording=true;resource_observed_instance=NULL;
     for(unsigned i=0;i<2;++i) {
         source_native_phase=0;source_native_instance=i;source_native_poll=UINT32_MAX;
-        runs[i]=(WaitResourceRun){.cost=&cost,.pass=i,.mode=mode,.cancel_prefix=i==cancel_pass ? cancel_prefix : UINT32_MAX};
+        runs[i]=(WaitResourceRun){.ids=fixture->ids,.factory=fixture->factory,.cost=&cost,.pass=i,.mode=mode,.cancel_prefix=i==cancel_pass ? cancel_prefix : UINT32_MAX};
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         if(limits) config=*limits;
         config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,resource_output,&runs[i]};

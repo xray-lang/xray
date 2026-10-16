@@ -14,13 +14,29 @@
 #include <string.h>
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_fixture_owner.h"
+#include "xir_iterator_pull87_golden.h"
 #include "xir_iterator_pull86_golden.h"
+#include "xir_checked_legacy_packets.h"
+static void pull_previous86(const XrXirCompileContext *context) {
+    const XirLegacyPacket packets[]={
+        {pull86_has_next_i64,sizeof(pull86_has_next_i64)},
+        {pull86_next_i64,sizeof(pull86_next_i64)},
+        {pull86_has_next_unit,sizeof(pull86_has_next_unit)},
+        {pull86_next_unit,sizeof(pull86_next_unit)},
+        {pull86_wrong_receiver,sizeof(pull86_wrong_receiver)},
+        {pull86_wrong_result,sizeof(pull86_wrong_result)},
+        {pull86_same_successor,sizeof(pull86_same_successor)},
+        {pull86_wrong_origin,sizeof(pull86_wrong_origin)},
+        {pull86_unused_immediate,sizeof(pull86_unused_immediate)},
+    };
+    checked_legacy_packets(context,packets,sizeof(packets)/sizeof(*packets));
+}
 _Static_assert(XR_XIR_INVOKE_RESULT==101 && XR_XIR_INVOKE_ERROR==102 && XR_XIR_ERROR==14,
     "independent control and Error ordinals");
 int main(void) {
-    SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+    SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);pull_previous86(&owner.context);
     const struct {const uint8_t *bytes;size_t length;XrXirStatus status;} cases[]={
-#define ROW(n,s) {pull86_##n,sizeof(pull86_##n),s}
+#define ROW(n,s) {pull87_##n,sizeof(pull87_##n),s}
         ROW(has_next_i64,XR_XIR_OK),ROW(next_i64,XR_XIR_OK),ROW(has_next_unit,XR_XIR_OK),ROW(next_unit,XR_XIR_OK),
         ROW(wrong_receiver,XR_XIR_BAD_TYPE),ROW(wrong_result,XR_XIR_BAD_STRUCTURE),
         ROW(same_successor,XR_XIR_BAD_STRUCTURE),ROW(wrong_origin,XR_XIR_BAD_STRUCTURE),ROW(unused_immediate,XR_XIR_BAD_STRUCTURE)

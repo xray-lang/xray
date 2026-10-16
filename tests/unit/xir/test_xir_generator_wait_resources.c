@@ -37,7 +37,7 @@ int main(int argc,char **argv) {
         char *end=NULL;unsigned long mode=strtoul(argv[3],&end,10);
         CHECK(*argv[3] && !*end && mode<3 && !strcmp(argv[2],"probe-fault"));selected=(unsigned)mode;
     }
-    WaitResourceFixture fixture={0};resource_fixture_new(&fixture,argv[1]);
+    WaitResourceFixture fixture={0};resource_fixture_new(&fixture,argv[1],NULL);
     for(unsigned mode=0;mode<3;++mode) {
         if(argc==5 && mode!=selected) continue;
         WaitResourceRequest request=resource_request(mode);

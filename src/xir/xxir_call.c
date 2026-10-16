@@ -494,7 +494,8 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
         }
         frame->invocation=*preparation->invocation;
     }
-    status = frame_cell_prepare(call, frame, captures, fault);
+    status = frame_cell_prepare(call, frame,
+        (entry->flags & XR_XIR_ENTRY_GENERATOR) ? entry->parameter_count : captures, fault);
     if (status == XR_XIR_CALL_READY) status = frame_class_recheck(call, frame, preparation);
     if (status != XR_XIR_CALL_READY) {
         frame_cell_abort(frame);
@@ -591,8 +592,6 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
             const XrXirTypeNode *iterator=xr_xir_type_node(types,entry->result);
             if (entry->cleanup_owner || !iterator || iterator->kind!=XR_XIR_TYPE_ITERATOR ||
                 iterator->parameter_span) return XR_XIR_CALL_BAD_ARGUMENT;
-            for (uint32_t p=0;p<entry->parameter_count;++p)
-                if (xr_xir_type_is_cell(types,entry->parameters[p])) return XR_XIR_CALL_BAD_ARGUMENT;
         }
         *bytes += (uint64_t) entry->parameter_count * sizeof(XrXirType);
         if (*bytes > config->byte_limit || *bytes > SIZE_MAX)

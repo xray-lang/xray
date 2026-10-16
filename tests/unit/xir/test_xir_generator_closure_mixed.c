@@ -16,8 +16,9 @@
 #include "xir_source_fixture_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_generator_wait_cases.h"
+#include "xir_generator_cell_escape_cases.h"
 XR_DATA const XrXirProgramSpec generator_closure_program;
-XR_DATA const uint32_t generator_closure_ids[12];
+XR_DATA const uint32_t generator_closure_ids[13];
 static const XrXirCallEntry *mixed_selected[64];
 static unsigned mixed_steps[2],mixed_yields[2],mixed_demands[2],mixed_timers[2];
 static bool mixed_native[64];
@@ -49,13 +50,13 @@ int main(int argc,char **argv) {
     }
     XrXirProgramSpec spec=*native;spec.entries=entries;XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context,&spec,&program)==XR_XIR_OK);
-    uint32_t ids[12];for(unsigned n=0;n<12;++n) ids[n]=generator_closure_ids[n];
-    uint32_t factories[]={ids[0],ids[8],ids[9],ids[10],ids[11]};
-    for(unsigned n=0;n<5;++n) {CHECK(xr_xir_compile_program_retain(program));ids[0]=factories[n];generator_wait_cases(program,ids);}
-    xr_xir_compile_program_drop(program);
-    CHECK(mixed_steps[0] && mixed_steps[1] && mixed_yields[root_native ? 0 : 1]==55 &&
-        !mixed_yields[root_native ? 1 : 0] && mixed_demands[root_native ? 1 : 0]==130 &&
-        mixed_demands[root_native ? 0 : 1]==30 && mixed_timers[root_native ? 1 : 0]==75 && !mixed_timers[root_native ? 0 : 1]);
+    uint32_t ids[13];for(unsigned n=0;n<13;++n) ids[n]=generator_closure_ids[n];
+    uint32_t factories[]={ids[0],ids[8],ids[9],ids[10],ids[11],ids[12]};
+    for(unsigned n=0;n<6;++n) {CHECK(xr_xir_compile_program_retain(program));ids[0]=factories[n];generator_wait_cases(program,ids);}
+    closure_cell_escape_case(program,ids);
+    CHECK(mixed_steps[0] && mixed_steps[1] && mixed_yields[root_native ? 0 : 1]==67 &&
+        !mixed_yields[root_native ? 1 : 0] && mixed_demands[root_native ? 1 : 0]==157 &&
+        mixed_demands[root_native ? 0 : 1]==36 && mixed_timers[root_native ? 1 : 0]==91 && !mixed_timers[root_native ? 0 : 1]);
     xr_compile_resources_free(vm);xr_compile_resources_free(bindings);xr_xir_compile_artifact_free(lowered);
     source_fixture_owner_free(&owner);CHECK(!runtime_live && !runtime_bytes);
     printf("Iterator wait mixed %s: VM%u native%u yields%u rootDemands%u producerDemands%u timers%u physical0 PASS\n",

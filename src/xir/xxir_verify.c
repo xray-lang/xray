@@ -378,8 +378,6 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
     for (uint32_t p = 0; p < function->parameter_count; ++p) {
         if (!xir_compile_work(&context->remaining, 1))
             return XR_XIR_BUDGET;
-        if (xr_xir_function_is_generator(context->module,function_id) &&
-            xr_xir_type_is_cell(context->module->types,function->parameters[p])) return XR_XIR_BAD_TYPE;
         if (!xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
             return XR_XIR_BAD_TYPE;
         visibility = signature_type_use_context(context, function_id, function->parameters[p], signature_constraints_proved);

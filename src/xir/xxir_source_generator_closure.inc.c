@@ -6,6 +6,16 @@
  *
  * xxir_source_generator_closure.inc.c - Ordinary closure factories own latent producer creation
  */
+static bool source_generator_closure_captures(SourceContext *ctx,AstNode *node,const SourceCaptureScan *scan) {
+    for(const SourceCapture *p=scan->captures;p;p=p->next) {
+        if(!source_work(ctx,node)) return false;
+        uint32_t declaration=p->source->declaration;
+        if(p->source->mutable && declaration && declaration<=ctx->query.declaration_count &&
+            ctx->query.declarations[declaration-1].kind==XR_XIR_SOURCE_PARAMETER)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot retain an external ref capture");
+    }
+    return true;
+}
 static bool source_generator_closure_factory(SourceContext *ctx,AstNode *node,uint32_t producer,
     bool no_suspend,uint32_t *target) {
     if(ctx->next_closure>=ctx->closure_limit)

@@ -21,6 +21,7 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_fixture_owner.h"
 #include "xir_generator_wait_cases.h"
+#include "xir_generator_cell_escape_cases.h"
 _Static_assert(XR_XIR_ITERATOR_HAS_NEXT==178 && XR_XIR_ITERATOR_NEXT==179,"canonical consumer ordinals");
 static const char factory_source[]=
     "import time\n"
@@ -53,7 +54,10 @@ static const char factory_source[]=
     " fn local(depth:i64)->Iterator<string> {defer {print(401)}\n"
     " if(depth>0) {const unstarted=local(0)}\n"
     " time.sleep(5)\n yield first\n time.sleep(7)\n yield second\n }\n"
-    " return local(1)}\n"    "export fn probe(it:Iterator<string>)->bool {return it.hasNext()}\n"
+    " return local(1)}\n"    "export fn make_owned_cell()->Iterator<string> {var first=\"one\"\n var second=\"two\"\n"
+    " fn local()->Iterator<string> {defer {first=\"closed\"\n print(401)}\n"
+    " time.sleep(5)\n yield first\n time.sleep(7)\n yield second\n }\n"
+    " return local()}\n"    "export fn probe(it:Iterator<string>)->bool {return it.hasNext()}\n"
     "export fn take(it:Iterator<string>)->string {return it.next()}\n"
     "export fn empty()->i64 {return 9}\n"
     "fn relay(it:Iterator<string>)->Iterator<string> {defer {print(402)}\n"
@@ -127,19 +131,19 @@ int main(int argc,char **argv) {
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
-    const char *names[]={"make","probe","take","empty","make_relay","task_root","make_self","make_cycle","make_expr","make_generic","make_array","make_recursive"};
-    uint32_t ids[12]={0};
-    for(unsigned n=0;n<12;++n) for(uint32_t f=0;f<module->function_count;++f)
+    const char *names[]={"make","probe","take","empty","make_relay","task_root","make_self","make_cycle","make_expr","make_generic","make_array","make_recursive","make_owned_cell"};
+    uint32_t ids[13]={0};
+    for(unsigned n=0;n<13;++n) for(uint32_t f=0;f<module->function_count;++f)
         if(module->functions[f].name_length==strlen(names[n]) && !memcmp(module->functions[f].name,names[n],strlen(names[n]))) ids[n]=f;
-    for(unsigned n=0;n<12;++n) CHECK(ids[n]);
+    for(unsigned n=0;n<13;++n) CHECK(ids[n]);
     XrXirCSource c={0};CHECK(xr_xir_compile_emit_c(lowered,"generator_closure",1048576,&c)==XR_XIR_OK);
     CHECK(c.text && c.length && !strstr(c.text,"({"));
     if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(c.text,1,c.length,file)==c.length);
-        CHECK(fprintf(file,"\nconst uint32_t generator_closure_ids[12]={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6],ids[7],ids[8],ids[9],ids[10],ids[11])>0);CHECK(!fclose(file));}
+        CHECK(fprintf(file,"\nconst uint32_t generator_closure_ids[13]={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6],ids[7],ids[8],ids[9],ids[10],ids[11],ids[12])>0);CHECK(!fclose(file));}
     xr_xir_compile_c_source_free(&c);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
-    uint32_t factories[]={ids[0],ids[8],ids[9],ids[10],ids[11]};
+    uint32_t factories[]={ids[0],ids[8],ids[9],ids[10],ids[11],ids[12]};
     for(unsigned i=0;i<3;++i) {CHECK(xr_xir_compile_program_retain(program));ids[0]=factories[i];generator_wait_cases(program,ids);}
-    xr_xir_compile_program_drop(program);source_fixture_owner_free(&owner);
+    closure_cell_escape_case(program,ids);source_fixture_owner_free(&owner);
     puts("Real Source time.sleep in Generator: exact waits and cancellation PASS");return 0;
 }

@@ -360,7 +360,7 @@ static bool cell_proof_inventory(CellProofBuild *build) {
 
 
 static bool cell_proof_role_opcode(XrXirOp op) {
-    return op==XR_XIR_FUNCTION_REF || op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CLEANUP_REGISTER;
+    return op==XR_XIR_FUNCTION_REF || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CLEANUP_REGISTER;
 }
 static bool cell_proof_role_row(CellProofBuild *build,uint32_t f,uint32_t i,const XrXirInstruction *op) {
     XrXirCellProvenance *proof=build->proof;const XirMetadataDomain *module=&build->body->domain;
@@ -373,7 +373,7 @@ static bool cell_proof_role_row(CellProofBuild *build,uint32_t f,uint32_t i,cons
         module->declarations->functions[target].cleanup_owner != f+1))
         return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
     if (!cell_proof_work(build,(uint64_t)op->args[1]*3)) return false;
-    uint8_t use = op->op == XR_XIR_FUNCTION_REF ? 1u : op->op == XR_XIR_CLEANUP_REGISTER ? 4u : 2u;
+    uint8_t use = (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW) ? 1u : op->op == XR_XIR_CLEANUP_REGISTER ? 4u : 2u;
     for (uint32_t p = 0; p < op->args[1]; ++p)
         if (cell_proof_tracking(proof,target,p) == 1) build->uses[callee->begin+p] |= use;
     if (op->op == XR_XIR_FUNCTION_REF) {
@@ -458,6 +458,9 @@ static bool cell_proof_roles(CellProofBuild *build) {
             proof->roles[id] = (use & 1u) ? XR_XIR_CELL_PROOF_OWNED_CAPTURE :
                 (use & 4u) ? XR_XIR_CELL_PROOF_LEXICAL_CLEANUP :
                 (use & 2u) ? XR_XIR_CELL_PROOF_SCOPED_REF : XR_XIR_CELL_PROOF_UNKNOWN;
+            if (module->declarations && (module->declarations->functions[f].promises & XR_XIR_FUNCTION_GENERATOR) &&
+                proof->roles[id]!=XR_XIR_CELL_PROOF_OWNED_CAPTURE)
+                return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
             if (!(use & 1u)) ++function->scopes;
         }
         scopes += function->scopes;
@@ -676,7 +679,7 @@ static bool cell_proof_edge_row(CellProofBuild *build,uint32_t f,uint32_t i,
         uint32_t source = begin+value;
         if (cell && cell_proof_identity_producer(op->op)) {
             if (!cell_proof_edge(build,source,result,true)) return false;
-        } else if (op->op == XR_XIR_FUNCTION_REF) {
+        } else if (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW) {
             uint32_t target = (uint32_t)op->immediate;
             uint32_t formal = proof->functions[target].begin+a;
             if (cell_proof_tracking(proof,target,a) == 1) {
@@ -843,10 +846,10 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
         op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_CELL_LOCAL_WRITE) && !ordinal) return true;
     if (op->op == XR_XIR_LOCAL_WRITE || op->op == XR_XIR_OWNED_LOCAL_WRITE) return true;
     if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ||
-        op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLEANUP_REGISTER) {
+        op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW || op->op == XR_XIR_CLEANUP_REGISTER) {
         uint32_t target = (uint32_t)op->immediate;
         uint8_t role = proof->roles[proof->functions[target].begin+ordinal];
-        if (op->op == XR_XIR_FUNCTION_REF)
+        if (op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_GENERATOR_NEW)
             return (role == XR_XIR_CELL_PROOF_OWNED_CAPTURE && origin == XR_XIR_CELL_ORIGIN_OWNED) ||
                 cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
         if (op->op == XR_XIR_CLEANUP_REGISTER)
