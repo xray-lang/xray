@@ -15,6 +15,7 @@
  */
 #include "xxir_call.h"
 #include "xxir_call_internal.h"
+#include "xxir_call_move_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_task_internal.h"
 #include "xxir_type_arena.h"
@@ -59,7 +60,7 @@ typedef struct CallFrame {
     uint32_t effect_instruction;
     bool effect_pending;
     uint32_t cleanup_frontier;
-    bool protected_call, entered, exiting, scope_exit, cleanup_call, in_cleanup, exit_done;
+    bool protected_call, entered, exiting, scope_exit, cleanup_call, in_cleanup, exit_done, return_staged;
 } CallFrame;
 
 struct XrXirCall {
@@ -337,6 +338,36 @@ static uint64_t state_offset(void) {
 }
 #include "xxir_call_cell_loans.inc.c"
 #include "xxir_call_class_access.inc.c"
+
+XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
+    XrXirValue *source, XrXirAction *action) {
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if (!admission || !source || !action || view->phase!=XR_XIR_CALL_NORMAL)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirCall *call=view->activation;CallFrame *frame=call->top;
+    if (call->admitting) return XR_XIR_CALL_BUSY;
+    uintptr_t address=(uintptr_t)source,begin=(uintptr_t)frame->state,output=(uintptr_t)action;
+    if (frame->return_staged || frame->entry->state_bytes<sizeof(*source) ||
+        address<begin || address-begin>frame->entry->state_bytes-sizeof(*source) ||
+        address%_Alignof(XrXirValue) ||
+        (output<=address ? address-output<sizeof(*action) : output-address<sizeof(*source)))
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirCallStatus status=xr_xir_call_execution_status(view);
+    if (status!=XR_XIR_CALL_READY) return status;
+    if (!call_cell_work(call,sizeof(*action)+2*sizeof(*source))) return XR_XIR_CALL_LIMIT;
+    call->admitting=true;
+    status=admit_value(source,frame->entry->result,admission);
+    call->admitting=false;
+    if (status!=XR_XIR_CALL_READY) return status;
+    XR_CHECK(frame->pending.status==XR_XIR_CALL_READY && !frame->pending.value.type &&
+        !frame->pending.value.reserved && !frame->pending.value.payload &&
+        xr_xir_panic_empty(&frame->pending.panic),"a normal frame owns no prior pending exit");
+    /* Admission and terminal work precede the only ownership mutation. */
+    frame->pending=call_result(XR_XIR_CALL_RETURNED);
+    frame->pending.value=*source;*source=(XrXirValue){0};frame->return_staged=true;
+    *action=(XrXirAction){.kind=XR_XIR_ACTION_RETURN,.value=frame->pending.value};
+    return XR_XIR_CALL_READY;
+}
 
 typedef struct CallFramePreparation {
     bool admitted;
@@ -702,6 +733,18 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
 }
 
 static void accept_action(XrXirCall *call, XrXirAction action) {
+    CallFrame *frame=call->top;
+    if (frame->return_staged) {
+        if (action.kind!=XR_XIR_ACTION_RETURN || action.callee || action.arguments || action.argument_count ||
+            action.flags || !xr_xir_panic_empty(&action.panic) ||
+            action.value.type!=frame->pending.value.type || action.value.reserved!=frame->pending.value.reserved ||
+            action.value.payload!=frame->pending.value.payload) {
+            abort_frames(call,XR_XIR_CALL_BAD_STATE);return;
+        }
+        XrXirCallResult result=call_result(XR_XIR_CALL_READY);
+        xr_xir_call_result_move(&frame->pending,&result);frame->return_staged=false;
+        request_exit(call,&result,false);return;
+    }
     bool panic = fault_panics(&action);
     uint32_t allowed = action.kind == XR_XIR_ACTION_CALL ? XR_XIR_ACTION_PROTECTED | XR_XIR_ACTION_CLEANUP :
         action.kind == XR_XIR_ACTION_AWAIT_TASK ? XR_XIR_ACTION_PROTECTED :
@@ -1115,7 +1158,8 @@ XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->cleaning)
         return XR_XIR_CALL_BUSY;
-    if (call->aborting || (call->result.status != XR_XIR_CALL_READY && call->result.status != XR_XIR_CALL_SUSPENDED))
+    if (call->aborting || call->abort_reason != XR_XIR_CALL_READY ||
+        (call->result.status != XR_XIR_CALL_READY && call->result.status != XR_XIR_CALL_SUSPENDED))
         return XR_XIR_CALL_BAD_STATE;
     call->cancel_requested = true;
     if (call->result.status == XR_XIR_CALL_SUSPENDED) {
