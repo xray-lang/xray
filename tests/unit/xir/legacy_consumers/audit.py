@@ -391,8 +391,23 @@ def file_record(path: Path) -> dict:
     if not path.is_file():
         return {"path": relative(path), "state": "MISSING"}
     raw = path.read_bytes()
+    digest = sha(raw)
+    normalized = raw.replace(b"\r\n", b"\n") if b"\r" in raw else raw
     return {"path": relative(path), "state": "PRESENT", "bytes": len(raw),
-            "sha256": sha(raw), "lf_sha256": sha(raw.replace(b"\r\n", b"\n"))}
+            "sha256": digest, "lf_sha256": digest if normalized is raw else sha(normalized)}
+
+
+def _audit_file_records():
+    """Read each path once in this audit; never retain records across calls."""
+    records = {}
+
+    def record(path: Path) -> dict:
+        key = str(path)
+        if key not in records:
+            records[key] = file_record(path)
+        return records[key]
+
+    return record
 
 
 def read_json(path: Path) -> dict:
@@ -479,6 +494,7 @@ def differential_input_obligation(source: Path, runner) -> dict:
 
 def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: dict | None = None) -> dict:
     """Bind explicit reviewed routes to original source, oracle and runner entry."""
+    record = _audit_file_records()
     if data["status"] != "REVIEWED_ROUTING_NOT_QUALIFICATION":
         raise ValueError("runner routing cannot qualify execution")
     families = ({r["id"] for r in responsibilities["capabilities"]}
@@ -504,7 +520,8 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
         source = ROOT / identity
         if identity not in actual_entries or row["original_runner_entries"] != actual_entries[identity]:
             raise ValueError("reviewed input changed its original runner entry")
-        if not source.is_file() or file_record(source)["lf_sha256"] != row["source_lf_sha256"]:
+        original = record(source)
+        if original["state"] != "PRESENT" or original["lf_sha256"] != row["source_lf_sha256"]:
             raise ValueError("reviewed runner source changed")
         if (row["primary_family"] not in families or not set(row["secondary_families"]) <= families
                 or not row["producer_packages"] or not set(row["producer_packages"]) <= packages):
@@ -524,7 +541,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
         if required_imports and tuple(i["path"] for i in imported) != required_imports:
             raise ValueError("reviewed imported oracle lost its required companion inputs")
         for item in imported:
-            actual = file_record(ROOT / item["path"])
+            actual = record(ROOT / item["path"])
             if item != {"path": actual["path"], "state": actual["state"], "lf_sha256": actual.get("lf_sha256")}:
                 raise ValueError("reviewed imported oracle companion changed")
         regression = row.get("original_regression_obligation")
@@ -547,14 +564,15 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
         port = row.get("target_source_port")
         if port:
             path = ROOT / port["fixture"]
+            actual = record(path)
             if (port["qualification"] != "NOT_RUN" or port["owner_package"] not in row["producer_packages"]
-                    or not path.is_file() or file_record(path)["lf_sha256"] != port["lf_sha256"]):
+                    or actual["state"] != "PRESENT" or actual["lf_sha256"] != port["lf_sha256"]):
                 raise ValueError("planned source port changed or incorrectly qualified")
             companions = port.get("companion_inputs", [])
             if tuple(i["path"] for i in companions) != TARGET_PORT_IMPORTS.get(identity, ()):
                 raise ValueError("target source port lost its required companion inputs")
             for item in companions:
-                if file_record(ROOT / item["path"]).get("lf_sha256") != item["lf_sha256"]:
+                if record(ROOT / item["path"]).get("lf_sha256") != item["lf_sha256"]:
                     raise ValueError("target source port companion changed")
         target_arguments = TARGET_PORT_ARGUMENTS.get(identity)
         if target_arguments is not None:
@@ -573,7 +591,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                 raise ValueError("named target migration omitted or requalified an original test")
         partial = row.get("partial_target_program")
         if partial:
-            actual = file_record(ROOT / partial["fixture"])
+            actual = record(ROOT / partial["fixture"])
             names = [d["name"] for d in named["declarations"]] if named else []
             covered, remaining = partial["covered_original_tests"], partial["remaining_original_tests"]
             if (not names or not covered or len(covered) != len(set(covered))
@@ -599,7 +617,7 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                 raise ValueError("rejection oracle changed expectation kind")
             if path.is_file():
                 assertions = [dataclasses.asdict(a) for a in errors.parse_expected(path)]
-                if (oracle["state"] != "PRESENT" or oracle["lf_sha256"] != file_record(path)["lf_sha256"]
+                if (oracle["state"] != "PRESENT" or oracle["lf_sha256"] != record(path)["lf_sha256"]
                         or oracle["assertions"] != assertions):
                     raise ValueError("rejection oracle lost original position, code or text")
             elif oracle["state"] != "MISSING" or oracle["assertions"] is not None or oracle["lf_sha256"] is not None:
@@ -607,8 +625,9 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
         else:
             oracle = row["original_stdout_oracle"]
             path = Path(str(source) + ".expected")
-            state = "PRESENT" if path.is_file() else "MISSING"
-            digest = file_record(path).get("lf_sha256")
+            actual = record(path)
+            state = actual["state"]
+            digest = actual.get("lf_sha256")
             if oracle != {"path": relative(path), "state": state, "lf_sha256": digest}:
                 raise ValueError("runner stdout oracle changed")
     missing = set(actual_entries) - set(ids)
@@ -666,6 +685,7 @@ def require_full_explicit_runner_coverage(counts: dict) -> None:
 
 
 def validate_oracles(data: dict) -> dict:
+    record = _audit_file_records()
     ids = [row["id"] for row in data["cases"]]
     if len(ids) != len(set(ids)) or not ids:
         raise ValueError("empty or duplicate oracle cases")
@@ -676,7 +696,8 @@ def validate_oracles(data: dict) -> dict:
             raise ValueError("an oracle needs independent reasoning and must remain unqualified")
         for item in row["inputs"]:
             path = ROOT / item["path"]
-            if not path.is_file() or file_record(path)["lf_sha256"] != item["lf_sha256"]:
+            actual = record(path)
+            if actual["state"] != "PRESENT" or actual["lf_sha256"] != item["lf_sha256"]:
                 raise ValueError(f"oracle input changed: {item['path']}")
             if "original_literal" in item:
                 start = source.index("TEST(" + row["legacy_case"] + ")")

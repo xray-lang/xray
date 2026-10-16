@@ -44,15 +44,13 @@ class PreparationChecks(unittest.TestCase):
         rows = [r for r in self.oracles['cases'] if r['id'].startswith('regression_core_review_')]
         self.assertEqual(len(rows), 130)
         self.assertEqual(sum(len(r['expected']['per_test_observations']) for r in rows), 1242)
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad['cases'] if r['id'] == 'regression_core_review_0301_int64_overflow')
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_0301_int64_overflow')))
         row['expected']['per_test_observations'].pop('test_div_min_neg_one_in_loop')
         with self.assertRaisesRegex(ValueError, 'per-test independent obligation'):
             audit.validate_oracles(bad)
 
     def test_core_per_test_obligation_cannot_be_only_a_nonempty_success_label(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad['cases'] if r['id'] == 'regression_core_review_0100_int_basic')
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_0100_int_basic')))
         row['expected']['per_test_observations']['test_hexadecimal'] = {'label':'PASS'}
         with self.assertRaisesRegex(ValueError, 'per-test independent obligation'):
             audit.validate_oracles(bad)
@@ -147,8 +145,7 @@ class PreparationChecks(unittest.TestCase):
             audit.compare_required(expected, wrong)
 
     def test_untyped_nested_optional_reverse_body_cannot_pose_as_execution_source(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad['cases'] if r['id'] == 'regression_core_review_0380_optional_chain')
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_0380_optional_chain')))
         row['execution_source'] = row['inputs'][0]['path']
         with self.assertRaisesRegex(ValueError, 'cannot pose as an executable'):
             audit.validate_oracles(bad)
@@ -245,8 +242,7 @@ class PreparationChecks(unittest.TestCase):
                 audit.compare_required(expected, dict(expected, **{key:False}))
 
     def test_unpublished_generator_iterator_cannot_pose_as_qualified_execution_source(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0431_for_in_try_scope')
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_0431_for_in_try_scope')))
         row['execution_source'] = row['inputs'][0]['path']
         with self.assertRaisesRegex(ValueError,'cannot pose as an executable'):
             audit.validate_oracles(bad)
@@ -351,8 +347,7 @@ class PreparationChecks(unittest.TestCase):
             expected = self.core_expected(name)
             with self.assertRaises(ValueError):
                 audit.compare_required(expected,dict(expected,**{key:'PASS'}))
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0690_user_hashable_key')
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_0690_user_hashable_key')))
         row['execution_source'] = row['inputs'][0]['path']
         with self.assertRaisesRegex(ValueError,'cannot pose as an executable'):
             audit.validate_oracles(bad)
@@ -429,8 +424,7 @@ class PreparationChecks(unittest.TestCase):
     def test_unpublished_byte_query_or_chain_replacements_cannot_claim_execution_source(self):
         for name in ('1402_byte_array_intrinsics', '1416_byte_receiver_effect_matrix',
                      '1601_narrowing_facts', '1602_optional_chain_shortcircuit'):
-            bad = copy.deepcopy(self.oracles)
-            row = next(r for r in bad['cases'] if r['id']=='regression_core_review_'+name)
+            bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_' + name)))
             row['execution_source'] = row['inputs'][0]['path']
             with self.assertRaisesRegex(ValueError, 'cannot pose as an executable'):
                 audit.validate_oracles(bad)
@@ -453,8 +447,7 @@ class PreparationChecks(unittest.TestCase):
         wrong['required_test_names'] = wrong['required_test_names'][:3]
         with self.assertRaises(ValueError):
             audit.compare_required(expected, wrong)
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0804_self_returning_method_rc')
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_0804_self_returning_method_rc')))
         row['expected']['per_test_observations'].pop('test_stringbuilder_clear_escapes_receiver_death')
         with self.assertRaisesRegex(ValueError, 'per-test independent obligation'):
             audit.validate_oracles(bad)
@@ -470,8 +463,7 @@ class PreparationChecks(unittest.TestCase):
                 audit.compare_required(expected, wrong)
 
     def test_full_return_draft_cannot_qualify_unpublished_compare_capacity_or_set(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad['cases'] if r['id']=='regression_core_review_0804_self_returning_method_rc')
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_core_review_0804_self_returning_method_rc')))
         row['execution_source'] = row['inputs'][1]['path']
         with self.assertRaisesRegex(ValueError, 'cannot pose as an executable'):
             audit.validate_oracles(bad)
@@ -483,6 +475,13 @@ class PreparationChecks(unittest.TestCase):
         row = copy.deepcopy(next(r for r in self.runner_routes["cases"] if r["case_id"] == identity))
         data = dict(self.runner_routes)
         data["cases"] = [row] + [r for r in self.runner_routes["cases"] if r["case_id"] != identity]
+        return data, row
+
+    def mutated_oracle(self, identity):
+        # Retain the whole corpus and isolate only the deliberately wrong row.
+        row = copy.deepcopy(next(r for r in self.oracles["cases"] if r["id"] == identity))
+        data = dict(self.oracles)
+        data["cases"] = [row] + [r for r in self.oracles["cases"] if r["id"] != identity]
         return data, row
 
     def test_complete_explicit_discovery_and_named_review_preserve_input_denominator(self):
@@ -593,8 +592,7 @@ class PreparationChecks(unittest.TestCase):
                 audit.compare_required(expected, observed)
 
     def test_unpublished_json_query_cannot_pose_as_a_qualified_executable_target(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad["cases"] if r["id"] == "regression_library_review_1000_json")
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_library_review_1000_json')))
         row["execution_source"] = row["inputs"][0]["path"]
         with self.assertRaisesRegex(ValueError, "cannot pose as an executable"):
             audit.validate_oracles(bad)
@@ -804,8 +802,7 @@ class PreparationChecks(unittest.TestCase):
                     if r["id"] == "regression_library_review_" + name)
 
     def test_regression_library_cannot_omit_original_named_bodies(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("/1101_regex_engine.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('/1101_regex_engine.xr'))))
         row.pop("original_named_test_obligation")
         with self.assertRaisesRegex(ValueError, "named source obligations"):
             self.validate_runner_routes(bad)
@@ -817,15 +814,13 @@ class PreparationChecks(unittest.TestCase):
                 audit.compare_required(expected, dict(expected, required_test_names=expected["required_test_names"][:-1]))
 
     def test_regression_library_oracle_cannot_drop_source_or_companion(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad["cases"] if r["id"] == "regression_library_review_1032_reexport")
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_library_review_1032_reexport')))
         row["inputs"] = [i for i in row["inputs"] if not i["path"].endswith("/product.xr")]
         with self.assertRaisesRegex(ValueError, "lost complete source or imported companion"):
             audit.validate_oracles(bad)
 
     def test_regression_library_oracle_cannot_run_only_root(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad["cases"] if r["id"] == "regression_library_review_1131_regex_source_field_ownership")
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'regression_library_review_1131_regex_source_field_ownership')))
         row["execution_entry"] = "run"
         with self.assertRaisesRegex(ValueError, "full actual test entry"):
             audit.validate_oracles(bad)
@@ -973,8 +968,7 @@ class PreparationChecks(unittest.TestCase):
                 audit.compare_required(expected, observed)
 
     def test_csv_missing_delimiter_cannot_fall_back_to_original_source(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("/csv_pure_module_direct.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('/csv_pure_module_direct.xr'))))
         row.pop("target_source_port")
         with self.assertRaisesRegex(ValueError, "requires its frozen source port"):
             self.validate_runner_routes(bad)
@@ -1024,8 +1018,7 @@ class PreparationChecks(unittest.TestCase):
 
     def test_process_target_cannot_drop_or_change_the_argument_context(self):
         for missing in (True, False):
-            bad = copy.deepcopy(self.runner_routes)
-            row = next(r for r in bad["cases"] if r["case_id"].endswith("/process_schema_shared_core.xr"))
+            bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('/process_schema_shared_core.xr'))))
             if missing:
                 row["target_source_port"].pop("differential_input_obligation")
             else:
@@ -1136,6 +1129,126 @@ class PreparationChecks(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "oracle input changed"):
                 audit.validate_oracles(data)
 
+    def oracle_freshness_probe(self, directory):
+        source = Path(directory) / "fresh.xr"
+        source.write_bytes(b"print(1)\n")
+        record = audit.file_record(source)
+        data = copy.deepcopy(self.oracles)
+        for index in range(3):
+            row = copy.deepcopy(self.oracles["cases"][0])
+            row.update(id=f"audit_freshness_probe_{index}", legacy_case=None,
+                       expected={"exit_code": 0, "stdout_utf8": "1\n"},
+                       inputs=[{"path": record["path"], "lf_sha256": record["lf_sha256"], "role": "target_source"}],
+                       execution_source=record["path"])
+            data["cases"].append(row)
+        return source, data
+
+    def test_shared_oracle_input_is_read_once_per_audit_and_again_on_next_call(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory(dir=audit.HERE) as directory:
+            source, data = self.oracle_freshness_probe(directory)
+            original = Path.read_bytes
+            reads = []
+
+            def read(path):
+                if path == source:
+                    reads.append(path)
+                return original(path)
+
+            with mock.patch.object(Path, "read_bytes", read):
+                for expected_reads in (1, 2):
+                    self.assertEqual(audit.validate_oracles(data)["oracle_cases"], 627)
+                    self.assertEqual(len(reads), expected_reads)
+
+    def test_same_length_same_timestamp_source_change_is_seen_on_next_audit(self):
+        import os
+        with tempfile.TemporaryDirectory(dir=audit.HERE) as directory:
+            source, data = self.oracle_freshness_probe(directory)
+            audit.validate_oracles(data)
+            before = source.stat()
+            source.write_bytes(b"print(2)\n")
+            os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+            self.assertEqual(source.stat().st_size, before.st_size)
+            self.assertEqual(source.stat().st_mtime_ns, before.st_mtime_ns)
+            with self.assertRaisesRegex(ValueError, "oracle input changed"):
+                audit.validate_oracles(data)
+
+    def test_deleted_and_recreated_source_does_not_reuse_a_prior_audit_record(self):
+        with tempfile.TemporaryDirectory(dir=audit.HERE) as directory:
+            source, data = self.oracle_freshness_probe(directory)
+            audit.validate_oracles(data)
+            source.unlink()
+            with self.assertRaisesRegex(ValueError, "oracle input changed"):
+                audit.validate_oracles(data)
+            source.write_bytes(b"print(1)\n")
+            self.assertEqual(audit.validate_oracles(data)["oracle_cases"], 627)
+
+    def test_reused_input_record_does_not_reuse_another_oracles_hash_claim(self):
+        with tempfile.TemporaryDirectory(dir=audit.HERE) as directory:
+            source, data = self.oracle_freshness_probe(directory)
+            data["cases"][-2]["inputs"][0]["lf_sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "oracle input changed"):
+                audit.validate_oracles(data)
+
+    def test_file_record_keeps_raw_and_lf_identity_for_lf_crlf_and_lone_cr(self):
+        import hashlib
+        with tempfile.TemporaryDirectory(dir=audit.HERE) as directory:
+            source = Path(directory) / "bytes.xr"
+            for raw, normalized in ((b"", b""), (b"print(1)\n", b"print(1)\n"),
+                                    (b"print(1)\r\n", b"print(1)\n"), (b"print(1)\r", b"print(1)\r")):
+                source.write_bytes(raw)
+                record = audit.file_record(source)
+                self.assertEqual(record["bytes"], len(raw))
+                self.assertEqual(record["sha256"], hashlib.sha256(raw).hexdigest())
+                self.assertEqual(record["lf_sha256"], hashlib.sha256(normalized).hexdigest())
+
+    def test_runner_audits_rediscover_created_and_deleted_expected_args_and_stdin_sidecars(self):
+        with tempfile.TemporaryDirectory(dir=audit.HERE) as directory:
+            source = Path(directory) / "sidecars.xr"
+            source.write_bytes(b"print(1)\n")
+            identity = audit.relative(source)
+            row = copy.deepcopy(next(r for r in self.runner_routes["cases"]
+                                     if r["case_id"] == "tests/diff/cases/basic/arith.xr"))
+            entries = [{"suite": "differential", "entry": "run"}]
+            runner = audit.load_module("audit_sidecar_freshness_runner", "tests/diff/run_backend_diff.py")
+            row.update(case_id=identity, source_lf_sha256=audit.file_record(source)["lf_sha256"],
+                       original_runner_entries=entries,
+                       original_differential_obligation=audit.differential_input_obligation(source, runner),
+                       original_stdout_oracle={"path": identity + ".expected", "state": "MISSING", "lf_sha256": None})
+            data = copy.deepcopy(self.runner_routes)
+            data["cases"].append(row)
+            actual = dict(self.actual_runner_entries)
+            actual[identity] = entries
+
+            def validate():
+                return audit.validate_runner_routes(data, self.mapping, actual)
+
+            self.assertEqual(validate()["reviewed_runner_inputs"], 2051)
+            for path, content, message in ((Path(str(source) + ".expected"), b"1\n", "stdout oracle changed"),
+                                           (source.with_suffix(".args"), b"changed\n", "lost arguments"),
+                                           (source.with_suffix(".stdin"), b"alpha\r\n", "lost arguments")):
+                path.write_bytes(content)
+                with self.assertRaisesRegex(ValueError, message):
+                    validate()
+                path.unlink()
+                self.assertEqual(validate()["reviewed_runner_inputs"], 2051)
+
+    def test_mutated_control_rows_keep_the_full_corpus_and_cannot_mutate_shared_fixtures(self):
+        import json
+        for original, key, helper in ((self.oracles, "id", self.mutated_oracle),
+                                      (self.runner_routes, "case_id", self.mutated_runner_route)):
+            before = json.dumps(original, sort_keys=True)
+            identity = original["cases"][-1][key]
+            data, row = helper(identity)
+            self.assertEqual(len(data["cases"]), len(original["cases"]))
+            self.assertEqual({r[key] for r in data["cases"]}, {r[key] for r in original["cases"]})
+            self.assertIs(data["cases"][0], row)
+            if key == "id":
+                row["inputs"][0]["lf_sha256"] = "0" * 64
+            else:
+                row["original_runner_entries"][0]["entry"] = "wrong"
+            self.assertEqual(json.dumps(original, sort_keys=True), before)
+
     def execution_review_expected(self, name):
         return next(r["expected"] for r in self.oracles["cases"]
                     if r["id"] == "execution_review_" + name)
@@ -1224,22 +1337,19 @@ class PreparationChecks(unittest.TestCase):
 
     def test_unit_null_and_raw_store_replacements_cannot_claim_execution_sources(self):
         for name in ("known_empty_call_result_is_null", "tbaa_raw_pointer_store_kills_array_load"):
-            bad = copy.deepcopy(self.oracles)
-            row = next(r for r in bad["cases"] if r["id"] == "execution_review_" + name)
+            bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'execution_review_' + name)))
             row["execution_source"] = row["inputs"][0]["path"]
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, "executable target source"):
                 audit.validate_oracles(bad)
 
     def test_type_positive_named_manifest_cannot_be_omitted(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("1206_generic_functions.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('1206_generic_functions.xr'))))
         row.pop("original_named_test_obligation")
         with self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
             self.validate_runner_routes(bad)
 
     def test_generic_equal_migration_cannot_keep_future_instance_proof(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("1437_generic_method_param_contract.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('1437_generic_method_param_contract.xr'))))
         row["target_disposition"]["kind"] = "INSTANCE_ONLY_EQUAL_PROOF"
         with self.assertRaisesRegex(ValueError, "required disposition"):
             self.validate_runner_routes(bad)
@@ -1308,8 +1418,7 @@ class PreparationChecks(unittest.TestCase):
 
     def test_target_borrow_return_helper_cannot_be_dropped_or_stale(self):
         for change in ("drop", "stale"):
-            bad = copy.deepcopy(self.runner_routes)
-            row = next(r for r in bad["cases"] if r["case_id"].endswith("slice_borrow_return_cross_module.xr"))
+            bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('slice_borrow_return_cross_module.xr'))))
             if change == "drop":
                 row["target_source_port"]["companion_inputs"] = []
             else:
@@ -1318,8 +1427,7 @@ class PreparationChecks(unittest.TestCase):
                 self.validate_runner_routes(bad)
 
     def test_pending_view_member_replacement_is_not_an_executable_port(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad["cases"] if r["id"] == "byte_explicit_endian_float_observations")
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'byte_explicit_endian_float_observations')))
         row["execution_source"] = row["inputs"][0]["path"]
         with self.assertRaisesRegex(ValueError, "cannot pose as an executable"):
             audit.validate_oracles(bad)
@@ -1353,8 +1461,7 @@ class PreparationChecks(unittest.TestCase):
 
     def test_dual_entry_input_cannot_lose_either_original_entry(self):
         for suite in ("regression", "differential"):
-            bad = copy.deepcopy(self.runner_routes)
-            row = next(r for r in bad["cases"] if len(r["original_runner_entries"]) == 2)
+            bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if len(r['original_runner_entries']) == 2)))
             row["original_runner_entries"] = [e for e in row["original_runner_entries"] if e["suite"] != suite]
             with self.subTest(suite=suite), self.assertRaisesRegex(ValueError, "original runner entry"):
                 self.validate_runner_routes(bad)
@@ -1366,8 +1473,7 @@ class PreparationChecks(unittest.TestCase):
 
     def test_differential_arguments_and_exact_stdin_cannot_be_lost(self):
         for field in ("arguments", "stdin_hex", "stdin_sidecar", "arguments_sidecar", "execution"):
-            bad = copy.deepcopy(self.runner_routes)
-            row = next(r for r in bad["cases"] if "original_differential_obligation" in r)
+            bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'original_differential_obligation' in r)))
             if field == "arguments":
                 row["original_differential_obligation"][field] = ["unreviewed-argument"]
             elif field == "stdin_hex":
@@ -1380,15 +1486,13 @@ class PreparationChecks(unittest.TestCase):
                 self.validate_runner_routes(bad)
 
     def test_coroutine_textual_tests_cannot_be_removed_from_test_obligation(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("1164_channel_recv_raw_match_nullable_payload.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('1164_channel_recv_raw_match_nullable_payload.xr'))))
         row.pop("original_named_test_obligation")
         with self.assertRaisesRegex(ValueError, "falsely qualified discovery"):
             self.validate_runner_routes(bad)
 
     def test_sticky_array_result_cannot_keep_already_taken_target(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("080_transfer_task_second_await_rejected.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('080_transfer_task_second_await_rejected.xr'))))
         self.assertEqual(row["original_rejection_oracle"]["assertions"][0]["code"], "E0356")
         row["target_disposition"]["kind"] = "REJECTION_FOR_ALREADY_TAKEN"
         with self.assertRaisesRegex(ValueError, "required disposition"):
@@ -1440,8 +1544,7 @@ class PreparationChecks(unittest.TestCase):
 
     def test_named_source_obligations_cannot_be_dropped_or_marked_discovered(self):
         for change in ("drop", "PASS"):
-            bad = copy.deepcopy(self.runner_routes)
-            row = next(r for r in bad["cases"] if "original_named_test_obligation" in r)
+            bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'original_named_test_obligation' in r)))
             if change == "drop":
                 row["original_named_test_obligation"]["declarations"].pop()
             else:
@@ -1450,22 +1553,19 @@ class PreparationChecks(unittest.TestCase):
                 self.validate_runner_routes(bad)
 
     def test_target_named_test_migration_must_cover_every_original_identity(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "named_test_migration" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'named_test_migration' in r)))
         row["named_test_migration"]["mapping"].pop(next(iter(row["named_test_migration"]["mapping"])))
         with self.assertRaisesRegex(ValueError, "omitted"):
             self.validate_runner_routes(bad)
 
     def test_partial_reverse_program_cannot_replace_the_thirteen_test_suite(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "partial_target_program" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'partial_target_program' in r)))
         row["partial_target_program"]["complete_file_replacement"] = True
         with self.assertRaisesRegex(ValueError, "remaining original tests"):
             self.validate_runner_routes(bad)
 
     def test_partial_reverse_program_cannot_delete_stringbuilder_obligations(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "partial_target_program" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'partial_target_program' in r)))
         row["partial_target_program"]["remaining_original_tests"] = []
         with self.assertRaisesRegex(ValueError, "remaining original tests"):
             self.validate_runner_routes(bad)
@@ -1545,8 +1645,7 @@ class PreparationChecks(unittest.TestCase):
     def test_local_tuple_view_exception_does_not_open_array_view_storage(self):
         row = next(r for r in self.runner_routes["cases"] if r["case_id"].endswith("/span_tuple_literal_escape.xr"))
         self.assertEqual(row["target_disposition"]["kind"], "POSITIVE_LOCAL_VIEW_TUPLE_AFTER_FROZEN_TASK313_PORT")
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("/span_array_literal_escape.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('/span_array_literal_escape.xr'))))
         row["target_disposition"] = {"kind": "POSITIVE_LOCAL_VIEW_TUPLE_AFTER_FROZEN_TASK313_PORT", "owner_package": "P10", "qualification": "NOT_RUN", "reason": "invalid container exemption"}
         with self.assertRaisesRegex(ValueError, "required disposition"):
             self.validate_runner_routes(bad)
@@ -1560,15 +1659,13 @@ class PreparationChecks(unittest.TestCase):
                     self.validate_runner_routes(bad)
 
     def test_imported_effect_diagnostic_cannot_bind_changed_companion(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "original_imported_inputs" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'original_imported_inputs' in r)))
         row["original_imported_inputs"][0]["lf_sha256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "companion changed"):
             self.validate_runner_routes(bad)
 
     def test_oracle_cannot_execute_a_different_unbound_source(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad["cases"] if r["id"] == "atomic_var_handle_root_parameter")
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'atomic_var_handle_root_parameter')))
         row["execution_source"] = "tests/diff/cases/basic/arith.xr"
         with self.assertRaisesRegex(ValueError, "execution source"):
             audit.validate_oracles(bad)
@@ -1614,23 +1711,20 @@ class PreparationChecks(unittest.TestCase):
                     self.validate_runner_routes(bad)
 
     def test_read_class_positive_requires_the_ported_source(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("/007_in_instance_mutating_method.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('/007_in_instance_mutating_method.xr'))))
         del row["target_source_port"]
         with self.assertRaisesRegex(ValueError, "requires its frozen source port"):
             self.validate_runner_routes(bad)
 
     def test_read_struct_cannot_inherit_read_class_mutation_permission(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("/read_struct_mutating_receiver.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('/read_struct_mutating_receiver.xr'))))
         row["target_disposition"] = {"kind": "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT",
                                      "owner_package": "P10", "qualification": "NOT_RUN", "reason": "invalid class-only permission"}
         with self.assertRaisesRegex(ValueError, "required disposition"):
             self.validate_runner_routes(bad)
 
     def test_incomplete_enum_witness_is_not_an_implemented_positive(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r["case_id"].endswith("/020_enum_implements_rejected.xr"))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r['case_id'].endswith('/020_enum_implements_rejected.xr'))))
         row["target_disposition"]["kind"] = "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT"
         with self.assertRaisesRegex(ValueError, "required disposition"):
             self.validate_runner_routes(bad)
@@ -1661,15 +1755,13 @@ class PreparationChecks(unittest.TestCase):
             audit.compare_required(expected, dict(expected, stdout_utf8="color\n"))
 
     def test_regression_positive_cannot_become_arbitrary_rejection(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "original_regression_obligation" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'original_regression_obligation' in r)))
         row["original_regression_obligation"]["expected_exit"] = 1
         with self.assertRaisesRegex(ValueError, "regression positive"):
             self.validate_runner_routes(bad)
 
     def test_build_only_cannot_claim_test_discovery(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "original_regression_obligation" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'original_regression_obligation' in r)))
         row["original_regression_obligation"]["test_discovery"] = "PASS"
         with self.assertRaisesRegex(ValueError, "test discovery"):
             self.validate_runner_routes(bad)
@@ -1687,8 +1779,7 @@ class PreparationChecks(unittest.TestCase):
         self.assertEqual(source.count("assertEqual(g.held, true)"), 4)
 
     def test_target_source_port_is_not_a_qualified_product(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "target_source_port" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'target_source_port' in r)))
         row["target_source_port"]["qualification"] = "PASS"
         with self.assertRaisesRegex(ValueError, "incorrectly qualified"):
             self.validate_runner_routes(bad)
@@ -1706,8 +1797,7 @@ class PreparationChecks(unittest.TestCase):
         self.assertEqual(row["original_rejection_oracle"]["state"], "PRESENT")
 
     def test_planned_ctfe_positive_is_not_execution_qualification(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if "target_disposition" in r)
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if 'target_disposition' in r)))
         row["target_disposition"]["qualification"] = "PASS"
         with self.assertRaisesRegex(ValueError, "cannot publish qualification"):
             self.validate_runner_routes(bad)
@@ -1719,8 +1809,7 @@ class PreparationChecks(unittest.TestCase):
             self.validate_runner_routes(bad)
 
     def test_imported_program_companion_is_part_of_oracle_identity(self):
-        bad = copy.deepcopy(self.oracles)
-        row = next(r for r in bad["cases"] if r["id"] == "module_diamond_initializes_once")
+        bad, row = self.mutated_oracle(next((r['id'] for r in self.oracles['cases'] if r['id'] == 'module_diamond_initializes_once')))
         row["inputs"][-1]["lf_sha256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "oracle input changed"):
             audit.validate_oracles(bad)
@@ -1757,22 +1846,19 @@ class PreparationChecks(unittest.TestCase):
             self.validate_runner_routes(bad)
 
     def test_wrong_diagnostic_location_is_not_preserved_oracle(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r.get("original_rejection_oracle", {}).get("state") == "PRESENT")
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r.get('original_rejection_oracle', {}).get('state') == 'PRESENT')))
         row["original_rejection_oracle"]["assertions"][0]["where"]["col"] += 1
         with self.assertRaisesRegex(ValueError, "position, code or text"):
             self.validate_runner_routes(bad)
 
     def test_position_gap_annotation_cannot_be_removed_to_pass(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if any(a["misplaced"] for a in r.get("original_rejection_oracle", {}).get("assertions") or []))
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if any((a['misplaced'] for a in r.get('original_rejection_oracle', {}).get('assertions') or [])))))
         next(a for a in row["original_rejection_oracle"]["assertions"] if a["misplaced"])["misplaced"] = None
         with self.assertRaisesRegex(ValueError, "position, code or text"):
             self.validate_runner_routes(bad)
 
     def test_missing_expected_file_stays_an_open_gap(self):
-        bad = copy.deepcopy(self.runner_routes)
-        row = next(r for r in bad["cases"] if r.get("original_rejection_oracle", {}).get("state") == "MISSING")
+        bad, row = self.mutated_runner_route(next((r['case_id'] for r in self.runner_routes['cases'] if r.get('original_rejection_oracle', {}).get('state') == 'MISSING')))
         row["original_rejection_oracle"]["assertions"] = []
         with self.assertRaisesRegex(ValueError, "cannot be fabricated"):
             self.validate_runner_routes(bad)
