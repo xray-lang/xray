@@ -30353,6 +30353,250 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 14
+    },
+    {
+      "id": "complete_traversal_range_inclusive",
+      "oracle_id": "complete_traversal_range_inclusive",
+      "source": "tests/diff/cases/semantics/range_inclusive.xr",
+      "source_lf_sha256": "52aa6c98fa659486f18c7702da58b5104bfe73fc854b24ae24d4628d60b02aa6",
+      "entry": "run",
+      "stdout_utf8": "1..=3\n3\ntrue\nfalse\n1\n3\n[1, 2, 3]\n6\n3\n9223372036854775807\n1\nlow\nmid\nother\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original ordered traversal/range/cursor/typed derived key behaviors. All source loops,large endpoints,full failure bodies and insertion/tombstone work retained. Logical outputs do not admit current Source Iterator/Iterable/Range/derive/mutation or erased fallback;complete atomic migration and compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/range_inclusive.xr",
+        "source_lf_sha256": "52aa6c98fa659486f18c7702da58b5104bfe73fc854b24ae24d4628d60b02aa6"
+      },
+      "remaining_gates": [
+        "All seven complete original programs,124 observations,10 caught faults and all traversal/derived-key work retained.",
+        "Atomic whole-source Range/Iterator/Iterable/Map/Set/derive/READ/ref migration;full VM/C/native/compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed qualification. Source guard refusal is not migration success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 14
+    },
+    {
+      "id": "complete_traversal_range_iterator_shared_core",
+      "oracle_id": "complete_traversal_range_iterator_shared_core",
+      "source": "tests/diff/cases/semantics/collections/range_iterator_shared_core.xr",
+      "source_lf_sha256": "f10b37f81efd47a39defd9720121e2ff6f5d7887d8f62d1ced3b4d32fe641e78",
+      "entry": "run",
+      "stdout_utf8": "[2, 3, 4, 5, 6, 7, 8]\n[1, 2, 3, 4]\n[]\n[]\n[-3, -2, -1, 0, 1]\n[-4, -3, -2]\n[7]\n[3, 4, 5, 6, 7, 8]\n[3, 4, 5, 6, 7, 8]\n33\n33\ntrue\n3\n4\n3\n4\nfalse\n0\n35\n10\n0\n-5\n43\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original ordered traversal/range/cursor/typed derived key behaviors. All source loops,large endpoints,full failure bodies and insertion/tombstone work retained. Logical outputs do not admit current Source Iterator/Iterable/Range/derive/mutation or erased fallback;complete atomic migration and compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/range_iterator_shared_core.xr",
+        "source_lf_sha256": "f10b37f81efd47a39defd9720121e2ff6f5d7887d8f62d1ced3b4d32fe641e78"
+      },
+      "remaining_gates": [
+        "All seven complete original programs,124 observations,10 caught faults and all traversal/derived-key work retained.",
+        "Atomic whole-source Range/Iterator/Iterable/Map/Set/derive/READ/ref migration;full VM/C/native/compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed qualification. Source guard refusal is not migration success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 23
+    },
+    {
+      "id": "complete_traversal_range_to_array_too_large_shared_core",
+      "oracle_id": "complete_traversal_range_to_array_too_large_shared_core",
+      "source": "tests/diff/cases/semantics/collections/range_to_array_too_large_shared_core.xr",
+      "source_lf_sha256": "07167b70c5d8baf9e9a9a834d75ef70457d14b10c6e065d4fdbe1ac545a96024",
+      "entry": "run",
+      "stdout_utf8": "Range.toArray range too large\n441\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original ordered traversal/range/cursor/typed derived key behaviors. All source loops,large endpoints,full failure bodies and insertion/tombstone work retained. Logical outputs do not admit current Source Iterator/Iterable/Range/derive/mutation or erased fallback;complete atomic migration and compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/range_to_array_too_large_shared_core.xr",
+        "source_lf_sha256": "07167b70c5d8baf9e9a9a834d75ef70457d14b10c6e065d4fdbe1ac545a96024"
+      },
+      "remaining_gates": [
+        "All seven complete original programs,124 observations,10 caught faults and all traversal/derived-key work retained.",
+        "Atomic whole-source Range/Iterator/Iterable/Map/Set/derive/READ/ref migration;full VM/C/native/compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed qualification. Source guard refusal is not migration success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
+    },
+    {
+      "id": "complete_traversal_iterator_protocol_exhausted",
+      "oracle_id": "complete_traversal_iterator_protocol_exhausted",
+      "source": "tests/diff/cases/semantics/collections/iterator_protocol_exhausted.xr",
+      "source_lf_sha256": "b4caf4fb6dd0c6698a00c30f2409aa53fdc2b9f212f73984ebfe5a1ca8f232d9",
+      "entry": "run",
+      "stdout_utf8": "arr 10\narr 20\narr 30\narr-has false\narr-next 432 Iterator.next() on an exhausted iterator: every next() must follow a hasNext() that returned true\narr-entry 0=10\narr-entry 1=20\narr-entry 2=30\narr-entry-next 432\narr-nth 30\narr-nth 432 Iterator.nth(index) ran past the end: the iterator was exhausted before reaching index\nmap k\nmap j\nmap-next 432\nmap-entry k=1\nmap-entry j=2\nmap-entry-next 432\nset 7\nset 8\nset-next 432\nrune a\nrune b\nrune-next 432 Iterator.next() on an exhausted iterator: every next() must follow a hasNext() that returned true\nrune-nth b\nrune-nth 432\nempty-has false\nempty-next 432\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original ordered traversal/range/cursor/typed derived key behaviors. All source loops,large endpoints,full failure bodies and insertion/tombstone work retained. Logical outputs do not admit current Source Iterator/Iterable/Range/derive/mutation or erased fallback;complete atomic migration and compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/iterator_protocol_exhausted.xr",
+        "source_lf_sha256": "b4caf4fb6dd0c6698a00c30f2409aa53fdc2b9f212f73984ebfe5a1ca8f232d9"
+      },
+      "remaining_gates": [
+        "All seven complete original programs,124 observations,10 caught faults and all traversal/derived-key work retained.",
+        "Atomic whole-source Range/Iterator/Iterable/Map/Set/derive/READ/ref migration;full VM/C/native/compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed qualification. Source guard refusal is not migration success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 27
+    },
+    {
+      "id": "complete_traversal_for_in_interface_iterator",
+      "oracle_id": "complete_traversal_for_in_interface_iterator",
+      "source": "tests/diff/cases/semantics/collections/for_in_interface_iterator.xr",
+      "source_lf_sha256": "ca5759543132cb95869fad03207f94401d48366a9f77a6804c3a07c32d7ce9a7",
+      "entry": "run",
+      "stdout_utf8": "4\n3\n2\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original ordered traversal/range/cursor/typed derived key behaviors. All source loops,large endpoints,full failure bodies and insertion/tombstone work retained. Logical outputs do not admit current Source Iterator/Iterable/Range/derive/mutation or erased fallback;complete atomic migration and compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/for_in_interface_iterator.xr",
+        "source_lf_sha256": "ca5759543132cb95869fad03207f94401d48366a9f77a6804c3a07c32d7ce9a7"
+      },
+      "remaining_gates": [
+        "All seven complete original programs,124 observations,10 caught faults and all traversal/derived-key work retained.",
+        "Atomic whole-source Range/Iterator/Iterable/Map/Set/derive/READ/ref migration;full VM/C/native/compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed qualification. Source guard refusal is not migration success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_traversal_map_set_order",
+      "oracle_id": "complete_traversal_map_set_order",
+      "source": "tests/diff/cases/semantics/iter_order/map_set_order.xr",
+      "source_lf_sha256": "2867ca8141a253a6a44c2e714fd965fe189cfd12ccc785e4e6219911bb7398ab",
+      "entry": "run",
+      "stdout_utf8": "-- map for k --\nfirst\nsecond\nthird\n-- map for k,v --\nfirst=10\nsecond=2\nthird=3\n-- map keys --\nfirst\nsecond\nthird\n-- map values --\n10\n2\n3\n-- map delete+reinsert --\nfirst\nthird\nsecond\n-- map tombstone append --\nsecond=20\nfourth=4\nfifth=5\n20\n4\n5\n-- set for e --\nx\ny\nz\n-- set delete+reinsert --\ny\nz\nx\n-- set tombstone append --\nz\nx\nw\n-- int set --\n30\n10\n20\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original ordered traversal/range/cursor/typed derived key behaviors. All source loops,large endpoints,full failure bodies and insertion/tombstone work retained. Logical outputs do not admit current Source Iterator/Iterable/Range/derive/mutation or erased fallback;complete atomic migration and compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/iter_order/map_set_order.xr",
+        "source_lf_sha256": "2867ca8141a253a6a44c2e714fd965fe189cfd12ccc785e4e6219911bb7398ab"
+      },
+      "remaining_gates": [
+        "All seven complete original programs,124 observations,10 caught faults and all traversal/derived-key work retained.",
+        "Atomic whole-source Range/Iterator/Iterable/Map/Set/derive/READ/ref migration;full VM/C/native/compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed qualification. Source guard refusal is not migration success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 43
+    },
+    {
+      "id": "complete_traversal_map_set_derived_key_fields",
+      "oracle_id": "complete_traversal_map_set_derived_key_fields",
+      "source": "tests/diff/cases/semantics/collections/map_set_derived_key_fields.xr",
+      "source_lf_sha256": "cf989cf13cb483ce8c3efbb3813ca0d49f26f60dc609d232da6618ae2297064c",
+      "entry": "run",
+      "stdout_utf8": "2\n11\ntrue\nfalse\nfalse\nnull\nfalse\n1\n2\ntrue\nfalse\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original ordered traversal/range/cursor/typed derived key behaviors. All source loops,large endpoints,full failure bodies and insertion/tombstone work retained. Logical outputs do not admit current Source Iterator/Iterable/Range/derive/mutation or erased fallback;complete atomic migration and compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/map_set_derived_key_fields.xr",
+        "source_lf_sha256": "cf989cf13cb483ce8c3efbb3813ca0d49f26f60dc609d232da6618ae2297064c"
+      },
+      "remaining_gates": [
+        "All seven complete original programs,124 observations,10 caught faults and all traversal/derived-key work retained.",
+        "Atomic whole-source Range/Iterator/Iterable/Map/Set/derive/READ/ref migration;full VM/C/native/compiler/runtime FI/resource/lifetime/sanitizer/provider/mixed qualification. Source guard refusal is not migration success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
     }
   ]
 }
