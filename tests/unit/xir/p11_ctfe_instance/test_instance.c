@@ -159,11 +159,18 @@ static void instance_limits(void) {
 #include "source_receiving.h"
 #include "source_resources.h"
 #include "source_limits.h"
+#include "instance_batch.h"
+#include "instance_batch_resources.h"
 int main(int argc,char **argv) {
     CHECK(argc>=2 && argc<=4);
     if (!strcmp(argv[1],"limits")) { CHECK(argc==2);instance_limits();return 0; }
     if (!strcmp(argv[1],"tamper")) { CHECK(argc==2);instance_tamper();return 0; }
     if (!strcmp(argv[1],"source-limits")) { CHECK(argc==2);source_receiving_limits();return 0; }
+    if (!strcmp(argv[1],"batch-limits")) { CHECK(argc==2);instance_batch_limits();return 0; }
+    if (!strcmp(argv[1],"batch")) { CHECK(argc==3);instance_batch_normal(argv[2]);return 0; }
+    if (!strcmp(argv[1],"batch-prefix")) { CHECK(argc==3);instance_batch_faults(argv[2],true);return 0; }
+    if (!strcmp(argv[1],"batch-faults")) { CHECK(argc==3);instance_batch_faults(argv[2],false);return 0; }
+    if (!strcmp(argv[1],"batch-bounds")) { CHECK(argc==3);instance_batch_bounds(argv[2]);return 0; }
     CHECK(argc>=3);unsigned ordinal=(unsigned)strtoul(argv[2],NULL,10);CHECK(ordinal<2);
     CHECK(!strcmp(argv[1],"array") || !strcmp(argv[1],"optional") || !strcmp(argv[1],"tuple") ||
         !strcmp(argv[1],"empty") || !strcmp(argv[1],"boxed") || !strcmp(argv[1],"text") || !strcmp(argv[1],"nested") ||

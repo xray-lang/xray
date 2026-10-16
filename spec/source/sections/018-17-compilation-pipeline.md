@@ -890,6 +890,14 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 该入口建立普通Program Source中真实关闭实例的结果接收与提供函数，不把提供函数自动接回某个comptime语法站点。目前含comptime站点的输入、Library模板后续绑定和无当前Source声明节点的定义仍拒绝；依赖外围T的逐实例comptime语法接线继续OPEN，17.71不变。这些限制不是完整C0/C1完成定义的缩减。完整物理FI、原owner重试、精确边界、当前完整矩阵、正式安全和provider证据必须分别取得，不能由定向正例推导。
 
+### 17.74 同步批次中的独立有界执行
+
+编译器内部批次只在一次同步调用的完整动态范围内共享同一不可变Lowered的整体验证。每个零运行期实参根仍逐一建立当前完整可达闭包、类型/Cell/指令准入、显式target与Checked身份，并使用原唯一执行核和独立steps/frame/output/depth限制。每根拥有自己的执行状态与值所有权；重复根也重新执行，不共享可变运行状态。所有根、共享准备和结果共用输入的原有限compiler ledger，不续额、不退累计费用。
+
+拥有型实例批次先完整核验所有真实INSTANCE定义与非空替换，将实际Checked独立写入并接收一次、普通Lowered一次，再执行全部选择。全部结果成功后才发布批次拥有者；任一根失败释放已产生值并保全空输出。一次视图借用完整重写当前Checked、验证当前Lowered并逐字对应其实际来源packet，再检查全部定义/结果后原子发布全部视图。不能保留准备令牌、布尔PASS、旧摘要或跨调用验证提示；后续调用必须重新验证当前输入。借用要求拥有者保活且输入不可变。
+
+17.73的Source实例接收使用此批次拥有者，共享独立接收产物，仍为每个真实替换分别执行和写出常量配方，完整普通Checker、权限和泛型witness证据保持。公开ABI、schema、opcode、预算和未完成comptime语法/Library边界不变。实际物理分配减少后须重测完整新分母，保留旧固定输入证据；首末故障点不等于完整FI，原门与时限不缩减。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1911,5 +1919,13 @@ Actual closed arguments are copied and interned from their verified type trees i
 Private owned results outside their declaration still use17.67's genuine declaration owner, literal-only materializer and exact call bindings, without turning data observation into general private construction permission. Result functions remain private: knowing their ordinal grants no runtime external-entry permission. Source construction, specialization, factories, type receiving, recipes and publication share the original finite compiler ledger. Failure preserves empty outputs and releasable prefixes without refunding work or cumulative allocation; final destruction allocates nothing. Public SourceContext/Value/Call/Instance layouts, schema, opcodes, construction interface and budgets remain unchanged.
 
 This entry establishes result receiving and provider functions for genuine closed instances in ordinary Program Source; it does not automatically bind providers to comptime syntax sites. Inputs containing comptime sites, later Library-template bindings and definitions without current Source declaration nodes remain refused. Type-dependent per-instance comptime syntax remains OPEN and17.71 is unchanged. These limits do not narrow complete C0/C1 completion criteria. Complete physical FI, original-owner retries, exact bounds, current full matrices, formal safety and provider evidence each remain necessary; focused positive cases cannot imply them.
+
+### 17.74 Independently bounded execution within a synchronous batch
+
+An internal compiler batch shares complete admission of one immutable Lowered artifact only for the entire dynamic extent of one synchronous call. Each zero-runtime-argument root still derives its current complete reachable closure, type/Cell/instruction admission, explicit target and Checked identity. Every root uses the sole execution kernel with independent original steps/frame/output/depth limits and its own execution state and value ownership. Repeated roots execute again without sharing mutable runtime state. Roots, shared preparation and results consume the input's original finite compiler ledger without renewal or cumulative refunds.
+
+An owned-instance batch completely verifies every genuine INSTANCE definition and nonempty substitution, independently writes and receives actual Checked bytes once, lowers once, then executes all selections. Only complete success publishes the batch owner. Any failed root drops already produced values and preserves empty output. Each view borrow completely rewrites current Checked bytes, verifies current Lowered and compares its actual source packet byte for byte, then checks all definitions/results before atomically publishing every view. No preparation token, boolean PASS, old digest or validation hint survives a call; subsequent calls admit their current inputs again. Borrowing requires a live owner and immutable inputs.
+
+The Source receiver in17.73 uses this batch owner to share independently received artifacts, while each genuine substitution executes separately and produces its own constant recipe. Complete ordinary checking, permissions and generic witness evidence remain. Public ABI, schema, opcodes, budgets and unfinished comptime-syntax/Library boundaries are unchanged. Reduced real physical allocations require a freshly measured complete denominator while retaining old fixed-input evidence. First/last fault points do not imply complete FI; original gates and deadlines remain.
 
 <!-- /xr-spec:en -->

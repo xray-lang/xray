@@ -8114,6 +8114,14 @@ Private owned results outside their declaration still use17.67's genuine declara
 
 This entry establishes result receiving and provider functions for genuine closed instances in ordinary Program Source; it does not automatically bind providers to comptime syntax sites. Inputs containing comptime sites, later Library-template bindings and definitions without current Source declaration nodes remain refused. Type-dependent per-instance comptime syntax remains OPEN and17.71 is unchanged. These limits do not narrow complete C0/C1 completion criteria. Complete physical FI, original-owner retries, exact bounds, current full matrices, formal safety and provider evidence each remain necessary; focused positive cases cannot imply them.
 
+### 17.74 Independently bounded execution within a synchronous batch
+
+An internal compiler batch shares complete admission of one immutable Lowered artifact only for the entire dynamic extent of one synchronous call. Each zero-runtime-argument root still derives its current complete reachable closure, type/Cell/instruction admission, explicit target and Checked identity. Every root uses the sole execution kernel with independent original steps/frame/output/depth limits and its own execution state and value ownership. Repeated roots execute again without sharing mutable runtime state. Roots, shared preparation and results consume the input's original finite compiler ledger without renewal or cumulative refunds.
+
+An owned-instance batch completely verifies every genuine INSTANCE definition and nonempty substitution, independently writes and receives actual Checked bytes once, lowers once, then executes all selections. Only complete success publishes the batch owner. Any failed root drops already produced values and preserves empty output. Each view borrow completely rewrites current Checked bytes, verifies current Lowered and compares its actual source packet byte for byte, then checks all definitions/results before atomically publishing every view. No preparation token, boolean PASS, old digest or validation hint survives a call; subsequent calls admit their current inputs again. Borrowing requires a live owner and immutable inputs.
+
+The Source receiver in17.73 uses this batch owner to share independently received artifacts, while each genuine substitution executes separately and produces its own constant recipe. Complete ordinary checking, permissions and generic witness evidence remain. Public ABI, schema, opcodes, budgets and unfinished comptime-syntax/Library boundaries are unchanged. Reduced real physical allocations require a freshly measured complete denominator while retaining old fixed-input evidence. First/last fault points do not imply complete FI; original gates and deadlines remain.
+
 ---
 
 ## 18. Error Codes

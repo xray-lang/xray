@@ -27,19 +27,19 @@ static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output
         source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"instance constant receiving requires an ordinary Program Source graph");return;
     }
     XrXirStatus status=XR_XIR_OK;uint32_t count=request->count;
-    XirCtfeInstanceResult **owners=xir_compile_calloc(&ctx->compile,count,sizeof(*owners),&status);
+    uint32_t *functions=xir_compile_calloc(&ctx->compile,count,sizeof(*functions),&status);
     XirCtfeInstanceView *views=status==XR_XIR_OK?xir_compile_calloc(&ctx->compile,count,sizeof(*views),&status):NULL;
-    XrXirArtifact *closed=NULL;
+    XrXirArtifact *closed=NULL;XirCtfeInstanceBatch *owner=NULL;
     if (status==XR_XIR_OK) status=xr_xir_compile_specialize(output->checked,&closed,NULL);
     if (status!=XR_XIR_OK) source_fail(ctx,NULL,status,"instance constant preparation failed");
     for (uint32_t i=0;ctx->diagnostic.status==XR_XIR_OK && i<count;++i) {
-        uint32_t function=UINT32_MAX;
-        if (!source_instance_selected(ctx,closed,&request->selections[i],&function)) break;
-        if (!source_work_units(ctx,NULL,sizeof(XirCtfeInstanceRequest))) break;
-        XirCtfeInstanceRequest evaluation={closed,function,request->target,request->limits,request->call_depth};
-        XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance(&evaluation,&owners[i]);
-        if (evaluated==XR_XIR_CTFE_OK) evaluated=xr_xir_compile_ctfe_instance_view(owners[i],&views[i]);
-        if (evaluated!=XR_XIR_CTFE_OK) { source_comptime_failure(ctx,NULL,evaluated);break; }
+        if (!source_instance_selected(ctx,closed,&request->selections[i],&functions[i])) break;
+    }
+    if (ctx->diagnostic.status==XR_XIR_OK && source_work_units(ctx,NULL,sizeof(XirCtfeInstanceBatchRequest))) {
+        XirCtfeInstanceBatchRequest evaluation={closed,functions,count,request->target,request->limits,request->call_depth};
+        XrXirCtfeStatus evaluated=xr_xir_compile_ctfe_instance_batch(&evaluation,&owner);
+        if (evaluated==XR_XIR_CTFE_OK) evaluated=xr_xir_compile_ctfe_instance_batch_views(owner,views,count);
+        if (evaluated!=XR_XIR_CTFE_OK) source_comptime_failure(ctx,NULL,evaluated);
     }
     if (ctx->diagnostic.status==XR_XIR_OK && source_work_units(ctx,NULL,sizeof(SourceContext)+sizeof(SourceInstanceBatch))) {
         SourceInstanceBatch batch={views,providers,count};SourceContext received={0};
@@ -54,6 +54,6 @@ static void source_instance_receive(SourceContext *ctx,XrXirSourceResult *output
         else { xr_xir_compile_source_result_free(&result);ctx->diagnostic=received.diagnostic;ctx->module=received.module; }
         source_comptime_context_free(&received);
     }
-    for (uint32_t i=0;owners && i<count;++i) xr_xir_compile_ctfe_instance_free(owners[i]);
-    xr_compile_resources_free(views);xr_compile_resources_free(owners);xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_ctfe_instance_batch_free(owner);
+    xr_compile_resources_free(views);xr_compile_resources_free(functions);xr_xir_compile_artifact_free(closed);
 }

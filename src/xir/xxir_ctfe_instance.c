@@ -11,6 +11,7 @@
  *   receives fresh Checked bytes and executes under its original finite ledger.
  */
 #include "xxir_ctfe_instance_internal.h"
+#include "xxir_ctfe_batch_internal.h"
 #include "xxir_internal.h"
 #include "xxir_checked.h"
 #include "xxir_compile_memory.h"
@@ -50,14 +51,15 @@ static XrXirCtfeStatus instance_definition(const XrXirArtifact *artifact,uint32_
         source->functions[origin->function].parameter_count) return XR_XIR_CTFE_NOT_SUPPORTED;
     *definition=proof->source;*declaration=origin->function;return XR_XIR_CTFE_OK;
 }
-static XrXirStatus instance_inputs_match(const XirCtfeInstanceResult *owner) {
-    if (owner->checked->context.resources!=owner->context.resources ||
-        owner->lowered->context.resources!=owner->context.resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirCheckedPacket current={0};XrXirStatus status=xr_xir_compile_checked_write(owner->checked,&current,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(owner->lowered,NULL);
+static XrXirStatus instance_inputs_match(const XrXirCompileContext *context,
+    const XrXirArtifact *checked,const XrXirArtifact *lowered) {
+    if (checked->context.resources!=context->resources ||
+        lowered->context.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
+    XrXirCheckedPacket current={0};XrXirStatus status=xr_xir_compile_checked_write(checked,&current,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status==XR_XIR_OK) {
-        const XrXirCheckedPacket *original=&owner->lowered->checked_packet;
-        if (!xir_compile_work(&owner->context,(uint64_t)current.length+2*sizeof(*original))) status=XR_XIR_BUDGET;
+        const XrXirCheckedPacket *original=&lowered->checked_packet;
+        if (!xir_compile_work(context,(uint64_t)current.length+2*sizeof(*original))) status=XR_XIR_BUDGET;
         else if (current.length!=original->length || !original->bytes ||
             memcmp(current.bytes,original->bytes,current.length)) status=XR_XIR_BAD_STRUCTURE;
     }
@@ -111,7 +113,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_view(const XirCtfeInstanceR
     if (!owner || !output || output->checked || output->lowered || output->definition || output->value ||
         output->instance_function || output->definition_function) return XR_XIR_CTFE_BAD_ARGUMENT;
     if (!xir_compile_work(&owner->context,sizeof(*output))) return XR_XIR_CTFE_BUDGET;
-    XrXirStatus status=instance_inputs_match(owner);
+    XrXirStatus status=instance_inputs_match(&owner->context,owner->checked,owner->lowered);
     if (status!=XR_XIR_OK) return instance_compile_status(status);
     const XrXirArtifact *definition=NULL;uint32_t declaration=0;
     XrXirCtfeStatus admitted=instance_definition(owner->checked,owner->function,&definition,&declaration);
@@ -122,3 +124,4 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance_view(const XirCtfeInstanceR
     *output=(XirCtfeInstanceView){owner->checked,owner->lowered,definition,&owner->value,owner->function,declaration};
     return XR_XIR_CTFE_OK;
 }
+#include "xxir_ctfe_instance_batch.inc.c"

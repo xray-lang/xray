@@ -187,12 +187,11 @@ done:
     xr_compile_resources_free(summaries);xr_compile_resources_free(memory);return status;
 }
 
-static XrXirCtfeStatus ctfe_call_prepare(const XrXirCtfeCallRequest *request,bool *owned,
+static XrXirCtfeStatus ctfe_call_prepare_received(const XrXirCtfeCallRequest *request,bool *owned,
     XrXirCellProvenance **cells,void **closure,uint64_t *header_work) {
     const XrXirCtfeRequest *input=&request->evaluation;
     const XrXirArtifact *artifact=input->artifact;
-    XrXirCtfeStatus status=ctfe_compile_status(xr_xir_compile_artifact_verify(artifact,NULL));
-    if (status!=XR_XIR_CTFE_OK) return status;
+    XrXirCtfeStatus status=XR_XIR_CTFE_OK;
     if (artifact->module.stage!=XR_XIR_LOWERED || input->function>=artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;
     if (artifact->module.declarations && artifact->module.declarations->functions &&
@@ -402,17 +401,10 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
     }
 }
 
-XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *request,
-    XrXirValue *output) {
-    if (!request || !output || output->type || output->reserved || output->payload ||
-        !request->evaluation.artifact || (request->evaluation.argument_count && !request->evaluation.arguments) ||
-        request->evaluation.limits.steps>XR_XIR_CTFE_MAX_STEPS ||
-        request->evaluation.limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
-        request->evaluation.limits.output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES ||
-        request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH) return XR_XIR_CTFE_BAD_ARGUMENT;
-    bool owned=false;XrXirCellProvenance *cells=NULL;void *closure=NULL;uint64_t header_work=0;
-    XrXirCtfeStatus status=ctfe_call_prepare(request,&owned,&cells,&closure,&header_work);
-    if (status==XR_XIR_CTFE_OK && !xir_compile_work(&request->evaluation.artifact->context,sizeof(CtfeCallExecution))) status=XR_XIR_CTFE_BUDGET;
+static XrXirCtfeStatus ctfe_call_run_received(const XrXirCtfeCallRequest *request,XrXirValue *output,
+    bool owned,XrXirCellProvenance *cells,void *closure,uint64_t header_work) {
+    XrXirCtfeStatus status=xir_compile_work(&request->evaluation.artifact->context,sizeof(CtfeCallExecution))?
+        XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
     if (status!=XR_XIR_CTFE_OK) { if (cells) xr_xir_compile_cell_provenance_free(cells);xr_compile_resources_free(closure);return status; }
     CtfeCallExecution execution={.request=request,.artifact=request->evaluation.artifact,.steps=request->evaluation.limits.steps};
     status=ctfe_owned_new(execution.artifact,owned,&execution.owned);
@@ -438,3 +430,21 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *re
     if (status==XR_XIR_CTFE_OK) status=ctfe_call_execute(&execution,output);
     ctfe_call_frames_free(&execution);ctfe_owned_free(&execution.owned);return status;
 }
+XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *request,
+    XrXirValue *output) {
+    if (!request || !output || output->type || output->reserved || output->payload ||
+        !request->evaluation.artifact || (request->evaluation.argument_count && !request->evaluation.arguments) ||
+        request->evaluation.limits.steps>XR_XIR_CTFE_MAX_STEPS ||
+        request->evaluation.limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
+        request->evaluation.limits.output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES ||
+        request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH) return XR_XIR_CTFE_BAD_ARGUMENT;
+    XrXirCtfeStatus status=ctfe_compile_status(xr_xir_compile_artifact_verify(request->evaluation.artifact,NULL));
+    if (status!=XR_XIR_CTFE_OK) return status;
+    bool owned=false;XrXirCellProvenance *cells=NULL;void *closure=NULL;uint64_t header_work=0;
+    status=ctfe_call_prepare_received(request,&owned,&cells,&closure,&header_work);
+    if (status!=XR_XIR_CTFE_OK) {
+        xr_xir_compile_cell_provenance_free(cells);xr_compile_resources_free(closure);return status;
+    }
+    return ctfe_call_run_received(request,output,owned,cells,closure,header_work);
+}
+#include "xxir_ctfe_batch.inc.c"
