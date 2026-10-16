@@ -1,4 +1,4 @@
-"""Independent state/serialization models for four whole HTTP policy fixtures."""
+"""Independent state/serialization models for whole HTTP policy fixtures."""
 from pathlib import Path
 import datetime,hashlib,json,re
 from email.utils import parsedate_to_datetime
@@ -18,6 +18,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e
  'tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr': '02a4d6f8bce23707d13a18ada2877c03e72888aad91c23b05fa0ddca8a772293',
  'tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr': '174c52527b158e2f23e393c6acab0a3525cc6e3dd094ef3415559f5f8c3ac4a5',
  'tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr': '0e07b3dc87f6d8510b7b45e507a1837bd99d3a6e9553503a98f36cb3aa8f8929'}
+_INPUTS['tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr'] = '0fe447c6b745844d25b9c35a8fe3191c10d3dcb0c5f0566a32d3840c97312afc'
 _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'spec/source/sections/004-3-expressions.md',
  'spec/source/sections/006-5-declarations.md',
@@ -31,11 +32,13 @@ _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr',
  'tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr',
  'tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr')
+_REQUIRED_INPUTS += ('tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr',)
 _PROGRAMS = {'http_cookie_pure_direct': 'tests/diff/cases/semantics/stdlib/http_cookie_pure_direct.xr',
  'http_pure_helpers_direct': 'tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr',
  'http_request_text_pure_direct': 'tests/diff/cases/semantics/stdlib/http_request_text_pure_direct.xr',
  'http_router_pure_direct': 'tests/diff/cases/semantics/stdlib/http_router_pure_direct.xr'}
-_NAMES=frozenset({'http_cookie_pure_direct','http_pure_helpers_direct','http_request_text_pure_direct','http_router_pure_direct'})
+_PROGRAMS['http_headers_typed_direct'] = 'tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr'
+_NAMES=frozenset({'http_cookie_pure_direct','http_pure_helpers_direct','http_request_text_pure_direct','http_router_pure_direct','http_headers_typed_direct'})
 
 class HeaderError(Exception):pass
 
@@ -45,6 +48,32 @@ def checked_headers(pairs):
         if not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+",name) or '\r' in value or '\n' in value:raise HeaderError('Invalid header')
         result.append((name,value))
     return result
+
+class HeaderCollection:
+    """Ordered field pairs with ASCII-only keys and detached read snapshots."""
+    def __init__(self):self._pairs=[]
+    @staticmethod
+    def key(name):return name.translate(str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'))
+    def add(self,name,value):self._pairs.extend(checked_headers([(name,value)]))
+    def get_all(self,name):return [value for field,value in self._pairs if self.key(field)==self.key(name)]
+    def get(self,name):return next(iter(self.get_all(name)),None)
+    def entries(self):return list(self._pairs)
+    def set(self,name,value):
+        checked_headers([(name,value)])
+        key=self.key(name);matches=[i for i,(field,_) in enumerate(self._pairs) if self.key(field)==key]
+        position=matches[0] if matches else len(self._pairs)
+        kept=[pair for field_index,pair in enumerate(self._pairs) if field_index not in matches]
+        kept.insert(position,(name,value));self._pairs=kept
+
+
+def headers_observations():
+    headers=HeaderCollection()
+    for field,value in [('Set-Cookie','a=1'),('set-cookie','b=2'),('X-Test','ok')]:headers.add(field,value)
+    display=lambda values:'['+', '.join(json.dumps(value,ensure_ascii=False) for value in values)+']'
+    first=headers.get('SET-cookie');all_values=display(headers.get_all('set-cookie'));entries=headers.entries()
+    headers.set('Set-Cookie','c=3')
+    return [first,all_values,len(entries),display(headers.get_all('set-cookie'))]
+
 
 def injection_rejected():
     try:checked_headers([('X-Bad','a\r\nInjected: y')])
@@ -178,6 +207,7 @@ def observations():
     post=router.find('POST','/users/42');values.extend([post[0],post[1]['id']]);file=router.find('GET','/files/a/b/c.txt');values.extend([file[0],file[1]['path'],router.find('GET','/')[0]])
     values.extend([router.find('DELETE','/users/42') is None,router.add('','/bad','x'),router.add('GET','bad','x'),router.add('GET','/bad/*tail/more','x'),router.add('GET','/users/:id','replacement'),router.find('GET','/users/7')[0]])
     other=Router();values.append(other.add('GET','/x/*tail',1));tail=other.find('GET','/x/a/b');values.extend([tail[0]+1,tail[1]['tail']]);rows['http_router_pure_direct']=values
+    rows['http_headers_typed_direct']=headers_observations()
     if set(rows)!=_NAMES:raise ValueError('HTTP policy lost a complete program')
     return rows
 
@@ -192,6 +222,6 @@ def expected_rows():
         if source!='tests/diff/cases/semantics/stdlib/'+name+'.xr' or source not in _INPUTS:raise ValueError('HTTP policy original source changed')
         rendered=lambda value:'null' if value is None else str(value).lower() if type(value) is bool else str(value)
         rows.append({'id':'complete_http_policy_'+name,'source':source,'original_source':source,'required_target':None,'expected':{'exit_code':0,'stdout_utf8':''.join(rendered(v)+'\n' for v in values[name]),'stderr_utf8':''},
-            'model':'Complete original HTTP policy body; independent cookie state, ordered full wire serialization, error channel and static/dynamic route models. No network/physical resource qualification.',
+            'model':('Complete original typed Headers body; independent duplicate-preserving ordered fields,ASCII lookup,detached entry snapshot and first-slot replacement. Logical strings are not HTTP/Source/provider/resource/lifetime qualification.' if name=='http_headers_typed_direct' else 'Complete original HTTP policy body; independent cookie state, ordered full wire serialization, error channel and static/dynamic route models. No network/physical resource qualification.'),
             'observation_count':len(values[name])})
     return rows

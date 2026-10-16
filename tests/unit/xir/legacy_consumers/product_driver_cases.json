@@ -31401,6 +31401,42 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 3
+    },
+    {
+      "id": "complete_http_policy_http_headers_typed_direct",
+      "oracle_id": "complete_http_policy_http_headers_typed_direct",
+      "source": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr",
+      "source_lf_sha256": "0fe447c6b745844d25b9c35a8fe3191c10d3dcb0c5f0566a32d3840c97312afc",
+      "entry": "run",
+      "stdout_utf8": "a=1\n[\"a=1\", \"b=2\"]\n3\n[\"c=3\"]\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original typed Headers body; independent duplicate-preserving ordered fields,ASCII lookup,detached entry snapshot and first-slot replacement. Logical strings are not HTTP/Source/provider/resource/lifetime qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/http_headers_typed_direct.xr",
+        "source_lf_sha256": "0fe447c6b745844d25b9c35a8fe3191c10d3dcb0c5f0566a32d3840c97312afc"
+      },
+      "remaining_gates": [
+        "Whole original Headers constructor,all3 add calls,2 getAll calls,get force unwrap,entries,length and set preserved.",
+        "All4 original observations;actual VM,C,native and complete compiler/runtime FI,resource,lifetime,sanitizer,provider,mixed gates remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
     }
   ]
 }
