@@ -57,3 +57,15 @@ tests/unit/xir/product_consumers/fixtures/** text eol=lf
 tests/unit/xir/product_consumers/*_cases.cmake text eol=lf
 tests/unit/xir/product_consumers/source_product_*_constructors.c text eol=lf
 tests/unit/xir/product_consumers/legacy_responsibilities.json text eol=lf
+
+# Retained semantic77 packets are authenticated as exact original LF bytes.
+# Pin only these governed preimages across Windows text checkouts.
+tests/unit/xir/compile_owner/checked_sizing77_golden.h text eol=lf
+tests/unit/xir/root_construction77_goldens.h text eol=lf
+tests/unit/xir/unit_values/unit77_wire_golden.h text eol=lf
+tests/unit/xir/xir_assert_panics77_golden.h text eol=lf
+tests/unit/xir/xir_checked_range77_golden.h text eol=lf
+tests/unit/xir/xir_checked_scalar77_golden.h text eol=lf
+tests/unit/xir/xir_error_marker77_golden.h text eol=lf
+tests/unit/xir/xir_generic_method77_golden.h text eol=lf
+tests/unit/xir/xir_rune77_golden.h text eol=lf
