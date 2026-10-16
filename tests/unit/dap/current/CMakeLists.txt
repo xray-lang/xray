@@ -189,6 +189,19 @@ if(XR_BUILD_DAP)
     add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp --start-request attach)
     set_tests_properties(dap_current_tcp dap_current_tcp_attach PROPERTIES TIMEOUT 120 LABELS "dap;tcp;cli;execution;ownership")
+    configure_file(${PROJECT_SOURCE_DIR}/tests/regression/dap/fixtures/current/oracle.json ${XR_DAP_FIXTURE_DIR}/oracle.json COPYONLY)
+    foreach(XR_DAP_WIRE_SCENARIO disconnect-clean stop-on-entry line-breakpoint logpoint mutate-oracle owned-oracle)
+        set(XR_DAP_WIRE_SOURCE call_stack.xr)
+        if(XR_DAP_WIRE_SCENARIO STREQUAL "logpoint")
+            set(XR_DAP_WIRE_SOURCE conditional_hits.xr)
+        elseif(XR_DAP_WIRE_SCENARIO STREQUAL "owned-oracle")
+            set(XR_DAP_WIRE_SOURCE owned_values.xr)
+        endif()
+        add_test(NAME dap_original_stdio_${XR_DAP_WIRE_SCENARIO} COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+            --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/${XR_DAP_WIRE_SOURCE}
+            --oracle ${XR_DAP_FIXTURE_DIR}/oracle.json --scenario ${XR_DAP_WIRE_SCENARIO})
+        set_tests_properties(dap_original_stdio_${XR_DAP_WIRE_SCENARIO} PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;source;execution;ownership;original-oracle")
+    endforeach()
 endif()
 
 add_executable(test_dap_exceptions test_exceptions.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)

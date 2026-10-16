@@ -384,7 +384,6 @@ XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,co
     if (!strcmp(command,"setBreakpoints")) return xdap_dispatch_source_breakpoints(s,r);
     if (!strcmp(command,"evaluate")) return inspect_evaluate(s,r);
     if (!strcmp(command,"setVariable")) return inspect_set_variable(s,r);
-    if (!strcmp(command,"restart")) return xdap_dispatch_response(s,r,false,NULL,"Restart construction is not yet available");
     if (!strcmp(command,"disassemble")) return inspect_disassemble(s,r);
     return xdap_dispatch_response(s,r,false,NULL,"Unknown request");
 }
