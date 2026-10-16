@@ -50,6 +50,7 @@ add_test(NAME test_xir_source_derivation_compiler_resources COMMAND ${Python3_EX
 set_tests_properties(test_xir_source_derivation_compiler_resources PROPERTIES TIMEOUT 600 COST 600 PROCESSORS 8 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;ownership;compiler-fault;resources")
 include("${CMAKE_CURRENT_LIST_DIR}/source_derivation_native.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/source_derivation_json.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/json_strings.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/source_derivation_enum.cmake")
 add_executable(test_xir_source_comptime "${CMAKE_CURRENT_LIST_DIR}/test_xir_source_comptime.c")
 target_link_libraries(test_xir_source_comptime PRIVATE xray_xir_source xray_xir_vm)
