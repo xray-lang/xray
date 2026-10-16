@@ -17,7 +17,8 @@ typedef struct XlspRequestId {
     union {int32_t number;char *string;} as;
 } XlspRequestId;
 typedef enum XlspProtocolStatus {
-    XLSP_PROTOCOL_OK=0,XLSP_PROTOCOL_BAD_ARGUMENT,XLSP_PROTOCOL_OUT_OF_MEMORY
+    XLSP_PROTOCOL_OK=0,XLSP_PROTOCOL_BAD_ARGUMENT,XLSP_PROTOCOL_OUT_OF_MEMORY,
+    XLSP_PROTOCOL_INVALID_NOTIFICATION,XLSP_PROTOCOL_INVALID_RESPONSE
 } XlspProtocolStatus;
 /* Missing id is a notification. Present ids must be a protocol integer or
  * valid UTF-8 string; strings own their full length, including embedded NUL.
@@ -36,4 +37,23 @@ XR_FUNC XlspProtocolStatus xlsp_protocol_error(const XlspRequestId *,int32_t,con
 /* An empty id creates a notification; otherwise it must be valid. Params are
  * an optional object/array and transfer only with the complete call envelope. */
 XR_FUNC XlspProtocolStatus xlsp_protocol_call(const XlspRequestId *,const char *,XrJsonValue **,XrJsonValue **);
+typedef enum XlspProtocolEnvelopeKind {
+    XLSP_ENVELOPE_NONE,XLSP_ENVELOPE_REQUEST,XLSP_ENVELOPE_NOTIFICATION,XLSP_ENVELOPE_RESPONSE
+} XlspProtocolEnvelopeKind;
+typedef struct XlspProtocolEnvelope {
+    XlspProtocolEnvelopeKind kind;
+    XlspRequestId id;
+    const char *method;
+    size_t method_length;
+    XrJsonValue *params;
+    const XrJsonValue *response_id,*result,*error;
+} XlspProtocolEnvelope;
+/* Decode one parsed DOM without dispatch or application mutation. Reserved fields
+ * are unique and all payload strings/numbers/container bounds are checked.
+ * Only a call's id is owned. Every other pointer borrows the unchanged input DOM;
+ * dispatch must finish or capture its own inputs before that DOM dies.
+ * Invalid notification/response statuses require silence, not a reply loop.
+ * Failure preserves the caller's empty output and never allocates an id first. */
+XR_FUNC XlspProtocolStatus xlsp_protocol_envelope_decode(XrJsonValue *,XlspProtocolEnvelope *);
+XR_FUNC void xlsp_protocol_envelope_clear(XlspProtocolEnvelope *);
 #endif // XLSP_PROTOCOL_MESSAGE_H

@@ -3809,6 +3809,7 @@ if(XR_BUILD_LSP)
     add_test(NAME test_lsp_stdlib COMMAND test_lsp_stdlib)
 
     file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
+    list(FILTER LSP_SOURCES EXCLUDE REGEX "\\.inc\\.c$")
     list(REMOVE_ITEM LSP_SOURCES
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_query.c
@@ -4618,3 +4619,5 @@ include(xir/lsp_call_syntax/CMakeLists.txt)
 
 include(xir/lsp_signature_task/CMakeLists.txt)
 include(xir/lsp_parameter_task/CMakeLists.txt)
+
+include(xir/lsp_envelope/CMakeLists.txt)

@@ -649,6 +649,18 @@ static bool ensure_method_table(XrLspServer *server, const XlspRequestId *id) {
     return false;
 }
 
+static bool progress_cancel_token_matches(const XrJsonValue *params,const char *expected) {
+    if(!params||params->type!=XR_JSON_OBJECT||!expected)return false;
+    const XrJsonValue *token=NULL;
+    for(int i=0;i<params->as.object.count;++i) {
+        const XrJsonMember *member=&params->as.object.members[i];
+        if(member->key_len!=5||memcmp(member->key,"token",5))continue;
+        if(token)return false;token=member->value;
+    }
+    size_t length=strlen(expected);
+    return token&&token->type==XR_JSON_STRING&&token->string_len==length&&!memcmp(token->as.string,expected,length);
+}
+
 // Handle incoming message.
 //
 // Request vs notification: per JSON-RPC 2.0 a request has an `id` member
@@ -656,34 +668,19 @@ static bool ensure_method_table(XrLspServer *server, const XlspRequestId *id) {
 // both `id` shapes, echo them back verbatim in responses, and use them
 // as the cancellation key.
 static void handle_message(XrLspServer *server, XrJsonValue *msg) {
-    // Server-originated progress requests do not retain a reply consumer.
-    // A reply must not be reinterpreted as a malformed client request.
-    if(!xjson_get(msg,"method")&&(xjson_get(msg,"result")||xjson_get(msg,"error")))return;
-
-    const char *method = xjson_get_string(msg, "method");
-    XrJsonValue *params = xjson_get(msg, "params");
-
-    XlspRequestId id={0};XlspProtocolStatus parsed_id=xlsp_request_id_parse(msg,&id);
-    if(parsed_id!=XLSP_PROTOCOL_OK) {
-        send_error(server,NULL,parsed_id==XLSP_PROTOCOL_OUT_OF_MEMORY?-32603:-32600,"Request id admission failed");
-        if(parsed_id==XLSP_PROTOCOL_OUT_OF_MEMORY)server->exit_received=true;
+    XlspProtocolEnvelope envelope={0};
+    XlspProtocolStatus decoded=xlsp_protocol_envelope_decode(msg,&envelope);
+    if(decoded!=XLSP_PROTOCOL_OK) {
+        if(decoded==XLSP_PROTOCOL_INVALID_NOTIFICATION||decoded==XLSP_PROTOCOL_INVALID_RESPONSE)return;
+        send_error(server,NULL,decoded==XLSP_PROTOCOL_OUT_OF_MEMORY?-32603:-32600,"Message envelope admission failed");
+        if(decoded==XLSP_PROTOCOL_OUT_OF_MEMORY)server->exit_received=true;
         return;
     }
-    bool is_request=xlsp_request_id_valid(&id);
-    XrJsonValue *rpc=xjson_get(msg,"jsonrpc"),*method_value=xjson_get(msg,"method");
-    if(!rpc||rpc->type!=XR_JSON_STRING||rpc->string_len!=3||memcmp(rpc->as.string,"2.0",3)||
-       !method_value||method_value->type!=XR_JSON_STRING||!method_value->as.string||
-       memchr(method_value->as.string,0,method_value->string_len)||!xr_utf8_validate(method_value->as.string,method_value->string_len)) {
-        send_error(server,is_request?&id:NULL,-32600,"Invalid Request");xlsp_request_id_free(&id);return;
-    }
-
-    if (!method) {
-        if (is_request) {
-            send_error(server, &id, -32600, "Invalid Request");
-        }
-        xlsp_request_id_free(&id);
-        return;
-    }
+    // Server-originated progress replies have no retained response consumer.
+    if(envelope.kind==XLSP_ENVELOPE_RESPONSE){xlsp_protocol_envelope_clear(&envelope);return;}
+    const char *method=envelope.method;XrJsonValue *params=envelope.params;
+    XlspRequestId id=envelope.id;envelope.id=(XlspRequestId){0};
+    bool is_request=envelope.kind==XLSP_ENVELOPE_REQUEST;
 
     XlspLifecycleAdmission admission = xlsp_lifecycle_admit(server, method, is_request);
     if (admission != XLSP_LIFECYCLE_ALLOW) {
@@ -711,9 +708,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
         if(is_request){send_error(server,&id,-32600,"Progress cancellation must be a notification");xlsp_request_id_free(&id);return;}
         // Mark indexing as cancelled if token matches
         if (params) {
-            const char *token = xjson_get_string(params, "token");
-            if (token && server->index_progress_token &&
-                strcmp(token, server->index_progress_token) == 0) {
+            if (progress_cancel_token_matches(params,server->index_progress_token)) {
                 lsp_log("Workspace indexing cancelled by user");
                 server->index_cancelled = true;
                 xlsp_index_pool_cancel_all(server->index_pool);

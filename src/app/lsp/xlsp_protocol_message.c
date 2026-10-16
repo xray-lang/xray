@@ -29,7 +29,16 @@ static XlspProtocolStatus id_string(const char *text,size_t length,XlspRequestId
 }
 XR_FUNC XlspProtocolStatus xlsp_request_id_parse(const XrJsonValue *message,XlspRequestId *out) {
     if(!message||message->type!=XR_JSON_OBJECT||!id_empty(out))return XLSP_PROTOCOL_BAD_ARGUMENT;
-    const XrJsonValue *value=xjson_get((XrJsonValue *)message,"id");if(!value)return XLSP_PROTOCOL_OK;
+    if(message->as.object.count<0||message->as.object.capacity<message->as.object.count||
+        (message->as.object.count&&!message->as.object.members))return XLSP_PROTOCOL_BAD_ARGUMENT;
+    const XrJsonValue *value=NULL;
+    for(int i=0;i<message->as.object.count;++i) {
+        const XrJsonMember *member=&message->as.object.members[i];
+        if(!member->key||!member->value)return XLSP_PROTOCOL_BAD_ARGUMENT;
+        if(member->key_len!=2||memcmp(member->key,"id",2))continue;
+        if(value)return XLSP_PROTOCOL_BAD_ARGUMENT;value=member->value;
+    }
+    if(!value)return XLSP_PROTOCOL_OK;
     if(value->type==XR_JSON_STRING)return id_string(value->as.string,value->string_len,out);
     if(value->type!=XR_JSON_NUMBER)return XLSP_PROTOCOL_BAD_ARGUMENT;
     int32_t number;
@@ -125,3 +134,5 @@ XR_FUNC XlspProtocolStatus xlsp_protocol_call(const XlspRequestId *id,const char
     }
     *out=object;return XLSP_PROTOCOL_OK;
 }
+
+#include "xlsp_protocol_envelope.inc.c"
