@@ -5,6 +5,9 @@ if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 enable_testing()
+add_test(NAME legacy_consumer_complete_memory_primitives_model_controls
+    COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_complete_memory_primitives_model.py")
+set_tests_properties(legacy_consumer_complete_memory_primitives_model_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)
 add_test(NAME legacy_consumer_complete_task_regression_model_controls
     COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_complete_task_regression_model.py")
 set_tests_properties(legacy_consumer_complete_task_regression_model_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)

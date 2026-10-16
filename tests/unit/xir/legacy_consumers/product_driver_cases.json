@@ -28183,6 +28183,186 @@
         "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
         "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
       ]
+    },
+    {
+      "id": "complete_memory_primitives_mem_bulk_shared_core",
+      "oracle_id": "complete_memory_primitives_mem_bulk_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/mem_bulk_shared_core.xr",
+      "source_lf_sha256": "fa16eb57725849a904a8e4b624c8da02e10216fa91ab35b16fd252e4d0deb830",
+      "entry": "run",
+      "stdout_utf8": "64\n7\n7\n7\n7\n0\ntrue\n0\n5\n6\nok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original normal allocation path;independent initialized bytes, symbolic typed pointer identity, explicit x64 little-endian scalar/layout facts and bulk policy. No host query or product-output oracle;all unsafe/volatile/resource/lifetime/provider duties remain open.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/mem_bulk_shared_core.xr",
+        "source_lf_sha256": "fa16eb57725849a904a8e4b624c8da02e10216fa91ab35b16fd252e4d0deb830"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and every unsafe operation,raw pointer/layout/byte observation through real CLI/VM/C/native.",
+        "Original foreign allocation failure,raw-pointer permissions/lifetime,volatile ordering,page/Buffer resources and physical reclamation;complete compiler/runtime FI,sanitizer and every admitted provider."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
+    },
+    {
+      "id": "complete_memory_primitives_mem_from_address_shared_core",
+      "oracle_id": "complete_memory_primitives_mem_from_address_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr",
+      "source_lf_sha256": "d299371e08a6bf0b2548c281f99272f3da767d47e7c5b85345f2b6f31a90f54d",
+      "entry": "run",
+      "stdout_utf8": "true\n0\nfalse\n42\n99\n99\ntrue\n16909060\ntrue\ntrue\ntrue\n0\n0\n0\n305419896\ntrue\nok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original normal allocation path;independent initialized bytes, symbolic typed pointer identity, explicit x64 little-endian scalar/layout facts and bulk policy. No host query or product-output oracle;all unsafe/volatile/resource/lifetime/provider duties remain open.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/mem_from_address_shared_core.xr",
+        "source_lf_sha256": "d299371e08a6bf0b2548c281f99272f3da767d47e7c5b85345f2b6f31a90f54d"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and every unsafe operation,raw pointer/layout/byte observation through real CLI/VM/C/native.",
+        "Original foreign allocation failure,raw-pointer permissions/lifetime,volatile ordering,page/Buffer resources and physical reclamation;complete compiler/runtime FI,sanitizer and every admitted provider."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 17
+    },
+    {
+      "id": "complete_memory_primitives_mem_layout_introspection",
+      "oracle_id": "complete_memory_primitives_mem_layout_introspection",
+      "source": "tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr",
+      "source_lf_sha256": "bbd4969eee7a9a93e601e0481787900fb6668f572b96aca36ccb6e5747bce504",
+      "entry": "run",
+      "stdout_utf8": "1\n1\n2\n2\n4\n4\n8\n8\n4\n4\n8\n8\n8\n8\n6\n2\n12\n4\n0\n2\n4\n8\n7\n1\n0\n1\n5\n4\n2\n20\n4\n0\n12\n16\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original normal allocation path;independent initialized bytes, symbolic typed pointer identity, explicit x64 little-endian scalar/layout facts and bulk policy. No host query or product-output oracle;all unsafe/volatile/resource/lifetime/provider duties remain open.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/mem_layout_introspection.xr",
+        "source_lf_sha256": "bbd4969eee7a9a93e601e0481787900fb6668f572b96aca36ccb6e5747bce504"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and every unsafe operation,raw pointer/layout/byte observation through real CLI/VM/C/native.",
+        "Original foreign allocation failure,raw-pointer permissions/lifetime,volatile ordering,page/Buffer resources and physical reclamation;complete compiler/runtime FI,sanitizer and every admitted provider."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 34
+    },
+    {
+      "id": "complete_memory_primitives_mem_load_store_scalar_shared_core",
+      "oracle_id": "complete_memory_primitives_mem_load_store_scalar_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr",
+      "source_lf_sha256": "2991106a9d42d9c106a55955ac54c5c0df1709f41bbc1a0505d2629feb5fd490",
+      "entry": "run",
+      "stdout_utf8": "-2\n250\n-1234\n4660\n-12345678\n16909060\n-5\n72623859790382856\n1.5\n-2.25\ntrue\ntrue\n270544960\n270544960\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original normal allocation path;independent initialized bytes, symbolic typed pointer identity, explicit x64 little-endian scalar/layout facts and bulk policy. No host query or product-output oracle;all unsafe/volatile/resource/lifetime/provider duties remain open.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr",
+        "source_lf_sha256": "2991106a9d42d9c106a55955ac54c5c0df1709f41bbc1a0505d2629feb5fd490"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and every unsafe operation,raw pointer/layout/byte observation through real CLI/VM/C/native.",
+        "Original foreign allocation failure,raw-pointer permissions/lifetime,volatile ordering,page/Buffer resources and physical reclamation;complete compiler/runtime FI,sanitizer and every admitted provider."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 14
+    },
+    {
+      "id": "complete_memory_primitives_mem_volatile_shared_core",
+      "oracle_id": "complete_memory_primitives_mem_volatile_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/mem_volatile_shared_core.xr",
+      "source_lf_sha256": "d444663d2e12faea5581ffa7704b3b7ec0f4bef5a72896f1bcda012ec93629c4",
+      "entry": "run",
+      "stdout_utf8": "305419896\n120\n255\n43981\n72623859790382856\nok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original normal allocation path;independent initialized bytes, symbolic typed pointer identity, explicit x64 little-endian scalar/layout facts and bulk policy. No host query or product-output oracle;all unsafe/volatile/resource/lifetime/provider duties remain open.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/mem_volatile_shared_core.xr",
+        "source_lf_sha256": "d444663d2e12faea5581ffa7704b3b7ec0f4bef5a72896f1bcda012ec93629c4"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and every unsafe operation,raw pointer/layout/byte observation through real CLI/VM/C/native.",
+        "Original foreign allocation failure,raw-pointer permissions/lifetime,volatile ordering,page/Buffer resources and physical reclamation;complete compiler/runtime FI,sanitizer and every admitted provider."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
     }
   ]
 }
