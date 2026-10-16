@@ -30632,6 +30632,111 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 2
+    },
+    {
+      "id": "complete_aggregate_adt_enum_payload_tostring",
+      "oracle_id": "complete_aggregate_adt_enum_payload_tostring",
+      "source": "tests/diff/cases/match/adt_enum_payload_tostring.xr",
+      "source_lf_sha256": "b9ea779e8affb3eb8f1f0db2748373f56d8f4947cee7e00c2da2a5b724abaa16",
+      "entry": "run",
+      "stdout_utf8": "x=E.A(7)\nE.A(7)\ni=E.A(7)\nc=E.A(7)\nE.B\nb=E.B\nP.Pair(3, \"hi\")\np=P.Pair(3, \"hi\")\nW.Wrap(E.A(9))\nw=W.Wrap(E.A(9))\ng=E.A(7)\ng=P.Pair(3, \"hi\")\nL=P.Pair(42, \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\")\nM=P.Pair(42, \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\")\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original body; independent path borrow lifetime, exact object fields, tagged union, unsigned arithmetic, nominal enum payload and key equivalence models. No physical release or backend agreement oracle.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/match/adt_enum_payload_tostring.xr",
+        "source_lf_sha256": "b9ea779e8affb3eb8f1f0db2748373f56d8f4947cee7e00c2da2a5b724abaa16"
+      },
+      "remaining_gates": [
+        "All three complete original enum declarations/functions/arrays/methods/14 formatting paths,2 generic describe calls and80byte payload kept.",
+        "CurrentSource enum value/name/ordinal/method/join/ToString and generic definition permissions;actual VM/C/native and all original FI/resource/lifetime/sanitizer/provider/mixed. No source refusal or output parity counted as success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 14
+    },
+    {
+      "id": "complete_aggregate_enum_type_name",
+      "oracle_id": "complete_aggregate_enum_type_name",
+      "source": "tests/diff/cases/semantics/types/enum_type_name.xr",
+      "source_lf_sha256": "33809215199c7233e2e15356702dd1c32815e243be22c1f992812dc566a5fc43",
+      "entry": "run",
+      "stdout_utf8": "Color\nColor\nShape\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original body; independent path borrow lifetime, exact object fields, tagged union, unsigned arithmetic, nominal enum payload and key equivalence models. No physical release or backend agreement oracle.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/types/enum_type_name.xr",
+        "source_lf_sha256": "33809215199c7233e2e15356702dd1c32815e243be22c1f992812dc566a5fc43"
+      },
+      "remaining_gates": [
+        "All three complete original enum declarations/functions/arrays/methods/14 formatting paths,2 generic describe calls and80byte payload kept.",
+        "CurrentSource enum value/name/ordinal/method/join/ToString and generic definition permissions;actual VM/C/native and all original FI/resource/lifetime/sanitizer/provider/mixed. No source refusal or output parity counted as success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
+    },
+    {
+      "id": "complete_aggregate_enum_value_aot_identity",
+      "oracle_id": "complete_aggregate_enum_value_aot_identity",
+      "source": "tests/diff/cases/semantics/oop/enum_value_aot_identity.xr",
+      "source_lf_sha256": "5d4091d8bd0fde0c52003f404bf8160ae5c9a3efa80c75b453fc40efb133d021",
+      "entry": "run",
+      "stdout_utf8": "Color.Red|Color.Green|Color.Blue\nRed\n1\n2\nColor.Red\ntrue\nGreen:1\nN\nDirection.North\n404\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original body; independent path borrow lifetime, exact object fields, tagged union, unsigned arithmetic, nominal enum payload and key equivalence models. No physical release or backend agreement oracle.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/enum_value_aot_identity.xr",
+        "source_lf_sha256": "5d4091d8bd0fde0c52003f404bf8160ae5c9a3efa80c75b453fc40efb133d021"
+      },
+      "remaining_gates": [
+        "All three complete original enum declarations/functions/arrays/methods/14 formatting paths,2 generic describe calls and80byte payload kept.",
+        "CurrentSource enum value/name/ordinal/method/join/ToString and generic definition permissions;actual VM/C/native and all original FI/resource/lifetime/sanitizer/provider/mixed. No source refusal or output parity counted as success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
     }
   ]
 }

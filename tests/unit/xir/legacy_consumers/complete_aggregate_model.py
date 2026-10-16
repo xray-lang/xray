@@ -1,6 +1,7 @@
 """Full original aggregate programs, with independent place and value models."""
 from pathlib import Path
-import hashlib,math
+import hashlib,math,json
+from dataclasses import dataclass
 import independent_observation_format
 
 ROOT=Path(__file__).resolve().parents[4]
@@ -72,8 +73,116 @@ _NAMES=frozenset({'span_active_borrow_branch_nll_shared_core','span_active_borro
  'object_field_invariance','object_optional_sparse_fields','union_as_conversion','union_member_selection',
  'map_build_in_fn','map_float_key_identity','map_key_contextual_literal','enum_payload_equality'})
 
+_ENUM_PROGRAMS = {"enum_type_name":"tests/diff/cases/semantics/types/enum_type_name.xr","enum_value_aot_identity":"tests/diff/cases/semantics/oop/enum_value_aot_identity.xr","adt_enum_payload_tostring":"tests/diff/cases/match/adt_enum_payload_tostring.xr"}
+_ENUM_INPUTS = {"tests/diff/cases/semantics/types/enum_type_name.xr":"33809215199c7233e2e15356702dd1c32815e243be22c1f992812dc566a5fc43","tests/diff/cases/semantics/oop/enum_value_aot_identity.xr":"5d4091d8bd0fde0c52003f404bf8160ae5c9a3efa80c75b453fc40efb133d021","tests/diff/cases/match/adt_enum_payload_tostring.xr":"b9ea779e8affb3eb8f1f0db2748373f56d8f4947cee7e00c2da2a5b724abaa16"}
+_PROGRAMS.update(_ENUM_PROGRAMS)
+_NAMES = _NAMES | frozenset(_ENUM_PROGRAMS)
+_INPUTS.update(_ENUM_INPUTS)
+_REQUIRED_INPUTS = _REQUIRED_INPUTS + tuple(_ENUM_INPUTS)
+
 def render(value):
     return independent_observation_format.render({'expected':value})
+
+
+@dataclass(frozen=True)
+class EnumType:
+    module: str
+    name: str
+    variants: tuple
+    declaration: int = 0
+
+    def __post_init__(self):
+        names=[name for name,fields in self.variants]
+        if not self.module or not self.name or len(names)!=len(set(names)) or not names:
+            raise ValueError('Enum requires one exact nominal declaration and unique variants')
+        for name,fields in self.variants:
+            if len({key for key,kind in fields})!=len(fields):
+                raise ValueError('Enum payload field identities must be unique')
+
+    def construct(self, variant, **values):
+        candidates=[(ordinal,fields) for ordinal,(name,fields) in enumerate(self.variants) if name==variant]
+        if len(candidates)!=1:
+            raise ValueError('Unknown enum variant')
+        ordinal,fields=candidates[0]
+        if set(values)!={name for name,kind in fields}:
+            raise ValueError('Enum payload must provide every exact declared field')
+        ordered=[]
+        for name,kind in fields:
+            value=values[name]
+            valid=(type(value) is int and -(1<<63)<=value<(1<<63)) if kind=='i64' else type(value) is str if kind=='string' else type(value) is EnumValue and value.type==kind
+            if not valid:
+                raise ValueError('Enum payload does not satisfy its exact declared type')
+            ordered.append(value)
+        return EnumValue(self,variant,ordinal,tuple(ordered))
+
+
+@dataclass(frozen=True)
+class EnumValue:
+    type: EnumType
+    name: str
+    ordinal: int
+    payload: tuple
+
+    def __post_init__(self):
+        if (type(self.type) is not EnumType or type(self.ordinal) is not int
+                or not 0 <= self.ordinal < len(self.type.variants)
+                or self.type.variants[self.ordinal][0] != self.name):
+            raise ValueError('Enum value must keep its exact declared variant and ordinal')
+        fields=self.type.variants[self.ordinal][1]
+        if type(self.payload) is not tuple or len(self.payload)!=len(fields):
+            raise ValueError('Enum value payload does not match its declared fields')
+        for value,(name,kind) in zip(self.payload,fields):
+            valid=(type(value) is int and -(1<<63)<=value<(1<<63)) if kind=='i64' else type(value) is str if kind=='string' else type(value) is EnumValue and value.type==kind
+            if not valid:
+                raise ValueError('Enum value payload has a different declared type')
+
+
+def enum_type_name(value):
+    if type(value) is not EnumValue:
+        raise ValueError('A declaration or payload constructor is not an enum value')
+    return value.type.name
+
+
+def enum_text(value, nested=False):
+    if type(value) is EnumValue:
+        head=value.type.name+'.'+value.name
+        return head+('('+', '.join(enum_text(item,True) for item in value.payload)+')' if value.payload else '')
+    if type(value) is str:
+        return json.dumps(value,ensure_ascii=False) if nested else value
+    return render(value)
+
+
+def enum_surface_traces():
+    name_source=_ENUM_PROGRAMS['enum_type_name']
+    color=EnumType(name_source,'Color',(('Red',()),('Green',())))
+    shape=EnumType(name_source,'Shape',(('Circle',(('radius','i64'),)),('Point',())),1)
+    names=[enum_type_name(color.construct('Red')),enum_type_name(color.construct('Green')),enum_type_name(shape.construct('Point'))]
+    value_source=_ENUM_PROGRAMS['enum_value_aot_identity']
+    color=EnumType(value_source,'Color',(('Red',()),('Green',()),('Blue',())))
+    direction=EnumType(value_source,'Direction',(('North',()),('East',())),1)
+    status=EnumType(value_source,'HttpStatus',(('OK',()),('NotFound',())),2)
+    red,green,blue=[color.construct(name) for name in ('Red','Green','Blue')]
+    outputs=['|'.join(enum_text(value) for value in (red,green,blue)),red.name,green.ordinal,blue.ordinal,enum_text(red)]
+    middle=green
+    outputs += [middle==color.construct('Green'),middle.name+':'+str(middle.ordinal)]
+    north=direction.construct('North')
+    outputs += [{'North':'N','East':'E'}[north.name],enum_text(north),{'OK':200,'NotFound':404}[status.construct('NotFound').name]]
+    payload_source=_ENUM_PROGRAMS['adt_enum_payload_tostring']
+    e_type=EnumType(payload_source,'E',(('A',(('value','i64'),)),('B',())))
+    p_type=EnumType(payload_source,'P',(('Pair',(('first','i64'),('second','string'))),('Solo',())),1)
+    w_type=EnumType(payload_source,'W',(('Wrap',(('value',e_type),)),('Empty',())),2)
+    e=e_type.construct('A',value=7)
+    values=['x='+enum_text(e),enum_text(e),'i='+enum_text(e),'c='+enum_text(e),enum_text(e_type.construct('B')),'b='+enum_text(e_type.construct('B'))]
+    pair=p_type.construct('Pair',first=3,second='hi');values += [enum_text(pair),'p='+enum_text(pair)]
+    wrap=w_type.construct('Wrap',value=e_type.construct('A',value=9));values += [enum_text(wrap),'w='+enum_text(wrap)]
+    def describe(value):return 'g='+enum_text(value)
+    values += [describe(e),describe(pair)]
+    long=p_type.construct('Pair',first=42,second='a'*80);values += ['L='+enum_text(long),'M='+enum_text(long)]
+    return {'enum_type_name':{'outputs':names,'enum_value_queries':3,'unexecuted_payload_variant_declaration_retained':True},
+            'enum_value_aot_identity':{'outputs':outputs,'array_join_enum_values':3,'method_dispatch_calls':2,'fresh_same_variant_equality':True},
+            'adt_enum_payload_tostring':{'outputs':values,'generic_describe_calls':2,'explicit_toString_runtime_calls':7,
+                'string_conversion_calls':1,'interpolation_calls':6,'long_payload_UTF8_bytes':80,
+                'generic_definition_display_permission_proved':False,'full_original_generic_body_retained':True}}
 
 class BorrowLedger:
     def __init__(self):self.active=set()
@@ -170,6 +279,7 @@ def observations():
     left=enum('E','A',(1,));values=[left==enum('E','A',(1,)),left==enum('E','A',(2,)),enum('E','B',('x',))==enum('E','B',('x',)),enum('E','B',('x',))==enum('E','B',('y',)),left==enum('E','C')]
     one,two=enum('K','Id',(1,)),enum('K','Id',(2,));mapping={one:'one',two:'two'};values.extend([len(mapping),mapping[one],mapping[two],len({one,two,one})])
     rows['enum_payload_equality']=values
+    rows.update({name:trace['outputs'] for name,trace in enum_surface_traces().items()})
     if set(rows)!=_NAMES:raise ValueError('Aggregate model lost a complete original program')
     return rows
 
