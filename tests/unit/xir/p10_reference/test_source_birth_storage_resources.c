@@ -47,11 +47,15 @@ static uint64_t birth_source(XrXirSourceGenerations *owner,const char *source,co
     CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,*output)==XR_XIR_OK);
     return serial;
 }
-static XrXirCallStatus birth_drive(XrXirInstance *instance,uint32_t entry) {
+static XrXirCallStatus birth_drive(XrXirInstance *instance,uint32_t entry,XrXirCallStatus *accepted) {
+    if (accepted) *accepted=XR_XIR_CALL_READY;
     XrXirCallStatus status=xr_xir_instance_start(instance,entry,NULL,0);
     if (status!=XR_XIR_CALL_READY) return status;
     status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
-    if (status!=XR_XIR_CALL_RETURNED) return status;
+    if (status!=XR_XIR_CALL_RETURNED) {
+        if (accepted) *accepted=status;
+        return status;
+    }
     XrXirValue value={0};
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
@@ -84,7 +88,7 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
     CHECK(xr_xir_instance_generation_new(&runtime,&instance)==XR_XIR_CALL_READY);
     uint64_t generation=0;
     CHECK(xr_xir_source_generation_prepare_instance(owner,first,instance,&generation)==XR_XIR_CALL_READY);
-    CHECK(birth_drive(instance,first_entry)==XR_XIR_CALL_READY);
+    CHECK(birth_drive(instance,first_entry,NULL)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_generation_publish(instance,generation)==XR_XIR_CALL_READY);
     CHECK(xr_xir_compile_source_generation_publish(owner,first)==XR_XIR_OK);
     const char *next_source=text_value ? "const value=99\nexport fn answer()->i64{return old()}" :
@@ -95,19 +99,21 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
     uint64_t next=birth_source(owner,next_source,"answer",&next_program,&next_entry);
     size_t before_blocks=runtime_live,before_bytes=runtime_bytes;
     runtime_attempts=0;runtime_fail_at=ordinal;generation=0;
+    XrXirCallStatus accepted=XR_XIR_CALL_READY;
     XrXirCallStatus status=xr_xir_source_generation_prepare_instance(owner,next,instance,&generation);
-    if (status==XR_XIR_CALL_READY) status=birth_drive(instance,next_entry);
+    if (status==XR_XIR_CALL_READY) status=birth_drive(instance,next_entry,&accepted);
     bool complete=status==XR_XIR_CALL_READY;
     CHECK(complete || status==XR_XIR_CALL_OOM);
+    CHECK(accepted==XR_XIR_CALL_READY || (!complete && generation && accepted==status));
     cost->sites=runtime_attempts;cost->status=status;runtime_fail_at=SIZE_MAX;
     if (complete && publish) {
         CHECK(xr_xir_instance_generation_publish(instance,generation)==XR_XIR_CALL_READY);
         CHECK(xr_xir_compile_source_generation_publish(owner,next)==XR_XIR_OK);
     } else {
-        if (generation) CHECK(xr_xir_instance_generation_abort(instance,generation)==XR_XIR_CALL_READY);
+        if (generation) CHECK(xr_xir_instance_generation_abort(instance,generation)==accepted);
         CHECK(xr_xir_compile_source_generation_abort(owner,next)==XR_XIR_OK);
         CHECK(runtime_live==before_blocks && runtime_bytes==before_bytes);
-        CHECK(birth_drive(instance,first_entry)==XR_XIR_CALL_READY);
+        CHECK(birth_drive(instance,first_entry,NULL)==XR_XIR_CALL_READY);
     }
     CHECK(calls==1);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
@@ -121,9 +127,14 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
     return complete;
 }
 int main(int argc,char **argv) {
-    bool baseline=argc==2;
-    CHECK(argc==1 || (baseline && !strcmp(argv[1],"--baseline")));
-    for (unsigned mode=0;mode<16;++mode) {
+    bool baseline=argc==2;unsigned first=0,last=16;
+    CHECK(argc==1 || (baseline && !strcmp(argv[1],"--baseline")) ||
+        (argc==3 && !strcmp(argv[1],"--mode")));
+    if (argc==3) {
+        char *end=NULL;unsigned long selected=strtoul(argv[2],&end,10);
+        CHECK(*argv[2] && end && !*end && selected<16);first=(unsigned)selected;last=first+1;
+    }
+    for (unsigned mode=first;mode<last;++mode) {
         bool publish=(mode&1)!=0,text_value=mode<4 && (mode&2)!=0;
         unsigned storage_kind=mode<4 ? 0 : mode<6 ? 1 : mode<8 ? 2 : mode<10 ? 3 : mode<12 ? 4 : mode<14 ? 5 : 6;
         bool cell_value=storage_kind==1 || storage_kind==2;

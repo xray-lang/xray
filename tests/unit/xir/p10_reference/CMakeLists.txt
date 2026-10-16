@@ -114,6 +114,21 @@ set_tests_properties(test_xir_p10_source_birth_storage_resources PROPERTIES
 add_test(NAME test_xir_p10_source_birth_storage_baseline COMMAND test_xir_p10_source_birth_storage_resources --baseline)
 set_tests_properties(test_xir_p10_source_birth_storage_baseline PROPERTIES
     TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;resource-control")
+add_test(NAME test_xir_p10_source_birth_storage_first_mode_fi
+    COMMAND test_xir_p10_source_birth_storage_resources --mode 0)
+set_tests_properties(test_xir_p10_source_birth_storage_first_mode_fi PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+foreach(ref_mode IN ITEMS abort publish)
+    if(ref_mode STREQUAL "abort")
+        set(ref_ordinal 14)
+    else()
+        set(ref_ordinal 15)
+    endif()
+    add_test(NAME test_xir_p10_source_birth_storage_class_ref_${ref_mode}_fi
+        COMMAND test_xir_p10_source_birth_storage_resources --mode ${ref_ordinal})
+    set_tests_properties(test_xir_p10_source_birth_storage_class_ref_${ref_mode}_fi PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+endforeach()
 target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source xray_xir_vm)
 set_target_properties(test_xir_p10_source_generation_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
