@@ -476,11 +476,11 @@ var init = Array<u8>([72, 101, 108, 108, 111])
 **对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
 
 ```xray @id=types-json-object
-// 结构对象字面量：标识符或静态字符串 key + 冒号 ':'
+// 匿名记录字面量：标识符字段名 + 冒号 ':'
 var user = { name: "Bob", age: 25 }       // exact 对象形状
 typeName(user)                            // "object"
 user.name              // 类型: string；direct ordinal
-user["name"]           // 与 user.name 完全等价；同一 direct ordinal
+// user["name"]        // 编译错误：匿名记录只用字段访问 user.name
 
 // 字段简写：当字段名与变量名相同
 var name = "Alice"
@@ -497,7 +497,7 @@ data["traceId"] = "req-1"               // 动态键只属于 Map
 
 | 写法 | 类型 | 备注 |
 |---|---|---|
-| `{ name: "x", age: 1 }` | exact 匿名对象形状 | 标识符或字符串 key 后跟 `:` |
+| `{ name: "x", age: 1 }` | exact 匿名对象形状 | 标识符字段名后跟 `:` |
 | `{ x: y }`（`x` 是字段名，`y` 是变量名） | exact 匿名对象形状 | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
 | `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object；可遍历、增删动态键 |
@@ -518,7 +518,7 @@ var u2 = { name: "Alice", age: 30 }      // exact 对象形状
 type Named = { name: string }
 fn showName<T: Named>(value: T) {
     print(value.name)                     // 约束只暴露已声明字段
-    print(value["name"])                  // 与 .name 相同
+    // print(value["name"])               // 编译错误：记录不接受字符串索引
     // print(value.age)                    // 编译错误：隐藏字段不可见
 }
 showName(u)                               // OK：u 的 concrete exact shape 更宽
@@ -527,6 +527,8 @@ var j: JSON.Object = #{"name": "Alice", "age": 30}
 j["extra"] = "x"                        // OK：Map 动态键
 var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
 ```
+
+匿名记录身份只取决于字段集合及各字段的准确类型。规范布局按字段名的无符号UTF-8字节序排列，不按声明模块、书写顺序或locale排序；输入表达式仍按源码顺序各求值一次。重复显式字段报错。展开源按书写顺序求值一次，后写显式字段覆盖先前展开字段；匿名展开可合并或增加字段，具名展开只更新已声明字段。同形匿名记录不隐式变成具名struct，具名struct之间也不隐式互转；具名构造须使用显式类型字面量。结构约束只匹配匿名记录，字段类型须完全相等，定义处只读且不可借实例化后的额外字段补救非法函数体。准确匿名形状可以作为普通值、泛型实参和Array元素；相等、Hashable、Sendable和序列化仍各自需要能力证明。
 
 **乘积类型的职责划分**：
 
@@ -537,7 +539,7 @@ var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
 | `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
 | `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
 
-结构对象字段可承载任意满足普通类型规则的静态值，包括函数引用、Map 或 class 实例；用户不能在结构对象类型上声明方法。能存储不等于能序列化：`JSON.value` / `JSON.stringify` 在编译期要求 `JSON.Encodable`，函数字段等不支持类型会被拒绝。
+结构对象字段可承载任意满足普通类型规则的静态值，包括函数引用、Map 或 class 实例；用户不能在结构对象类型上声明方法。能存储不等于能序列化：普通库反射编码入口逐字段要求对应能力，函数字段等不支持类型会被拒绝；匿名记录使用该入口不因此实现用户的JSON接口。具名类型按明确的声明或派生授权实现库接口。
 
 #### 2.4.8 `BigInt`
 
@@ -1578,11 +1580,11 @@ A bare object literal always forms a static structural object with an exact fiel
 The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
 
 ```xray @id=types-json-object
-// Structural-object literal: identifier or static string key + colon ':'
+// Anonymous-record literal: identifier field name + colon ':'
 var user = { name: "Bob", age: 25 }       // exact object shape
 typeName(user)                            // "object"
 user.name              // type: string; direct ordinal
-user["name"]           // exactly equivalent to user.name; same direct ordinal
+// user["name"]        // compile error: use field access user.name
 
 // Field shorthand: when a field name matches a variable name
 var name = "Alice"
@@ -1599,7 +1601,7 @@ data["traceId"] = "req-1"               // only Map has dynamic keys
 
 | Form | Type | Notes |
 |---|---|---|
-| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier or string key followed by `:` |
+| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier field name followed by `:` |
 | `{ x: y }` (`x` is field name, `y` is variable) | exact anonymous object shape | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object; supports iteration and dynamic-key mutation |
@@ -1620,7 +1622,7 @@ var u2 = { name: "Alice", age: 30 }      // exact object shape
 type Named = { name: string }
 fn showName<T: Named>(value: T) {
     print(value.name)                     // the constraint exposes declared fields only
-    print(value["name"])                  // identical to .name
+    // print(value["name"])               // compile error: records reject string indexing
     // print(value.age)                    // compile error: hidden field
 }
 showName(u)                               // OK: u has a wider concrete exact shape
@@ -1629,6 +1631,8 @@ var j: JSON.Object = #{"name": "Alice", "age": 30}
 j["extra"] = "x"                        // OK: a Map dynamic key
 var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
 ```
+
+Anonymous record identity depends only on its field set and exact field types. Canonical layout orders names by unsigned UTF-8 bytes, independently of declaring module, spelling order or locale; input expressions still evaluate exactly once in source order. Duplicate explicit fields are errors. Spread sources evaluate once in spelling order, and later explicit fields override earlier spread fields; anonymous spreads may merge or add fields, while named spreads update declared fields only. Equal anonymous shapes do not implicitly become named structs, and named structs do not implicitly convert to one another; named construction uses an explicit type literal. Structural constraints match anonymous records only, require exact field types and expose read-only members at definition time; specialization cannot repair an illegal body with extra actual fields. Exact anonymous shapes remain ordinary values, generic arguments and Array elements. Equality, Hashable, Sendable and serialization require their own capability proofs.
 
 **Responsibilities of product types**:
 
@@ -1639,7 +1643,7 @@ var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
 | `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
 | `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
 
-Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: `JSON.value` and `JSON.stringify` require `JSON.Encodable` at compile time, so unsupported types such as function fields are rejected.
+Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: ordinary library reflection encoders require the appropriate capability for each field and reject unsupported function fields. Using that entry does not make an anonymous record implement a user JSON interface. Named types implement library interfaces through explicit declarations or authorized derivation.
 
 #### 2.4.8 `BigInt`
 

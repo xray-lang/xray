@@ -858,6 +858,12 @@ native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/
 
 读取或修改已接收Map/Set时，先在调用方类型池认证完整容器身份，再用实际出生池中的key/value类型解释探测、解包、COW克隆及写回。place保留调用方静态预期，payload恢复真实载体；不能把静态序号写入旧对象头。新字段按已认证身份匹配，可引用接收池新建的等价构造值。局部请求保留原Domain、函数gate/context，只向原请求回写实际消耗的work和释放后的scratch；失败保原根、快照与输出。该行为不扩大普通Source成员准入或函数执行权限。
 
+### 17.71 匿名记录的规范字段准备
+
+匿名记录使用字段名的无符号UTF-8字节序规范化身份，字段表达式的源码顺序单独保留。当前编译器仅实现拥有式形状准备器：验证已检查类型池中的字段表达式及当前泛型作用域，复制全部字段名，拒绝重复字段名和非法标识符，返回规范字段表与源码序号到字段序号的排列。类型编号仍属于调用方原池，形状不保留AST字符串或借此获得访问、结构约束、相等、Sendable、编解码或用户接口权限。迭代归并排序、字节比较、复制、临时存储及发布都计入同一原编译账本，失败保输出且不退款。
+
+该准备器尚未接入匿名记录的Source、Checked类型/字段证明、特化、VM/native或跨池运行时存储；保留排列本身也不等于已经执行了源码求值顺序。当前身份仍32/79/25/29/34。合法记录仍是待实现正例；旧字符串键接受路径须在记录切换批次删除，不能将旧接受行为或元数据单元测试称为记录整族资格。完整资源、取消、安全及普通库协议仍待证明。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1826,5 +1832,11 @@ The current unified identity is Checked schema32/semantic79, Value25, Call29 and
 Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
 
 Reading or mutating a received Map/Set first authenticates the complete container identity in the caller arena, then interprets keys and values in the actual birth arena for probing, unpacking, COW cloning and publication. Places retain the caller static expectation while payload recovery preserves the actual carrier; a static ordinal never rewrites an old object header. Prepared fields match authenticated identities and may contain equivalent constructed values newly allocated in the receiving arena. Local requests retain the original Domain and function gate/context, returning only consumed work and released scratch to the original request. Failure preserves roots, snapshots and outputs. This behavior does not expand ordinary Source member admission or callable execution authority.
+
+### 17.71 Canonical anonymous-record field preparation
+
+Anonymous record identities use unsigned UTF-8 byte order for field names while retaining source expression order separately. The compiler currently implements only an owned shape preparer: it checks field type expressions in the original verified pool and generic scope, copies every name, rejects duplicate names and invalid identifiers, and returns canonical fields plus a source-to-field permutation. Type IDs remain coordinates in the caller pool. A shape retains no AST string and grants no access, structural-constraint, equality, Sendable, encoding or user-interface authority. Iterative merge sorting, byte comparisons, copying, temporary storage and publication charge the same original compiler ledger; failure preserves output and never refunds work.
+
+This preparer is not yet connected to anonymous-record Source admission, Checked type/field proofs, specialization, VM/native execution or cross-arena runtime storage. Retaining a permutation does not prove source evaluation behavior. Current identities remain32/79/25/29/34. Legal records remain required positive cases. Retired quoted-key acceptance must be removed with the record cutover; old acceptance or metadata unit checks do not qualify the complete record family. Complete resource, cancellation, safety and ordinary library protocol duties remain.
 
 <!-- /xr-spec:en -->

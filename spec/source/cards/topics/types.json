@@ -88,6 +88,10 @@
     {
       "heading": "Logical Unit parameters",
       "markdown": "Unit is the empty Tuple and retains one logical argument even with zero frame payload. Fixed Unit READ formals in free functions, callable/closures, methods/constructors, interface signatures and generic definitions use canonical zero Values and the common checked argument plan. Calls retain arity and effects; other Unit statements do not become SSA values. Generic Unit-argument domains and full fault/safety qualifications remain separate obligations. See compilation pipeline section17.68."
+    },
+    {
+      "heading": "Anonymous record identities",
+      "markdown": "Anonymous record identity uses the exact field set and field types. Canonical field order uses unsigned UTF-8 bytes; expression evaluation still follows source order exactly once. Only identifier field names and dot access are allowed; quoted keys and string indexing belong to Map/JSON. Shapes do not implicitly convert to named structs or acquire user interfaces. Structural constraints accept anonymous records only, expose exact read-only fields at definition time, and cannot use extra actual fields to repair an invalid generic body. The compiler currently has an owned, bounded canonical-field preparation helper with an explicit source-to-field permutation. This helper does not yet admit anonymous records through Source, Checked, VM/native, structural witnesses or full resource/safety qualification."
     }
   ]
 }

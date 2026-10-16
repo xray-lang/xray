@@ -1071,11 +1071,11 @@ A bare object literal always forms a static structural object with an exact fiel
 The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
 
 ```xray
-// Structural-object literal: identifier or static string key + colon ':'
+// Anonymous-record literal: identifier field name + colon ':'
 var user = { name: "Bob", age: 25 }       // exact object shape
 typeName(user)                            // "object"
 user.name              // type: string; direct ordinal
-user["name"]           // exactly equivalent to user.name; same direct ordinal
+// user["name"]        // compile error: use field access user.name
 
 // Field shorthand: when a field name matches a variable name
 var name = "Alice"
@@ -1092,7 +1092,7 @@ data["traceId"] = "req-1"               // only Map has dynamic keys
 
 | Form | Type | Notes |
 |---|---|---|
-| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier or string key followed by `:` |
+| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier field name followed by `:` |
 | `{ x: y }` (`x` is field name, `y` is variable) | exact anonymous object shape | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object; supports iteration and dynamic-key mutation |
@@ -1113,7 +1113,7 @@ var u2 = { name: "Alice", age: 30 }      // exact object shape
 type Named = { name: string }
 fn showName<T: Named>(value: T) {
     print(value.name)                     // the constraint exposes declared fields only
-    print(value["name"])                  // identical to .name
+    // print(value["name"])               // compile error: records reject string indexing
     // print(value.age)                    // compile error: hidden field
 }
 showName(u)                               // OK: u has a wider concrete exact shape
@@ -1122,6 +1122,8 @@ var j: JSON.Object = #{"name": "Alice", "age": 30}
 j["extra"] = "x"                        // OK: a Map dynamic key
 var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
 ```
+
+Anonymous record identity depends only on its field set and exact field types. Canonical layout orders names by unsigned UTF-8 bytes, independently of declaring module, spelling order or locale; input expressions still evaluate exactly once in source order. Duplicate explicit fields are errors. Spread sources evaluate once in spelling order, and later explicit fields override earlier spread fields; anonymous spreads may merge or add fields, while named spreads update declared fields only. Equal anonymous shapes do not implicitly become named structs, and named structs do not implicitly convert to one another; named construction uses an explicit type literal. Structural constraints match anonymous records only, require exact field types and expose read-only members at definition time; specialization cannot repair an illegal body with extra actual fields. Exact anonymous shapes remain ordinary values, generic arguments and Array elements. Equality, Hashable, Sendable and serialization require their own capability proofs.
 
 **Responsibilities of product types**:
 
@@ -1132,7 +1134,7 @@ var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
 | `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
 | `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
 
-Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: `JSON.value` and `JSON.stringify` require `JSON.Encodable` at compile time, so unsupported types such as function fields are rejected.
+Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: ordinary library reflection encoders require the appropriate capability for each field and reject unsupported function fields. Using that entry does not make an anonymous record implement a user JSON interface. Named types implement library interfaces through explicit declarations or authorized derivation.
 
 #### 2.4.8 `BigInt`
 
@@ -8085,6 +8087,12 @@ The current unified identity is Checked schema32/semantic79, Value25, Call29 and
 Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
 
 Reading or mutating a received Map/Set first authenticates the complete container identity in the caller arena, then interprets keys and values in the actual birth arena for probing, unpacking, COW cloning and publication. Places retain the caller static expectation while payload recovery preserves the actual carrier; a static ordinal never rewrites an old object header. Prepared fields match authenticated identities and may contain equivalent constructed values newly allocated in the receiving arena. Local requests retain the original Domain and function gate/context, returning only consumed work and released scratch to the original request. Failure preserves roots, snapshots and outputs. This behavior does not expand ordinary Source member admission or callable execution authority.
+
+### 17.71 Canonical anonymous-record field preparation
+
+Anonymous record identities use unsigned UTF-8 byte order for field names while retaining source expression order separately. The compiler currently implements only an owned shape preparer: it checks field type expressions in the original verified pool and generic scope, copies every name, rejects duplicate names and invalid identifiers, and returns canonical fields plus a source-to-field permutation. Type IDs remain coordinates in the caller pool. A shape retains no AST string and grants no access, structural-constraint, equality, Sendable, encoding or user-interface authority. Iterative merge sorting, byte comparisons, copying, temporary storage and publication charge the same original compiler ledger; failure preserves output and never refunds work.
+
+This preparer is not yet connected to anonymous-record Source admission, Checked type/field proofs, specialization, VM/native execution or cross-arena runtime storage. Retaining a permutation does not prove source evaluation behavior. Current identities remain32/79/25/29/34. Legal records remain required positive cases. Retired quoted-key acceptance must be removed with the record cutover; old acceptance or metadata unit checks do not qualify the complete record family. Complete resource, cancellation, safety and ordinary library protocol duties remain.
 
 ---
 
