@@ -17,6 +17,7 @@
 #include "xlsp_analysis.h"
 #include "xlsp_format.h"
 #include "xlsp_on_type.h"
+#include "xlsp_document_notification.h"
 #include "xlsp_workspace.h"
 #include "xlsp_rename.h"
 #include "xlsp_semantic_tokens.h"
@@ -28,49 +29,42 @@
 #include "../../base/xchecks.h"
 #include <string.h>
 
-void xlsp_handle_td_did_open(XrLspServer *server,XrJsonValue *params) {
-    if(!server)return;
-    XrJsonValue *document=xjson_get_object(params,"textDocument");
-    XrJsonValue *uri=xjson_get(document,"uri"),*text=xjson_get(document,"text"),*version=xjson_get(document,"version");
-    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||!text||text->type!=XR_JSON_STRING||!text->as.string||
-        !version||version->type!=XR_JSON_NUMBER||!version->is_integer||version->as.integer<INT32_MIN||version->as.integer>INT32_MAX) {
-        lsp_log("didOpen rejected: invalid bounded document input");return;
+void xlsp_handle_td_did_open(XrLspServer *server, XrJsonValue *params) {
+    if (!server) return;
+    XlspDocumentNotification input = {0};
+    if (xlsp_document_notification_decode(params, XLSP_DOCUMENT_NOTIFICATION_OPEN, &input) != XR_XIR_OK) {
+        lsp_log("didOpen rejected: invalid document notification"); return;
     }
-    XlspSourceDocument input={uri->as.string,text->as.string,uri->string_len,text->string_len,version->as.integer};
-    XrLspDocument *doc=xlsp_document_open(server,&input);
-    if(!doc){lsp_log("didOpen failed; document table unchanged");return;}
-    if(server->config.diagnostics_enabled)xlsp_publish_diagnostics(server,doc);
+    XlspSourceDocument document = {input.uri->as.string, input.text->as.string,
+        input.uri->string_len, input.text->string_len, input.version};
+    XrLspDocument *doc = xlsp_document_open(server, &document);
+    if (!doc) { lsp_log("didOpen failed; document table unchanged"); return; }
+    if (server->config.diagnostics_enabled) xlsp_publish_diagnostics(server, doc);
 }
 
-void xlsp_handle_td_did_change(XrLspServer *server,XrJsonValue *params) {
-    if(!server)return;
-    XrJsonValue *document=xjson_get_object(params,"textDocument");
-    XrJsonValue *uri=xjson_get(document,"uri"),*version=xjson_get(document,"version");
-    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len)||
-        !version||version->type!=XR_JSON_NUMBER||!version->is_integer||version->as.integer<INT32_MIN||version->as.integer>INT32_MAX) {
-        lsp_log("didChange rejected: invalid URI or version");return;
+void xlsp_handle_td_did_change(XrLspServer *server, XrJsonValue *params) {
+    if (!server) return;
+    XlspDocumentNotification input = {0};
+    if (xlsp_document_notification_decode(params, XLSP_DOCUMENT_NOTIFICATION_CHANGE, &input) != XR_XIR_OK) {
+        lsp_log("didChange rejected: invalid document notification"); return;
     }
-    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
-    if(!doc)return;
-    XrXirStatus status=xlsp_document_apply_changes(doc,xjson_get(params,"contentChanges"),(int)version->as.integer);
-    if(status!=XR_XIR_OK) {lsp_log("didChange rejected: status %u, previous version retained",(unsigned)status);return;}
-    const char *uri_text=uri->as.string;
-    (void)uri_text;
-    /* Syntax and the one Source pipeline already ran before commit. */
-    xlsp_schedule_diagnostics(server,doc);
+    XrLspDocument *doc = xlsp_document_get(server, input.uri->as.string);
+    if (!doc) return;
+    XrXirStatus status = xlsp_document_apply_changes(doc, input.changes, input.version);
+    if (status != XR_XIR_OK) {
+        lsp_log("didChange rejected: status %u, previous version retained", (unsigned)status); return;
+    }
+    xlsp_schedule_diagnostics(server, doc);
 }
 
 void xlsp_handle_td_did_close(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    if (!textDocument)
-        return;
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    if (uri) {
-        xlsp_document_close(server, uri);
-        xlsp_workspace_index_file(server,uri,NULL);
-        // The closed document and obsolete Source workspace owners are gone.
+    if (!server) return;
+    XlspDocumentNotification input = {0};
+    if (xlsp_document_notification_decode(params, XLSP_DOCUMENT_NOTIFICATION_CLOSE, &input) != XR_XIR_OK) {
+        lsp_log("didClose rejected: invalid document notification"); return;
     }
+    xlsp_document_close(server, input.uri->as.string);
+    xlsp_workspace_index_file(server, input.uri->as.string, NULL);
 }
 
 XrJsonValue *xlsp_handle_td_completion(XrLspServer *server, XrJsonValue *params) {
