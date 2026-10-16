@@ -46,7 +46,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
         const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
         CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(closed);
-        char prefix[80],path[4096];const char *mode=kind==5 ? "class_array" : kind==4 ? "class" : kind==3 ? "array_const" : kind==2 ? "array" : mutating ? "write" : "read";
+        char prefix[80],path[4096];const char *mode=history_mode_name(kind);
         int n=snprintf(prefix,sizeof(prefix),"source_history_%s_%u",mode,generation);CHECK(n>0 && (size_t)n<sizeof(prefix));
         n=snprintf(path,sizeof(path),"%s/%s.c",directory,prefix);CHECK(n>0 && (size_t)n<sizeof(path));
         XrXirCSource emitted={0};
