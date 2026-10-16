@@ -44,16 +44,18 @@ static void hints_invalid(const XlspSourceSnapshot *snapshot,const char *uri) {
     CHECK(!strcmp(hints.items[0].label,": Actual"));xlsp_source_type_hints_free(&hints);
     hints.count=1;CHECK(xlsp_source_type_hints(snapshot,uri,strlen(uri),selected,&hints)==XR_XIR_BAD_STRUCTURE&&hints.count==1);
 }
-static size_t hints_attachment(const XlspSourceSnapshot *snapshot,const char *uri,bool failures) {
+static size_t hints_attachment(XrCompileResources *resources,const XlspSourceSnapshot *snapshot,const char *uri,bool failures) {
     const XrLspRange range={{0,0},{8,0}};size_t sites=0;
     for(size_t probe=0;probe<=sites;++probe) {
         if(probe&&!failures)break;
         XlspSourceTypeHints hints={0};size_t blocks=runtime_live,bytes=runtime_bytes,start=runtime_attempts;
+        uint64_t live=sdk_stats(resources).live_bytes;
         runtime_fail_at=probe?start+probe-1:SIZE_MAX;
         XrXirStatus status=xlsp_source_type_hints(snapshot,uri,strlen(uri),range,&hints);runtime_fail_at=SIZE_MAX;
         if(!probe){CHECK(status==XR_XIR_OK);sites=runtime_attempts-start;CHECK(sites);hints_check(&hints);}
         else CHECK(status==XR_XIR_OUT_OF_MEMORY&&!hints.items&&!hints.count);
         xlsp_source_type_hints_free(&hints);CHECK(runtime_live==blocks&&runtime_bytes==bytes);
+        CHECK(sdk_stats(resources).live_bytes==live);
     }
     return sites;
 }
@@ -85,7 +87,7 @@ int main(int argc,char **argv) {
     XlspSourceSnapshot *snapshot=hints_producer(resources,argv[1],
         "fn wrapper<Actual>(value:Actual)->Actual {\n const inferred=value\n const declared:Actual=value\n"
         " var changed=1\n const values=[value]\n return inferred\n}\nfn main()->i64{return wrapper(1)}\n");
-    hints_invalid(snapshot,argv[1]);size_t sites=hints_attachment(snapshot,argv[1],failures);
+    hints_invalid(snapshot,argv[1]);size_t sites=hints_attachment(resources,snapshot,argv[1],failures);
     XlspSourceHover hover={0};CHECK(xlsp_source_hover(snapshot,argv[1],strlen(argv[1]),(XrLspPosition){1,8},&hover)==XR_XIR_OK);
     CHECK(!strcmp(hover.text,"const inferred: Actual"));xlsp_source_hover_free(&hover);
     XlspSourceTypeHints hints={0};XrLspRange range={{0,0},{8,0}};
