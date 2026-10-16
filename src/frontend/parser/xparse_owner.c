@@ -195,7 +195,9 @@ static XrParseStatus parse_owned(XrCompilerSession *session, const char *source,
     XrArena *arena = memory;
     XrArenaBacking backing;
     (void) xr_compiler_arena_state_backing(state, &backing);
-    (void) xr_arena_open(arena, XR_ARENA_SEGMENT_SIZE, &backing);
+    /* Independent small modules retain their first segment for the AST's
+     * lifetime. Subsequent segments still use the common growth policy. */
+    (void) xr_arena_open(arena, 32 * 1024, &backing);
     if (xr_compiler_arena_capture_status(arena, state) != XR_COMPILE_RESOURCE_OK) {
         status = parse_resource_status(state);
         goto failure;

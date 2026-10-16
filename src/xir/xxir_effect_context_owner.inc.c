@@ -547,7 +547,7 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     if (!owner) return status;
     owner->refinement=bounds;
     status=effect_invocation_bounds_new(context,&owner->declared);
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,bounds?NULL:initial,&owner->ordinary);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,initial,bounds,&owner->ordinary);
     if (status==XR_XIR_OK && bounds) {
         owner->ordinary->terms.remaining=context;
         status=effect_refinement_apply(owner->ordinary,source,bounds);

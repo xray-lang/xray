@@ -31,7 +31,7 @@ static void effect_body_material_free(EffectBodyMaterial *body) {
         xr_compile_resources_free(body);return;
     }
     if (body->functions) for (uint32_t f=0;f<effect_body_count(body);++f)
-        xr_compile_resources_free(body->functions[f].runs);
+        effect_body_runs_release(body->functions[f].runs);
     effect_physical_free(body->physical);
     xr_xir_compile_cell_provenance_free(body->cells);
     effect_invocation_bounds_free(body->declared);
@@ -213,6 +213,8 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
     return status;
 }
 
+#include "xxir_effect_snapshot_record_sharing.inc.c"
+
 /* Constructor verifies actual TEMPLATE/INSTANCE evidence before any concrete
  * role product. No provenance alias or verified flag survives as admission. */
 static XrXirStatus effect_body_material_generation_input(const XrXirCompileContext *work,
@@ -235,6 +237,9 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         status=effect_body_material_initial(work,source,ordinary,output);
         if (status!=XR_XIR_OK || *output) return status;
     }
+    EffectBodyMaterial *record_source=NULL;
+    if (ordinary) status=effect_body_ordinary_record_parent(work,ordinary,&record_source);
+    if (status!=XR_XIR_OK) return status;
     /* Prepay the initial reference write and its unavoidable release. */
     if (!xir_compile_work(work,3*sizeof(uint32_t)+2*sizeof(void *)+3)) return XR_XIR_BUDGET;
     EffectBodyMaterial *body=xir_compile_calloc(work,1,sizeof(*body),&status);
@@ -328,7 +333,16 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         }
         EffectBodyWriter writer={work,source,body,cells,advertisements,f};EffectBodyWriteSink sink={&writer,effect_body_writer_row,effect_body_writer_span};
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink.span))) status=XR_XIR_BUDGET;
-        if (status==XR_XIR_OK) status=effect_body_records_write(work,&source->functions[f],function,&sink);
+        bool shared=false;
+        if (status==XR_XIR_OK && record_source) {
+            if (!xir_compile_work(work,sizeof(EffectBodyRecordShareRequest))) status=XR_XIR_BUDGET;
+            else {
+                EffectBodyRecordShareRequest share={f,&source->functions[f],&sink};
+                status=effect_body_records_share(work,ordinary,body,record_source,&share,&shared);
+            }
+        }
+        if (status==XR_XIR_OK && !shared)
+            status=effect_body_records_write(work,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
     }
     if (status==XR_XIR_OK) status=xir_cell_proof_builder_finish(&cells,&body->cells);

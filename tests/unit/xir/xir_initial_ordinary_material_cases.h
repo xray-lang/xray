@@ -80,7 +80,7 @@ static XrXirStatus initial_ordinary_operation(const XrXirCompileContext *context
     EffectBodyMaterial *initial=status==XR_XIR_OK?effects->invocations->body:NULL;
     uint32_t references=initial?initial->references:0;
     if (status==XR_XIR_OK && mode==1) status=initial_ordinary_owner(context,source,initial,true);
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,initial,&ordinary);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,source,initial,NULL,&ordinary);
     if (status==XR_XIR_OK) {
         material=ordinary->uses.generation;ordinary->uses.generation=NULL;
         CHECK(material->backbone==initial && material->overlay && initial->references==references+1);
@@ -145,7 +145,7 @@ static XrXirStatus initial_ordinary_expansion(const XrXirCompileContext *context
     XrXirEffects *effects=NULL;EffectOrdinaryContexts *ordinary=NULL;
     XrXirStatus status=initial_ordinary_effects(context,&fixture.module,&effects);
     EffectBodyMaterial *initial=status==XR_XIR_OK?effects->invocations->body:NULL;
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,&fixture.module,initial,&ordinary);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,&fixture.module,initial,NULL,&ordinary);
     if (status==XR_XIR_OK) {
         CHECK(ordinary->count>5 && ordinary->uses.generation && !ordinary->uses.generation->backbone);
         CHECK(ordinary->uses.generation->cells!=initial->cells && initial->references==1);
@@ -376,13 +376,13 @@ static void initial_ordinary_controls(void) {
     EffectBodyMaterial *initial=effects->invocations->body;
     XrCompileResourceStats prepared=rp_stats(&context);size_t attempts=rp_attempts;
     ordinary=(EffectOrdinaryContexts *)(uintptr_t)1;
-    CHECK(effect_ordinary_build(&context,&fixture.source,initial,&ordinary)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_ordinary_build(&context,&fixture.source,initial,NULL,&ordinary)==XR_XIR_BAD_STRUCTURE &&
         ordinary==(EffectOrdinaryContexts *)(uintptr_t)1 && rp_stats(&context).work==prepared.work && rp_attempts==attempts);
     ordinary=NULL;XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats foreign_before=rp_stats(&foreign);
-    CHECK(effect_ordinary_build(&foreign,&fixture.source,initial,&ordinary)==XR_XIR_BAD_STRUCTURE && !ordinary);
+    CHECK(effect_ordinary_build(&foreign,&fixture.source,initial,NULL,&ordinary)==XR_XIR_BAD_STRUCTURE && !ordinary);
     CHECK(rp_stats(&foreign).work==foreign_before.work && rp_stats(&foreign).live_bytes==foreign_before.live_bytes);
     rp_owner_free(&foreign,foreign_before.live_bytes);
-    CHECK(effect_ordinary_build(&context,&fixture.source,initial,&ordinary)==XR_XIR_OK);
+    CHECK(effect_ordinary_build(&context,&fixture.source,initial,NULL,&ordinary)==XR_XIR_OK);
     EffectBodyMaterial *holder=ordinary->uses.generation;
     CHECK(holder->backbone==initial && holder->overlay && initial->references==2);
     EffectBodyMaterial *saved_parent=holder->backbone;

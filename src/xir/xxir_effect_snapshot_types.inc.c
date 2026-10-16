@@ -21,6 +21,12 @@ typedef struct EffectBodyRun {
     XrXirInstruction base;
     uint32_t delta[EFFECT_BODY_WORDS];
 } EffectBodyRun;
+typedef struct EffectBodyRunStorage {
+    XrCompileResources *resources;
+    uint32_t references,capacity;
+} EffectBodyRunStorage;
+_Static_assert(sizeof(EffectBodyRunStorage)%_Alignof(EffectBodyRun)==0,
+    "Physical record storage preserves run alignment");
 /* This request borrows the actual generating contexts only during construction.
  * Its owned ordinal products contain no caller-supplied role or authority bit. */
 typedef struct EffectBodyOrdinaryInput {
@@ -30,6 +36,9 @@ typedef struct EffectBodyOrdinaryInput {
     EffectOrdinaryContexts *basis;
     /* The current operation retains this genuine initial certificate body. */
     struct EffectBodyMaterial *initial;
+    /* Only lossless records are candidates when refinement forbids sharing
+     * an earlier generation's semantic products. */
+    struct EffectBodyMaterial *record_source;
 } EffectBodyOrdinaryInput;
 typedef struct EffectBodyOrdinaryIdentity {
     uint32_t declaration,owner;
@@ -52,6 +61,8 @@ typedef struct EffectBodyFunction {
     uint32_t operand_count;
     EffectBodyRun *runs;
     uint32_t run_count,run_capacity;
+    /* The record allocation owns its reference count, never the caller. */
+    bool borrowed_runs;
     /* Concrete initial roles follow the constructor's real evidence proof. */
     const uint8_t *initial_roles;
 } EffectBodyFunction;
@@ -95,6 +106,10 @@ typedef struct EffectBodyMaterial {
 } EffectBodyMaterial;
 static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
     const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
+static XrXirStatus effect_body_ordinary_record_parent(const XrXirCompileContext *work,
+    const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
+static XrXirStatus effect_body_ordinary_record_index(const XrXirCompileContext *work,
+    const EffectBodyOrdinaryInput *input,uint32_t function,uint32_t *output);
 typedef struct EffectBodyRead {
     const void *owner;
     bool (*consume)(const void *owner,uint64_t units);

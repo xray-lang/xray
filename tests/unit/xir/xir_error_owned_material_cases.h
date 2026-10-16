@@ -351,7 +351,7 @@ static void owned_error_direct_fields(void) {
             CHECK(effect_body_records_match(&read,&body,&input)==XR_XIR_BAD_STRUCTURE);
             original[1]=saved;CHECK(effect_body_records_match(&read,&body,&input)==XR_XIR_OK);
         }
-        xr_compile_resources_free(body.runs);CHECK(rp_stats(&context).live_bytes==baseline);
+        effect_body_runs_release(body.runs);CHECK(rp_stats(&context).live_bytes==baseline);
     }
     rp_owner_free(&context,baseline);rp_balanced(physical);
 }
@@ -374,7 +374,7 @@ static void owned_error_range_copies(void) {
     memset(producer,0xCE,sizeof(producer));
     owned_error_range_values(&context,&body,original);
     owned_error_range_refusals(&context,&body);
-    xr_compile_resources_free(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
+    effect_body_runs_release(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
 static void conditional_owned_error_cursor_literals(void) {
@@ -398,7 +398,7 @@ static void conditional_owned_error_cursor_literals(void) {
         CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_BAD_STRUCTURE);
         original[2]=saved;CHECK(effect_body_records_match(&read,&body,&expected)==XR_XIR_OK);
     }
-    xr_compile_resources_free(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
+    effect_body_runs_release(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
 static unsigned owned_error_cell_type_reads;

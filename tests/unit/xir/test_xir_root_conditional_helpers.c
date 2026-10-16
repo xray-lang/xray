@@ -358,7 +358,7 @@ static XrXirStatus conditional_refinement(const XrXirCompileContext *context, bo
     XrXirEffects effects={.resources=context->resources,.count=4};
     XrXirStatus status=xir_effects_refinement_capture(context,&f.module,&effects);
     EffectOrdinaryContexts *ordinary=NULL;
-    if (status==XR_XIR_OK) status=effect_ordinary_build(context,&f.module,NULL,&ordinary);
+    if (status==XR_XIR_OK) status=effect_ordinary_build(context,&f.module,NULL,NULL,&ordinary);
     if (status==XR_XIR_OK) {
         f.method_parameters[1]=(XrXirType)259;
         ordinary->terms.remaining=context;

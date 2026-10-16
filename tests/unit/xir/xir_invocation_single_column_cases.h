@@ -31,7 +31,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
         if (status==XR_XIR_OK && oracle) CHECK(conditional_compact_same(&decoded,&expected[i]));
     }
     if (status==XR_XIR_OK && oracle) CHECK(body.run_count==2);
-    xr_compile_resources_free(body.runs);
+    effect_body_runs_release(body.runs);
     if (status!=XR_XIR_OK || !oracle) return status;
     uint64_t held_bytes=rp_stats(context).live_bytes;
     const XrXirOp invalid[]={XR_XIR_INVALID,XR_XIR_OP_COUNT,(XrXirOp)UINT32_MAX};
@@ -42,7 +42,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
         body=(EffectBodyFunction){.instruction_count=4};size_t allocations=rp_attempts;
         CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE &&
             body.run_count<=body.run_capacity && rp_attempts>=allocations);
-        xr_compile_resources_free(body.runs);body.runs=NULL;
+        effect_body_runs_release(body.runs);body.runs=NULL;
         CHECK(rp_stats(context).live_bytes==held_bytes);
     }
     /* A real affine opcode column can reach an invalid ordinal. Its actual
@@ -52,7 +52,7 @@ static XrXirStatus conditional_compact_writer_boundary(const XrXirCompileContext
     input.instruction_count=3;body=(EffectBodyFunction){.instruction_count=3};size_t allocations=rp_attempts;
     CHECK(effect_body_records_copy(context,&input,&body)==XR_XIR_BAD_STRUCTURE &&
         body.run_count<=body.run_capacity && rp_attempts>=allocations);
-    xr_compile_resources_free(body.runs);body.runs=NULL;
+    effect_body_runs_release(body.runs);body.runs=NULL;
     CHECK(rp_stats(context).live_bytes==held_bytes);
     return XR_XIR_OK;
 }
@@ -140,7 +140,7 @@ static XrXirStatus conditional_compact_sparse_codec(const XrXirCompileContext *c
         CHECK(effect_body_records_match(&read,&body,&original)==XR_XIR_OK &&
             rp_stats(context).live_bytes==held_bytes);
     }
-    xr_compile_resources_free(body.runs);return status;
+    effect_body_runs_release(body.runs);return status;
 }
 
 #endif
