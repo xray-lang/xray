@@ -77,6 +77,13 @@ _INPUTS.update({
 })
 
 
+_FFI_PROGRAMS={"extern_libm":'tests/diff/cases/semantics/ffi/extern_libm.xr'}
+_PROGRAMS.update(_FFI_PROGRAMS)
+_NAMES=_NAMES|frozenset(_FFI_PROGRAMS)
+_FFI_MANIFEST='tests/diff/cases/semantics/ffi/xray.toml'
+_AUTHORITIES+=(_FFI_MANIFEST,)
+_INPUTS.update({'tests/diff/cases/semantics/ffi/extern_libm.xr': '493218a3d036ca7b5510045695bbcd366fd2bcba1d67957716f18bf07db80b58', 'tests/diff/cases/semantics/ffi/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94'})
+
 def multiply(a,b):
     result=0
     while b:
@@ -489,16 +496,35 @@ def system_observations():
     return rows
 
 
+
+def extern_libm_trace():
+    root=sqrt_bits(Fraction(2));power_value=fraction_bits(Fraction(2)**10)
+    return [shortest_float(root),shortest_float(power_value),str(abs(-7))]
+
+
+def extern_libm_requirements():
+    plan=tomllib.loads((ROOT/_FFI_MANIFEST).read_text(encoding='utf-8'))
+    symbols={item['xray']:item for item in plan['native']['symbol']}
+    for name,unit in [('sqrt','libm'),('pow','libm'),('abs','libc')]:
+        row=symbols[name]
+        if row['native']!=name or row['unit']!=unit or row['calling_convention']!='c':raise ValueError('Original complete C math symbol mapping changed')
+    return {'original_extern_functions':{'sqrt':{'arguments':['f64'],'return':'f64'},'pow':{'arguments':['f64','f64'],'return':'f64'},'abs':{'arguments':['i32'],'return':'i32'}},
+        'original_unsafe_calls':['sqrt(2.0)','pow(2.0,10.0)','abs(-7)'],'sqrt_binary64_RNE_bits':sqrt_bits(Fraction(2)),
+        'derivation':'Exact integer square-midpoint comparisons and rational shortest-decimal intervals;no host libm or product output',
+        'native_math_reference_conditions':['C binary64 sqrt under nearest ties-even','pow2^10 exact','i32 abs(-7) exact'],
+        'all_original_manifest_units_and_unused_symbols_retained':True,'actual_C_ABI_symbol_resolution_rounding_provider_and_runtime_qualified':False}
+
+
 def observations():
     rows={'crypto_timing_safe_equal_direct':crypto_trace(),'toml_pure_module_direct':toml_trace(),
             'io_read_stdin_shared_core':stdin_trace(STDIN_BYTES)}
-    rows.update(system_observations());return rows
+    rows.update(system_observations());rows['extern_libm']=extern_libm_trace();return rows
 
 
 def expected_rows():
     if (set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items() if name in _ORIGINAL_NAMES) or
             any(_PROGRAMS.get(name)!=path for name,path in _SYSTEM_PROGRAMS.items()) or
-            set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()) or set(_RAW_INPUTS)!={_STDIN}):
+            set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()) or set(_RAW_INPUTS)!={_STDIN} or any(_PROGRAMS.get(name)!=path for name,path in _FFI_PROGRAMS.items())):
         raise ValueError('Pure library model lost complete original programs or exact authorities')
     for path,digest in _INPUTS.items():
         if hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
@@ -507,7 +533,7 @@ def expected_rows():
         if hashlib.sha256((ROOT/path).read_bytes()).hexdigest()!=digest or (ROOT/path).read_bytes()!=STDIN_BYTES:
             raise ValueError('Original stdin bytes changed;line endings are observable')
     traces=observations()
-    if set(traces)!=_NAMES or sum(map(len,traces.values()))!=112:raise ValueError('Pure library model lost complete original observations')
+    if set(traces)!=_NAMES or sum(map(len,traces.values()))!=115:raise ValueError('Pure library model lost complete original observations')
     rows=[]
     for name,path in sorted(_PROGRAMS.items()):
         row={'id':'complete_pure_library_boundaries_'+name,'source':path,'original_source':path,'required_target':None,
@@ -519,4 +545,10 @@ def expected_rows():
     for row in rows:
         if row['original_source'] in _SYSTEM_PROGRAMS.values():
             row['model']='Complete unchanged original;independent exact rational/binary64 arithmetic and shortest decimal interval display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.'
+    for row in rows:
+        if row['source'] in _FFI_PROGRAMS.values():
+            row['required_target']='windows-x86_64'
+            row['required_companions']=[{'path':_FFI_MANIFEST,'lf_sha256':_INPUTS[_FFI_MANIFEST]}]
+            row['required_semantic_trace']=extern_libm_requirements()
+            row['model']='Complete unchanged three-C-function math original and full native manifest;exact rational binary64 nearest-root,2^10 and signed abs plus shortest-decimal output. This is a Windows x64 reference expectation;actual ABI,default foreign fenv,symbol resolution,generatedC,provider and complete safety require product evidence.'
     return rows

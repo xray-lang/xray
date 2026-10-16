@@ -107,6 +107,12 @@ _JSON_BOUNDARY_INPUT='tests/unit/xir/legacy_consumers/complete_json_boundary_mod
 _INPUTS[_JSON_BOUNDARY_INPUT]='17012d55f7022726163e2c2057371b0ceaa52631886c99d13d6f2d7cf5245ae0'
 _REQUIRED_INPUTS+=(_JSON_BOUNDARY_INPUT,)
 
+_VALUE_BOUNDARY_PROGRAMS={'bool_conversion_truthy_shared_core': 'tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr', 'array_join_special_object_shared_core': 'tests/diff/cases/semantics/collections/array_join_special_object_shared_core.xr', 'value_format_truncation_shared_core': 'tests/diff/cases/semantics/collections/value_format_truncation_shared_core.xr'}
+_PROGRAMS.update(_VALUE_BOUNDARY_PROGRAMS)
+_NAMES=_NAMES|frozenset(_VALUE_BOUNDARY_PROGRAMS)
+_INPUTS.update({'tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr': 'c1f90b63c44a001a2f431ab0212c7bad3db659e3dc1373b7ded370c942760338', 'tests/diff/cases/semantics/collections/array_join_special_object_shared_core.xr': '471dfe6c13b893800fcf888a3882c54a6064b33707e663222cb1348de6218dbe', 'tests/diff/cases/semantics/collections/value_format_truncation_shared_core.xr': '93847a826482963e8d4894c3fef17e720b547f13395d96c23883c4e2ba397ded', 'src/shared/xr_truthy_core.h': 'ae980791ae9b4706c205cc6d97287241625623e75b099bd986ea393a97737abf', 'src/shared/xr_range_core.h': '8c0d9ec40d4b40f4c78566a2bcecb25c217a921725edc1dda2929590ddec951e', 'src/runtime/object/xrange.c': '437fa3a87091575c4ac77b740fa1d9e8c90efa90282de6315bb5d26932afcc1d'})
+_REQUIRED_INPUTS += ('tests/diff/cases/semantics/collections/bool_conversion_truthy_shared_core.xr', 'tests/diff/cases/semantics/collections/array_join_special_object_shared_core.xr', 'tests/diff/cases/semantics/collections/value_format_truncation_shared_core.xr', 'src/shared/xr_truthy_core.h', 'src/shared/xr_range_core.h', 'src/runtime/object/xrange.c')
+
 class Array:
     def __init__(self,items):self.items=copy.deepcopy(list(items))
     def reverse(self):self.items.reverse();return Array(self.items)
@@ -230,6 +236,76 @@ def self_return_trace():
     rows=Array([[1,2],[3,4]]);iterator=rows.iterator();next(iterator);kept=next(iterator);out.extend(['kept '+str(kept[0]),'rows0 '+str(rows.items[0][0])])
     a=Array([1,2,3]);b=a.reverse();out.extend('y '+str(x*2) for x in b.items);sorted_=a.sort();out.append('y '+str(sorted_.items[0]));filled=a.fill(4);out.append('y '+str(filled.items[0]));builder='';builder+='done';builder='';same=builder;same+='x';out.append('y '+str(a.items[0]));return out
 
+
+class RangeText:
+    def __init__(self,start,end):
+        if type(start) is not int or type(end) is not int:raise ValueError('Range endpoints must be exact integers')
+        self.start,self.end=start,end
+    def text(self):return str(self.start)+'..'+str(self.end)
+
+
+def explicit_bool(value):
+    if value is None:return False
+    if type(value) is bool:return value
+    if type(value) in {int,float}:return value!=0
+    if type(value) is str:return len(value)!=0
+    if isinstance(value,Array):return len(value.items)!=0
+    if isinstance(value,DisplayMap):return len(value.entries())!=0
+    if isinstance(value,DisplaySet):return len(value.values)!=0
+    raise ValueError('Unreviewed explicit bool conversion family')
+
+
+def join_selected_values(values,separator):
+    if type(separator) is not str:raise ValueError('Selected join separator must be string')
+    return separator.join(value.text() if isinstance(value,RangeText) else render(value) for value in values)
+
+
+def limited_container_display(value):
+    """Keep the complete logical value, showing the public first32 elements."""
+    if isinstance(value,Array):entries=value.items;prefix,suffix='[',']';part=lambda item:display(item,True)
+    elif isinstance(value,DisplayMap):entries=value.entries();prefix,suffix='#{','}';part=lambda item:display(item[0],True)+': '+display(item[1],True)
+    elif isinstance(value,DisplaySet):entries=value.values;prefix,suffix='#[',']';part=lambda item:display(item,True)
+    else:raise ValueError('Unreviewed top-level truncated container')
+    shown=min(len(entries),32);inside=', '.join(part(item) for item in entries[:shown])
+    if len(entries)>shown:inside+=', ...('+str(len(entries)-shown)+' more)'
+    return prefix+inside+suffix
+
+
+def complete_truncation_values(count=35):
+    if type(count) is not int or count<0:raise ValueError('Invalid original loop extent')
+    array=Array([]);mapping=DisplayMap();set_=DisplaySet([])
+    for value in range(count):
+        array.items.append(value);mapping.put(value,value+100)
+        if value not in set_.values:set_.values.append(value)
+    outputs=[limited_container_display(container) for container in (array,mapping,set_)]
+    if len(array.items)!=count or len(mapping.entries())!=count or len(set_.values)!=count:raise ValueError('Display destroyed undisplayed values')
+    return outputs,{'original_loop_iterations':count,'original_mutation_operations':3*count,'complete_container_lengths':[count]*3,
+        'public_display_element_limit':32,'shown_elements_per_container':min(count,32),'undisplayed_elements_per_container':max(0,count-32),
+        'full_original_values_retained_after_display':True,'physical_storage_and_output_ownership_qualified':False}
+
+
+def value_boundary_observations():
+    cases=[('null',None),('false',False),('true',True),('zero-int',0),('nonzero-int',-1),('zero-float',0.0),('nonzero-float',0.25),('empty-string',''),('nonempty-string','x'),
+        ('empty-array',Array([])),('full-array',Array([1])),('empty-map',DisplayMap()),('full-map',DisplayMap([('x',1)])),
+        ('empty-boolmap',DisplayMap()),('full-boolmap',DisplayMap([(True,1)])),('empty-set',DisplaySet([])),('full-set',DisplaySet(['x'])),
+        ('empty-typed-set',DisplaySet([])),('full-typed-set',DisplaySet([7]))]
+    truth=[label+'='+render(explicit_bool(value)) for label,value in cases]
+    ranges=[RangeText(1,3),RangeText(4,4),RangeText(9,12)]
+    joins=[join_selected_values(ranges,','),join_selected_values(['tag',RangeText(2,5),None],':')]
+    return {'bool_conversion_truthy_shared_core':truth,'array_join_special_object_shared_core':joins,
+        'value_format_truncation_shared_core':complete_truncation_values()[0]}
+
+
+def value_boundary_semantic_traces():
+    return {'bool_conversion_truthy_shared_core':{'explicit_conversion_calls':19,'implicit_condition_truthiness_not_granted':True,
+        'original_sized_container_families':['Array<i64>','Map<string,i64>','Map<bool,i64>','Set<string>','Set<u8>'],
+        'conversion_state_access_and_provider_qualified':False},
+        'array_join_special_object_shared_core':{'original_range_endpoints':[[1,3],[4,4],[9,12],[2,5]],
+        'original_ranges_joined_as_values_not_enumerated':True,'empty_range_keeps_4_dotdot_4_text':True,'null_text_is_null':True,
+        'original_range_Array_elements':3,'original_mixed_Array_elements':3,'real_join_ToString_capabilities_and_runtime_qualified':False},
+        'value_format_truncation_shared_core':complete_truncation_values()[1]}
+
+
 def observations():
     rows={'array_member_scalar_target':member_trace(),'method_self_return_ownership':self_return_trace()}
     counts=[1,2,3];counts.extend([4,-5]);ratios=[0.5];ratios.append(1.25);flags=[True];flags.append(False);out=[len(counts),counts[3],counts[4],len(ratios),ratios[1],flags[1]];counts.append(7);out.append(counts[5]);rows['array_push_scalar_target']=out
@@ -247,6 +323,7 @@ def observations():
     # A key's declared equality compares both fields; its hash is only a bucket hint.
     key=lambda a,b:(a,b);mapping={key(1,'x'):'one',key(2,'yy'):'two'};mapping[key(1,'x')]='ONE';out=[len(mapping),mapping[key(1,'x')],mapping[key(2,'yy')],key(1,'x') in mapping,key(3,'z') in mapping];removed=mapping.pop(key(2,'yy'),None) is not None;out.extend([removed,len(mapping)]);seen={key(5,'p'),key(5,'p'),key(6,'q')};out.extend([len(seen),key(5,'p') in seen,key(9,'z') in seen]);rows['user_hashable_map_set_key']=out
     rows.update(display_observations())
+    rows.update(value_boundary_observations())
     if set(rows)!=_NAMES:raise ValueError('Collection model lost a full source')
     return rows
 
@@ -295,5 +372,10 @@ def expected_rows():
     for row in rows:
         if row['original_source'] in _DISPLAY_PROGRAMS.values():
             row['model']='Complete unchanged original; independent recursive container display,insertion order,singleton tuple comma,typed Slice range,callable name-free display plus actual calls,and selected JSON scalar/key/value association. No physical lifetime,Source,generated-C,FI,safety or provider qualification.'
+    for row in rows:
+        name=Path(row['original_source']).stem
+        if name in _VALUE_BOUNDARY_PROGRAMS:
+            row['required_semantic_trace']=value_boundary_semantic_traces()[name]
+            row['model']='Complete unchanged original explicit bool conversions,Range and nullable ToString joins,or all35 iterations/105 mutations with public first32 display and exact remaining suffix. Full underlying values retained;no implicit conditions,physical layout,output ownership,Source,FI,lifetime or provider qualification inferred.'
     rows.extend(json_boundary.expected_rows())
     return rows

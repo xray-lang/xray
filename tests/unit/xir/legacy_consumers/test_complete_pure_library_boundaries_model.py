@@ -14,7 +14,7 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
         self.assertEqual(traces['crypto_timing_safe_equal_direct'][:12],[True,False,False,True,True,False,False,False,True,False,True,True])
         self.assertEqual(traces['toml_pure_module_direct'],['xray',2,True,'apple','red',2,'Nail',True,'TomlDiagnostic',True,2,'Duplicate key','Alice',True,0,True,True,True,True])
         self.assertEqual(traces['io_read_stdin_shared_core'],[20,False,False,False])
-        self.assertEqual(len([row for row in m.expected_rows() if row['original_source'] not in m._SYSTEM_PROGRAMS.values()]),3)
+        self.assertEqual(len([row for row in m.expected_rows() if row['original_source'] in {m._PROGRAMS[name] for name in m._ORIGINAL_NAMES}]),3)
 
     def test_all_four_published_nist_aes256_known_answers_both_directions(self):
         key=bytes.fromhex('603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4')
@@ -117,7 +117,7 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
          'rounding_boundary':['0.30000000000000004','5.551115123125783e-17','-2.7755575615628914e-17','1.4142135623730951','2.0000000000000004','0.010000000000000002','0.3333333333333333','0.6666666666666666'],
          'crypto_random_system_direct':[True]*11,'runtime_domain_bytes':[True]*3}
         self.assertEqual(sum(map(len,expected.values())),67);self.assertEqual(m.system_observations(),expected)
-        self.assertEqual(sum(map(len,m.observations().values())),112);self.assertEqual(len(m.expected_rows()),7)
+        self.assertEqual(sum(map(len,m.observations().values())),115);self.assertEqual(len(m.expected_rows()),8)
 
     def test_binary64_literals_and_left_associative_residual_known_bits(self):
         f=m.FloatValue.literal;fraction=m.Fraction
@@ -216,5 +216,37 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
         rows=[row for row in m.expected_rows() if row['original_source'] in m._SYSTEM_PROGRAMS.values()]
         self.assertEqual(len(rows),4);self.assertEqual(sum(row['observation_count'] for row in rows),67)
         for row in rows:self.assertEqual(row['source'],row['original_source']);self.assertEqual(row['expected']['exit_code'],0)
+
+
+    def test_full_original_C_math_outputs_use_exact_integer_and_rational_reference(self):
+        self.assertEqual(m.extern_libm_trace(),['1.4142135623730951','1024.0','7'])
+        bits=m.sqrt_bits(m.Fraction(2));self.assertEqual(bits,0x3ff6a09e667f3bcd)
+        previous,value,following=[m.bits_fraction(bits+offset) for offset in (-1,0,1)]
+        self.assertLess(((previous+value)/2)**2,2);self.assertGreater(((value+following)/2)**2,2)
+        self.assertEqual(m.fraction_bits(m.Fraction(m.shortest_float(bits))),bits)
+        self.assertEqual(m.bits_fraction(m.fraction_bits(m.Fraction(2)**10)),1024)
+        self.assertFalse(m.extern_libm_requirements()['actual_C_ABI_symbol_resolution_rounding_provider_and_runtime_qualified'])
+
+    def test_full_C_math_original_manifest_prototypes_and_target_are_retained(self):
+        import re
+        source=m._FFI_PROGRAMS['extern_libm'];text=(m.ROOT/source).read_text(encoding='utf-8')
+        self.assertEqual(re.findall(r'fn\s+(\w+)\s*\(',text),['sqrt','pow','abs'])
+        self.assertEqual(len(re.findall(r'\bunsafe\s*\{',text)),3)
+        row=next(row for row in m.expected_rows() if row['source']==source)
+        self.assertEqual(row['required_target'],'windows-x86_64');self.assertEqual(row['observation_count'],3)
+        self.assertEqual(row['required_companions'],[{'path':m._FFI_MANIFEST,'lf_sha256':m._INPUTS[m._FFI_MANIFEST]}])
+        self.assertEqual(row['required_semantic_trace']['original_extern_functions']['abs'],{'arguments':['i32'],'return':'i32'})
+        with mock.patch.dict(m._INPUTS,{m._FFI_MANIFEST:'0'*64}),self.assertRaises(ValueError):m.expected_rows()
+        for name in ('extern_no_arg_void_and_unused','force_unwrap_error_shape'):self.assertNotIn(name,m._NAMES)
+
+    def test_all_new_positive_entries_bind_exact_full_sources_and_foreign_companion(self):
+        import complete_collection_values_model as collections
+        cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
+        rows=[row for row in m.expected_rows() if row['source'] in m._FFI_PROGRAMS.values()]+[row for row in collections.expected_rows() if row['source'] in collections._VALUE_BOUNDARY_PROGRAMS.values()]
+        self.assertEqual(len(rows),4);self.assertEqual(sum(row['observation_count'] for row in rows),27)
+        for row in rows:
+            case=cases[row['id']];self.assertEqual(case['entry'],'run');self.assertEqual(case['source_context'],'original_absolute')
+            self.assertEqual(case['source'],row['original_source']);self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
+            self.assertEqual(case['companions'],row.get('required_companions',[]))
 
 if __name__=='__main__':unittest.main()

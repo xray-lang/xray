@@ -96,4 +96,54 @@ class CollectionValues(unittest.TestCase):
         source=model._DISPLAY_PROGRAMS['slice_value_to_string']
         with patch.dict(model._INPUTS,{source:'0'*64}),self.assertRaisesRegex(ValueError,'source/authority changed'):model.expected_rows()
 
+
+    def test_all_complete_explicit_bool_and_range_join_observations(self):
+        facts=model.value_boundary_observations()
+        truth=[('null',False),('false',False),('true',True),('zero-int',False),('nonzero-int',True),('zero-float',False),('nonzero-float',True),('empty-string',False),('nonempty-string',True),
+            ('empty-array',False),('full-array',True),('empty-map',False),('full-map',True),('empty-boolmap',False),('full-boolmap',True),('empty-set',False),('full-set',True),('empty-typed-set',False),('full-typed-set',True)]
+        self.assertEqual(facts['bool_conversion_truthy_shared_core'],[label+'='+str(value).lower() for label,value in truth])
+        self.assertEqual(facts['array_join_special_object_shared_core'],['1..3,4..4,9..12','tag:2..5:null'])
+        self.assertEqual(len(facts['value_format_truncation_shared_core']),3)
+        self.assertEqual(sum(map(len,facts.values())),24)
+
+    def test_explicit_bool_is_not_python_container_identity_or_implicit_condition(self):
+        for value in (None,False,0,0.0,-0.0,'',model.Array([]),model.DisplayMap(),model.DisplaySet([])):self.assertFalse(model.explicit_bool(value))
+        for value in (True,-1,0.25,'x',model.Array([False]),model.DisplayMap([(False,0)]),model.DisplaySet([0]),float('nan')):self.assertTrue(model.explicit_bool(value))
+        for value in ([],{},lambda:7,object()):
+            with self.subTest(value=type(value)),self.assertRaises(ValueError):model.explicit_bool(value)
+        self.assertTrue(model.value_boundary_semantic_traces()['bool_conversion_truthy_shared_core']['implicit_condition_truthiness_not_granted'])
+
+    def test_public_element_limit_covers_empty_exact_boundary_and_all_retained_tails(self):
+        for count in (0,1,31,32,33,35):
+            values,trace=model.complete_truncation_values(count);shown=min(count,32);suffix=(', ...('+str(count-32)+' more)') if count>32 else ''
+            self.assertEqual(values[0],'['+', '.join(str(value) for value in range(shown))+suffix+']')
+            self.assertEqual(values[1],'#{'+', '.join(str(value)+': '+str(value+100) for value in range(shown))+suffix+'}')
+            self.assertEqual(values[2],'#['+', '.join(str(value) for value in range(shown))+suffix+']')
+            self.assertEqual(trace['original_mutation_operations'],3*count);self.assertEqual(trace['complete_container_lengths'],[count]*3)
+        array=model.Array(range(35));mapping=model.DisplayMap((value,value+100) for value in range(35));set_=model.DisplaySet(range(35))
+        before=(list(array.items),mapping.entries(),list(set_.values))
+        for value in (array,mapping,set_):self.assertIn(', ...(3 more)',model.limited_container_display(value))
+        self.assertEqual(before,(array.items,mapping.entries(),set_.values));self.assertEqual(array.items[-1],34);self.assertEqual(mapping.entries()[-1],(34,134))
+        self.assertFalse(model.complete_truncation_values()[1]['physical_storage_and_output_ownership_qualified'])
+
+    def test_join_formats_range_values_including_empty_range_and_nullable_value(self):
+        self.assertEqual(model.join_selected_values([model.RangeText(4,4)],','),'4..4')
+        self.assertEqual(model.join_selected_values([model.RangeText(-2,5),None,False],'|'),'-2..5|null|false')
+        self.assertEqual(model.join_selected_values([],','),'')
+        with self.assertRaises(ValueError):model.RangeText(True,3)
+        with self.assertRaises(ValueError):model.join_selected_values([model.RangeText(1,3)],None)
+        self.assertFalse(model.value_boundary_semantic_traces()['array_join_special_object_shared_core']['real_join_ToString_capabilities_and_runtime_qualified'])
+
+    def test_new_complete_value_sources_and_authorities_cannot_be_changed_or_dropped(self):
+        from pathlib import Path
+        from unittest import mock
+        saved=Path.read_bytes
+        for name in [*model._VALUE_BOUNDARY_PROGRAMS.values(),'src/shared/xr_truthy_core.h','src/shared/xr_range_core.h']:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'\nchanged\n' if path==model.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.expected_rows()
+        rows=[row for row in model.expected_rows() if row['source'] in model._VALUE_BOUNDARY_PROGRAMS.values()]
+        self.assertEqual(len(rows),3);self.assertEqual(sum(row['observation_count'] for row in rows),24)
+        for row in rows:self.assertEqual(row['source'],row['original_source']);self.assertIn('required_semantic_trace',row)
+
 if __name__=='__main__':unittest.main()
