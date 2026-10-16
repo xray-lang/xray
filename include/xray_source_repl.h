@@ -51,6 +51,22 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, co
  * A pending input or an untaken terminal result excludes another begin.
  * Compile failure leaves published declarations and values intact. */
 XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);
+/* Reads an exact regular-file snapshot with the original Compiler ledger and
+ * genuine FILE authority, then parses once into the same paired transaction.
+ * Relative paths resolve from the real working directory on that same ledger.
+ * Relative imports use its real project/script root and lockfile. The path and
+ * file contents may change after return; execution retains the admitted AST.
+ * Missing/nonregular files and invalid nearer configuration never fall back
+ * to MEMORY or an unsaved input. Lifecycle and sticky limits match begin. */
+XRAY_API XrSourceStatus xray_source_repl_begin_file(XrSourceRepl *, const char *path, XrSourceDiagnostic **);
+typedef enum XrSourceInputState { XR_SOURCE_INPUT_COMPLETE, XR_SOURCE_INPUT_INCOMPLETE } XrSourceInputState;
+/* Scans an exact input span with the real lexer and this Compiler's cumulative
+ * ledger. Empty input is complete; open delimiters or unterminated literals
+ * need more input. Other syntax errors are complete and remain for the parser.
+ * This observation grants no checking or execution authority. Pending input,
+ * callback reentry and failed resource state preserve the output. */
+XRAY_API XrSourceStatus xray_source_repl_check_input(XrSourceRepl *, const char *bytes, size_t length,
+    XrSourceInputState *);
 /* Inspects exactly one expression. The same checker evaluates its real
  * typeName once, including ordinary effects, and returns/displays that String.
  * The temporary candidate is aborted; published declarations and it stay fixed.

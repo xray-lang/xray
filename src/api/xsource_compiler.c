@@ -178,6 +178,32 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_open_input(XrSourceCompiler *co
     }
     return compiler_publish(diagnostic,&detail,status);
 }
+XR_FUNC void xr_source_compiler_file_clear(XrSourceCompilerFile *file) {
+    if(!file)return;
+    xr_source_authority_close(file->authority);xr_compile_resources_free(file->bytes);
+    *file=(XrSourceCompilerFile){0};
+}
+XR_FUNC XrSourceCompileStatus xr_source_compiler_read_file(XrSourceCompiler *compiler,const char *path,
+    XrSourceCompilerFile *output,XrSourceCompileDiagnostic *diagnostic) {
+    if(!compiler || !path || !output || output->authority || output->bytes || output->length ||
+        !compiler_diagnostic_empty(diagnostic))return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    XrSourceCompileDiagnostic detail={0};XrSourceCompilerFile file={0};char *absolute=NULL;
+    XrOsIoPolicy policy=xr_compile_io_policy(compiler->context.resources);
+    detail.stage=XR_SOURCE_COMPILE_PATH;
+    XrSourceCompileStatus status=compiler_io(xr_realpath_owned(&policy,path,&absolute));
+    const XrSourceEntryInput input={XR_SOURCE_ENTRY_FILE,absolute,NULL,0};
+    if(status==XR_SOURCE_COMPILE_OK)status=xr_source_compiler_open_input(compiler,&input,&file.authority,&detail);
+    xr_compile_resources_free(absolute);
+    if(status==XR_SOURCE_COMPILE_OK) {
+        detail.stage=XR_SOURCE_COMPILE_INPUT;
+        status=compiler_io(xr_os_io_read_regular_file(&policy,xr_source_authority_source_path(file.authority),
+            SIZE_MAX-1,&file.bytes,&file.length));
+    }
+    status=compiler_capture(compiler,status);
+    if(status==XR_SOURCE_COMPILE_OK)*output=file;
+    else xr_source_compiler_file_clear(&file);
+    return compiler_publish(diagnostic,&detail,status);
+}
 XR_FUNC XrSourceCompileStatus xr_source_compiler_build_file(XrSourceCompiler *compiler, const char *absolute_path,
     XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
     if (!compiler || !compiler_diagnostic_empty(diagnostic)) return XR_SOURCE_COMPILE_BAD_ARGUMENT;

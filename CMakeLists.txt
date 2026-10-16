@@ -2487,6 +2487,7 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli_diag.c
     ${XRAY_CLI_ROOT}/xcli_output.c
     ${XRAY_CLI_ROOT}/xcli_installation.c
+    ${XRAY_CLI_ROOT}/xcmd_repl.c
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
     ${XRAY_CLI_ROOT}/xcmd_deps.c
@@ -2649,6 +2650,9 @@ if(WIN32)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})
+if(READLINE_LIB)
+    target_link_libraries(xray PRIVATE ${READLINE_LIB})
+endif()
 
 if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
     add_custom_command(TARGET xray POST_BUILD
@@ -4526,6 +4530,12 @@ if(BUILD_TESTS)
         LABELS "cli;module;identity;package"
         TIMEOUT 60
     )
+
+    add_test(NAME source_repl_cli
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_source_repl_tests.py
+            --binary $<TARGET_FILE:xray> --stdlib ${CMAKE_CURRENT_SOURCE_DIR}/stdlib
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(source_repl_cli PROPERTIES TIMEOUT 120 LABELS "cli;source;repl;ownership")
 
     add_test(
         NAME canonical_source_run_cli

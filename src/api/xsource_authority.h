@@ -53,7 +53,7 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(
     const struct XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
     XrSourceAuthority **output, XrManifestDiagnostic *diagnostic);
 XR_FUNC const char *xr_source_authority_source_path(const XrSourceAuthority *);
-/* AST's exact authority-relative locator; NULL for other input kinds. */
+/* FILE/AST's exact authority-relative locator; TEXT uses its owned overlay. */
 XR_FUNC const char *xr_source_authority_logical_path(const XrSourceAuthority *);
 /* NULL for FILE input; an immutable owner-backed entry for TEXT input. */
 XR_FUNC const XrModuleOverlayInput *xr_source_authority_overlay(const XrSourceAuthority *);
