@@ -10,8 +10,13 @@ static void parameter_same_hints(const XlspSourceParameterHints *a,const XlspSou
         const XlspSourceParameterHint *left=&a->items[i],*right=&b->items[i];
         parameter_same_text(left->label,right->label);parameter_same_text(left->target_identity,right->target_identity);
         parameter_same_text(left->target_path,right->target_path);
+        parameter_same_text(left->target_uri,right->target_uri);
         CHECK(left->position.line==right->position.line&&left->position.character==right->position.character&&
             left->mode==right->mode&&left->target_native_identity==right->target_native_identity&&left->target_kind==right->target_kind);
+        CHECK(left->has_target_location==right->has_target_location&&left->target_version==right->target_version);
+        CHECK(left->target_selection.start.line==right->target_selection.start.line&&
+            left->target_selection.start.character==right->target_selection.start.character&&
+            left->target_selection.end.line==right->target_selection.end.line&&left->target_selection.end.character==right->target_selection.end.character);
         CHECK(!memcmp(&left->target_fingerprint,&right->target_fingerprint,sizeof(XrFingerprint)));
         CHECK(left->target_range.module==right->target_range.module&&left->target_range.line==right->target_range.line&&
             left->target_range.column==right->target_range.column&&left->target_range.end_line==right->target_range.end_line&&

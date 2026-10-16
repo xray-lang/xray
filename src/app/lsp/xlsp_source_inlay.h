@@ -19,11 +19,14 @@ XR_FUNC XrXirStatus xlsp_source_type_hints(const XlspSourceSnapshot *,const char
 XR_FUNC void xlsp_source_type_hints_free(XlspSourceTypeHints *);
 typedef struct XlspSourceParameterHint {
     XrLspPosition position;
-    XlspSourceHover label,target_identity,target_path;
+    XlspSourceHover label,target_identity,target_path,target_uri;
     XrFingerprint target_fingerprint;
     XrXirSourceRange target_range;
     uint32_t target_native_identity,mode;
     XrXirSourceDeclarationKind target_kind;
+    XrLspRange target_selection;
+    int64_t target_version;
+    bool has_target_location;
 } XlspSourceParameterHint;
 typedef struct XlspSourceParameterHints {XlspSourceParameterHint *items;size_t count;} XlspSourceParameterHints;
 /* Actual checked call identities and declared parameters supply labels/modes.
@@ -36,4 +39,17 @@ typedef struct XlspSourceParameterHints {XlspSourceParameterHint *items;size_t c
 XR_FUNC XrXirStatus xlsp_source_parameter_hints(const XlspSourceSnapshot *,const XlspSourceCallArguments *,
     XrLspRange,XlspSourceParameterHints *);
 XR_FUNC void xlsp_source_parameter_hints_free(XlspSourceParameterHints *);
+typedef struct XlspSourceParameterHintRequest {
+    XrCompileResources *resources;
+    XlspSourceSnapshot *const *snapshots;
+    size_t count;
+    const XlspSourceCallArguments *arguments;
+    XrLspRange range;
+} XlspSourceParameterHintRequest;
+/* All roots containing the exact document must agree on labels, modes and
+ * declaration provenance, including actual editor location/version when known.
+ * JSON owns its strings independently of all Source and syntax owners.
+ * No containing root is UNRESOLVED; a valid empty region produces [].
+ * Failure preserves output and never publishes a partial JSON array. */
+XR_FUNC XrXirStatus xlsp_source_parameter_hints_many_json(const XlspSourceParameterHintRequest *,XrJsonValue **);
 #endif

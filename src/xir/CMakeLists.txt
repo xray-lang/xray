@@ -71,6 +71,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/stdlib_checked.cmake")
 add_library(xray_lsp_source_workspace STATIC ../app/lsp/xlsp_source_workspace.c ../app/lsp/xlsp_source_request.c
     ../app/lsp/xlsp_source_code_lens.c)
 target_sources(xray_lsp_source_workspace PRIVATE ../app/lsp/xlsp_source_signature.c)
+target_sources(xray_lsp_source_workspace PRIVATE ../app/lsp/xlsp_source_parameter_json.c)
 target_link_libraries(xray_lsp_source_workspace PUBLIC xray_lsp_source_query xray_source_compile xray_lsp_source_syntax)
 target_compile_features(xray_lsp_source_workspace PUBLIC c_std_11)
 if(MSVC)

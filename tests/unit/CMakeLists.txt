@@ -4617,3 +4617,4 @@ include(xir/lsp_navigation_admission/CMakeLists.txt)
 include(xir/lsp_call_syntax/CMakeLists.txt)
 
 include(xir/lsp_signature_task/CMakeLists.txt)
+include(xir/lsp_parameter_task/CMakeLists.txt)

@@ -20,5 +20,7 @@
 // commits full/delta cache proposals exclusively on the dispatch thread.
 // Mode 14 resolves document links from captured texts and project authority.
 // Mode 15 produces signature help from parser boundaries and Checked Source.
+// Mode 16 prepares parameter hints; public inlay dispatch still requires the full
+// type and effect hint contract before switching its request boundary.
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *, const XlspRequestId *, XrJsonValue *, unsigned mode);
 #endif // XLSP_SOURCE_TASK_H

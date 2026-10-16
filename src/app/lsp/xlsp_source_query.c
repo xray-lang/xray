@@ -28,6 +28,9 @@ static XrXirStatus lsp_resource_status(XrCompileResourceStatus status) {
 static XrXirStatus lsp_work(const XlspSourceSnapshot *s, size_t bytes) {
     return lsp_resource_status(xr_compile_resources_work(s->resources, bytes));
 }
+XR_FUNC bool xlsp_source_snapshot_uses_resources(const XlspSourceSnapshot *s,const XrCompileResources *resources) {
+    return s&&resources&&s->resources==resources;
+}
 static XrXirStatus lsp_copy(const XlspSourceSnapshot *s, const char *bytes, size_t length, char **out) {
     if (!bytes || length == SIZE_MAX) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = lsp_work(s, length);

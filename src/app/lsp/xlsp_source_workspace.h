@@ -20,4 +20,7 @@ XR_FUNC XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *,
     const char *,size_t,XrLspPosition,unsigned,bool,XrJsonValue **);
 XR_FUNC XrXirStatus xlsp_source_workspace_tokens(XlspSourceWorkspace *,const char *,size_t,
     const XrLspRange *,XlspSourceTokens **);
+/* Prepared parameter-only projection; complete public inlay includes effects. */
+XR_FUNC XrXirStatus xlsp_source_workspace_parameter_hints(XlspSourceWorkspace *,const char *,size_t,
+    XrLspRange,XrJsonValue **);
 #endif

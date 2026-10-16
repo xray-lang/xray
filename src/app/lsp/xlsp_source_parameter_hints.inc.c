@@ -11,6 +11,18 @@ typedef struct ParameterHintsContext {
 } ParameterHintsContext;
 static void parameter_hint_free(XlspSourceParameterHint *hint) {
     xlsp_source_hover_free(&hint->label);xlsp_source_hover_free(&hint->target_identity);xlsp_source_hover_free(&hint->target_path);
+    xlsp_source_hover_free(&hint->target_uri);
+}
+static XrXirStatus parameter_hint_location(ParameterHintsContext *ctx,const XrXirSourceDeclaration *target,
+    XlspSourceParameterHint *hint) {
+    if(target->native_identity)return XR_XIR_OK;
+    XlspSourceLocation location={0};
+    XrXirStatus status=lsp_location(ctx->snapshot,ctx->syntax->declarations[target->id-1].name,target->name,&location);
+    if(status==XR_XIR_UNRESOLVED)return XR_XIR_OK;
+    if(status!=XR_XIR_OK)return status;
+    LspHoverBuilder uri={ctx->snapshot,NULL,0,0,XR_XIR_OK};hover_text(&uri,location.uri);
+    hint->target_uri=(XlspSourceHover){uri.text,uri.length};if(uri.status!=XR_XIR_OK)return uri.status;
+    hint->target_selection=location.range;hint->target_version=location.version;hint->has_target_location=true;return XR_XIR_OK;
 }
 XR_FUNC void xlsp_source_parameter_hints_free(XlspSourceParameterHints *hints) {
     if(!hints)return;
@@ -44,6 +56,7 @@ static XrXirStatus parameter_hint_emit(ParameterHintsContext *ctx,const XrXirSou
         .target_native_identity=provenance.target_native_identity,.target_kind=target->kind};
     provenance.target_identity=(XlspSourceHover){0};provenance.target_path=(XlspSourceHover){0};status=label.status;
     if(status!=XR_XIR_OK)goto hint_done;
+    status=parameter_hint_location(ctx,target,&hint);if(status!=XR_XIR_OK)goto hint_done;
     if(ctx->hints.count==ctx->capacity) {
         size_t capacity=ctx->capacity?ctx->capacity*2:8;
         if(capacity<ctx->capacity||capacity>SIZE_MAX/sizeof(*ctx->hints.items)){status=XR_XIR_BUDGET;goto hint_done;}

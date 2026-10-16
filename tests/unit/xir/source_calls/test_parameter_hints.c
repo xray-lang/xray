@@ -46,6 +46,8 @@ static void parameter_check(const XlspSourceParameterHints *hints,const Paramete
             CHECK(!hint->target_path.text&&!hint->target_path.length);
             CHECK(strstr(hint->target_identity.text,"xray-core-assertions-v1"));
         } else CHECK(hint->target_path.text&&hint->target_path.length);
+        if(!expected->native_identity)CHECK(hint->has_target_location&&hint->target_uri.text&&hint->target_uri.length&&hint->target_version==9);
+        else CHECK(!hint->has_target_location&&!hint->target_uri.text&&!hint->target_uri.length);
         if(i)CHECK(hints->items[i-1].position.line<hint->position.line||
             (hints->items[i-1].position.line==hint->position.line&&hints->items[i-1].position.character<hint->position.character));
     }

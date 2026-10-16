@@ -34,6 +34,8 @@ XR_FUNC XrXirStatus xlsp_source_snapshot_build(const XrXirSourceRequest *request
     const XlspSourceDocument *documents, size_t count, size_t entry,
     XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, char **failure_path);
 XR_FUNC void xlsp_source_snapshot_free(XlspSourceSnapshot *snapshot);
+/* Pure owner identity check before any query can charge a foreign ledger. */
+XR_FUNC bool xlsp_source_snapshot_uses_resources(const XlspSourceSnapshot *,const XrCompileResources *);
 /* Exact input comparison, including ordering, entry index and every version.
  * Same version with changed bytes is stale too. Failure preserves matches. */
 XR_FUNC XrXirStatus xlsp_source_snapshot_matches(const XlspSourceSnapshot *snapshot,

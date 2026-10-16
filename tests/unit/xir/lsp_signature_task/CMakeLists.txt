@@ -28,7 +28,7 @@ endforeach()
 
 source_task_target(test_lsp_native_signature_before "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_navigation.c")
 target_compile_definitions(test_lsp_native_signature_before PRIVATE XLSP_SIGNATURE_TASK=1)
-target_sources(test_lsp_native_signature_before PRIVATE "${CMAKE_CURRENT_LIST_DIR}/native_before/before_query.c")
+target_sources(test_lsp_native_signature_before PRIVATE "${CMAKE_CURRENT_LIST_DIR}/native_before/before_query_owner.c")
 
 foreach(mode normal before)
     if(mode STREQUAL "before")
