@@ -16,16 +16,21 @@
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_derivation_internal.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_emit_c.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_generated_schema.h"
 #include "xir_source_constructor_names_source.h"
 static const XrCompileResourceLimits library_caps={67108864,8388608,128000000};
+#ifndef XR_DERIVED_LIBRARY_VARIANT
+#define XR_DERIVED_LIBRARY_VARIANT 0
+#endif
 static const char read_generator_source[]=
     "export fn readGenerate(info:TypeInfo,context:Context)->Generated {\n"
     " const node=info.1[info.0]\n"
@@ -112,8 +117,9 @@ static uint32_t library_function(const XrXirModule *module,const char *name) {
         !memcmp(module->functions[f].name,name,strlen(name))){CHECK(found==UINT32_MAX);found=f;}
     CHECK(found!=UINT32_MAX);return found;
 }
-static XrXirValue library_execute(const XrXirCompileContext *context,XrXirSourceResult *source) {
+static XrXirValue library_execute(const XrXirCompileContext *context,XrXirSourceResult *source,const char *emit,const char *packet_path) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
+    if(packet_path){FILE *file=fopen(packet_path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));}
     xr_xir_compile_source_result_free(source);XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
@@ -122,6 +128,21 @@ static XrXirValue library_execute(const XrXirCompileContext *context,XrXirSource
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t entries[]={library_function(module,"names"),library_function(module,"main")};
+    if(emit) {
+        uint32_t method=library_function(module,"measure");bool calls=false;
+        for(uint32_t i=0;i<module->functions[entries[1]].instruction_count;++i) {
+            const XrXirInstruction *op=&module->functions[entries[1]].instructions[i];calls|=op->op==XR_XIR_CALL && op->immediate==method;
+        }
+        CHECK(calls);XrXirCSource output={0};XrXirStatus status=xr_xir_compile_emit_c(lowered,"fixture_derived_library",8388608,&output);
+        fprintf(stderr,"Cold library actual C11 emit%u\n",(unsigned)status);CHECK(status==XR_XIR_OK);
+        for(size_t i=0;i<output.length;++i)if(output.text[i]=='(') {
+            size_t next=i+1;while(next<output.length && isspace((unsigned char)output.text[next]))++next;
+            CHECK(next==output.length || output.text[next]!='{');
+        }
+        FILE *file=fopen(emit,"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
+        CHECK(fprintf(file,"\nconst uint32_t fixture_derived_library_selection[3]={%uu,%uu,%uu};\n",entries[0],entries[1],method)>0 && !fclose(file));
+        xr_xir_compile_c_source_free(&output);
+    }
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);XrXirValue retained={0};
     for(unsigned i=0;i<2;++i) {
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
@@ -173,7 +194,7 @@ static XrXirCheckedPacket library_fixture(const XrXirCompileContext *transport,X
     memset(g.bytes,0xa5,g.length);xr_xir_compile_checked_packet_free(&g);
     return derived;
 }
-static int library_normal(void) {
+static int library_normal(const char *emit,const char *packet_path) {
     XrXirCompileContext transport=library_context();XrXirLibraryModuleInput bindings[2];
     XrXirCheckedPacket derived=library_fixture(&transport,bindings);XrXirSourceResult source={0};int n=0;
     XrXirCompileContext receivers[4];XrXirLibraryCatalog *catalogs[4];
@@ -196,7 +217,9 @@ static int library_normal(void) {
             XrXirGeneratedText field=copied->records[1].origins.instructions[0].field_path;
             CHECK(field.length==10 && !memcmp(field.bytes,"Future.sum",10));
         }
-        XrXirValue result={0};if(i<2)result=library_execute(&receivers[i],&source);else xr_xir_compile_source_result_free(&source);
+        XrXirValue result={0};
+        if(i<2)result=library_execute(&receivers[i],&source,i==XR_DERIVED_LIBRARY_VARIANT?emit:NULL,i==XR_DERIVED_LIBRARY_VARIANT?packet_path:NULL);
+        else xr_xir_compile_source_result_free(&source);
         XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(receivers[i].resources,&spent)==XR_COMPILE_RESOURCE_OK);
         fprintf(stderr,"Derived library receiver%u complete allocated=%llu peak=%llu work=%llu\n",i,
             (unsigned long long)spent.allocated_bytes,(unsigned long long)spent.peak_bytes,(unsigned long long)spent.work);
@@ -211,4 +234,8 @@ static int library_normal(void) {
 }
 
 #include "xir_source_derived_library_resources.h"
-int main(int argc,char **argv) {return argc==1?library_normal():library_resource_main(argc,argv);}
+int main(int argc,char **argv) {
+    if(argc==1)return library_normal(NULL,NULL);
+    if(argc==4 && !strcmp(argv[1],"--emit-native"))return library_normal(argv[2],argv[3]);
+    return library_resource_main(argc,argv);
+}
