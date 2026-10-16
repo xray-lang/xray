@@ -28471,6 +28471,42 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 19
+    },
+    {
+      "id": "complete_websocket_protocol_ws_pure_protocol_direct",
+      "oracle_id": "complete_websocket_protocol_ws_pure_protocol_direct",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/websocket_explicit_utf8/root.xr",
+      "source_lf_sha256": "210744193215f46eb813d5115823e735c4c56ef9cc536ea1928de24dfd6edec1",
+      "entry": "run",
+      "stdout_utf8": "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\ntrue\n/chat?room=1\ntrue\nchat\ntrue\nhttps://app.example\nsuperchat\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\nexample.com\n443\n/chat?room=1\nfalse\n::1\n8080\n/\n/?token=a\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n101\nchat\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n1000\nOK\n1005\n0\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ntrue\n0\n3\n2\n5\n4\n4\n129\n2\n72\n105\n130\n126\n0\n126\n1\n44\n300\n90\ntrue\nfalse\n1\nfalse\nHi\n4\ntrue\nHi\nA\n3\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original94-observation WebSocket helper body with only3 explicit UTF8 decode ports;independent accept digest,HTTP negotiation,URI,mask/length/frame/control/close byte models. No socket/TLS/compression/entropy/connection-state/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr",
+        "source_lf_sha256": "84a83b5ddb62ff454e6f4c13ec5ae29c6aeb5d06372b326a68ea40ed7d040759"
+      },
+      "remaining_gates": [
+        "Whole original94-observation protocol body and all invalid-frame/header/UTF8 responsibilities through actual VM/C/native;only3 explicit text-decode migrations.",
+        "Original socket/TLS/compression/entropy/connection-state responsibilities and all compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 94
     }
   ]
 }

@@ -119987,7 +119987,23 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure."
+      "target_contract_review": "REQUIRED; exact declaration-owned interfaces, types, payloads, budgets, scopes, platform and provider gates remainOPEN. Preserve wholeoriginal positive/error responsibility without retired shims or arbitraryfailure.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/websocket_explicit_utf8/root.xr",
+        "lf_sha256": "210744193215f46eb813d5115823e735c4c56ef9cc536ea1928de24dfd6edec1",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec14 Array<u8>.toString is container formatting;explicit string.fromUtf8(shared byte view) preserves all3 original text payload observations and the complete94-observation source body."
+        ],
+        "companion_inputs": []
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_WEBSOCKET_EXPLICIT_UTF8_PORT",
+        "owner_package": "P13",
+        "qualification": "NOT_RUN",
+        "reason": "Complete source only replaces3 payload.toString calls with explicit UTF8 decode;all original normal/error/byte/frame observations,side effects and obligations retained."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr",
