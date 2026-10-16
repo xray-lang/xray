@@ -1,0 +1,8 @@
+export struct Parcel { labels:Array<string>; counter:Atomic<i64> }
+
+export fn words()->Parcel {
+    const counter = Atomic<i64>(17)
+    Coro.yield()
+    counter.fetchAdd(25)
+    return Parcel{labels:["cedar", "birch"], counter:counter}
+}

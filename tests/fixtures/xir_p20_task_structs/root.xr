@@ -1,0 +1,14 @@
+import "./worker" as library
+
+var observation = "cold"
+
+export fn run()->Task<library.Parcel> {
+    const task:Task<library.Parcel> = go library.words()
+    var first = await task
+    first.labels[0] = "changed"
+    observation = first.labels[0]
+    return task
+}
+
+export fn observed()->string { return observation }
+export fn main()->i64 { return 0 }
