@@ -193,7 +193,7 @@ static void real_once(char **argv,XrXirWindowsDriver driver) {
         const XtcXirLocalToolchainView *view=xtc_xir_local_toolchain_view(owner);
         const XrXirRuntimeSdk *sdk=xtc_xir_local_toolchain_sdk(owner);
         CHECK(view->library_count==5 && xr_xir_runtime_sdk_resources(sdk)==r);
-        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==31);
+        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==32);
         printf("compiler=%s\nlinker=%s\nworkspace=%s\nsdk=%s\n",view->compiler,view->linker,view->workspace_parent,xr_xir_runtime_sdk_root(sdk));
         CHECK(view->msvc.driver==driver&&(driver==XR_XIR_WINDOWS_CLANG_CL?view->msvc.builtin_include!=NULL:!view->msvc.builtin_include));
         printf("driver=%u\nbuiltin=%s\n",(unsigned)driver,view->msvc.builtin_include?view->msvc.builtin_include:"");
