@@ -1,0 +1,6 @@
+fn plus(value: i64) -> i64 { return value + 1 }
+fn identity<T>(value: T) -> T { return value }
+export fn referenceAnswer() -> i64 {
+    const record = identity({ apply: plus, items: [2, 4] })
+    return record.apply(7) + record.items[1]
+}

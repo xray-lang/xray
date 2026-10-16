@@ -18,6 +18,7 @@
 #include "xxir_program.h"
 #include "xxir_atomic.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
 #include "xxir_scalar.h"
@@ -711,8 +712,8 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     EMIT_STATIC(buffer, es_74e4c9ff5e4a5422," { XrXirValue value = {0}; XrXirValueStatus status;\n");
     if (op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) {
         append(buffer," status=xr_xir_tuple_new(XR_XIR_UNIT,NULL,0,xr_xir_call_admission(view),&value);\n");
-    } else if (op->op==XR_XIR_TUPLE_NEW) {
-        const XrXirTypeNode *tuple=xr_xir_tuple_signature(buffer->types,op->type);
+    } else if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_RECORD_NEW) {
+        const XrXirTypeNode *tuple=xir_product_signature(buffer->types,op->type);
         uint32_t payload=0;
         for (uint32_t i=0;i<tuple->parameter_count && emit_work(buffer,1);++i) {
             EMIT_U_SHAPE(buffer,et_285705dd6fffa699, " state->arguments[%u] = ", " state->arguments[", "] = ",i);
@@ -720,11 +721,16 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
             else emit_value(buffer,function,layout,function->operands[op->args[0]+payload++]);
             EMIT_LITERAL(buffer,";\n");
         }
-        EMIT_FORMAT(buffer, et_3543ec3480078c22, " status = xr_xir_tuple_new((XrXirType) %uu, state->arguments, %uu, xr_xir_call_admission(view), &value);\n",
+        if (op->op==XR_XIR_RECORD_NEW)
+            append(buffer," status = xr_xir_record_new((XrXirType)%uu, %s, %uu, xr_xir_call_admission(view), &value);\n",
+                (uint32_t)op->type,tuple->parameter_count ? "state->arguments" : "NULL",tuple->parameter_count);
+        else EMIT_FORMAT(buffer, et_3543ec3480078c22, " status = xr_xir_tuple_new((XrXirType) %uu, state->arguments, %uu, xr_xir_call_admission(view), &value);\n",
             (uint32_t)op->type,tuple->parameter_count);
     } else {
         EMIT_LITERAL(buffer," XrXirValue receiver = ");emit_value(buffer,function,layout,op->args[0]);
-        EMIT_FORMAT(buffer, et_f81789f811f4c23d, ";\n status = xr_xir_tuple_get(&receiver, %uu, &value);\n",(uint32_t)op->immediate);
+        if (op->op==XR_XIR_RECORD_FIELD)
+            append(buffer,";\n status = xr_xir_record_get(&receiver, %uu, xr_xir_call_admission(view), &value);\n",(uint32_t)op->immediate);
+        else EMIT_FORMAT(buffer, et_f81789f811f4c23d, ";\n status = xr_xir_tuple_get(&receiver, %uu, &value);\n",(uint32_t)op->immediate);
     }
     EMIT_STATIC(buffer, es_040bd7f1d3f9cf54," if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         " status == XR_XIR_VALUE_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"
@@ -737,10 +743,16 @@ static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
 }
 static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination) {
-    if (op->op == XR_XIR_STRUCT_SET) {
+    if (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET) {
         EMIT_LITERAL(buffer, " {\n"); emit_value_receiver(buffer, function, layout, op->args[0]);
         EMIT_LITERAL(buffer, " XrXirValue value = "); emit_value(buffer, function, layout, op->args[1]);
-        EMIT_FORMAT(buffer, et_d8a2be7aac5e1cf5, ";\n XrXirCallStatus status = xr_xir_instance_struct_write(view, &receiver, %uu, &value);\n"
+        if (op->op == XR_XIR_RECORD_SET) append(buffer,
+            ";\n XrXirCallStatus status = xr_xir_instance_record_write(view, &receiver, %uu, &value);\n"
+            " if (status != XR_XIR_CALL_READY) return xr_xir_call_fault(\n"
+            " status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+            " status == XR_XIR_CALL_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            " }\n return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n",(uint32_t)op->immediate);
+        else EMIT_FORMAT(buffer, et_d8a2be7aac5e1cf5, ";\n XrXirCallStatus status = xr_xir_instance_struct_write(view, &receiver, %uu, &value);\n"
             " if (status != XR_XIR_CALL_READY) return xr_xir_call_fault(\n"
             " status == XR_XIR_CALL_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"
             " status == XR_XIR_CALL_LIMIT \? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n"
@@ -907,10 +919,11 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     if (xr_xir_op_is_atomic(op->op)) {
         emit_atomic_step(buffer, function, op, layout, destination, index); return;
     }
-    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
+    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD ||
+        op->op==XR_XIR_RECORD_NEW || op->op==XR_XIR_RECORD_FIELD) {
         emit_tuple_step(buffer,function,op,layout,destination);return;
     }
-    if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
+    if (op->op == XR_XIR_RECORD_SET || (op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
         op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
         emit_nominal_step(buffer, function, op, layout, destination); return;
@@ -1434,8 +1447,17 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
     emit_nominal_identities(buffer, types->nominals, prefix);
     for (uint32_t i = 0; i < types->count && emit_work(buffer, 1); ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
-        emit_type_ids(buffer, prefix, i, "nominal_arguments", node->nominal.arguments, node->nominal.argument_count);
-        emit_type_ids(buffer, prefix, i, "nominal_types", node->nominal.fields, node->nominal.field_count);
+        if (node->kind == XR_XIR_TYPE_NOMINAL) {
+            emit_type_ids(buffer, prefix, i, "nominal_arguments", node->nominal.arguments, node->nominal.argument_count);
+            emit_type_ids(buffer, prefix, i, "nominal_types", node->nominal.fields, node->nominal.field_count);
+        } else if (node->kind == XR_XIR_TYPE_RECORD && node->parameter_count) {
+            append(buffer,"static const XrXirLiteral %s_record_names_%u[] = {\n",prefix,i);
+            for (uint32_t f=0;f<node->parameter_count && emit_work(buffer,1);++f) {
+                EMIT_LITERAL(buffer,"    {");emit_bytes(buffer,node->record.names[f].bytes,node->record.names[f].length);
+                append(buffer,", %uu},\n",node->record.names[f].length);
+            }
+            EMIT_LITERAL(buffer,"};\n");
+        }
         if (!node->parameter_count) continue;
         EMIT_FORMAT(buffer, et_952ab3861223aaad, "static const XrXirCallableParameter %s_type_parameters_%u[] = {", prefix, i);
         for (uint32_t p = 0; p < node->parameter_count && emit_work(buffer, 1); ++p)
@@ -1447,8 +1469,14 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
         const XrXirTypeNode *node = &types->nodes[i];
         append(buffer, "    {%uu, (XrXirType) %u, ", node->kind, (uint32_t) node->element);
         if (node->parameter_count) append(buffer, "%s_type_parameters_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
-        append(buffer, ", %uu, (XrXirType) %u, %uu, %uu, {%uu, ", node->parameter_count,
-            (uint32_t) node->result, node->flags, node->parameter_span, node->nominal.declaration);
+        append(buffer, ", %uu, (XrXirType) %u, %uu, %uu, ", node->parameter_count,
+            (uint32_t) node->result, node->flags, node->parameter_span);
+        if (node->kind == XR_XIR_TYPE_RECORD) {
+            EMIT_LITERAL(buffer,".record = {");
+            if (node->parameter_count) append(buffer,"%s_record_names_%u",prefix,i);else EMIT_LITERAL(buffer,"NULL");
+            EMIT_LITERAL(buffer,"}},\n");continue;
+        }
+        append(buffer,".nominal = {%uu, ",node->kind==XR_XIR_TYPE_NOMINAL ? node->nominal.declaration : 0);
         if (node->nominal.argument_count) append(buffer, "%s_nominal_arguments_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
         EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", node->nominal.argument_count);
         if (node->nominal.field_count) append(buffer, "%s_nominal_types_%u", prefix, i); else EMIT_LITERAL(buffer, "NULL");
@@ -1625,6 +1653,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
+    EMIT_LITERAL(buffer,"#include \"xir/xxir_record.h\"\n");
     EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"

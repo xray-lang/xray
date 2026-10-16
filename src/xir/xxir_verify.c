@@ -20,6 +20,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
 #include "xxir_operand_roles.h"
 #include "xxir_initialization.h"
 #include "xxir_constraint_proof.h"
@@ -279,9 +280,9 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_ARRAY && (!xr_xir_type_is_array(module->types, op->type) ||
             !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
-            !xr_xir_type_is_nominal(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
+            !xr_xir_type_is_nominal(module->types, op->type) && !xr_xir_type_is_record(module->types,op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
-        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_NEW) && op->type == XR_XIR_UNIT) &&
+        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_RECORD_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_NEW) && op->type == XR_XIR_UNIT) &&
             !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
@@ -321,7 +322,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
                op->op != XR_XIR_SLOT_PLACE && op->op != XR_XIR_FIELD_PLACE && op->op != XR_XIR_STRUCT_GET && op->op != XR_XIR_STRUCT_SET &&
-               op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET && op->op != XR_XIR_TUPLE_FIELD &&
+               op->op != XR_XIR_CLASS_GET && op->op != XR_XIR_CLASS_SET && op->op != XR_XIR_TUPLE_FIELD && op->op != XR_XIR_RECORD_FIELD && op->op != XR_XIR_RECORD_SET &&
                op->op != XR_XIR_ENUM_NEW && op->op != XR_XIR_ENUM_GET && op->op != XR_XIR_ERROR_IS && op->immediate) {
         return XR_XIR_BAD_STRUCTURE;
     }
@@ -659,6 +660,10 @@ static XrXirStatus place_write_authority(const XrXirFunction *function,
         if (place == XR_XIR_PLACE_FIELD) {
             XrXirType type = xr_xir_operand_type(function, op->args[0]);
             const XrXirTypeNode *node = xr_xir_type_node(context->module->types, type);
+            if (node && node->kind == XR_XIR_TYPE_RECORD) {
+                if (op->immediate < 0 || (uint64_t)op->immediate >= node->parameter_count) return XR_XIR_BAD_STRUCTURE;
+                id = op->args[0];continue;
+            }
             if (!node || (!xr_xir_type_is_struct(context->module->types, type) && !xr_xir_type_is_class(context->module->types, type)) ||
                 op->immediate < 0 || (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, node->nominal.declaration, (uint32_t)op->immediate, XR_XIR_NOMINAL_WRITE);
@@ -705,7 +710,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
         array = xr_xir_operand_type(function, receiver);
         if (!xr_xir_type_is_array(types, array)) return XR_XIR_BAD_TYPE;
     }
-    if (op->op == XR_XIR_CELL_PLACE && xr_xir_type_is_nominal(types, array))
+    if (op->op == XR_XIR_CELL_PLACE && (xr_xir_type_is_nominal(types, array) || xr_xir_type_is_record(types,array)))
         return role_operand(function, graph, context, instruction, 0, cell);
     XrXirType element = xr_xir_array_element(types, array);
     XrXirStatus status = xir_effect_evidence_is_instance(context->module) ?
@@ -848,7 +853,8 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (status != XR_XIR_OK) return status;
             continue;
         }
-        if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD) {
+        if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD ||
+            op->op == XR_XIR_RECORD_NEW || op->op == XR_XIR_RECORD_FIELD || op->op == XR_XIR_RECORD_SET) {
             XrXirStatus status=tuple_uses(graph,function,context,i);
             if (status!=XR_XIR_OK) return status;
             continue;

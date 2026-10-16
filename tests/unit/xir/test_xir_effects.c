@@ -311,11 +311,11 @@ static void effect_term_shapes(void) {
     XrXirCallableParameter parameters[] = {{(XrXirType)257, 0}, {(XrXirType)257, 1}};
     XrXirType nominal_argument = (XrXirType)258;
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
-        {XR_XIR_TYPE_CELL, (XrXirType)256, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 1, {0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {0, &nominal_argument, 1, NULL, 0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 1, {0}}};
+        {XR_XIR_TYPE_ARRAY, t, NULL, 0, XR_XIR_UNIT, 0, 1, .nominal={0}},
+        {XR_XIR_TYPE_CELL, (XrXirType)256, NULL, 0, XR_XIR_UNIT, 0, 1, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 1, .nominal={0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, .nominal={0, &nominal_argument, 1, NULL, 0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 1, .nominal={0}}};
     XrXirGeneric arguments = {0}; arguments.argument_count = 1; arguments.arguments = &argument;
     XrXirCompileContext budget = effect_context; EffectMark mark = effect_mark();
     XrXirCompileLimits structural = budget.limits;
@@ -492,8 +492,8 @@ static void effect_mixed_callable_witness(void) {
 static void effect_callable_weakening(void) {
     XrXirCallableParameter parameters[2] = {{XR_XIR_I64, 0}, {XR_XIR_I64, 0}};
     XrXirTypeNode nodes[2] = {
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[0], 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[1], 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND, 0, {0}}};
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[0], 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameters[1], 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND, 0, .nominal={0}}};
     XrXirTypes types = {nodes, 2, NULL, NULL};
     XrXirType source = (XrXirType)257;
     XrXirInstruction ops[] = {

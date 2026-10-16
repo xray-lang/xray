@@ -438,25 +438,9 @@ XrDestructurePattern *convert_object_literal_to_pattern(Parser *parser,
         AstNode *key_node = object_literal->as.object_literal.keys[i];
         AstNode *value_node = object_literal->as.object_literal.values[i];
 
-        // Check if key is string literal or variable reference
-        char *field_name = NULL;
-        if (key_node->type == AST_LITERAL_STRING) {
-            // Key is string literal
-            do {
-                field_name = ast_strdup(parser->compiler_session, key_node->as.literal.raw_value.string_val);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else if (key_node->type == AST_VARIABLE) {
-            // Key is variable reference (shorthand syntax: {x, y})
-            do {
-                field_name = ast_strdup(parser->compiler_session, key_node->as.variable.name);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else {
-            // Key is not string or variable, cannot convert
-            return NULL;
-        }
-
+        if (!key_node || key_node->type != AST_RECORD_KEY) return NULL;
+        char *field_name = ast_strdup(parser->compiler_session,key_node->as.literal.raw_value.string_val);
+        if (!xr_parser_healthy(parser)) return NULL;
         if (value_node->type == AST_VARIABLE) {
             if (xr_parser_compare_string(parser, field_name, value_node->as.variable.name) != 0)
                 all_shorthand = false;

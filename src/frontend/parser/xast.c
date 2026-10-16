@@ -183,6 +183,11 @@ AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, si
     return node;
 }
 
+XR_FUNC AstNode *xr_ast_record_key(XrCompilerSession *session, const char *name, size_t length, int line) {
+    AstNode *node = xr_ast_literal_string(session,name,length,XR_LITERAL_RAW,XR_LITERAL_INLINE,line);
+    if (node) node->type = AST_RECORD_KEY;
+    return node;
+}
 AstNode *xr_ast_fixed_bytes_literal(XrCompilerSession *session, const uint8_t *payload,
                                     size_t payload_length, bool append_nul,
                                     XrLiteralEscapeMode escape_mode,
@@ -1930,6 +1935,7 @@ const char *xr_ast_typename(AstNodeType type) {
             return "LiteralFloat";
         case AST_LITERAL_BIGINT:
             return "LiteralBigInt";
+        case AST_RECORD_KEY: return "RecordKey";
         case AST_LITERAL_STRING:
             return "LiteralString";
         case AST_FIXED_BYTES_LITERAL:
@@ -2199,6 +2205,7 @@ void xr_ast_print(AstNode *node, int indent) {
         case AST_LITERAL_FLOAT:
             printf("(%g)", node->as.literal.raw_value.float_val);  // Print raw value
             break;
+        case AST_RECORD_KEY:
         case AST_LITERAL_STRING:
             printf("(\"");
             if (node->as.literal.raw_value.string_val)

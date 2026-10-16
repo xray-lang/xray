@@ -15,8 +15,8 @@ static XrXirTypeArena *struct_value_arena(XrXirDomain *domain) {
     NominalIdentityFixture f; nominal_identity_fixture(&f);
     XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING, (XrXirType)256, XR_XIR_STRING};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 2}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 2, 2}}};
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, NULL, 0, fields, 2}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={1, NULL, 0, fields + 2, 2}}};
     XrXirTypes types = {nodes, 2, &f.table, NULL};
     XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 10000);
     XrXirTypeArena *arena = NULL;
@@ -33,7 +33,7 @@ static XrXirValue struct_deep_value(void) {
         identities[i] = (XrXirNominalIdentity) {{"module", 6}, {names[i], (uint32_t) length}, 1, 0, &field, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}};
         fields[i] = i + 1 == DEPTH ? XR_XIR_I64 : (XrXirType) (257 + i);
         nodes[i] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
-            {i, NULL, 0, &fields[i], 1}};
+            .nominal={i, NULL, 0, &fields[i], 1}};
     }
     XrXirNominalTable table = {NULL, DEPTH, identities}; XrXirTypes types = {nodes, DEPTH, &table, NULL};
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
@@ -68,8 +68,8 @@ static void struct_function_gate(void) {
     XrXirType fields[] = {(XrXirType)256, (XrXirType)257};
     XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, fields, 1}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, NULL, 0, fields + 1, 1}}};
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, NULL, 0, fields, 1}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={1, NULL, 0, fields + 1, 1}}};
     XrXirTypes types = {nodes, 3, &f.table, NULL};
     XrCompileResourceLimits limits = value_compile_limits(65536, 1048576, 10000);
     XrXirTypeArena *arena = NULL;

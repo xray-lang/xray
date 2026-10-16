@@ -376,7 +376,7 @@ static void deep_arena_release(void) {
 static void nominal_arena_allocation(void) {
     NominalIdentityFixture f; nominal_identity_fixture(&f);
     XrXirType field_types[] = {XR_XIR_I64, XR_XIR_STRING};
-    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, field_types, 2}};
+    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, NULL, 0, field_types, 2}};
     XrXirTypes types = {&node, 1, &f.table, NULL};
     calls = 0; fail_at = SIZE_MAX;
     XrXirDomain *domain = NULL;

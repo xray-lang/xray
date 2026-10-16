@@ -17,4 +17,6 @@
 #include "retired_type_packets_part2.h"
 #include "retired_type_packets_part3.h"
 #include "retired_type_packets_part4.h"
+#include "retired_type_packets_part5.h"
+#include "retired_type_packets_part6.h"
 #endif // RETIRED_TYPE_PACKETS_H

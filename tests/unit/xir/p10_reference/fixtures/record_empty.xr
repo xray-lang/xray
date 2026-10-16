@@ -1,0 +1,3 @@
+type Empty = {}
+fn echo<T>(value: T) -> T { return value }
+export fn referenceAnswer() -> i64 { const value: Empty = echo({}); return 17 }

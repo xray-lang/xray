@@ -13,6 +13,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_operand_roles.h"
 #include "xxir_types.h"
+#include "xxir_record_names_internal.h"
 #include "xxir_internal.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_implementation_verify.h"
@@ -77,14 +78,20 @@ static XrXirType spec_node(SpecContext *c, XrXirTypeNode signature) {
         const XrXirTypeNode *s = &c->types.nodes[i];
         if (s->kind != signature.kind || s->element != signature.element || s->flags != signature.flags ||
             s->parameter_count != signature.parameter_count || s->result != signature.result ||
-            s->parameter_span != signature.parameter_span ||
-            s->nominal.declaration != signature.nominal.declaration ||
-            s->nominal.argument_count != signature.nominal.argument_count) continue;
+            s->parameter_span != signature.parameter_span) continue;
+        if (signature.kind == XR_XIR_TYPE_NOMINAL &&
+            (s->nominal.declaration != signature.nominal.declaration ||
+             s->nominal.argument_count != signature.nominal.argument_count)) continue;
         if (!spec_work(c, s->parameter_count)) return XR_XIR_UNIT;
         bool same = true;
-        if (!spec_work(c, s->nominal.argument_count)) return XR_XIR_UNIT;
-        for (uint32_t a = 0; a < s->nominal.argument_count; ++a)
-            if (s->nominal.arguments[a] != signature.nominal.arguments[a]) same = false;
+        if (signature.kind == XR_XIR_TYPE_RECORD) {
+            c->diagnostic.status = xir_record_names_match(&c->remaining,s,&signature,&same);
+            if (c->diagnostic.status != XR_XIR_OK) return XR_XIR_UNIT;
+        } else {
+            if (!spec_work(c, s->nominal.argument_count)) return XR_XIR_UNIT;
+            for (uint32_t a = 0; a < s->nominal.argument_count; ++a)
+                if (s->nominal.arguments[a] != signature.nominal.arguments[a]) same = false;
+        }
         for (uint32_t p = 0; p < s->parameter_count; ++p)
             if (s->parameters[p].type != signature.parameters[p].type ||
                 s->parameters[p].mode != signature.parameters[p].mode) same = false;
@@ -101,6 +108,17 @@ static XrXirType spec_node(SpecContext *c, XrXirTypeNode signature) {
         if (!table) return XR_XIR_UNIT;
         if (c->types.count) { if (!spec_work(c, c->types.count * sizeof(*table))) { return XR_XIR_UNIT; } memcpy(table, c->types.nodes, c->types.count * sizeof(*table)); }
         c->types.nodes = table; c->node_capacity = capacity;
+    }
+    if (signature.kind == XR_XIR_TYPE_RECORD) {
+        XrXirLiteral *names = signature.parameter_count ? spec_alloc(c,signature.parameter_count,sizeof(*names)) : NULL;
+        if (signature.parameter_count && !names) return XR_XIR_UNIT;
+        for (uint32_t f = 0; f < signature.parameter_count; ++f) {
+            XrXirLiteral name = signature.record.names[f];
+            char *bytes = spec_alloc(c,(uint64_t)name.length+1,1);
+            if (!bytes || !spec_work(c,(uint64_t)name.length+1+sizeof(*names))) return XR_XIR_UNIT;
+            memcpy(bytes,name.bytes,name.length);bytes[name.length]=0;names[f]=(XrXirLiteral){bytes,name.length};
+        }
+        signature.record.names = names;
     }
     ((XrXirTypeNode *) c->types.nodes)[c->types.count] = signature;
     return (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + c->types.count++);
@@ -125,7 +143,7 @@ static bool spec_type_push(SpecContext *c, uint32_t index, uint32_t *count) {
     SpecTypeFrame *frame = &c->type_stack[(*count)++];
     *frame = (SpecTypeFrame) {index, 0, c->source->types->nodes[index]};
     frame->node.parameter_span = 0;
-    if (frame->node.kind == XR_XIR_TYPE_CALLABLE || frame->node.kind == XR_XIR_TYPE_TUPLE) {
+    if (frame->node.kind == XR_XIR_TYPE_CALLABLE || (frame->node.kind == XR_XIR_TYPE_TUPLE || frame->node.kind == XR_XIR_TYPE_RECORD)) {
         uint32_t n = frame->node.parameter_count;
         XrXirCallableParameter *parameters = spec_alloc(c, n, sizeof(*parameters));
         if (n && !parameters) return false;
@@ -154,7 +172,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         const XrXirTypeNode *source = &c->source->types->nodes[frame->index];
         uint32_t components = source->kind == XR_XIR_TYPE_NOMINAL ? source->nominal.argument_count :
             source->kind == XR_XIR_TYPE_CALLABLE ? source->parameter_count + 1 :
-            source->kind == XR_XIR_TYPE_TUPLE ? source->parameter_count :
+            (source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_RECORD) ? source->parameter_count :
             source->kind == XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next == components) {
             *spec_type_cache(c, instance, frame->index) = spec_node(c, frame->node);
@@ -163,7 +181,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         XrXirType child = source->element;
         if (source->kind == XR_XIR_TYPE_MAP && frame->next) child = source->result;
         if (source->kind == XR_XIR_TYPE_NOMINAL) child = source->nominal.arguments[frame->next];
-        if (source->kind == XR_XIR_TYPE_TUPLE) child = source->parameters[frame->next].type;
+        if ((source->kind == XR_XIR_TYPE_TUPLE || source->kind == XR_XIR_TYPE_RECORD)) child = source->parameters[frame->next].type;
         if (source->kind == XR_XIR_TYPE_CALLABLE)
             child = frame->next < source->parameter_count ? source->parameters[frame->next].type : source->result;
         if (!spec_type_ready(c, instance, child, &result)) {
@@ -176,7 +194,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         if (source->kind == XR_XIR_TYPE_NOMINAL)
             ((XrXirType *) frame->node.nominal.arguments)[frame->next] = result;
         else if (source->kind == XR_XIR_TYPE_MAP && frame->next) frame->node.result = result;
-        else if (source->kind != XR_XIR_TYPE_CALLABLE && source->kind != XR_XIR_TYPE_TUPLE) frame->node.element = result;
+        else if (source->kind != XR_XIR_TYPE_CALLABLE && (source->kind != XR_XIR_TYPE_TUPLE && source->kind != XR_XIR_TYPE_RECORD)) frame->node.element = result;
         else if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next == source->parameter_count) frame->node.result = result;
         else {
             XrXirCallableParameter *parameters = (XrXirCallableParameter *) frame->node.parameters;

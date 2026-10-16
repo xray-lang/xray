@@ -29,7 +29,7 @@ static XrXirArtifact *nominal_chain_fixture(const XrXirCompileContext *context, 
         declarations[i] = (XrXirNominalDeclaration) {{"alpha", 5}, {names[i], (uint32_t) length},
             0, NULL, 0, fields[i], field_count, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}};
         nodes[i] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0,
-            {i, NULL, 0, NULL, 0}};
+            .nominal={i, NULL, 0, NULL, 0}};
     }
     XrXirNominalTable table = {declarations, depth, NULL};
     XrXirTypes types = {nodes, depth, &table, NULL}; built.types = &types;

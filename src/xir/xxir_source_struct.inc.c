@@ -259,6 +259,8 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
 static bool source_struct_field(SourceContext *ctx, AstNode *node, XrXirType type,
     const char *name, unsigned write, uint32_t *index, XrXirType *field_type) {
     const XrXirTypeNode *found = xr_xir_type_node(&ctx->types, type);
+    if (found && found->kind == XR_XIR_TYPE_RECORD)
+        return source_record_field(ctx,node,type,name,index,field_type);
     if (xr_xir_type_is_nullable(&ctx->types, type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "receiver may be null: check it for null, unwrap it with !, or use ?.");
     if (!found || (!xr_xir_type_is_struct(&ctx->types, type) && !xr_xir_type_is_class(&ctx->types, type)))
@@ -286,13 +288,19 @@ static bool source_struct_spread(SourceContext *ctx, AstNode *node, XrXirType ta
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"struct spread entry is malformed");
     SourceValue source;
     if (!source_plan_expression(ctx,node->as.spread_expr.expr,(SourceExpectedType){0},&source)) return false;
-    if (!xr_xir_type_is_struct(&ctx->types,source.type))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"struct spread requires a nominal struct value");
-    uint32_t declaration = xr_xir_type_node(&ctx->types,source.type)->nominal.declaration;
-    const XrXirNominalDeclaration *decl = &ctx->nominals.declarations[declaration];
-    for (uint32_t f = 0; f < decl->field_count; ++f) {
-        if (!source_work(ctx,node)) return false;
-        XrXirLiteral field = decl->fields[f].name;
+    bool record=xr_xir_type_is_record(&ctx->types,source.type);
+    if (!record && !xr_xir_type_is_struct(&ctx->types,source.type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"struct spread requires a nominal struct value or an exact record");
+    XrXirTypeDescription description={0};
+    XrXirStatus status=xr_xir_compile_type_description(&ctx->compile,&ctx->types,source.type,&description);
+    if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"struct spread description failed");
+    XrXirTypeNode descriptor=*description.node;description.node=&descriptor;
+    if (!record) description.instance=&descriptor.nominal;
+    for (uint32_t f=0;f<description.field_count;++f) {
+        XrXirFieldDescription member={0};
+        status=xr_xir_compile_description_field(&ctx->compile,&description,f,&member);
+        if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"struct spread field description failed");
+        XrXirLiteral field=member.name;
         char *name = source_alloc(ctx,(size_t)field.length + 1,1);
         if (!name || !source_copy_bytes(ctx,node,name,field.bytes,field.length)) return false;
         uint32_t source_index, target_index; XrXirType source_type, target_type;
@@ -302,7 +310,7 @@ static bool source_struct_spread(SourceContext *ctx, AstNode *node, XrXirType ta
         SourceConversionRecipe conversion;
         if (!source_conversion_plan(ctx,node,source_type,
                 (SourceExpectedType){true,target_type,false,false},&conversion)) return false;
-        if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_STRUCT_GET,source_type,
+        if (!source_recipe_record(ctx,(XrXirInstruction){record ? XR_XIR_RECORD_FIELD : XR_XIR_STRUCT_GET,source_type,
                 {source.id,0},{0},source_index,{0}},&fields[target_index]) ||
             !source_conversion_emit(ctx,&conversion,&fields[target_index])) return false;
         provided[target_index] |= 1;
@@ -381,7 +389,8 @@ static bool source_struct_literal(SourceContext *ctx, AstNode *node, SourceValue
 static bool source_struct_get_value(SourceContext *ctx, AstNode *node, SourceValue receiver, SourceValue *value) {
     uint32_t index; XrXirType type;
     if (!source_struct_field(ctx, node, receiver.type, node->as.member_access.name, false, &index, &type)) return false;
-    return source_recipe_record(ctx, (XrXirInstruction) {xr_xir_type_is_class(&ctx->types,receiver.type) ? XR_XIR_CLASS_GET : XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
+    return source_recipe_record(ctx, (XrXirInstruction) {xr_xir_type_is_record(&ctx->types,receiver.type) ? XR_XIR_RECORD_FIELD :
+        xr_xir_type_is_class(&ctx->types,receiver.type) ? XR_XIR_CLASS_GET : XR_XIR_STRUCT_GET, type, {receiver.id, 0}, {0}, index, {0}}, value);
 }
 
 /* This is a target carrier boundary after collection, not a generic premise.

@@ -65,7 +65,7 @@ static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, ui
 static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal) {
     if (!ordinal && (op == XR_XIR_ARRAY_GET || op == XR_XIR_ARRAY_LEN || op == XR_XIR_ARRAY_CAPACITY || op == XR_XIR_PLACE_READ ||
         op == XR_XIR_FIELD_PLACE || op == XR_XIR_INDEX_PLACE)) return XR_XIR_OPERAND_READ;
-    if (!ordinal && (op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_STRUCT_SET ||
+    if (!ordinal && (op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_STRUCT_SET || op == XR_XIR_RECORD_SET ||
         op == XR_XIR_PLACE_WRITE || op == XR_XIR_CELL_PROJECT)) return XR_XIR_OPERAND_WRITE;
     return XR_XIR_OPERAND_VALUE;
 }
@@ -95,7 +95,7 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT ||
         op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
         op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF ||
-        op == XR_XIR_TUPLE_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK || (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
+        op == XR_XIR_TUPLE_NEW || op == XR_XIR_RECORD_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK || (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
 }
 static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_INVOKE_DEFAULT;
@@ -103,7 +103,7 @@ static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
 static inline bool xr_xir_op_uses_value_path(const XrXirFunction *function, const XrXirInstruction *op) {
     if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE || op->op == XR_XIR_CELL_PROJECT) return true;
     if (op->op != XR_XIR_ARRAY_GET && op->op != XR_XIR_ARRAY_SET && op->op != XR_XIR_ARRAY_PUSH &&
-        op->op != XR_XIR_ARRAY_LEN && op->op != XR_XIR_ARRAY_CAPACITY && op->op != XR_XIR_STRUCT_SET) return false;
+        op->op != XR_XIR_ARRAY_LEN && op->op != XR_XIR_ARRAY_CAPACITY && op->op != XR_XIR_STRUCT_SET && op->op != XR_XIR_RECORD_SET) return false;
     uint32_t id = xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0]] : op->args[0];
     XrXirPlaceKind kind = xr_xir_place_kind(function, id);
     return kind == XR_XIR_PLACE_FIELD || kind == XR_XIR_PLACE_INDEX;

@@ -1,0 +1,16 @@
+type Row = { items: Array<i64>, name: string, empty: () }
+fn identity<T>(value: T) -> T { return value }
+fn prepare() -> Row {
+    var value: Row = { name: "old", empty: (), items: [2, 4] }
+    value.items[1] = 17
+    value.name = "new"
+    value.empty = ()
+    return value
+}
+export fn referenceAnswer() -> i64 {
+    const empty = comptime identity<{}>({})
+    identity(empty)
+    const frozen = comptime prepare()
+    const value = identity(frozen)
+    return value.items[1] * 100 + len(value.name) * 10 + len(value.items)
+}

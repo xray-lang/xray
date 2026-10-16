@@ -41,6 +41,12 @@ static bool source_root_lock(SourceContext *ctx, uint32_t f) {
             if (!source_work(ctx,NULL)) return false;
             if (flow[i].kind != 3) continue;
             const XrXirInstruction *op = &body->instructions[i];
+            /* A private scalar copy receives the frozen field bound explicitly.
+             * Its origin remains independently refinable by the authentic owner. */
+            if ((op->op == XR_XIR_COPY || op->op == XR_XIR_FUNCTION_WEAKEN) &&
+                xr_xir_type_is_callable(&ctx->types,op->type)) {
+                flow[i].kind = 1; changed = true; continue;
+            }
             bool table = xr_xir_op_uses_operand_table(op->op);
             uint32_t count = table ? op->args[1] : source_recipe_roles[op->op].values;
             if (op->op == XR_XIR_RETURN) count = body->result != XR_XIR_UNIT;
@@ -49,7 +55,9 @@ static bool source_root_lock(SourceContext *ctx, uint32_t f) {
                 if (op->op == XR_XIR_PHI && !(a % 2)) continue;
                 uint32_t input = table ? body->operands[op->args[0] + a] : op->args[a];
                 if (input >= body->parameter_count && input - body->parameter_count < body->instruction_count &&
-                    flow[input - body->parameter_count].kind != 3) {
+                    flow[input - body->parameter_count].kind != 3 &&
+                    !(flow[input - body->parameter_count].kind == 1 &&
+                      xr_xir_type_is_callable(&ctx->types,body->instructions[input - body->parameter_count].type))) {
                     flow[input - body->parameter_count].kind = 3; changed = true;
                 }
             }
@@ -91,7 +99,7 @@ static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
 static bool source_root_tuple(SourceContext *ctx, uint32_t f, uint32_t i, bool *changed) {
     const XrXirFunction *body = &ctx->functions[f];
     const XrXirInstruction *op = &body->instructions[i];
-    XrXirTypeNode tuple = *xr_xir_tuple_signature(&ctx->types,op->type);
+    XrXirTypeNode tuple = *xir_product_signature(&ctx->types,op->type);
     XrXirCallableParameter *fields = tuple.parameter_count ? source_alloc(ctx,tuple.parameter_count,sizeof(*fields)) : NULL;
     if (tuple.parameter_count && !fields) return false;
     uint32_t a = 0; bool differs = false;
@@ -145,9 +153,9 @@ static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
         type = source_root_operand(ctx,f,op->args[0]); break;
     case XR_XIR_ARRAY_GET:
         type = xr_xir_array_element(&ctx->types,source_root_operand(ctx,f,op->args[0])); break;
-    case XR_XIR_TUPLE_NEW: return source_root_tuple(ctx,f,i,changed);
-    case XR_XIR_TUPLE_FIELD: {
-        const XrXirTypeNode *tuple = xr_xir_tuple_signature(&ctx->types,source_root_operand(ctx,f,op->args[0]));
+    case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: return source_root_tuple(ctx,f,i,changed);
+    case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: {
+        const XrXirTypeNode *tuple = xir_product_signature(&ctx->types,source_root_operand(ctx,f,op->args[0]));
         if (!tuple || (uint64_t)op->immediate >= tuple->parameter_count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"tuple flow lost its field");
         type = tuple->parameters[op->immediate].type; break;
     }
@@ -197,7 +205,7 @@ static bool source_root_value_bottom(SourceContext *ctx, uint32_t f, uint32_t i)
     case XR_XIR_FUNCTION_REF: case XR_XIR_COPY: case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_PHI: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_PLACE:
     case XR_XIR_NULLABLE_SOME: case XR_XIR_NULLABLE_UNWRAP:
-    case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_NEW: case XR_XIR_RECORD_FIELD: case XR_XIR_RECORD_SET: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET:
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_PLACE: case XR_XIR_PLACE_READ: case XR_XIR_ARRAY_RESERVE:
         return source_root_bottom_type(ctx,flow->declared,0,&op->type);
     default: return true;

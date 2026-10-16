@@ -78,6 +78,26 @@ int main(void) {
     rejected(&context,retired_20_nullable_none75_golden,sizeof(retired_20_nullable_none75_golden));
     rejected(&context,retired_20_nullable_some75_golden,sizeof(retired_20_nullable_some75_golden));
     rejected(&context,retired_21_nested_nullable75_golden,sizeof(retired_21_nested_nullable75_golden));
+    rejected(&context,retired_22_sizing79_golden,sizeof(retired_22_sizing79_golden));
+    rejected(&context,retired_22_sizing79_embedded_golden,sizeof(retired_22_sizing79_embedded_golden));
+    rejected(&context,retired_22_sizing79_empty_golden,sizeof(retired_22_sizing79_empty_golden));
+    rejected(&context,retired_23_root_construction72_checked,sizeof(retired_23_root_construction72_checked));
+    rejected(&context,retired_23_root_construction72_instance,sizeof(retired_23_root_construction72_instance));
+    rejected(&context,retired_24_unit79_packet,sizeof(retired_24_unit79_packet));
+    rejected(&context,retired_25_assert_panics79_golden,sizeof(retired_25_assert_panics79_golden));
+    rejected(&context,retired_26_checked_range79_golden,sizeof(retired_26_checked_range79_golden));
+    rejected(&context,retired_27_checked_scalar79_golden,sizeof(retired_27_checked_scalar79_golden));
+    rejected(&context,retired_28_error_marker79_golden,sizeof(retired_28_error_marker79_golden));
+    rejected(&context,retired_29_generic_method79_golden,sizeof(retired_29_generic_method79_golden));
+    rejected(&context,retired_29_generic_method79_invalid_flags0,sizeof(retired_29_generic_method79_invalid_flags0));
+    rejected(&context,retired_29_generic_method79_invalid_flags1,sizeof(retired_29_generic_method79_invalid_flags1));
+    rejected(&context,retired_30_rune79_golden,sizeof(retired_30_rune79_golden));
+    rejected(&context,retired_31_hash79_golden,sizeof(retired_31_hash79_golden));
+    rejected(&context,retired_32_nullable_none79_golden,sizeof(retired_32_nullable_none79_golden));
+    rejected(&context,retired_32_nullable_some79_golden,sizeof(retired_32_nullable_some79_golden));
+    rejected(&context,retired_33_nested_nullable79_golden,sizeof(retired_33_nested_nullable79_golden));
+    rejected(&context,retired_34_constant_wire,sizeof(retired_34_constant_wire));
+    rejected(&context,retired_35_rest_wire,sizeof(retired_35_rest_wire));
     xr_compile_resources_release(context.resources);
-    puts("Complete retired declaration/hash packets rejected with fixed header work and no allocation: 45");return 0;
+    puts("Complete retired declaration/hash packets rejected with fixed header work and no allocation: 65");return 0;
 }

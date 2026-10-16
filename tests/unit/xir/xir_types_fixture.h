@@ -19,9 +19,9 @@ static XrXirArtifact *callable_fixture(const XrXirCompileContext *context) {
     XrXirType fn1 = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirType generic = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter parameters[] = {{XR_XIR_I64, 0}, {fn0, 0}};
-    XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, fn0, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}}};
+    XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters, 1, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, parameters + 1, 1, fn0, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}}};
     XrXirTypes types = {signatures, 3, NULL, NULL};
     XrXirInstruction caller_ops[] = {{XR_XIR_CALL, fn1, {0, 1}, {0}, 1, {0, 1}},
         {XR_XIR_RETURN, XR_XIR_UNIT, {1, 0}, {0}, 0, {0}}};
@@ -48,7 +48,7 @@ static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
     XrXirConstraint constraint = {0};
     XrXirGeneric generics[] = {{0}, {NULL,0,&concrete,1, NULL}, {&constraint,1,NULL,0, NULL}};
     XrXirCallableParameter input = {XR_XIR_I64, 0};
-    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input, 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}};
+    XrXirTypeNode signature = {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &input, 1, XR_XIR_I64, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}};
     XrXirTypes types = {&signature, 1, NULL, NULL};
     XrXirInstruction init[] = {{XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}}};
     XrXirInstruction root[] = {{XR_XIR_FUNCTION_REF, (XrXirType) 256, {0}, {0}, 2, {0,1}},
@@ -75,8 +75,8 @@ static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
 static XrXirArtifact *generic_callable_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter components[] = {{t,0}, {XR_XIR_STRING,0}};
-    XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components,1,t, XR_XIR_CALLABLE_ROOT_UNRESOLVED,1, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components+1,1,XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}}};
+    XrXirTypeNode signatures[] = {{XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components,1,t, XR_XIR_CALLABLE_ROOT_UNRESOLVED,1, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,components+1,1,XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}}};
     XrXirTypes table = {signatures,2, NULL, NULL};
     XrXirType parameters[] = {(XrXirType)257,XR_XIR_STRING,(XrXirType)256,t}, argument = XR_XIR_STRING;
     XrXirConstraint constraint = {0};
@@ -104,18 +104,18 @@ static XrXirArtifact *constructed_fixture(const XrXirCompileContext *context) {
     XrXirType t = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter inputs[] = {{(XrXirType)257,0}, {(XrXirType)261,0}, {(XrXirType)265,0}};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_ARRAY,t,NULL,0,XR_XIR_UNIT,0,1, {0}},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,1, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,inputs,1,(XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED,1, {0}},
-        {XR_XIR_TYPE_CELL,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,1, {0}},
-        {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)260,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,inputs+1,1,(XrXirType)260, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
-        {XR_XIR_TYPE_CELL,(XrXirType)261,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)264,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,inputs+2,1,(XrXirType)264, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
-        {XR_XIR_TYPE_CELL,(XrXirType)265,NULL,0,XR_XIR_UNIT,0,0, {0}}
+        {XR_XIR_TYPE_ARRAY,t,NULL,0,XR_XIR_UNIT,0,1, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,1, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,inputs,1,(XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED,1, .nominal={0}},
+        {XR_XIR_TYPE_CELL,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,1, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)260,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,inputs+1,1,(XrXirType)260, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}},
+        {XR_XIR_TYPE_CELL,(XrXirType)261,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)264,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,inputs+2,1,(XrXirType)264, XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}},
+        {XR_XIR_TYPE_CELL,(XrXirType)265,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}}
     };
     XrXirTypes types = {nodes,12, NULL, NULL};
     XrXirType parameters[] = {(XrXirType)261,(XrXirType)262,(XrXirType)265,(XrXirType)266,

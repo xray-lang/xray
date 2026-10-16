@@ -50,14 +50,20 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
     ValuePathWrite *write, XrXirValueAdmission *admission) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     bool array = xr_xir_type_is_array(types, slot->type);
-    if (!array && slot->inline_storage) return XR_XIR_VALUE_OK;
+    if (!array && slot->inline_storage && inline_nominal_type(types,slot->type)) return XR_XIR_VALUE_OK;
     XrXirValue current = path_handle(*slot);
     XirObject *object = object_pointer(&current);
     if (atomic_load_explicit(&object->references, memory_order_acquire) == 1 &&
         (!write->domain_sensitive || object->domain == admission->domain)) return XR_XIR_VALUE_OK;
     XrXirValue copy = {0}; XrXirValueStatus status;
     if (array) status = path_array_clone(&current, admission, &copy);
-    else {
+    else if (xr_xir_type_is_record(types,slot->type)) {
+        const XirTuple *record = (const XirTuple *)object;
+        if (record->count > admission->work) return XR_XIR_VALUE_LIMIT;
+        admission->work -= record->count;
+        ProductCopyInput input = {record->fields,record->count,UINT32_MAX,NULL};
+        status = product_copy_fields((XrXirType)current.type,&input,admission,&copy);
+    } else {
         XirNominalValue *record = (XirNominalValue *)object;
         if (record->count > admission->work) return XR_XIR_VALUE_LIMIT;
         admission->work -= record->count;
@@ -101,6 +107,17 @@ static XrXirValueStatus path_storage_step(ValuePathSlot *slot,
         *slot = (ValuePathSlot){node->nominal.fields[field],
             (unsigned char *)((XirClassObject *)object + 1) + layout->field_offsets[field], true,admission->arena};
         return XR_XIR_VALUE_OK;
+    }
+    if (step->kind == XR_XIR_PATH_FIELD && node && node->kind == XR_XIR_TYPE_RECORD) {
+        if (step->selector < 0 || (uint64_t)step->selector >= node->parameter_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        uint32_t field = (uint32_t)step->selector;
+        if (write) {
+            XrXirValueStatus status = path_unique(slot,write,admission);
+            if (status != XR_XIR_VALUE_OK) return status;
+        }
+        XrXirValue value = path_handle(*slot);XirTuple *record = (XirTuple *)object_pointer(&value);
+        slot->bytes = (unsigned char *)&record->fields[field].payload;
+        slot->type = node->parameters[field].type;slot->inline_storage = false;return XR_XIR_VALUE_OK;
     }
     if (step->kind == XR_XIR_PATH_FIELD) {
         if (!node || !xr_xir_type_is_struct(types, slot->type) || step->selector < 0 ||

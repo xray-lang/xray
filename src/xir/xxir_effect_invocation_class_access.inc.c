@@ -18,7 +18,7 @@ static bool effect_class_access_opcode(XrXirOp op,XirEffectClassAccessKind kind)
     case XIR_EFFECT_ACCESS_PROJECT: return op==XR_XIR_CELL_PROJECT;
     case XIR_EFFECT_ACCESS_PATH_READ: return op==XR_XIR_PLACE_READ || op==XR_XIR_ARRAY_GET;
     case XIR_EFFECT_ACCESS_PATH_WRITE:
-        return op==XR_XIR_PLACE_WRITE || op==XR_XIR_ARRAY_SET || op==XR_XIR_STRUCT_SET;
+        return op==XR_XIR_PLACE_WRITE || op==XR_XIR_ARRAY_SET || (op==XR_XIR_STRUCT_SET || op==XR_XIR_RECORD_SET);
     case XIR_EFFECT_ACCESS_PUSH: return op==XR_XIR_ARRAY_PUSH;
     case XIR_EFFECT_ACCESS_LENGTH: return op==XR_XIR_ARRAY_LEN;
     case XIR_EFFECT_ACCESS_CAPACITY: return op==XR_XIR_ARRAY_CAPACITY;

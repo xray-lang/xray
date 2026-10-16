@@ -73,7 +73,7 @@ static XrXirStatus storage_layouts_into(const XrXirCompileContext *compile_conte
     for (uint32_t i = 0; i < count; ++i) {
         const XrXirTypeNode *node = &types->nodes[i];
         layouts[i].depth = 0; layouts[i].owned_depth = 0; layouts[i].tag_bytes = 0; layouts[i].body = (XrXirLayout){0,0};
-        if (node->parameter_span || layouts[i].field_count != node->nominal.field_count ||
+        if (node->parameter_span || layouts[i].field_count != (node->kind == XR_XIR_TYPE_NOMINAL ? node->nominal.field_count : 0) ||
             (layouts[i].field_count != 0) != (layouts[i].field_offsets != NULL)) return XR_XIR_BAD_LAYOUT;
         if (node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE) nominal = true;
         else {

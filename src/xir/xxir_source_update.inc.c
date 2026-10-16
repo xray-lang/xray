@@ -13,7 +13,7 @@ typedef struct SourceMemberPlace {
     SourceValue place;
     XrXirType type;
     uint32_t field;
-    bool constructor, identity;
+    bool constructor, identity, unit;
 } SourceMemberPlace;
 static bool source_member_place(SourceContext *ctx, AstNode *node, AstNode *object,
     const char *name, unsigned access, SourceMemberPlace *member) {
@@ -35,14 +35,17 @@ static bool source_member_place(SourceContext *ctx, AstNode *node, AstNode *obje
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "PanicInfo field writes require class support");
     if (!source_value_place(ctx,object,&member->place) ||
         !source_struct_field(ctx,node,member->place.type,name,access,&member->field,&member->type)) return false;
+    if (member->type==XR_XIR_UNIT) {member->unit=true;return true;}
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,member->type,{member->place.id},{0},member->field,{0}},&member->place);
 }
 static bool source_member_read(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue *value) {
+    if (member->unit) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,XR_XIR_UNIT,{0},{0},0,{0}},value);
     if (member->constructor) return source_constructor_read(ctx, node, member->field, value);
     if (member->identity) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_GET,member->type,{member->place.id},{0},member->field,{0}},value);
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PLACE_READ,member->type,{member->place.id},{0},0,{0}},value);
 }
 static bool source_member_store(SourceContext *ctx, AstNode *node, const SourceMemberPlace *member, SourceValue value) {
+    if (member->unit) return true;
     if (member->constructor) return source_constructor_store(ctx, node, member->field, value);
     if (member->identity) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CLASS_SET,XR_XIR_UNIT,{member->place.id,value.id},{0},member->field,{0}},NULL);
     return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {member->place.id, value.id}, {0}, 0, {0}}, NULL);

@@ -102,9 +102,13 @@ PUBLIC_STRUCTURES = [
      ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
  (4700, 'XrXirFunctionIdentity', [('module','u32'),('exported','u32'),('nominal_owner','u32'),('member_access','u32'),('cleanup_owner','u32'),('promises','u32'),('method_kind','u32'),('test_role','u32'),('test_timeout_seconds','u32'),('variadic','u32')]),
  (4600, 'XrXirSlot', [('module','u32'),('type','enum'),('mutable','u32'),('exported','u32'),('name','u32')]),
+ (4800, 'XrXirRecordType', [('names','ptr')]),
 ]
 
+# The tagged payload retains the nominal member's natural size/alignment.
+# Record holds one pointer and shares the same final payload offset.
 PUBLIC_SCALARS = [
+  (4803,'XrXirTypeNode.record.offset',32,'offsetof(XrXirTypeNode,record)'),
  (45,'AtomicOperation.size',4,'sizeof(XrXirAtomicOperation)'),
  (46,'AtomicOperation.align',4,'_Alignof(XrXirAtomicOperation)'),
  (47,'RunStatus.size',4,'sizeof(XrXirRunStatus)'),
@@ -166,7 +170,10 @@ def prepare(output: Path) -> None:
     # row order is part of the independently specified canonical SDK framing.
     declaration_rows=[row for row in rows if 4700<=row['id']<4712]
     assert len(declaration_rows)==12
-    rows=[row for row in rows if not 4700<=row['id']<4712]+declaration_rows
+    record_rows=[row for row in rows if 4800<=row['id']<4804]
+    assert len(record_rows)==4
+    record_rows.sort(key=lambda row:row['id'])
+    rows=[row for row in rows if not (4700<=row['id']<4712 or 4800<=row['id']<4804)]+declaration_rows+record_rows
     assert len({row['id'] for row in rows}) == len(rows), 'ABI field IDs must be unique'
     document = {'recipe':'xray:xir-runtime-abi-measurements:v1','rows':rows,
                 'basis':'Independent natural Windows x86_64 C layout: pointer/size_t/u64 align8, '

@@ -13,7 +13,7 @@
 static XrXirCtfeStatus ctfe_index_path_build(ScalarRun *run,const XrXirInstruction *op,
     CtfeOwnedState *state,XrXirValuePath *path,uint32_t *root) {
     const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&run->function->operands[op->args[0]]:op->args;
-    bool final=op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_STRUCT_SET;
+    bool final=op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_SET || (op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET);
     uint32_t id=ids[0],count=final?1:0;
     while (xr_xir_place_kind(run->function,id)==XR_XIR_PLACE_INDEX || xr_xir_place_kind(run->function,id)==XR_XIR_PLACE_FIELD) {
         if (!scalar_compile_work(run,4)) return XR_XIR_CTFE_BUDGET;
@@ -29,8 +29,8 @@ static XrXirCtfeStatus ctfe_index_path_build(ScalarRun *run,const XrXirInstructi
         xr_compile_resources_calloc(run->compile_resources,1,(size_t)bytes,&memory)));
     if (status!=XR_XIR_CTFE_OK) return status;
     XrXirValuePathStep *steps=memory;uint32_t next=count;*root=id;id=ids[0];
-    if (final) steps[--next]=(XrXirValuePathStep){op->op==XR_XIR_STRUCT_SET?XR_XIR_PATH_FIELD:XR_XIR_PATH_INDEX,
-        xr_xir_operand_type(run->function,id),op->op==XR_XIR_STRUCT_SET?op->immediate:ctfe_array_operand(run,ids[1]).payload};
+    if (final) steps[--next]=(XrXirValuePathStep){(op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET)?XR_XIR_PATH_FIELD:XR_XIR_PATH_INDEX,
+        xr_xir_operand_type(run->function,id),(op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET)?op->immediate:ctfe_array_operand(run,ids[1]).payload};
     while (next) {
         if (!scalar_compile_work(run,sizeof(*steps)+4)) { xr_compile_resources_free(memory);return XR_XIR_CTFE_BUDGET; }
         const XrXirInstruction *projection=&run->function->instructions[id-run->function->parameter_count];
@@ -56,7 +56,7 @@ static XrXirCtfeStatus ctfe_index_path_preflight(ScalarRun *run,CtfeOwnedState *
         bool field=path->steps[i].kind==XR_XIR_PATH_FIELD;
         if (mutate && field) {
             const XrXirTypeNode *node=xr_xir_type_node(run->module->types,(XrXirType)current.type);
-            if (!node || !scalar_compile_work(run,(uint64_t)node->nominal.field_count*sizeof(XrXirValue))) { status=XR_XIR_CTFE_BUDGET;break; }
+            if (!node || !scalar_compile_work(run,(uint64_t)(node->kind==XR_XIR_TYPE_RECORD?node->parameter_count:node->nominal.field_count)*sizeof(XrXirValue))) { status=XR_XIR_CTFE_BUDGET;break; }
         } else if (mutate) {
             int64_t capacity=0;status=ctfe_value_status(xr_xir_array_capacity(&current,&admission,&capacity));
             if (status==XR_XIR_CTFE_OK) status=ctfe_array_bytes_work(run,state,(XrXirType)current.type,(uint64_t)capacity);
@@ -66,7 +66,8 @@ static XrXirCtfeStatus ctfe_index_path_preflight(ScalarRun *run,CtfeOwnedState *
         if (field && xr_xir_type_is_class(run->module->types,(XrXirType)current.type))
             status=ctfe_class_member_read(run,state,&current,(uint32_t)path->steps[i].selector,&child);
         else {
-            XrXirValueStatus received=field?xr_xir_struct_get(&current,(uint32_t)path->steps[i].selector,&admission,&child):
+            XrXirValueStatus received=field && xr_xir_type_is_record(run->module->types,(XrXirType)current.type)?
+                xr_xir_record_get(&current,(uint32_t)path->steps[i].selector,&admission,&child):field?xr_xir_struct_get(&current,(uint32_t)path->steps[i].selector,&admission,&child):
                 xr_xir_array_get(&current,path->steps[i].selector,&admission,&child,&fault);
             status=received==XR_XIR_VALUE_BOUNDS?ctfe_bounds_fault(run,state,fault):ctfe_value_status(received);
         }
@@ -85,7 +86,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     const XrXirInstruction *root_op=&run->function->instructions[root_id-run->function->parameter_count];
     XrXirValue cell=ctfe_array_operand(run,root_op->args[0]),root={0},target={0},result={0};
     XrXirValuePlace place={0};XrXirFaultDetail fault={0};XrXirCellLoan object_loan={0};bool held=false;
-    bool mutate=op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_STRUCT_SET;
+    bool mutate=op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_PLACE_WRITE || (op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET);
     if (!scalar_compile_work(run,state->value_header_work)) { status=XR_XIR_CTFE_BUDGET;goto done; }
     bool object=root_op->op==XR_XIR_OBJECT_PLACE,projected=!object && xr_xir_cell_is_projection(&cell);
     if (!object && !xr_xir_cell_in_domain(&cell,state->domain)) { status=XR_XIR_CTFE_BAD_ARTIFACT;goto done; }
@@ -97,10 +98,12 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
         status=received==XR_XIR_VALUE_BOUNDS?ctfe_bounds_fault(run,&bounded,fault):ctfe_value_status(received);
         if (status!=XR_XIR_CTFE_OK) goto done;held=true;
     } else {
-        status=ctfe_value_status(xr_xir_cell_authorized_place(&cell,&state->authority,&admission,&place));if (status!=XR_XIR_CTFE_OK) goto done;
+        status=ctfe_value_status(xr_xir_cell_authorized_place(&cell,&state->authority,&admission,&place));
+        if (status!=XR_XIR_CTFE_OK) goto done;
         root.type=(uint32_t)place.type;memcpy(&root.payload,place.payload,sizeof(root.payload));
     }
-    status=ctfe_index_path_preflight(run,&bounded,&root,&path,mutate,&target);if (status!=XR_XIR_CTFE_OK) goto done;
+    status=ctfe_index_path_preflight(run,&bounded,&root,&path,mutate,&target);
+    if (status!=XR_XIR_CTFE_OK) goto done;
     status=ctfe_admission_work(run,&bounded,&root);if (status!=XR_XIR_CTFE_OK) goto done;
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     if (mutate) {

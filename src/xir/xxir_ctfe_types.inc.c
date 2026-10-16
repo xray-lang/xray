@@ -11,14 +11,15 @@
  *   ledger-owned DFS rejects cyclic or authority-bearing Tuple/Nullable fields.
  */
 #include "xxir_operand_roles.h"
+#include "xxir_record.h"
 typedef struct CtfeTypeFrame { uint64_t work;uint32_t index,next;bool dynamic,pure_arrays; } CtfeTypeFrame;
 static const XrXirTypeNode *ctfe_composite_node(const XrXirTypes *types,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     bool nominal=node && (xr_xir_type_is_struct(types,type) || xr_xir_type_is_enum(types,type));
-    return node && (node->kind==XR_XIR_TYPE_TUPLE || node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ARRAY || nominal)?node:NULL;
+    return node && (node->kind==XR_XIR_TYPE_TUPLE || node->kind==XR_XIR_TYPE_RECORD || node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ARRAY || nominal)?node:NULL;
 }
 static uint32_t ctfe_composite_fields(const XrXirTypeNode *node) {
-    return node->kind==XR_XIR_TYPE_TUPLE?node->parameter_count:node->kind==XR_XIR_TYPE_NOMINAL?node->nominal.field_count:1;
+    return (node->kind==XR_XIR_TYPE_TUPLE || node->kind==XR_XIR_TYPE_RECORD)?node->parameter_count:node->kind==XR_XIR_TYPE_NOMINAL?node->nominal.field_count:1;
 }
 static const XrXirTypeNode *ctfe_execution_node(const XrXirTypes *types,XrXirType type,bool internal) {
     const XrXirTypeNode *node=ctfe_composite_node(types,type);
@@ -65,7 +66,9 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
         const XrXirTypeNode *node=&types->nodes[frame->index];
         bool single=node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ARRAY;
         bool nominal=node->kind==XR_XIR_TYPE_NOMINAL,callable=node->kind==XR_XIR_TYPE_CALLABLE;
-        if ((!single && !nominal && !callable && (node->kind!=XR_XIR_TYPE_TUPLE || !node->parameter_count || !node->parameters)) ||
+        if ((!single && !nominal && !callable && ((node->kind!=XR_XIR_TYPE_TUPLE && node->kind!=XR_XIR_TYPE_RECORD) ||
+                (node->kind==XR_XIR_TYPE_TUPLE && !node->parameter_count) ||
+                (node->parameter_count && !node->parameters))) ||
             (callable && node->parameter_count && !node->parameters) || node->parameter_span) {
             status=XR_XIR_CTFE_NOT_SUPPORTED;break;
         }
@@ -163,11 +166,11 @@ static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifac
     if (op->op==XR_XIR_TO_STRING && !ctfe_scalar_type(xr_xir_operand_type(body,op->args[0]))) return XR_XIR_CTFE_NOT_SUPPORTED;
     bool array_receiver=op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_LEN || op->op==XR_XIR_ARRAY_CAPACITY ||
         op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_ARRAY_RESERVE ||
-        op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_STRUCT_SET;
+        op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || (op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET);
     if (array_receiver) {
         const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&body->operands[op->args[0]]:op->args;
         XrXirPlaceKind kind=xr_xir_place_kind(body,ids[0]);
-        if ((op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_STRUCT_SET) &&
+        if ((op->op==XR_XIR_CELL_PROJECT || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || (op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET)) &&
             kind!=XR_XIR_PLACE_OBJECT && kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX && kind!=XR_XIR_PLACE_FIELD) return XR_XIR_CTFE_NOT_SUPPORTED;
         if (kind!=XR_XIR_PLACE_NONE && kind!=XR_XIR_PLACE_OBJECT && kind!=XR_XIR_PLACE_CELL && kind!=XR_XIR_PLACE_INDEX && kind!=XR_XIR_PLACE_FIELD) return XR_XIR_CTFE_NOT_SUPPORTED;
         uint32_t root=ids[0],depth=0;
@@ -188,7 +191,7 @@ static XrXirCtfeStatus ctfe_tuple_instruction_admit(const XrXirArtifact *artifac
     if (xr_xir_type_is_cell(artifact->module.types,type))
         type=xr_xir_cell_element(artifact->module.types,type);
     XrXirCtfeStatus status=ctfe_body_type_admit(artifact,type,false);
-    if (status==XR_XIR_CTFE_OK && (op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_IS_SOME || op->op==XR_XIR_NULLABLE_UNWRAP ||
+    if (status==XR_XIR_CTFE_OK && (op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_RECORD_FIELD || op->op==XR_XIR_NULLABLE_IS_SOME || op->op==XR_XIR_NULLABLE_UNWRAP ||
         op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_CLASS_SET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_TAG || op->op==XR_XIR_ENUM_GET))
         status=ctfe_body_type_admit(artifact,xr_xir_operand_type(body,op->args[0]),false);
     return status;
@@ -203,8 +206,8 @@ static XrXirCtfeStatus ctfe_tuple_scratch(const XrXirArtifact *artifact,uint32_t
             uint32_t arity=body->instructions[i].args[1];
             if (arity>count) count=arity;continue;
         }
-        if (body->instructions[i].op!=XR_XIR_TUPLE_NEW || body->instructions[i].type==XR_XIR_UNIT) continue;
-        const XrXirTypeNode *tuple=xr_xir_tuple_signature(artifact->module.types,body->instructions[i].type);
+        if ((body->instructions[i].op!=XR_XIR_TUPLE_NEW && body->instructions[i].op!=XR_XIR_RECORD_NEW) || body->instructions[i].type==XR_XIR_UNIT) continue;
+        const XrXirTypeNode *tuple=xir_product_signature(artifact->module.types,body->instructions[i].type);
         if (!tuple || tuple->parameter_count>artifact->layouts[function].outgoing_count) return XR_XIR_CTFE_BAD_ARTIFACT;
         if (tuple->parameter_count>count) count=tuple->parameter_count;
     }

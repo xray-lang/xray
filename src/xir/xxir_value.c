@@ -29,6 +29,7 @@
 #include "xxir_map.h"
 #include "xxir_nullable.h"
 #include "xxir_tuple.h"
+#include "xxir_record.h"
 #include "xxir_float.h"
 #include "xxir_atomic.h"
 #include "xxir_task_internal.h"
@@ -195,7 +196,7 @@ static bool value_object_kind_known(uint32_t kind) {
     return !kind || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
         kind == XIR_OBJECT_FUNCTION || kind == XR_XIR_TYPE_ARRAY ||
         kind == XR_XIR_TYPE_NOMINAL || kind == XR_XIR_TYPE_NULLABLE ||
-        kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK ||
+        kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_RECORD || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK ||
         kind == XR_XIR_TYPE_MAP || kind == XR_XIR_TYPE_SET;
 }
 static bool value_header_valid(const XrXirValue *value) {
@@ -232,7 +233,7 @@ static bool value_header_valid(const XrXirValue *value) {
         return node && !node->parameter_span && xr_xir_type_is_class(xr_xir_compile_type_arena_types(object->arena),type);
     return node && !node->parameter_span && object_storage_kind(node->kind) == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
-         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD ||
          node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
          (node->kind == XR_XIR_TYPE_ATOMIC && ((XirAtomic *)object)->element ==
           xr_xir_atomic_element(xr_xir_compile_type_arena_types(object->arena), type)));
@@ -256,10 +257,10 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         return true;
     }
     if (object->kind == XR_XIR_TYPE_TASK) return xr_xir_task_storage_valid((const XirTask *)object);
-    if (object->kind == XR_XIR_TYPE_TUPLE) {
+    if ((object->kind == XR_XIR_TYPE_TUPLE || object->kind == XR_XIR_TYPE_RECORD)) {
         const XirTuple *tuple=(const XirTuple *)object;
-        const XrXirTypeNode *node=xr_xir_tuple_signature(xr_xir_compile_type_arena_types(object->arena),object->type);
-        if (!node || !node->parameters || tuple->count!=node->parameter_count ||
+        const XrXirTypeNode *node=xir_product_signature(xr_xir_compile_type_arena_types(object->arena),object->type);
+        if (!node || (node->parameter_count && !node->parameters) || tuple->count!=node->parameter_count ||
             tuple->fields!=(const XrXirValue *)(tuple+1)) return false;
         for (uint32_t i=0;i<tuple->count;++i) {
             const XrXirValue *field=&tuple->fields[i];
@@ -827,7 +828,7 @@ static void release_pending(XirObject *pending) {
                 class_release_fields(object,layout->field_count,&pending);
             }
             class_storage_deallocate((XirClassObject *)object, false, 0, XR_XIR_VALUE_OK);
-        } else if (object->kind == XR_XIR_TYPE_TUPLE) {
+        } else if ((object->kind == XR_XIR_TYPE_TUPLE || object->kind == XR_XIR_TYPE_RECORD)) {
             XirTuple *tuple=(XirTuple *)object;
             for (uint32_t i=object->graph_dead ? 0 : tuple->count;i;--i) queue_release(&tuple->fields[i-1],&pending);
             xr_xir_domain_deallocate(domain,tuple,sizeof(*tuple)+(size_t)tuple->count*sizeof(XrXirValue));
@@ -1192,6 +1193,7 @@ static bool admission_owner(const XrXirValueAdmission *admission,
 #include "xxir_value_admission.inc.c"
 #include "xxir_nullable_value.inc.c"
 #include "xxir_tuple_value.inc.c"
+#include "xxir_record_value.inc.c"
 #include "xxir_atomic_value.inc.c"
 static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain, XrXirTypeArena *arena,
     XrXirType type,const XirFunctionConstruction *construction,XrXirValue *output) {
@@ -1416,7 +1418,7 @@ static XrXirValueStatus cell_value_place_storage(const XrXirValue *cell,
     XrXirType type = xr_xir_cell_element(xr_xir_compile_type_arena_types(holder->object.arena),holder->object.type);
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     if (type != XR_XIR_STRING && !xr_xir_type_is_array(types, type) &&
-        !xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        !xr_xir_type_is_nominal(types, type) && !xr_xir_type_is_record(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output = (XrXirValuePlace) {type, &holder->value.payload};
     return XR_XIR_VALUE_OK;
 }

@@ -1,0 +1,7 @@
+type Row = { name: string, n: i16 }
+fn identity<T>(value: T) -> T { return value }
+export fn referenceAnswer() -> i64 {
+    const rows: Array<Row> = [{ n: 7, name: "first" }, { name: "second", n: 8 }]
+    const copy = identity(rows)
+    return (copy[0].n as i64) * 10 + (copy[1].n as i64)
+}

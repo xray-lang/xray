@@ -166,7 +166,8 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_ATOMIC = 7,
     XR_XIR_TYPE_TASK = 8,
     XR_XIR_TYPE_MAP = 9,
-    XR_XIR_TYPE_SET = 10
+    XR_XIR_TYPE_SET = 10,
+    XR_XIR_TYPE_RECORD = 11
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;
@@ -175,6 +176,9 @@ typedef struct XrXirNominalType {
     const XrXirType *fields;
     uint32_t field_count;
 } XrXirNominalType;
+typedef struct XrXirRecordType {
+    const XrXirLiteral *names;
+} XrXirRecordType;
 typedef struct XrXirTypeNode {
     uint32_t kind;
     XrXirType element;
@@ -183,7 +187,11 @@ typedef struct XrXirTypeNode {
     XrXirType result;
     uint32_t flags;
     uint32_t parameter_span;
-    XrXirNominalType nominal;
+    /* Initialize and read only the member selected by kind. */
+    union {
+        XrXirNominalType nominal;
+        XrXirRecordType record;
+    };
 } XrXirTypeNode;
 typedef struct XrXirNominalTable XrXirNominalTable;
 typedef struct XrXirInterfaceTable XrXirInterfaceTable;

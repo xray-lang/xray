@@ -23,12 +23,12 @@ static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types
     return table->declarations?&table->declarations[node->nominal.declaration].variants[variant]:&table->identities[node->nominal.declaration].variants[variant];
 }
 static bool ctfe_nominal_opcode(XrXirOp op) {
-    return (op>=XR_XIR_STRUCT_NEW && op<=XR_XIR_STRUCT_SET) || (op>=XR_XIR_ENUM_NEW && op<=XR_XIR_ENUM_GET);
+    return op==XR_XIR_RECORD_SET || (op>=XR_XIR_STRUCT_NEW && op<=XR_XIR_STRUCT_SET) || (op>=XR_XIR_ENUM_NEW && op<=XR_XIR_ENUM_GET);
 }
 static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state);
 static XrXirCtfeStatus ctfe_nominal_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];
-    if (op->op==XR_XIR_STRUCT_SET) return ctfe_index_path_step(run,vm,state);
+    if (op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET) return ctfe_index_path_step(run,vm,state);
     bool create=op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_ENUM_NEW;
     XrXirValue receiver={0},result={0};XrXirType type=op->type;
     if (!create) { receiver=ctfe_nominal_operand(run,op->args[0]);type=(XrXirType)receiver.type; }

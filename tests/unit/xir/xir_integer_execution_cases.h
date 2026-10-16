@@ -55,7 +55,7 @@ static void integer_value_boundaries(void) {
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     for (unsigned i = 0; i < 8; ++i) {
         XrXirType type = (XrXirType) values[i].type;
-        XrXirTypeNode node = {XR_XIR_TYPE_CELL,type,NULL,0,XR_XIR_UNIT,0,0, {0}};
+        XrXirTypeNode node = {XR_XIR_TYPE_CELL,type,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}};
         XrXirTypes types = {&node,1, NULL, NULL};
         ScalarCompileOwner owner = {0};
         XrXirCompileLimits structural = xr_xir_compile_default_limits();

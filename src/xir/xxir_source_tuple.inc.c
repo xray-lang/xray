@@ -64,6 +64,8 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
         if (!child) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple literal entry is missing");
         SourceExpectedType hint={expected.present,fields[i].type,false, expected.inferred};
         if (!source_plan_expression(ctx,child,hint,&element)) return false;
+        if ((!expected.present || expected.inferred || expected.infer_result) &&
+            !source_root_join_record(ctx,&element)) return false;
         if (expected.present && element.type!=fields[i].type)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple field does not satisfy its ordered context");
         fields[i]=(XrXirCallableParameter){element.type,0};

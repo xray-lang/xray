@@ -1,0 +1,1 @@
+export fn referenceAnswer() -> i64 { const value = { z: 9, a: 7 }; return value.a + value.z }

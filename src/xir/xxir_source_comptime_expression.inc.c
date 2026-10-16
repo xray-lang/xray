@@ -71,7 +71,8 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *site,SourceExpected
 }
 static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpectedType expected,uint32_t *output) {
     uint32_t outer=ctx->function;
-    if (ctx->generics[outer].parameter_count || ctx->generics[outer].argument_count || ctx->bodies[outer].type_parameter_count)
+    /* Closed call argument tables do not introduce lexical type binders. */
+    if (ctx->generics[outer].parameter_count || ctx->bodies[outer].type_parameter_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime in an open generic scope is not supported");
     if (ctx->function_count>=ctx->function_capacity || ctx->comptime_count>=ctx->comptime_capacity)
         return source_fail(ctx,node,XR_XIR_BUDGET,"comptime function inventory exhausted");
@@ -131,7 +132,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     if (!matched || !source_comptime_result_value(ctx,node,&matched->value,matched->result_arity,matched->result_work))
         return source_fail(ctx,node,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:ctx->diagnostic.status,"comptime occurrence or canonical result changed");
     const XrXirTypeArena *arena=NULL;
-    if (matched->result_arity) {
+    if (matched->value.type>=XR_XIR_CONSTRUCTED_TYPE_BASE) {
         if (!source_work_units(ctx,node,(uint64_t)matched->result_arity*16)) return false;
         arena=xr_xir_value_arena(&matched->value);
     }
@@ -141,7 +142,7 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     if (!source_work_units(ctx,node,sizeof(site->value)+sizeof(site->result_arity)+sizeof(site->result_work)+sizeof(ctx->comptime_matched))) return false;
     site->result_arity=matched->result_arity;
     site->result_work=matched->result_work;
-    if (matched->value.type==XR_XIR_STRING || matched->result_arity) {
+    if (matched->value.type==XR_XIR_STRING || matched->value.type>=XR_XIR_CONSTRUCTED_TYPE_BASE) {
         if (!source_work_units(ctx,node,(uint64_t)matched->result_arity*16)) return false;
         XrXirValueStatus copied=xr_xir_value_copy(&matched->value,&site->value);
         if (copied!=XR_XIR_VALUE_OK) return source_fail(ctx,node,

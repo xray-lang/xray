@@ -131,7 +131,7 @@ static bool source_root_bottom_type(SourceContext *ctx, XrXirType original,
     } else if (bottom.kind == XR_XIR_TYPE_CELL || bottom.kind == XR_XIR_TYPE_SET ||
                bottom.kind == XR_XIR_TYPE_ARRAY || bottom.kind == XR_XIR_TYPE_NULLABLE) {
         if (!source_root_bottom_type(ctx,bottom.element,depth + 1,&bottom.element)) return false;
-    } else if (bottom.kind == XR_XIR_TYPE_TUPLE) {
+    } else if ((bottom.kind == XR_XIR_TYPE_TUPLE || bottom.kind == XR_XIR_TYPE_RECORD)) {
         XrXirCallableParameter *fields = bottom.parameter_count ? source_alloc(ctx,bottom.parameter_count,sizeof(*fields)) : NULL;
         if (bottom.parameter_count && !fields) return false;
         for (uint32_t p = 0; p < bottom.parameter_count; ++p) {
@@ -152,11 +152,16 @@ static bool source_root_capture_join(SourceContext *ctx, XrXirType left,
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"capture shape join exhausted");
     if (!a || !b || a->kind != b->kind || a->parameter_count != b->parameter_count ||
         (a->kind != XR_XIR_TYPE_CELL && a->kind != XR_XIR_TYPE_ARRAY &&
-         a->kind != XR_XIR_TYPE_NULLABLE && a->kind != XR_XIR_TYPE_TUPLE &&
+         a->kind != XR_XIR_TYPE_NULLABLE && (a->kind != XR_XIR_TYPE_TUPLE && a->kind != XR_XIR_TYPE_RECORD) &&
          a->kind != XR_XIR_TYPE_MAP && a->kind != XR_XIR_TYPE_SET))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"capture value shapes cannot change");
+    if (a->kind == XR_XIR_TYPE_RECORD) {
+        bool same=true;XrXirStatus status=xir_record_names_match(&ctx->compile,a,b,&same);
+        if (status!=XR_XIR_OK || !same) return source_fail(ctx,NULL,status==XR_XIR_OK ? XR_XIR_BAD_TYPE : status,
+            "capture record field sets cannot change");
+    }
     XrXirTypeNode joined = *a, right_shape = *b;
-    if (joined.kind == XR_XIR_TYPE_TUPLE) {
+    if ((joined.kind == XR_XIR_TYPE_TUPLE || joined.kind == XR_XIR_TYPE_RECORD)) {
         XrXirCallableParameter *fields = joined.parameter_count ? source_alloc(ctx,joined.parameter_count,sizeof(*fields)) : NULL;
         if (joined.parameter_count && !fields) return false;
         for (uint32_t p = 0; p < joined.parameter_count; ++p) {

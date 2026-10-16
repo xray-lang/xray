@@ -87,7 +87,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
         if (shaped!=XR_XIR_CTFE_OK) { xr_xir_value_drop(&value);source_comptime_failure(ctx,site->syntax,shaped);break; }
         if (!source_work_units(ctx,site->syntax,sizeof(site->result_work))) { xr_xir_value_drop(&value);break; }
         site->result_work=shape.work;
-        const XrXirTypeNode *tuple=xr_xir_tuple_signature(module->types,module->functions[f].result);
+        const XrXirTypeNode *tuple=xir_product_signature(module->types,module->functions[f].result);
         site->result_arity=tuple?tuple->parameter_count:(xr_xir_type_is_nullable(module->types,module->functions[f].result) || xr_xir_type_is_array(module->types,module->functions[f].result) ||
             xr_xir_type_is_struct(module->types,module->functions[f].result) || xr_xir_type_is_enum(module->types,module->functions[f].result))?1:0;
         if (!source_comptime_result_value(ctx,site->syntax,&value,site->result_arity,site->result_work)) {

@@ -1,0 +1,12 @@
+type User = { name: string, size: i64, empty: () }
+fn echo<T>(value: T) -> T { return value }
+export fn referenceAnswer() -> i64 {
+    var r: User = { size: 7, name: "first", empty: () }
+    const snapshot = echo(r)
+    r.size = 9
+    r.name = "second"
+    r.empty = ()
+    const merged = { ...r, size: 11, extra: 3 }
+    const reordered: User = { empty: (), name: "third", size: 15 }
+    return snapshot.size * 100 + r.size * 10 + merged.size + merged.extra + reordered.size
+}

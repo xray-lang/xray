@@ -24,6 +24,9 @@
 #include "xxir_source_query_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
+#include "xxir_record_shape.h"
+#include "xxir_record_names_internal.h"
 #include "xxir_nominal.h"
 #include "xxir_float.h"
 #include "xxir_compile_memory.h"
@@ -548,7 +551,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
         node.nominal.fields = NULL; node.nominal.field_count = 0;
         return source_intern_type(ctx, node, output);
     }
-    if (node.kind != XR_XIR_TYPE_CALLABLE && node.kind != XR_XIR_TYPE_TUPLE) {
+    if (node.kind != XR_XIR_TYPE_CALLABLE && node.kind != XR_XIR_TYPE_TUPLE && node.kind != XR_XIR_TYPE_RECORD) {
         if (!source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
         if (node.kind == XR_XIR_TYPE_MAP &&
             !source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
@@ -599,6 +602,8 @@ static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *t
     return source_intern_type(ctx,(XrXirTypeNode){.kind=XR_XIR_TYPE_TUPLE,
         .parameters=fields,.parameter_count=ref->nchildren},type);
 }
+
+#include "xxir_source_record_type.inc.c"
 /* A type failure raised without an owning AST node reports the annotation that caused it. */
 static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     bool valid = source_type_ref(ctx, ref, type);
@@ -618,6 +623,7 @@ static bool source_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
     if (!ref) { *type = XR_XIR_UNIT; return true; }
     switch (ref->kind) {
+    case XR_TREF_OBJECT: return source_record_type_ref(ctx,ref,type);
     case XR_TREF_OPTIONAL: {
         if (ref->nchildren != 1 || !ref->children || ctx->depth >= 128)
             return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable type requires one bounded element");
@@ -753,7 +759,7 @@ static bool source_root_type(SourceContext *ctx, XrXirType type, uint32_t depth)
     if (source_root_type(ctx,node->element,depth + 1)) return true;
     for (uint32_t p = 0; p < node->parameter_count; ++p)
         if (source_root_type(ctx,node->parameters[p].type,depth + 1)) return true;
-    for (uint32_t a = 0; a < node->nominal.argument_count; ++a)
+    for (uint32_t a = 0; node->kind == XR_XIR_TYPE_NOMINAL && a < node->nominal.argument_count; ++a)
         if (source_root_type(ctx,node->nominal.arguments[a],depth + 1)) return true;
     return false;
 }
@@ -1056,6 +1062,7 @@ static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 static bool source_constructor_place(SourceContext *ctx, AstNode *member, SourceValue *place);
 #include "xxir_source_struct.inc.c"
+#include "xxir_source_record.inc.c"
 #include "xxir_source_path.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, uint32_t *literal) {
@@ -1246,7 +1253,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if ((uint32_t)receiver.type >= XR_XIR_TYPE_PARAMETER_BASE &&
                 (uint32_t)receiver.type < XR_XIR_TYPE_PARAMETER_LIMIT)
                 return source_requirement_call(ctx,node,receiver,result_context,value);
-            if (xr_xir_type_is_nominal(&ctx->types, receiver.type)) {
+            if (xr_xir_type_is_nominal(&ctx->types, receiver.type) || xr_xir_type_is_record(&ctx->types,receiver.type)) {
                 SourceName *member_method = source_method_find(ctx, receiver.type, member->name);
                 if (member_method) return source_method_call(ctx, node, receiver, member_method, result_context, value);
                 if (!source_struct_get_value(ctx, callee, receiver, &indirect) ||
@@ -1639,6 +1646,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         if (context.present && xr_xir_type_is_nullable(&ctx->types,context.type))
             context.type=xr_xir_nullable_element(&ctx->types,context.type);
         return source_closure(ctx, node, context, value);
+    case AST_OBJECT_LITERAL: return source_record_literal(ctx,node,context,value);
     case AST_STRUCT_LITERAL: return source_struct_literal(ctx, node, value);
     case AST_ENUM_CONSTRUCT: return source_enum_literal(ctx, node, value);
     case AST_MEMBER_SET: return source_struct_set(ctx, node, value);

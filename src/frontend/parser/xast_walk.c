@@ -79,6 +79,7 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
+        case AST_RECORD_KEY:
         case AST_LITERAL_STRING:
         case AST_LITERAL_RUNE:
         case AST_LITERAL_REGEX:
@@ -626,6 +627,7 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
         case AST_LITERAL_BIGINT:
             sig_name(s, "big", n->as.literal.raw_value.bigint_val);
             return true;
+        case AST_RECORD_KEY:
         case AST_LITERAL_STRING:
             sig_add(s, " str[%zu]=", n->as.literal.string_length);
             if (!n->as.literal.raw_value.string_val) sig_add(s, "<null>");

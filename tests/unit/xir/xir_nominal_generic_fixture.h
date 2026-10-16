@@ -29,8 +29,8 @@ static XrXirArtifact *nominal_generic_fixture(const XrXirCompileContext *context
     NominalFixture f; nominal_fixture(&f); f.table.count = 1;
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8};
     XrXirTypeNode nodes[] = {built.types->nodes[0],
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments, 1, NULL, 0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 1, 1, NULL, 0}}};
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, arguments, 1, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, arguments + 1, 1, NULL, 0}}};
     if (expressions) f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirTypes types = {nodes, expressions ? 3 : 1, &f.table, NULL};
     built.functions = functions; built.function_count = 4; built.generics = generics;

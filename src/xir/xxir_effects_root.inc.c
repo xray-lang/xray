@@ -153,7 +153,7 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
     case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_ARRAY_LEN:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT:
     case XR_XIR_DIV_FLOAT: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
-    case XR_XIR_STRUCT_SET: case XR_XIR_LOCAL_UNINIT: case XR_XIR_STRING_LEN:
+    case XR_XIR_STRUCT_SET: case XR_XIR_RECORD_SET: case XR_XIR_LOCAL_UNINIT: case XR_XIR_STRING_LEN:
     case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: case XR_XIR_STRING_CONTAINS:
     case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: case XR_XIR_STRING_INDEX_OF:
     case XR_XIR_STRING_LAST_INDEX_OF: case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG:
@@ -172,7 +172,7 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_CONST_RUNE:
     case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE: case XR_XIR_LT_STRING:
     case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
-    case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_GO:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_GO:
     case XR_XIR_TASK_AWAIT: case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY:
     case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
         return XR_XIR_OK;

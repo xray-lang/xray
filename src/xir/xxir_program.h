@@ -16,7 +16,7 @@
 #include "xxir_call.h"
 #include "xxir_class_observation.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 34u
+#define XR_XIR_PROGRAM_ABI_VERSION 35u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {

@@ -17,9 +17,9 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
     XrXirType arguments[] = {XR_XIR_I64, (XrXirType)256};
     XrXirType fields[] = {XR_XIR_I64, XR_XIR_STRING, (XrXirType)256, XR_XIR_STRING};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, arguments, 1, fields, 2}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 1, 1, fields + 2, 2}},
-        {XR_XIR_TYPE_CELL, (XrXirType)257, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={1, arguments, 1, fields, 2}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, arguments + 1, 1, fields + 2, 2}},
+        {XR_XIR_TYPE_CELL, (XrXirType)257, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}},
         {.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING}};
     XrXirTypes types = {nodes, 5, &table, NULL};

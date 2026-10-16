@@ -21,8 +21,8 @@ static XrXirArtifact *nominal_expression_fixture(const XrXirCompileContext *cont
         {{"alpha", 5}, {"Outer", 5}, 1, &constraint, 1, fields + 1, 1, XR_XIR_NOMINAL_STRUCT, NULL, 0, 0, {0}}};
     XrXirNominalTable table = {definitions, 2, NULL};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {0, &t, 1, NULL, 0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, {1, &t, 1, NULL, 0}}};
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, .nominal={0, &t, 1, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 1, .nominal={1, &t, 1, NULL, 0}}};
     XrXirTypes types = {nodes, 2, &table, NULL};
     XrXirInstruction entry[] = {
         {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 7, {0}},

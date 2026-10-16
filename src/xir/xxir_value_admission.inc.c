@@ -79,7 +79,7 @@ static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType 
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
-            node->kind == XR_XIR_TYPE_TUPLE ||
+            (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) ||
             node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
@@ -94,7 +94,7 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     XrXirValue *value, StorageSpan *span, bool *inlined, bool *tuple_field) {
     XR_CHECK(admission_frame_next(frame)<admission_frame_count(frame), "admission cursor exceeded its validated owner");
     size_t index=frame->boxed.inline_storage ? frame->packed.next++ : frame->boxed.next++;
-    *tuple_field=!frame->boxed.inline_storage && frame->boxed.object->kind==XR_XIR_TYPE_TUPLE;
+    *tuple_field=!frame->boxed.inline_storage && (frame->boxed.object->kind == XR_XIR_TYPE_TUPLE || frame->boxed.object->kind == XR_XIR_TYPE_RECORD);
     *inlined = frame->boxed.inline_storage || frame->boxed.object->kind == XR_XIR_TYPE_ARRAY ||
         frame->boxed.object->kind==XIR_OBJECT_CLASS;
     if (!frame->boxed.inline_storage && frame->boxed.object->kind==XIR_OBJECT_CLASS) {
@@ -199,7 +199,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                         }
                     }
                     if (status != XR_XIR_VALUE_OK) break;
-                } else if (object->kind==XR_XIR_TYPE_TUPLE) {
+                } else if ((object->kind == XR_XIR_TYPE_TUPLE || object->kind == XR_XIR_TYPE_RECORD)) {
                     if (!admission->domain) {status=XR_XIR_VALUE_BAD_ARGUMENT;break;}
                     count=((XirTuple *)object)->count;
                 } else if (object->kind == XR_XIR_TYPE_NOMINAL || object->kind == XR_XIR_TYPE_NULLABLE) {

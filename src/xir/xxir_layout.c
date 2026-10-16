@@ -14,6 +14,7 @@
 #include "xxir_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
 #include "../base/xmalloc.h"
@@ -46,7 +47,7 @@ static XrXirStatus path_capacity(const XrXirFunction *function, const XrXirCompi
             if (depth == function->instruction_count) return XR_XIR_BAD_VALUE;
             ++depth; id = function->instructions[id - function->parameter_count].args[0];
         }
-        if (depth && (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET)) {
+        if (depth && (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET)) {
             if (depth == UINT32_MAX) return XR_XIR_BUDGET;
             ++depth;
         }
@@ -152,8 +153,8 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
             op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT ? op->args[1] : 0;
-        if (op->op==XR_XIR_TUPLE_NEW && op->type!=XR_XIR_UNIT) {
-            const XrXirTypeNode *tuple=xr_xir_tuple_signature(artifact->module.types,op->type);
+        if ((op->op==XR_XIR_TUPLE_NEW && op->type!=XR_XIR_UNIT) || op->op==XR_XIR_RECORD_NEW) {
+            const XrXirTypeNode *tuple=xir_product_signature(artifact->module.types,op->type);
             if (!tuple) return XR_XIR_BAD_TYPE;
             count=tuple->parameter_count;
         }

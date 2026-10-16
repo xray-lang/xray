@@ -17,6 +17,7 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_nominal.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_construction.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
@@ -99,8 +100,17 @@ static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expect
 static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected, const char *output, unsigned suspensions) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(source->checked, &packet, NULL) == XR_XIR_OK);
+    XrXirSourceSnapshot *record_snapshot=NULL;
+    const XrXirSourceView *source_view=xr_xir_compile_source_snapshot_view(source->snapshot);
+    for (uint32_t t=0;source_view->types && t<source_view->types->count;++t)
+        if (source_view->types->nodes[t].kind==XR_XIR_TYPE_RECORD) {record_snapshot=source->snapshot;source->snapshot=NULL;break;}
     /* No source arena, AST or session may supply the reconstructed consumer. */
     xr_xir_compile_source_result_free(source); xr_compile_session_free(session);
+    if (record_snapshot) {
+        const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record_snapshot);
+        CHECK(xr_xir_compile_types_structure_verify(&owner->context,view->types)==XR_XIR_OK);
+        xr_xir_compile_source_snapshot_free(record_snapshot);
+    }
     XrXirArtifact *decoded = NULL, *specialized = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&owner->context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);

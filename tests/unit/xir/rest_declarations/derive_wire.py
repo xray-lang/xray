@@ -23,7 +23,7 @@ def model():
     callable=64+len(body);body+=word(1,0,1,256,0,2,18)
     body+=word(1,0,1,256,0,2,2)
     body+=word(0,0,0)
-    head=b'XRCHK\0\0\0'+word(32,79,2,0)+struct.pack('<Q',len(body))
+    head=b'XRCHK\0\0\0'+word(32,80,2,0)+struct.pack('<Q',len(body))
     return head+hashlib.sha256(head+body).digest()+body,dict(ENTRY=entry,IDENTITY=identity,ARRAY=array,CALLABLE=callable)
 
 def main():
@@ -31,7 +31,7 @@ def main():
     data,positions=model();text='/* Independently specified declaration, callable and real Array call fields. */\n'
     text+='enum {'+','.join('REST_'+k+'='+str(v) for k,v in positions.items())+'};\n'
     text+='static const uint8_t rest_wire[] = {\n'+''.join('    '+','.join('0x%02x'%v for v in data[i:i+12])+',\n' for i in range(0,len(data),12))+'};\n'
-    target=Path(__file__).with_name('wire_golden.h')
+    target=Path(__file__).with_name('wire80_golden.h')
     if args.write:target.write_bytes(text.encode())
     else:assert target.read_text()==text
     print('Independent rest packet:',len(data),hashlib.sha256(data).hexdigest(),positions)

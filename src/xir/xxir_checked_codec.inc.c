@@ -444,13 +444,22 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             }
             s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
             s.flags = checked_u32(c, s.flags);
-        } else if (s.kind == XR_XIR_TYPE_TUPLE) {
+        } else if (s.kind == XR_XIR_TYPE_TUPLE || s.kind == XR_XIR_TYPE_RECORD) {
             s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 4);
             XrXirCallableParameter *fields = checked_array(c, s.parameters, s.parameter_count, sizeof(*fields), 4);
             s.parameters = fields;
             for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
                 XrXirType field = (XrXirType)checked_u32(c,(uint32_t)fields[p].type);
                 if (c->reading) fields[p] = (XrXirCallableParameter){field,0};
+            }
+            if (s.kind == XR_XIR_TYPE_RECORD) {
+                if (c->reading) s.record = (XrXirRecordType){NULL};
+                XrXirLiteral *names = checked_array(c,s.record.names,s.parameter_count,sizeof(*names),4);
+                s.record.names = names;
+                for (uint32_t p = 0; p < s.parameter_count && c->status == XR_XIR_OK; ++p) {
+                    XrXirLiteral name = checked_nominal_name(c,names[p]);
+                    if (c->reading) names[p] = name;
+                }
             }
         } else if (s.kind == XR_XIR_TYPE_MAP) {
             s.element = (XrXirType)checked_u32(c, (uint32_t)s.element);

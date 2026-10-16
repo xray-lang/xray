@@ -9,16 +9,18 @@
 static XrXirStatus tuple_uses(const Graph *graph, const XrXirFunction *function,
     VerifyContext *context, uint32_t instruction) {
     const XrXirInstruction *op=&function->instructions[instruction];
-    bool construct=op->op==XR_XIR_TUPLE_NEW;
+    bool construct=op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_RECORD_NEW;
+    bool record=op->op==XR_XIR_RECORD_NEW || op->op==XR_XIR_RECORD_FIELD || op->op==XR_XIR_RECORD_SET;
+    bool write=op->op==XR_XIR_RECORD_SET;
     XrXirType type=construct ? op->type : xr_xir_operand_type(function,op->args[0]);
     XrXirTypeDescription description={0};
     XrXirStatus status=xr_xir_compile_type_description(&context->remaining,context->module->types,type,&description);
     if (status!=XR_XIR_OK) return status;
-    if (construct && type==XR_XIR_UNIT) {
+    if (!record && construct && type==XR_XIR_UNIT) {
         status=type_use_context(context,context->location.function,type);
         return status==XR_XIR_OK && (op->args[0] || op->args[1]) ? XR_XIR_BAD_STRUCTURE : status;
     }
-    if (description.kind!=XR_XIR_TYPE_TUPLE) return XR_XIR_BAD_TYPE;
+    if (description.kind!=(uint32_t)(record ? XR_XIR_TYPE_RECORD : XR_XIR_TYPE_TUPLE)) return XR_XIR_BAD_TYPE;
     const XrXirTypeNode *node=description.node;
     status=type_use_context(context,context->location.function,type);
     if (status!=XR_XIR_OK) return status;
@@ -27,8 +29,10 @@ static XrXirStatus tuple_uses(const Graph *graph, const XrXirFunction *function,
         XrXirFieldDescription member={0};
         status=xr_xir_compile_description_field(&context->remaining,&description,(uint32_t)op->immediate,&member);
         if (status!=XR_XIR_OK) return status;
-        if (op->type!=member.type) return XR_XIR_BAD_TYPE;
-        return role_operand(function,graph,context,instruction,0,type);
+        if (!write && op->type!=member.type) return XR_XIR_BAD_TYPE;
+        status=role_operand(function,graph,context,instruction,0,type);
+        if (status==XR_XIR_OK && write) status=role_operand(function,graph,context,instruction,1,member.type);
+        return status;
     }
     if (!xir_compile_work(&context->remaining,node->parameter_count)) return XR_XIR_BUDGET;
     uint32_t payloads=0;

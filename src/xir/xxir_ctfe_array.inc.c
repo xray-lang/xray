@@ -102,6 +102,11 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
                 CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)capacity*sizeof(*stack);
                 status=ctfe_class_member_read(run,&bounded,&frame->value,frame->next++,&current);state->tuple_costs=bounded.tuple_costs;
             }
+            else if (node->kind==XR_XIR_TYPE_RECORD) {
+                CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)capacity*sizeof(*stack);
+                XrXirValueAdmission admission=ctfe_value_admission(&bounded);
+                status=ctfe_value_status(xr_xir_record_get(&frame->value,frame->next++,&admission,&current));
+            }
             else if (node->kind==XR_XIR_TYPE_TUPLE) status=ctfe_value_status(xr_xir_tuple_get(&frame->value,frame->next++,&current));
             else if (node->kind==XR_XIR_TYPE_NOMINAL) {
                 XrXirEnumBorrow borrowed={0};status=ctfe_value_status(xr_xir_enum_borrow(&frame->value,&borrowed));

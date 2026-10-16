@@ -21,7 +21,7 @@ static const XrXirCompileContext *nullable_context;
 #include "xir_nullable_golden.h"
 #include "xir_nullable65_golden.h"
 #include "xir_nullable72_golden.h"
-#include "xir_nullable79_golden.h"
+#include "xir_nullable80_golden.h"
 
 static void nullable_word(uint8_t *bytes,uint32_t word) {
     for (uint32_t i=0;i<4;++i) bytes[i]=(uint8_t)(word>>(8*i));
@@ -43,8 +43,8 @@ static XrXirStatus nullable_packet_operation(const XrXirCompileContext *context,
 }
 static void nullable_packets(void) {
     for (uint32_t some=0;some<2;++some) {
-        const uint8_t *golden=some ? nullable_some79_golden : nullable_none79_golden;
-        size_t length=some ? sizeof(nullable_some79_golden) : sizeof(nullable_none79_golden);
+        const uint8_t *golden=some ? nullable_some80_golden : nullable_none80_golden;
+        size_t length=some ? sizeof(nullable_some80_golden) : sizeof(nullable_none80_golden);
         XrXirArtifact *checked=NULL;XrXirCheckedPacket packet={0};
         CHECK(xr_xir_compile_checked_read(nullable_context,golden,length,&checked,NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);

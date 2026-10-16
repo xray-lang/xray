@@ -62,7 +62,7 @@ static void floating_value_admission(void) {
     XrXirDomain *domain = NULL; CHECK(xr_xir_domain_new(4096, &domain) == XR_XIR_VALUE_OK);
     uint64_t baseline = xr_xir_domain_stats(domain).live_bytes;
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
-        XrXirTypeNode node = {XR_XIR_TYPE_CELL,cases[i].type,NULL,0,XR_XIR_UNIT,0,0, {0}};
+        XrXirTypeNode node = {XR_XIR_TYPE_CELL,cases[i].type,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}};
         XrXirTypes types = {&node,1, NULL, NULL};
         ScalarCompileOwner owner = {0};
         XrXirCompileLimits structural = xr_xir_compile_default_limits();

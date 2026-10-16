@@ -42,6 +42,11 @@ static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type)
             *type = xr_xir_type_is_array(&ctx->types,*type) ? xr_xir_array_element(&ctx->types,*type) : XR_XIR_UNIT;
         } else {
             const XrXirTypeNode *container = xr_xir_type_node(&ctx->types,*type);
+            if (container && container->kind == XR_XIR_TYPE_RECORD) {
+                uint32_t field;
+                if (!source_record_field(ctx,step,*type,step->as.member_access.name,&field,type)) return false;
+                continue;
+            }
             if (!container || (!xr_xir_type_is_struct(&ctx->types,*type) && !xr_xir_type_is_class(&ctx->types,*type))) {
                 *type = XR_XIR_UNIT; return true;
             }
@@ -74,7 +79,7 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
     XrXirType root_type = root ? source_symbol_type(ctx,root) : XR_XIR_UNIT;
     bool narrowed = root && root_type != root->type;
     if (reference && (narrowed || !root || root->construction ||
-        (!xr_xir_type_is_struct(&ctx->types,root_type) && !xr_xir_type_is_array(&ctx->types,root_type) &&
+        (!xr_xir_type_is_struct(&ctx->types,root_type) && !xr_xir_type_is_record(&ctx->types,root_type) && !xr_xir_type_is_array(&ctx->types,root_type) &&
             !xr_xir_type_is_class(&ctx->types,root_type))))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"projected ref requires an actual stored root");
     bool constructing = root && root->construction;
@@ -111,7 +116,7 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
     while (count) {
         AstNode *step = steps[--count];
         if (step->type == AST_MEMBER_ACCESS) {
-            if (reference && !xr_xir_type_is_struct(&ctx->types,place->type) &&
+            if (reference && !xr_xir_type_is_struct(&ctx->types,place->type) && !xr_xir_type_is_record(&ctx->types,place->type) &&
                 !(object_root && count + 1 == initial_count))
                 return source_fail(ctx,step,XR_XIR_BAD_TYPE,"projected ref cannot cross a Class identity");
             uint32_t field; XrXirType type;

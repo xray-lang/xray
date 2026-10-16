@@ -42,7 +42,7 @@ static XrXirStorageLayout *arena_storage(ArenaNominalCursor *c, const XrXirTypes
     XrXirStorageLayout *layouts = arena_nominal_span(c, count, sizeof(*layouts), _Alignof(XrXirStorageLayout));
     for (uint32_t i = 0; i < count && c->status == XR_XIR_VALUE_OK; ++i) {
         if (!arena_nominal_work(c, 1)) break;
-        uint32_t fields = types->nodes[i].nominal.field_count;
+        uint32_t fields = types->nodes[i].kind == XR_XIR_TYPE_NOMINAL ? types->nodes[i].nominal.field_count : 0;
         uint32_t *offsets = arena_nominal_span(c, fields, sizeof(*offsets), _Alignof(uint32_t));
         if (layouts && arena_nominal_work(c, sizeof(*layouts)))
             layouts[i] = (XrXirStorageLayout) {{0, 0}, offsets, fields, 0, 0, 0, {0,0}};
@@ -68,6 +68,14 @@ static XrXirValueStatus arena_pool_walk(const XrXirCompileContext *context,
             nodes[i].parameters = parameters;
             if (parameter_bytes) memcpy(parameters, source->parameters, (size_t)parameter_bytes);
         }
+        if (source->kind != XR_XIR_TYPE_RECORD) continue;
+        if (!arena_nominal_work(&cursor,1)) break;
+        XrXirLiteral *names = arena_nominal_span(&cursor,source->parameter_count,sizeof(*names),_Alignof(XrXirLiteral));
+        for (uint32_t f = 0; f < source->parameter_count && cursor.status == XR_XIR_VALUE_OK; ++f) {
+            XrXirLiteral name = arena_nominal_name(&cursor,source->record.names[f]);
+            if (names && arena_nominal_work(&cursor,sizeof(*names))) names[f] = name;
+        }
+        if (nodes && arena_nominal_work(&cursor,sizeof(nodes[i].record.names))) nodes[i].record.names = names;
     }
     arena_nominal_nodes(&cursor, types, nodes);
     XrXirNominalTable *nominals = arena_nominals(&cursor, types ? types->nominals : NULL);

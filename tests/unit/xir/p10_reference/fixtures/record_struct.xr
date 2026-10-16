@@ -1,0 +1,8 @@
+struct Point { x: i64; y: i64 }
+fn identity(value: Point) -> Point { return value }
+export fn referenceAnswer() -> i64 {
+    const record = { y: 7, x: 5 }
+    const point = identity(Point{ ...record })
+    const anonymous = { ...point, z: 11 }
+    return point.x * 100 + anonymous.y * 10 + anonymous.z
+}

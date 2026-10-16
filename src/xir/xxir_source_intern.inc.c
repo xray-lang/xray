@@ -39,7 +39,7 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
     }
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
         if (!source_work(ctx, NULL)) return false;
-        if (node.parameters[p].type == XR_XIR_UNIT && node.kind != XR_XIR_TYPE_TUPLE &&
+        if (node.parameters[p].type == XR_XIR_UNIT && node.kind != XR_XIR_TYPE_TUPLE && node.kind != XR_XIR_TYPE_RECORD &&
             !(node.kind == XR_XIR_TYPE_CALLABLE && node.parameters[p].mode == XR_PARAM_READ))
             return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable parameter must be a value type");
         uint32_t component = xr_xir_type_span(&ctx->types, node.parameters[p].type);
@@ -61,7 +61,7 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         if (node.kind == XR_XIR_TYPE_NOMINAL && (s->nominal.declaration != node.nominal.declaration ||
             s->nominal.argument_count != node.nominal.argument_count)) continue;
         bool same = true;
-        for (uint32_t a = 0; a < node.nominal.argument_count; ++a) {
+        for (uint32_t a = 0; node.kind == XR_XIR_TYPE_NOMINAL && a < node.nominal.argument_count; ++a) {
             if (!source_work(ctx, NULL)) return false;
             if (s->nominal.arguments[a] != node.nominal.arguments[a]) same = false;
         }
@@ -69,6 +69,10 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
             if (!source_work(ctx, NULL)) return false;
             if (s->parameters[p].type != node.parameters[p].type ||
                 s->parameters[p].mode != node.parameters[p].mode) same = false;
+        }
+        if (node.kind == XR_XIR_TYPE_RECORD) {
+            XrXirStatus status = xir_record_names_match(&ctx->compile,s,&node,&same);
+            if (status != XR_XIR_OK) return source_fail(ctx,NULL,status,"record identity comparison failed");
         }
         if (same) { *type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + i); return true; }
     }
@@ -84,6 +88,16 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         source_vector_retire(ctx,ctx->types.nodes);
         ctx->types.nodes = table; ctx->type_capacity = capacity;
     }
+    if (node.kind == XR_XIR_TYPE_RECORD) {
+        XrXirLiteral *names = node.parameter_count ? source_alloc(ctx,node.parameter_count,sizeof(*names)) : NULL;
+        if (node.parameter_count && !names) return false;
+        for (uint32_t p=0;p<node.parameter_count;++p) {
+            XrXirLiteral name = node.record.names[p];char *bytes = source_alloc(ctx,(size_t)name.length+1,1);
+            if (!bytes || !source_copy_bytes(ctx,NULL,bytes,name.bytes,name.length)) return false;
+            names[p] = (XrXirLiteral){bytes,name.length};
+        }
+        node.record.names = names;
+    }
     XrXirTypeNode *table = (XrXirTypeNode *) ctx->types.nodes;
     table[ctx->types.count] = node;
     *type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + ctx->types.count++); return true;
@@ -91,7 +105,7 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
 static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *parameters,
     uint32_t count, XrXirType result, XrXirType *type) {
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT,
-        parameters, count, result, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}, type);
+        parameters, count, result, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, .nominal={0}}, type);
 }
 static bool source_reference_promise(SourceContext *ctx, AstNode *node,
     uint32_t function, SourceExpectedType expected, XrXirType *type) {
@@ -110,12 +124,12 @@ static bool source_reference_promise(SourceContext *ctx, AstNode *node,
 }
 static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CELL, element,
-        NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
+        NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}}, type);
 }
 static bool source_nullable_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
     if (!element || xr_xir_type_is_cell(&ctx->types,element))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"nullable element must be an ordinary value type");
-    return source_intern_type(ctx,(XrXirTypeNode){XR_XIR_TYPE_NULLABLE,element,NULL,0,XR_XIR_UNIT,0,0,{0}},type);
+    return source_intern_type(ctx,(XrXirTypeNode){XR_XIR_TYPE_NULLABLE,element,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}},type);
 }
 static XrGenericParam **source_type_parameters(SourceContext *ctx, int *count) {
     if (ctx->type_scope.active) {

@@ -1,0 +1,9 @@
+var trace: i64 = 0
+fn first() -> { z: i64, a: i64 } { trace = trace * 10 + 1; return { z: 2, a: 3 } }
+fn mark() -> i64 { trace = trace * 10 + 2; return 7 }
+fn last() -> { b: i64 } { trace = trace * 10 + 3; return { b: 11 } }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    const value = { ...first(), z: mark(), ...last() }
+    return trace * 10000 + value.a * 1000 + value.z * 100 + value.b
+}

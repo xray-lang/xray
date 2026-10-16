@@ -11,6 +11,7 @@
  */
 #include "xxir_types.h"
 #include "xxir_map.h"
+#include "xxir_record.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_compile_memory.h"
 
@@ -104,6 +105,14 @@ XR_FUNC bool xr_xir_nominal_native_ordering(const XrXirTypes *types, XrXirType t
         native->kind == XR_NATIVE_DECLARATION_VALUE &&
         !memcmp(record->source_fingerprint, native->source_fingerprint.bytes, sizeof(record->source_fingerprint));
 }
+XR_FUNC bool xr_xir_type_is_record(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types,type);
+    return node && node->kind == XR_XIR_TYPE_RECORD;
+}
+XR_FUNC const XrXirTypeNode *xr_xir_record_signature(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types,type);
+    return node && node->kind == XR_XIR_TYPE_RECORD ? node : NULL;
+}
 static bool type_has_kind(const XrXirTypes *types, XrXirType type, uint32_t kind) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && node->kind == kind;
@@ -166,7 +175,7 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
     return type == XR_XIR_STRING || type == XR_XIR_ERROR ||
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
-                  node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+                  node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD || node->kind == XR_XIR_TYPE_ATOMIC ||
                   node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET));
 }
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type) {
@@ -205,7 +214,7 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
-         node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+         node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD || node->kind == XR_XIR_TYPE_ATOMIC ||
          node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET);
 }
 static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
@@ -213,10 +222,11 @@ static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t
     return type_component(types, type, earlier) || (node && node->kind == XR_XIR_TYPE_NOMINAL &&
         (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier);
 }
+#include "xxir_record_metadata.inc.c"
 static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCompileContext *remaining) {
     const XrXirTypeNode *node = &types->nodes[index];
     uint32_t span = 0;
-    if (node->kind != XR_XIR_TYPE_NOMINAL &&
+    if (node->kind != XR_XIR_TYPE_NOMINAL && node->kind != XR_XIR_TYPE_RECORD &&
         (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
          node->nominal.fields || node->nominal.field_count)) return XR_XIR_BAD_STRUCTURE;
     if (node->kind == XR_XIR_TYPE_CALLABLE) {
@@ -250,6 +260,9 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         span = xr_xir_type_span(types, node->element);
         uint32_t value_span = node->kind == XR_XIR_TYPE_MAP ? xr_xir_type_span(types, node->result) : 0;
         if (value_span > span) span = value_span;
+    } else if (node->kind == XR_XIR_TYPE_RECORD) {
+        XrXirStatus status = record_type_payload(types, index, remaining, &span);
+        if (status != XR_XIR_OK) return status;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;
@@ -326,18 +339,24 @@ static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index, const Xr
         const XrXirTypeNode *previous = &types->nodes[j];
         if (previous->kind != node->kind || previous->element != node->element ||
             previous->parameter_count != node->parameter_count || previous->result != node->result ||
-            previous->flags != node->flags || previous->nominal.declaration != node->nominal.declaration ||
-            previous->nominal.argument_count != node->nominal.argument_count) continue;
+            previous->flags != node->flags) continue;
+        if (node->kind == XR_XIR_TYPE_NOMINAL &&
+            (previous->nominal.declaration != node->nominal.declaration ||
+             previous->nominal.argument_count != node->nominal.argument_count)) continue;
         if (!xir_compile_work(work, node->parameter_count)) return XR_XIR_BUDGET;
 
         bool same = true;
         for (uint32_t p = 0; p < node->parameter_count; ++p)
             if (node->parameters[p].type != previous->parameters[p].type ||
                 node->parameters[p].mode != previous->parameters[p].mode) same = false;
-        if (!xir_compile_work(work, node->nominal.argument_count)) return XR_XIR_BUDGET;
-
-        for (uint32_t a = 0; a < node->nominal.argument_count; ++a)
-            if (node->nominal.arguments[a] != previous->nominal.arguments[a]) same = false;
+        if (node->kind == XR_XIR_TYPE_RECORD) {
+            XrXirStatus status = record_type_same(work, node, previous, &same);
+            if (status != XR_XIR_OK) return status;
+        } else if (node->kind == XR_XIR_TYPE_NOMINAL) {
+            if (!xir_compile_work(work, node->nominal.argument_count)) return XR_XIR_BUDGET;
+            for (uint32_t a = 0; a < node->nominal.argument_count; ++a)
+                if (node->nominal.arguments[a] != previous->nominal.arguments[a]) same = false;
+        }
         if (same) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -375,7 +394,8 @@ XrXirStatus xr_xir_compile_types_parameter_count(const XrXirCompileContext *cont
     if (types) {
         for (uint32_t i = 0; i < types->count; ++i) {
             const XrXirTypeNode *node = &types->nodes[i];
-            uint64_t slots = (uint64_t)node->parameter_count + node->nominal.argument_count + node->nominal.field_count;
+            uint64_t slots = node->parameter_count;
+            if (node->kind == XR_XIR_TYPE_NOMINAL) slots += (uint64_t)node->nominal.argument_count + node->nominal.field_count;
             if (!type_parameter_count_add(context, &total, slots)) return XR_XIR_BUDGET;
         }
         if (types->nominals) {
@@ -410,8 +430,11 @@ void xr_xir_compile_types_free(XrXirTypes *types) {
     if (types->nodes)
         for (uint32_t i = 0; i < types->count; ++i) {
             xr_compile_resources_free((void *) types->nodes[i].parameters);
-            xr_compile_resources_free((void *) types->nodes[i].nominal.arguments);
-            xr_compile_resources_free((void *) types->nodes[i].nominal.fields);
+            if (types->nodes[i].kind == XR_XIR_TYPE_RECORD) record_type_names_free(&types->nodes[i]);
+            else {
+                xr_compile_resources_free((void *) types->nodes[i].nominal.arguments);
+                xr_compile_resources_free((void *) types->nodes[i].nominal.fields);
+            }
         }
     xr_xir_compile_nominal_free((XrXirNominalTable *) types->nominals);
     xr_xir_compile_interfaces_free((XrXirInterfaceTable *) types->interfaces);
@@ -433,12 +456,18 @@ XrXirStatus xr_xir_compile_types_clone(const XrXirCompileContext *compile_contex
     copy->nodes = nodes; copy->count = types->count;
     for (uint32_t i = 0; i < types->count; ++i) {
         nodes[i] = types->nodes[i];
-        nodes[i].nominal.arguments = NULL; nodes[i].nominal.fields = NULL;
+        if (nodes[i].kind == XR_XIR_TYPE_RECORD) nodes[i].record.names = NULL;
+        else {nodes[i].nominal.arguments = NULL; nodes[i].nominal.fields = NULL;}
         uint32_t count = nodes[i].parameter_count;
         XrXirCallableParameter *parameters = xir_compile_copy(compile_context, types->nodes[i].parameters, (size_t) count * sizeof(*parameters), &allocation_status);
         nodes[i].parameters = parameters;
         if (count && !parameters) { xr_xir_compile_types_free(copy); return allocation_status; }
 
+        if (nodes[i].kind == XR_XIR_TYPE_RECORD) {
+            allocation_status = record_type_names_copy(compile_context, &types->nodes[i], &nodes[i]);
+            if (allocation_status != XR_XIR_OK) {xr_xir_compile_types_free(copy);return allocation_status;}
+            continue;
+        }
         uint32_t arguments = nodes[i].nominal.argument_count;
         XrXirType *owned = xir_compile_copy(compile_context, types->nodes[i].nominal.arguments, (size_t) arguments * sizeof(*owned), &allocation_status);
         nodes[i].nominal.arguments = owned;

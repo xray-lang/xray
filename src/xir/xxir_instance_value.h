@@ -81,4 +81,6 @@ XR_FUNC XrXirCallStatus xr_xir_instance_array_write(XrXirCallView *view,
     bool append, XrXirFaultDetail *fault);
 XR_FUNC XrXirCallStatus xr_xir_instance_struct_write(XrXirCallView *view,
     const XrXirValueReceiver *receiver, uint32_t field, const XrXirValue *value);
+XR_FUNC XrXirCallStatus xr_xir_instance_record_write(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, uint32_t field, const XrXirValue *value);
 #endif // XXIR_INSTANCE_VALUE_H

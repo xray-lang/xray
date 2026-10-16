@@ -352,7 +352,7 @@ static void nominal_arena_admission(void) {
     CHECK(xr_xir_domain_stats(domain).live_bytes==initial.live_bytes);
     for(uint32_t i=0;i<2;++i){f.declarations[i].parameter_count=0;f.declarations[i].constraints=NULL;}
     f.fields[0].type=XR_XIR_I64;
-    XrXirTypeNode node={XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0}};
+    XrXirTypeNode node={XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}};
     types.nodes=&node;types.count=1;
     CHECK(xr_xir_compile_types_structure_verify(&owner.context,&types)==XR_XIR_OK);
     CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
@@ -365,7 +365,7 @@ static void nominal_arena_admission(void) {
 static void nominal_arena_ownership(void) {
     NominalIdentityFixture f; nominal_identity_fixture(&f);
     XrXirType field_types[] = {XR_XIR_I64, XR_XIR_STRING};
-    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, NULL, 0, field_types, 2}};
+    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, NULL, 0, field_types, 2}};
     XrXirTypes types = {&node, 1, &f.table, NULL};
     XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);

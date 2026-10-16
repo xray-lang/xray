@@ -8,6 +8,8 @@
  */
 #include "xir/xxir_record_shape.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_record.h"
+#include "xir/xxir_type_arena_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -136,6 +138,37 @@ static XrXirStatus record_shape_trial(XrCompileResourceLimits limits,XrCompileRe
     CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK && stats->live_bytes==baseline.live_bytes);
     xr_compile_resources_release(resources);instance_compile_zero();return status;
 }
+static void record_type_descriptors(SourceFixtureOwner *compiler) {
+    char a[]="alpha",z[]="zeta";XrXirLiteral names[]={{a,5},{z,4}};
+    XrXirCallableParameter fields[]={{XR_XIR_BOOL,0},{XR_XIR_I64,0}};
+    XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_RECORD,.parameters=fields,.parameter_count=2,.record={names}},
+        {.kind=XR_XIR_TYPE_RECORD,.record={NULL}}};
+    XrXirTypes types={nodes,2,NULL,NULL};XrXirTypes *copy=NULL;
+    XrXirStatus verified=xr_xir_compile_types_structure_verify(&compiler->context,&types);
+    if (verified!=XR_XIR_OK) fprintf(stderr,"record descriptor status=%u kind=%u/%u count=%u/%u mode=%u/%u span=%u/%u fields=%u/%u\n",
+        (unsigned)verified,nodes[0].kind,nodes[1].kind,nodes[0].parameter_count,nodes[1].parameter_count,
+        fields[0].mode,fields[1].mode,nodes[0].parameter_span,nodes[1].parameter_span,fields[0].type,fields[1].type);
+    CHECK(verified==XR_XIR_OK);
+    CHECK(xr_xir_type_is_record(&types,(XrXirType)256) && !xr_xir_tuple_signature(&types,(XrXirType)256));
+    CHECK(xr_xir_compile_types_clone(&compiler->context,&types,&copy)==XR_XIR_OK);
+    CHECK(copy->nodes[0].record.names!=names && copy->nodes[0].record.names[0].bytes!=a);
+    a[0]='x';z[0]='y';CHECK(!memcmp(copy->nodes[0].record.names[0].bytes,"alpha",5));
+    CHECK(xr_xir_compile_types_structure_verify(&compiler->context,copy)==XR_XIR_OK);
+    XrXirTypeArena *arena=NULL;
+    CHECK(xr_xir_compile_type_arena_new(&compiler->context,copy,&arena)==XR_XIR_VALUE_OK);
+    xr_xir_compile_types_free(copy);copy=NULL;
+    const XrXirTypes *owned=xr_xir_compile_type_arena_types(arena);
+    CHECK(!memcmp(owned->nodes[0].record.names[0].bytes,"alpha",5));
+    XrXirLayout layout={0};CHECK(xr_xir_compile_type_arena_layout(arena,(XrXirType)256,&layout) && layout.size==8);
+    xr_xir_compile_type_arena_drop(arena);
+    a[0]='a';z[0]='z';names[1]=names[0];
+    CHECK(xr_xir_compile_types_structure_verify(&compiler->context,&types)==XR_XIR_BAD_STRUCTURE);
+    names[0]=(XrXirLiteral){z,4};names[1]=(XrXirLiteral){a,5};
+    CHECK(xr_xir_compile_types_structure_verify(&compiler->context,&types)==XR_XIR_BAD_STRUCTURE);
+    names[0]=(XrXirLiteral){a,5};names[1]=(XrXirLiteral){z,4};nodes[1]=nodes[0];
+    CHECK(xr_xir_compile_types_structure_verify(&compiler->context,&types)==XR_XIR_BAD_STRUCTURE);
+    puts("Exact Record descriptor,empty identity,owned clone/arena,distinct Tuple and strict canonical names PASS");
+}
 static void record_shape_resources(void) {
     XrCompileResourceLimits limits={64*1024*1024,8*1024*1024,128000000};XrCompileResourceStats normal={0},observed={0};
     instance_compile_attempts=0;CHECK(record_shape_trial(limits,&normal)==XR_XIR_OK);size_t sites=instance_compile_attempts;
@@ -163,7 +196,7 @@ static void record_shape_resources(void) {
 int main(void) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     record_shape_permutations(&compiler);record_shape_rejected(&compiler);record_shape_generic(&compiler);
-    record_shape_maximum(&compiler);
+    record_shape_maximum(&compiler);record_type_descriptors(&compiler);
     source_fixture_owner_free(&compiler);instance_compile_zero();record_shape_resources();
     puts("Canonical record metadata24 permutations,owned names,source ordinals,generic scope and strict rejection PASS");return 0;
 }

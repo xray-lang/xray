@@ -4,7 +4,7 @@
 typedef struct TypeTemporaryFixture { XrXirTypeNode node; XrXirTypes from,to; } TypeTemporaryFixture;
 static void type_temporary_fixture(TypeTemporaryFixture *f) {
     *f=(TypeTemporaryFixture){0};
-    f->node=(XrXirTypeNode){XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0,{0}};
+    f->node=(XrXirTypeNode){XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}};
     f->from=(XrXirTypes){&f->node,1,NULL,NULL};f->to=f->from;
 }
 static XrXirStatus type_temporary_shape(const XrXirCompileContext *context,void *opaque) {

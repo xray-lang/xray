@@ -164,9 +164,9 @@ TEST(parser_selective_import_freezes_exact_locator) {
     teardown();
 }
 
-TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder) {
+TEST(parser_block_map_key_and_coroutine_name_use_shared_decoder) {
     setup();
-    AstNode *program = parse_ok("var object = {\n"
+    AstNode *program = parse_ok("var object = #{\n"
                                 "    \"\"\"\n"
                                 "    key\n"
                                 "    \"\"\"\n"
@@ -177,10 +177,10 @@ TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder) {
                                 "    \"\"\"\n"
                                 ") work()\n");
     AstNode *object = program->as.program.statements[0]->as.var_decl.initializer;
-    ASSERT_EQ_INT(object->type, AST_OBJECT_LITERAL);
-    ASSERT_EQ_INT(object->as.object_literal.count, 1);
-    ASSERT_STR_EQ(object->as.object_literal.keys[0]->as.literal.raw_value.string_val, "key");
-    ASSERT_EQ_INT(object->as.object_literal.keys[0]->as.literal.source_form, XR_LITERAL_BLOCK);
+    ASSERT_EQ_INT(object->type, AST_MAP_LITERAL);
+    ASSERT_EQ_INT(object->as.map_literal.count, 1);
+    ASSERT_STR_EQ(object->as.map_literal.keys[0]->as.literal.raw_value.string_val, "key");
+    ASSERT_EQ_INT(object->as.map_literal.keys[0]->as.literal.source_form, XR_LITERAL_BLOCK);
     AstNode *go_expr = program->as.program.statements[1]->as.var_decl.initializer;
     ASSERT_EQ_INT(go_expr->type, AST_GO_EXPR);
     ASSERT_STR_EQ(go_expr->as.go_expr.name, "worker");
@@ -1639,7 +1639,7 @@ int main(void) {
     RUN_TEST(parser_block_string_normalizes_crlf_and_margin);
     RUN_TEST(parser_non_expression_string_consumers_use_shared_decoder);
     RUN_TEST(parser_selective_import_freezes_exact_locator);
-    RUN_TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder);
+    RUN_TEST(parser_block_map_key_and_coroutine_name_use_shared_decoder);
     RUN_TEST(parser_fixed_bytes_are_one_compact_payload_node);
     RUN_TEST(parser_c_literal_retains_nul_policy_without_element_ast);
     RUN_TEST(parser_q2_is_empty_for_every_prefix_family);

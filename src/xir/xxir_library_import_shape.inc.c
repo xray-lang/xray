@@ -44,7 +44,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_CLASS_SET:
     case XR_XIR_STRUCT_NEW:
     case XR_XIR_STRUCT_GET:
-    case XR_XIR_STRUCT_SET:
+    case XR_XIR_STRUCT_SET: case XR_XIR_RECORD_SET:
     case XR_XIR_COPY:
     case XR_XIR_LOCAL_NEW:
     case XR_XIR_LOCAL_READ:
@@ -70,8 +70,8 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_ARRAY_CAPACITY:
     case XR_XIR_ARRAY_WITH_CAPACITY:
     case XR_XIR_ARRAY_RESERVE:
-    case XR_XIR_TUPLE_NEW:
-    case XR_XIR_TUPLE_FIELD:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW:
+    case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD:
     case XR_XIR_NULLABLE_NONE:
     case XR_XIR_NULLABLE_SOME:
     case XR_XIR_NULLABLE_IS_SOME:

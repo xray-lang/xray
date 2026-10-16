@@ -29,7 +29,7 @@
 #include "xir_checked_scalar71_golden.h"
 #include "xir_checked_scalar72_golden.h"
 #include "xir_checked_scalar73_golden.h"
-#include "xir_checked_scalar79_golden.h"
+#include "xir_checked_scalar80_golden.h"
 #include "xir_checked_scalar74_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
@@ -187,7 +187,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 32 && XR_XIR_CHECKED_CONTRACT == 79 && XR_XIR_OP_COUNT == 154, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 32 && XR_XIR_CHECKED_CONTRACT == 80 && XR_XIR_OP_COUNT == 157, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -227,8 +227,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[144] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
-    CHECK(!memcmp(packet.bytes + 32, checked_scalar79_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar79_golden) && !memcmp(packet.bytes,checked_scalar79_golden,packet.length));
+    CHECK(!memcmp(packet.bytes + 32, checked_scalar80_digest, 32));
+    CHECK(packet.length==sizeof(checked_scalar80_golden) && !memcmp(packet.bytes,checked_scalar80_golden,packet.length));
     checked_previous_identity_rejected(checked_scalar73_golden,sizeof(checked_scalar73_golden));
     checked_previous_identity_rejected(checked_scalar72_golden,sizeof(checked_scalar72_golden));
     checked_previous_identity_rejected(checked_scalar71_golden,sizeof(checked_scalar71_golden));
@@ -635,7 +635,7 @@ static void deep_nominal_fields(void) {
     for (uint32_t i = 0; i < DEPTH; ++i)
         nodes[i] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY,
             (XrXirType) (i ? XR_XIR_CONSTRUCTED_TYPE_BASE + i - 1 : XR_XIR_TYPE_PARAMETER_BASE),
-            NULL, 0, XR_XIR_UNIT, 0, 1, {0}};
+            NULL, 0, XR_XIR_UNIT, 0, 1, .nominal={0}};
     for (uint32_t i = 0; i < 3; ++i) nodes[DEPTH + i] = built.types->nodes[1 + i];
     XrXirNominalDeclaration declarations[2]; XrXirNominalField fields[2][2];
     memcpy(declarations, built.types->nominals->declarations, sizeof(declarations));
@@ -724,7 +724,7 @@ static void nominal_storage_layout(void) {
     xr_xir_compile_artifact_free(closed);closed=NULL;
     NominalIdentityFixture empty; nominal_identity_fixture(&empty);
     empty.identities[0].fields = NULL; empty.identities[0].field_count = 0;
-    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}};
     XrXirTypes types = {&node, 1, &empty.table, NULL}; budget = original;
     CHECK(xr_xir_compile_nominal_layout(&budget, &types, (XrXirType)256, &target, &layout, NULL, 0) == XR_XIR_OK);
     CHECK(!layout.size && layout.alignment == 1);
@@ -887,7 +887,7 @@ static void nominal_callable_components(void) {
     XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
     XrXirCallableParameter parameter = {(XrXirType)256, 0};
     XrXirTypeNode nodes[2] = {built.types->nodes[0],
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}};
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, (XrXirType)256, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, .nominal={0}}};
     XrXirTypes types = {nodes, 2, built.types->nominals, NULL}; built.types = &types;
     CheckedAtomicPool atomic_pool;checked_atomic_pool(&built,&atomic_pool);
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);

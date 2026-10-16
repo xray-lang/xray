@@ -39,9 +39,10 @@ static XrXirStatus effect_lowered_snapshot_node(const XrXirCompileContext *work,
         left->result != right->result || left->flags != right->flags ||
         left->parameter_span != right->parameter_span || left->parameter_span ||
         left->parameter_count != right->parameter_count ||
-        left->nominal.declaration != right->nominal.declaration ||
-        left->nominal.argument_count != right->nominal.argument_count ||
-        left->nominal.field_count != right->nominal.field_count ||
+        (left->kind == XR_XIR_TYPE_NOMINAL &&
+            (left->nominal.declaration != right->nominal.declaration ||
+             left->nominal.argument_count != right->nominal.argument_count ||
+             left->nominal.field_count != right->nominal.field_count)) ||
         (left->parameter_count && (!left->parameters || !right->parameters)))
         return XR_XIR_BAD_STRUCTURE;
     for (uint32_t p = 0; p < left->parameter_count; ++p) {
@@ -49,6 +50,11 @@ static XrXirStatus effect_lowered_snapshot_node(const XrXirCompileContext *work,
         if (left->parameters[p].mode != right->parameters[p].mode ||
             left->parameters[p].type != right->parameters[p].type) return XR_XIR_BAD_STRUCTURE;
     }
+    if (left->kind == XR_XIR_TYPE_RECORD) {
+        bool same = true;XrXirStatus status = xir_record_names_match(work,left,right,&same);
+        return status != XR_XIR_OK ? status : same ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+    }
+    if (left->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_OK;
     XrXirStatus status = effect_lowered_snapshot_vector(work, left->nominal.arguments,
         right->nominal.arguments, left->nominal.argument_count);
     if (status == XR_XIR_OK) status = effect_lowered_snapshot_vector(work, left->nominal.fields,

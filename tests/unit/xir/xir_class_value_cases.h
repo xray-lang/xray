@@ -19,8 +19,8 @@ static XrXirTypeArena *class_value_arena(XrXirDomain *domain) {
     XrXirNominalIdentity identity={{"module",6},{"Counter",7},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}};
     XrXirNominalTable table={NULL,1,&identity};XrXirType types_[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_STRING};
     XrXirTypeNode nodes[]={
-        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,types_,3}},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0,{0}}};
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={0,NULL,0,types_,3}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}}};
     XrXirTypes types={nodes,2,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(1048576, 1048576, 1000000);
     XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
     memset(fields,0xcc,sizeof(fields));memset(nodes,0xcc,sizeof(nodes));

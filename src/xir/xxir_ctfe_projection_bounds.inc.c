@@ -90,7 +90,7 @@ static XrXirCtfeStatus ctfe_projection_loan_bound(CtfeCallExecution *execution,C
     const XrXirValue *root=xr_xir_cell_canonical_root(&record->value);if (!root) return XR_XIR_CTFE_BAD_ARTIFACT;
     bool identity=xr_xir_type_is_class(run->module->types,(XrXirType)root->type);
     XrXirType type=identity?(XrXirType)root->type:xr_xir_cell_element(run->module->types,(XrXirType)root->type);
-    if (!identity && !xr_xir_type_is_array(run->module->types,type) && !xr_xir_type_is_struct(run->module->types,type)) return XR_XIR_CTFE_NOT_SUPPORTED;
+    if (!identity && !xr_xir_type_is_array(run->module->types,type) && !xr_xir_type_is_struct(run->module->types,type) && !xr_xir_type_is_record(run->module->types,type)) return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus status=ctfe_validation_work(run,state,type);if (status!=XR_XIR_CTFE_OK) return status;
     if (identity) {
         XrXirType leaf=xr_xir_cell_element(run->module->types,(XrXirType)record->value.type);

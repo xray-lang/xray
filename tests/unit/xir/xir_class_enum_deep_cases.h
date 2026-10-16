@@ -24,10 +24,10 @@ static XrXirTypeArena *class_enum_arena(XrXirDomain *domain) {
  XrXirType cf_types[]={XR_XIR_I64,XR_XIR_STRING},sf_types[]={(XrXirType)256,XR_XIR_STRING};
  XrXirType ef_types[]={(XrXirType)256,XR_XIR_STRING,(XrXirType)257};
  XrXirTypeNode nodes[]={
- {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,cf_types,2}},
- {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,NULL,0,sf_types,2}},
- {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{2,NULL,0,ef_types,3}},
- {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0,{0}}};
+ {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={0,NULL,0,cf_types,2}},
+ {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={1,NULL,0,sf_types,2}},
+ {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={2,NULL,0,ef_types,3}},
+ {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}}};
  XrXirTypes types={nodes,4,&table,NULL};ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);XrXirTypeArena *arena=NULL;
  CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena)==XR_XIR_VALUE_OK);
  class_pipeline_release_producer(&owner);(void)domain;memset(ids,0xcc,sizeof(ids));memset(variants,0xcc,sizeof(variants));return arena;

@@ -128,13 +128,21 @@ static XrXirStatus effect_body_type_nodes_compare(const XrXirCompileContext *wor
         const XrXirTypeNode *x=&a->nodes[t],*y=&b->nodes[t];
         if (!xir_compile_work(work,2*sizeof(*x))) return XR_XIR_BUDGET;
         if ((x->parameter_count && !x->parameters) || (y->parameter_count && !y->parameters) ||
-            (x->nominal.argument_count && !x->nominal.arguments) || (y->nominal.argument_count && !y->nominal.arguments) ||
-            (x->nominal.field_count && !x->nominal.fields) || (y->nominal.field_count && !y->nominal.fields))
+            (x->kind==XR_XIR_TYPE_NOMINAL && ((x->nominal.argument_count && !x->nominal.arguments) ||
+                (x->nominal.field_count && !x->nominal.fields))) ||
+            (y->kind==XR_XIR_TYPE_NOMINAL && ((y->nominal.argument_count && !y->nominal.arguments) ||
+                (y->nominal.field_count && !y->nominal.fields))))
             return XR_XIR_BAD_STRUCTURE;
         if (x->kind!=y->kind || x->element!=y->element || x->result!=y->result || x->flags!=y->flags ||
-            x->parameter_span!=y->parameter_span || x->parameter_count!=y->parameter_count ||
-            x->nominal.declaration!=y->nominal.declaration || x->nominal.argument_count!=y->nominal.argument_count ||
-            x->nominal.field_count!=y->nominal.field_count) return effect_body_difference(same);
+            x->parameter_span!=y->parameter_span || x->parameter_count!=y->parameter_count) return effect_body_difference(same);
+        if (x->kind==XR_XIR_TYPE_NOMINAL && (x->nominal.declaration!=y->nominal.declaration ||
+            x->nominal.argument_count!=y->nominal.argument_count || x->nominal.field_count!=y->nominal.field_count))
+            return effect_body_difference(same);
+        if (x->kind==XR_XIR_TYPE_RECORD) {
+            bool names_same=true;status=xir_record_names_match(work,x,y,&names_same);
+            if (status!=XR_XIR_OK) return status;
+            if (!names_same) {status=effect_body_difference(same);if (status!=XR_XIR_OK) return status;}
+        }
         for (uint32_t p=0;p<x->parameter_count;++p) {
             if (!xir_compile_work(work,2*sizeof(*x->parameters))) return XR_XIR_BUDGET;
             if (x->parameters[p].mode!=y->parameters[p].mode || x->parameters[p].type!=y->parameters[p].type) {
@@ -142,6 +150,7 @@ static XrXirStatus effect_body_type_nodes_compare(const XrXirCompileContext *wor
                 if (difference!=XR_XIR_OK) return difference;
             }
         }
+        if (x->kind!=XR_XIR_TYPE_NOMINAL) continue;
         status=effect_body_type_vector_compare(work,x->nominal.arguments,y->nominal.arguments,x->nominal.argument_count,same);
         if (status==XR_XIR_OK) status=effect_body_type_vector_compare(work,x->nominal.fields,y->nominal.fields,
             x->nominal.field_count,same);

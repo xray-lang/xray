@@ -73,7 +73,7 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
         return graph_direct_edge(&task->outcome.value, visit, context) &&
             graph_direct_edge(&task->outcome.panic.message, visit, context);
     }
-    if (object->kind == XR_XIR_TYPE_TUPLE) {
+    if ((object->kind == XR_XIR_TYPE_TUPLE || object->kind == XR_XIR_TYPE_RECORD)) {
         XirTuple *tuple = (XirTuple *)object;
         for (uint32_t i = 0; i < tuple->count; ++i)
             if (!graph_edge_work(budget) || !graph_direct_edge(&tuple->fields[i], visit, context)) return false;

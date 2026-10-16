@@ -56,6 +56,10 @@ static XrXirValueStatus cell_projection_shape(const XrXirValuePath *path,
             current = xr_xir_array_element(types, current);
         } else if (step->kind == XR_XIR_PATH_FIELD) {
             const XrXirTypeNode *node = xr_xir_type_node(types, current);
+            if (node && node->kind == XR_XIR_TYPE_RECORD) {
+                if (step->selector < 0 || (uint64_t)step->selector >= node->parameter_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+                current = node->parameters[step->selector].type;continue;
+            }
             bool identity_root = i == 0 && xr_xir_type_is_class(types, start);
             if (!node || (!xr_xir_type_is_struct(types, current) && !identity_root) || step->selector < 0 ||
                 (uint64_t)step->selector >= node->nominal.field_count)

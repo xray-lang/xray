@@ -12,13 +12,13 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_nominal.h"
 #include "base/xsha256.h"
-#include "root_construction79_goldens.h"
+#include "root_construction80_goldens.h"
 #include "root_construction74_goldens.h"
 _Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_ADD_INT == 25 && XR_XIR_CALL == 28 &&
     XR_XIR_RETURN == 33 && XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83,
     "Independent construction vector opcode identities changed");
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 32u && XR_XIR_CHECKED_CONTRACT == 79u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 32u && XR_XIR_CHECKED_CONTRACT == 80u &&
     XR_XIR_CALLABLE_ROOT_REQUIRED == 4u, "Independent construction wire facts changed");
 
 static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
@@ -60,7 +60,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
         XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
     XrXirNominalTable table = {&nominal,1,NULL};
     XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,
-        {0,NULL,0,NULL,0}};
+        .nominal={0,NULL,0,NULL,0}};
     XrXirTypes types = {&node,1,&table,NULL};
     /* The initializer owns ROOT. These direct scalar construction calls have
      * no callable, Cell, unknown or deferred input. The complete checker must

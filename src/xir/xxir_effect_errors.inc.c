@@ -100,13 +100,16 @@ static const uint64_t *error_read(const ErrorFlow *flow, const uint64_t *row, ui
 /* Complete type verification precedes inference. Closed outer containers are
  * not Error atoms, even when an extracted payload has its own error facts. */
 static bool error_closed_node_shape(const XrXirTypeNode *node) {
-    if (node->kind != XR_XIR_TYPE_NOMINAL &&
+    if (node->kind != XR_XIR_TYPE_NOMINAL && node->kind != XR_XIR_TYPE_RECORD &&
         (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
          node->nominal.fields || node->nominal.field_count)) return false;
     switch (node->kind) {
     case XR_XIR_TYPE_CALLABLE:
         return node->element == XR_XIR_UNIT && xr_xir_callable_flags_valid(node->flags) &&
             ((node->parameter_count != 0) == (node->parameters != NULL));
+    case XR_XIR_TYPE_RECORD:
+        return node->element == XR_XIR_UNIT && node->result == XR_XIR_UNIT && !node->flags &&
+            (!!node->parameter_count == !!node->parameters) && (!!node->parameter_count == !!node->record.names);
     case XR_XIR_TYPE_TUPLE:
         return node->element == XR_XIR_UNIT && node->result == XR_XIR_UNIT && !node->flags &&
             node->parameter_count && node->parameters;

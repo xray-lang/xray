@@ -19,10 +19,10 @@ static XrXirArtifact *nominal_checked_fixture(const XrXirCompileContext *context
     f.declarations[1].module = (XrXirLiteral) {"beta", 4};
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_STRING};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_ARRAY, (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, NULL, 0, XR_XIR_UNIT, 0, 1, {0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments, 1, NULL, 0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 1, 1, NULL, 0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, arguments, 1, NULL, 0}}};
+        {XR_XIR_TYPE_ARRAY, (XrXirType) XR_XIR_TYPE_PARAMETER_BASE, NULL, 0, XR_XIR_UNIT, 0, 1, .nominal={0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, arguments, 1, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, arguments + 1, 1, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={1, arguments, 1, NULL, 0}}};
     XrXirTypes types = {mode == 2 ? nodes + 1 : mode ? nodes : NULL, mode == 3 ? 4u : mode == 2 ? 3u : mode ? 1u : 0u, &f.table, NULL};
     if (mode == 1 || mode == 3) f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     built.types = &types;

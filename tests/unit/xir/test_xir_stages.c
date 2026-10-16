@@ -402,11 +402,11 @@ static void numeric_admission(void) {
 static void constructed_metadata(void) {
     XrXirCallableParameter input = {(XrXirType)256,0};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, {0}},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, {0}},
-        {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536, {0}}
+        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,&input,1,(XrXirType)256,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)258,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY,(XrXirType)(XR_XIR_TYPE_PARAMETER_LIMIT-1),NULL,0,XR_XIR_UNIT,0,65536, .nominal={0}}
     };
     XrXirTypes types = {nodes,5, NULL, NULL};
     XrXirCompileContext budget = stage_context_default();
@@ -516,7 +516,7 @@ static void nominal_metadata_cases(void) {
     b = stage_context_default();
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f);
-    XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1), NULL, 0, XR_XIR_UNIT, 0, 2, {0}};
+    XrXirTypeNode node = {XR_XIR_TYPE_ARRAY, (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1), NULL, 0, XR_XIR_UNIT, 0, 2, .nominal={0}};
     XrXirTypes types = {&node, 1, NULL, NULL}; f.fields[0].type = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
     b = stage_context_default();
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, &types) == XR_XIR_BAD_TYPE);
@@ -603,9 +603,9 @@ static void nominal_pool_ownership(void) {
 static void nominal_instance_metadata(void) {
     NominalFixture f; nominal_fixture(&f);
     XrXirType argument = (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {1, &argument, 1, NULL, 0}}};
+    XrXirTypeNode nodes[] = {{XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, &argument, 1, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={1, &argument, 1, NULL, 0}}};
     XrXirTypes types = {nodes, 3, &f.table, NULL};
     XrXirCompileContext budget = stage_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_OK);
@@ -629,7 +629,7 @@ static void nominal_instance_metadata(void) {
         budget = stage_context_default();
         CHECK(nominal_catalog_semantics(&types, &budget) != XR_XIR_OK);
         nodes[2] = saved; argument = saved_argument;
-        nodes[0] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+        nodes[0] = (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}};
     }
     nodes[0].nominal.declaration = 1; budget = stage_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_BAD_STRUCTURE);
@@ -652,8 +652,8 @@ static void nominal_argument_identity(void) {
     }
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_STRING, XR_XIR_STRING, XR_XIR_I64};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments, 2, NULL, 0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, {0, arguments + 2, 2, NULL, 0}}};
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, arguments, 2, NULL, 0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0, arguments + 2, 2, NULL, 0}}};
     XrXirTypes types = {nodes, 2, &f.table, NULL};
     XrXirCompileContext budget = stage_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types) == XR_XIR_OK);
@@ -673,8 +673,8 @@ static void nominal_context_proofs(void) {
     NominalFixture f; nominal_fixture(&f);
     XrXirType argument = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + 1);
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_ARRAY, argument, NULL, 0, XR_XIR_UNIT, 0, 2, {0}},
-        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 2, {0, &argument, 1, NULL, 0}}};
+        {XR_XIR_TYPE_ARRAY, argument, NULL, 0, XR_XIR_UNIT, 0, 2, .nominal={0}},
+        {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0, XR_XIR_UNIT, 0, 2, .nominal={0, &argument, 1, NULL, 0}}};
     XrXirTypes types = {nodes, 2, &f.table, NULL};
     const XrXirType nominal = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirConstraint allowed[] = {{0}, {.markers = XR_XIR_CONSTRAINT_SENDABLE}}, denied[] = {{.markers = XR_XIR_CONSTRAINT_SENDABLE}, {0}};

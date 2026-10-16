@@ -103,7 +103,7 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
     }
     if (status != XR_XIR_OK)
         return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
-    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
+    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}}, type);
 }
 static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
     if (find_name(ctx, ctx->locals, name) || find_name(ctx, ctx->names[ctx->module], name) ||

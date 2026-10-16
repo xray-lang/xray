@@ -1,0 +1,5 @@
+type Row = { n: i64, ready: bool }
+export fn referenceAnswer() -> i64 {
+    const value: Row = { n: 1 }
+    return value.n
+}

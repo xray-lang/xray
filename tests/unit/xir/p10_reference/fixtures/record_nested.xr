@@ -1,0 +1,7 @@
+fn identity<T>(value: T) -> T { return value }
+export fn referenceAnswer() -> i64 {
+    var outer = { nested: { items: [3, 7], empty: () }, n: 13 }
+    const snapshot = identity(outer)
+    outer.nested.items[0] = 17
+    return snapshot.nested.items[0] * 10000 + outer.nested.items[0] * 100 + snapshot.n
+}

@@ -17,11 +17,14 @@ XR_FUNC XrXirStatus xr_xir_compile_type_description(const XrXirCompileContext *c
             !xr_xir_type_is_number(type) && type != XR_XIR_STRING &&
             type != XR_XIR_ERROR && type != XR_XIR_PANIC_INFO) return XR_XIR_BAD_TYPE;
     } else {
-        if (node->kind < XR_XIR_TYPE_CALLABLE || node->kind > XR_XIR_TYPE_TASK)
+        if (node->kind < XR_XIR_TYPE_CALLABLE || node->kind > XR_XIR_TYPE_RECORD)
             return XR_XIR_BAD_TYPE;
         description.kind = node->kind; description.node = node;
-        if (node->kind == XR_XIR_TYPE_TUPLE) {
-            if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
+        if (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) {
+            if ((node->kind == XR_XIR_TYPE_TUPLE && !node->parameter_count) ||
+                (node->parameter_count && !node->parameters) ||
+                (node->kind == XR_XIR_TYPE_RECORD && node->parameter_count && !node->record.names))
+                return XR_XIR_BAD_STRUCTURE;
             description.field_count = node->parameter_count;
         } else if (node->kind == XR_XIR_TYPE_NOMINAL) {
             const XrXirNominalTable *table = types->nominals;
@@ -55,11 +58,15 @@ XR_FUNC XrXirStatus xr_xir_compile_description_field(const XrXirCompileContext *
     if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
     if (field >= description->field_count) return XR_XIR_BAD_STRUCTURE;
     XrXirFieldDescription result = {0};
-    if (description->kind == XR_XIR_TYPE_TUPLE) {
-        if (!description->node || description->node->kind != XR_XIR_TYPE_TUPLE ||
+    if (description->kind == XR_XIR_TYPE_TUPLE || description->kind == XR_XIR_TYPE_RECORD) {
+        if (!description->node || description->node->kind != description->kind ||
             description->node->parameter_count != description->field_count ||
             !description->node->parameters) return XR_XIR_BAD_STRUCTURE;
         result.type = result.template_type = description->node->parameters[field].type;
+        if (description->kind == XR_XIR_TYPE_RECORD) {
+            if (!description->node->record.names) return XR_XIR_BAD_STRUCTURE;
+            result.name = description->node->record.names[field];result.flags = XR_XIR_FIELD_MUTABLE;
+        }
         result.resolved = true;
     } else if (description->kind == XR_XIR_TYPE_NOMINAL) {
         if (!description->node || description->node->kind != XR_XIR_TYPE_NOMINAL ||

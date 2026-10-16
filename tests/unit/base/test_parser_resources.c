@@ -670,7 +670,29 @@ static void this_ref_positions(void) {
     printf("parser real ref THIS marker spans: allocations=%zu full FI/three axes/producer death/physical zero passed\n",sites);
 }
 
+static void record_key_lifetime(void) {
+    reset();XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;AstNode *program=NULL;
+    OK(xr_compile_resources_new(&unlimited,&resources));
+    CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
+    char source_text[]="const seed = 3\nconst value = {\n    name: \"text\",\n    seed,\n    ...{ other: 4 }\n}\nconst map = #{\"key\": 5}\n";
+    CHECK(xr_compile_parse(session,source_text,&program)==XR_PARSE_OK && program);
+    const AstNode *record=program->as.program.statements[1]->as.var_decl.initializer;
+    const AstNode *map=program->as.program.statements[2]->as.var_decl.initializer;
+    CHECK(record->type==AST_OBJECT_LITERAL && record->as.object_literal.count==3);
+    const AstNode *name=record->as.object_literal.keys[0],*seed=record->as.object_literal.keys[1];
+    CHECK(name && name->type==AST_RECORD_KEY && name->line==3 && name->as.literal.string_length==4);
+    CHECK(seed && seed->type==AST_RECORD_KEY && seed->line==4 && seed->as.literal.string_length==4);
+    CHECK(!record->as.object_literal.keys[2] && record->as.object_literal.values[2]->type==AST_SPREAD_EXPR);
+    CHECK(map->type==AST_MAP_LITERAL && map->as.map_literal.count==1 && map->as.map_literal.keys[0]->type==AST_LITERAL_STRING);
+    memset(source_text,'?',sizeof(source_text));xr_compile_session_free(session);xr_compile_resources_release(resources);
+    CHECK(!memcmp(name->as.literal.raw_value.string_val,"name",4) && !memcmp(seed->as.literal.raw_value.string_val,"seed",4));
+    CHECK(!strcmp(map->as.map_literal.keys[0]->as.literal.raw_value.string_val,"key"));
+    xr_program_destroy(program);CHECK(!physical_live&&!allocation_count);
+    puts("Record identifier keys preserve exact spans and owned bytes after producer death; Map string keys stay distinct");
+}
+
 int main(void) {
+    record_key_lifetime();
     recovered_positions();
     this_positions();
     this_ref_positions();

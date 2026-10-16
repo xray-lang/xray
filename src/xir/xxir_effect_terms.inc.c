@@ -10,6 +10,7 @@
  *   Verified declaration identities survive substitution without publishing a
  *   new executable descriptor or borrowing storage into the final summary.
  */
+#include "xxir_record_names_internal.h"
 #include "xxir_nominal.h"
 #include "xxir_type_match_internal.h"
 
@@ -148,19 +149,37 @@ static void effect_terms_free(EffectTerms *pool) {
     }
     pool->slice=NULL;pool->slice_capacity=0;
 }
+static bool effect_record_names(EffectTerms *pool, XrXirTypeNode *node) {
+    XrXirLiteral *names = node->parameter_count ? effect_terms_alloc(pool,node->parameter_count,sizeof(*names)) : NULL;
+    if (node->parameter_count && !names) return false;
+    for (uint32_t f = 0; f < node->parameter_count; ++f) {
+        XrXirLiteral name = node->record.names[f];
+        char *bytes = effect_terms_alloc(pool,(uint64_t)name.length+1,1);
+        if (!bytes) return false;
+        if (!xir_compile_work(pool->remaining,(uint64_t)name.length+1+sizeof(*names))) {
+            pool->status=XR_XIR_BUDGET;return false;
+        }
+        memcpy(bytes,name.bytes,name.length);bytes[name.length]=0;names[f]=(XrXirLiteral){bytes,name.length};
+    }
+    node->record.names=names;return true;
+}
 /* Shape equality intentionally excludes executable field/layout projections. */
 static bool effect_term_same(EffectTerms *pool, const XrXirTypeNode *a, const XrXirTypeNode *b) {
-    if (!xir_compile_work(pool->remaining, (uint64_t)a->parameter_count + a->nominal.argument_count + 1)) {
+    if (!xir_compile_work(pool->remaining, (uint64_t)a->parameter_count + (a->kind==XR_XIR_TYPE_NOMINAL?a->nominal.argument_count:0) + 1)) {
         pool->status = XR_XIR_BUDGET; return false;
     }
     if (a->kind != b->kind || a->flags != b->flags || a->element != b->element ||
-        a->result != b->result || a->parameter_count != b->parameter_count ||
-        a->nominal.declaration != b->nominal.declaration ||
-        a->nominal.argument_count != b->nominal.argument_count) return false;
+        a->result != b->result || a->parameter_count != b->parameter_count) return false;
+    if (a->kind==XR_XIR_TYPE_NOMINAL && (a->nominal.declaration != b->nominal.declaration ||
+        a->nominal.argument_count != b->nominal.argument_count)) return false;
+    if (a->kind==XR_XIR_TYPE_RECORD) {
+        bool same=true;pool->status=xir_record_names_match(pool->remaining,a,b,&same);
+        if (pool->status!=XR_XIR_OK || !same) return false;
+    }
     for (uint32_t i = 0; i < a->parameter_count; ++i)
         if (a->parameters[i].type != b->parameters[i].type || a->parameters[i].mode != b->parameters[i].mode)
             return false;
-    for (uint32_t i = 0; i < a->nominal.argument_count; ++i)
+    for (uint32_t i = 0; a->kind==XR_XIR_TYPE_NOMINAL && i < a->nominal.argument_count; ++i)
         if (a->nominal.arguments[i] != b->nominal.arguments[i]) return false;
     return true;
 }
@@ -179,7 +198,7 @@ static XrXirType effect_term_intern(EffectTerms *pool, XrXirTypeNode node) {
         if (pool->types.count) { if (!xir_compile_work(pool->remaining, (size_t)pool->types.count * sizeof(*nodes))) { pool->status = XR_XIR_BUDGET; return XR_XIR_UNIT; } memcpy(nodes, pool->types.nodes, (size_t)pool->types.count * sizeof(*nodes)); }
         pool->types.nodes = nodes; pool->capacity = capacity;
     }
-    if (node.nominal.argument_count) {
+    if (node.kind==XR_XIR_TYPE_NOMINAL && node.nominal.argument_count) {
         XrXirType *arguments = effect_terms_alloc(pool, node.nominal.argument_count, sizeof(*arguments));
         if (!arguments) return XR_XIR_UNIT;
         { if (!xir_compile_work(pool->remaining, (size_t)node.nominal.argument_count * sizeof(*arguments))) { pool->status = XR_XIR_BUDGET; return XR_XIR_UNIT; } memcpy(arguments, node.nominal.arguments, (size_t)node.nominal.argument_count * sizeof(*arguments)); }
@@ -191,7 +210,8 @@ static XrXirType effect_term_intern(EffectTerms *pool, XrXirTypeNode node) {
         { if (!xir_compile_work(pool->remaining, (size_t)node.parameter_count * sizeof(*parameters))) { pool->status = XR_XIR_BUDGET; return XR_XIR_UNIT; } memcpy(parameters, node.parameters, (size_t)node.parameter_count * sizeof(*parameters)); }
         node.parameters = parameters;
     }
-    node.nominal.fields = NULL; node.nominal.field_count = 0;
+    if (node.kind==XR_XIR_TYPE_RECORD) {if (!effect_record_names(pool,&node)) return XR_XIR_UNIT;}
+    else {node.nominal.fields = NULL; node.nominal.field_count = 0;}
     ((XrXirTypeNode *)pool->types.nodes)[pool->types.count] = node;
     return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + pool->types.count++);
 }
@@ -240,7 +260,8 @@ static bool effect_term_push(EffectTerms *pool,EffectTermFrame *frame,uint32_t i
     *frame=(EffectTermFrame){.node=pool->types.nodes[index],.index=index,
         .children=children,.child_capacity=capacity};
     frame->node.parameter_span=0;
-    uint64_t bytes=(uint64_t)frame->node.nominal.argument_count*sizeof(XrXirType)+
+    uint64_t bytes=(frame->node.kind==XR_XIR_TYPE_NOMINAL ?
+        (uint64_t)frame->node.nominal.argument_count*sizeof(XrXirType) : 0)+
         (uint64_t)frame->node.parameter_count*sizeof(XrXirCallableParameter);
     if (bytes>SIZE_MAX || !xir_compile_work(pool->remaining,1)) {
         pool->status=XR_XIR_BUDGET;return false;
@@ -280,7 +301,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         XrXirTypeNode source=pool->types.nodes[frame->index];
         uint32_t components=source.kind==XR_XIR_TYPE_NOMINAL ? source.nominal.argument_count :
             source.kind==XR_XIR_TYPE_CALLABLE ? source.parameter_count+1 :
-            source.kind==XR_XIR_TYPE_TUPLE ? source.parameter_count : source.kind==XR_XIR_TYPE_MAP ? 2 : 1;
+            (source.kind == XR_XIR_TYPE_TUPLE || source.kind == XR_XIR_TYPE_RECORD) ? source.parameter_count : source.kind==XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next==components) {
             cache[frame->index]=effect_term_intern(pool,frame->node);
             --depth;continue;
@@ -288,7 +309,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         XrXirType child=source.element;
         if (source.kind==XR_XIR_TYPE_MAP && frame->next) child=source.result;
         else if (source.kind==XR_XIR_TYPE_NOMINAL) child=source.nominal.arguments[frame->next];
-        else if (source.kind==XR_XIR_TYPE_TUPLE) child=source.parameters[frame->next].type;
+        else if ((source.kind == XR_XIR_TYPE_TUPLE || source.kind == XR_XIR_TYPE_RECORD)) child=source.parameters[frame->next].type;
         else if (source.kind==XR_XIR_TYPE_CALLABLE)
             child=frame->next==source.parameter_count ? source.result : source.parameters[frame->next].type;
         if (!effect_term_ready(pool,child,arguments,cache,&result)) {
@@ -300,7 +321,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         }
         if (source.kind==XR_XIR_TYPE_NOMINAL) ((XrXirType *)frame->node.nominal.arguments)[frame->next]=result;
         else if (source.kind==XR_XIR_TYPE_MAP && frame->next) frame->node.result=result;
-        else if (source.kind!=XR_XIR_TYPE_CALLABLE && source.kind!=XR_XIR_TYPE_TUPLE) frame->node.element=result;
+        else if (source.kind!=XR_XIR_TYPE_CALLABLE && (source.kind != XR_XIR_TYPE_TUPLE && source.kind != XR_XIR_TYPE_RECORD)) frame->node.element=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next==source.parameter_count) frame->node.result=result;
         else ((XrXirCallableParameter *)frame->node.parameters)[frame->next]=
             (XrXirCallableParameter){result,source.parameters[frame->next].mode};

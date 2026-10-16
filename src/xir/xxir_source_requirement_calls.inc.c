@@ -20,7 +20,7 @@ static bool source_reify_type(SourceContext *ctx, AstNode *site,
     ++ctx->depth;
     XrXirTypeNode node = *found;
     bool ok = true;
-    if (node.kind == XR_XIR_TYPE_CALLABLE || node.kind == XR_XIR_TYPE_TUPLE) {
+    if (node.kind == XR_XIR_TYPE_CALLABLE || (node.kind == XR_XIR_TYPE_TUPLE || node.kind == XR_XIR_TYPE_RECORD)) {
         XrXirCallableParameter *parameters = node.parameter_count ? source_alloc(ctx,node.parameter_count,sizeof(*parameters)) : NULL;
         ok = !node.parameter_count || parameters;
         for (uint32_t p = 0; p < node.parameter_count && ok; ++p) {

@@ -104,6 +104,12 @@ static XrXirValueStatus type_receiving_node(TypeReceiving *r,uint32_t index) {
     if (!b || a->kind!=b->kind || a->flags!=b->flags || a->parameter_span || b->parameter_span ||
         a->parameter_count!=b->parameter_count) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (a->kind==XR_XIR_TYPE_NOMINAL) return type_receiving_nominal(r,a,b);
+    if (a->kind==XR_XIR_TYPE_RECORD) {
+        for (uint32_t p=0;p<a->parameter_count;++p) {
+            XrXirValueStatus status=type_receiving_literal(r,a->record.names[p],b->record.names[p]);
+            if (status!=XR_XIR_VALUE_OK) return status;
+        }
+    }
     XrXirValueStatus status=type_receiving_edge(r,a->element,b->element);
     if (status==XR_XIR_VALUE_OK) status=type_receiving_edge(r,a->result,b->result);
     for (uint32_t p=0;status==XR_XIR_VALUE_OK && p<a->parameter_count;++p) {

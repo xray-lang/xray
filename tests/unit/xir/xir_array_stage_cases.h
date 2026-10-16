@@ -138,7 +138,7 @@ static void array_compact_layout(void) {
     const uint32_t widths[] = {1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 8, 8, 8, 8};
     XirArrayMetadataFixture f; xir_array_metadata_init(&f);
     XrXirTypeNode nodes[4]; memcpy(nodes, f.nodes, sizeof(f.nodes));
-    nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_ATOMIC, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+    nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_ATOMIC, XR_XIR_I64, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}};
     f.types.nodes = nodes; f.types.count = 4;
     CHECK(xr_xir_compile_types_structure_verify(&stage_context, &f.types) == XR_XIR_OK);
     XrXirLayout retired = {77, 88};

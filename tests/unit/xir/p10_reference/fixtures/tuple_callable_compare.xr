@@ -1,0 +1,7 @@
+fn plus(value: i64) -> i64 { return value + 1 }
+fn identity<T>(value: T) -> T { return value }
+export fn referenceAnswer() -> i64 {
+    const value = identity((plus, [2, 4]))
+    const callback = value.0
+    return callback(7) + value.1[1]
+}

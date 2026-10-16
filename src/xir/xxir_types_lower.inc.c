@@ -26,6 +26,7 @@ static bool lower_type_node(XrXirTypeNode *node, const uint32_t *map, uint32_t c
     XrXirCallableParameter *parameters = (XrXirCallableParameter *) node->parameters;
     for (uint32_t p = 0; p < node->parameter_count; ++p)
         if (!lower_type_id(&parameters[p].type, map, count)) return false;
+    if (node->kind != XR_XIR_TYPE_NOMINAL) return true;
     XrXirType *arguments = (XrXirType *) node->nominal.arguments, *fields = (XrXirType *) node->nominal.fields;
     for (uint32_t p = 0; p < node->nominal.argument_count; ++p)
         if (!lower_type_id(&arguments[p], map, count)) return false;

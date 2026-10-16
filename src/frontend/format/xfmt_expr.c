@@ -43,6 +43,8 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, node->as.literal.raw_value.bigint_val);
             xfmt_write_char(ctx, 'n');
             break;
+        case AST_RECORD_KEY:
+            xfmt_write_bytes(ctx,node->as.literal.raw_value.string_val,node->as.literal.string_length);break;
         case AST_LITERAL_STRING: {
             xfmt_emit_string_literal(ctx, node);
             break;
@@ -389,6 +391,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
+        case AST_RECORD_KEY:
         case AST_LITERAL_STRING:
         case AST_FIXED_BYTES_LITERAL:
         case AST_LITERAL_RUNE:
@@ -606,8 +609,9 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             for (int i = 0; xfmt_step(ctx) && (i < obj->count); i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, obj->keys[i]);
-                xfmt_write_str(ctx, ": ");
+                if (obj->keys[i]) {
+                    xfmt_emit_expression(ctx,obj->keys[i]);xfmt_write_str(ctx,": ");
+                }
                 xfmt_emit_expression(ctx, obj->values[i]);
             }
             xfmt_write_str(ctx, " }");
@@ -618,8 +622,9 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 ctx->indent_level++;
                 for (int i = 0; xfmt_step(ctx) && (i < obj->count); i++) {
                     xfmt_write_indent(ctx);
-                    xfmt_emit_expression(ctx, obj->keys[i]);
-                    xfmt_write_str(ctx, ": ");
+                    if (obj->keys[i]) {
+                        xfmt_emit_expression(ctx,obj->keys[i]);xfmt_write_str(ctx,": ");
+                    }
                     xfmt_emit_expression(ctx, obj->values[i]);
                     if (ctx->config->multiline_trailing_comma || i < obj->count - 1)
                         xfmt_write_char(ctx, ',');

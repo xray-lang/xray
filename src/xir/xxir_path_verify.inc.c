@@ -10,6 +10,10 @@ static XrXirStatus path_field_type(const XrXirInstruction *op,
     XrXirType parent, VerifyContext *context) {
     const XrXirTypes *types = context->module->types;
     const XrXirTypeNode *node = xr_xir_type_node(types, parent);
+    if (node && node->kind == XR_XIR_TYPE_RECORD) {
+        if (op->immediate < 0 || (uint64_t)op->immediate >= node->parameter_count) return XR_XIR_BAD_STRUCTURE;
+        return node->parameters[op->immediate].type == op->type ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+    }
     if (!node || (!xr_xir_type_is_struct(types, parent) && !xr_xir_type_is_class(types, parent)) ||
         op->immediate < 0 || (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
     uint32_t field = (uint32_t)op->immediate;
@@ -47,7 +51,7 @@ static XrXirStatus path_uses(const Graph *graph, const XrXirFunction *function,
             bool object_root = kind == XR_XIR_PLACE_FIELD &&
                 xr_xir_place_kind(function, step->args[0]) == XR_XIR_PLACE_OBJECT &&
                 xr_xir_type_is_class(types, container);
-            if (kind == XR_XIR_PLACE_FIELD ? (!xr_xir_type_is_struct(types, container) && !object_root) :
+            if (kind == XR_XIR_PLACE_FIELD ? (!xr_xir_type_is_struct(types, container) && !xr_xir_type_is_record(types,container) && !object_root) :
                 !xr_xir_type_is_array(types, container)) return XR_XIR_BAD_TYPE;
             /* Each producer already passed the same typed field/index checker.
              * This walk only restricts descriptor roots and identity boundaries. */

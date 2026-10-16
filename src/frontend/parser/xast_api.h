@@ -24,6 +24,7 @@ XR_FUNC AstNode *xr_ast_literal_int_bits(XrCompilerSession *session, uint64_t bi
                                          bool overflows_i64, int line);
 XR_FUNC AstNode *xr_ast_literal_float(XrCompilerSession *session, xr_Number value, int line);
 XR_FUNC AstNode *xr_ast_literal_bigint(XrCompilerSession *session, const char *value, int line);
+XR_FUNC AstNode *xr_ast_record_key(XrCompilerSession *session, const char *name, size_t length, int line);
 XR_FUNC AstNode *xr_ast_literal_string(XrCompilerSession *session, const char *value, size_t length,
                                        XrLiteralEscapeMode escape_mode,
                                        XrLiteralSourceForm source_form, int line);

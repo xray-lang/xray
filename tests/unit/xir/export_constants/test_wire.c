@@ -17,7 +17,7 @@
 #include "xir/xxir_program_internal.h"
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}} while(0)
 #include "../xir_library_compile_owner.h"
-#include "wire_golden.h"
+#include "wire80_golden.h"
 #include "retired29_slot.h"
 #include "retired30_constants.h"
 static XrXirStatus constant_wire_operation(const XrXirCompileContext *context,void *unused) {

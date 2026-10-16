@@ -18,10 +18,10 @@ static void emit_path_receiver(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, const XrXirInstruction *op) {
     const uint32_t *args = op->op == XR_XIR_ARRAY_SET ? &function->operands[op->args[0]] : op->args;
     uint32_t id = args[0], begin = layout->path_count;
-    if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET) {
+    if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET)) {
         if (!begin) { emit_reject(buffer, XR_XIR_BAD_LAYOUT); return; }
         emit_path_component(buffer, layout, --begin, xr_xir_operand_type(function, id),
-            op->op == XR_XIR_STRUCT_SET, op->op == XR_XIR_STRUCT_SET ? op->immediate : args[1]);
+            (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET), (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET) ? op->immediate : args[1]);
     }
     for (;;) {
         if (!emit_work(buffer, 1)) return;

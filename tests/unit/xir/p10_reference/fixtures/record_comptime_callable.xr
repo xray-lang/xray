@@ -1,0 +1,10 @@
+fn plus(value: i64) -> i64 { return value + 1 }
+fn compute() -> i64 {
+    const value = { apply: plus, items: [2, 4] }
+    return value.apply(7) + value.items[1]
+}
+fn identity<T>(value: T) -> T { return value }
+export fn referenceAnswer() -> i64 {
+    const value = comptime compute()
+    return identity(value)
+}

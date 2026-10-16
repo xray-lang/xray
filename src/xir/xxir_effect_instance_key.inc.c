@@ -61,7 +61,7 @@ static const XrXirType *spec_effect_import(SpecContext *c, const XrXirTypes *typ
         if (!spec_work(c,sizeof(XrXirTypeNode))) return NULL;
         XrXirTypeNode node=types->nodes[i];
         if (node.parameter_span) continue;
-        if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE) {
+        if (node.kind==XR_XIR_TYPE_CALLABLE || (node.kind == XR_XIR_TYPE_TUPLE || node.kind == XR_XIR_TYPE_RECORD)) {
             XrXirCallableParameter *parameters=spec_alloc(c,node.parameter_count,sizeof(*parameters));
             if (node.parameter_count && !parameters) return NULL;
             for (uint32_t p=0;p<node.parameter_count;++p) {

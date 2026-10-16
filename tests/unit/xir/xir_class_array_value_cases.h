@@ -17,9 +17,9 @@ static XrXirTypeArena *class_array_field_arena(XrXirDomain *domain) {
     XrXirNominalIdentity identity={{"module",6},{"Bag",3},1,0,fields,3,XR_XIR_NOMINAL_CLASS,NULL,0,XR_XIR_NOMINAL_FINAL,{0}};
     XrXirNominalTable table={NULL,1,&identity};XrXirType field_types[]={XR_XIR_BOOL,(XrXirType)256,(XrXirType)257};
     XrXirTypeNode nodes[]={
-        {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0,{0}},
-        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,{0}},
-        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,field_types,3}}};
+        {XR_XIR_TYPE_ARRAY,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}},
+        {XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={0,NULL,0,field_types,3}}};
     XrXirTypes types={nodes,3,&table,NULL};XrCompileResourceLimits limits = value_compile_limits(65536, 65536, 10000);
     XrXirTypeArena *arena=NULL;CHECK(value_compile_arena(&types, 100, limits, &arena)==XR_XIR_VALUE_OK);
     return arena;

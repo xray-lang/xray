@@ -218,6 +218,32 @@ TEST(template_string_round_trip) {
     }
 }
 
+TEST(record_identifier_keys_round_trip) {
+    const char *source = "const base = { z: 1 }\n"
+        "const value = { \n    name: \"text\",\n    ...base,\n    type: 2\n}\n";
+    char *formatted = assert_round_trip(source, "record_keys");
+    ASSERT_NOT_NULL(formatted);
+    ASSERT_TRUE(strstr(formatted, "name:") != NULL);
+    ASSERT_TRUE(strstr(formatted, "type:") != NULL);
+    ASSERT_TRUE(strstr(formatted, "...base") != NULL);
+    ASSERT_TRUE(strstr(formatted, "\"name\"") == NULL);
+    xr_compile_resources_free(formatted);
+    AstNode *tree = fixture_parse(g_session, source, "<record-wrap>");
+    ASSERT_NOT_NULL(tree);
+    XrFmtConfig config = xfmt_default_config;
+    config.wrap_long_lines = 1; config.max_line_length = 20;
+    char *first = fixture_format(tree, &config);
+    xr_program_destroy(tree);
+    ASSERT_NOT_NULL(first);
+    ASSERT_TRUE(strstr(first, "name:") != NULL && strstr(first, "\"name\"") == NULL);
+    tree = fixture_parse(g_session, first, "<record-wrap-again>");
+    ASSERT_NOT_NULL(tree);
+    char *second = fixture_format(tree, &config);
+    xr_program_destroy(tree);
+    ASSERT_NOT_NULL(second); ASSERT_STR_EQ(first, second);
+    xr_compile_resources_free(first); xr_compile_resources_free(second);
+}
+
 TEST(idempotence_after_two_passes) {
     // The most direct fixed-point witness: a single source going
     // through two format passes must yield identical bytes. This
@@ -458,6 +484,7 @@ RUN_TEST(decimal_spelling_round_trip);
 RUN_TEST(formatter_preserves_binary_ast_payload);
 RUN_TEST(raw_string_form_is_preserved);
 RUN_TEST(template_string_round_trip);
+RUN_TEST(record_identifier_keys_round_trip);
 RUN_TEST(idempotence_after_two_passes);
 RUN_TEST(random_regular_string_round_trip);
 RUN_TEST(random_raw_string_round_trip);

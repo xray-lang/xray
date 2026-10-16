@@ -39,7 +39,7 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
             memcpy(parameters,node.parameters,(size_t)node.parameter_count*sizeof(*parameters));
             node.parameters=parameters;
         }
-        if (node.nominal.argument_count) {
+        if (node.kind==XR_XIR_TYPE_NOMINAL && node.nominal.argument_count) {
             XrXirType *arguments=effect_terms_alloc(pool,node.nominal.argument_count,sizeof(*arguments));
             if (!arguments) return pool->status;
             if (!xir_compile_work(pool->remaining,(uint64_t)node.nominal.argument_count*sizeof(*arguments)))
@@ -47,7 +47,8 @@ static XrXirStatus effect_terms_seed(EffectTerms *pool, const XrXirTypes *source
             memcpy(arguments,node.nominal.arguments,(size_t)node.nominal.argument_count*sizeof(*arguments));
             node.nominal.arguments=arguments;
         }
-        node.nominal.fields=NULL;node.nominal.field_count=0;
+        if (node.kind==XR_XIR_TYPE_RECORD) {if (!effect_record_names(pool,&node)) return pool->status;}
+        else {node.nominal.fields=NULL;node.nominal.field_count=0;}
         nodes[i]=node;
     }
     pool->types=(XrXirTypes){nodes,source->count,NULL,NULL};
@@ -86,7 +87,7 @@ static XrXirStatus effect_terms_import(EffectTerms *pool,
         if (!xir_compile_work(pool->remaining,1+sizeof(XrXirTypeNode))) return XR_XIR_BUDGET;
         XrXirTypeNode node=source->nodes[i];
         XrXirStatus status=XR_XIR_OK;
-        if (node.kind==XR_XIR_TYPE_CALLABLE || node.kind==XR_XIR_TYPE_TUPLE) {
+        if (node.kind==XR_XIR_TYPE_CALLABLE || (node.kind == XR_XIR_TYPE_TUPLE || node.kind == XR_XIR_TYPE_RECORD)) {
             XrXirCallableParameter *parameters=node.parameter_count ?
                 effect_terms_alloc(pool,node.parameter_count,sizeof(*parameters)) : NULL;
             if (node.parameter_count && !parameters) return pool->status;

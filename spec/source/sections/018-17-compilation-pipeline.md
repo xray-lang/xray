@@ -852,7 +852,7 @@ slot线格式现在为五个u32，当前共同协议为schema30/semantic77与Pro
 
 native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/Ordering/Task的声明编号为1–5，i64/f64/bool/rune为6–9，Map/Set为10/11；不得用旧Map6/Set7覆盖标量声明。Map/Set的XIR类型种类仍为9/10。声明源、完整泛型绑定器及约束、共享生成表、Source查询和API盘点消费同一唯一声明；声明存在不授予未实现成员的执行权限。
 
-当前统一身份为Checked schema32/semantic79、Value25、Call29、Program34。Map类型记录携带准确key/value边，Set携带准确element边；普通声明保留真实rest、导出const和逐帧出生权限的既有字段。旧31/78声明包、旧28/75哈希包及双方完整SDK前像均保留为拒绝证据；不设置旧reader、别名或按版本猜测的接收通道。独立模型遍历全部字段和递归来源，旧Nullable夹具缺失的声明字段以显式命名事实重建，不能从产品writer刷新期望。
+该哈希容器接收使用Checked schema32/semantic79、Value25、Call29、Program34；记录扩展后的现行身份见17.72。Map类型记录携带准确key/value边，Set携带准确element边；普通声明保留真实rest、导出const和逐帧出生权限的既有字段。旧31/78声明包、旧28/75哈希包及双方完整SDK前像均保留为拒绝证据；不设置旧reader、别名或按版本猜测的接收通道。独立模型遍历全部字段和递归来源，旧Nullable夹具缺失的声明字段以显式命名事实重建，不能从产品writer刷新期望。
 
 紧凑哈希字段的拥有式载体读取须恢复子对象的实际arena/type，不将局部类型序号贴到另一个出生池的对象。哈希图遍历使用真实对象所保留的arena；存储准备沿同一已检查目标类型及原Domain、work、scratch和失败责任。此身份接收不代表完整Map/Set普通库方法、union、匿名记录、视图或普通Iterable已完成，完整资源、取消、安全及provider资格仍独立要求。
 
@@ -860,9 +860,19 @@ native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/
 
 ### 17.71 匿名记录的规范字段准备
 
-匿名记录使用字段名的无符号UTF-8字节序规范化身份，字段表达式的源码顺序单独保留。当前编译器仅实现拥有式形状准备器：验证已检查类型池中的字段表达式及当前泛型作用域，复制全部字段名，拒绝重复字段名和非法标识符，返回规范字段表与源码序号到字段序号的排列。类型编号仍属于调用方原池，形状不保留AST字符串或借此获得访问、结构约束、相等、Sendable、编解码或用户接口权限。迭代归并排序、字节比较、复制、临时存储及发布都计入同一原编译账本，失败保输出且不退款。
+匿名记录使用字段名的无符号UTF-8字节序规范化身份，字段表达式的源码顺序单独保留。编译器的拥有式形状准备器验证已检查类型池中的字段表达式及当前泛型作用域，复制全部字段名，拒绝重复字段名和非法标识符，返回规范字段表与源码序号到字段序号的排列。类型编号仍属于调用方原池，形状不保留AST字符串或借此获得访问、结构约束、相等、Sendable、编解码或用户接口权限。迭代归并排序、字节比较、复制、临时存储及发布都计入同一原编译账本，失败保输出且不退款。
 
-该准备器尚未接入匿名记录的Source、Checked类型/字段证明、特化、VM/native或跨池运行时存储；保留排列本身也不等于已经执行了源码求值顺序。当前身份仍32/79/25/29/34。合法记录仍是待实现正例；旧字符串键接受路径须在记录切换批次删除，不能将旧接受行为或元数据单元测试称为记录整族资格。完整资源、取消、安全及普通库协议仍待证明。
+准备结果现用于准确记录类型、Source构造及字段布局；求值顺序另由实际执行路径保证。字段准备本身仍不授结构约束或运行时权限。17.72说明当前接入范围与身份；定义处结构证明、完整资源、取消、安全及普通库协议仍须独立完成。
+
+### 17.72 拥有式准确记录的执行接入
+
+匿名记录使用独立XIR kind11，具名类型及Tuple的身份保持独立。TypeNode按kind选择nominal或record描述；记录描述拥有按规范序排列的标识符字段名，普通parameter表保存对应准确字段类型，mode为0。空记录保留独立身份，不变成Unit。字段名称在克隆、Checked重读、类型接收、特化、查询快照和生成C中由接收方拥有；不得保留AST字符串或读取非活动union成员。
+
+现行统一身份为Checked schema32/semantic80、Value26、Call29、Program35，新增RECORD_NEW/RECORD_FIELD/RECORD_SET操作。公共TypeNode保持72字节、8字节对齐；RecordType为8字节，描述偏移32。独立全布局模型包含385项，旧381项保持原序，新增四项描述记录布局。完整旧32/79包与SDK前像继续在入口拒绝，不提供旧reader或别名。完整独立字段模型产生新向量，不能用产品writer刷新预期。
+
+Source已接准确记录类型/别名、标识符字面量、字段简写、展开、点读写、泛型值参数、记录数组及当前可重建的编译期结果。字段表达式按书写顺序各求值一次，再按规范序构造；显式重复字段拒绝。字符串键由parser拒绝，Map保留独立语法。构造、字段路径、Cell根与Array内记录沿现有失败原子发布/COW；旧快照不被新写入污染。Tuple公开操作不能准入记录，记录操作也不能准入Tuple。逻辑Unit字段不授予const根写权限。函数字段沿原唯一Final与显式FUNCTION_WEAKEN保持声明接收上界，不从形状或存储推导执行权限。
+
+VM、真实生成C及双向mixed已覆盖上述有限路径，真实Checked独立包另覆盖空记录、Unit字段、开放泛型描述和直接字段替换。编译期记录沿原预算、类型准入、字段路径与拥有式重建，不产生第二evaluator。结构约束的定义处只读字段/借用来源、完整模式、真实跨池函数字段gate、全部FI/预算/取消/安全与完整provider资格仍未完成。Readonly字段注解当前明确拒绝，仍是待实现的合法目标。普通Iterable/Lengthable/FromLiteral、union、views及完整公共REPL不由此获得资格。
 
 <!-- /xr-spec:cn -->
 
@@ -1827,7 +1837,7 @@ Source and Catalog consumers retain separate ownership evidence: received consta
 
 Native declaration IDs and XIR type kinds occupy separate namespaces. Array/string/Atomic/Ordering/Task retain declaration IDs1–5; i64/f64/bool/rune use6–9, and Map/Set use10/11. Retired Map6/Set7 cannot overwrite scalar declarations. Map/Set retain XIR type kinds9/10. Declaration sources, complete ordered binders and constraints, generated tables, Source queries and API inventory consume one identity. A declaration does not authorize an unimplemented member.
 
-The current unified identity is Checked schema32/semantic79, Value25, Call29 and Program34. Map records carry exact key/value edges, and Set records carry their exact element edge. Ordinary declarations retain authentic rest, exported constants and existing per-frame birth authority. Complete old31/78 declaration packets, old28/75 hash packets and both SDK preimages remain rejection evidence. There is no old reader, alias or version-guessing admission path. Independent models traverse all fields and recursive origins. Missing declaration fields in retired Nullable fixtures are reconstructed from named facts without refreshing expectations from the product writer.
+This hash-container reception used Checked schema32/semantic79, Value25, Call29 and Program34; Section17.72 defines the current record extension. Map records carry exact key/value edges, and Set records carry their exact element edge. Ordinary declarations retain authentic rest, exported constants and existing per-frame birth authority. Complete old31/78 declaration packets, old28/75 hash packets and both SDK preimages remain rejection evidence. There is no old reader, alias or version-guessing admission path. Independent models traverse all fields and recursive origins. Missing declaration fields in retired Nullable fixtures are reconstructed from named facts without refreshing expectations from the product writer.
 
 Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
 
@@ -1835,8 +1845,18 @@ Reading or mutating a received Map/Set first authenticates the complete containe
 
 ### 17.71 Canonical anonymous-record field preparation
 
-Anonymous record identities use unsigned UTF-8 byte order for field names while retaining source expression order separately. The compiler currently implements only an owned shape preparer: it checks field type expressions in the original verified pool and generic scope, copies every name, rejects duplicate names and invalid identifiers, and returns canonical fields plus a source-to-field permutation. Type IDs remain coordinates in the caller pool. A shape retains no AST string and grants no access, structural-constraint, equality, Sendable, encoding or user-interface authority. Iterative merge sorting, byte comparisons, copying, temporary storage and publication charge the same original compiler ledger; failure preserves output and never refunds work.
+Anonymous record identities use unsigned UTF-8 byte order for field names while retaining source expression order separately. The compiler uses an owned shape preparer that checks field type expressions in the original verified pool and generic scope, copies every name, rejects duplicate names and invalid identifiers, and returns canonical fields plus a source-to-field permutation. Type IDs remain coordinates in the caller pool. A shape retains no AST string and grants no access, structural-constraint, equality, Sendable, encoding or user-interface authority. Iterative merge sorting, byte comparisons, copying, temporary storage and publication charge the same original compiler ledger; failure preserves output and never refunds work.
 
-This preparer is not yet connected to anonymous-record Source admission, Checked type/field proofs, specialization, VM/native execution or cross-arena runtime storage. Retaining a permutation does not prove source evaluation behavior. Current identities remain32/79/25/29/34. Legal records remain required positive cases. Retired quoted-key acceptance must be removed with the record cutover; old acceptance or metadata unit checks do not qualify the complete record family. Complete resource, cancellation, safety and ordinary library protocol duties remain.
+Prepared fields now feed exact record types, Source construction and canonical layouts; actual execution separately preserves evaluation order. Preparation alone grants no structural-constraint or runtime permission. Section17.72 defines current admission and identity. Definition-time structural proofs, complete resources, cancellation, safety and ordinary library protocols remain separate obligations.
+
+### 17.72 Owned exact-record execution
+
+Anonymous records use independent XIR kind11; named types and Tuples retain distinct identities. A TypeNode selects its nominal or record descriptor by kind. The record owns canonical identifier names and stores corresponding exact field types with mode0 in the ordinary parameter table. An empty record remains distinct from Unit. Cloning, Checked reading, type receiving, specialization, query snapshots and generated C own received name bytes; no AST strings or inactive union members may be retained or read.
+
+The current unified identity is Checked schema32/semantic80, Value26, Call29 and Program35, with RECORD_NEW/RECORD_FIELD/RECORD_SET operations. Public TypeNode remains72 bytes aligned8; RecordType is8 bytes and its descriptor offset is32. The independent full layout model contains385 rows, retaining the original381 in order and appending four record measurements. Complete old32/79 packets and SDK preimages reject at entry without an old reader or alias. Complete independent field models derive new vectors; product writer output never refreshes expectations.
+
+Source admits exact record types and aliases, identifier literals, field shorthand, spreads, dot reads and writes, generic value arguments, record arrays and currently reconstructible compiler-execution results. Each expression evaluates once in spelling order before canonical construction; duplicate explicit fields reject. The parser rejects quoted keys, while Map retains its separate syntax. Construction, field paths, Cell roots and records inside Arrays use existing failure-atomic publication and COW; writes preserve earlier snapshots. Public Tuple operations reject records and record operations reject Tuples. Logical Unit fields grant no mutation of a const root. Function fields retain declared receiving bounds through the unique Final and explicit FUNCTION_WEAKEN; shape and storage grant no execution authority.
+
+VM, actual generated C and both mixed directions cover these bounded paths. Independent complete Checked packets additionally cover empty records, Unit fields, open generic descriptions and direct replacement. Compiler execution uses the original budget, admission, field paths and owned reconstruction, without a second evaluator. Definition-time structural constraints with read-only fields and borrow origins, complete patterns, actual cross-arena callable gates, all FI/budget/cancellation/safety and complete provider qualification remain unfinished. Readonly field annotations currently reject and remain required legal targets. Ordinary Iterable/Lengthable/FromLiteral, unions, views and complete public REPL execution receive no qualification from this extension.
 
 <!-- /xr-spec:en -->

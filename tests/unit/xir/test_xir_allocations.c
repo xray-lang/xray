@@ -554,8 +554,8 @@ static XrXirStatus nominal_pool_copy_operation(const XrXirCompileContext *contex
 static void nominal_pool_allocation_failures(void) {
     NominalFixture f;nominal_fixture(&f);
     XrXirType argument=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirTypeNode nodes[]={{XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,{0}},
-        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&argument,1,NULL,0}}};
+    XrXirTypeNode nodes[]={{XR_XIR_TYPE_ARRAY,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={0,&argument,1,NULL,0}}};
     XrXirTypes types={nodes,2,&f.table,NULL};
     AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
     CHECK(xr_xir_compile_types_structure_verify(&owner.context,&types)==XR_XIR_OK);

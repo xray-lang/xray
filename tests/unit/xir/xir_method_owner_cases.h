@@ -21,7 +21,7 @@ static void method_owner_cases(void) {
         {{"alpha",5},{"Twin",4},0,constraints,1,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}}};
     XrXirNominalTable table = {nominal,2,NULL};
     XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
-    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&argument,1,NULL,0}};
+    XrXirTypeNode node = {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,.nominal={0,&argument,1,NULL,0}};
     XrXirTypes types = {&node,1,&table,NULL};
     XrXirType receiver = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirInstruction code[2] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}},

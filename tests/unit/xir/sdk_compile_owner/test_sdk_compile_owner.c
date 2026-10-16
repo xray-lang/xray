@@ -99,7 +99,7 @@ static char *input(const char *path,size_t *length) {
 static XrXirRuntimeSdk *admit(const XrXirRuntimeSdkRequest *request) {
     XrXirRuntimeSdk *sdk=NULL;CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK);
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
-    CHECK(facts->value_abi==25 && facts->call_abi==29 && facts->program_abi==30 && facts->crt==2);
+    CHECK(facts->value_abi==26 && facts->call_abi==29 && facts->program_abi==35 && facts->crt==2);
     const char *resource_library=NULL;
     CHECK(xr_xir_runtime_sdk_file(sdk,"lib/xray_compile_resources.lib",&resource_library)==XR_XIR_SDK_OK && resource_library);
     return sdk;
@@ -234,7 +234,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     xr_compile_resources_free(entries);sdk_abi_observation=(SdkAbiObservation){0};
     xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(request.resources);
     CHECK(!runtime_live && !runtime_bytes && handles()==initial);
-    puts("SDK current Program30 rejects Program29, Value20/22/23 and entries Call24/25/26/27/28; standalone Call29 rejects Call24/25/26/27/28; real42/lease controls PASS");
+    puts("SDK current Program35 rejects Program29, Value20/22/23 and entries Call24/25/26/27/28; standalone Call29 rejects Call24/25/26/27/28; real42/lease controls PASS");
 }
 static void positive(const XrXirRuntimeSdkRequest *original) {
     DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);

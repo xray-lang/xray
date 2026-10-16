@@ -99,10 +99,15 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
         if (from->nominal.declaration != to->nominal.declaration ||
             from->nominal.argument_count != to->nominal.argument_count) return XR_XIR_BAD_TYPE;
     } else if (from->kind != XR_XIR_TYPE_ARRAY && from->kind != XR_XIR_TYPE_CELL &&
-               from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE && from->kind != XR_XIR_TYPE_TUPLE &&
+               from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE && (from->kind != XR_XIR_TYPE_TUPLE && from->kind != XR_XIR_TYPE_RECORD) &&
                from->kind != XR_XIR_TYPE_ATOMIC && from->kind != XR_XIR_TYPE_TASK &&
                from->kind != XR_XIR_TYPE_MAP && from->kind != XR_XIR_TYPE_SET)
         return XR_XIR_BAD_TYPE;
+    if (from->kind == XR_XIR_TYPE_RECORD) {
+        bool same = true;
+        XrXirStatus status = xir_record_names_match(c->remaining, from, to, &same);
+        if (status != XR_XIR_OK || !same) return status != XR_XIR_OK ? status : XR_XIR_BAD_TYPE;
+    }
     *frame = (TypeMatchFrame) {from, to, 0}; return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(const XrXirCompileContext *compile_context, const XrXirTypes *source_types, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual, XrXirTypeMatchScratch *scratch) {
@@ -126,14 +131,14 @@ XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(con
         const XrXirTypeNode *from = frame->from, *to = frame->to;
         uint32_t components = from->kind == XR_XIR_TYPE_NOMINAL ? from->nominal.argument_count :
             from->kind == XR_XIR_TYPE_CALLABLE ? from->parameter_count + 1 :
-            from->kind == XR_XIR_TYPE_TUPLE ? from->parameter_count : from->kind == XR_XIR_TYPE_MAP ? 2 : 1;
+            (from->kind == XR_XIR_TYPE_TUPLE || from->kind == XR_XIR_TYPE_RECORD) ? from->parameter_count : from->kind == XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next == components) { --depth; continue; }
         XrXirType left = from->element, right = to->element;
         if (from->kind == XR_XIR_TYPE_MAP && frame->next) {
             left = from->result; right = to->result;
         } else if (from->kind == XR_XIR_TYPE_NOMINAL) {
             left = from->nominal.arguments[frame->next]; right = to->nominal.arguments[frame->next];
-        } else if (from->kind == XR_XIR_TYPE_TUPLE) {
+        } else if ((from->kind == XR_XIR_TYPE_TUPLE || from->kind == XR_XIR_TYPE_RECORD)) {
             uint32_t p=frame->next;
             if (from->parameters[p].mode || to->parameters[p].mode) {status=XR_XIR_BAD_TYPE;break;}
             left=from->parameters[p].type;right=to->parameters[p].type;

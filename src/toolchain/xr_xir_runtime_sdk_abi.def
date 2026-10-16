@@ -383,3 +383,8 @@ XR_XIR_SDK_ABI(4708, offsetof(XrXirFunctionIdentity,method_kind))
 XR_XIR_SDK_ABI(4709, offsetof(XrXirFunctionIdentity,test_role))
 XR_XIR_SDK_ABI(4710, offsetof(XrXirFunctionIdentity,test_timeout_seconds))
 XR_XIR_SDK_ABI(4711, offsetof(XrXirFunctionIdentity,variadic))
+
+XR_XIR_SDK_ABI(4800, sizeof(XrXirRecordType))
+XR_XIR_SDK_ABI(4801, _Alignof(XrXirRecordType))
+XR_XIR_SDK_ABI(4802, offsetof(XrXirRecordType,names))
+XR_XIR_SDK_ABI(4803, offsetof(XrXirTypeNode,record))

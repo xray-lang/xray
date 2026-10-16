@@ -87,6 +87,7 @@ static void arena_nominal_nodes(ArenaNominalCursor *c, const XrXirTypes *source,
     if (!source) return;
     for (uint32_t i = 0; i < source->count && c->status == XR_XIR_VALUE_OK; ++i) {
         if (!arena_nominal_work(c, 1)) break;
+        if (source->nodes[i].kind == XR_XIR_TYPE_RECORD) continue;
         const XrXirNominalType *n = &source->nodes[i].nominal;
         XrXirType *arguments = arena_nominal_span(c, n->argument_count, sizeof(*arguments), _Alignof(XrXirType));
         XrXirType *fields = arena_nominal_span(c, n->field_count, sizeof(*fields), _Alignof(XrXirType));

@@ -12,12 +12,12 @@ static XrXirCallStatus vm_path_receiver(const ScalarRun *run, VmState *state,
     if (!admission) return XR_XIR_CALL_BAD_STATE;
     const uint32_t *args = op->op == XR_XIR_ARRAY_SET ? &run->function->operands[op->args[0]] : op->args;
     uint32_t id = args[0], begin = run->layout->path_count;
-    if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET) {
+    if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET)) {
         if (!begin) return XR_XIR_CALL_BAD_STATE;
         state->path_steps[--begin] = (XrXirValuePathStep){
-            op->op == XR_XIR_STRUCT_SET ? XR_XIR_PATH_FIELD : XR_XIR_PATH_INDEX,
+            (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET) ? XR_XIR_PATH_FIELD : XR_XIR_PATH_INDEX,
             xr_xir_operand_type(run->function, id),
-            op->op == XR_XIR_STRUCT_SET ? op->immediate : vm_value_operand(run, args[1]).payload};
+            (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET) ? op->immediate : vm_value_operand(run, args[1]).payload};
     }
     for (;;) {
         XrXirPlaceKind kind = xr_xir_place_kind(run->function, id);

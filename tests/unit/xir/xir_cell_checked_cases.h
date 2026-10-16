@@ -18,9 +18,9 @@ static void cell_generic_nominal_cases(void) {
         NominalIdentityFixture identity; nominal_identity_fixture(&identity);
         XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE, closed = XR_XIR_I64;
         XrXirTypeNode nodes[] = {
-            {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&argument,1,NULL,0}},
-            {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,1,{0}},
-            {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,&closed,1,NULL,0}}
+            {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,.nominal={0,&argument,1,NULL,0}},
+            {XR_XIR_TYPE_CELL,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,1,.nominal={0}},
+            {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={1,&closed,1,NULL,0}}
         };
         XrXirTypes types = {nodes,3,&nominal.table, NULL};
         if (mode == 1) nodes[1].parameter_span = 0;
@@ -29,7 +29,7 @@ static void cell_generic_nominal_cases(void) {
         if (mode == 4) nodes[1].element = XR_XIR_UNIT;
         if (mode == 5) nodes[0].parameter_span = 0;
         if (mode == 6) types.nominals = &identity.table;
-        if (mode == 7) nodes[2] = (XrXirTypeNode){XR_XIR_TYPE_CELL,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,1,{0}};
+        if (mode == 7) nodes[2] = (XrXirTypeNode){XR_XIR_TYPE_CELL,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,1,.nominal={0}};
         XrXirCompileContext budget = consumer_context_default();
         XrXirStatus status = xr_xir_compile_types_structure_verify(&budget, &types);
         CHECK(mode ? status != XR_XIR_OK : status == XR_XIR_OK);
@@ -41,7 +41,7 @@ static void cell_local_checked_cases(void) {
         XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
         XrXirFunction functions[9]; memcpy(functions, built.functions, sizeof(functions));
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
-        XrXirTypeNode node = {XR_XIR_TYPE_CELL, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}};
+        XrXirTypeNode node = {XR_XIR_TYPE_CELL, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}};
         XrXirTypes types = {&node, 1, NULL, NULL}; built.types = &types;
         XrXirInstruction ops[] = {
             {XR_XIR_LOCAL_UNINIT, (XrXirType)256, {0}, {0}, 0, {0}},
@@ -88,8 +88,8 @@ static void cell_checked_cases(void) {
         XrXirModule built = *xr_xir_compile_artifact_module(base); built.stage = XR_XIR_BUILT;
         XrXirFunction functions[9]; memcpy(functions, built.functions, sizeof(functions));
         XrXirType parameters[] = {XR_XIR_I64, XR_XIR_STRING};
-        XrXirTypeNode nodes[] = {{XR_XIR_TYPE_CELL,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, {0}},
-            {XR_XIR_TYPE_CELL,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, {0}}};
+        XrXirTypeNode nodes[] = {{XR_XIR_TYPE_CELL,XR_XIR_STRING,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}},
+            {XR_XIR_TYPE_CELL,XR_XIR_I64,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}}};
         XrXirTypes types = {nodes,2, NULL, NULL}; built.types = &types;
         XrXirInstruction ops[] = {
             {XR_XIR_CELL_NEW, (XrXirType)256, {1}, {0}, 0, {0}},

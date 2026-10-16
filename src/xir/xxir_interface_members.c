@@ -144,6 +144,16 @@ static XrXirType member_node(MemberContext *c, XrXirTypeNode node) {
         if (c->types.count) memcpy(nodes, c->types.nodes, c->types.count * sizeof(*nodes));
         c->types.nodes = nodes; c->capacity = capacity; c->nodes_owned = true;
     }
+    if (node.kind == XR_XIR_TYPE_RECORD) {
+        XrXirLiteral *names = member_alloc(c,node.parameter_count,sizeof(*names));
+        if (node.parameter_count && !names) return XR_XIR_UNIT;
+        for (uint32_t p=0;p<node.parameter_count;++p) {
+            XrXirLiteral name=node.record.names[p];char *bytes=member_alloc(c,(uint64_t)name.length+1,1);
+            if (!bytes || !member_work(c,(uint64_t)name.length+1)) return XR_XIR_UNIT;
+            memcpy(bytes,name.bytes,name.length);bytes[name.length]=0;names[p]=(XrXirLiteral){bytes,name.length};
+        }
+        node.record.names=names;
+    }
     if (!member_work(c, sizeof(node))) return XR_XIR_UNIT;
     ((XrXirTypeNode *)c->types.nodes)[c->types.count] = node;
     return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + c->types.count++);
@@ -159,7 +169,7 @@ static bool member_reuses_node(MemberContext *c, const MemberApplication *app,
     if (!member_work(c,1) || c->source != c->base) return false;
     uint32_t count = node->kind == XR_XIR_TYPE_CALLABLE ? node->parameter_count + 1 :
         node->kind == XR_XIR_TYPE_NOMINAL ? node->nominal.argument_count :
-        node->kind == XR_XIR_TYPE_TUPLE ? node->parameter_count : 1;
+        (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) ? node->parameter_count : 1;
     uint32_t span = 0;
     for (uint32_t i = 0; i < count; ++i) {
         if (!member_work(c,1)) return false;
@@ -167,7 +177,7 @@ static bool member_reuses_node(MemberContext *c, const MemberApplication *app,
         if (node->kind == XR_XIR_TYPE_CALLABLE)
             original = i == node->parameter_count ? node->result : node->parameters[i].type;
         else if (node->kind == XR_XIR_TYPE_NOMINAL) original = node->nominal.arguments[i];
-        else if (node->kind == XR_XIR_TYPE_TUPLE) original = node->parameters[i].type;
+        else if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) original = node->parameters[i].type;
         XrXirType actual = member_remap(c,app,map,original);
         if (c->status != XR_XIR_OK || actual != original) return false;
         uint32_t child_span = xr_xir_type_span(&c->types,actual);
@@ -178,7 +188,7 @@ static bool member_reuses_node(MemberContext *c, const MemberApplication *app,
 static XrXirType member_substitute_node(MemberContext *c, const MemberApplication *app,
     const MemberTypeMap *map, XrXirTypeNode node) {
     node.parameter_span = 0;
-    if (node.kind == XR_XIR_TYPE_CALLABLE || node.kind == XR_XIR_TYPE_TUPLE) {
+    if (node.kind == XR_XIR_TYPE_CALLABLE || (node.kind == XR_XIR_TYPE_TUPLE || node.kind == XR_XIR_TYPE_RECORD)) {
         XrXirCallableParameter *parameters = member_alloc(c, node.parameter_count, sizeof(*parameters));
         if (node.parameter_count && !parameters) return XR_XIR_UNIT;
         for (uint32_t p = 0; p < node.parameter_count && c->status == XR_XIR_OK; ++p) {
@@ -224,7 +234,7 @@ static XrXirType member_resolve(MemberContext *c, const MemberApplication *app,
         if (!node) { c->status = XR_XIR_BAD_TYPE; break; }
         uint32_t components = node->kind == XR_XIR_TYPE_NOMINAL ? node->nominal.argument_count :
             node->kind == XR_XIR_TYPE_CALLABLE ? node->parameter_count + 1 :
-            node->kind == XR_XIR_TYPE_TUPLE ? node->parameter_count : 1;
+            (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) ? node->parameter_count : 1;
         if (frame->next == components) {
             result = member_reuses_node(c,app,map,node) ? frame->source :
                 member_substitute_node(c,app,map,*node);
@@ -235,7 +245,7 @@ static XrXirType member_resolve(MemberContext *c, const MemberApplication *app,
         }
         XrXirType child = node->element;
         if (node->kind == XR_XIR_TYPE_NOMINAL) child = node->nominal.arguments[frame->next];
-        if (node->kind == XR_XIR_TYPE_TUPLE) child = node->parameters[frame->next].type;
+        if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) child = node->parameters[frame->next].type;
         if (node->kind == XR_XIR_TYPE_CALLABLE)
             child = frame->next < node->parameter_count ? node->parameters[frame->next].type : node->result;
         if (member_ready(c,app,map,child,&result)) { ++frame->next; continue; }

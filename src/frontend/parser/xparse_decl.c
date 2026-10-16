@@ -1571,43 +1571,9 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             } while (0);
             return xr_ast_literal_null(parser->compiler_session, line);
         }
-        // String literal as key
         else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
-            Token key_token = parser->current;
-            do {
-                xr_parser_advance(parser);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            XrParsedQuoted payload = {0};
-            const char *error = NULL;
-            bool decode_escapes = key_token.escape_mode == XR_LITERAL_ESCAPED;
-            if (xr_parser_decode_quoted(parser, &key_token, decode_escapes, &payload, &error) != XR_QUOTED_OK) {
-                do {
-                    xr_parser_error_at_previous(parser, error ? error : "invalid object key literal");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return xr_ast_literal_null(parser->compiler_session, line);
-            }
-            if (xr_parser_find_byte(parser, payload.bytes, '\0', payload.length) != NULL ||
-                !xr_parser_utf8_validate(parser, (const char *) payload.bytes, payload.length)) {
-
-                do {
-                    xr_parser_error_at_previous(parser,
-                                            "object key must be valid UTF-8 without NUL bytes");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return xr_ast_literal_null(parser->compiler_session, line);
-            }
-            char *key_str = (char *) ast_alloc(parser->compiler_session, payload.length + 1);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do { if (!ast_copy(parser->compiler_session, key_str, payload.bytes, payload.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; key_str[payload.length] = '\0'; } while (0);
-            do {
-                key = xr_ast_literal_string(parser->compiler_session, key_str, payload.length, key_token.escape_mode,
-                                        key_token.source_form, line);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-
+            xr_parser_error(parser,"record keys must be identifiers; use Map for string keys");
+            return NULL;
         }
         // Numeric literal as key: only Map allows this, and Map literals must
         // use the `#{ ... }` prefix form.
@@ -1643,8 +1609,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             do { if (!ast_copy(parser->compiler_session, key_str, key_token.start, key_token.length)) return NULL; } while (0);
             do { if (!ast_work(parser->compiler_session, 1)) return NULL; key_str[key_token.length] = '\0'; } while (0);
             do {
-                key = xr_ast_literal_string(parser->compiler_session, key_str, (size_t) key_token.length, XR_LITERAL_ESCAPED,
-                                        XR_LITERAL_INLINE, line);
+                key = xr_ast_record_key(parser->compiler_session,key_str,(size_t)key_token.length,key_token.line);
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             if (key_token.type == TK_NAME)
@@ -1653,7 +1618,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             do {
                 xr_parser_error(
                 parser,
-                "literal key must be identifier, string, number or [expr] computed property");
+                "record key must be an identifier");
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             return xr_ast_literal_null(parser->compiler_session, line);

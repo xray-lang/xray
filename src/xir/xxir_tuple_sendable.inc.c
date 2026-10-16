@@ -51,7 +51,7 @@ static XrXirStatus sendable_enum_shape(const XrXirConstraintEnvironment *environ
 }
 static uint32_t sendable_child_count(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node) {
-    if (node->kind == XR_XIR_TYPE_TUPLE) return node->parameter_count;
+    if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) return node->parameter_count;
     if (node->kind == XR_XIR_TYPE_MAP) return 2;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return 1;
     if (node->nominal.field_count) return node->nominal.field_count;
@@ -60,7 +60,7 @@ static uint32_t sendable_child_count(const XrXirConstraintEnvironment *environme
 }
 static XrXirType sendable_child(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node, uint32_t at) {
-    if (node->kind == XR_XIR_TYPE_TUPLE) return node->parameters[at].type;
+    if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) return node->parameters[at].type;
     if (node->kind == XR_XIR_TYPE_MAP) return at ? node->result : node->element;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return node->element;
     return node->nominal.field_count ? node->nominal.fields[at] :
@@ -88,8 +88,9 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
     if (node->kind == XR_XIR_TYPE_NOMINAL) {
         XrXirStatus status = sendable_enum_shape(environment, node, work);
         if (status != XR_XIR_OK) return status;
-    } else if (node->kind == XR_XIR_TYPE_TUPLE) {
-        if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
+    } else if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) {
+        if ((node->kind == XR_XIR_TYPE_TUPLE && !node->parameter_count) ||
+            (node->parameter_count && !node->parameters)) return XR_XIR_BAD_STRUCTURE;
     } else if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
                node->kind != XR_XIR_TYPE_SET && node->kind != XR_XIR_TYPE_NULLABLE &&
                node->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
@@ -115,7 +116,7 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
         if (frame->next == sendable_child_count(environment, node)) {
             state[frame->index] = 2; --depth; continue;
         }
-        if (node->kind == XR_XIR_TYPE_TUPLE && node->parameters[frame->next].mode) {
+        if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) && node->parameters[frame->next].mode) {
             status = XR_XIR_BAD_TYPE; break;
         }
         XrXirType child = sendable_child(environment, node, frame->next++);

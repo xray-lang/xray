@@ -384,9 +384,9 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
             op->op==XR_XIR_CELL_LOCAL_WRITE || op->op==XR_XIR_PLACE_WRITE ||
             op->op==XR_XIR_SLOT_INIT || op->op==XR_XIR_SLOT_GROUP_INIT ||
             op->op==XR_XIR_SLOT_STORE || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_SET ||
-            op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_SET ||
+            op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_STRUCT_NEW || (op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET) ||
             op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_SET || op->op==XR_XIR_ENUM_NEW ||
-            op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_NULLABLE_SOME;
+            (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_RECORD_NEW) || op->op==XR_XIR_NULLABLE_SOME;
         if (!store) continue;
         bool table=xr_xir_op_uses_operand_table(op->op);
         uint32_t count=table ? op->args[1] : effect_parameter_operands[op->op];

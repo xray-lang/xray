@@ -196,15 +196,17 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
     for (uint32_t t=0; t<unit->type_count; ++t) {
         if (!source_work(ctx,NULL)) return false;
         const XrXirTypeNode *in=&pool->nodes[t]; XrXirTypeNode out=*in;
-        out.parameters=NULL;out.nominal.arguments=NULL;out.nominal.fields=NULL;
-        out.nominal.field_count=0;
+        out.parameters=NULL;
+        if (in->kind!=XR_XIR_TYPE_RECORD) {
+            out.nominal.arguments=NULL;out.nominal.fields=NULL;out.nominal.field_count=0;
+        }
         if (in->kind==XR_XIR_TYPE_NOMINAL) {
             if (!pool->nominals || in->nominal.declaration>=pool->nominals->count)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library nominal type identity is invalid");
             out.nominal.declaration=unit->nominals[in->nominal.declaration];
             if (!source_library_type_arguments(ctx,unit,in->nominal.arguments,in->nominal.argument_count,
                 &out.nominal.arguments)) return false;
-        } else if (in->kind==XR_XIR_TYPE_CALLABLE || in->kind==XR_XIR_TYPE_TUPLE) {
+        } else if (in->kind==XR_XIR_TYPE_CALLABLE || (in->kind == XR_XIR_TYPE_TUPLE || in->kind == XR_XIR_TYPE_RECORD)) {
             XrXirCallableParameter *parameters=in->parameter_count ? source_alloc(ctx,in->parameter_count,sizeof(*parameters)) : NULL;
             if (in->parameter_count && !parameters) return false;
             for (uint32_t p=0; p<in->parameter_count; ++p) {

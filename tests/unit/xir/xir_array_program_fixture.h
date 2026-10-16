@@ -19,8 +19,8 @@
 static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, bool fail_init, bool nominal) {
     XrXirType a = (XrXirType) (nominal ? 257 : 256), cell = (XrXirType) (nominal ? 258 : 257);
     XrXirTypeNode nodes[4] = {
-        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
-        {XR_XIR_TYPE_CELL, a, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}};
+        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}},
+        {XR_XIR_TYPE_CELL, a, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}}};
     NominalFixture f; nominal_fixture(&f);
     XrXirType argument = XR_XIR_STRING;
     if (nominal) {
@@ -28,7 +28,7 @@ static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, 
         nodes[0].element = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE;
         nodes[0].parameter_span = 1;
         nodes[3] = (XrXirTypeNode) {XR_XIR_TYPE_NOMINAL, XR_XIR_UNIT, NULL, 0,
-            XR_XIR_UNIT, 0, 0, {0, &argument, 1, NULL, 0}};
+            XR_XIR_UNIT, 0, 0, .nominal={0, &argument, 1, NULL, 0}};
         f.declarations[0].module = (XrXirLiteral) {"root", 4};
         f.declarations[1].module = (XrXirLiteral) {"library", 7};
         f.fields[0].type = (XrXirType) 256;

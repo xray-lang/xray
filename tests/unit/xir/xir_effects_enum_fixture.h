@@ -92,8 +92,8 @@ static XrXirArtifact *effect_enum_generic_checked(const XrXirCompileContext *con
         .native={.native_id=0,.source_fingerprint={0}}};
     XrXirNominalTable table = {&declaration,1,NULL};
     XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,{0,&t,1,NULL,0}},
-        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,&concrete,1,NULL,0}}};
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,1,.nominal={0,&t,1,NULL,0}},
+        {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={0,&concrete,1,NULL,0}}};
     XrXirTypes types = {nodes,2,&table, NULL};
     XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0, {0}};
     XrXirInstruction entry[] = {{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},42, {0}},

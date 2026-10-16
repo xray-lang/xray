@@ -48,6 +48,11 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
             MATCH(x->parameters[p].type, y->parameters[p].type);
             MATCH(x->parameters[p].mode, y->parameters[p].mode);
         }
+        if (x->kind == XR_XIR_TYPE_RECORD) {
+            for (uint32_t p=0;p<x->parameter_count;++p) TRY(match_literal(x->record.names[p],y->record.names[p],context));
+            continue;
+        }
+        if (x->kind != XR_XIR_TYPE_NOMINAL) continue;
         MATCH(x->nominal.declaration, y->nominal.declaration);
         MATCH(x->nominal.argument_count, y->nominal.argument_count);
         MATCH(x->nominal.field_count, y->nominal.field_count);

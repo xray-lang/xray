@@ -102,3 +102,22 @@ tests/unit/xir/retired_hash75/xir_error_marker75_golden.h text eol=lf
 tests/unit/xir/retired_hash75/xir_generic_method75_golden.h text eol=lf
 tests/unit/xir/retired_hash75/xir_rune75_golden.h text eol=lf
 tests/unit/xir/root_construction75_goldens.h text eol=lf
+
+# Current record packet facts and retained preceding SDK framing.
+tests/unit/xir/compile_owner/checked_sizing80_golden.h text eol=lf
+tests/unit/xir/root_construction80_goldens.h text eol=lf
+tests/unit/xir/unit_values/unit80_wire_golden.h text eol=lf
+tests/unit/xir/xir_assert_panics80_golden.h text eol=lf
+tests/unit/xir/xir_checked_range80_golden.h text eol=lf
+tests/unit/xir/xir_checked_scalar80_golden.h text eol=lf
+tests/unit/xir/xir_error_marker80_golden.h text eol=lf
+tests/unit/xir/xir_generic_method80_golden.h text eol=lf
+tests/unit/xir/xir_rune80_golden.h text eol=lf
+tests/unit/xir/xir_hash80_golden.h text eol=lf
+tests/unit/xir/xir_nullable80_golden.h text eol=lf
+tests/unit/xir/xir_nested_nullable80_golden.h text eol=lf
+tests/unit/xir/sdk_previous79_identity_golden.h text eol=lf
+tests/unit/xir/xir_semantic80_identity.h text eol=lf
+tests/unit/xir/xir_record80_golden.h text eol=lf
+tests/unit/xir/export_constants/wire80_golden.h text eol=lf
+tests/unit/xir/rest_declarations/wire80_golden.h text eol=lf

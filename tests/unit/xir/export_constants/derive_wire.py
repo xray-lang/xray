@@ -21,7 +21,7 @@ def model():
     literal_at=64+len(body)
     body+=blob(b'answer')+blob(b'secret')+word(0)
     body+=word(0,0,0,0,0,0,0)
-    head=b'XRCHK\0\0\0'+word(32,79,2,0)+struct.pack('<Q',len(body))
+    head=b'XRCHK\0\0\0'+word(32,80,2,0)+struct.pack('<Q',len(body))
     return head+hashlib.sha256(head+body).digest()+body,dict(SLOT=slot_at,DECL=decl_at,READ=read_at,LITERAL=literal_at)
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--write',action='store_true');args=parser.parse_args()
@@ -30,7 +30,7 @@ def main():
     text+='enum {'+','.join('CONSTANT_'+k+'='+str(v) for k,v in positions.items())+'};\n'
     text+='static const uint8_t constant_wire[] = {\n'
     text+=''.join('    '+','.join('0x%02x'%v for v in data[i:i+12])+',\n' for i in range(0,len(data),12))+'};\n'
-    path=Path(__file__).with_name('wire_golden.h')
+    path=Path(__file__).with_name('wire80_golden.h')
     if args.write:path.write_bytes(text.encode())
     else:assert path.read_text()==text
     retired=Path(__file__).with_name('retired29_slot.h').read_text()

@@ -23,6 +23,7 @@
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_task_internal.h"
 #include "xxir_struct.h"
+#include "xxir_record.h"
 #include "xxir_output.h"
 #include "xxir_panic.h"
 #include "../base/xmalloc.h"
@@ -1164,6 +1165,21 @@ XrXirCallStatus xr_xir_instance_struct_write(XrXirCallView *view,
     XrXirCallStatus status = value_place(view, instance, receiver, true, admission, &place);
     if (status != XR_XIR_CALL_READY) return status;
     return value_call_status(xr_xir_struct_set(&place, field, value, admission));
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_record_write(XrXirCallView *view,
+    const XrXirValueReceiver *receiver, uint32_t field, const XrXirValue *value) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !receiver || !xr_xir_type_is_record(instance->program->types,receiver->type))
+        return XR_XIR_CALL_BAD_STATE;
+    if (receiver->kind == XR_XIR_ROOT_CELL) {
+        XrXirValuePathStep step = {XR_XIR_PATH_FIELD,receiver->type,field};
+        XrXirValuePath path = {&step,1};XrXirFaultDetail fault = {0};
+        return xr_xir_instance_path_write(view,receiver,&path,value,&fault);
+    }
+    XrXirValueAdmission *admission = xr_xir_call_admission(view);XrXirValuePlace place = {0};
+    XrXirCallStatus status = value_place(view,instance,receiver,true,admission,&place);
+    return status == XR_XIR_CALL_READY ? value_call_status(xr_xir_record_set(&place,field,value,admission)) : status;
 }
 XrXirCallStatus xr_xir_instance_literal(XrXirCallView *view, uint32_t literal, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

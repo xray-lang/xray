@@ -17,6 +17,7 @@
 #include "xxir_vm.h"
 #include "xxir_internal.h"
 #include "xxir_tuple.h"
+#include "xxir_record.h"
 #include "xxir_atomic.h"
 #include "xxir_task.h"
 #include "xxir_compile_memory.h"
@@ -269,18 +270,22 @@ static XrXirRunStatus vm_tuple_step(ScalarRun *run,VmState *state,
     XrXirValue output={0};XrXirValueStatus status;
     if (op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) {
         status=xr_xir_tuple_new(XR_XIR_UNIT,NULL,0,xr_xir_call_admission(run->view),&output);
-    } else if (op->op==XR_XIR_TUPLE_NEW) {
-        const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,op->type);
+    } else if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_RECORD_NEW) {
+        const XrXirTypeNode *tuple=xir_product_signature(run->module->types,op->type);
         if (!tuple || tuple->parameter_count>run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
         uint32_t payload=0;
         for (uint32_t i=0;i<tuple->parameter_count;++i)
             state->arguments[i]=tuple->parameters[i].type==XR_XIR_UNIT ? (XrXirValue){0} :
                 vm_value_operand(run,run->function->operands[op->args[0]+payload++]);
-        status=xr_xir_tuple_new(op->type,state->arguments,tuple->parameter_count,
-            xr_xir_call_admission(run->view),&output);
+        status=op->op==XR_XIR_RECORD_NEW ?
+            xr_xir_record_new(op->type,tuple->parameter_count ? state->arguments : NULL,tuple->parameter_count,
+                xr_xir_call_admission(run->view),&output) :
+            xr_xir_tuple_new(op->type,state->arguments,tuple->parameter_count,xr_xir_call_admission(run->view),&output);
     } else {
         XrXirValue receiver=vm_value_operand(run,op->args[0]);
-        status=xr_xir_tuple_get(&receiver,(uint32_t)op->immediate,&output);
+        status=op->op==XR_XIR_RECORD_FIELD ?
+            xr_xir_record_get(&receiver,(uint32_t)op->immediate,xr_xir_call_admission(run->view),&output) :
+            xr_xir_tuple_get(&receiver,(uint32_t)op->immediate,&output);
     }
     if (status!=XR_XIR_VALUE_OK) return value_run_status(status);
     if (xr_xir_type_is_owned(run->module->types,op->type)) xr_xir_owned_slot_move(run->frame,destination,&output);
@@ -291,10 +296,12 @@ static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
                                       const XrXirInstruction *op, uint32_t destination) {
     XrXirValueAdmission *admission = xr_xir_call_admission(run->view);
     if (!admission) return XR_XIR_RUN_BAD_ARTIFACT;
-    if (op->op == XR_XIR_STRUCT_SET) {
+    if (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET) {
         XrXirValueReceiver receiver = vm_value_receiver(run, op->args[0]);
         XrXirValue value = vm_value_operand(run, op->args[1]);
-        XrXirCallStatus status = xr_xir_instance_struct_write(run->view, &receiver, (uint32_t) op->immediate, &value);
+        XrXirCallStatus status = op->op == XR_XIR_RECORD_SET ?
+            xr_xir_instance_record_write(run->view,&receiver,(uint32_t)op->immediate,&value) :
+            xr_xir_instance_struct_write(run->view, &receiver, (uint32_t) op->immediate, &value);
         return status == XR_XIR_CALL_READY ? XR_XIR_RUN_OK : status == XR_XIR_CALL_OOM ? XR_XIR_RUN_OUT_OF_MEMORY :
             status == XR_XIR_CALL_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT;
     }
@@ -573,11 +580,12 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
     }
     if (xr_xir_op_is_atomic(op->op))
         return vm_atomic_step(run, state, op, run->layout->offsets[result_id], action);
-    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
+    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD ||
+        op->op==XR_XIR_RECORD_NEW || op->op==XR_XIR_RECORD_FIELD) {
         state->instruction=next;
         return vm_tuple_step(run,state,op,run->layout->offsets[result_id]);
     }
-    if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
+    if (op->op == XR_XIR_RECORD_SET || (op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
         (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
         op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
         state->instruction = next;

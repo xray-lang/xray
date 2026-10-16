@@ -11,6 +11,7 @@
  *   target-pool recipes. No evaluator pointer or local type ID becomes data.
  */
 #include "xxir_tuple.h"
+#include "xxir_record.h"
 #include "xxir_nullable.h"
 #include "xxir_array.h"
 #include "xxir_type_arena.h"
@@ -26,11 +27,11 @@ static bool source_comptime_result_value(SourceContext *ctx,AstNode *node,
     if (!work || work>UINT64_MAX/16 || !source_work_units(ctx,node,work*16)) return false;
     if (!value) return false;
     if (value->type==XR_XIR_UNIT) return !value->reserved && !value->payload && !arity;
-    if (!arity) return (value->type==XR_XIR_STRING || value->type==XR_XIR_BOOL || value->type==XR_XIR_RUNE ||
+    if (value->type<XR_XIR_CONSTRUCTED_TYPE_BASE) return (value->type==XR_XIR_STRING || value->type==XR_XIR_BOOL || value->type==XR_XIR_RUNE ||
         xr_xir_type_is_number((XrXirType)value->type)) && xr_xir_value_argument(value,NULL,(XrXirType)value->type);
     if (!source_work_units(ctx,node,(uint64_t)arity*16)) return false;
     const XrXirTypeArena *arena=xr_xir_value_arena(value);
-    const XrXirTypeNode *tuple=xr_xir_tuple_signature(xr_xir_compile_type_arena_types(arena),(XrXirType)value->type);
+    const XrXirTypeNode *tuple=xir_product_signature(xr_xir_compile_type_arena_types(arena),(XrXirType)value->type);
     bool shape=tuple?tuple->parameter_count==arity:
         arity==1 && (xr_xir_type_is_nullable(xr_xir_compile_type_arena_types(arena),(XrXirType)value->type) ||
             xr_xir_type_is_array(xr_xir_compile_type_arena_types(arena),(XrXirType)value->type) ||
@@ -61,6 +62,21 @@ typedef struct SourceComptimeTupleFrame {
 } SourceComptimeTupleFrame;
 #include "xxir_source_comptime_array.inc.c"
 #include "xxir_source_comptime_nominal.inc.c"
+static bool source_comptime_record_get(SourceContext *ctx,AstNode *node,
+    SourceComptimeTupleFrame *frame,XrXirValue *output) {
+    if (!source_comptime_nominal_work(ctx,node,frame->target)) return false;
+    const XrXirTypeArena *arena=xr_xir_value_arena(&frame->value);XrXirDomain *domain=NULL;
+    XrXirValueStatus status=xr_xir_compile_domain_new(ctx->compile.resources,UINT64_MAX,&domain);
+    if (status==XR_XIR_VALUE_OK) {
+        XrXirValueAdmission admission={.arena=arena,.domain=domain,.work=UINT64_MAX,
+            .scratch_bytes=XR_XIR_CTFE_MAX_FRAME_BYTES};
+        status=xr_xir_record_get(&frame->value,frame->next,&admission,output);
+    }
+    xr_xir_domain_drop(domain);
+    return status==XR_XIR_VALUE_OK || source_fail(ctx,node,status==XR_XIR_VALUE_OOM?XR_XIR_OUT_OF_MEMORY:
+        status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,
+        "comptime record field receiving failed");
+}
 static bool source_comptime_constant_leaf(SourceContext *ctx,AstNode *node,
     const XrXirValue *input,XrXirType target,SourceValue *output) {
     if (target==XR_XIR_UNIT) { *output=(SourceValue){0,XR_XIR_UNIT};return !input->type && !input->reserved && !input->payload; }
@@ -97,7 +113,7 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
                 goto receive_parent;
             }
         }
-        if (array || nullable || nominal || (tuple && tuple->kind==XR_XIR_TYPE_TUPLE)) {
+        if (array || nullable || nominal || (tuple && (tuple->kind==XR_XIR_TYPE_TUPLE || tuple->kind==XR_XIR_TYPE_RECORD))) {
             if (depth==capacity) {
                 if (capacity>UINT32_MAX/2) { ok=source_fail(ctx,node,XR_XIR_BUDGET,"comptime recipe stack exhausted");break; }
                 uint32_t next=capacity?capacity*2:1;
@@ -141,7 +157,7 @@ receive_parent:
                 } else if (previous!=XR_XIR_UNIT || frame->nominal) frame->payloads[frame->payload++]=result;
             }
             if (frame->next<frame->count) {
-                const XrXirTypeNode *child=xr_xir_tuple_signature(&ctx->types,frame->fields[frame->next].type);
+                const XrXirTypeNode *child=xir_product_signature(&ctx->types,frame->fields[frame->next].type);
                 uint64_t headers=(uint64_t)frame->count+(child?child->parameter_count:0);
                 if (!source_work_units(ctx,node,headers*16)) { ok=false;goto done; }
                 XrXirValueStatus status;
@@ -155,6 +171,9 @@ receive_parent:
                     bool some=false;const XrXirValue *payload=NULL;
                     if (!xr_xir_nullable_view(&frame->value,&some,&payload) || !some || !payload) { ok=source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"comptime Nullable payload is invalid");goto done; }
                     status=xr_xir_value_copy(payload,&current);
+                } else if (xr_xir_type_is_record(&ctx->types,frame->target)) {
+                    if (!source_comptime_record_get(ctx,node,frame,&current)) { ok=false;goto done; }
+                    status=XR_XIR_VALUE_OK;
                 } else status=xr_xir_tuple_get(&frame->value,frame->next,&current);
                 if (status!=XR_XIR_VALUE_OK) { ok=source_fail(ctx,node,
                     status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,"comptime Tuple field receiving failed");goto done; }
@@ -167,7 +186,7 @@ receive_parent:
                 if (!source_recipe_group(ctx,(XrXirInstruction){op,frame->target,{0},{0},frame->variant,{0}},frame->payloads,frame->payload,&result)) { ok=false;goto done; }
             } else if (frame->nullable) {
                 if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_NULLABLE_SOME,frame->target,{result.id},{0},0,{0}},&result)) { ok=false;goto done; }
-            } else if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_TUPLE_NEW,frame->target,{0},{0},0,{0}},
+            } else if (!source_recipe_group(ctx,(XrXirInstruction){xr_xir_type_is_record(&ctx->types,frame->target)?XR_XIR_RECORD_NEW:XR_XIR_TUPLE_NEW,frame->target,{0},{0},0,{0}},
                 frame->payloads,frame->payload,&result)) { ok=false;goto done; }
             if (frame->owned) xr_xir_value_drop(&frame->value);--depth;
         }

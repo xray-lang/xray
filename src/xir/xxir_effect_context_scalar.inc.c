@@ -209,11 +209,11 @@ static XrXirStatus effect_scalar_escape(EffectScalarFlow *flow, uint32_t instruc
     uint32_t destination=flow->function->parameter_count+instruction;
     bool construct=op.op==XR_XIR_CELL_NEW || op.op==XR_XIR_NULLABLE_SOME ||
         op.op==XR_XIR_ARRAY_NEW || op.op==XR_XIR_STRUCT_NEW || op.op==XR_XIR_CLASS_NEW ||
-        op.op==XR_XIR_ENUM_NEW || op.op==XR_XIR_TUPLE_NEW;
+        op.op==XR_XIR_ENUM_NEW || (op.op==XR_XIR_TUPLE_NEW || op.op==XR_XIR_RECORD_NEW);
     bool store=construct || op.op==XR_XIR_CELL_WRITE || op.op==XR_XIR_CELL_LOCAL_WRITE ||
         op.op==XR_XIR_PLACE_WRITE || op.op==XR_XIR_SLOT_STORE || op.op==XR_XIR_SLOT_INIT ||
         op.op==XR_XIR_SLOT_GROUP_INIT || op.op==XR_XIR_ARRAY_SET || op.op==XR_XIR_ARRAY_PUSH ||
-        op.op==XR_XIR_STRUCT_SET || op.op==XR_XIR_CLASS_SET;
+        (op.op==XR_XIR_STRUCT_SET || op.op==XR_XIR_RECORD_SET) || op.op==XR_XIR_CLASS_SET;
     if (!store) return XR_XIR_OK;
     if (construct && !(flow->fixed[destination]&EFFECT_SCALAR_OPAQUE)) {
         flow->fixed[destination]|=EFFECT_SCALAR_OPAQUE;flow->changed=true;
@@ -252,7 +252,7 @@ static XrXirStatus effect_scalar_instruction(EffectScalarFlow *flow, uint32_t in
     case XR_XIR_COPY: case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ:
         return effect_scalar_transfer(flow,destination,op.args[0]);
     case XR_XIR_CELL_READ: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_STRUCT_GET:
-    case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD:
+    case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD:
     case XR_XIR_ARRAY_GET: case XR_XIR_PLACE_READ:
         if (op.args[0]>=flow->value_count) return XR_XIR_BAD_VALUE;
         if ((flow->fixed[op.args[0]]&EFFECT_SCALAR_OPAQUE) && !(flow->fixed[destination]&EFFECT_SCALAR_OPAQUE)) {

@@ -18,11 +18,11 @@ static XrXirTypeArena *deep_arena(XrXirDomain *domain,bool writable) {
  {{"deep",4},{"Holder",6},1,0,sf,2,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}}};
  XrXirNominalTable table={NULL,2,ids};XrXirType cfields[]={XR_XIR_I64,XR_XIR_STRING},sfields[]={(XrXirType)256,XR_XIR_STRING};
  XrXirTypeNode nodes[]={
- {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{0,NULL,0,cfields,2}},
- {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0,{0}},
- {XR_XIR_TYPE_ARRAY,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,0,{0}},
- {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,{1,NULL,0,sfields,2}},
- {XR_XIR_TYPE_ARRAY,(XrXirType)259,NULL,0,XR_XIR_UNIT,0,0,{0}}};
+ {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={0,NULL,0,cfields,2}},
+ {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}},
+ {XR_XIR_TYPE_ARRAY,(XrXirType)257,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}},
+ {XR_XIR_TYPE_NOMINAL,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,0,0,.nominal={1,NULL,0,sfields,2}},
+ {XR_XIR_TYPE_ARRAY,(XrXirType)259,NULL,0,XR_XIR_UNIT,0,0,.nominal={0}}};
  XrXirTypes types={nodes,5,&table,NULL};ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);XrXirTypeArena *arena=NULL;
  CHECK(xr_xir_compile_type_arena_new(&owner.context,&types,&arena)==XR_XIR_VALUE_OK);
  class_pipeline_release_producer(&owner);(void)domain;memset(ids,0xcc,sizeof(ids));memset(nodes,0xcc,sizeof(nodes));return arena;

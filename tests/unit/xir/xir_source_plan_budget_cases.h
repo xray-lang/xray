@@ -79,8 +79,8 @@ static void source_plan_context_cases(void) {
         (SourceExpectedType){true,XR_XIR_UNIT,false,false},&conditional));
     ctx.diagnostic.status=XR_XIR_OK;
     XrXirTypeNode promises[2]={
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,{0}},
-        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,{0}}};
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,.nominal={0}},
+        {XR_XIR_TYPE_CALLABLE,XR_XIR_UNIT,NULL,0,XR_XIR_UNIT,XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_ROOT_UNRESOLVED,0,.nominal={0}}};
     XrXirFunctionIdentity identity={0}; ctx.identities=&identity;
     ctx.types=(XrXirTypes){promises,2,NULL,NULL};
     XrXirType target=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;

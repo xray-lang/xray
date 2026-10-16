@@ -329,9 +329,9 @@ static void snapshot_enum_allocations(void) {
 static void snapshot_type_allocations(void) {
     const XrXirCallableParameter parameter = {XR_XIR_I64, 0};
     const XrXirTypeNode nodes[] = {
-        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
-        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, {0}},
-        {XR_XIR_TYPE_CELL, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, &parameter, 1, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, .nominal={0}},
+        {XR_XIR_TYPE_ARRAY, XR_XIR_STRING, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}},
+        {XR_XIR_TYPE_CELL, (XrXirType) XR_XIR_CONSTRUCTED_TYPE_BASE, NULL, 0, XR_XIR_UNIT, 0, 0, .nominal={0}}
     };
     const XrXirTypes types = {nodes, 3, NULL, NULL};
     XrXirSourceView view = {0}; view.types = &types;

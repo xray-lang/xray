@@ -270,6 +270,13 @@ static void query_types(SourceQueryCopy *copy, const XrXirTypes *source) {
     for (uint32_t i = 0; i < source->count && query_work(copy, 1); ++i) {
         nodes[i].parameters = query_copy(copy, source->nodes[i].parameters,
             nodes[i].parameter_count, sizeof(*nodes[i].parameters));
+        if (nodes[i].kind == XR_XIR_TYPE_RECORD) {
+            XrXirLiteral *names=query_copy(copy,source->nodes[i].record.names,nodes[i].parameter_count,sizeof(*names));
+            nodes[i].record.names=names;
+            for (uint32_t f=0;names && f<nodes[i].parameter_count && query_work(copy,1);++f) query_literal(copy,&names[f]);
+            continue;
+        }
+        if (nodes[i].kind != XR_XIR_TYPE_NOMINAL) continue;
         nodes[i].nominal.arguments = query_copy(copy, source->nodes[i].nominal.arguments,
             nodes[i].nominal.argument_count, sizeof(*nodes[i].nominal.arguments));
         nodes[i].nominal.fields = query_copy(copy, source->nodes[i].nominal.fields,

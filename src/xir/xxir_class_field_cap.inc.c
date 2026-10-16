@@ -15,7 +15,7 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
     if (type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type) || type==XR_XIR_STRING) return XR_XIR_OK;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
-    if (node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_TUPLE) { *leaf=false; return XR_XIR_OK; }
+    if (node->kind==XR_XIR_TYPE_NULLABLE || (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) { *leaf=false; return XR_XIR_OK; }
     /* Hash containers own separately admitted dense storage. A class field
      * retains only that handle, so recursive identities stop at this edge. */
     if (node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_SET) return XR_XIR_OK;
@@ -26,7 +26,7 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
         const XrXirTypeNode *element=xr_xir_type_node(types,node->element);
         return element && !element->parameter_span && (element->kind==XR_XIR_TYPE_NOMINAL ||
             element->kind==XR_XIR_TYPE_NULLABLE || element->kind==XR_XIR_TYPE_ARRAY ||
-            element->kind==XR_XIR_TYPE_TUPLE || element->kind==XR_XIR_TYPE_MAP ||
+            (element->kind == XR_XIR_TYPE_TUPLE || element->kind == XR_XIR_TYPE_RECORD) || element->kind==XR_XIR_TYPE_MAP ||
             element->kind==XR_XIR_TYPE_SET) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     }
     if (node->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals ||
@@ -44,8 +44,9 @@ static XrXirStatus class_field_frame(const XrXirTypes *types, uint32_t index, Cl
     if (node->kind==XR_XIR_TYPE_NULLABLE) {
         *frame=(ClassFieldFrame){index,0,1,false}; return XR_XIR_OK;
     }
-    if (node->kind==XR_XIR_TYPE_TUPLE) {
-        if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
+    if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) {
+        if ((node->kind==XR_XIR_TYPE_TUPLE && !node->parameter_count) ||
+            (node->parameter_count && !node->parameters)) return XR_XIR_BAD_STRUCTURE;
         *frame=(ClassFieldFrame){index,0,node->parameter_count,false};return XR_XIR_OK;
     }
     uint32_t count=types->nominals->declarations ?
@@ -84,11 +85,11 @@ XR_FUNC XrXirStatus xr_xir_compile_class_field_verify(const XrXirCompileContext 
         ClassFieldFrame *frame=&frames[depth-1];
         if (frame->next==frame->count) {states[frame->index]=2;--depth;continue;}
         const XrXirTypeNode *node=&types->nodes[frame->index];uint32_t field=frame->next++;
-        if (node->kind==XR_XIR_TYPE_TUPLE && node->parameters[field].mode) {status=XR_XIR_BAD_TYPE;break;}
-        XrXirType child=node->kind==XR_XIR_TYPE_TUPLE ? node->parameters[field].type :
+        if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) && node->parameters[field].mode) {status=XR_XIR_BAD_TYPE;break;}
+        XrXirType child=(node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) ? node->parameters[field].type :
             node->kind==XR_XIR_TYPE_NULLABLE ? node->element : frame->declaration ?
             types->nominals->declarations[node->nominal.declaration].fields[field].type : node->nominal.fields[field];
-        if (node->kind==XR_XIR_TYPE_TUPLE && child==XR_XIR_UNIT) continue;
+        if ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) && child==XR_XIR_UNIT) continue;
         status=class_field_leaf(types,child,&leaf);
         if (status!=XR_XIR_OK || leaf) continue;
         index=(uint32_t)child-XR_XIR_CONSTRUCTED_TYPE_BASE;

@@ -10,38 +10,8 @@
 #include "xxir_types.h"
 #include "xxir_compile_memory.h"
 #include "xxir_type_scratch_internal.h"
-#include "../shared/xr_utf8_core.h"
+#include "xxir_record_names_internal.h"
 #include "../base/xchecks.h"
-static int record_shape_read(void *owner, const uint8_t *address, uint8_t *output) {
-    if (xr_compile_resources_work(owner, 1) != XR_COMPILE_RESOURCE_OK) return 0;
-    *output = *address;return 1;
-}
-static XrXirStatus record_shape_name(const XrXirCompileContext *context, XrXirLiteral name) {
-    if (!name.bytes || !name.length) return XR_XIR_BAD_STRUCTURE;
-    size_t offset = 0;
-    while (offset < name.length) {
-        XrUtf8Step step = {0};
-        if (!xr_utf8_core_decode_step_read((const uint8_t *)name.bytes + offset, name.length - offset,
-            record_shape_read, context->resources, &step)) return XR_XIR_BUDGET;
-        if (step.error != XR_UTF8_OK) return XR_XIR_BAD_STRUCTURE;
-        if (step.scalar < 128) {
-            uint32_t byte = step.scalar;
-            bool alpha = (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') || byte == '_';
-            if ((!alpha && (!offset || byte < '0' || byte > '9')) || (name.length == 1 && byte == '_'))
-                return XR_XIR_BAD_STRUCTURE;
-        }
-        offset += step.consumed;
-    }
-    return XR_XIR_OK;
-}
-static XrXirStatus record_shape_compare(const XrXirCompileContext *context,
-    XrXirLiteral left, XrXirLiteral right, int *result) {
-    uint32_t common = left.length < right.length ? left.length : right.length;
-    if (!xir_compile_work(context, (uint64_t)common + 1)) return XR_XIR_BUDGET;
-    int comparison = common ? memcmp(left.bytes, right.bytes, common) : 0;
-    *result = comparison ? comparison : left.length < right.length ? -1 : left.length > right.length;
-    return XR_XIR_OK;
-}
 static XrXirStatus record_shape_order(const XrXirCompileContext *context,
     const XrXirRecordShapeInput *input, uint32_t *order, uint32_t *temporary) {
     if (!xir_compile_work(context, (uint64_t)input->count * sizeof(*order))) return XR_XIR_BUDGET;
@@ -55,7 +25,7 @@ static XrXirStatus record_shape_order(const XrXirCompileContext *context,
             for (uint32_t at = begin; at < end; ++at) {
                 int comparison = -1;
                 if (left < middle && right < end) {
-                    XrXirStatus status = record_shape_compare(context, input->fields[order[left]].name,
+                    XrXirStatus status = xir_record_name_compare(context, input->fields[order[left]].name,
                         input->fields[order[right]].name, &comparison);
                     if (status != XR_XIR_OK) return status;
                 }
@@ -66,7 +36,7 @@ static XrXirStatus record_shape_order(const XrXirCompileContext *context,
     }
     for (uint32_t i = 1; i < input->count; ++i) {
         int comparison = 0;
-        XrXirStatus status = record_shape_compare(context, input->fields[order[i-1]].name,
+        XrXirStatus status = xir_record_name_compare(context, input->fields[order[i-1]].name,
             input->fields[order[i]].name, &comparison);
         if (status != XR_XIR_OK) return status;
         if (!comparison) return XR_XIR_BAD_STRUCTURE;
@@ -82,7 +52,7 @@ static XrXirStatus record_shape_validate(const XrXirCompileContext *context,
     for (uint32_t i = 0; i < input->count && status == XR_XIR_OK; ++i) {
         if (!xir_compile_work(context, sizeof(*input->fields))) {status = XR_XIR_BUDGET;break;}
         const XrXirRecordField *field = &input->fields[i];
-        status = record_shape_name(context, field->name);
+        status = xir_record_name_validate(context, field->name);
         if (status != XR_XIR_OK) break;
         if (UINT64_MAX - *name_bytes <= field->name.length) {status = XR_XIR_BUDGET;break;}
         *name_bytes += (uint64_t)field->name.length + 1;

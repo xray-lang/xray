@@ -12,6 +12,7 @@
  */
 #include "xxir_type_inference.h"
 #include "xxir_compile_memory.h"
+#include "xxir_record_names_internal.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 typedef struct InferenceTask {
@@ -94,6 +95,10 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
     if (!to || from->kind != to->kind || from->parameter_count != to->parameter_count || from->flags != to->flags) {
         s->status = XR_XIR_BAD_TYPE; return;
     }
+    if (from->kind == XR_XIR_TYPE_RECORD) {
+        bool same = true;s->status = xir_record_names_match(&s->context,from,to,&same);
+        if (s->status != XR_XIR_OK || !same) {if (s->status == XR_XIR_OK) s->status = XR_XIR_BAD_TYPE;return;}
+    }
     if (task->depth == UINT32_MAX) { s->status = XR_XIR_BUDGET; return; }
     uint32_t depth = task->depth+1;
     if (from->kind == XR_XIR_TYPE_NOMINAL) {
@@ -101,7 +106,7 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
             from->nominal.argument_count != to->nominal.argument_count) { s->status = XR_XIR_BAD_TYPE; return; }
         for (uint32_t a = 0; a < from->nominal.argument_count && s->status == XR_XIR_OK; ++a)
             inference_enqueue(w,from->nominal.arguments[a],to->nominal.arguments[a],depth);
-    } else if (from->kind == XR_XIR_TYPE_CALLABLE || from->kind == XR_XIR_TYPE_TUPLE) {
+    } else if (from->kind == XR_XIR_TYPE_CALLABLE || (from->kind == XR_XIR_TYPE_TUPLE || from->kind == XR_XIR_TYPE_RECORD)) {
         if (from->kind == XR_XIR_TYPE_CALLABLE) inference_enqueue(w,from->result,to->result,depth);
         for (uint32_t p = 0; p < from->parameter_count && s->status == XR_XIR_OK; ++p) {
             if (from->parameters[p].mode != to->parameters[p].mode) { s->status = XR_XIR_BAD_TYPE; break; }
@@ -190,7 +195,7 @@ XR_FUNC XrXirStatus xr_xir_compile_inference_expected_known(XrXirInferenceState 
         if (!node) continue;
         if (task->depth == UINT32_MAX) { s->status = XR_XIR_BUDGET; break; }
         uint32_t depth = task->depth+1;
-        if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+        if (node->kind == XR_XIR_TYPE_CALLABLE || (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) {
             if (node->kind == XR_XIR_TYPE_CALLABLE) inference_enqueue(&walk,node->result,XR_XIR_UNIT,depth);
             for (uint32_t p = 0; p < node->parameter_count && s->status == XR_XIR_OK; ++p)
                 inference_enqueue(&walk,node->parameters[p].type,XR_XIR_UNIT,depth);

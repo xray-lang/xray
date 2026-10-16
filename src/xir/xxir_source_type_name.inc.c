@@ -94,6 +94,8 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
         source_type_name_append(name, "?", 1);
         return true;
+    case XR_XIR_TYPE_RECORD:
+        source_type_name_append(name, "object", 6);return true;
     case XR_XIR_TYPE_CALLABLE:
         source_type_name_append(name, TYPE_NAME_FUNCTION, strlen(TYPE_NAME_FUNCTION));
         return true;

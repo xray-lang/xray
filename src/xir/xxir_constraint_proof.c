@@ -123,7 +123,7 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (node && node->kind == XR_XIR_TYPE_ATOMIC)
             return constraint_atomic(environment,node->element,XR_XIR_CONSTRAINT_ATOMIC_VALUE,work);
-        if (node && (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_NOMINAL))
+        if (node && ((node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) || node->kind == XR_XIR_TYPE_NOMINAL))
             return constraint_sendable_graph(environment,type,work);
         if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE &&
                       node->kind != XR_XIR_TYPE_TASK)) return XR_XIR_BAD_TYPE;
@@ -376,7 +376,7 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
             status = proof_type_edge(proof, index, node->result);
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE)
         status = proof_type_edge(proof,index,node->element);
-    else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
+    else if (node->kind == XR_XIR_TYPE_CALLABLE || (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
         if (node->kind == XR_XIR_TYPE_CALLABLE) status = proof_type_edge(proof,index,node->result);
         for (uint32_t a = 0; status == XR_XIR_OK && a < node->parameter_count; ++a)
