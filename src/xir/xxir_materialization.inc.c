@@ -17,6 +17,18 @@ static bool materialization_scalar(XrXirType type) {
     return type==XR_XIR_UNIT || type==XR_XIR_BOOL || type==XR_XIR_RUNE ||
         type==XR_XIR_STRING || xr_xir_type_is_number(type);
 }
+static XrXirStatus materialization_type_cycle(const XrXirCompileContext *context,
+    const XrXirTypes *types,const MaterializationTypeFrame *stack,uint32_t depth,XrXirType type) {
+    bool reference=false,array_only=true;
+    while (depth) {
+        if (!xir_compile_work(context,8)) return XR_XIR_BUDGET;
+        const MaterializationTypeFrame *frame=&stack[--depth];const XrXirTypeNode *node=xr_xir_type_node(types,frame->type);
+        reference|=node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_NULLABLE;
+        array_only&=node->kind==XR_XIR_TYPE_ARRAY;
+        if (frame->type==type) return reference && !array_only?XR_XIR_OK:XR_XIR_BAD_TYPE;
+    }
+    return XR_XIR_BAD_STRUCTURE;
+}
 static XrXirStatus materialization_data_type(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type) {
     if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
@@ -54,7 +66,10 @@ static XrXirStatus materialization_data_type(const XrXirCompileContext *context,
         }
         if (!xr_xir_type_node(types,child)) { status=XR_XIR_BAD_TYPE;break; }
         uint32_t index=(uint32_t)child-XR_XIR_CONSTRUCTED_TYPE_BASE;
-        if (colors[index]==1) { status=XR_XIR_BAD_TYPE;break; }
+        if (colors[index]==1) {
+            status=materialization_type_cycle(context,types,stack,depth,child);
+            if (status!=XR_XIR_OK) break;continue;
+        }
         if (colors[index]==2) continue;
         if (depth==types->count) { status=XR_XIR_BAD_STRUCTURE;break; }
         colors[index]=1;stack[depth++]=(MaterializationTypeFrame){child,0};

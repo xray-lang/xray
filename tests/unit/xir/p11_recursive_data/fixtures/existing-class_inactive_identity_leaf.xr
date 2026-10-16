@@ -1,0 +1,4 @@
+class Node{value:i64;next:Node?;constructor(value:i64,next:Node?){this.value=value;this.next=next}}
+fn replace(next:ref Node?){next=Node(0,null)}
+fn eval()->i64{const b=Node(42,null);replace(ref b.next);return b.value}
+export fn answer()->i64{return comptime eval()}

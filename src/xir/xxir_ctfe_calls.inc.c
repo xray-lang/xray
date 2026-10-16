@@ -13,6 +13,9 @@
 typedef struct CtfeCellLoan {
     XrXirValue value;XrXirCellLoan loan;
     uint64_t root_work,root_shape;bool projected,variable_receiving;
+    struct CtfeCellLoan *budget;
+    CtfeIdentitySet identities;
+    uint32_t *tracking_count;
 } CtfeCellLoan;
 typedef struct CtfeCallFrame {
     struct CtfeCallFrame *parent;
@@ -33,7 +36,8 @@ typedef struct CtfeCallExecution {
     const XrXirCtfeCallRequest *request;
     const XrXirArtifact *artifact;
     CtfeCallFrame *top;
-    uint64_t steps, live_bytes,epoch;
+    uint64_t steps, live_bytes,epoch,loan_bytes;
+    uint32_t identity_roots;
     uint32_t depth;
     CtfeOwnedState owned;
 } CtfeCallExecution;
@@ -238,7 +242,7 @@ static XrXirCtfeStatus ctfe_call_frame_new(CtfeCallExecution *execution,uint32_t
     }
     uint64_t bytes=(uint64_t)sizeof(CtfeCallFrame)+artifact->layouts[function].frame_bytes+scratch+(uint64_t)cells*sizeof(CtfeCellLoan);
     uint64_t maximum=execution->request->evaluation.limits.frame_bytes;
-    if (bytes>SIZE_MAX || execution->live_bytes>maximum || bytes>maximum-execution->live_bytes)
+    if (bytes>SIZE_MAX || execution->live_bytes>maximum || execution->loan_bytes>maximum-execution->live_bytes || bytes>maximum-execution->live_bytes-execution->loan_bytes)
         return XR_XIR_CTFE_FRAME_LIMIT;
     if (!xir_compile_work(&artifact->context,(uint64_t)artifact->layouts[function].owned_count*2+(uint64_t)cells*sizeof(CtfeCellLoan)*4))
         return XR_XIR_CTFE_BUDGET;
@@ -370,7 +374,8 @@ static XrXirCtfeStatus ctfe_call_execute(CtfeCallExecution *execution,XrXirValue
         if (!execution->steps) return XR_XIR_CTFE_STEP_LIMIT;
         --execution->steps;
         if (frame->state.instruction>=body->instruction_count) return XR_XIR_CTFE_BAD_ARTIFACT;
-        execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes;
+        execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes-execution->loan_bytes;
+    execution->owned.loan_base=execution->loan_bytes;
         execution->owned.authority=(XrXirCellAuthority){execution,frame,frame->epoch};execution->owned.activation=frame;
         if (frame->state.leaving) {
             bool done=false;XrXirCtfeStatus status=ctfe_cleanup_continue(execution,output,&done);
@@ -412,6 +417,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_calls(const XrXirCtfeCallRequest *re
     CtfeCallExecution execution={.request=request,.artifact=request->evaluation.artifact,.steps=request->evaluation.limits.steps};
     status=ctfe_owned_new(execution.artifact,owned,&execution.owned);
     if (status!=XR_XIR_CTFE_OK) { if (cells) xr_xir_compile_cell_provenance_free(cells);xr_compile_resources_free(closure);return status; }
+    execution.owned.loan_bytes=&execution.loan_bytes;execution.owned.identity_roots=&execution.identity_roots;
     execution.owned.cells=cells;execution.owned.closure=closure;execution.owned.value_header_work=header_work;
     execution.owned.reachable=closure?(uint8_t *)((uint32_t *)closure+execution.artifact->module.function_count):NULL;
     CtfeCallFrame *first=NULL;

@@ -27,7 +27,7 @@ static XrXirCtfeStatus ctfe_array_member_read(ScalarRun *run,CtfeOwnedState *sta
     XrXirCtfeStatus status=ctfe_validation_work(run,state,(XrXirType)receiver->type);
     if (status==XR_XIR_CTFE_OK) status=ctfe_validation_work(run,state,node->element);
     if (status!=XR_XIR_CTFE_OK) return status;
-    if (state->frame_spare<256) return XR_XIR_CTFE_FRAME_LIMIT;
+    if (ctfe_frame_spare(state)<256) return XR_XIR_CTFE_FRAME_LIMIT;
     if (!scalar_compile_work(run,512)) return XR_XIR_CTFE_BUDGET;
     XrXirValueAdmission admission=ctfe_value_admission(state);admission.scratch_bytes-=256;
     XrXirFaultDetail fault={0};
@@ -45,41 +45,24 @@ static XrXirCtfeStatus ctfe_struct_member_read(ScalarRun *run,CtfeOwnedState *st
     XrXirValueAdmission admission=ctfe_value_admission(state);
     return ctfe_value_status(xr_xir_struct_observe(receiver,field,&admission,output));
 }
-static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *input,bool data_only) {
+static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *input,CtfeIdentityVisitor visitor,void *visitor_context) {
     XrXirValue concrete={0};
-    if (!data_only && input->type==XR_XIR_ERROR) {
+    if (input->type==XR_XIR_ERROR) {
         XrXirCtfeStatus received=ctfe_error_concrete(run,state,input,&concrete);if (received!=XR_XIR_CTFE_OK) return received;input=&concrete;
     }
     XrXirCtfeStatus status=ctfe_validation_work(run,state,(XrXirType)input->type);
     bool cell=xr_xir_type_is_cell(run->module->types,(XrXirType)input->type);
-    if (status!=XR_XIR_CTFE_OK || (!data_only && !cell && !ctfe_execution_node(run->module->types,(XrXirType)input->type,true))) return status;
-    if (!data_only && !cell && !state->tuple_costs[input->type-XR_XIR_CONSTRUCTED_TYPE_BASE].dynamic) return XR_XIR_CTFE_OK;
+    if (status!=XR_XIR_CTFE_OK || (!cell && !ctfe_execution_node(run->module->types,(XrXirType)input->type,true))) return status;
+    if (!cell && !state->tuple_costs[input->type-XR_XIR_CONSTRUCTED_TYPE_BASE].dynamic) return XR_XIR_CTFE_OK;
     CtfeAdmissionFrame *stack=NULL;uint32_t depth=0,capacity=0;XrXirValue current=*input;bool owned=false;
     for (;;) {
-        if (data_only) {
-            if (!scalar_compile_work(run,2)) { status=XR_XIR_CTFE_BUDGET;break; }
-            XrXirCtfeTypeShape shape={0};status=ctfe_type_info(state->context,run->module->types,(XrXirType)current.type,false,&shape);
-            if (status==XR_XIR_CTFE_OK) {
-                CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)capacity*sizeof(*stack);
-                status=ctfe_value_graph_work(run,&bounded,&current,false);state->tuple_costs=bounded.tuple_costs;
-                if (status!=XR_XIR_CTFE_OK) break;
-                if (owned) xr_xir_value_drop(&current);current=(XrXirValue){0};owned=false;goto next_child;
-            }
-            if (status!=XR_XIR_CTFE_NOT_SUPPORTED) break;
-            const XrXirTypeNode *wrapper=ctfe_composite_node(run->module->types,(XrXirType)current.type);
-            /* Value wrappers can prove an inactive authority branch while the
-             * root loan prevents replacement. Active identities still refuse. */
-            if (!wrapper || (wrapper->kind!=XR_XIR_TYPE_TUPLE && wrapper->kind!=XR_XIR_TYPE_NULLABLE && wrapper->kind!=XR_XIR_TYPE_ARRAY &&
-                    !xr_xir_type_is_enum(run->module->types,(XrXirType)current.type) &&
-                    !xr_xir_type_is_struct(run->module->types,(XrXirType)current.type))) break;
-        }
         if (current.type==XR_XIR_ERROR) {
             XrXirValue erased={0};status=ctfe_error_concrete(run,state,&current,&erased);if (status!=XR_XIR_CTFE_OK) break;current=erased;
         }
         status=ctfe_validation_work(run,state,(XrXirType)current.type);if (status!=XR_XIR_CTFE_OK) break;
         cell=xr_xir_type_is_cell(run->module->types,(XrXirType)current.type);
         const XrXirTypeNode *node=ctfe_execution_node(run->module->types,(XrXirType)current.type,true);
-        bool descend=cell || (node && (data_only || state->tuple_costs[current.type-XR_XIR_CONSTRUCTED_TYPE_BASE].dynamic));
+        bool descend=cell || (node && state->tuple_costs[current.type-XR_XIR_CONSTRUCTED_TYPE_BASE].dynamic);
         bool identity=node && xr_xir_type_is_class(run->module->types,(XrXirType)current.type);
         uint32_t count=cell?1:node?ctfe_composite_fields(node):0;const XrXirFunctionBinding *function=NULL;
         if (cell) {
@@ -103,6 +86,11 @@ static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *stat
             }
             descend=count!=0;
         }
+        if ((cell || identity) && visitor) {
+            CtfeOwnedState bounded=*state;bounded.frame_spare-=(uint64_t)capacity*sizeof(*stack);
+            status=visitor(run,&bounded,&current,visitor_context);state->tuple_costs=bounded.tuple_costs;
+            if (status!=XR_XIR_CTFE_OK) break;
+        }
         if (descend && node && node->kind==XR_XIR_TYPE_ARRAY) {
             XrXirValueAdmission admission=ctfe_value_admission(state);int64_t length=0;
             status=ctfe_value_status(xr_xir_array_len(&current,&admission,&length));
@@ -125,7 +113,7 @@ static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *stat
         if (descend) {
             if (depth==capacity) {
                 uint64_t next=capacity?(uint64_t)capacity*2:1,bytes=next*sizeof(*stack),old=(uint64_t)capacity*sizeof(*stack);
-                if (next>UINT32_MAX || bytes>SIZE_MAX || old>state->frame_spare || bytes>state->frame_spare-old) { status=XR_XIR_CTFE_FRAME_LIMIT;break; }
+                if (next>UINT32_MAX || bytes>SIZE_MAX || old>ctfe_frame_spare(state) || bytes>ctfe_frame_spare(state)-old) { status=XR_XIR_CTFE_FRAME_LIMIT;break; }
                 void *memory=stack;status=ctfe_compile_status(xir_compile_resource_status(xr_compile_resources_resize(run->compile_resources,&memory,(size_t)bytes)));
                 if (status!=XR_XIR_CTFE_OK) break;stack=memory;capacity=(uint32_t)next;
             }
@@ -133,7 +121,6 @@ static XrXirCtfeStatus ctfe_value_graph_work(ScalarRun *run,CtfeOwnedState *stat
              * object, never in the growing traversal vector. */
             stack[depth++]=(CtfeAdmissionFrame){current,0,count,owned,function};current=(XrXirValue){0};owned=false;
         } else { if (owned) xr_xir_value_drop(&current);current=(XrXirValue){0};owned=false; }
-next_child:
         for (;;) {
             if (!depth) goto done;
             CtfeAdmissionFrame *frame=&stack[depth-1];node=ctfe_execution_node(run->module->types,(XrXirType)frame->value.type,true);
@@ -176,10 +163,7 @@ done:
     xr_compile_resources_free(stack);return status;
 }
 static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value) {
-    return ctfe_value_graph_work(run,state,value,false);
-}
-static XrXirCtfeStatus ctfe_data_admission_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value) {
-    return ctfe_value_graph_work(run,state,value,true);
+    return ctfe_value_graph_work(run,state,value,NULL,NULL);
 }
 static bool ctfe_array_opcode(XrXirOp op) {
     return op==XR_XIR_CELL_PROJECT || op==XR_XIR_RANGE_CHECK || op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
@@ -200,7 +184,7 @@ static XrXirCtfeStatus ctfe_array_incoming_work(ScalarRun *run,CtfeOwnedState *s
     const XrXirValue *cell,const XrXirValue *incoming) {
     XrXirValue previous=state->forbidden_cell;
     if (cell->type) state->forbidden_cell=*cell;
-    XrXirCtfeStatus status=ctfe_admission_work(run,state,incoming);
+    XrXirCtfeStatus status=ctfe_mutation_work(run,state,cell,incoming);
     state->forbidden_cell=previous;return status;
 }
 static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
@@ -260,7 +244,7 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
     else if (op->op==XR_XIR_PLACE_WRITE) {
         if (!place.payload) return XR_XIR_CTFE_NOT_SUPPORTED;
         XrXirValue value=ctfe_array_operand(run,ids[1]);status=ctfe_array_incoming_work(run,state,&receiver_cell,&value);
-        if (status!=XR_XIR_CTFE_OK) return status;XrXirValuePath path={0};
+        if (status!=XR_XIR_CTFE_OK) return status;admission=ctfe_value_admission(state);XrXirValuePath path={0};
         value_status=xr_xir_value_path_write(&place,&path,&value,&admission,&fault);
     } else if (op->op==XR_XIR_ARRAY_GET) value_status=xr_xir_array_get(&receiver,ctfe_array_operand(run,ids[1]).payload,&admission,&result,&fault);
     else if (op->op==XR_XIR_ARRAY_LEN || op->op==XR_XIR_ARRAY_CAPACITY) {
@@ -274,7 +258,7 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
         if (!place.payload) return XR_XIR_CTFE_NOT_SUPPORTED;
         XrXirValue element=ctfe_array_operand(run,ids[op->op==XR_XIR_ARRAY_SET?2:1]);
         status=ctfe_array_incoming_work(run,state,&receiver_cell,&element);
-        if (status!=XR_XIR_CTFE_OK) return status;
+        if (status!=XR_XIR_CTFE_OK) return status;admission=ctfe_value_admission(state);
         int64_t capacity=0;value_status=xr_xir_array_capacity(&receiver,&admission,&capacity);
         if (value_status!=XR_XIR_VALUE_OK) return ctfe_value_status(value_status);
         if ((uint64_t)capacity>(UINT64_MAX-4)/2) return XR_XIR_CTFE_BUDGET;

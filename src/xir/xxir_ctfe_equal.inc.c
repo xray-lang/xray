@@ -47,7 +47,7 @@ static XrXirCtfeStatus ctfe_owned_equal_work(ScalarRun *run,CtfeOwnedState *stat
             if (a==b && a) {
                 if (depth==capacity) {
                     uint64_t next=capacity?(uint64_t)capacity*2:1,size=next*sizeof(*stack),old=(uint64_t)capacity*sizeof(*stack);
-                    if (next>UINT32_MAX || size>SIZE_MAX || old>state->frame_spare || size>state->frame_spare-old) { status=XR_XIR_CTFE_FRAME_LIMIT;break; }
+                    if (next>UINT32_MAX || size>SIZE_MAX || old>ctfe_frame_spare(state) || size>ctfe_frame_spare(state)-old) { status=XR_XIR_CTFE_FRAME_LIMIT;break; }
                     if (!scalar_compile_work(run,(uint64_t)depth*sizeof(*stack)+sizeof(*stack))) { status=XR_XIR_CTFE_BUDGET;break; }
                     void *memory=stack;status=ctfe_compile_status(xir_compile_resource_status(xr_compile_resources_resize(run->compile_resources,&memory,(size_t)size)));
                     if (status!=XR_XIR_CTFE_OK) break;stack=memory;capacity=(uint32_t)next;
@@ -74,7 +74,7 @@ next_child:
         if (status==XR_XIR_CTFE_OK) status=ctfe_admission_work(run,state,&frame->right);
         if (status!=XR_XIR_CTFE_OK) break;
         XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,.work=UINT64_MAX,
-            .scratch_bytes=state->frame_spare-(uint64_t)capacity*sizeof(*stack)};XrXirFaultDetail fault={0};
+            .scratch_bytes=ctfe_frame_spare(state)-(uint64_t)capacity*sizeof(*stack)};XrXirFaultDetail fault={0};
         status=ctfe_value_status(xr_xir_array_get(&frame->left,(int64_t)frame->next,&admission,&left,&fault));
         if (status!=XR_XIR_CTFE_OK) break;left_owned=true;
         status=ctfe_value_status(xr_xir_array_get(&frame->right,(int64_t)frame->next++,&admission,&right,&fault));
@@ -91,7 +91,7 @@ static XrXirCtfeStatus ctfe_owned_equal_step(ScalarRun *run,uint32_t *cursor,Ctf
     const XrXirInstruction *op=&run->function->instructions[*cursor];
     XrXirValue left=ctfe_array_operand(run,op->args[0]),right=ctfe_array_operand(run,op->args[1]);bool equal=false;
     XrXirCtfeStatus status=ctfe_owned_equal_work(run,state,left,right);if (status!=XR_XIR_CTFE_OK) return status;
-    XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,.work=UINT64_MAX,.scratch_bytes=state->frame_spare};
+    XrXirValueAdmission admission={.arena=state->arena,.domain=state->domain,.work=UINT64_MAX,.scratch_bytes=ctfe_frame_spare(state)};
     status=ctfe_value_status(xr_xir_value_equal(&left,&right,(XrXirType)left.type,&admission,&equal));
     if (status!=XR_XIR_CTFE_OK) return status;
     xr_xir_scalar_store(run->frame,run->layout->offsets[run->function->parameter_count+*cursor],op->immediate?!equal:equal);

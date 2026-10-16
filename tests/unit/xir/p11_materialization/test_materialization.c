@@ -265,7 +265,7 @@ static void source_materializers(unsigned mode) {
             if (f==run) CHECK(op->immediate!=outer);
         }
     }
-    uint32_t expected=mode==7?33u:mode==8?1u:2u;
+    uint32_t expected=(mode==6 || mode==7)?33u:mode==8?1u:2u;
     CHECK(count==expected && xr_xir_compile_construction_materialization_count(source.checked->construction)==expected);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
@@ -331,10 +331,7 @@ int main(int argc,char **argv) {
     for (unsigned mode=3;mode<=5;++mode) source_materializers(mode);
     source_materializers(7);
     source_materializers(8);
-    context_new(&producer);XrXirSourceResult unadmitted={0};
-    CHECK(source_operation(&producer,6,XR_XIR_PROGRAM,&unadmitted)==XR_XIR_BAD_TYPE && !unadmitted.checked && !unadmitted.snapshot);
-    xr_compile_resources_release(producer.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
-    fprintf(stderr,"Deeper external Array<owning private struct> remains explicitly refused; no added observation authority\n");
+    source_materializers(6);
     source_library_case(false);source_library_case(true);
     independent_wire();
     fprintf(stderr,"Private fixed-data catalogue, nested owner edges, no export/FnRef/user computation, independent packets and two real Instance42; compiler physical0\n");

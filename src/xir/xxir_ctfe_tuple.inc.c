@@ -130,7 +130,7 @@ static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *
             if (depth==capacity) {
                 uint64_t next=capacity?(uint64_t)capacity*2:1;
                 uint64_t old=(uint64_t)capacity*sizeof(*stack),size=next*sizeof(*stack);
-                if (next>UINT32_MAX || size>SIZE_MAX || old>state->frame_spare || size>state->frame_spare-old) { status=XR_XIR_CTFE_FRAME_LIMIT;break; }
+                if (next>UINT32_MAX || size>SIZE_MAX || old>ctfe_frame_spare(state) || size>ctfe_frame_spare(state)-old) { status=XR_XIR_CTFE_FRAME_LIMIT;break; }
                 void *memory=stack;
                 status=ctfe_compile_status(xir_compile_resource_status(xr_compile_resources_resize(run->compile_resources,&memory,(size_t)size)));
                 if (status!=XR_XIR_CTFE_OK) break;

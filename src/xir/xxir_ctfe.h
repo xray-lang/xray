@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_ctfe.h - Compiler-owned evaluation of closed scalar leaf functions
+ * xxir_ctfe.h - Bounded compiler execution of closed Lowered functions
  *
  * KEY CONCEPT:
  *   Authentic Lowered instructions share ordinary VM numeric semantics.
@@ -52,19 +52,21 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_shape(const XrXirCompileContext
 
 /* Receive a closed compiler value family from its structurally verified pool.
  * This ledger-owned iterative admission accepts primitive/String/Unit and
- * immutable Tuples and Nullable values, rejects cycles and authority-bearing fields, and grants no
- * execution permission. Failure preserves all caller metadata. */
+ * immutable Tuple/Nullable/Array and declared struct/enum data. Finite storage
+ * handles may close recursive metadata; inline cycles, pure Array cycles and
+ * authority-bearing fields refuse. Actual value visits pay separately and
+ * no execution permission follows. Failure preserves caller metadata. */
 XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirType type);
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function must have bool/integer/Float/Rune/String inputs and results or Unit results, with
+ * ordinary function has scalar/String inputs and admitted data or Unit results,
  * frame-owned locals and private Cells of admitted value families. Immutable
  * Tuples and Nullable values can be constructed/projected and exported by logical
  * active field-byte sum and canonical discriminants; Unit fields occupy zero
  * output bytes. Nullable unwrap of None returns NULL_UNWRAP. External composite parameters
  * require bounded cross-arena receiving and currently reject. Private storage
- * in a bounded admitted opcode graph. Local
+ * remains inside the bounded admitted opcode graph. Local
  * writes produce Unit without a result slot. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant
  * purity. Limits may deny all resources and must not exceed the fixed ceilings.

@@ -39,6 +39,24 @@ static XrXirCtfeStatus ctfe_nominal_owner_admit(const XrXirArtifact *artifact,ui
     return kind==XR_XIR_NOMINAL_STRUCT || kind==XR_XIR_NOMINAL_ENUM || kind==XR_XIR_NOMINAL_CLASS?
         XR_XIR_CTFE_OK:XR_XIR_CTFE_NOT_SUPPORTED;
 }
+static XrXirCtfeStatus ctfe_type_cycle_admit(const XrXirCompileContext *context,
+    const XrXirTypes *types,const CtfeTypeFrame *stack,uint32_t depth,uint32_t index) {
+    bool reference=false,array_only=true;
+    while (depth) {
+        if (!xir_compile_work(context,8)) return XR_XIR_CTFE_BUDGET;
+        const CtfeTypeFrame *frame=&stack[--depth];const XrXirTypeNode *node=&types->nodes[frame->index];
+        reference|=node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_CALLABLE ||
+            xr_xir_type_is_class(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+frame->index));
+        array_only&=node->kind==XR_XIR_TYPE_ARRAY;
+        if (frame->index==index) {
+            /* Pure Array chains have no finite terminal admission query.
+             * Inline cycles have no finite storage. Other reference cycles
+             * describe types only; actual value visits pay independently. */
+            return reference && !array_only?XR_XIR_CTFE_OK:XR_XIR_CTFE_NOT_SUPPORTED;
+        }
+    }
+    return XR_XIR_CTFE_BAD_ARTIFACT;
+}
 static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type,bool internal,XrXirCtfeTypeShape *output) {
     if (!xir_compile_context_valid(context)) return XR_XIR_CTFE_BAD_ARGUMENT;
@@ -77,10 +95,9 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
                 (node->nominal.field_count && !node->nominal.fields)) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
         }
         if (frame->next==ctfe_type_fields(node)) {
-            if (!internal && node->kind==XR_XIR_TYPE_ARRAY && frame->dynamic) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
-            if (!internal && nominal && xr_xir_type_is_struct(types,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+frame->index)) && frame->dynamic) {
-                status=XR_XIR_CTFE_NOT_SUPPORTED;break;
-            }
+            /* Pure data may contain variable descendants. Actual receiving
+             * observes each node and pays its original owner before reading;
+             * the static shape is never a complete variable-graph reserve. */
             colors[frame->index]=2;costs[frame->index]=(XrXirCtfeTypeShape){frame->work,
                 node->kind==XR_XIR_TYPE_ARRAY?!frame->pure_arrays:frame->dynamic,frame->pure_arrays};--depth;
             if (!depth) { *output=costs[frame->index];break; }
@@ -122,7 +139,16 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
         const XrXirTypeNode *child=ctfe_execution_node(types,field.type,internal);
         if (!child) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
         index=(uint32_t)field.type-XR_XIR_CONSTRUCTED_TYPE_BASE;
-        if (colors[index]==1) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+        /* Ordinary composite descriptors refer only to earlier pool entries.
+         * Nominal fields alone may close a separately verified recursive type;
+         * a gray edge cannot legitimize malformed Tuple or Nullable metadata. */
+        if (!nominal && index>=frame->index) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+        if (colors[index]==1) {
+            status=ctfe_type_cycle_admit(context,types,stack,depth,index);if (status!=XR_XIR_CTFE_OK) break;
+            uint64_t shallow=(uint64_t)ctfe_type_fields(child)+1;
+            if (shallow>UINT64_MAX-frame->work) { status=XR_XIR_CTFE_BUDGET;break; }
+            frame->work+=shallow;frame->dynamic=true;frame->pure_arrays=false;continue;
+        }
         if (colors[index]==2) {
             if (costs[index].work>UINT64_MAX-frame->work) { status=XR_XIR_CTFE_BUDGET;break; }
             frame->work+=costs[index].work;frame->dynamic|=costs[index].dynamic;

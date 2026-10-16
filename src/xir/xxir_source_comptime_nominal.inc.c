@@ -114,13 +114,9 @@ static bool source_comptime_nominal_get(SourceContext *ctx,AstNode *node,SourceC
         if (status==XR_XIR_VALUE_OK && frame->next<borrowed.field_count) status=xr_xir_value_copy(&borrowed.fields[frame->next],output);
         else status=XR_XIR_VALUE_BAD_ARGUMENT;
     } else {
-        const XrXirTypeArena *arena=xr_xir_value_arena(&frame->value);XrXirDomain *domain=NULL;
-        status=xr_xir_compile_domain_new(ctx->compile.resources,UINT64_MAX,&domain);
-        if (status==XR_XIR_VALUE_OK) {
-            XrXirValueAdmission admission={.arena=arena,.domain=domain,.work=UINT64_MAX,.scratch_bytes=XR_XIR_CTFE_MAX_FRAME_BYTES};
-            status=xr_xir_struct_get(&frame->value,frame->next,&admission,output);
-        }
-        xr_xir_domain_drop(domain);
+        XrXirValueAdmission admission={0};
+        if (!source_comptime_observation(ctx,node,&frame->value,&admission)) return false;
+        status=xr_xir_struct_observe(&frame->value,frame->next,&admission,output);
     }
     return status==XR_XIR_VALUE_OK || source_fail(ctx,node,status==XR_XIR_VALUE_OOM?XR_XIR_OUT_OF_MEMORY:
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,"comptime nominal field receiving failed");

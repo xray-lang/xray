@@ -1,0 +1,6 @@
+struct Item{private value:string;static make()->Item{return Item{value:"ab"}}}
+struct Box{left:Array<Item>;right:Array<Item>}
+fn grow(items:ref Array<Item>){for(var i=0;i<8;i++){items.push(Item.make())}}
+fn edit(box:ref Box){grow(ref box.left);grow(ref box.right)}
+fn eval()->i64{var box=Box{left:[],right:[]};const before=box;edit(ref box);return len(before.left)+len(before.right)+len(box.left)+len(box.right)+26}
+export fn answer()->i64{const value=comptime eval();return value}

@@ -27,9 +27,12 @@ static XrXirCtfeStatus ctfe_projection_record(ScalarRun *run,CtfeOwnedState *sta
     return XR_XIR_CTFE_NOT_SUPPORTED;
 }
 static XrXirCtfeStatus ctfe_projection_access_work(ScalarRun *run,CtfeOwnedState *state,
-    const XrXirValue *value,bool mutate) {
+    const XrXirValue *value,bool mutate,uint32_t suffix) {
     CtfeCellLoan *record=NULL;XrXirCtfeStatus status=ctfe_projection_record(run,state,value,&record);
     if (status!=XR_XIR_CTFE_OK) return status;
+    uint64_t span=0;status=ctfe_projection_path_work(run,state,value,suffix,&span);
+    if (status!=XR_XIR_CTFE_OK) return status;
+    if (span>record->root_shape) record->root_shape=span;
     status=ctfe_projection_receive_work(run,record);if (status!=XR_XIR_CTFE_OK) return status;
     if (!mutate) return XR_XIR_CTFE_OK;
     if (!scalar_compile_work(run,sizeof(XrXirDomainStats))) return XR_XIR_CTFE_BUDGET;
@@ -48,7 +51,9 @@ static XrXirCtfeStatus ctfe_projection_extend_work(ScalarRun *run,CtfeOwnedState
             if (!scalar_compile_work(run,sizeof(CtfeCellLoan)+state->value_header_work*2)) return XR_XIR_CTFE_BUDGET;
             CtfeCellLoan *other=&frame->loans[p];
             if (!other->projected || !xr_xir_cell_same_owner(&record->value,&other->value)) continue;
-            if (!other->variable_receiving || other->root_shape!=record->root_shape) return XR_XIR_CTFE_BAD_ARTIFACT;
+            /* Selector spans belong to each exact loan. Same-owner reserves
+             * share graph growth, while their proven path lengths may differ. */
+            if (!other->variable_receiving) return XR_XIR_CTFE_BAD_ARTIFACT;
             if (extra>UINT64_MAX-other->root_work) return XR_XIR_CTFE_BUDGET;
             other->root_work+=extra;
         }
@@ -59,11 +64,11 @@ static XrXirCtfeStatus ctfe_projection_incoming_work(ScalarRun *run,CtfeOwnedSta
     const XrXirValue *cell,const XrXirValue *value) {
     CtfeCellLoan *record=NULL;XrXirCtfeStatus status=ctfe_projection_record(run,state,cell,&record);
     if (status!=XR_XIR_CTFE_OK) return status;
-    if (!record->variable_receiving) return ctfe_admission_work(run,state,value);
+    if (!record->variable_receiving) return ctfe_mutation_work(run,state,cell,value);
     if (!scalar_compile_work(run,2*sizeof(XrCompileResourceStats))) return XR_XIR_CTFE_BUDGET;
     XrCompileResourceStats before={0},after={0};
     if (xr_compile_resources_stats(state->context->resources,&before)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_CTFE_BAD_ARTIFACT;
-    status=ctfe_admission_work(run,state,value);if (status!=XR_XIR_CTFE_OK) return status;
+    status=ctfe_mutation_work(run,state,cell,value);if (status!=XR_XIR_CTFE_OK) return status;
     if (xr_compile_resources_stats(state->context->resources,&after)!=XR_COMPILE_RESOURCE_OK || after.work<before.work)
         return XR_XIR_CTFE_BAD_ARTIFACT;
     uint64_t work=after.work-before.work;if (work>UINT64_MAX/4) return XR_XIR_CTFE_BUDGET;
@@ -72,18 +77,24 @@ static XrXirCtfeStatus ctfe_projection_incoming_work(ScalarRun *run,CtfeOwnedSta
      * variable subtree. Four times that span bounds either growth, including
      * enclosing fixed metadata. Primitive Array receiving has no length span.
      * This number only bounds later charges; it grants neither work nor access. */
-    if (work) { status=ctfe_projection_extend_work(run,state,record,work*4);if (status!=XR_XIR_CTFE_OK) return status; }
+    if (work && (!record->budget || !record->budget->tracking_count)) {
+        status=ctfe_projection_extend_work(run,state,record,work*4);if (status!=XR_XIR_CTFE_OK) return status;
+    }
     /* Pay the enlarged root before the actual Value write. Failed writes may
      * leave a conservative overestimate; cumulative charges never decrease. */
     return ctfe_projection_receive_work(run,record);
 }
 static XrXirCtfeStatus ctfe_projection_loan_bound(CtfeCallExecution *execution,CtfeCallFrame *frame,CtfeCellLoan *record) {
     CtfeOwnedState *state=&execution->owned;ScalarRun *run=&frame->run;CtfeCallFrame *parent=state->activation;
+    uint64_t span=0;XrXirCtfeStatus path_status=ctfe_projection_path_work(run,state,&record->value,0,&span);
+    if (path_status!=XR_XIR_CTFE_OK) return path_status;
     if (parent) for (uint32_t p=0;p<parent->loan_count;++p) {
         if (!scalar_compile_work(run,64+state->value_header_work*2)) return XR_XIR_CTFE_BUDGET;
         const CtfeCellLoan *outer=&parent->loans[p];
         if (!outer->projected || !xr_xir_cell_same_owner(&record->value,&outer->value)) continue;
-        record->root_work=outer->root_work;record->root_shape=outer->root_shape;record->variable_receiving=outer->variable_receiving;
+        record->root_work=outer->root_work;record->root_shape=span>outer->root_shape?span:outer->root_shape;
+        record->variable_receiving=outer->variable_receiving;
+        record->budget=outer->budget;
         return ctfe_projection_receive_work(run,record);
     }
     if (!scalar_compile_work(run,128+state->value_header_work)) return XR_XIR_CTFE_BUDGET;
@@ -92,30 +103,33 @@ static XrXirCtfeStatus ctfe_projection_loan_bound(CtfeCallExecution *execution,C
     XrXirType type=identity?(XrXirType)root->type:xr_xir_cell_element(run->module->types,(XrXirType)root->type);
     if (!identity && !xr_xir_type_is_array(run->module->types,type) && !xr_xir_type_is_struct(run->module->types,type)) return XR_XIR_CTFE_NOT_SUPPORTED;
     XrXirCtfeStatus status=ctfe_validation_work(run,state,type);if (status!=XR_XIR_CTFE_OK) return status;
-    if (identity) {
-        XrXirType leaf=xr_xir_cell_element(run->module->types,(XrXirType)record->value.type);
-        status=ctfe_class_projection_type(run,state,root,leaf,&record->variable_receiving);if (status!=XR_XIR_CTFE_OK) return status;
-    } else {
-        /* A narrow data-root loan cannot observe identity descendants changed
-         * through another alias. Its receiving reserve therefore requires an
-         * externally admissible data type, independent of internal execution. */
-        XrXirCtfeTypeShape shape={0};
-        status=ctfe_type_info(state->context,run->module->types,type,false,&shape);
-        if (status!=XR_XIR_CTFE_OK) return status;
-    }
+    XrXirCtfeTypeShape shape={0};status=ctfe_type_info(state->context,run->module->types,type,true,&shape);
+    if (status!=XR_XIR_CTFE_OK) return status;record->variable_receiving=shape.dynamic;
+    XrXirCtfeTypeShape data={0};status=ctfe_type_info(state->context,run->module->types,type,false,&data);
+    bool tracking=status==XR_XIR_CTFE_NOT_SUPPORTED;
+    if (status!=XR_XIR_CTFE_OK && !tracking) return status;
+    record->budget=record;record->identities.retained=true;
     XrXirValue value={0};status=ctfe_value_status(identity?xr_xir_value_copy(root,&value):xr_xir_cell_authorized_read(root,&state->authority,&value));
     if (status!=XR_XIR_CTFE_OK) return status;
     XrCompileResourceStats before={0},after={0};
     if (xr_compile_resources_stats(state->context->resources,&before)!=XR_COMPILE_RESOURCE_OK) status=XR_XIR_CTFE_BAD_ARTIFACT;
-    if (status==XR_XIR_CTFE_OK) status=ctfe_admission_work(run,state,&value);
+    if (status==XR_XIR_CTFE_OK) status=tracking?
+        ctfe_value_graph_work(run,state,&value,ctfe_identity_visit,&record->identities):ctfe_admission_work(run,state,&value);
     if (status==XR_XIR_CTFE_OK && xr_compile_resources_stats(state->context->resources,&after)!=XR_COMPILE_RESOURCE_OK) status=XR_XIR_CTFE_BAD_ARTIFACT;
     xr_xir_value_drop(&value);
     if (status!=XR_XIR_CTFE_OK) return status;
     if (after.work<before.work) return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (tracking) {
+        if (!state->identity_roots || *state->identity_roots==UINT32_MAX) return XR_XIR_CTFE_BUDGET;
+        ++*state->identity_roots;record->tracking_count=state->identity_roots;
+    }
     record->root_work=after.work-before.work;
-    record->root_shape=state->tuple_costs[type-XR_XIR_CONSTRUCTED_TYPE_BASE].work;
-    /* Proper descendant loans on data Cells cannot grow the root Array span.
-     * Dynamic data leaves on Class roots extend all live parent reserves
-     * before writes. No root Value or interior address is retained here. */
+    /* Receiving traverses the root graph once per actual selector, not once
+     * per type-graph edge. Every access and child loan extends this exact
+     * selector span before calling the common Value path operation. */
+    record->root_shape=span;
+    /* Only mutable identity leases persist in the shared account. Root
+     * snapshots and interior addresses never cross this authority boundary.
+     * Descriptor spans and every parent receiving reserve remain independent. */
     return ctfe_projection_receive_work(run,record);
 }

@@ -10,6 +10,7 @@
  *   Actual producer roles admit loans; only live parent authority can reborrow.
  *   Every prepared prefix rolls back and every pop restores its exact parent.
  */
+#include "xxir_ctfe_alias_budget.inc.c"
 #include "xxir_ctfe_projection_bounds.inc.c"
 static void ctfe_call_frame_free(CtfeCallFrame *frame) {
     xr_xir_value_drop(&frame->returned);
@@ -17,6 +18,15 @@ static void ctfe_call_frame_free(CtfeCallFrame *frame) {
     while (frame->loan_count) {
         XrXirCellLoan *loan=&frame->loans[--frame->loan_count].loan;
         if (frame->loans_committed) xr_xir_cell_loan_release(loan);else xr_xir_cell_loan_abort(loan);
+    }
+    for (uint32_t p=0;p<frame->loan_capacity;++p) {
+        CtfeCellLoan *record=&frame->loans[p];
+        if (record->budget!=record) continue;
+        if (record->tracking_count) {
+            XR_CHECK(*record->tracking_count,"identity root accounting retires its exact registration");
+            --*record->tracking_count;
+        }
+        ctfe_identity_drop(&record->identities);
     }
     ctfe_owned_frame_clear(&frame->run);xr_compile_resources_free(frame);
 }

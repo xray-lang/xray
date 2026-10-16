@@ -33,7 +33,7 @@ static XrXirCtfeStatus ctfe_text_reserve(ScalarRun *run,CtfeOwnedState *state,co
             work=UINT64_C(131072)+(distance+2)*UINT64_C(2048);frame=16384;
         }
     }
-    if (frame>state->frame_spare) return XR_XIR_CTFE_FRAME_LIMIT;
+    if (frame>ctfe_frame_spare(state)) return XR_XIR_CTFE_FRAME_LIMIT;
     return scalar_compile_work(run,work)?XR_XIR_CTFE_OK:XR_XIR_CTFE_BUDGET;
 }
 static XrXirCtfeStatus ctfe_text_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {

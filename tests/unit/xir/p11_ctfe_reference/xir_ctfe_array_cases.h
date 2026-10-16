@@ -17,26 +17,31 @@ static void reference_array_type_policy(const XrXirCompileContext *context) {
     XrXirTypes types={nodes,3,NULL,NULL};XrXirCtfeTypeShape shape={0};
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
     CHECK(xr_xir_compile_ctfe_type_shape(context,&types,second,&shape)==XR_XIR_CTFE_OK && shape.dynamic && !shape.pure_arrays);
-    XrXirCtfeTypeShape saved=shape;
-    CHECK(xr_xir_compile_ctfe_type_shape(context,&types,third,&shape)==XR_XIR_CTFE_NOT_SUPPORTED);
-    CHECK(shape.work==saved.work && shape.dynamic==saved.dynamic && shape.pure_arrays==saved.pure_arrays);
+    CHECK(xr_xir_compile_ctfe_type_shape(context,&types,third,&shape)==XR_XIR_CTFE_OK && shape.dynamic && !shape.pure_arrays);
     nodes[1].element=XR_XIR_I8;
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
     CHECK(xr_xir_compile_ctfe_type_shape(context,&types,third,&shape)==XR_XIR_CTFE_OK && !shape.dynamic && shape.pure_arrays);
-    fprintf(stderr,"CTFE Array type policy: fixed Tuple elements and pure Array chains; nested variable admission refuses and preserves shape output\n");
+    fprintf(stderr,"CTFE Array type policy: fixed and variable Tuple elements, with pure primitive Array chains\n");
 }
 static void reference_array_value(const XrXirValue *value,const CtfeReferenceCase *selected,XrXirDomain *domain) {
     const XrXirTypeArena *arena=xr_xir_value_arena(value);CHECK(arena && xr_xir_value_valid(value));
     XrXirValueAdmission admission={.arena=arena,.domain=domain,.work=UINT64_MAX,.scratch_bytes=65536};int64_t length=0,capacity=0;
     CHECK(xr_xir_array_len(value,&admission,&length)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_array_capacity(value,&admission,&capacity)==XR_XIR_VALUE_OK);
-    int64_t expected=!strcmp(selected->name,"array_repeat")?3:!strcmp(selected->name,"array_export")?4:!strcmp(selected->name,"array_tuple")?1:
+    int64_t expected=!strcmp(selected->name,"array_repeat")?3:!strcmp(selected->name,"array_export")?4:(!strcmp(selected->name,"array_tuple") || !strcmp(selected->name,"array_deep_gap"))?1:
         (!strcmp(selected->name,"array_empty") || !strcmp(selected->name,"array_capacity"))?0:2;
     CHECK(length==expected);
     CHECK(capacity==(!strcmp(selected->name,"array_reserve")?6:!strcmp(selected->name,"array_capacity")?2:length?4:0));
     for (int64_t i=0;i<length;++i) {
         XrXirValue element={0};XrXirFaultDetail fault={0};CHECK(xr_xir_array_get(value,i,&admission,&element,&fault)==XR_XIR_VALUE_OK);
-        if (!strcmp(selected->name,"array_nested")) {
+        if (!strcmp(selected->name,"array_deep_gap")) {
+            int64_t count=0;CHECK(xr_xir_array_len(&element,&admission,&count)==XR_XIR_VALUE_OK && count==2);
+            for (int64_t j=0;j<count;++j) {
+                XrXirValue number={0};CHECK(xr_xir_array_get(&element,j,&admission,&number,&fault)==XR_XIR_VALUE_OK);
+                bool some=false;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(&number,&some,&payload) && some==(j!=0));
+                if (some) CHECK(payload && payload->type==XR_XIR_I8 && payload->payload==7);xr_xir_value_drop(&number);
+            }
+        } else if (!strcmp(selected->name,"array_nested")) {
             XrXirValueAdmission child=admission;int64_t count=0;CHECK(xr_xir_array_len(&element,&child,&count)==XR_XIR_VALUE_OK && count==(i?1:2));
             for (int64_t j=0;j<count;++j) { XrXirValue number={0};CHECK(xr_xir_array_get(&element,j,&child,&number,&fault)==XR_XIR_VALUE_OK);CHECK(number.type==XR_XIR_I8 && number.payload==(i?3:j+1)); }
         } else if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) {

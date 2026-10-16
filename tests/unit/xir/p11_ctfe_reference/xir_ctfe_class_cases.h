@@ -97,9 +97,15 @@ static void reference_class_direct(const XrXirCompileContext *context,XrXirSourc
         CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
     }
     fprintf(stderr,"CTFE Class depth prefixes1..%u preserve empty output and exact parent loans\n",depth);
-    /* This fixed boundary includes simultaneous activation, path, traversal
-     * and common receiving scratch on the explicit x86_64 target. */
-    uint64_t low=1176;
+    /* Retained identity keys share the same explicit frame quota as live
+     * activations and scratch. Find the exact bound without raising the cap. */
+    uint64_t low=0,high=XR_XIR_CTFE_MAX_FRAME_BYTES;
+    while (low<high) {
+        uint64_t middle=low+(high-low)/2;request.limits.frame_bytes=middle;
+        XrXirCtfeStatus status=reference_text_evaluate(&request,true,&output);
+        if (status==XR_XIR_CTFE_OK) { xr_xir_value_drop(&output);high=middle; }
+        else { CHECK((status==XR_XIR_CTFE_FRAME_LIMIT || status==XR_XIR_CTFE_BUDGET) && !output.type && !output.payload);low=middle+1; }
+    }
     CHECK(low);request.limits.frame_bytes=low;
     CHECK(reference_text_evaluate(&request,true,&output)==XR_XIR_CTFE_OK && output.type==XR_XIR_I64 && output.payload==42);xr_xir_value_drop(&output);
     request.limits.frame_bytes=low-1;
