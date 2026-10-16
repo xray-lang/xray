@@ -13,6 +13,7 @@
 #include "../xir/xxir_specialization_bindings.h"
 #include "../xir/xxir_vm.h"
 #include <stdio.h>
+#include <string.h>
 
 typedef struct SubmissionBirth {
     struct SubmissionBirth *previous;
@@ -159,7 +160,7 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
 typedef struct SubmissionInput {
     const XrXirSourceText *text;
     const XrXirSourceAstOwner *ast;
-    bool interactive;
+    bool interactive, type_query;
 } SubmissionInput;
 static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const SubmissionInput *input,
     XrXirSourceDiagnostic *diagnostic) {
@@ -169,7 +170,8 @@ static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const Submiss
     XrSourceStatus status=submission_resource(xr_compile_state_status(owner->state));
     if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;
-    XrXirStatus prepared=input->interactive ? xr_xir_compile_source_generation_prepare_repl_ast_bindings(owner->source,
+    XrXirStatus prepared=input->type_query ? xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(owner->source,
+        input->ast,&owner->source_serial,diagnostic) : input->interactive ? xr_xir_compile_source_generation_prepare_repl_ast_bindings(owner->source,
         input->ast,&owner->source_serial,diagnostic) : input->ast ? xr_xir_compile_source_generation_prepare_ast_bindings(owner->source,
         input->ast,&owner->source_serial,diagnostic) : xr_xir_compile_source_generation_prepare_bindings(owner->source,
         input->text,&owner->source_serial,diagnostic);
@@ -208,6 +210,11 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *owne
 XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_ast(XrSourceSubmission *owner,const XrXirSourceAstOwner *ast,
     XrXirSourceDiagnostic *diagnostic) {
     const SubmissionInput input={.ast=ast,.interactive=true};
+    return submission_prepare(owner,&input,diagnostic);
+}
+XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_type_ast(XrSourceSubmission *owner,const XrXirSourceAstOwner *ast,
+    XrXirSourceDiagnostic *diagnostic) {
+    const SubmissionInput input={.ast=ast,.interactive=true,.type_query=true};
     return submission_prepare(owner,&input,diagnostic);
 }
 XR_FUNC bool xr_source_submission_repl_result(const XrSourceSubmission *owner) {
@@ -256,7 +263,7 @@ XR_FUNC XrSourceStatus xr_source_submission_publish(XrSourceSubmission *owner) {
     if(!owner->source_serial || !owner->has_observed || owner->observed.outcome.status!=XR_XIR_CALL_RETURNED)return XR_SOURCE_BAD_STATE;
     XrXirSourceGenerationView view={0};
     XrXirStatus source=xr_xir_compile_source_generation_view(owner->source,owner->source_serial,&view);
-    if(source!=XR_XIR_OK || view.published)return XR_SOURCE_BAD_STATE;
+    if(source!=XR_XIR_OK || view.published || view.type_query)return XR_SOURCE_BAD_STATE;
     owner->busy=true;
     XrXirCallStatus published=xr_xir_instance_generation_publish(owner->runtime,owner->runtime_serial);
     if(published==XR_XIR_CALL_READY) {
@@ -353,6 +360,14 @@ XR_FUNC XrSourceStatus xr_source_submission_read(XrSourceSubmission *owner,const
     XrSourceStatus status=submission_resource(xr_compile_state_status(owner->state));
     if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;status=submission_read_binding(owner,name,output);owner->busy=false;return status;
+}
+XR_FUNC XrSourceStatus xr_source_submission_names(const XrSourceSubmission *owner,bool pending,
+    const XrXirSourceGenerationName **output,size_t *count) {
+    if(!owner || !output || *output || !count || *count)return XR_SOURCE_BAD_ARGUMENT;
+    if(owner->busy)return XR_SOURCE_BUSY;
+    if(pending && !owner->source_serial)return XR_SOURCE_BAD_STATE;
+    return submission_capture(owner,submission_xir(xr_xir_compile_source_generation_names(owner->source,
+        pending?owner->source_serial:0,output,count)));
 }
 XR_FUNC XrSourceStatus xr_source_submission_drop(XrSourceSubmission **output,XrXirCallStatus *cleanup) {
     if(!output)return XR_SOURCE_BAD_ARGUMENT;

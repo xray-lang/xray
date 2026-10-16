@@ -100,7 +100,7 @@ static bool source_destructure_binding(SourceContext *ctx, AstNode *node, bool t
         *symbols[i] = (SourceName){NULL,field->as.identifier.name,NULL,node,
             fields[i].type == XR_XIR_UNIT && node->as.destructure_decl.is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
             fields[i].type == XR_XIR_UNIT && node->as.destructure_decl.is_const ? UINT32_MAX : values[i].id,
-            ctx->module,fields[i].type,!node->as.destructure_decl.is_const,false,0, true, false};
+            ctx->module,fields[i].type,!node->as.destructure_decl.is_const,false,0, true, false,0,false};
     }
     if(top) {
         if(!bindings)return true;

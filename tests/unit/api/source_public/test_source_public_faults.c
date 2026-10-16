@@ -135,7 +135,7 @@ int main(int argc,char **argv) {
         !strcmp(argv[1],"--invoke-values-budget") || !strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe") ||
         !strcmp(argv[1],"--instance") || !strcmp(argv[1],"--instance-probe") || !strcmp(argv[1],"--instance-budget") ||
         !strcmp(argv[1],"--repl") || !strcmp(argv[1],"--repl-probe") || !strcmp(argv[1],"--repl-budget") ||
-        !strcmp(argv[1],"--repl-samples") || !strcmp(argv[1],"--repl-display"))));
+        !strcmp(argv[1],"--repl-samples") || !strcmp(argv[1],"--repl-display") || !strcmp(argv[1],"--repl-inspect") || !strcmp(argv[1],"--repl-inspect-probe") || !strcmp(argv[1],"--repl-inspect-budget") || !strcmp(argv[1],"--repl-inspect-samples"))));
     if(argc==1)allocation_faults(0,3,false);
     else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4,false);
     else if(!strcmp(argv[1],"--constructed-task"))allocation_faults(4,5,false);
@@ -151,6 +151,11 @@ int main(int argc,char **argv) {
     else if(!strcmp(argv[1],"--repl-budget"))public_repl_budgets();
     else if(!strcmp(argv[1],"--repl-samples"))public_repl_samples();
     else if(!strcmp(argv[1],"--repl-display"))public_repl_display_failure();
+    else if(!strcmp(argv[1],"--repl-inspect") || !strcmp(argv[1],"--repl-inspect-probe")) {
+        public_repl_inspection_case=true;public_repl_faults(!strcmp(argv[1],"--repl-inspect-probe"));
+    }
+    else if(!strcmp(argv[1],"--repl-inspect-budget")){public_repl_inspection_case=true;public_repl_budgets();}
+    else if(!strcmp(argv[1],"--repl-inspect-samples")){public_repl_inspection_case=true;public_repl_samples();}
     else if(!strcmp(argv[1],"--invoke-values-budget"))invoke_values_budgets();
     else if(!strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe")) {
         projection_faults(!strcmp(argv[1],"--value-projections-probe"));

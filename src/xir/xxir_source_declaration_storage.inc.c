@@ -12,6 +12,9 @@ static bool source_declaration_storage(SourceContext *ctx,uint32_t nominals,uint
         if(slots==UINT32_MAX)return source_fail(ctx,ctx->repl_tail,XR_XIR_BUDGET,"implicit result slot capacity exhausted");
         ++slots;
     }
+    if(ctx->function_value_capacity>UINT32_MAX-slots)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"function value slot capacity exhausted");
+    slots+=ctx->function_value_capacity;
     ctx->slot_capacity=slots;
     ctx->functions = source_alloc(ctx, capacity, sizeof(*ctx->functions));
     ctx->bodies = source_alloc(ctx, capacity, sizeof(*ctx->bodies));

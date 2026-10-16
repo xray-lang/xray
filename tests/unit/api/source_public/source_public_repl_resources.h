@@ -45,7 +45,7 @@ static XrSourceStatus public_repl_input(PublicReplOwners *owners,const char *sou
     }
     return status;
 }
-static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,PublicReplOwners *owners) {
+static XrSourceStatus public_repl_normal_drive(const XrCompileResourceLimits *limits,PublicReplOwners *owners) {
     memset(public_repl_boundaries,0,sizeof(public_repl_boundaries));
     XrSourceCompilerOptions compiler;CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
     compiler.stdlib_path=XR_PUBLIC_STDLIB;compiler.allocated_bytes=limits->allocated_bytes;
@@ -94,6 +94,10 @@ static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,Pu
         length==sizeof(expected)-1 && !memcmp(bytes,expected,length));
     return XR_SOURCE_OK;
 }
+#include "source_public_repl_inspection_resources.h"
+static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,PublicReplOwners *owners) {
+    return public_repl_inspection_case ? public_repl_inspection_drive(limits,owners) : public_repl_normal_drive(limits,owners);
+}
 static void public_repl_sticky(PublicReplOwners *owners) {
     if(!owners->owner)return;
     XrCompileResources *resources=xr_source_compiler_resources(owners->owner->compiler);
@@ -118,7 +122,10 @@ static void public_repl_faults(bool probe) {
         }
         runtime_fail_at=SIZE_MAX;public_repl_close(&owners);
     }
-    printf("public Source REPL actual allocation sites=%zu swept=%zu; four published/aborted inputs, typed tails/it/display, actual old state/closure, owned bytes, sticky retry and physical=0/0\n",sites,probe?0:sites);
+    printf("public Source REPL %s actual allocation sites=%zu swept=%zu; %s; sticky retry and physical=0/0\n",
+        public_repl_inspection_case?"inspection":"history",sites,probe?0:sites,
+        public_repl_inspection_case?"real typeName, unchanged published observations/it, state41 and owned result after owner death":
+            "four published/aborted inputs, typed tails/it/display, actual old state/closure and owned bytes");
 }
 static void public_repl_samples(void) {
     const XrCompileResourceLimits limits={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};

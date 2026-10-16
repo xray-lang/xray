@@ -20,6 +20,8 @@ typedef struct SourceGenerationRecord {
     XrXirSourceGenerationBinding *bindings;
     size_t binding_count;
     XrXirSourceGenerationBinding implicit_result;
+    XrXirSourceGenerationName *names;
+    size_t name_count;
     char *source, *namespace_id;
     XrXirSourceAstOwner ast_owner;
     uint32_t *received_functions;
@@ -62,6 +64,8 @@ static void generation_record_free(SourceGenerationRecord *record) {
     source_semantic_free(record->capture.semantic);
     if (record->ast_owner.owner) record->ast_owner.release(record->ast_owner.owner);
     xr_xir_compile_source_result_free(&record->result);
+    for(size_t i=0;i<record->name_count;++i)xr_compile_resources_free((void *)record->names[i].type_name);
+    xr_compile_resources_free(record->names);
     xr_compile_resources_free(record->bindings);
     xr_compile_resources_free(record->namespace_id);
     xr_compile_resources_free(record->source);
@@ -204,10 +208,11 @@ static XrXirStatus generation_result_binding(XrXirSourceGenerations *owner,Sourc
     record->implicit_result=(XrXirSourceGenerationBinding){record->view.serial,&view->declarations[implicit->declaration-1]};
     record->view.repl_result=record->implicit_result.declaration;return XR_XIR_OK;
 }
+#include "xxir_source_generation_names.inc.c"
 typedef struct GenerationInput {
     const XrXirSourceText *text;
     const XrXirSourceAstOwner *ast;
-    bool readers, interactive;
+    bool readers, interactive, type_query;
 } GenerationInput;
 static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
     const GenerationInput *input,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
@@ -229,7 +234,7 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
     if (status!=XR_XIR_OK) goto done;
     record->view.serial=reserved;record->view.parent=owner->published ? owner->published->view.serial : 0;
     record->unit.owner=owner;record->unit.serial=reserved;record->unit.interactive=input->interactive;
-    record->view.interactive=input->interactive;
+    record->view.interactive=input->interactive;record->view.type_query=input->type_query;
     if (ast) {
         status=ast->retain(ast->owner,&ast->input);
         if (status!=XR_XIR_OK) goto done;
@@ -247,7 +252,7 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
         owner->config.lockfile,XR_XIR_PROGRAM,owner->config.libraries};
     SourceInput source={.supplied=text!=NULL,.text={NULL,record->source,text?text->length:0},
         .ast=ast?ast->input.program:NULL,.ast_input=ast!=NULL,.ast_owner=ast?&record->ast_owner:NULL,
-        .capture=&record->capture,.binding_readers=input->readers,.interactive=input->interactive,
+        .capture=&record->capture,.binding_readers=input->readers,.interactive=input->interactive,.type_query=input->type_query,
         .history=owner->published ? &owner->published->unit : NULL,.self=&record->unit};
     status=source_check_input(&request,source,&record->result,&location,NULL);
     if (status!=XR_XIR_OK) goto done;
@@ -262,6 +267,7 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
     record->view.fingerprint=view->modules[record->capture.module].fingerprint;
     status=generation_bindings(owner,record);
     if (status==XR_XIR_OK) status=generation_result_binding(owner,record,view);
+    if (status==XR_XIR_OK) status=generation_names(owner,record);
 done:
     xr_compile_session_free(session);
     if (diagnostic) { *diagnostic=location;diagnostic->status=status; }
@@ -286,6 +292,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_ast_bindings(XrXirS
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_ast_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceAstOwner *ast,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     const GenerationInput input={.ast=ast,.readers=true,.interactive=true};
+    return generation_prepare(owner,&input,serial,diagnostic);
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(XrXirSourceGenerations *owner,
+    const XrXirSourceAstOwner *ast,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
+    const GenerationInput input={.ast=ast,.readers=true,.interactive=true,.type_query=true};
     return generation_prepare(owner,&input,serial,diagnostic);
 }
 /* Common specialization preserves module and slot ordinals. Complete code
@@ -491,7 +502,7 @@ XR_FUNC XrXirCallStatus xr_xir_source_generation_prepare_instance(XrXirSourceGen
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_publish(XrXirSourceGenerations *owner,uint64_t serial) {
     if (!owner) return XR_XIR_BAD_STRUCTURE;
     SourceGenerationRecord *record=owner->pending;
-    if (!serial || !record || record->view.serial!=serial) return XR_XIR_BAD_STAGE;
+    if (!serial || !record || record->view.serial!=serial || record->view.type_query) return XR_XIR_BAD_STAGE;
     XrXirSourceGenerationBinding *previous=owner->bindings;
     owner->bindings=record->bindings;owner->binding_count=record->binding_count;
     record->bindings=NULL;record->binding_count=0;
@@ -580,7 +591,16 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourc
     case SOURCE_FUNCTION:
         if (symbol->index>=checked->function_count || checked->declarations->functions[symbol->index].module!=module)
             return XR_XIR_BAD_STRUCTURE;
-        definition.kind=XR_XIR_SOURCE_DEFINITION_FUNCTION;break;
+        definition.kind=XR_XIR_SOURCE_DEFINITION_FUNCTION;
+        if(symbol->reader) {
+            uint32_t reader=symbol->reader-1;
+            if(reader>=checked->function_count || checked->functions[reader].parameter_count ||
+                checked->declarations->functions[reader].module!=module || !checked->declarations->functions[reader].exported ||
+                !(checked->declarations->functions[reader].promises&XR_XIR_FUNCTION_NO_SUSPEND) ||
+                !xr_xir_callable_signature(checked->types,checked->functions[reader].result))return XR_XIR_BAD_STRUCTURE;
+            definition.reader=reader;definition.logical_type=checked->functions[reader].result;
+        }
+        break;
     case SOURCE_NOMINAL:
         if (!checked->types || !checked->types->nominals || symbol->index>=checked->types->nominals->count)
             return XR_XIR_BAD_STRUCTURE;

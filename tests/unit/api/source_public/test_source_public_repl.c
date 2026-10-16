@@ -25,6 +25,9 @@ static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,con
         CHECK(xray_source_repl_read(owner,"value",&value)==XR_SOURCE_BUSY && !value);
         CHECK(xray_source_repl_take(owner,&result)==XR_SOURCE_BUSY && !result);
         CHECK(xray_source_repl_cancel(owner)==XR_SOURCE_BUSY);
+        const XrSourceReplBindingInfo *rows=NULL;size_t names=0;
+        CHECK(xray_source_repl_bindings(owner,&rows,&names)==XR_SOURCE_BUSY && !rows && !names);
+        CHECK(xray_source_repl_begin_type(owner,&text,NULL)==XR_SOURCE_BUSY);
     }
     memcpy(trace->bytes+trace->count,bytes,count);trace->count+=count;++trace->callbacks;return XR_SOURCE_WRITE_OK;
 }
@@ -79,7 +82,9 @@ static void history(void) {
     wrong.namespace_id=namespace_id;wrong.absolute_path="C:/not-a-memory-input.xr";
     CHECK(xray_source_repl_begin(owner,&wrong,NULL)==XR_SOURCE_BAD_ARGUMENT);
     char first[]="var value=40\nfn next()->i64{value+=1;return value}\nconst old=next\nprint(17)\n";
-    CHECK(begin(owner,first,NULL)==XR_SOURCE_OK);memset(first,'!',sizeof(first));
+    XrSourceDiagnostic *first_detail=NULL;XrSourceStatus first_status=begin(owner,first,&first_detail);
+    if(first_detail){XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(first_detail,&info)==XR_SOURCE_OK);fprintf(stderr,"first input %u at%d: %s\n",(unsigned)first_status,info.line,info.message);}
+    CHECK(first_status==XR_SOURCE_OK);xray_source_diagnostic_free(first_detail);memset(first,'!',sizeof(first));
     XrSourceValue *empty=NULL;CHECK(xray_source_repl_read(owner,"value",&empty)==XR_SOURCE_BUSY && !empty);
     CHECK(begin(owner,"const pending=99\n",NULL)==XR_SOURCE_BUSY);
     CHECK(pause_or_finish(owner).state==XR_SOURCE_RUN_RETURNED);
@@ -140,7 +145,8 @@ static void cancellation(void) {
     XrSourceEvent cleanup;CHECK(xray_source_repl_drop(&owner,&cleanup)==XR_SOURCE_OK && cleanup.state==XR_SOURCE_RUN_READY);
 }
 #include "source_public_repl_results.h"
+#include "source_public_repl_inspection.h"
 int main(void) {
-    history();cancellation();typed_results();display_limit();
+    history();cancellation();typed_results();display_limit();metadata_inspection();
     puts("public Source REPL: real Compiler/Catalog, exact AST, paired publication, old closures, rollback, cumulative output, owned survivors, reentry and cancel/defer PASS");return 0;
 }

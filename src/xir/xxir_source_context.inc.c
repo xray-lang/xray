@@ -9,6 +9,10 @@
  * KEY CONCEPT:
  *   Actual receiving maps outlive the temporary checker before storage admission.
  */
+typedef struct SourceFunctionValue {
+    struct SourceFunctionValue *next;
+    SourceName *function, *value;
+} SourceFunctionValue;
 typedef struct SourceHistoryCorrespondence {
     const struct XrXirSourceHistoryUnit *unit;
     uint32_t *modules, *functions, *slots;
@@ -92,12 +96,13 @@ typedef struct SourceContext {
     uint64_t next_epoch;
     uint32_t flow_alternatives;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
-    uint32_t slot_capacity;
+    uint32_t slot_capacity, function_value_capacity;
     uint32_t module_count, entry_function;
     bool core_factory, binding_readers;
-    bool interactive;
+    bool interactive, type_query;
     AstNode *repl_tail;
     SourceName *repl_result;
+    SourceFunctionValue *function_values;
     uint32_t *binding_reads, *binding_writes;
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;

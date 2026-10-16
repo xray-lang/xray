@@ -36,6 +36,9 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *, co
 /* Same transaction with genuine interactive Source tail/result ownership. */
 XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_ast(XrSourceSubmission *owner,
     const XrXirSourceAstOwner *ast, XrXirSourceDiagnostic *diagnostic);
+/* Temporary type inspection uses real expression execution and must abort. */
+XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_type_ast(XrSourceSubmission *,
+    const XrXirSourceAstOwner *, XrXirSourceDiagnostic *);
 /* Borrows the exact pending compiler fact; publication/abort clears it. */
 XR_FUNC bool xr_source_submission_repl_result(const XrSourceSubmission *owner);
 XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *, uint64_t quantum, XrXirInstanceResult *);
@@ -62,5 +65,8 @@ XR_FUNC XrSourceStatus xr_source_submission_lookup_runtime(const XrSourceSubmiss
  * survives the coordinator; its normal runtime ownership rules still apply.
  * Reading performs no initializer replay or metadata-based slot access. */
 XR_FUNC XrSourceStatus xr_source_submission_read(XrSourceSubmission *, const char *, XrXirValue *output);
+/* Immutable prepared/published display observations, never runtime authority. */
+XR_FUNC XrSourceStatus xr_source_submission_names(const XrSourceSubmission *, bool pending,
+    const XrXirSourceGenerationName **, size_t *);
 XR_FUNC XrSourceStatus xr_source_submission_drop(XrSourceSubmission **, XrXirCallStatus *cleanup);
 #endif // XSOURCE_SUBMISSION_H

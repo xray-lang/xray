@@ -68,6 +68,8 @@ typedef struct SourceName {
     uint32_t declaration;
     bool inferred;
     bool checked_library;
+    uint32_t reader;
+    bool hidden;
 } SourceName;
 /* SOURCE_UNIT_LOCAL is an initialized logical declaration with no runtime
  * payload. Its index is never an executable value or a capture ordinal.
@@ -1770,7 +1772,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     *symbol = (SourceName) {ctx->locals, decl->name, NULL, node,
         logical_type == XR_XIR_UNIT && decl->is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
         logical_type == XR_XIR_UNIT && decl->is_const ? UINT32_MAX : initial.id,
-        ctx->module, logical_type, !decl->is_const, false, 0, false, false};
+        ctx->module, logical_type, !decl->is_const, false, 0, false, false,0,false};
     symbol->inferred = !decl->type_annotation;
     ctx->locals = symbol;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
@@ -1794,7 +1796,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     if (!symbol) {
         symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
-        *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_PENDING, UINT32_MAX, ctx->module, XR_XIR_UNIT, false, false, 0, false, false};
+        *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_PENDING, UINT32_MAX, ctx->module, XR_XIR_UNIT, false, false, 0, false, false,0,false};
         ctx->locals = symbol;
     }
     symbol->kind = SOURCE_LOCAL; symbol->index = value.id; symbol->type = value.type;
@@ -1818,7 +1820,7 @@ static bool source_block_functions(SourceContext *ctx, AstNode *block) {
         SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
         *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_PENDING, UINT32_MAX,
-            ctx->module, XR_XIR_UNIT, false, false, 0, false, false};
+            ctx->module, XR_XIR_UNIT, false, false, 0, false, false,0,false};
         ctx->locals = symbol;
     }
     return true;
@@ -2004,7 +2006,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     }
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_FUNCTION_DECL: return top || source_nested_function(ctx, node);
+    case AST_FUNCTION_DECL: return top ? source_repl_function_binding(ctx,node) : source_nested_function(ctx,node);
     case AST_TYPE_ALIAS: return true;
     case AST_IMPORT_STMT: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
@@ -2227,7 +2229,7 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
 
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
-    uint32_t readers = ctx->repl_tail ? 1u : 0u;
+    uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
     SourceClosureCount closures = {ctx,0,0,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
@@ -2249,7 +2251,13 @@ static bool collect_declarations(SourceContext *ctx) {
         for (int i = 0; i < ast->as.program.count; ++i) {
             AstNode *node = ast->as.program.statements[i];
             if (!source_work(ctx, node)) return false;
-            if (node->type == AST_FUNCTION_DECL) ++functions;
+            if (node->type == AST_FUNCTION_DECL) {
+                ++functions;
+                if(ctx->interactive && ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index && !node->as.function_decl.type_param_count) {
+                    if(readers==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"function reader inventory exhausted");
+                    ++readers;++function_values;
+                }
+            }
             if (node->type == AST_INTERFACE_DECL) ++interfaces;
             if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL || node->type == AST_ENUM_DECL) ++nominals;
             if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL || node->type == AST_ENUM_DECL) {
@@ -2316,6 +2324,7 @@ static bool collect_declarations(SourceContext *ctx) {
     capacity+=readers;
     if (capacity > ctx->compile.limits.functions) capacity = ctx->compile.limits.functions;
     ctx->function_capacity = capacity;
+    ctx->function_value_capacity=function_values;
     if (!source_declaration_storage(ctx,nominals,interfaces)) return false;
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
@@ -2709,7 +2718,7 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
     if (!source_type_arguments(ctx, node, types, count, &op) || !source_recipe_group(ctx, op, captures, scan->count, &self))
         return false;
     *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_LOCAL, self.id,
-        ctx->module, type, false, false, body->declaration, false, false};
+        ctx->module, type, false, false, body->declaration, false, false,0,false};
     ctx->locals = symbol;
     return true;
 }
