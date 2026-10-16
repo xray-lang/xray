@@ -484,3 +484,113 @@ foreach(iterator_compiler_backend IN ITEMS 0 1 vm native)
             TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;generator;iterator;compiler;resource;fault_injection")
     endforeach()
 endforeach()
+
+add_executable(test_xir_mixed_iterator_resources xir/test_xir_mixed_iterator_resources.c "${XIR_MIXED_ITERATOR_LIFETIME_C}")
+target_link_libraries(test_xir_mixed_iterator_resources PRIVATE xray_xir_vm xray_xir_scalar)
+set_target_properties(test_xir_mixed_iterator_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_iterator_resources PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_iterator_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(iterator_resource_backend IN ITEMS 0 1 vm native)
+    foreach(iterator_resource_mode IN ITEMS baseline axes)
+        add_test(NAME test_xir_mixed_iterator_resources_${iterator_resource_backend}_${iterator_resource_mode}
+            COMMAND test_xir_mixed_iterator_resources ${iterator_resource_backend} ${iterator_resource_mode})
+        set_tests_properties(test_xir_mixed_iterator_resources_${iterator_resource_backend}_${iterator_resource_mode} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;resource;timer;cleanup")
+    endforeach()
+endforeach()
+
+foreach(iterator_resource_case IN ITEMS
+    "0,0,0,0,66"
+    "0,0,1,0,52"
+    "0,0,1,1,52"
+    "0,0,2,0,55"
+    "0,0,2,1,55"
+    "0,0,3,0,41"
+    "0,0,3,1,41"
+    "0,0,4,0,41"
+    "0,0,4,1,41"
+    "0,1,0,0,66"
+    "0,1,1,0,52"
+    "0,1,1,1,52"
+    "0,1,2,0,55"
+    "0,1,2,1,55"
+    "0,1,3,0,41"
+    "0,1,3,1,41"
+    "0,1,4,0,41"
+    "0,1,4,1,41"
+    "1,0,0,0,66"
+    "1,0,1,0,52"
+    "1,0,1,1,52"
+    "1,0,2,0,55"
+    "1,0,2,1,55"
+    "1,0,3,0,41"
+    "1,0,3,1,41"
+    "1,0,4,0,41"
+    "1,0,4,1,41"
+    "1,1,0,0,66"
+    "1,1,1,0,52"
+    "1,1,1,1,52"
+    "1,1,2,0,55"
+    "1,1,2,1,55"
+    "1,1,3,0,41"
+    "1,1,3,1,41"
+    "1,1,4,0,41"
+    "1,1,4,1,41"
+    "vm,0,0,0,66"
+    "vm,0,1,0,52"
+    "vm,0,1,1,52"
+    "vm,0,2,0,55"
+    "vm,0,2,1,55"
+    "vm,0,3,0,41"
+    "vm,0,3,1,41"
+    "vm,0,4,0,41"
+    "vm,0,4,1,41"
+    "vm,1,0,0,66"
+    "vm,1,1,0,52"
+    "vm,1,1,1,52"
+    "vm,1,2,0,55"
+    "vm,1,2,1,55"
+    "vm,1,3,0,41"
+    "vm,1,3,1,41"
+    "vm,1,4,0,41"
+    "vm,1,4,1,41"
+    "native,0,0,0,66"
+    "native,0,1,0,52"
+    "native,0,1,1,52"
+    "native,0,2,0,55"
+    "native,0,2,1,55"
+    "native,0,3,0,41"
+    "native,0,3,1,41"
+    "native,0,4,0,41"
+    "native,0,4,1,41"
+    "native,1,0,0,66"
+    "native,1,1,0,52"
+    "native,1,1,1,52"
+    "native,1,2,0,55"
+    "native,1,2,1,55"
+    "native,1,3,0,41"
+    "native,1,3,1,41"
+    "native,1,4,0,41"
+    "native,1,4,1,41"
+)
+    string(REPLACE "," ";" iterator_resource_fields "${iterator_resource_case}")
+    list(GET iterator_resource_fields 0 iterator_resource_backend)
+    list(GET iterator_resource_fields 1 iterator_resource_first)
+    list(GET iterator_resource_fields 2 iterator_resource_mode)
+    list(GET iterator_resource_fields 3 iterator_resource_victim)
+    list(GET iterator_resource_fields 4 iterator_resource_sites)
+    math(EXPR iterator_resource_last "${iterator_resource_sites} - 1")
+    foreach(iterator_resource_begin RANGE 0 ${iterator_resource_last} 64)
+        math(EXPR iterator_resource_end "${iterator_resource_begin} + 64")
+        if(iterator_resource_end GREATER iterator_resource_sites)
+            set(iterator_resource_end ${iterator_resource_sites})
+        endif()
+        add_test(NAME test_xir_mixed_iterator_resources_${iterator_resource_backend}_fi_${iterator_resource_first}_${iterator_resource_mode}_${iterator_resource_victim}_${iterator_resource_begin}_${iterator_resource_end}
+            COMMAND test_xir_mixed_iterator_resources ${iterator_resource_backend} fi ${iterator_resource_first} ${iterator_resource_mode} ${iterator_resource_victim} ${iterator_resource_begin} ${iterator_resource_end} ${iterator_resource_sites})
+        set_tests_properties(test_xir_mixed_iterator_resources_${iterator_resource_backend}_fi_${iterator_resource_first}_${iterator_resource_mode}_${iterator_resource_victim}_${iterator_resource_begin}_${iterator_resource_end} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;resource;timer;cleanup;fault_injection")
+    endforeach()
+endforeach()
