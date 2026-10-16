@@ -88,6 +88,13 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT:
     case XR_XIR_REM_INT:
+    case XR_XIR_AND_INT:
+    case XR_XIR_OR_INT:
+    case XR_XIR_SHL_INT:
+    case XR_XIR_SHR_INT:
+    case XR_XIR_CONVERT_NUMBER:
+    case XR_XIR_TO_STRING:
+    case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_STRING_LEN:
     case XR_XIR_STRING_COPY_BYTES:
     case XR_XIR_STRING_CONTAINS:

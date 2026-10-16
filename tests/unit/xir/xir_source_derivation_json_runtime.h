@@ -12,7 +12,8 @@
 #include "xir_runtime_allocations.h"
 static void json_runtime_expected(const XrXirValue *value,bool text) {
     if (!text) {CHECK(value->type==XR_XIR_I64 && !value->reserved && value->payload==42);return;}
-    const char expected[]="{\"left\":42,\"secret\":-7}";const char *bytes=NULL;size_t length=0;
+    const char expected[]="{\"left\":42,\"secret\":-7,\"enabled\":true,\"label\":\"\\\"\\\\\\u000a\\u0009\\u0000汉😀\"}";
+    const char *bytes=NULL;size_t length=0;
     CHECK(value->type==XR_XIR_STRING && xr_xir_string_view(value,&bytes,&length) &&
         length==sizeof(expected)-1 && !memcmp(bytes,expected,length));
 }

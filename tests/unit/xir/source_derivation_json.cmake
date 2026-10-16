@@ -4,6 +4,9 @@ set_target_properties(test_xir_source_derivation_json PROPERTIES C_STANDARD 11 C
 set(XR_SOURCE_DERIVATION_JSON_WORK "${CMAKE_CURRENT_BINARY_DIR}/source-derivation-json-work")
 file(MAKE_DIRECTORY "${XR_SOURCE_DERIVATION_JSON_WORK}")
 target_compile_definitions(test_xir_source_derivation_json PRIVATE XR_SOURCE_DERIVATION_JSON_WORK="${XR_SOURCE_DERIVATION_JSON_WORK}")
+target_compile_definitions(test_xir_source_derivation_json PRIVATE XR_JSON_ENCODING_SOURCE="${PROJECT_SOURCE_DIR}/stdlib/json/encoding.xr")
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/test_xir_source_derivation_json.c" APPEND PROPERTY
+    OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/stdlib/json/encoding.xr")
 if(MSVC)
     target_compile_options(test_xir_source_derivation_json PRIVATE /utf-8 /W4 /WX)
 else()

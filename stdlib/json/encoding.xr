@@ -1,0 +1,34 @@
+// JSON text escaping uses ordinary string and byte operations in both engines.
+// Strings carry valid UTF-8; decoding preserves every non-control scalar.
+export fn jsonQuote(text:string)->string {
+    const bytes=text.copyBytes()
+    const hex="0123456789abcdef".copyBytes()
+    var output="\""
+    var i:i64=0
+    while(i<len(bytes)) {
+        const first=bytes[i] as i64
+        var scalar=first
+        var width:i64=1
+        if(first>=240) {
+            width=4
+            scalar=((first&7)<<18)|(((bytes[i+1] as i64)&63)<<12)|
+                (((bytes[i+2] as i64)&63)<<6)|((bytes[i+3] as i64)&63)
+        } else if(first>=224) {
+            width=3
+            scalar=((first&15)<<12)|(((bytes[i+1] as i64)&63)<<6)|((bytes[i+2] as i64)&63)
+        } else if(first>=192) {
+            width=2
+            scalar=((first&31)<<6)|((bytes[i+1] as i64)&63)
+        }
+        if(scalar==34 || scalar==92) {
+            output=output+"\\"+string(rune(scalar))
+        } else if(scalar<32) {
+            output=output+"\\u00"+string(rune(hex[scalar>>4] as i64))+
+                string(rune(hex[scalar&15] as i64))
+        } else {
+            output=output+string(rune(scalar))
+        }
+        i=i+width
+    }
+    return output+"\""
+}

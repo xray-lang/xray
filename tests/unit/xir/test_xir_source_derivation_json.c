@@ -50,7 +50,7 @@ static void json_refuse_ungranted_public(const XrXirCheckedPacket *packet) {
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_DERIVATION_JSON_WORK},"generator_json.xr"};
     XrXirLibraryInput input={packet->bytes,packet->length,{0},&binding,1};xr_sha256(packet->bytes,packet->length,input.sha256);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog)==XR_XIR_OK);
-    const char *read=strstr(json_user_source,"read:[\"left\",\"secret\"]");CHECK(read);read+=6;
+    const char *read=strstr(json_user_source,"read:[\"left\",\"secret\"");CHECK(read);read+=6;
     CHECK(!strncmp(read,"\"left\",",7));char negative[4096];
     int n=snprintf(negative,sizeof(negative),"%.*s%s",(int)(read-json_user_source),json_user_source,read+7);
     CHECK(n>0 && n<(int)sizeof(negative));XrXirSourceResult output={0};
@@ -109,10 +109,19 @@ int main(int argc,char **argv) {
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     char text[18000];int n=snprintf(text,sizeof(text),json_generator_format,generated_schema_source,
-        XR_XIR_CONST_STRING,XR_XIR_STRUCT_GET,XR_XIR_TO_STRING,XR_XIR_CONCAT_STRING,XR_XIR_RETURN,XR_XIR_I64);
-    CHECK(n>0 && n<(int)sizeof(text));XrXirSourceResult producer={0};
+        XR_XIR_CONST_STRING,XR_XIR_STRUCT_GET,XR_XIR_TO_STRING,XR_XIR_CONCAT_STRING,XR_XIR_RETURN,XR_XIR_CALL,
+        XR_XIR_I64,XR_XIR_BOOL,XR_XIR_STRING);
+    CHECK(n>0 && n<(int)sizeof(text));FILE *helper=fopen(XR_JSON_ENCODING_SOURCE,"rb");CHECK(helper);
+    size_t count=fread(text+n,1,sizeof(text)-(size_t)n-1,helper);CHECK(!ferror(helper) && feof(helper) && !fclose(helper));
+    text[(size_t)n+count]=0;XrXirSourceResult producer={0};
     json_source(&context,text,XR_XIR_LIBRARY,NULL,&producer,XR_XIR_OK);memset(text,0xa5,sizeof(text));
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);
+    const XrXirModule *library=xr_xir_compile_artifact_module(producer.checked);
+    fprintf(stderr,"Ordinary JSON generator modules=%u\n",library->declarations->module_count);
+    for(uint32_t m=0;m<library->declarations->module_count;++m) {
+        const XrXirSourceModule *module=&library->declarations->modules[m];
+        fprintf(stderr,"JSON module%u name%.*s\n",m,(int)module->name_length,module->name);
+    }
     xr_xir_compile_source_result_free(&producer);
     if (generator_packet || compiler) {
         if (generator_packet) {
@@ -127,13 +136,14 @@ int main(int argc,char **argv) {
     if (!emit && !faults) json_refuse_ungranted_public(&packet);
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_DERIVATION_JSON_WORK},"generator_json.xr"};
     XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
-    XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog)==XR_XIR_OK);
+    XrXirLibraryCatalog *catalog=NULL;XrXirStatus catalog_status=xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog);
+    fprintf(stderr,"Ordinary JSON catalog status%u\n",(unsigned)catalog_status);CHECK(catalog_status==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     memset(&binding,0xa5,sizeof(binding));memset(&input,0xa5,sizeof(input));XrXirSourceResult user={0};
     json_source(&context,json_user_source,XR_XIR_PROGRAM,catalog,&user,XR_XIR_OK);xr_xir_compile_library_catalog_free(catalog);
     json_execute(&context,&user,emit?argv[2]:NULL,emit?argv[3]:NULL,faults);CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==baseline.live_bytes);xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
-    printf("Ordinary JSON integer-record encoder: dynamic future fields, explicit private READ, hidden string omitted, comptime+VM oracle, producer death, physical0; allocated=%llu peak=%llu work=%llu\n",
+    printf("Ordinary JSON scalar-record encoder: dynamic future fields, explicit private READ, hidden string omitted, bool/escaped UTF8/comptime+VM oracle, producer death, physical0; allocated=%llu peak=%llu work=%llu\n",
         (unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes,(unsigned long long)after.work);return 0;
 }
