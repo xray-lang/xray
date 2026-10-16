@@ -4317,6 +4317,23 @@ add_xray_bootstrap_unit_test(test_callable52_physical_lifecycle
     ${CMAKE_SOURCE_DIR}/src/vm/audit/xr_typed_lifecycle_audit.c)
 
 
+add_executable(test_source_compile_transaction api/test_source_compile_transaction.c)
+target_link_libraries(test_source_compile_transaction PRIVATE xray_source_api)
+target_include_directories(test_source_compile_transaction PRIVATE
+    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_source_compile_transaction PRIVATE
+    XR_TRANSACTION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_source_compile_transaction PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_compile_transaction PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_compile_transaction PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_source_compile_transaction COMMAND test_source_compile_transaction)
+set_tests_properties(test_source_compile_transaction PROPERTIES
+    LABELS "unit;api;source;ownership;ast;original;transaction" TIMEOUT 120)
+
 add_executable(test_source_repl_generation api/test_source_repl_generation.c)
 target_link_libraries(test_source_repl_generation PRIVATE xray_source_api)
 target_include_directories(test_source_repl_generation PRIVATE
