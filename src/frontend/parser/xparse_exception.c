@@ -179,6 +179,10 @@ AstNode *xr_parse_try_statement(Parser *parser) {
                     } while (0);
                     return NULL;
                 }
+                /* Pattern wrappers need not carry columns. Preserve the
+                 * actual first header token for source-owned catch facts. */
+                var_line = parser->current.line;
+                var_column = parser->current.column;
                 do {
                     pattern = xr_parse_match_pattern(parser);
                     if (!xr_parser_healthy(parser)) return NULL;
@@ -197,8 +201,6 @@ AstNode *xr_parse_try_statement(Parser *parser) {
                     } while (0);
                     return NULL;
                 }
-                var_line = pattern->line;
-                var_column = pattern->column;
                 const char *head = catch_pattern_enum_head_name(pattern);
                 if (!xr_parser_healthy(parser)) return NULL;
                 if (head)

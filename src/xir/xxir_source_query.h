@@ -27,6 +27,10 @@ typedef struct XrXirSourceRange {
 /* Source-owned display coordinates use the sealed instruction order. Zero
  * statement means no source execution site; it never grants frame authority. */
 #define XR_XIR_SOURCE_DEBUG_ENTRY 1u
+/* This site is reached only after an ordinary catch's type and pattern have
+ * accepted the error. It is not a prediction at an earlier throw and excludes
+ * panic handlers. Empty bodies use their existing join instruction. */
+#define XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT 2u
 #define XR_XIR_SOURCE_DEBUG_UNIT 1u
 #define XR_XIR_SOURCE_DEBUG_CELL 2u
 typedef struct XrXirSourceDebugBinding {

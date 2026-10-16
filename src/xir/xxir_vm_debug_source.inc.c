@@ -60,7 +60,7 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *debug,const XrXirCompi
         const XrXirSourceDebugFunction *function=&source->functions[f];
         for (uint32_t i=0;i<function->instruction_count;++i) {
             XrXirSourceDebugPoint point=function->points ? function->points[i] : (XrXirSourceDebugPoint){0};
-            if ((point.flags & ~XR_XIR_SOURCE_DEBUG_ENTRY) || (point.flags && !point.statement) ||
+            if ((point.flags & ~(XR_XIR_SOURCE_DEBUG_ENTRY|XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT)) || (point.flags && !point.statement) ||
                 (point.statement && (point.range.line<=0 || point.range.column<=0))) {
                 xr_compile_resources_free(memory);return XR_XIR_BAD_STRUCTURE;
             }

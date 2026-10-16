@@ -66,7 +66,7 @@ static bool source_catch_placeholders(SourceContext *ctx, const SourceMatchArm *
     return true;
 }
 static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceMatchArm *arm,
-    SourceValue error, SourceMatchFailure **failures) {
+    SourceValue error, SourceMatchFailure **failures, uint32_t *accepted) {
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     if (clause->var_name) {
         SourceName *binding = source_alloc(ctx,1,sizeof(*binding));
@@ -83,6 +83,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
             source_match_alternatives(ctx,arm,error,true,failures);
         if (!bound) return false;
     }
+    if (accepted) *accepted=ctx->bodies[ctx->function].count;
     bool ok = scoped_statement(ctx,clause->body);
     ctx->locals = locals; ctx->scope = scope; return ok;
 }
@@ -114,7 +115,7 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
         body->initialization_parent=region;
     }
     body->error_context = NULL;
-    bool ok = begin_block(ctx) && source_catch_body(ctx,clause,arm,(SourceValue){UINT32_MAX,type},NULL);
+    bool ok = begin_block(ctx) && source_catch_body(ctx,clause,arm,(SourceValue){UINT32_MAX,type},NULL,NULL);
     if (ok && region) ok=source_catch_snapshot(ctx,region);
     i = 0;
     for (SourceLoop *loop = ctx->loop; loop; loop = loop->parent) *loop = loops[i++];
@@ -131,6 +132,18 @@ static bool source_catch_join(SourceContext *ctx, uint32_t *joins, uint32_t *cou
     if (ctx->returned) return true;
     joins[(*count)++] = ctx->bodies[ctx->function].count;
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
+}
+static bool source_catch_accept(SourceContext *ctx,XrCatchClause *clause,uint32_t instruction) {
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    if (instruction>=body->count) return source_fail(ctx,clause->body,XR_XIR_BAD_STRUCTURE,"catch acceptance lacks an instruction");
+    if (!source_work_units(ctx,clause->body,sizeof(XrXirSourceDebugPoint))) return false;
+    XrXirSourceDebugPoint *point=&body->recipes[instruction].debug;
+    if (!point->statement) {
+        if (clause->body->node_id==UINT32_MAX) return source_fail(ctx,clause->body,XR_XIR_BUDGET,"catch source identity exhausted");
+        point->range=(XrXirSourceRange){ctx->module,clause->var_line,clause->var_column,0,0};
+        point->statement=clause->body->node_id+1;
+    }
+    point->flags|=XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT;return true;
 }
 static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, const XrXirType *types,
     SourceMatchArm *patterns, SourceValue error, uint32_t checkpoint, uint32_t *joins, uint32_t *count) {
@@ -156,7 +169,9 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
             if (!begin_block(ctx) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ERROR_NARROW,types[i],{error.id},{0},0,{0}},&bound)) return false;
         } else consumed = true;
-        if (!source_catch_body(ctx,clause,&patterns[i],bound,&failures) || !source_catch_join(ctx,joins,count)) return false;
+        uint32_t accepted=0;
+        if (!source_catch_body(ctx,clause,&patterns[i],bound,&failures,&accepted) ||
+            !source_catch_join(ctx,joins,count) || !source_catch_accept(ctx,clause,accepted)) return false;
         if (branch != UINT32_MAX) {
             uint32_t next = body->block_count;
             body->recipes[branch].instruction.targets[1] = next;
@@ -183,7 +198,7 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
     SourceValue caught = {0, XR_XIR_UNIT};
     if (!begin_block(ctx) || !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PANIC_CATCH,
             clause->var_name ? XR_XIR_PANIC_INFO : XR_XIR_UNIT,{0},{0},0,{0}},&caught) ||
-        !source_catch_body(ctx,clause,NULL,caught,NULL) || !source_catch_join(ctx,joins,count)) return false;
+        !source_catch_body(ctx,clause,NULL,caught,NULL,NULL) || !source_catch_join(ctx,joins,count)) return false;
     for (uint32_t b = first; b < end; ++b) {
         if (!source_work(ctx,clause->body)) return false;
         if (!body->blocks[b].block.panic) body->blocks[b].block.panic = handler;

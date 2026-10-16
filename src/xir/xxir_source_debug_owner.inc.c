@@ -56,7 +56,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
             if (!query_work(&copy,1)) return copy.status;
             const XrXirSourceDebugPoint *point=&function->points[i];
             const XrXirSourceRange *range=&point->range;
-            if ((point->flags & ~XR_XIR_SOURCE_DEBUG_ENTRY) || (point->flags && !point->statement) ||
+            if ((point->flags & ~(XR_XIR_SOURCE_DEBUG_ENTRY|XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT)) || (point->flags && !point->statement) ||
                 point->environment>function->binding_count) return XR_XIR_BAD_STRUCTURE;
             if (point->statement && (range->module>=snapshot->view.module_count || range->line<=0 || range->column<=0 ||
                 (range->end_line && (range->end_line<range->line || range->end_column<=0 ||

@@ -132,7 +132,7 @@ int main(int argc,char **argv) {
         if (point->range.column!=source_columns[point->range.line])
             fprintf(stderr,"Source point i=%u line=%d column=%d\n",i,point->range.line,point->range.column);
         CHECK(point->range.column==source_columns[point->range.line]);source_lines[point->range.line]=true;
-        CHECK(!(point->flags & ~XR_XIR_SOURCE_DEBUG_ENTRY));
+        CHECK(!(point->flags & ~(XR_XIR_SOURCE_DEBUG_ENTRY|XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT)));
         if (point->flags & XR_XIR_SOURCE_DEBUG_ENTRY) ++source_entries[point->range.line];
     }
     if (!(source_lines[2] && source_lines[3] && source_lines[4] && source_lines[5]))
