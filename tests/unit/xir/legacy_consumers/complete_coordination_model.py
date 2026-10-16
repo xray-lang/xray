@@ -193,7 +193,7 @@ def body_traces():
 
 
 def _validate():
-    if set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()) or len(_PROGRAMS)!=6 or len(_NAMED)!=5:
+    if set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values())|set(_SYSTEM_INPUTS) or len(_PROGRAMS)!=6 or len(_NAMED)!=5:
         raise ValueError('Coordination complete original source or authority identities changed')
     for path,digest in _INPUTS.items():
         if hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Coordination complete source or authority changed: '+path)
@@ -218,7 +218,7 @@ def expected_rows():
         else:row['required_semantic_trace']=traces[name]
         if name in {'work_queue_native_methods','1158_work_queue_native'}:row['current_source_policy_witness']=fifo_source_witness()
         rows.append(row)
-    return rows
+    return rows+system_expected_rows()
 
 
 def named_expected_rows():
@@ -229,4 +229,210 @@ def named_expected_rows():
             'expected':{'exit_code':0,'stdout_utf8':'','stderr_utf8':'','required_test_names':[function]},
             'required_original_assertion_results':trace['assertions'],'required_semantic_trace':trace,
             'model':'Complete unchanged named body with all original asserts/helpers/sleep calls and separate CLI discovery plus VM/C/native execution. Legacy own-LIFO queue requirement is not current FIFO;finite symbolic value invariance is not actual wakeup/scheduler/resource/provider qualification.'})
+    return rows
+
+
+# These remain ordinary run entries; none replaces the five named queue bodies.
+_SYSTEM_PROGRAMS={name:'tests/diff/cases/semantics/stdlib/'+name+'.xr' for name in (
+    'sys_threadlocal_recursive_init','sys_condvar_direct',
+    'sys_thread_os_primitives_cross_thread','sync_module_import')}
+_SYSTEM_NAMES=frozenset({'sys_threadlocal_recursive_init','sys_condvar_direct',
+    'sys_thread_os_primitives_cross_thread','sync_module_import'})
+_SYSTEM_INPUTS={"stdlib/sys/sys.xr":"8e508319d317801403b633b8f27c7fb6154be5f0743ea2bdb6f1fca52bba3471","tests/diff/cases/semantics/stdlib/sys_threadlocal_recursive_init.xr":"aceada7c058a409dbd37e1af86987a0b7497a68505f6ed55b38af79d27ba3108","tests/diff/cases/semantics/stdlib/sys_condvar_direct.xr":"dc14e1ed7574f59e7478ef7a97748833f0ba1ef5919fc0d3dca515409b41b27a","tests/diff/cases/semantics/stdlib/sys_thread_os_primitives_cross_thread.xr":"858c01c1b18cf9e0d1e212926cd98ec66a909b161a285f993cac5c737ef58239","tests/diff/cases/semantics/stdlib/sync_module_import.xr":"7d33f834499a53b238bae4a04dce65d70ecde1f83af53a48dc2dfaa9caeb5ef4"}
+_INPUTS.update(_SYSTEM_INPUTS)
+
+
+class SerializedCell:
+    """Finite critical-section value algebra; never a host lock or scheduler."""
+    def __init__(self,value):self.value=value;self.held=False;self.writes=0
+    def access(self,body,replace=False,try_only=False):
+        if self.held:
+            if try_only:return None
+            raise ValueError('Uncompleted critical section cannot reenter')
+        self.held=True
+        try:
+            result=body(self.value)
+            if replace:self.value=result;self.writes+=1
+            return result
+        finally:self.held=False
+    def replace(self,body):return self.access(body,replace=True)
+
+
+class OnceCompletion:
+    def __init__(self):self.done=False;self.calls=0
+    def call(self,body):
+        if not self.done:
+            body();self.calls+=1;self.done=True
+
+
+class BarrierCompletion:
+    def __init__(self,parties):
+        if type(parties) is not int or parties<=0:raise ValueError('Invalid barrier parties')
+        self.parties=parties;self.arrivals=set();self.released=False
+    def arrive(self,thread):
+        if self.released or thread in self.arrivals:raise ValueError('Only one original barrier generation is modeled')
+        self.arrivals.add(thread);self.released=len(self.arrivals)==self.parties
+    def result(self,thread):
+        if not self.released or thread not in self.arrivals:raise ValueError('Barrier result read before all original parties arrive')
+        return True
+
+
+class RecursiveInitialization(Exception):pass
+
+
+class LocalInitialization:
+    """Per-thread empty/initializing/ready transitions, including failed init."""
+    def __init__(self,initializer):
+        self.initializer=initializer;self.states={};self.values={};self.initializations=0
+    def get(self,thread):
+        state=self.states.get(thread,'empty')
+        if state=='ready':return self.values[thread]
+        if state=='initializing':raise RecursiveInitialization('Same-thread recursive initialization')
+        self.states[thread]='initializing';self.initializations+=1
+        try:
+            value=self.initializer()
+            if self.states.get(thread)!='ready':self.set(thread,value)
+            return self.values[thread]
+        except Exception:
+            if self.states.get(thread)=='initializing':self.states.pop(thread)
+            raise
+    def set(self,thread,value):self.values[thread]=value;self.states[thread]='ready'
+
+
+def threadlocal_trace():
+    local=LocalInitialization(lambda:local.get('main'));output=[]
+    try:output.append(local.get('main'))
+    except RecursiveInitialization:output.append('recursive')
+    recovered=LocalInitialization(lambda:0);recovered.set('main',7);output.append(recovered.get('main'))
+    if output!=['recursive',7] or local.states or local.values or recovered.initializations:
+        raise ValueError('Complete recursive ThreadLocal failure/recovery requirement changed')
+    return {'outputs':output,'failed_initializer_calls':local.initializations,
+        'failed_initializing_flags':dict(local.states),'failed_cached_values':dict(local.values),
+        'second_instance_initializer_calls':recovered.initializations,'second_instance_value':recovered.values['main'],
+        'actual_thread_identity_pruning_storage_and_cleanup':'OPEN_REQUIRES_NATIVE_FI_LIFETIME'}
+
+
+def condition_completion(producer_first,initial=0,produced=7,joined=9):
+    # Predicate checks and lock release/reacquire are the only legal observations.
+    state=initial;consumer_waits=0;epoch=0;lock_owner='consumer';events=[]
+    if not producer_first:
+        if lock_owner!='consumer' or state!=initial:raise ValueError('Invalid consumer entry')
+        events+=['observe predicate','release monitor','wait for changed predicate'];consumer_waits+=1;lock_owner=None
+    else:
+        events+=['release monitor before producer'];lock_owner=None
+    if lock_owner is not None:raise ValueError('Producer needs the monitor')
+    lock_owner='producer';state=produced;epoch+=1
+    events+=['producer acquires monitor','release store'+str(produced),'signal','producer releases monitor'];lock_owner=None
+    lock_owner='consumer';events+=['consumer acquires monitor','acquire load'+str(state),'consumer releases monitor'];lock_owner=None
+    return {'producer_first':producer_first,'consumer_waits':consumer_waits,'events':events,
+        'observed_state':state,'producer_join':joined,'epoch':epoch,'monitor_released':lock_owner is None}
+
+
+def timed_condition_trace():
+    # No other thread exists in this complete program. Neither signal nor
+    # broadcast occurs before waitFor returns, so its observed epoch cannot change.
+    timeout_ns=1000000;clock_samples=[0,1,timeout_ns-1,timeout_ns]
+    locked=True;observed_epoch=0;current_epoch=0;deadline=clock_samples[0]+timeout_ns
+    locked=False;result=None
+    for now in clock_samples[1:]:
+        if current_epoch!=observed_epoch:result=True;break
+        if now>=deadline:result=False;break
+    locked=True
+    if result is not False or not locked:raise ValueError('Original timed condition wait must reacquire before timeout result')
+    locked=False;current_epoch+=1;current_epoch+=1
+    return {'outputs':[result,True],'timeout_ns':timeout_ns,'clock_samples':clock_samples,
+        'signals_before_wait_return':0,'signals_after_unlock':2,'final_epoch':current_epoch,
+        'deadline_comparison':'now >= start+1000000','lock_reacquired_before_return':True,
+        'actual_clock_wait_yield_and_native_spurious_behavior':'OPEN_REQUIRES_PAIRED_SOURCE_AND_PROVIDER_EXECUTION'}
+
+
+def os_thread_trace():
+    variants=[]
+    # Critical sections are indivisible in this algebra. Four blocks expose all
+    # worker identities; arbitrary transaction interleavings share the induction
+    # count'=count+1 and the same 4*200 completed transactions. This does not
+    # enumerate native instruction schedules or prove progress/fairness.
+    for order in itertools.permutations(range(4)):
+        guarded=SerializedCell(0);completed=[0]*4
+        for worker in order:
+            for _ in range(200):guarded.replace(lambda value:value+1);completed[worker]+=1
+        if guarded.value!=800 or guarded.writes!=800 or completed!=[200]*4 or guarded.held:
+            raise ValueError('Complete four-worker200-loop mutual exclusion requirement changed')
+        variants.append({'worker_block_order':list(order),'iterations':completed,
+            'guarded':guarded.value,'completed_critical_sections':guarded.writes,'join_sum':sum(completed)})
+    barriers=[]
+    for order in itertools.permutations(range(3)):
+        barrier=BarrierCompletion(3);arrived=0
+        for thread in order:arrived+=1;barrier.arrive(thread)
+        results=[barrier.result(thread) for thread in range(3)];reads=[arrived]*3
+        barriers.append({'arrival_order':list(order),'all_wait_results':results,'post_barrier_reads':reads,'sum':sum(reads)})
+    once_variants=[]
+    for order in itertools.permutations(range(3)):
+        once=OnceCompletion();count=SerializedCell(0);loads={}
+        for thread in order:
+            once.call(lambda:count.replace(lambda value:value+1));loads[thread]=count.value
+        once_variants.append({'entry_order':list(order),'callback_calls':once.calls,'thread_loads':[loads[i] for i in range(3)],'count':count.value})
+    conditions=[condition_completion(first) for first in (False,True)]
+    output=[variants[0]['join_sum'],variants[0]['guarded'],conditions[0]['observed_state'],conditions[0]['producer_join'],
+        barriers[0]['all_wait_results'][0],barriers[0]['sum'],
+        *[v>=1 for v in once_variants[0]['thread_loads']],once_variants[0]['count']]
+    if output!=[800,800,7,9,True,9,True,True,True,1]:raise ValueError('Original cross-thread outputs changed')
+    return {'outputs':output,'mutual_exclusion_variants':variants,'condition_variants':conditions,
+        'barrier_variants':barriers,'once_variants':once_variants,'spawned_threads':10,'joined_threads':10,
+        'iterations_per_worker':200,'completed_critical_sections':800,'barrier_parties':3,'once_contenders':3,
+        'interleaving_value_induction':{'initial':0,'step_delta':1,'exact_completed_transactions':800,'final':800},
+        'actual_native_threads_memory_orders_wakeup_fairness_cancellation_and_storage':'OPEN_REQUIRES_REAL_VM_C_NATIVE_FI_SAFETY_PROVIDER'}
+
+
+def sync_import_trace():
+    m=SerializedCell(10);out=[]
+    out.append(m.access(lambda value:value*2));out.append(m.access(lambda value:value+1,try_only=True))
+    def nested(value):
+        attempted=m.access(lambda nested_value:nested_value,try_only=True)
+        return -7 if attempted is None else attempted
+    out.append(m.access(nested));out.append(m.replace(lambda value:value+5))
+    rw=SerializedCell('a');out.append(rw.access(lambda value:value+'!'))
+    out.append(rw.replace(lambda value:value+'b'));out.append(rw.access(lambda value:value+'c'))
+    fair_variants=[]
+    for order in itertools.permutations([1,10]):
+        fair=SerializedCell(0);remaining=2
+        for delta in order:fair.replace(lambda value:value+delta);remaining-=1
+        if remaining:raise ValueError('Both imported RwLock writers must complete')
+        fair_variants.append({'writer_add_order':list(order),'result':fair.value,'latch_remaining':remaining})
+    out.append(fair_variants[0]['result']);once=OnceCompletion();counter=SerializedCell(0)
+    for _ in range(2):once.call(lambda:counter.replace(lambda value:value+1))
+    out.append(counter.value);barrier=BarrierCompletion(1);barrier.arrive('main');out.append(barrier.result('main'))
+    shared=SerializedCell(0);shared.replace(lambda value:value+100);out.append(shared.access(lambda value:value))
+    conds=[]
+    for producer_first in (False,True):
+        # The same monitor predicate protocol as sys, with literal42 and latch1.
+        trace=condition_completion(producer_first,-1,42,None)
+        conds.append({'producer_first':producer_first,'consumer_waits':trace['consumer_waits'],
+            'observed':trace['observed_state'],'consumed_latch_remaining':0,'output_order':[trace['observed_state'],'done']})
+    out+=conds[0]['output_order']
+    if out!=[20,11,-7,15,'a!','ab','abc',11,1,True,100,42,'done']:
+        raise ValueError('Complete imported sync value or output-order requirement changed')
+    return {'outputs':out,'fair_writer_variants':fair_variants,'condition_variants':conds,
+        'rw_value_after_nonmutating_write':rw.value,'nested_try_lock_entered':False,'once_callback_calls':once.calls,
+        'spawned_coroutines':4,'latch_initial_counts':[2,1,1],
+        'all_imports_preserved':['Semaphore','CountdownLatch','EventCount','WorkQueue','ResultGroup','Mutex','RwLock','Once','Barrier','Condvar'],
+        'actual_generic_resolution_locks_defers_wakeups_and_task_lifetime':'OPEN_REQUIRES_PAIRED_FULL_SOURCE_AND_SAFETY_EXECUTION'}
+
+
+def system_traces():
+    return {'sys_threadlocal_recursive_init':threadlocal_trace(),'sys_condvar_direct':timed_condition_trace(),
+        'sys_thread_os_primitives_cross_thread':os_thread_trace(),'sync_module_import':sync_import_trace()}
+
+
+def system_expected_rows():
+    if set(_SYSTEM_PROGRAMS)!=_SYSTEM_NAMES or set(_SYSTEM_INPUTS)!=set(_SYSTEM_PROGRAMS.values())|{'stdlib/sys/sys.xr'}:
+        raise ValueError('Complete synchronization program or authority identity changed')
+    traces=system_traces();rows=[]
+    for name,source in _SYSTEM_PROGRAMS.items():
+        values=traces[name]['outputs']
+        text=''.join(('true' if value is True else 'false' if value is False else str(value))+'\n' for value in values)
+        rows.append({'id':'complete_coordination_'+name,'source':source,'required_target':None,
+            'expected':{'exit_code':0,'stdout_utf8':text,'stderr_utf8':''},'observation_count':len(values),
+            'required_semantic_trace':traces[name],
+            'model':'Complete unchanged synchronization program with all imports,threads,4x200 iterations,joins,waits and callbacks. Independent finite completion/value algebra and failure-state cleanup;no claim of host scheduling,progress,memory-order,FI,resource,lifetime,sanitizer or provider qualification.'})
     return rows

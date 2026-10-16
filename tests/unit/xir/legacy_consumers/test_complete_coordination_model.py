@@ -6,9 +6,9 @@ import complete_coordination_model as m
 
 
 class CompleteCoordination(unittest.TestCase):
-    def test_all_six_complete_entries_and_five_named_bodies(self):
+    def test_six_legacy_and_four_system_entries_keep_five_named_bodies(self):
         rows=m.expected_rows();named=m.named_expected_rows()
-        self.assertEqual((len(rows),len(named)),(6,5));self.assertEqual(sum(x['observation_count'] for x in rows),1)
+        self.assertEqual((len(rows),len(named)),(10,5));self.assertEqual(sum(x['observation_count'] for x in rows),28)
         traces=m.body_traces();self.assertEqual({k:len(v['assertions']) for k,v in traces.items()},
             {'work_queue_native_methods':17,'1157_work_queue_generic_class':4,'1158_work_queue_native':33,
              '1159_work_queue_blocking_pop':4,'1160_work_queue_close_fanout':4,'1165_result_group_native':18})
@@ -17,7 +17,7 @@ class CompleteCoordination(unittest.TestCase):
         self.assertEqual(rows[0]['expected']['stdout_utf8'],'workqueue native ok\n')
 
     def test_declaration_entry_never_claims_named_body_execution(self):
-        for row in m.expected_rows()[1:]:
+        for row in m.expected_rows()[1:6]:
             self.assertEqual(row['expected']['stdout_utf8'],'');self.assertEqual(row['observation_count'],0)
             self.assertFalse(row['separate_named_body_obligation']['executed_by_run'])
             self.assertEqual(row['separate_named_body_obligation']['qualification'],'OPEN_REQUIRES_NAMED_TEST_EXECUTION')
@@ -108,6 +108,125 @@ class CompleteCoordination(unittest.TestCase):
             self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8']);self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'')
             if case['entry']=='test':self.assertNotIn('source_context',case)
             else:self.assertEqual(case['source_context'],'original_absolute')
+
+
+
+
+class CompleteSynchronization(unittest.TestCase):
+    def test_all_four_whole_programs_have27_observations_and_original_context(self):
+        rows=m.system_expected_rows();self.assertEqual(len(rows),4)
+        self.assertEqual(sum(row['observation_count'] for row in rows),27)
+        cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
+        for row in rows:
+            case=cases[row['id']];self.assertEqual(case['source'],row['source'])
+            self.assertEqual(case['preserved_original_identity']['source'],row['source'])
+            self.assertEqual(case['source_lf_sha256'],m._INPUTS[row['source']])
+            self.assertEqual(case['entry'],'run');self.assertEqual(case['source_context'],'original_absolute')
+            self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'')
+            self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
+
+    def test_recursive_failure_resets_own_flag_and_separate_set_skips_initializer(self):
+        trace=m.threadlocal_trace();self.assertEqual(trace['outputs'],['recursive',7])
+        self.assertEqual(trace['failed_initializer_calls'],1)
+        self.assertEqual(trace['failed_initializing_flags'],{});self.assertEqual(trace['failed_cached_values'],{})
+        self.assertEqual(trace['second_instance_initializer_calls'],0)
+
+    def test_initializer_retry_and_per_thread_identity(self):
+        calls=[]
+        def initialize():
+            calls.append(1)
+            if len(calls)==1:raise LookupError('failure')
+            return len(calls)
+        local=m.LocalInitialization(initialize)
+        with self.assertRaises(LookupError):local.get('a')
+        self.assertEqual(local.states,{})
+        self.assertEqual(local.get('a'),2);self.assertEqual(local.get('a'),2)
+        self.assertEqual(local.get('b'),3);self.assertEqual(local.values,{'a':2,'b':3})
+        self.assertEqual(local.initializations,3)
+
+    def test_recursive_error_is_deterministic_and_does_not_cache(self):
+        local=m.LocalInitialization(lambda:local.get('main'))
+        for _ in range(2):
+            with self.assertRaises(m.RecursiveInitialization):local.get('main')
+            self.assertEqual(local.states,{});self.assertEqual(local.values,{})
+        self.assertEqual(local.initializations,2)
+
+    def test_scoped_cell_releases_after_throw_and_does_not_replace(self):
+        cell=m.SerializedCell(10)
+        def fail(value):raise ArithmeticError('callback')
+        with self.assertRaises(ArithmeticError):cell.access(fail,replace=True)
+        self.assertFalse(cell.held);self.assertEqual((cell.value,cell.writes),(10,0))
+        self.assertEqual(cell.access(lambda v:v+1,try_only=True),11)
+
+    def test_nested_try_lock_never_calls_body_or_mutates(self):
+        cell=m.SerializedCell(10);calls=[]
+        self.assertIsNone(cell.access(lambda value:cell.access(lambda nested:calls.append(nested),try_only=True)))
+        self.assertEqual(calls,[]);self.assertFalse(cell.held)
+        self.assertEqual((cell.value,cell.writes),(10,0))
+        with self.assertRaises(ValueError):cell.access(lambda value:cell.access(lambda v:v))
+        self.assertFalse(cell.held)
+
+    def test_timeout_preserves_one_million_ns_and_deadline_equality(self):
+        trace=m.timed_condition_trace();self.assertEqual(trace['outputs'],[False,True])
+        self.assertEqual(trace['timeout_ns'],1000000)
+        self.assertEqual(trace['clock_samples'],[0,1,999999,1000000])
+        self.assertEqual((trace['signals_before_wait_return'],trace['signals_after_unlock'],trace['final_epoch']),(0,2,2))
+        self.assertTrue(trace['lock_reacquired_before_return'])
+        self.assertIn('OPEN',trace['actual_clock_wait_yield_and_native_spurious_behavior'])
+
+    def test_all_four_workers_keep200_iterations_and800_critical_sections(self):
+        trace=m.os_thread_trace();variants=trace['mutual_exclusion_variants']
+        self.assertEqual(len(variants),24);self.assertEqual(len({tuple(x['worker_block_order']) for x in variants}),24)
+        self.assertTrue(all(x['iterations']==[200]*4 and x['guarded']==800 and x['completed_critical_sections']==800 for x in variants))
+        self.assertEqual((trace['spawned_threads'],trace['joined_threads']),(10,10))
+        self.assertEqual(trace['interleaving_value_induction'],{'initial':0,'step_delta':1,'exact_completed_transactions':800,'final':800})
+
+    def test_dropped_increment_fails_whole_original_value_requirement(self):
+        with mock.patch.object(m.SerializedCell,'replace',lambda cell,body:cell.value),self.assertRaisesRegex(ValueError,'four-worker200-loop'):
+            m.os_thread_trace()
+
+    def test_condition_value_invariance_keeps_both_arrival_orders(self):
+        variants=m.os_thread_trace()['condition_variants']
+        self.assertEqual([x['producer_first'] for x in variants],[False,True])
+        self.assertEqual([x['consumer_waits'] for x in variants],[1,0])
+        self.assertTrue(all(x['observed_state']==7 and x['producer_join']==9 and x['monitor_released'] for x in variants))
+
+    def test_barrier_requires_all_parties_and_returns_true_to_every_original_thread(self):
+        barrier=m.BarrierCompletion(3)
+        for thread in [0,1]:barrier.arrive(thread)
+        with self.assertRaises(ValueError):barrier.result(0)
+        with self.assertRaises(ValueError):barrier.arrive(0)
+        barrier.arrive(2);self.assertEqual([barrier.result(thread) for thread in range(3)],[True]*3)
+        with self.assertRaises(ValueError):barrier.result(3)
+        with self.assertRaises(ValueError):barrier.arrive(3)
+        for parties in [0,-1,True]:
+            with self.assertRaises(ValueError):m.BarrierCompletion(parties)
+        variants=m.os_thread_trace()['barrier_variants'];self.assertEqual(len(variants),6)
+        self.assertEqual({tuple(x['arrival_order']) for x in variants},set(__import__('itertools').permutations(range(3))))
+        self.assertTrue(all(x['post_barrier_reads']==[3]*3 and x['sum']==9 and x['all_wait_results']==[True]*3 for x in variants))
+
+    def test_once_keeps_three_contenders_and_one_successful_callback(self):
+        variants=m.os_thread_trace()['once_variants'];self.assertEqual(len(variants),6)
+        self.assertTrue(all(x['callback_calls']==1 and x['thread_loads']==[1]*3 and x['count']==1 for x in variants))
+        once=m.OnceCompletion()
+        def fail():raise RuntimeError('callback failure')
+        with self.assertRaises(RuntimeError):once.call(fail)
+        self.assertFalse(once.done);self.assertEqual(once.calls,0)
+        once.call(lambda:None);once.call(fail);self.assertEqual(once.calls,1)
+
+    def test_imported_sync_keeps_generic_callbacks_all_imports_and_wait_order(self):
+        trace=m.sync_import_trace()
+        self.assertEqual(trace['outputs'],[20,11,-7,15,'a!','ab','abc',11,1,True,100,42,'done'])
+        self.assertEqual(trace['rw_value_after_nonmutating_write'],'ab')
+        self.assertEqual(trace['spawned_coroutines'],4);self.assertEqual(trace['latch_initial_counts'],[2,1,1])
+        self.assertEqual(trace['all_imports_preserved'],['Semaphore','CountdownLatch','EventCount','WorkQueue','ResultGroup','Mutex','RwLock','Once','Barrier','Condvar'])
+        self.assertEqual([x['writer_add_order'] for x in trace['fair_writer_variants']],[[1,10],[10,1]])
+        self.assertTrue(all(x['result']==11 and x['latch_remaining']==0 for x in trace['fair_writer_variants']))
+        self.assertTrue(all(x['output_order']==[42,'done'] and x['consumed_latch_remaining']==0 for x in trace['condition_variants']))
+
+    def test_removed_full_program_or_authority_is_rejected(self):
+        with mock.patch.dict(m._SYSTEM_PROGRAMS,{},clear=True),self.assertRaises(ValueError):m.expected_rows()
+        with mock.patch.dict(m._SYSTEM_INPUTS,{},clear=True),self.assertRaises(ValueError):m.expected_rows()
 
 
 if __name__=='__main__':unittest.main()

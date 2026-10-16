@@ -30737,6 +30737,150 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 10
+    },
+    {
+      "id": "complete_coordination_sys_threadlocal_recursive_init",
+      "oracle_id": "complete_coordination_sys_threadlocal_recursive_init",
+      "source": "tests/diff/cases/semantics/stdlib/sys_threadlocal_recursive_init.xr",
+      "source_lf_sha256": "aceada7c058a409dbd37e1af86987a0b7497a68505f6ed55b38af79d27ba3108",
+      "entry": "run",
+      "stdout_utf8": "recursive\n7\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged synchronization program with all imports,threads,4x200 iterations,joins,waits and callbacks. Independent finite completion/value algebra and failure-state cleanup;no claim of host scheduling,progress,memory-order,FI,resource,lifetime,sanitizer or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/sys_threadlocal_recursive_init.xr",
+        "source_lf_sha256": "aceada7c058a409dbd37e1af86987a0b7497a68505f6ed55b38af79d27ba3108"
+      },
+      "remaining_gates": [
+        "All four complete original synchronization programs,all imports,4x200 loops,10 native threads and joins,4 coroutines,all waits/latches/closures/callbacks retained.",
+        "CurrentSource ThreadLocal generic/recursive failure state,atomic/Thread/monitor/Barrier/Once and sync imported generic methods/defer;actual VM/C/native and original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
+    },
+    {
+      "id": "complete_coordination_sys_condvar_direct",
+      "oracle_id": "complete_coordination_sys_condvar_direct",
+      "source": "tests/diff/cases/semantics/stdlib/sys_condvar_direct.xr",
+      "source_lf_sha256": "dc14e1ed7574f59e7478ef7a97748833f0ba1ef5919fc0d3dca515409b41b27a",
+      "entry": "run",
+      "stdout_utf8": "false\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged synchronization program with all imports,threads,4x200 iterations,joins,waits and callbacks. Independent finite completion/value algebra and failure-state cleanup;no claim of host scheduling,progress,memory-order,FI,resource,lifetime,sanitizer or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/sys_condvar_direct.xr",
+        "source_lf_sha256": "dc14e1ed7574f59e7478ef7a97748833f0ba1ef5919fc0d3dca515409b41b27a"
+      },
+      "remaining_gates": [
+        "All four complete original synchronization programs,all imports,4x200 loops,10 native threads and joins,4 coroutines,all waits/latches/closures/callbacks retained.",
+        "CurrentSource ThreadLocal generic/recursive failure state,atomic/Thread/monitor/Barrier/Once and sync imported generic methods/defer;actual VM/C/native and original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
+    },
+    {
+      "id": "complete_coordination_sys_thread_os_primitives_cross_thread",
+      "oracle_id": "complete_coordination_sys_thread_os_primitives_cross_thread",
+      "source": "tests/diff/cases/semantics/stdlib/sys_thread_os_primitives_cross_thread.xr",
+      "source_lf_sha256": "858c01c1b18cf9e0d1e212926cd98ec66a909b161a285f993cac5c737ef58239",
+      "entry": "run",
+      "stdout_utf8": "800\n800\n7\n9\ntrue\n9\ntrue\ntrue\ntrue\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged synchronization program with all imports,threads,4x200 iterations,joins,waits and callbacks. Independent finite completion/value algebra and failure-state cleanup;no claim of host scheduling,progress,memory-order,FI,resource,lifetime,sanitizer or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/sys_thread_os_primitives_cross_thread.xr",
+        "source_lf_sha256": "858c01c1b18cf9e0d1e212926cd98ec66a909b161a285f993cac5c737ef58239"
+      },
+      "remaining_gates": [
+        "All four complete original synchronization programs,all imports,4x200 loops,10 native threads and joins,4 coroutines,all waits/latches/closures/callbacks retained.",
+        "CurrentSource ThreadLocal generic/recursive failure state,atomic/Thread/monitor/Barrier/Once and sync imported generic methods/defer;actual VM/C/native and original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_coordination_sync_module_import",
+      "oracle_id": "complete_coordination_sync_module_import",
+      "source": "tests/diff/cases/semantics/stdlib/sync_module_import.xr",
+      "source_lf_sha256": "7d33f834499a53b238bae4a04dce65d70ecde1f83af53a48dc2dfaa9caeb5ef4",
+      "entry": "run",
+      "stdout_utf8": "20\n11\n-7\n15\na!\nab\nabc\n11\n1\ntrue\n100\n42\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged synchronization program with all imports,threads,4x200 iterations,joins,waits and callbacks. Independent finite completion/value algebra and failure-state cleanup;no claim of host scheduling,progress,memory-order,FI,resource,lifetime,sanitizer or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/sync_module_import.xr",
+        "source_lf_sha256": "7d33f834499a53b238bae4a04dce65d70ecde1f83af53a48dc2dfaa9caeb5ef4"
+      },
+      "remaining_gates": [
+        "All four complete original synchronization programs,all imports,4x200 loops,10 native threads and joins,4 coroutines,all waits/latches/closures/callbacks retained.",
+        "CurrentSource ThreadLocal generic/recursive failure state,atomic/Thread/monitor/Barrier/Once and sync imported generic methods/defer;actual VM/C/native and original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 13
     }
   ]
 }
