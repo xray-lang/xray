@@ -30,7 +30,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     XrXirFunctionIdentity identities[4]={{0},{0},{.test_role=role,.test_timeout_seconds=timeout},{0}};
     const XrXirConstraint unconstrained={0};
     const XrXirGeneric generics[4]={{0},{0},{0},{&unconstrained,1,NULL,0,NULL}};
-    const XrXirSourceModule source={"root",4,NULL,0,0};
+    const XrXirSourceModule source={"root",4,NULL,0,0, 0};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generics,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
@@ -123,7 +123,7 @@ static void invalid(const XrXirCompileContext *context) {
         {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,code,2,NULL,0},
         {"test",4,NULL,0,XR_XIR_UNIT,blocks,1,&unit,1,NULL,0}};
     XrXirFunctionIdentity identities[3]={{0},{0},{0}};
-    const XrXirSourceModule source={"root",4,NULL,0,0};
+    const XrXirSourceModule source={"root",4,NULL,0,0, 0};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirFunctionIdentity malformed[]={

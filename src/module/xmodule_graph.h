@@ -30,6 +30,8 @@ struct AstNode;
 struct XrModule;
 struct XrCompilerSession;
 struct XrVMRuntime;
+struct XrXirSourceHistoryUnit;
+enum { XR_MODULE_GRAPH_MAX_MODULES = 1024 };
 
 /* ========== Module Spec Status ========== */
 
@@ -52,12 +54,15 @@ typedef struct XrModuleSpec {
     XrModuleKind kind;    /* stdlib / file / package */
     XrModuleRepresentation representation;
     const XrModuleResourceBinding *resource; /* Catalog outlives this graph. */
+    const struct XrXirSourceHistoryUnit *history; /* Exact owned Source record; never a Catalog binding. */
+    uint32_t history_module;
     XrModuleIdentityAuthority authority; /* Owned typed authority */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
-    XrFingerprint source_content_fingerprint; /* Full source bytes; never a locator */
+    XrFingerprint source_content_fingerprint; /* Source bytes; zero when only an AST was supplied. */
     XrModSpecStatus status;
 
-    struct AstNode *ast; /* Parsed AST (owned; freed via xr_program_destroy) */
+    struct AstNode *ast; /* Owned unless ast_borrowed; never moved within its arena. */
+    bool ast_borrowed; /* Synchronous caller-owned entry; imports remain graph-owned. */
 
     /* Dependency edges: indices into XrModuleGraph.specs[] */
     int *dep_indices; /* Array of spec indices this module imports from */
@@ -162,6 +167,19 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_source(XrModuleGraph *g,
 XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGraph *g,
     const XrModuleIdentityAuthority *authority, const char *logical_path,
     const char *source_path, const char *source, char **out_err);
+
+typedef struct XrModuleAstInput {
+    struct AstNode *program;
+    const XrModuleIdentityAuthority *authority;
+    const char *logical_path, *source_path;
+} XrModuleAstInput;
+/* Borrow a complete owning parser AST until graph_free. Its authentic arena
+ * must retain the same ledger, but its producing session may already be dead.
+ * Imports use ordinary discovery. No entry bytes are read, synthesized or
+ * parsed. Failure preserves the caller's AST; discard partial graph discovery.
+ * An AST has no source-byte fingerprint; query metadata reports zero. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *g,
+    const XrModuleAstInput *input, char **out_err);
 
 /* Include exact caller-owned logical source under the same typed authority
  * rules as build_logical_source. The original entry is preserved. Reusing a

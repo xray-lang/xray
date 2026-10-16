@@ -53,7 +53,7 @@ static XrXirArtifact *nominal_expression_fixture(const XrXirCompileContext *cont
         {"escape", 6, NULL, 0, XR_XIR_STRING, blocks + 3, 1, escape, 3, &escape_operand, 1}};
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8, XR_XIR_STRING};
     XrXirGeneric generics[] = {{NULL, 0, arguments, 3, NULL}, {&constraint, 1, NULL, 0, NULL}, {0}, {NULL,0,arguments+2,1, NULL}};
-    XrXirSourceModule source = {"alpha", 5, NULL, 0, 2};
+    XrXirSourceModule source = {"alpha", 5, NULL, 0, 2, 0};
     XrXirFunctionIdentity identities[4] = {{0}}; identities[3].exported = 1;
     XrXirLiteral literal = {"generic",7};
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, &literal, 1, 0, 0, NULL};

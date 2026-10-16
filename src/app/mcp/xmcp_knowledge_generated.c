@@ -8488,7 +8488,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "modules",
         .title = "Modules & Imports",
-        .aliases_csv = "import,export,module,require,package,re-export,circular dependency,module graph",
+        .aliases_csv = "import,export,module,require,package,re-export,circular dependency,module graph,Source generations,lexical scope",
         .body =
             "[Language reference](#11-\xe6\xa8\xa1\xe5\x9d\x97\xe7\xb3\xbb\xe7\xbb\x9f-modules)\n"
             "\n"
@@ -8497,6 +8497,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "Each .xr file is a module. import/export must be top-level. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.\n"
             "\n"
             "### Imports\n"
+            "import declarations must appear at module top level. Bare identifiers resolve to stdlib; quoted paths resolve relative to the current file or project root. Dynamic import is not supported.\n"
             "```xray\n"
             "// 1. stdlib: bare identifier; without `as`, the alias equals the module name\n"
             "import time\n"
@@ -8524,6 +8525,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Exports\n"
+            "export declarations must appear at module top level. export var is not supported \xe2\x80\x94 use export const. Re-exports (named and wildcard) aggregate submodule APIs.\n"
             "```xray\n"
             "// 1. visibility belongs to the declaration\n"
             "export fn helper() { return }\n"
@@ -8541,6 +8543,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Module graph & circular dependencies\n"
+            "The compiler builds a module dependency DAG from all import declarations. Circular dependencies are a compile error. Modules initialize in topological order. Selective imports resolve to fixed module index + export slot at compile time.\n"
+            "\n"
+            "### Published Source definitions\n"
+            "Persistent Source checking receives only its owner's published Checked Program and registered bindings. Session inputs share a lexical scope while definitions retain birth modules and private visibility. Runtime receiving requires the actual Source map, exact specialized/Lowered Program proof and the same retained runtime Domain. Budgeted routes preserve birth slots and completed initialization. Actual stored-type roots receive existing type identities through acyclic arena ownership; equal shapes grant nothing, and values retain their birth type. Domain, publication, borrow and call checks remain separate. Old Cell reads/writes work in VM, native and mixed directions; ordinary Cell side effects survive candidate abort. Complete Class/Array operations, closures, full G2/G3 and P14 coordination remain unfinished. See compilation pipeline section17.50.\n"
+            "\n"
+            "Array length, capacity, indexed reads, reserve, indexed writes and push use the actual data owner arena for element types and layouts after receiving-identity validation. Read-only ROOT_SLOT paths still refer to actual birth slots and check their original publication state. Paths retain the arena of each data edge and match static and actual container types by exact identity. Compact-leaf packing, unpacking, graph scans and destruction recover actual object headers. Existing erased Error views keep their Error tag and actual enum owner rather than becoming concrete enum handles. An Array allocated in the receiving arena can occupy a birth-arena compact element; writes to shared subtrees still copy before mutation and preserve independent copies. These type-coordinate changes never alter object headers or replace Domain or loan authority.\n"
             "",
     },
     {

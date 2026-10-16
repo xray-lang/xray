@@ -86,10 +86,11 @@ static bool toolchain_probe_close(XrCliNativeProbe **owner) {
     fputs("toolchain: native probe cleanup remains pending\n",stderr);fflush(stderr);
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
-static void toolchain_probe_native(XrCompileResources *resources,const XrCliInvocation *inv,
+static void toolchain_probe_native(XrCompileState *state,const XrCliInvocation *inv,
     ToolchainProbeReport *report) {
+    XrCompileResources *resources=xr_compile_state_resources(state);
     uint64_t started=GetTickCount64();XrCliToolchainConfig *preferences=NULL;XrCliNativeProbe *owner=NULL;
-    XrCliToolchainConfigStatus configured=xr_cli_toolchain_config_open(resources,NULL,&preferences);
+    XrCliToolchainConfigStatus configured=xr_cli_toolchain_config_open(state,NULL,&preferences);
     if (configured!=XR_CLI_TOOLCHAIN_CONFIG_OK) {
         toolchain_probe_failure(report,"CONFIG_INVALID","preferences",(unsigned)configured,0);goto done;
     }
@@ -134,7 +135,7 @@ done:
 }
 
 #endif
-static int toolchain_probe(XrCompileResources *resources,const XrCliInvocation *inv) {
+static int toolchain_probe(XrCompileState *state,const XrCliInvocation *inv) {
     if (inv->positional_count!=1 || inv->passthrough_argc) return XR_CLI_EXIT_USAGE;
     ToolchainProbeReport report={0};report.requested=xr_cli_opt_string(&inv->options,"target","native");
     XrToolchainTarget target={0};char error[256]={0};
@@ -142,12 +143,12 @@ static int toolchain_probe(XrCompileResources *resources,const XrCliInvocation *
     report.normalized=target.name;report.provider="none";
     report.c_compile=report.sdk_compile=report.runtime_link=report.native_run="skipped";
 #if XR_OS_WINDOWS && defined(XR_ARCH_X86_64)
-    if (target.is_native) toolchain_probe_native(resources,inv,&report);
+    if (target.is_native) toolchain_probe_native(state,inv,&report);
     else {
         toolchain_probe_failure(&report,"TARGET_UNSUPPORTED","target",0,0);toolchain_probe_report(inv,&report);
     }
 #else
-    (void)resources;
+    (void)state;
     toolchain_probe_failure(&report,"TARGET_UNSUPPORTED","host",0,0);toolchain_probe_report(inv,&report);
 #endif
     return report.ready ? XR_CLI_EXIT_OK : XR_CLI_EXIT_UNAVAILABLE;

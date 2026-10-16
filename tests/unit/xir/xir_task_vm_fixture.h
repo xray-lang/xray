@@ -82,7 +82,7 @@ static void task_vm_fixture(TaskVmFixture *f, uint32_t mode) {
     f->functions[2] = (XrXirFunction){.name = "init", .name_length = 4,
         .blocks = &f->init_block, .block_count = 1, .instructions = &f->init, .instruction_count = 1};
     f->identities[0].exported = 1;
-    f->source = (XrXirSourceModule){"task-vm", 7, NULL, 0, 2};
+    f->source = (XrXirSourceModule){"task-vm", 7, NULL, 0, 2, 0};
     f->declarations = (XrXirDeclarations){.modules = &f->source, .module_count = 1,
         .functions = f->identities, .literals = &f->literal, .literal_count = 1,
         .root_module = 0, .entry_function = 0};

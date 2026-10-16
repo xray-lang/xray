@@ -40,7 +40,7 @@ static bool source_declaration_modules(SourceContext *ctx) {
         uint32_t *deps = source_alloc(ctx, (size_t) spec->dep_count, sizeof(*deps));
         if (!deps) return false;
         for (int i = 0; i < spec->dep_count; ++i) deps[i] = (uint32_t) spec->dep_indices[i];
-        ctx->modules[m] = (XrXirSourceModule) {spec->canonical, (uint32_t) source_text_size(ctx, spec->canonical), deps, (uint32_t) spec->dep_count, m};
+        ctx->modules[m] = (XrXirSourceModule) {spec->canonical, (uint32_t) source_text_size(ctx, spec->canonical), deps, (uint32_t) spec->dep_count, m, 0};
         ctx->bodies[m].module = m;
         ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
         ctx->identities[m].module = m;

@@ -2636,6 +2636,9 @@ endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
 target_link_libraries(xray PRIVATE xray_cli_toolchain_config)
+if(TARGET xray_cli_toolchain_update)
+    target_link_libraries(xray PRIVATE xray_cli_toolchain_update)
+endif()
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so

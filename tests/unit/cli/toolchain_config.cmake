@@ -18,6 +18,37 @@ add_test(NAME cli_toolchain_config_normal COMMAND "${XRAY_PYTHON}" -X utf8
 set_tests_properties(cli_toolchain_config_normal PROPERTIES TIMEOUT 120
     LABELS "unit;cli;toolchain;ownership")
 if(WIN32)
+    add_executable(test_cli_toolchain_command "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_command.c"
+        "${PROJECT_SOURCE_DIR}/src/app/cli/xcmd_toolchain.c"
+        "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_spec.c"
+        "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_diag.c"
+        "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_output.c"
+        "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
+    target_link_libraries(test_cli_toolchain_command PRIVATE xray_cli_toolchain_update)
+    target_compile_definitions(test_cli_toolchain_command PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_include_directories(test_cli_toolchain_command PRIVATE "${PROJECT_SOURCE_DIR}/src")
+    set_target_properties(test_cli_toolchain_command PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_compile_options(test_cli_toolchain_command PRIVATE /W4 /WX /utf-8)
+    foreach(mode normal resources)
+        set(command_args)
+        if(mode STREQUAL "resources")
+            list(APPEND command_args --resources)
+        endif()
+        add_test(NAME cli_toolchain_command_${mode} COMMAND "${XRAY_PYTHON}" -X utf8
+            "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_command.py" $<TARGET_FILE:test_cli_toolchain_command>
+            "${CMAKE_CURRENT_BINARY_DIR}/toolchain-command-${mode}" ${command_args})
+        set_tests_properties(cli_toolchain_command_${mode} PROPERTIES TIMEOUT 120
+            LABELS "unit;cli;toolchain;ownership")
+        if(mode STREQUAL "resources")
+            set_tests_properties(cli_toolchain_command_${mode} PROPERTIES TIMEOUT 600 COST 30 RUN_SERIAL TRUE
+                LABELS "unit;cli;toolchain;ownership;compiler-faults")
+        endif()
+    endforeach()
+    add_test(NAME cli_toolchain_public COMMAND "${XRAY_PYTHON}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_public.py" $<TARGET_FILE:xray>
+        "${XIR_INVOCATION_MSVC}" "${CMAKE_CURRENT_BINARY_DIR}/toolchain-public")
+    set_tests_properties(cli_toolchain_public PROPERTIES TIMEOUT 300
+        LABELS "unit;cli;toolchain;ownership;generated-c")
     foreach(target test_cli_toolchain_update test_cli_toolchain_update_injected)
         add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update.c")
         target_link_libraries(${target} PRIVATE xray_cli_toolchain_update)
@@ -59,6 +90,11 @@ if(WIN32)
     add_test(NAME cli_toolchain_update COMMAND "${XRAY_PYTHON}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update.py" $<TARGET_FILE:test_cli_toolchain_update>
         "${CMAKE_CURRENT_BINARY_DIR}/toolchain-update")
+    add_test(NAME cli_toolchain_state COMMAND "${XRAY_PYTHON}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_state.py" $<TARGET_FILE:test_cli_toolchain_update>
+        "${CMAKE_CURRENT_BINARY_DIR}/toolchain-state")
+    set_tests_properties(cli_toolchain_state PROPERTIES TIMEOUT 120
+        LABELS "unit;cli;toolchain;ownership;budget")
     add_test(NAME cli_toolchain_update_resources COMMAND "${XRAY_PYTHON}" -X utf8
         "${CMAKE_CURRENT_LIST_DIR}/test_cli_toolchain_update.py" $<TARGET_FILE:test_cli_toolchain_update>
         "${CMAKE_CURRENT_BINARY_DIR}/toolchain-update-resources" --resources)

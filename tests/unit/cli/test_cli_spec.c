@@ -67,6 +67,14 @@ TEST(spec_find_command_unknown) {
     const XrCliCommandSpec *spec = xr_cli_find_command("nonexistent");
     ASSERT_NULL(spec);
 }
+TEST(spec_toolchain_preferences_registered) {
+    const XrCliCommandSpec *spec=xr_cli_find_command("toolchain");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options),4);
+    ASSERT_EQ_INT(spec->positional_min,1);
+    ASSERT_EQ_INT(spec->positional_max,2);
+    ASSERT_FALSE(spec->allow_passthrough);
+}
 
 TEST(spec_aliases_removed) {
     /* Package management aliases should NOT be in the command table */
@@ -792,6 +800,7 @@ RUN_TEST(spec_find_command_test_options);
 RUN_TEST(spec_find_command_self_subcommands);
 RUN_TEST(spec_retired_fix_command_removed);
 RUN_TEST(spec_find_command_unknown);
+RUN_TEST(spec_toolchain_preferences_registered);
 RUN_TEST(spec_aliases_removed);
 RUN_TEST(spec_option_count);
 RUN_TEST(spec_option_count_empty);

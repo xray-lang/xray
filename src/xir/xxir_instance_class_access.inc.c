@@ -21,10 +21,12 @@ static XrXirCallStatus instance_class_view(XrXirCallView *view,XrXirInstance **o
     return XR_XIR_CALL_READY;
 }
 static const XrXirValue *instance_class_root(const XrXirInstance *instance,const XrXirValue *value) {
-    if (!value) return NULL;
-    const XrXirValue *root=xr_xir_type_is_cell(instance->program->types,(XrXirType)value->type)?
+    if (!instance || !value) return NULL;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(xr_xir_value_arena(value));
+    const XrXirValue *root=xr_xir_type_is_cell(types,(XrXirType)value->type)?
         xr_xir_cell_canonical_root(value):value;
-    return root && xr_xir_type_is_class(instance->program->types,(XrXirType)root->type)?root:NULL;
+    return root && xr_xir_type_is_class(xr_xir_compile_type_arena_types(xr_xir_value_arena(root)),
+        (XrXirType)root->type)?root:NULL;
 }
 static XrXirCallStatus instance_class_access_begin(XrXirCallView *view,uint32_t instruction,
     XirEffectClassAccessKind kind,const XrXirValue *value,XrXirCallClassAccess *access) {

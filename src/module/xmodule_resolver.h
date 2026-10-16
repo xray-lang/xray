@@ -33,7 +33,9 @@ struct XrProject;
 struct XrLockfile;
 
 /* Explicit representations preserve the existing typed authority domain. */
-typedef enum XrModuleRepresentation { XR_MODULE_SOURCE, XR_MODULE_CHECKED_LIBRARY } XrModuleRepresentation;
+typedef enum XrModuleRepresentation {
+    XR_MODULE_SOURCE, XR_MODULE_CHECKED_LIBRARY, XR_MODULE_CHECKED_HISTORY
+} XrModuleRepresentation;
 typedef struct XrModuleResourceBinding {
     const char *canonical, *logical_path, *source_locator;
     XrModuleIdentityAuthority authority;
@@ -54,6 +56,7 @@ typedef enum {
     XR_MOD_FILE,
     XR_MOD_PACKAGE,
     XR_MOD_MEMORY,
+    XR_MOD_HISTORY,
 } XrModuleKind;
 
 typedef struct {

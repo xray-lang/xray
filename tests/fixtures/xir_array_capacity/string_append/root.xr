@@ -1,0 +1,44 @@
+import "./producer" as producer
+var changed="a"
+fn touch()->string{changed="z";return "x"}
+fn appendRef(value:ref string)->string{value+="r";return value}
+export fn main()->i64{return 0}
+export fn scenario()->i64{
+    var text="a"
+    const old=text
+    text+="b"
+    assert(old=="a" && text=="ab")
+    const letter="Ω"
+    text+=letter
+    assert(text=="abΩ")
+    const expression=(text+="!")
+    text+="?"
+    assert(expression=="abΩ!" && text=="abΩ!?")
+    var self="ab"
+    self+=self
+    assert(self=="abab")
+    changed="a"
+    changed+=touch()
+    assert(changed=="ax")
+    changed+="m"
+    assert(changed=="axm")
+    var reference="q"
+    const savedReference=reference
+    const refResult=appendRef(ref reference)
+    reference+="s"
+    assert(savedReference=="q" && refResult=="qr" && reference=="qrs")
+    var many=""
+    var i=0
+    while(i<16){many+="x";i+=1}
+    var formatted=""
+    var number=0
+    while(number<4){formatted+="${number}";number+=1}
+    assert(formatted=="0123")
+    const parts=["a","","Ω"]
+    const separator="|"
+    assert(parts.join(separator)=="a||Ω" && separator=="|")
+    const empty:Array<string>=[]
+    assert(empty.join(separator)=="" && parts.join("")=="aΩ")
+    return len(many)+producer.check()+len(self)+len(changed)+len(reference)
+}
+export fn escaped()->string{return producer.make()}

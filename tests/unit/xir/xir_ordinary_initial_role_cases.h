@@ -14,7 +14,7 @@ static void conditional_initial_role_literals(void) {
         {.op=XR_XIR_RETURN,.args={2,0}}},done={.op=XR_XIR_RETURN};
     XrXirFunction functions[2]={{.parameters=parameters,.parameter_count=2,.result=XR_XIR_I64,
         .instructions=ops,.instruction_count=2},{.result=XR_XIR_UNIT,.instructions=&done,.instruction_count=1}};
-    XrXirFunctionIdentity identities[2]={0};XrXirSourceModule module_name={"initial",7,NULL,0,1};
+    XrXirFunctionIdentity identities[2]={0};XrXirSourceModule module_name={"initial",7,NULL,0,1, 0};
     XrXirDeclarations declarations={.modules=&module_name,.module_count=1,.functions=identities};
     XrXirModule source={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=2,
         .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};

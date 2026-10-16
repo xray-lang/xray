@@ -238,7 +238,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
                 (uint32_t) op->immediate == d->modules[callee_module].initializer ||
                 !xr_xir_module_imports(d, caller_module, callee_module))
                 return XR_XIR_BAD_STRUCTURE;
-            if (caller_module != callee_module && !d->functions[op->immediate].exported) {
+            if (!xr_xir_module_same_scope(d, caller_module, callee_module) && !d->functions[op->immediate].exported) {
                 bool source_visible = false;
                 XrXirStatus status = instance_call_visibility(module, caller_id,
                     (uint32_t)(op - function->instructions), (uint32_t)op->immediate,
@@ -302,6 +302,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CLOCK_NANOS) {
         if (op->immediate < XR_XIR_CLOCK_REALTIME || op->immediate > XR_XIR_CLOCK_MONOTONIC)
             return XR_XIR_BAD_STRUCTURE;
+    } else if (op->op == XR_XIR_CELL_STRING_APPEND) {
+        if (op->immediate != 0 && op->immediate != 1) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL &&
@@ -950,6 +952,12 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             expected = xr_xir_operand_type(function, op->args[0]);
             if (!xr_xir_type_is_cell(context->module->types, expected)) return XR_XIR_BAD_TYPE;
         }
+        if (op->op == XR_XIR_CELL_STRING_APPEND) {
+            expected = xr_xir_operand_type(function, op->args[0]);
+            if (!xr_xir_type_is_cell(context->module->types, expected) ||
+                xr_xir_cell_element(context->module->types, expected) != XR_XIR_STRING)
+                return XR_XIR_BAD_TYPE;
+        }
         if (op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_STRING_LEN ||
             op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
             (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
@@ -996,6 +1004,14 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (op->op == XR_XIR_STRING_INDEX_OF && a == 2) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_ASSERT_CONDITION) operand_type = a ? XR_XIR_STRING : XR_XIR_BOOL;
             if ((op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
+            if (op->op == XR_XIR_CELL_STRING_APPEND && a == 1) {
+                operand_type = XR_XIR_STRING;
+                if (op->immediate) {
+                    operand_type = xr_xir_operand_type(function, op->args[1]);
+                    if (operand_type != XR_XIR_BOOL && operand_type != XR_XIR_RUNE &&
+                        !xr_xir_type_is_number(operand_type)) return XR_XIR_BAD_TYPE;
+                }
+            }
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {
                 uint32_t id = op->op == XR_XIR_PRINT ? function->operands[op->args[0] + a] : op->args[a];
                 if (id >= function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;

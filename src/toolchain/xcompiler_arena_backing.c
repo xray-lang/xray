@@ -74,11 +74,16 @@ XR_FUNC XrArenaStatus xr_compiler_arena_state_backing(XrCompileState *state, XrA
     return XR_ARENA_OK;
 }
 
-XR_FUNC bool xr_compiler_arena_matches_state(const XrArena *arena, const XrCompileState *state) {
-    return arena && state && arena->retained && arena->backing.context == state &&
+XR_FUNC XrCompileState *xr_compiler_arena_compile_state(const XrArena *arena) {
+    bool owned = arena && arena->retained && arena->backing.context &&
         arena->backing.alloc == compiler_state_arena_alloc && arena->backing.free == compiler_arena_free &&
         arena->backing.work == compiler_state_arena_work && arena->backing.retain == compiler_state_arena_retain &&
         arena->backing.release == compiler_state_arena_release;
+    return owned ? arena->backing.context : NULL;
+}
+
+XR_FUNC bool xr_compiler_arena_matches_state(const XrArena *arena, const XrCompileState *state) {
+    return state && xr_compiler_arena_compile_state(arena) == state;
 }
 
 XR_FUNC XrCompileResourceStatus xr_compiler_arena_capture_status(const XrArena *arena, XrCompileState *state) {

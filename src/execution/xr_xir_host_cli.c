@@ -45,7 +45,8 @@ XR_FUNC XrXirHostReportStatus xr_xir_host_report_result(const XrXirCallResult *r
             if (!xr_xir_error_borrow(value, &concrete)) return XR_XIR_HOST_REPORT_BAD_ARGUMENT;
             value = &concrete;
         }
-        written = xr_value_format_uncaught(xr_xir_value_format_reader(),
+        XrXirFormatContext format={0};
+        written = xr_value_format_uncaught(xr_xir_value_format_reader(&format),
             (XrValueFormatNode){value, 0}, checked, 0, color);
     } else if (xr_xir_call_panic_status(result->status)) {
         char scratch[XR_XIR_PANIC_MESSAGE_CAPACITY];

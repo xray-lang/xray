@@ -16,10 +16,14 @@
 #include "xxir_float.h"
 #include "xxir_rune.h"
 
-static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
-    (void)context;
-    const XrXirValue *value = node.value;
-    if (!view || !xr_xir_value_valid(value)) return 0;
+static bool xir_format_cursor(const void *context,XrValueFormatNode node,XrXirFormatCursor *output) {
+    const XrXirFormatContext *format=context;
+    if (!format || !output) return false;
+    if (!node.type) return xr_xir_value_format_cursor(node.value,output);
+    if (node.type>XR_VALUE_FORMAT_MAX_DEPTH+1 || node.value!=&format->cursors[node.type-1]) return false;
+    *output=format->cursors[node.type-1];return true;
+}
+static int xir_format_scalar(const XrXirValue *value,XrValueFormatView *view) {
     XrXirType type = (XrXirType)value->type;
     if (xr_xir_type_is_integer(type)) {
         view->kind = xr_xir_integer_signed(type) ? XR_VALUE_FORMAT_SIGNED : XR_VALUE_FORMAT_UNSIGNED;
@@ -50,25 +54,33 @@ static int xir_format_read(const void *context, XrValueFormatNode node, XrValueF
         view->kind = XR_VALUE_FORMAT_BYTES; view->bytes = view->scalar_bytes; view->quote = '\0';
         return 1;
     }
-    XrXirEnumBorrow borrowed;
-    if (xr_xir_enum_borrow(value, &borrowed) != XR_XIR_VALUE_OK) return 0;
-    view->kind = XR_VALUE_FORMAT_ENUM;
-    view->name = borrowed.name.bytes; view->name_size = borrowed.name.length;
-    view->member = borrowed.member.bytes; view->member_size = borrowed.member.length;
-    view->children = borrowed.field_count;
+    return 0;
+}
+static int xir_format_read(const void *context, XrValueFormatNode node, XrValueFormatView *view) {
+    XrXirFormatCursor cursor={0};XrXirValue borrowed={0};
+    if (!view || !xir_format_cursor(context,node,&cursor)) return 0;
+    if (xr_xir_value_format_leaf(&cursor,&borrowed) && xir_format_scalar(&borrowed,view)) return 1;
+    XrXirFormatAggregate aggregate={0};
+    if (!xr_xir_value_format_aggregate(&cursor,&aggregate)) return 0;
+    view->kind=aggregate.array ? XR_VALUE_FORMAT_ARRAY : XR_VALUE_FORMAT_ENUM;
+    view->name=aggregate.name.bytes;view->name_size=aggregate.name.length;
+    view->member=aggregate.member.bytes;view->member_size=aggregate.member.length;
+    view->unsigned_value=aggregate.count;
+    view->children=aggregate.array ? (uint32_t)xr_value_format_limit_count((int64_t)aggregate.count) : (uint32_t)aggregate.count;
     return 1;
 }
 
 static int xir_format_child(const void *context, XrValueFormatNode node, uint32_t index,
     XrValueFormatNode *child) {
-    (void)context;
-    XrXirEnumBorrow borrowed;
-    if (!child || xr_xir_enum_borrow(node.value, &borrowed) != XR_XIR_VALUE_OK ||
-        index >= borrowed.field_count) return 0;
-    *child = (XrValueFormatNode){&borrowed.fields[index], 0};
+    XrXirFormatContext *format=(XrXirFormatContext *)context;
+    XrXirFormatCursor cursor={0},next={0};
+    if (!child || !xir_format_cursor(context,node,&cursor) || node.type>XR_VALUE_FORMAT_MAX_DEPTH ||
+        !xr_xir_value_format_child(&cursor,index,&next)) return 0;
+    format->cursors[node.type]=next;
+    *child=(XrValueFormatNode){&format->cursors[node.type],(uint16_t)(node.type+1)};
     return 1;
 }
 
-XR_FUNC XrValueFormatReader xr_xir_value_format_reader(void) {
-    return (XrValueFormatReader){NULL, xir_format_read, xir_format_child};
+XR_FUNC XrValueFormatReader xr_xir_value_format_reader(XrXirFormatContext *context) {
+    return context ? (XrValueFormatReader){context,xir_format_read,xir_format_child} : (XrValueFormatReader){0};
 }

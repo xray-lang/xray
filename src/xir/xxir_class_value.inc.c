@@ -125,7 +125,7 @@ static XrXirValueStatus xr_xir_class_set_graph_operation(const XrXirValue *recei
     if (!xr_xir_compile_type_arena_layout(object->arena,node->nominal.fields[field],&physical))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     StoragePrepared prepared={0};
-    status=storage_prepared_begin(&prepared,replacement,physical.size,admission);
+    status=storage_prepared_begin(&prepared,node->nominal.fields[field],replacement,physical.size,admission);
     if (status != XR_XIR_VALUE_OK) return status;
     XrXirClassPublication publication = {0};
     if (xr_xir_class_module_storage(receiver)) {

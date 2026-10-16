@@ -43,10 +43,11 @@ static int build_probe_close(XrCliNativeProbe **owner) {
     fputs("XR_BUILD_6008: native probe cleanup remains pending\n",stderr);fflush(stderr);
     _Exit(XR_CLI_EXIT_INTERNAL);
 }
-static int build_native_prepare(XrCompileResources *resources, const XrCliInvocation *inv,
+static int build_native_prepare(XrCompileState *state, const XrCliInvocation *inv,
     const XrXirNativeProjection *projection, XrXirNativeArtifact **artifact) {
+    XrCompileResources *resources=xr_compile_state_resources(state);
     XrCliToolchainConfig *config = NULL;
-    XrCliToolchainConfigStatus configured = xr_cli_toolchain_config_open(resources, NULL, &config);
+    XrCliToolchainConfigStatus configured = xr_cli_toolchain_config_open(state, NULL, &config);
     if (configured != XR_CLI_TOOLCHAIN_CONFIG_OK) {
         fprintf(stderr, "XR_BUILD_6010: toolchain preference snapshot failed (status=%u)\n", (unsigned)configured);
         return configured == XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;

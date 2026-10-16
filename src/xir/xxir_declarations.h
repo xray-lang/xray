@@ -24,6 +24,9 @@ typedef struct XrXirSourceModule {
     const uint32_t *dependencies;
     uint32_t dependency_count;
     uint32_t initializer;
+    /* Zero owns a lexical scope; otherwise one plus its canonical module.
+     * Storage and initialization retain this module's independent identity. */
+    uint32_t lexical_scope;
 } XrXirSourceModule;
 typedef enum XrXirMemberAccess {
     XR_XIR_MEMBER_PUBLIC, XR_XIR_MEMBER_PRIVATE, XR_XIR_MEMBER_PROTECTED

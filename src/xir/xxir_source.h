@@ -17,6 +17,7 @@
 struct XrCompilerSession;
 struct XrLockfile;
 struct XrXirLibraryCatalog;
+struct AstNode;
 typedef struct XrXirSourceRequest {
     struct XrCompilerSession *session;
     const char *entry_path;
@@ -55,6 +56,22 @@ typedef struct XrXirSourceText {
 XR_FUNC XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path);
+typedef struct XrXirSourceAst {
+    struct AstNode *program;
+    const char *logical_path;
+} XrXirSourceAst;
+/* Check the actual caller-owned AST through the same Source construction.
+ * The complete owning parser program and all its arena data are borrowed
+ * synchronously and preserved on success or failure. Its original compiler
+ * ledger must match the request; the producing session may already be dead.
+ * Identity/path rules match explicit text. No entry file or source text is
+ * consumed. Imports and declaration obligations retain ordinary admission.
+ * An AST has no source-byte digest: its query fingerprint is zero. The owned
+ * result has independently verified IR and copied query data, and outlives
+ * the AST, request and both sessions. No AST rendering/reparsing occurs. */
+XR_FUNC XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
+    const XrXirSourceAst *ast, XrXirSourceResult *output,
+    XrXirSourceDiagnostic *diagnostic, char **failure_path);
 /* Synchronously check a rooted entry with an immutable set of unsaved sources.
  * Entries are deep copied to the request ledger before discovery. The entry
  * may itself be absent on disk. Relative imports select each .xr or /index.xr

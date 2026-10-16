@@ -71,8 +71,7 @@ static void fixture(const char *path,bool write){
     CHECK(CloseHandle(file));
 }
 static XrCliToolchainUpdateStatus run(const XrCliToolchainUpdateRequest *request,size_t cut,
-    const XrCompileResourceLimits *limits,XrCompileResourceStats *stats,bool producer_death,
-    XrCliToolchainUpdateStatus construction_status){
+    const XrCompileResourceLimits *limits,XrCompileResourceStats *stats,bool producer_death){
     char path[4096],target[128],compiler[4096];
     XrCliToolchainUpdateRequest transient=*request;
     if(producer_death){
@@ -85,13 +84,18 @@ static XrCliToolchainUpdateStatus run(const XrCliToolchainUpdateRequest *request
     XrCompileResources *resources=NULL;XrCompileResourceStatus allocated=xr_compile_resources_new(limits,&resources);
     if(allocated!=XR_COMPILE_RESOURCE_OK){CHECK(!live);return allocated==XR_COMPILE_RESOURCE_BUDGET?
         XR_CLI_TOOLCHAIN_UPDATE_BUDGET:XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY;}
+    XrCompileState *state=NULL;allocated=xr_compile_state_new(resources,&state);
+    if(allocated!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_resources_release(resources);CHECK(!live);
+        return allocated==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET : XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY;
+    }
     XrCliToolchainUpdate *owner=NULL;
-    XrCliToolchainUpdateStatus status=xr_cli_toolchain_update_new(resources,request,&owner);
+    XrCliToolchainUpdateStatus status=xr_cli_toolchain_update_new(state,request,&owner);
     if(status==XR_CLI_TOOLCHAIN_UPDATE_OK){
         XrCliToolchainUpdate *occupied=owner;
-        CHECK(xr_cli_toolchain_update_new(resources,request,&occupied)==XR_CLI_TOOLCHAIN_UPDATE_INVALID&&occupied==owner);
+        CHECK(xr_cli_toolchain_update_new(state,request,&occupied)==XR_CLI_TOOLCHAIN_UPDATE_INVALID&&occupied==owner);
         if(producer_death){memset(path,0xcc,sizeof(path));memset(target,0xcc,sizeof(target));memset(compiler,0xcc,sizeof(compiler));
-            xr_compile_resources_release(resources);resources=NULL;}
+            xr_compile_state_release(state);state=NULL;xr_compile_resources_release(resources);resources=NULL;}
         status=xr_cli_toolchain_update_execute(owner);
         const XrCliToolchainUpdateView *view=xr_cli_toolchain_update_view(owner);CHECK(view&&view->path);
         CHECK(view->first_error==status);
@@ -102,46 +106,84 @@ static XrCliToolchainUpdateStatus run(const XrCliToolchainUpdateRequest *request
         CHECK(xr_compile_resources_stats(resources,stats)==XR_COMPILE_RESOURCE_OK);
         if(status==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY||status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET){
             XrCompileResourceStats before=*stats,after;
-            if(!owner){
-                /* Failed construction leaves no transaction to replay. A new
-                 * owner consumes the original ledger without refunding it. */
-                XrCliToolchainUpdateStatus retry=xr_cli_toolchain_update_new(resources,request,&owner);
-                CHECK(retry==(status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET ?
-                    XR_CLI_TOOLCHAIN_UPDATE_BUDGET : construction_status));
-                CHECK((retry==XR_CLI_TOOLCHAIN_UPDATE_OK)==(owner!=NULL));
-                CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
-                CHECK(after.allocated_bytes>=before.allocated_bytes&&after.work>=before.work);
-                CHECK(after.allocated_bytes<=limits->allocated_bytes&&after.peak_bytes<=limits->live_bytes&&
-                    after.work<=limits->work);
-                if(retry==XR_CLI_TOOLCHAIN_UPDATE_OK)
-                    CHECK(after.allocated_bytes>before.allocated_bytes&&after.work>before.work);
-            }else{
-                CHECK(xr_cli_toolchain_update_execute(owner)==status);
-                CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
-                CHECK(before.allocated_bytes==after.allocated_bytes&&before.work==after.work);
-            }
+            size_t attempts=calls;
+            if(!owner)CHECK(xr_cli_toolchain_update_new(state,request,&owner)==status&&!owner);
+            else CHECK(xr_cli_toolchain_update_execute(owner)==status);
+            XrCliToolchainUpdate *retry=NULL;XrCliToolchainConfig *snapshot=NULL;char *locator=NULL;
+            XrCliToolchainConfigStatus expected=status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET ?
+                XR_CLI_TOOLCHAIN_CONFIG_BUDGET : XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY;
+            CHECK(xr_cli_toolchain_update_new(state,request,&retry)==status && !retry);
+            CHECK(xr_cli_toolchain_config_open(state,request->path,&snapshot)==expected && !snapshot);
+            CHECK(xr_cli_toolchain_config_path(state,request->path,&locator)==expected && !locator && calls==attempts);
+            CHECK(xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK);
+            CHECK(before.allocated_bytes==after.allocated_bytes&&before.work==after.work);
         }
     }
     XrCliToolchainUpdateStatus close=XR_CLI_TOOLCHAIN_UPDATE_PENDING;
     for(unsigned i=0;i<64&&close==XR_CLI_TOOLCHAIN_UPDATE_PENDING;++i)close=xr_cli_toolchain_update_close(&owner);
     CHECK(close==XR_CLI_TOOLCHAIN_UPDATE_OK&&!owner);
-    xr_compile_resources_release(resources);
+    xr_compile_state_release(state);xr_compile_resources_release(resources);
     DWORD after_handles=handles();
     if(live||after_handles!=baseline)fprintf(stderr,"release: live=%zu handles=%lu baseline=%lu status=%u\n",live,after_handles,baseline,(unsigned)status);
     CHECK(!live&&after_handles==baseline);return status;
 }
+static void shared_state_failures(const char *path) {
+    for(unsigned family=0;family<6;++family) {
+        calls=0;fail_at=SIZE_MAX;DWORD baseline=handles();CHECK(!live);
+        XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&defaults,&resources)==XR_COMPILE_RESOURCE_OK);
+        XrCompileState *state=NULL;CHECK(xr_compile_state_new(resources,&state)==XR_COMPILE_RESOURCE_OK);
+        XrCliToolchainUpdateRequest request={path,"native","after.exe",NULL,XR_TOOLCHAIN_SELECTOR_MSVC,false};
+        XrCliToolchainConfig *snapshot=NULL;XrCliToolchainUpdate *transaction=NULL;
+        if(family==4)CHECK(xr_cli_toolchain_config_open(state,path,&snapshot)==XR_CLI_TOOLCHAIN_CONFIG_OK);
+        if(family==5)CHECK(xr_cli_toolchain_update_new(state,&request,&transaction)==XR_CLI_TOOLCHAIN_UPDATE_OK);
+        XrCompileResourceStatus fatal=family==3 ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
+        if(family==3)CHECK(xr_compile_state_work(state,UINT64_MAX)==fatal);
+        else {
+            fail_at=calls;
+            if(family==0 || family==4) {
+                XrCliToolchainConfig *empty=NULL;
+                CHECK(xr_cli_toolchain_config_open(state,path,&empty)==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY && !empty);
+            } else if(family==1) {
+                XrCliToolchainUpdate *empty=NULL;
+                CHECK(xr_cli_toolchain_update_new(state,&request,&empty)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY && !empty);
+            } else {
+                char *empty=NULL;
+                CHECK(xr_cli_toolchain_config_path(state,path,&empty)==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY && !empty);
+            }
+        }
+        CHECK(xr_compile_state_status(state)==fatal);
+        XrCliToolchainConfigStatus expected=family==3 ? XR_CLI_TOOLCHAIN_CONFIG_BUDGET : XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY;
+        XrCliToolchainUpdateStatus updated=family==3 ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET : XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY;
+        XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
+        size_t attempts=calls;XrCliToolchainConfig *empty=NULL;XrCliToolchainUpdate *retry=NULL;char *locator=NULL;
+        CHECK(xr_cli_toolchain_config_open(state,path,&empty)==expected && !empty);
+        CHECK(xr_cli_toolchain_config_path(state,path,&locator)==expected && !locator);
+        CHECK(xr_cli_toolchain_update_new(state,&request,&retry)==updated && !retry);
+        if(transaction)CHECK(xr_cli_toolchain_update_execute(transaction)==updated && !xr_cli_toolchain_update_view(transaction)->published);
+        if(snapshot)CHECK(xr_cli_toolchain_config_view(snapshot)->exists);
+        CHECK(calls==attempts && xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK &&
+            before.work==after.work && before.allocated_bytes==after.allocated_bytes && before.live_bytes==after.live_bytes);
+        fail_at=SIZE_MAX;xr_compile_state_release(state);xr_compile_resources_release(resources);
+        xr_cli_toolchain_config_free(snapshot);
+        CHECK(xr_cli_toolchain_update_close(&transaction)==XR_CLI_TOOLCHAIN_UPDATE_OK && !transaction);
+        CHECK(!live && handles()==baseline);
+    }
+    puts("Six real shared-state failures: config/update/path constructor OOM and work budget; cross-entry sticky/no work/allocation; retained snapshot/transaction after caller death; physical0/handles baseline");
+}
 static int test_main(int argc,char **argv){
     CHECK(argc>=3);
     winapi_control();
+    if(!strcmp(argv[2],"state")){shared_state_failures(argv[1]);return 0;}
 #ifdef UPDATE_INJECTED
     if(!strcmp(argv[2],"cleanup")){
         DWORD baseline=handles();CHECK(!live);calls=0;fail_at=SIZE_MAX;
         XrCompileResources *resources=NULL;CHECK(xr_compile_resources_new(&defaults,&resources)==XR_COMPILE_RESOURCE_OK);
+        XrCompileState *state=NULL;CHECK(xr_compile_state_new(resources,&state)==XR_COMPILE_RESOURCE_OK);
         XrCliToolchainUpdateRequest request={argv[1],"native","retained.exe",NULL,XR_TOOLCHAIN_SELECTOR_MSVC,false};
-        XrCliToolchainUpdate *owner=NULL;CHECK(xr_cli_toolchain_update_new(resources,&request,&owner)==XR_CLI_TOOLCHAIN_UPDATE_OK);
+        XrCliToolchainUpdate *owner=NULL;CHECK(xr_cli_toolchain_update_new(state,&request,&owner)==XR_CLI_TOOLCHAIN_UPDATE_OK);
         CHECK(xr_cli_toolchain_update_execute(owner)==XR_CLI_TOOLCHAIN_UPDATE_OK);
         XrCompileResourceStats before,after;CHECK(xr_compile_resources_stats(resources,&before)==XR_COMPILE_RESOURCE_OK);
-        xr_compile_resources_release(resources);
+        xr_compile_state_release(state);xr_compile_resources_release(resources);
         rejected_closes=2;
         for(unsigned i=0;i<2;++i){
             XrCliToolchainUpdate *original_owner=owner;
@@ -158,22 +200,22 @@ static int test_main(int argc,char **argv){
     if(!strcmp(argv[2],"faults")){
         XrCliToolchainUpdateRequest request={argv[1],"native","C:/after/编译器/cl.exe",NULL,XR_TOOLCHAIN_SELECTOR_MSVC,false};
         XrCompileResourceStats stats={0};
-        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,false,XR_CLI_TOOLCHAIN_UPDATE_OK)==XR_CLI_TOOLCHAIN_UPDATE_OK);
+        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,false)==XR_CLI_TOOLCHAIN_UPDATE_OK);
         size_t total=calls;
         for(size_t cut=0;cut<total;++cut){
             fixture(argv[1],true);XrCompileResourceStats unused={0};
-            CHECK(run(&request,cut,&defaults,&unused,false,XR_CLI_TOOLCHAIN_UPDATE_OK)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);fixture(argv[1],false);
+            CHECK(run(&request,cut,&defaults,&unused,false)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);fixture(argv[1],false);
         }
         const uint64_t bounds[3]={stats.allocated_bytes,stats.peak_bytes,stats.work};
         for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){
             fixture(argv[1],true);XrCompileResourceLimits limits=defaults;uint64_t bound=bounds[axis];CHECK(bound);
             uint64_t selected=delta<0?bound-1:bound+(unsigned)delta;
             if(axis==0)limits.allocated_bytes=selected;if(axis==1)limits.live_bytes=selected;if(axis==2)limits.work=selected;
-            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&limits,&unused,false,XR_CLI_TOOLCHAIN_UPDATE_OK);
+            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&limits,&unused,false);
             CHECK(status==(delta<0?XR_CLI_TOOLCHAIN_UPDATE_BUDGET:XR_CLI_TOOLCHAIN_UPDATE_OK));
             if(delta<0)fixture(argv[1],false);
         }
-        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,true,XR_CLI_TOOLCHAIN_UPDATE_OK)==XR_CLI_TOOLCHAIN_UPDATE_OK);
+        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,true)==XR_CLI_TOOLCHAIN_UPDATE_OK);
         printf("complete update cuts=%zu axes=3 physical=0 handles=baseline\n",total);return 0;
     }
     CHECK(argc==6);
@@ -181,7 +223,7 @@ static int test_main(int argc,char **argv){
     XrCliToolchainUpdateRequest request={argv[1],!strcmp(argv[2],"reset-all")?NULL:argv[3],
         !strcmp(argv[4],"-")?NULL:argv[4],NULL,reset?XR_TOOLCHAIN_SELECTOR_AUTO:XR_TOOLCHAIN_SELECTOR_MSVC,reset};
     XrCompileResourceStats stats={0};
-    XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&defaults,&stats,true,XR_CLI_TOOLCHAIN_UPDATE_OK);
+    XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&defaults,&stats,true);
     if(status!=atoi(argv[5]))fprintf(stderr,"actual status=%u expected=%s\n",(unsigned)status,argv[5]);
     CHECK(status==atoi(argv[5]));printf("status=%u\n",(unsigned)status);return 0;
 }

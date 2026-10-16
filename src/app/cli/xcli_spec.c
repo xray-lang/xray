@@ -141,6 +141,7 @@ static const XrCliOptionSpec toolchain_options[] = {
 
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 
+
 static const XrCliOptionSpec info_options[] = {
     {"installation", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Report installed payload identity and ownership paths"},
@@ -174,11 +175,12 @@ static XrCliCommandSpec cli_commands[] = {
     /* Artifact commands */
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
 
-    {"toolchain", "Read or update persistent native toolchain preferences", NULL,
-     toolchain_options, 1, 2, false, false, NULL, NULL, 0},
-
     /* Utility commands */
     {"deps", "Analyze source dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
+    {"toolchain", "Probe and manage native toolchains",
+     "probe [--target TARGET] [--provider PROVIDER]; list [--target TARGET]; config-path; use --target TARGET PROVIDER [--cc PATH | --zig PATH]; reset [--target TARGET]",
+     toolchain_options, 1, 2, false,
+     false, NULL, NULL, 0},
     {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,
      NULL, 0},
     {"doctor", "Diagnose Xray installation state", NULL, info_options, 0, 1, false, false, NULL,

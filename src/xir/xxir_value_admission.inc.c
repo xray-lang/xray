@@ -6,12 +6,34 @@
  *
  * xxir_value_admission.inc.c - Budgeted iterative authority traversal
  */
-typedef struct ValueAdmissionFrame {
-    union { XirObject *object; StorageSpan storage; };
-    size_t next, count;
-    uint32_t begin;
-    bool inline_storage;
+typedef union ValueAdmissionFrame {
+    struct {
+        bool inline_storage;
+        XirObject *object;
+        size_t next,count;
+    } boxed;
+    struct {
+        bool inline_storage;
+        XrXirType type;
+        const unsigned char *bytes;
+        const XrXirTypeArena *arena;
+        uint32_t begin,next,count;
+    } packed;
 } ValueAdmissionFrame;
+/* Both alternatives share their initial discriminator. Object owners already
+ * retain their arena; only inline fields need a separate coordinate. Closed
+ * field ordinals fit uint32_t while materialized Array indices remain size_t. */
+XR_STATIC_ASSERT(sizeof(ValueAdmissionFrame)<=40,"admission frames preserve the original bounded scratch footprint");
+static size_t admission_frame_next(const ValueAdmissionFrame *frame) {
+    return frame->boxed.inline_storage ? frame->packed.next : frame->boxed.next;
+}
+static size_t admission_frame_count(const ValueAdmissionFrame *frame) {
+    return frame->boxed.inline_storage ? frame->packed.count : frame->boxed.count;
+}
+static const XrXirTypeArena *admission_frame_arena(const ValueAdmissionFrame *frame) {
+    return frame->boxed.inline_storage ? frame->packed.arena : frame->boxed.object->arena;
+}
+
 typedef struct ValueAdmissionStack {
     ValueAdmissionFrame *frames;
     size_t depth, capacity, bytes;
@@ -69,35 +91,35 @@ static XrXirValueStatus array_needs_admission(const XirArray *array,
 }
 static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *arena,
     XrXirValue *value, StorageSpan *span, bool *inlined, bool *tuple_field) {
-    XR_CHECK(frame->next < frame->count, "admission cursor exceeded its validated owner");
-    size_t index = frame->next++;
-    *tuple_field=!frame->inline_storage && frame->object->kind==XR_XIR_TYPE_TUPLE;
-    *inlined = frame->inline_storage || frame->object->kind == XR_XIR_TYPE_ARRAY ||
-        frame->object->kind==XIR_OBJECT_CLASS;
-    if (!frame->inline_storage && frame->object->kind==XIR_OBJECT_CLASS) {
-        const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(arena),frame->object->type);
-        const XrXirStorageLayout *layout=class_body_layout(frame->object);
-        const unsigned char *body=(const unsigned char *)((const XirClassObject *)frame->object+1);
+    XR_CHECK(admission_frame_next(frame)<admission_frame_count(frame), "admission cursor exceeded its validated owner");
+    size_t index=frame->boxed.inline_storage ? frame->packed.next++ : frame->boxed.next++;
+    *tuple_field=!frame->boxed.inline_storage && frame->boxed.object->kind==XR_XIR_TYPE_TUPLE;
+    *inlined = frame->boxed.inline_storage || frame->boxed.object->kind == XR_XIR_TYPE_ARRAY ||
+        frame->boxed.object->kind==XIR_OBJECT_CLASS;
+    if (!frame->boxed.inline_storage && frame->boxed.object->kind==XIR_OBJECT_CLASS) {
+        const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(arena),frame->boxed.object->type);
+        const XrXirStorageLayout *layout=class_body_layout(frame->boxed.object);
+        const unsigned char *body=(const unsigned char *)((const XirClassObject *)frame->boxed.object+1);
         *span=(StorageSpan){node->nominal.fields[index],body+layout->field_offsets[index]};
-    } else if (frame->inline_storage) {
-        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), frame->storage.type);
-        const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(arena, frame->storage.type);
-        uint32_t field = frame->begin + (uint32_t)index;
+    } else if (frame->boxed.inline_storage) {
+        const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(arena), frame->packed.type);
+        const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(arena, frame->packed.type);
+        uint32_t field = frame->packed.begin + (uint32_t)index;
         *span = (StorageSpan){node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field],
-            frame->storage.bytes ? frame->storage.bytes +
+            frame->packed.bytes ? frame->packed.bytes +
                 (node->kind == XR_XIR_TYPE_NULLABLE ? layout->value.alignment : layout->field_offsets[field]) : NULL};
     } else if (*inlined) {
-        const XirArray *array = (const XirArray *)frame->object;
+        const XirArray *array = (const XirArray *)frame->boxed.object;
         *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
-    } else if (*tuple_field) *value=((XirTuple *)frame->object)->fields[index];
-    else *value = ((XirNominalValue *)frame->object)->fields[index];
+    } else if (*tuple_field) *value=((XirTuple *)frame->boxed.object)->fields[index];
+    else *value = ((XirNominalValue *)frame->boxed.object)->fields[index];
 }
 static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
-    StorageSpan span, XrXirValueAdmission *admission) {
+    StorageSpan span,const XrXirTypeArena *arena,XrXirValueAdmission *admission) {
     if (!admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
-    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, span.type);
+    const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(arena, span.type);
     if (!layout || (layout->value.size && !span.bytes)) return XR_XIR_VALUE_BAD_ARGUMENT;
     uint32_t begin = 0, count = node->nominal.field_count, variant = 0;
     if (node->kind == XR_XIR_TYPE_NULLABLE) {
@@ -109,8 +131,7 @@ static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
         if (variant >= identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
         begin = identity->variants[variant].field_begin; count = identity->variants[variant].field_count;
     }
-    return count ? admission_push(stack, (ValueAdmissionFrame){.storage = span, .count = count,
-        .begin = begin, .inline_storage = true}, admission) : XR_XIR_VALUE_OK;
+    return count ? admission_push(stack, (ValueAdmissionFrame){.packed={true,span.type,span.bytes,arena,begin,0,count}}, admission) : XR_XIR_VALUE_OK;
 }
 /* Ownership summary shares the authority walk and its existing work/scratch
  * charges. Empty or pure scalar/String aggregates need no foreign detachment. */
@@ -120,6 +141,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
     if (domain_sensitive) *domain_sensitive = false;
     if (!admission || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValueAdmissionStack stack = {0}; XrXirValue current = *value;
+    const XrXirTypeArena *arena=admission->arena;
     StorageSpan span = {0}; bool inlined = false, tuple_field=false;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
     for (;;) {
@@ -127,22 +149,25 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
             status = XR_XIR_VALUE_LIMIT; break;
         }
         --admission->work;
-        if (inlined && inline_nominal_type(xr_xir_compile_type_arena_types(admission->arena), type)) {
-            status = admission_inline(&stack, span, admission);
+        if (inlined && inline_nominal_type(xr_xir_compile_type_arena_types(arena), type)) {
+            status = admission_inline(&stack, span,arena,admission);
             if (status != XR_XIR_VALUE_OK) break;
         } else {
             if (inlined) {
                 XrXirLayout layout = {0};
-                if (!xr_xir_compile_type_arena_layout(admission->arena, type, &layout) || !layout.size ||
+                if (!xr_xir_compile_type_arena_layout(arena, type, &layout) || !layout.size ||
                     layout.size > sizeof(uint64_t) || !span.bytes) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
-                current = storage_leaf_value(type, span.bytes, layout.size);
+                if (!storage_leaf_value(arena,type,span.bytes,layout.size,&current)) {
+                    status=XR_XIR_VALUE_BAD_ARGUMENT;break;
+                }
             }
             if (type==XR_XIR_UNIT ? (!tuple_field || inlined || !unit_value(&current)) :
-                !xr_xir_value_argument(&current, admission->arena, type)) {
+                !xr_xir_value_argument(&current, arena, type)) {
                 status = XR_XIR_VALUE_BAD_ARGUMENT; break;
             }
             if (owned_carrier_type(type)) {
                 XirObject *object = object_pointer(&current);
+                arena=object->arena;type=object->type;
                 if (domain_sensitive && (object->kind == XIR_OBJECT_CLASS || object->kind == XIR_OBJECT_CELL ||
                     object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK))
                     *domain_sensitive = true;
@@ -162,7 +187,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                             status = XR_XIR_VALUE_LIMIT; break;
                         }
                         --admission->work;
-                        if (!stack.frames[i].inline_storage && stack.frames[i].object == object) {
+                        if (!stack.frames[i].boxed.inline_storage && stack.frames[i].boxed.object == object) {
                             count = 0; break;
                         }
                     }
@@ -198,15 +223,16 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 }
                 if (count) {
-                    status = admission_push(&stack, (ValueAdmissionFrame){.object = object, .count = count}, admission);
+                    status = admission_push(&stack, (ValueAdmissionFrame){.boxed={false,object,0,count}}, admission);
                     if (status != XR_XIR_VALUE_OK) break;
                 }
             }
         }
-        while (stack.depth && stack.frames[stack.depth - 1].next == stack.frames[stack.depth - 1].count)
+        while (stack.depth && admission_frame_next(&stack.frames[stack.depth-1])==admission_frame_count(&stack.frames[stack.depth-1]))
             --stack.depth;
         if (!stack.depth) break;
-        admission_child(&stack.frames[stack.depth - 1], admission->arena, &current, &span, &inlined, &tuple_field);
+        arena=admission_frame_arena(&stack.frames[stack.depth-1]);
+        admission_child(&stack.frames[stack.depth - 1], arena, &current, &span, &inlined, &tuple_field);
         type = inlined ? span.type : (XrXirType)current.type;
     }
     if (stack.frames) {

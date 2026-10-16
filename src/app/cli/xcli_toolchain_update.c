@@ -18,6 +18,7 @@
 
 #define UPDATE_BYTES (256 * 1024)
 struct XrCliToolchainUpdate {
+    XrCompileState *state;
     XrCompileResources *resources;
     XrOsIoPolicy policy;
     XrCliToolchainUpdateRequest request;
@@ -30,7 +31,15 @@ struct XrCliToolchainUpdate {
     XrFsExclusiveLock lock;
     bool executed;
 };
+static XrCliToolchainUpdateStatus update_resource_status(XrCompileResourceStatus status) {
+    return status==XR_COMPILE_RESOURCE_OK ? XR_CLI_TOOLCHAIN_UPDATE_OK :
+        status==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_TOOLCHAIN_UPDATE_BUDGET :
+        status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_UPDATE_INVALID;
+}
 static XrCliToolchainUpdateStatus update_fail(XrCliToolchainUpdate *owner, XrCliToolchainUpdateStatus status) {
+    if(status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET || status==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY)
+        status=update_resource_status(xr_compile_state_fail(owner->state,status==XR_CLI_TOOLCHAIN_UPDATE_BUDGET ?
+            XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
     if (owner->view.first_error == XR_CLI_TOOLCHAIN_UPDATE_OK) owner->view.first_error = status;
     return owner->view.first_error;
 }
@@ -210,27 +219,33 @@ static bool update_publication(XrCliToolchainUpdate *owner, XtcXirPublicationSta
         status == XTC_XIR_PUBLICATION_UNRESOLVED ? XR_CLI_TOOLCHAIN_UPDATE_UNRESOLVED :
         status == XTC_XIR_PUBLICATION_UNSUPPORTED ? XR_CLI_TOOLCHAIN_UPDATE_UNSUPPORTED : XR_CLI_TOOLCHAIN_UPDATE_IO) == XR_CLI_TOOLCHAIN_UPDATE_OK;
 }
-XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileResources *resources,
+XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileState *state,
     const XrCliToolchainUpdateRequest *request, XrCliToolchainUpdate **output) {
-    if (!resources || !request || !output || *output ||
+    if (!state || !request || !output || *output ||
         (!request->target && !request->reset) || request->selector > XR_TOOLCHAIN_SELECTOR_ZIG ||
         request->selector < XR_TOOLCHAIN_SELECTOR_AUTO ||
         (request->reset && (request->compiler || request->zig || request->selector != XR_TOOLCHAIN_SELECTOR_AUTO)) ||
         (request->compiler && request->selector == XR_TOOLCHAIN_SELECTOR_ZIG) ||
         (request->zig && request->selector != XR_TOOLCHAIN_SELECTOR_ZIG && request->selector != XR_TOOLCHAIN_SELECTOR_AUTO))
         return XR_CLI_TOOLCHAIN_UPDATE_INVALID;
+    XrCompileResourceStatus initial=xr_compile_state_status(state);
+    if(initial!=XR_COMPILE_RESOURCE_OK)return update_resource_status(initial);
 #ifndef XR_OS_WINDOWS
     return XR_CLI_TOOLCHAIN_UPDATE_UNSUPPORTED;
 #else
     XrCliToolchainUpdate *owner = NULL;
-    XrCompileResourceStatus allocated = xr_compile_resources_calloc(resources,1,sizeof(*owner),(void **)&owner);
-    if (allocated != XR_COMPILE_RESOURCE_OK) return allocated == XR_COMPILE_RESOURCE_BUDGET ?
-        XR_CLI_TOOLCHAIN_UPDATE_BUDGET : allocated == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ?
-        XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY : XR_CLI_TOOLCHAIN_UPDATE_INVALID;
+    XrCompileResourceStatus allocated = xr_compile_state_calloc(state,1,sizeof(*owner),(void **)&owner);
+    if (allocated != XR_COMPILE_RESOURCE_OK) return update_resource_status(allocated);
+    allocated=xr_compile_state_retain(state);
+    if(allocated!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_state_free(owner);return update_resource_status(xr_compile_state_fail(state,allocated));
+    }
+    owner->state=state;
+    XrCompileResources *resources=xr_compile_state_resources(state);
     owner->resources = resources; owner->policy = xr_compile_io_policy(resources);
     owner->request.selector = request->selector; owner->request.reset = request->reset;
     char *locator = NULL;
-    bool okay = update_fail(owner,update_config_status(xr_cli_toolchain_config_path(resources,request->path,&locator))) == XR_CLI_TOOLCHAIN_UPDATE_OK;
+    bool okay = update_fail(owner,update_config_status(xr_cli_toolchain_config_path(state,request->path,&locator))) == XR_CLI_TOOLCHAIN_UPDATE_OK;
     if (okay) okay = update_io(owner,xr_realpath_owned(&owner->policy,locator,&owner->path));
     xr_compile_resources_free(locator);
     if (okay) okay = update_copy(owner,request->target,127,&owner->target) && update_target(owner) &&
@@ -254,6 +269,8 @@ XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_new(XrCompileResource
 XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_execute(XrCliToolchainUpdate *owner) {
     if (!owner) return XR_CLI_TOOLCHAIN_UPDATE_INVALID;
     if (owner->view.first_error != XR_CLI_TOOLCHAIN_UPDATE_OK) return owner->view.first_error;
+    XrCompileResourceStatus state_status=xr_compile_state_status(owner->state);
+    if(state_status!=XR_COMPILE_RESOURCE_OK)return update_fail(owner,update_resource_status(state_status));
     if (owner->executed) return XR_CLI_TOOLCHAIN_UPDATE_INVALID;
     owner->executed = true;
     XrFsStat initial; XrOsIoStatus initial_status = xr_os_io_stat(&owner->policy,owner->path,&initial);
@@ -268,7 +285,7 @@ XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_execute(XrCliToolchai
         if (update_io(owner,xr_os_io_remove(&owner->policy,owner->path))) owner->view.removed = true;
         return owner->view.first_error;
     }
-    if (update_fail(owner,update_config_status(xr_cli_toolchain_config_open(owner->resources,owner->path,&owner->snapshot)))
+    if (update_fail(owner,update_config_status(xr_cli_toolchain_config_open(owner->state,owner->path,&owner->snapshot)))
         != XR_CLI_TOOLCHAIN_UPDATE_OK) return owner->view.first_error;
     if (owner->request.reset && !xr_cli_toolchain_config_view(owner->snapshot)->exists) return XR_CLI_TOOLCHAIN_UPDATE_OK;
     if (!update_serialize(owner)) return owner->view.first_error;
@@ -301,6 +318,8 @@ XR_FUNC XrCliToolchainUpdateStatus xr_cli_toolchain_update_close(XrCliToolchainU
     xr_cli_toolchain_config_free(owner->snapshot);
     xr_compile_resources_free(owner->bytes); xr_compile_resources_free(owner->lock_path);
     xr_compile_resources_free(owner->target); xr_compile_resources_free(owner->compiler); xr_compile_resources_free(owner->zig);
+    XrCompileState *state=owner->state;
     xr_compile_resources_free(owner->path); xr_compile_resources_free(owner); *handle = NULL;
+    xr_compile_state_release(state);
     return XR_CLI_TOOLCHAIN_UPDATE_OK;
 }

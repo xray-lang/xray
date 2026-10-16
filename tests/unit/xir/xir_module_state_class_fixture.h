@@ -79,10 +79,10 @@ static void state_class_fixture(StateClassFixture *f,uint32_t scenario,uint32_t 
     f->identities[6].nominal_owner=1;f->identities[6].method_kind=XR_XIR_READ_METHOD;
     f->functions[7]=(XrXirFunction){"consume",7,&f->class_type,1,XR_XIR_UNIT,&f->blocks[3],1,f->helper,3,NULL,0};
     f->identities[7].nominal_owner=1;f->identities[7].method_kind=XR_XIR_READ_METHOD;
-    f->modules[0]=(XrXirSourceModule){"base",4,NULL,0,0};
-    f->modules[1]=(XrXirSourceModule){"left",4,&f->base,1,1};
-    f->modules[2]=(XrXirSourceModule){"right",5,&f->base,1,2};
-    f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3};
+    f->modules[0]=(XrXirSourceModule){"base",4,NULL,0,0, 0};
+    f->modules[1]=(XrXirSourceModule){"left",4,&f->base,1,1, 0};
+    f->modules[2]=(XrXirSourceModule){"right",5,&f->base,1,2, 0};
+    f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3, 0};
     for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected?0:3,f->class_type,rejected==2?0:1};
     f->literal=(XrXirLiteral){"x",1};
     f->declarations=(XrXirDeclarations){f->modules,4,f->identities,f->slots,4,&f->literal,1,3,4,NULL};

@@ -156,7 +156,7 @@ static void path_ancestor_checked_cases(void) {
         {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,&blocks[1],1,main,2,NULL,0},
         {"path",4,&pair,1,XR_XIR_I64,&blocks[2],1,path,8,NULL,0}};
-    XrXirSourceModule source = {"alpha",5,NULL,0,0};
+    XrXirSourceModule source = {"alpha",5,NULL,0,0, 0};
     XrXirFunctionIdentity identities[3] = {{0}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
