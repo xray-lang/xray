@@ -30,4 +30,29 @@ class CalendarPaths(unittest.TestCase):
         self.assertEqual(model.log_observations()[:2],['LogLevel.Debug','LogLevel.Info'])
         self.assertEqual(model.milliseconds(datetime(2024,2,29,23,45,6,tzinfo=timezone.utc)),1709250306000)
 
+    def test_complete_file_logger_trace_keeps_write_flush_read_and_remove(self):
+        trace=model.log_file_trace();self.assertEqual(trace['outputs'],['LogLevel.'+level for level in ('Debug','Info','Warn','Error','Fatal')]+['Logger']+[True]*5)
+        self.assertEqual(trace['file_before_remove'],'INFO server started port=8080 host=localhost\nWARN slow response module=http ms=42\n{"level":"ERROR","msg":"request failed","module":"http","route":"/api","code":500}\nDEBUG queued ok=true\n')
+        self.assertEqual([event[0] for event in trace['events']],['writeFile']+['appendFile']*4+['readFile','remove'])
+        self.assertEqual(trace['queued_before_flush'],['DEBUG queued ok=true']);self.assertEqual(trace['queue_after_flush'],[]);self.assertFalse(trace['file_exists_after_remove'])
+
+    def test_logger_child_captures_configuration_and_output_switch_flushes_old_queue(self):
+        state=model.LogFixtureState();state.write_file('old','');state.write_file('new','');state.set_output('old')
+        child=state.child(state.root(),'module','http');state.format='JSON';state.level='Fatal'
+        state.emit(child,'Warn','before','x',7);self.assertEqual(state.files['old'],'WARN before module=http x=7\n')
+        state.level='Debug';state.enable_async(True);state.emit(state.root(),'Debug','queued','ok',True)
+        self.assertNotIn('queued',state.files['old']);state.set_output('new')
+        self.assertEqual(state.queue,[]);self.assertIn('"msg":"queued"',state.files['old']);self.assertEqual(state.files['new'],'')
+        state.emit(state.root(),'Debug','next');state.enable_async(False);self.assertIn('"msg":"next"',state.files['new'])
+        self.assertEqual(child[4],(('module','http'),));self.assertEqual(state.root()[4],())
+
+    def test_logger_filtered_calls_and_complete_source_binding(self):
+        from unittest.mock import patch
+        state=model.LogFixtureState();state.write_file('out','');state.set_output('out');state.enable_async(True)
+        state.emit(state.root(),'Debug','not enabled');self.assertEqual(state.queue,[])
+        row=next(row for row in model.expected_rows() if row['source'].endswith('/log_pure_module_direct.xr'))
+        self.assertEqual(row['observation_count'],11);self.assertFalse(row['required_semantic_trace']['file_exists_after_remove'])
+        with patch.dict(model._INPUTS,{row['source']:'0'*64}):
+            with self.assertRaisesRegex(ValueError,'source/authority changed'):model.expected_rows()
+
 if __name__=='__main__':unittest.main()

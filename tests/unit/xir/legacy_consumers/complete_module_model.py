@@ -174,6 +174,27 @@ _NAMES=frozenset({'_classlib','_cleanup_init_error','_cleanup_init_panic','_defa
 _PORT_KEYS=frozenset({'_classlib','xmod_class','_exported_struct_methods_lib','exported_struct_methods'})
 
 
+_REACHABILITY_PROGRAMS = {"_dead_net_helper":"tests/diff/cases/semantics/modules/_dead_net_helper.xr","xmod_dead_net_helper":"tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr","xmod_ptr_offset_imported_const":"tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr"}
+_INPUTS.update({"tests/diff/cases/semantics/modules/_dead_net_helper.xr":"fb8bd04809d12d90ca2f8e87f413652c88a073f807b6abb8696c1791c5649c41","tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr":"fd53364f9fade021d31902e558aca92c30f9867c6e9cb7b16c5f596163a2e4fc","tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr":"e92a9fe733e2c1697332e58ede3090b1689a8d910570e932eb6116bed4daa72f"})
+_REQUIRED_INPUTS += tuple(_REACHABILITY_PROGRAMS.values())
+_PROGRAMS.update(_REACHABILITY_PROGRAMS)
+_NAMES = _NAMES | frozenset(_REACHABILITY_PROGRAMS)
+_COMPANIONS.update({'_dead_net_helper':[], 'xmod_dead_net_helper':['tests/diff/cases/semantics/modules/_dead_net_helper.xr'], 'xmod_ptr_offset_imported_const':['tests/diff/cases/semantics/modules/_ptr_offset_const_lib.xr']})
+
+def reachability_traces():
+    declarations={'label':lambda:'dead-net-ok'}
+    page_text=(ROOT/'tests/diff/cases/semantics/modules/_ptr_offset_const_lib.xr').read_text(encoding='utf-8')
+    page=int(re.search(r'export const PAGE: u64 = ([0-9]+)',page_text).group(1))
+    allocation_size=8192;element_size=1;base_address=0x100000
+    q_address=base_address+page*element_size
+    return {'_dead_net_helper':{'outputs':[],'entered_function_bodies':[],'unreachable_net_calls_executed':0},
+            'xmod_dead_net_helper':{'outputs':[declarations['label']()],'entered_function_bodies':['label'],'unreachable_net_calls_executed':0},
+            'xmod_ptr_offset_imported_const':{'outputs':[q_address-base_address],'imported_PAGE':page,
+              'allocation_request_bytes':allocation_size,'foreign_malloc_calls':1,'foreign_free_calls':0,
+              'pointer_offset_calls':1,'pointed_u8_bytes':element_size,'pointer_dereferences':0,
+              'symbolic_base_address_not_observed':True,'actual_foreign_allocation_or_pointer_provenance_qualified':False}}
+
+
 def observations():
     traces={name:[] for name in ['_classlib','_default_arg_class_lib','_exported_struct_methods_lib','_inherit_lib','_ptr_offset_const_lib','_value_struct_arg_lib']}
     for suffix,channel in [('error','error'),('panic','panic')]:
@@ -228,6 +249,7 @@ def observations():
     traces['xmod_same_name_classes']=[factories['a','Options'](3)['weight'],factories['b','Options'](7)['weight'],factories['a','Options']()['weight'],factories['b','Options']()['weight']]
     methods={('a','Widget'):{'kind':100,'scale':1},('b','Widget'):{'kind':200,'scale':10}}
     traces['xmod_same_name_methods']=[methods['a','Widget']['kind'],methods['b','Widget']['kind'],3*methods['a','Widget']['scale'],3*methods['b','Widget']['scale']]
+    traces.update({name:trace['outputs'] for name,trace in reachability_traces().items()})
     if set(traces)!=_NAMES:raise ValueError('Complete module model lost a program')
     return traces
 
@@ -278,7 +300,8 @@ def expected_rows():
         exit_code,stderr=termination(name)
         rows.append({'id':'complete_module_'+name,'source':_PORTS.get(name,source),'original_source':source,'required_target':None,
             'expected':{'exit_code':exit_code,'stdout_utf8':''.join(render(value)+'\n' for value in values[name]),'stderr_utf8':stderr},
-            'model':'Complete original module obligation and full companion sources; independent initialization/call/value-copy events. Declaration-only execution does not invoke exports. Counter predicates are not physical release proof.',
+            'model':('Complete unchanged module source and exact companions; independent reachable label calls or imported u64 constant times u8 element size and address difference. Unused net body and original malloc without free preserved; no network,foreign allocation,pointer provenance,cleanup,FI or provider qualification.' if name in _REACHABILITY_PROGRAMS else 'Complete original module obligation and full companion sources; independent initialization/call/value-copy events. Declaration-only execution does not invoke exports. Counter predicates are not physical release proof.'),
             'observation_count':len(values[name]),'companions':list(_COMPANIONS[name]),
             'required_runtime_counter_predicates':[{'name':'liveBytes-beforeBytes','comparison':'<','limit':4096},{'name':'liveObjects-beforeObjects','comparison':'<','limit':100}] if name=='value_struct_return_release' else []})
+        if name in _REACHABILITY_PROGRAMS:rows[-1]['required_semantic_trace']={k:v for k,v in reachability_traces()[name].items() if k!='outputs'}
     return rows

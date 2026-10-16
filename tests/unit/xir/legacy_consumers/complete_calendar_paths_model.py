@@ -1,7 +1,7 @@
 """Independent complete calendar, POSIX path and typed log-level traces."""
 from pathlib import Path
 from datetime import datetime,timedelta,timezone
-import calendar,hashlib,posixpath
+import calendar,hashlib,json,posixpath
 
 ROOT=Path(__file__).resolve().parents[4]
 _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
@@ -25,6 +25,7 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e
  'tests/diff/cases/semantics/stdlib/datetime_core_direct.xr': '6e08d89f3daf3e8105f98616db0219dfd4f476768ff6d782c5c93d31c5175c4e',
  'tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr': '19734d46f7f1c2e1e9f794c50524345b52afb36424ab70661a4a56a6f5ac1374',
  'tests/diff/cases/semantics/stdlib/path_string_ops.xr': 'daecb9f8ca5a32e311b89c91991e718dcbb6334758d2b61d105a42a991ba4bbc'}
+_INPUTS['tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr'] = '12ce3045515296e42fb1b1bfa24e18254727302e0648a68fc45b47c74e933b2d'
 _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'spec/source/sections/004-3-expressions.md',
  'spec/source/sections/005-4-statements.md',
@@ -46,10 +47,12 @@ _REQUIRED_INPUTS = ('spec/source/sections/003-2-type-system.md',
  'tests/diff/cases/semantics/stdlib/datetime_core_direct.xr',
  'tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr',
  'tests/diff/cases/semantics/stdlib/path_string_ops.xr')
+_REQUIRED_INPUTS += ('tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr',)
 _PROGRAMS = {'datetime_core_direct': 'tests/diff/cases/semantics/stdlib/datetime_core_direct.xr',
  'log_level_enum_direct': 'tests/diff/cases/semantics/stdlib/log_level_enum_direct.xr',
  'path_string_ops': 'tests/diff/cases/semantics/stdlib/path_string_ops.xr'}
-_NAMES=frozenset({'datetime_core_direct','path_string_ops','log_level_enum_direct'})
+_PROGRAMS['log_pure_module_direct'] = 'tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr'
+_NAMES=frozenset({'datetime_core_direct','path_string_ops','log_level_enum_direct','log_pure_module_direct'})
 EPOCH=datetime(1970,1,1,tzinfo=timezone.utc)
 
 def milliseconds(value):
@@ -125,7 +128,64 @@ def log_observations():
     threshold=levels.index('Info');stored=['Fatal','Debug'];rows.extend([levels.index('Info')>=threshold,name('LogLevel',stored[0]),len(stored)])
     return rows
 
-def observations():return {'datetime_core_direct':calendar_observations(),'path_string_ops':path_observations(),'log_level_enum_direct':log_observations()}
+class LogFixtureState:
+    """Logical file and queue effects; no host clock, I/O or thread is used."""
+    levels=('Debug','Info','Warn','Error','Fatal')
+    def __init__(self):
+        self.level='Info';self.format='Text';self.output=None;self.async_mode=False
+        self.files={};self.queue=[];self.events=[]
+    def write_file(self,path,content):self.files[path]=content;self.events.append(('writeFile',path,content))
+    def append_line(self,path,line):
+        self.files[path]+=line+'\n';self.events.append(('appendFile',path,line+'\n'))
+    def root(self):return (self.level,self.format,self.output,self.async_mode,())
+    def child(self,parent,*fields):return (*parent[:4],parent[4]+tuple(zip(fields[::2],fields[1::2])))
+    def set_output(self,path):self.flush();self.output=path
+    def enable_async(self,enabled):
+        if not enabled and self.async_mode:self.flush()
+        self.async_mode=enabled
+    @staticmethod
+    def text(value):return str(value).lower() if type(value) is bool else str(value)
+    def emit(self,logger,level,message,*fields):
+        minimum,format,output,asynchronous,context=logger
+        if self.levels.index(level)<self.levels.index(minimum):return
+        attributes=(*context,*zip(fields[::2],fields[1::2]))
+        if format=='JSON':
+            payload={'level':level.upper(),'msg':message};payload.update(attributes)
+            line=json.dumps(payload,ensure_ascii=False,separators=(',',':'))
+        else:
+            def attribute(key,value):
+                text=self.text(value)
+                if any(char in text for char in (' ','"','=','\n','\t')):text='"'+text+'"'
+                return str(key)+'='+text
+            line=level.upper()+(' '+message if message else '')+''.join(' '+attribute(k,v) for k,v in attributes)
+        if asynchronous:self.queue.append(line)
+        else:self.append_line(output,line)
+    def flush(self):
+        while self.queue:self.append_line(self.output,self.queue.pop(0))
+    def read_file(self,path):self.events.append(('readFile',path));return self.files.get(path,'')
+    def remove(self,path):del self.files[path];self.events.append(('remove',path))
+
+
+def log_file_trace():
+    state=LogFixtureState();path='/tmp/xray_log_pure_module_direct.txt';state.write_file(path,'')
+    outputs=['LogLevel.'+level for level in state.levels]
+    state.set_output(path);state.level='Debug'
+    state.emit(state.root(),'Info','server started','port',8080,'host','localhost')
+    child=state.child(state.root(),'module','http');outputs.append('Logger')
+    state.emit(child,'Warn','slow response','ms',42)
+    state.format='JSON';child=state.child(state.root(),'module','http');child=state.child(child,'route','/api')
+    state.emit(child,'Error','request failed','code',500)
+    state.format='Text';state.enable_async(True);state.emit(state.root(),'Debug','queued','ok',True)
+    queued_before_flush=list(state.queue);state.flush();state.enable_async(False)
+    content=state.read_file(path)
+    outputs.extend(needle in content for needle in ['INFO server started','module=http','"level":"ERROR"','"route":"/api"','DEBUG queued'])
+    state.remove(path)
+    return {'outputs':outputs,'file_before_remove':content,'events':state.events,'queued_before_flush':queued_before_flush,
+            'queue_after_flush':list(state.queue),'file_exists_after_remove':path in state.files,
+            'logical_only_not_physical_IO_or_async_safety_qualification':True}
+
+
+def observations():return {'datetime_core_direct':calendar_observations(),'path_string_ops':path_observations(),'log_level_enum_direct':log_observations(),'log_pure_module_direct':log_file_trace()['outputs']}
 
 def expected_rows():
     if set(_INPUTS)!=set(_REQUIRED_INPUTS) or len(_REQUIRED_INPUTS)!=len(set(_REQUIRED_INPUTS)) or set(_PROGRAMS)!=_NAMES or len(set(_PROGRAMS.values()))!=len(_NAMES):raise ValueError('Calendar/path exact identity set changed')
@@ -139,6 +199,7 @@ def expected_rows():
         if source!='tests/diff/cases/semantics/stdlib/'+name+'.xr' or source not in _INPUTS:raise ValueError('Calendar/path original source identity changed')
         rows.append({'id':'complete_calendar_paths_'+name,'source':source,'original_source':source,'required_target':None,
          'expected':{'exit_code':0,'stdout_utf8':''.join((str(v).lower() if type(v) is bool else str(v))+'\n' for v in values),'stderr_utf8':''},
-         'model':'Complete original source; independent civil calendar and POSIX path components plus nominal enum levels. No clock/cwd/host timezone oracle,whole-library/provider/lifetime qualification.',
+         'model':('Complete unchanged log source; independent ordered file writes,Logger configuration snapshots,child context,typed formatting,async enqueue/flush/read/remove trace. Logical trace is not host I/O,queue-boundary,failure,thread,lifetime or provider qualification.' if name=='log_pure_module_direct' else 'Complete original source; independent civil calendar and POSIX path components plus nominal enum levels. No clock/cwd/host timezone oracle,whole-library/provider/lifetime qualification.'),
          'observation_count':len(values)})
+        if name=='log_pure_module_direct':rows[-1]['required_semantic_trace']={k:v for k,v in log_file_trace().items() if k!='outputs'}
     return rows

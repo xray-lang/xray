@@ -31437,6 +31437,145 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 4
+    },
+    {
+      "id": "complete_calendar_paths_log_pure_module_direct",
+      "oracle_id": "complete_calendar_paths_log_pure_module_direct",
+      "source": "tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr",
+      "source_lf_sha256": "12ce3045515296e42fb1b1bfa24e18254727302e0648a68fc45b47c74e933b2d",
+      "entry": "run",
+      "stdout_utf8": "LogLevel.Debug\nLogLevel.Info\nLogLevel.Warn\nLogLevel.Error\nLogLevel.Fatal\nLogger\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged log source; independent ordered file writes,Logger configuration snapshots,child context,typed formatting,async enqueue/flush/read/remove trace. Logical trace is not host I/O,queue-boundary,failure,thread,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr",
+        "source_lf_sha256": "12ce3045515296e42fb1b1bfa24e18254727302e0648a68fc45b47c74e933b2d"
+      },
+      "remaining_gates": [
+        "All original statements,imports,complete companions,unused net body,malloc8192/no-free,pointer offset and log queue/file cleanup retained without source edits.",
+        "Logical expectations only;actual VM,C,native and complete compiler/runtime FI,resource,lifetime,sanitizer,provider,mixed gates remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
+    },
+    {
+      "id": "complete_module__dead_net_helper",
+      "oracle_id": "complete_module__dead_net_helper",
+      "source": "tests/diff/cases/semantics/modules/_dead_net_helper.xr",
+      "source_lf_sha256": "fb8bd04809d12d90ca2f8e87f413652c88a073f807b6abb8696c1791c5649c41",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged module source and exact companions; independent reachable label calls or imported u64 constant times u8 element size and address difference. Unused net body and original malloc without free preserved; no network,foreign allocation,pointer provenance,cleanup,FI or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/modules/_dead_net_helper.xr",
+        "source_lf_sha256": "fb8bd04809d12d90ca2f8e87f413652c88a073f807b6abb8696c1791c5649c41"
+      },
+      "remaining_gates": [
+        "All original statements,imports,complete companions,unused net body,malloc8192/no-free,pointer offset and log queue/file cleanup retained without source edits.",
+        "Logical expectations only;actual VM,C,native and complete compiler/runtime FI,resource,lifetime,sanitizer,provider,mixed gates remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_module_xmod_dead_net_helper",
+      "oracle_id": "complete_module_xmod_dead_net_helper",
+      "source": "tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr",
+      "source_lf_sha256": "fd53364f9fade021d31902e558aca92c30f9867c6e9cb7b16c5f596163a2e4fc",
+      "entry": "run",
+      "stdout_utf8": "dead-net-ok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        "tests/diff/cases/semantics/modules/_dead_net_helper.xr"
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged module source and exact companions; independent reachable label calls or imported u64 constant times u8 element size and address difference. Unused net body and original malloc without free preserved; no network,foreign allocation,pointer provenance,cleanup,FI or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr",
+        "source_lf_sha256": "fd53364f9fade021d31902e558aca92c30f9867c6e9cb7b16c5f596163a2e4fc"
+      },
+      "remaining_gates": [
+        "All original statements,imports,complete companions,unused net body,malloc8192/no-free,pointer offset and log queue/file cleanup retained without source edits.",
+        "Logical expectations only;actual VM,C,native and complete compiler/runtime FI,resource,lifetime,sanitizer,provider,mixed gates remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_module_xmod_ptr_offset_imported_const",
+      "oracle_id": "complete_module_xmod_ptr_offset_imported_const",
+      "source": "tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr",
+      "source_lf_sha256": "e92a9fe733e2c1697332e58ede3090b1689a8d910570e932eb6116bed4daa72f",
+      "entry": "run",
+      "stdout_utf8": "4096\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        "tests/diff/cases/semantics/modules/_ptr_offset_const_lib.xr"
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged module source and exact companions; independent reachable label calls or imported u64 constant times u8 element size and address difference. Unused net body and original malloc without free preserved; no network,foreign allocation,pointer provenance,cleanup,FI or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/modules/xmod_ptr_offset_imported_const.xr",
+        "source_lf_sha256": "e92a9fe733e2c1697332e58ede3090b1689a8d910570e932eb6116bed4daa72f"
+      },
+      "remaining_gates": [
+        "All original statements,imports,complete companions,unused net body,malloc8192/no-free,pointer offset and log queue/file cleanup retained without source edits.",
+        "Logical expectations only;actual VM,C,native and complete compiler/runtime FI,resource,lifetime,sanitizer,provider,mixed gates remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
     }
   ]
 }
