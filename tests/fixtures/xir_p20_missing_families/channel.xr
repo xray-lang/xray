@@ -1,0 +1,7 @@
+export fn inspect() -> i64 {
+    const conduit = Channel<i64>(1)
+    conduit.send(42)
+    const value = conduit.recvOr(0)
+    conduit.close()
+    return value
+}

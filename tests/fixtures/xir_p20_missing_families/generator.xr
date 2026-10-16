@@ -1,0 +1,9 @@
+fn values() -> Iterator<i64> {
+    yield 17
+    yield 25
+}
+
+export fn inspect() -> i64 {
+    const cursor = values()
+    return cursor.next() + cursor.next()
+}
