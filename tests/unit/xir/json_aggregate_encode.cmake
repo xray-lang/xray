@@ -15,3 +15,6 @@ endif()
 add_test(NAME test_xir_json_aggregate_encode COMMAND test_xir_json_aggregate_encode)
 set_tests_properties(test_xir_json_aggregate_encode PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;source;ctfe;generated;json;library;ownership")
+add_test(NAME test_xir_json_aggregate_encode_negative COMMAND test_xir_json_aggregate_encode --negative)
+set_tests_properties(test_xir_json_aggregate_encode_negative PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;ctfe;generated;json;library;ownership;negative")

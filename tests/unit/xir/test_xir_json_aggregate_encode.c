@@ -23,6 +23,7 @@ static XrXirCompileContext aggregate_context(void) {
     XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();return context;
 }
+#include "xir_json_aggregate_encode_negative.h"
 static void aggregate_source(const XrXirCompileContext *context,const XrXirLibraryCatalog *catalog,
     const char *text,XrXirLinkageKind kind,XrXirSourceResult *output) {
     const char *logical=kind==XR_XIR_LIBRARY?"json_aggregates.xr":"future_json_aggregates.xr";char path[2048];
@@ -51,7 +52,8 @@ static XrXirValue aggregate_call(XrXirProgram *program,uint32_t entry) {
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);return value;
 }
-int main(void) {
+int main(int argc,char **argv) {
+    bool negative=argc==2 && !strcmp(argv[1],"--negative");CHECK(argc==1 || negative);
     char source[24000];int n=snprintf(source,sizeof(source),aggregate_generator_format,generated_schema_source,
         XR_XIR_CONST_STRING,XR_XIR_STRUCT_GET,XR_XIR_TO_STRING,XR_XIR_CONCAT_STRING,XR_XIR_RETURN,XR_XIR_CALL,
         XR_XIR_I64,XR_XIR_TYPE_ARRAY,XR_XIR_TYPE_NULLABLE,XR_XIR_STRING);CHECK(n>0 && n<(int)sizeof(source));
@@ -64,6 +66,12 @@ int main(void) {
     CHECK(xr_compile_resources_alloc(transport.resources,original.length,&owned)==XR_COMPILE_RESOURCE_OK);
     packet.bytes=owned;packet.length=original.length;memcpy(packet.bytes,original.bytes,packet.length);
     memset(original.bytes,0xa5,original.length);xr_xir_compile_checked_packet_free(&original);xr_compile_resources_release(producer.resources);
+    if(negative) {
+        for(unsigned variant=0;variant<4;++variant)aggregate_reject(&packet,variant);
+        memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_release(transport.resources);
+        CHECK(!runtime_live && !runtime_bytes && !source_fixture_compile_live && !source_fixture_compile_bytes);
+        puts("Actual missing private READ and unsupported Array/nullable element types rejected with empty outputs and physical0");return 0;
+    }
     XrXirCompileContext receiver=aggregate_context();XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_AGGREGATE_WORK},"json_aggregates.xr"};
     XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&receiver,&input,1,&catalog)==XR_XIR_OK);
