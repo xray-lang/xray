@@ -27,6 +27,10 @@ typedef struct XrSourceSubmissionConfig {
  * preparation. This coordinator does not synthesize historical source bindings. */
 XR_FUNC XrSourceStatus xr_source_submission_new(const XrSourceSubmissionConfig *, XrSourceSubmission **);
 XR_FUNC XrSourceStatus xr_source_submission_prepare(XrSourceSubmission *, const XrXirSourceText *, XrXirSourceDiagnostic *);
+/* Shares the authentic immutable parser owner into the same Source/Instance
+ * transaction. Failure preserves the input owner and published state. Success
+ * permits producer disposal; history retains the AST until coordinator drop. */
+XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *, const XrXirSourceAstOwner *, XrXirSourceDiagnostic *);
 /* Poll output borrows until the next successful state change. Take copies one
  * genuine terminal outcome; failed copy preserves the terminal and output. */
 XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *, uint64_t quantum, XrXirInstanceResult *);

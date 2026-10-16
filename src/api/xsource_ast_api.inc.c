@@ -23,6 +23,8 @@ static void api_parse_error(void *context,int line,int column,int end_line,int e
 }
 XRAY_API void xray_source_ast_free(XrSourceAst *ast) {
     if(!ast)return;
+    XR_CHECK(ast->references,"a parser AST reference is owned before release");
+    if(--ast->references)return;
     xr_program_destroy(ast->program);
     xr_compile_state_free(ast->source);xr_compile_state_free(ast->path);xr_compile_state_free(ast->namespace_id);
     xr_compile_state_release(ast->state);xr_compile_state_free(ast);
@@ -69,6 +71,7 @@ XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *compiler,const 
     if(diagnostic)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*detail),(void **)&detail));
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*ast),(void **)&ast));
     if(status==XR_SOURCE_OK) {
+        ast->references=1;
         status=api_resource(xr_compile_state_retain(state));
         if(status==XR_SOURCE_OK){ast->state=state;status=api_parse_owned(compiler,text,ast,detail);}
     }
@@ -80,6 +83,26 @@ XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *compiler,const 
         if(detail){detail->detail.status=api_compile_failure(status);detail->detail.stage=XR_SOURCE_COMPILE_INPUT;*diagnostic=detail;}
     }
     return status;
+}
+static XrXirStatus api_ast_retain(void *context,const XrXirSourceAst *input) {
+    XrSourceAst *ast=context;
+    if(!ast || !ast->state || !ast->program || !ast->references || !input ||
+        input->program!=ast->program || input->logical_path!=ast->path)return XR_XIR_BAD_STRUCTURE;
+    if(ast->references==UINT32_MAX)return XR_XIR_BUDGET;
+    XrCompileResourceStatus status=xr_compile_state_work(ast->state,1);
+    if(status!=XR_COMPILE_RESOURCE_OK)return status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ?
+        XR_XIR_OUT_OF_MEMORY : status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+    ++ast->references;return XR_XIR_OK;
+}
+static void api_ast_release(void *context) {xray_source_ast_free(context);}
+XR_FUNC XrSourceStatus xr_source_ast_owned_input(const XrSourceAst *ast,XrXirSourceAstOwner *output) {
+    if(!ast || !ast->state || !ast->program || !ast->references || !output || output->input.program ||
+        output->input.logical_path || output->resources || output->owner || output->retain || output->release)
+        return XR_SOURCE_BAD_ARGUMENT;
+    *output=(XrXirSourceAstOwner){.input={ast->program,ast->path},
+        .resources=xr_compile_state_resources(ast->state),.owner=(void *)ast,
+        .retain=api_ast_retain,.release=api_ast_release};
+    return XR_SOURCE_OK;
 }
 XRAY_API XrSourceStatus xray_source_compile_ast(XrSourceCompiler *compiler,const XrSourceAst *ast,
     XrSourceProgram **output,XrSourceDiagnostic **diagnostic) {

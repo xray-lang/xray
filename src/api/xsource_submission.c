@@ -119,7 +119,10 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
     if(status==XR_XIR_OK) {stage="Source physical lowering";status=xr_xir_compile_lower(closed,&owner->target,&lowered,NULL);}
     if(status==XR_XIR_OK) {stage="Source physical declaration correspondence";status=submission_lowered_bindings(bindings,closed,lowered);}
     xr_xir_compile_artifact_free(closed);
-    if(status==XR_XIR_OK) {stage="Source public Program admission";status=xr_xir_compile_source_lowered_public_admit(lowered,diagnostic);}
+    /* This private Program cannot escape the paired transaction. Binding below
+     * checks complete history coverage of active foreign mutable slots; actual
+     * Instance preparation authenticates their published birth storage before
+     * any entry starts. Fresh public Programs retain their separate admission. */
     if(status==XR_XIR_OK) {
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
         const XrXirDeclarations *declarations=module?module->declarations:NULL;
@@ -130,7 +133,7 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
     }
     if(status==XR_XIR_OK) {stage="Source Program transfer";status=xr_xir_compile_vm_program_take(&lowered,output);}
     if(status==XR_XIR_OK) {
-        stage="Source sealed Program correspondence";
+        stage="Source sealed Program and storage correspondence";
         status=xr_xir_compile_source_generation_bind_program(owner->source,owner->source_serial,*output);
     }
     xr_xir_compile_artifact_free(lowered);
@@ -141,15 +144,22 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
     }
     return submission_capture(owner,submission_xir(status));
 }
-XR_FUNC XrSourceStatus xr_source_submission_prepare(XrSourceSubmission *owner,const XrXirSourceText *text,
+typedef struct SubmissionInput {
+    const XrXirSourceText *text;
+    const XrXirSourceAstOwner *ast;
+} SubmissionInput;
+static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const SubmissionInput *input,
     XrXirSourceDiagnostic *diagnostic) {
-    if(!owner || !text)return XR_SOURCE_BAD_ARGUMENT;
+    if(!owner || !input || ((input->text==NULL)==(input->ast==NULL)))return XR_SOURCE_BAD_ARGUMENT;
     if(owner->busy)return XR_SOURCE_BUSY;
     if(owner->source_serial)return XR_SOURCE_BAD_STATE;
     XrSourceStatus status=submission_resource(xr_compile_state_status(owner->state));
     if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;
-    status=submission_capture(owner,submission_xir(xr_xir_compile_source_generation_prepare_bindings(owner->source,text,&owner->source_serial,diagnostic)));
+    XrXirStatus prepared=input->ast ? xr_xir_compile_source_generation_prepare_ast_bindings(owner->source,
+        input->ast,&owner->source_serial,diagnostic) : xr_xir_compile_source_generation_prepare_bindings(owner->source,
+        input->text,&owner->source_serial,diagnostic);
+    status=submission_capture(owner,submission_xir(prepared));
     if(status==XR_SOURCE_OK)status=submission_capture(owner,submission_resource(xr_compile_state_calloc(owner->state,
         1,sizeof(*owner->pending_birth),(void **)&owner->pending_birth)));
     XrXirProgram *program=NULL;uint32_t entry=UINT32_MAX;
@@ -170,6 +180,16 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare(XrSourceSubmission *owner,co
         if(cleanup!=XR_XIR_CALL_READY)status=submission_call(cleanup);
     }
     owner->busy=false;return status;
+}
+XR_FUNC XrSourceStatus xr_source_submission_prepare(XrSourceSubmission *owner,const XrXirSourceText *text,
+    XrXirSourceDiagnostic *diagnostic) {
+    const SubmissionInput input={.text=text};
+    return submission_prepare(owner,&input,diagnostic);
+}
+XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *owner,const XrXirSourceAstOwner *ast,
+    XrXirSourceDiagnostic *diagnostic) {
+    const SubmissionInput input={.ast=ast};
+    return submission_prepare(owner,&input,diagnostic);
 }
 XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *owner,uint64_t quantum,XrXirInstanceResult *output) {
     if(!owner || !output || !quantum)return XR_SOURCE_BAD_ARGUMENT;

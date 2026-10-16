@@ -152,13 +152,15 @@ static void reads_history_admission(void) {
     const char *source="const answer=read()\n";
     XrXirSourceText text={NULL,source,strlen(source)};XrXirSourceDiagnostic diagnostic={0};
     XrSourceStatus status=xr_source_submission_prepare(owned.owner,&text,&diagnostic);
-    if(status!=XR_SOURCE_REJECTED || !strstr(diagnostic.message,"library mutable"))
+    if(status!=XR_SOURCE_OK)
         fprintf(stderr,"active history status=%u line=%d message=%s\n",status,diagnostic.line,diagnostic.message);
-    CHECK(status==XR_SOURCE_REJECTED && strstr(diagnostic.message,"library mutable"));
+    CHECK(status==XR_SOURCE_OK && submission_finish(&owned)==XR_XIR_CALL_RETURNED);
+    CHECK(xr_source_submission_publish(owned.owner)==XR_SOURCE_OK);
     CHECK(owned.outputs==1);
     reads_scalar(&owned,"value",XR_XIR_I64,11);reads_scalar(&owned,"future",XR_XIR_BOOL,1);
+    reads_scalar(&owned,"answer",XR_XIR_I64,11);
     submission_close(&owned);
-    puts("Inactive history retains its actual birth reader without initializer replay; active foreign mutable storage refused; physical0");
+    puts("Active history uses actual published birth storage without initializer replay; original value11 and output17 once; physical0");
 }
 static void reads_history_receiving(void) {
     SubmissionOwners owned={0};CHECK(submission_open(&owned,&generous)==XR_SOURCE_OK);

@@ -7,6 +7,7 @@
  * xsource_api.c - Public ownership at the ordinary compiler and HostCall boundary
  */
 #include "xsource_api.h"
+#include "xsource_ast_owner.h"
 #include "../../include/xray_source_ast.h"
 #include "../../include/xray_source_entry.h"
 #include "../../include/xray_source_instance.h"
@@ -37,6 +38,7 @@ struct XrSourceAst {
     XrCompileState *state;
     AstNode *program;
     char *source, *path, *namespace_id;
+    uint32_t references;
 };
 struct XrSourceResult { XrXirCallResult value; XrCompileResources *resources; };
 struct XrSourceValue { XrXirValue value; XrCompileResources *resources; };
