@@ -228,10 +228,10 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
         break;
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT: case XR_XIR_TIMER_AFTER_MS:
-        /* A checked history body retains its original host-clock semantics.
-         * These operands carry no artifact-global declaration coordinates. */
-        if (!map->history)
-            return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program clock operations require a history owner");
+        /* Clock operands stay local in history bodies. Ordinary Catalog
+         * imports retain the same admitted subset as other local operations. */
+        if (!map->history && !library_catalog_local_instruction(result.op))
+            return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library clock instruction remapping is not admitted");
         break;
     case XR_XIR_ASSERT_CONDITION: case XR_XIR_INVOKE_INDIRECT:
     case XR_XIR_INVOKE_DISCARD: case XR_XIR_PANIC_CATCH:

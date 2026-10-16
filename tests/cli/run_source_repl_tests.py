@@ -21,7 +21,7 @@ def main() -> None:
     parser.add_argument("--stdlib", type=Path, required=True)
     args = parser.parse_args()
     binary = args.binary.resolve()
-    environment = dict(os.environ, XRAY_STDLIB=str(args.stdlib.resolve()), NO_COLOR="1")
+    environment = dict(os.environ, XRAY_STDLIB_PATH=str(args.stdlib.resolve()), NO_COLOR="1")
     with tempfile.TemporaryDirectory(prefix="xray-source-repl-") as temporary:
         root = Path(temporary)
         def invoke(source: bytes, *options: str) -> subprocess.CompletedProcess[bytes]:
