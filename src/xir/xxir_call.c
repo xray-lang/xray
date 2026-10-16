@@ -349,7 +349,6 @@ typedef struct CallFramePreparation {
 static XrXirCallStatus frame_class_recheck(XrXirCall *call, const CallFrame *frame,
     const CallFramePreparation *preparation) {
     if (!frame->parent || !frame->loan_count) return XR_XIR_CALL_READY;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
     bool identity = false;
     for (uint32_t i = 0; i < frame->loan_count; ++i) {
         if (!call_cell_work(call, 1)) return XR_XIR_CALL_LIMIT;
@@ -357,7 +356,8 @@ static XrXirCallStatus frame_class_recheck(XrXirCall *call, const CallFrame *fra
         if (parameter >= frame->entry->parameter_count) return XR_XIR_CALL_BAD_STATE;
         const XrXirValue *root = xr_xir_cell_canonical_root(&frame->arguments[parameter]);
         if (!root) return XR_XIR_CALL_BAD_STATE;
-        identity |= xr_xir_type_is_class(types, (XrXirType)root->type);
+        identity |= xr_xir_type_is_class(xr_xir_compile_type_arena_types(xr_xir_value_arena(root)),
+            (XrXirType)root->type);
     }
     if (!identity) return XR_XIR_CALL_READY;
     if (!call->active_view || !preparation->function || call->top != frame->parent)

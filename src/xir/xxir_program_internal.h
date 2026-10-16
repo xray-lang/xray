@@ -31,6 +31,8 @@ typedef struct XrXirProgramPermission {
 } XrXirProgramPermission;
 typedef struct XrXirProgramPermissions {
     uint32_t function_count, slot_count;
+    /* Maximum sealed frame, outgoing values and path scratch, in bytes. */
+    uint64_t frame_bytes;
     XrXirProgramPermission *entries;
     XrXirProgramFunctionRef *references;
     uint32_t *parameter_offsets;

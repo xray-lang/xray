@@ -297,17 +297,22 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGen
     if (!record || record->view.serial!=serial) return XR_XIR_BAD_STAGE;
     if (record->unit.program) return record->unit.program==program ? XR_XIR_OK : XR_XIR_BAD_STAGE;
     if (program->context.resources!=owner->config.context.resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirArtifact *closed=NULL,*lowered=NULL;
+    if (!program->permissions) return XR_XIR_BAD_STRUCTURE;
+    if (program->permissions->frame_bytes>owner->config.context.limits.frame_bytes) return XR_XIR_BUDGET;
+    XrXirArtifact *closed=NULL;XrXirCheckedPacket packet={0};
     XrXirStatus status=xr_xir_compile_specialize(record->result.checked,&closed,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&program->target,&lowered,NULL);
-    if (status==XR_XIR_OK && !xir_compile_work(&owner->config.context,sizeof(program->checked_identity)))
+    if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(closed,&packet,NULL);
+    if (status==XR_XIR_OK && (packet.length>UINT64_MAX-sizeof(program->checked_identity) ||
+        !xir_compile_work(&owner->config.context,packet.length+sizeof(program->checked_identity))))
         status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
-        XrXirProgramProof proof=xr_xir_compile_program_proof(lowered);
-        if (!proof.identity || memcmp(proof.identity,program->checked_identity,sizeof(program->checked_identity)))
+        /* Sealing already proved target code, layouts and their complete frame
+         * bound. Receiving independently reconstructs the same canonical bytes. */
+        uint8_t identity[32];xr_sha256(packet.bytes,packet.length,identity);
+        if (memcmp(identity,program->checked_identity,sizeof(identity)))
             status=XR_XIR_BAD_STRUCTURE;
     }
-    xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(closed);
     if (status!=XR_XIR_OK) return status;
     status=generation_program_correspondence(&owner->config.context,record,program);
     if (status!=XR_XIR_OK) return status;

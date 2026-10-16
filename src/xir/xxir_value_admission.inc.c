@@ -219,7 +219,10 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                         type = cell->projection_count ? (XrXirType)cell->value.type :
                             xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), type);
                         tuple_field = !cell->projection_count && type == XR_XIR_UNIT;
-                        current = cell->value; inlined = false; continue;
+                        current=cell->value;
+                        /* A projection retains its actual root, not a value in its own storage type. */
+                        if (cell->projection_count) arena=xr_xir_value_arena(&current);
+                        inlined=false;continue;
                     } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 }
                 if (count) {

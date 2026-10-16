@@ -1117,11 +1117,11 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                 " return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, concrete, {0}, 0}; }\n");
             return;
         }
-        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, {%uu, 0, ",
-               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN", type);
-        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "0");
-        else EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
-        EMIT_LITERAL(buffer, "}, {0}, 0};\n");
+        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, ",
+               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN");
+        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "{0}");
+        else emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer, ", {0}, 0};\n");
         return;
     }
     default:

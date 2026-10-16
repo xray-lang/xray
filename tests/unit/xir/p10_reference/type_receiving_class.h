@@ -57,6 +57,7 @@ static void received_class_storage(SourceFixtureOwner *compiler) {
     CHECK(xr_xir_class_authorized_path_write(&object,&authority,&path,&scalar,&admission,&fault)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_project_authorized(type(2),&object,&path,&authority,&admission,&projection)==XR_XIR_VALUE_OK);
     CHECK(projection.type==(uint32_t)type(2) && xr_xir_value_arena(&projection)==target);
+    CHECK(xr_xir_value_admit(&projection,type(2),&admission)==XR_XIR_VALUE_OK);
     xr_xir_cell_loan_release(&whole);
     CHECK(xr_xir_cell_loan_prepare_path(&projection,&authority,&admission,&fault,&leaf)==XR_XIR_VALUE_OK);
     xr_xir_cell_loan_commit(&projection,&leaf,&child);

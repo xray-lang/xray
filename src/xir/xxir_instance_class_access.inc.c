@@ -28,20 +28,6 @@ static const XrXirValue *instance_class_root(const XrXirInstance *instance,const
     return root && xr_xir_type_is_class(xr_xir_compile_type_arena_types(xr_xir_value_arena(root)),
         (XrXirType)root->type)?root:NULL;
 }
-static XrXirCallStatus instance_received_value(XrXirValueAdmission *admission,const XrXirValue *value,
-    XrXirType *type) {
-    if (!admission || !type || !xr_xir_value_valid(value)) return XR_XIR_CALL_BAD_ARGUMENT;
-    const XrXirTypeArena *arena=xr_xir_value_arena(value);*type=(XrXirType)value->type;
-    if (arena && arena!=admission->arena) {
-        uint64_t work=xir_type_arena_lookup_work(admission->arena);
-        if (work>admission->work || !admission->domain || !xr_xir_domain_work(admission->domain,work))
-            return XR_XIR_CALL_LIMIT;
-        admission->work-=work;
-        if (!xir_type_arena_local_type(admission->arena,arena,(XrXirType)value->type,type))
-            return XR_XIR_CALL_BAD_ARGUMENT;
-    }
-    return admit_instance_value(admission,value,*type);
-}
 static XrXirCallStatus instance_class_access_begin(XrXirCallView *view,uint32_t instruction,
     XirEffectClassAccessKind kind,const XrXirValue *value,XrXirCallClassAccess *access) {
     XrXirInstance *instance=view_instance(view);
