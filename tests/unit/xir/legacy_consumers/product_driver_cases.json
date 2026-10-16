@@ -30281,6 +30281,78 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 13
+    },
+    {
+      "id": "complete_generic_program_generic_container_type_args",
+      "oracle_id": "complete_generic_program_generic_container_type_args",
+      "source": "tests/diff/cases/semantics/generic_container_type_args.xr",
+      "source_lf_sha256": "f9c48b5c518187c61d97c722d3cee0e95393fa5ec67a1da09bfa3e50e1c7c80e",
+      "entry": "run",
+      "stdout_utf8": "9\n12\n9\n11\n6\n4\n2\n2\n5\n5\n1\nab\n30\n21\n29\n19\n3\n3\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original generic behavior with every container/tuple/Slice/function type and loop retained. Independent source-declaration/full-type instance keys and iterable reductions do not grant current open-generic display,static protocols,borrow ABI,erased fallback or actual monomorphization. All complete source migration/FI/resource/lifetime/safety/provider obligations remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/generic_container_type_args.xr",
+        "source_lf_sha256": "f9c48b5c518187c61d97c722d3cee0e95393fa5ec67a1da09bfa3e50e1c7c80e"
+      },
+      "remaining_gates": [
+        "Both complete original generic programs,all32 outputs/32calls/30 exact semantic instances,all16 arithmetic loops and24for-body+4generator-body iterations retained.",
+        "Whole-source definition permissions and closed display/Iterable/Lengthable/Slice/function-type admission;no erased origin fallback. Real Checked specialization and sealed instances,VM/generatedC/native,all original compiler/runtime FI/resources/lifetime/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 18
+    },
+    {
+      "id": "complete_generic_program_generic_iterable_constraint",
+      "oracle_id": "complete_generic_program_generic_iterable_constraint",
+      "source": "tests/diff/cases/semantics/generic_iterable_constraint.xr",
+      "source_lf_sha256": "64c5612e9b6bf00193efd0ca8c195f17412862f98c23935694c2f693281fbfef",
+      "entry": "run",
+      "stdout_utf8": "6\n6\n10\n14\n10\n5\n3\n31\n3\n3\n2\n2\n3\n4\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original generic behavior with every container/tuple/Slice/function type and loop retained. Independent source-declaration/full-type instance keys and iterable reductions do not grant current open-generic display,static protocols,borrow ABI,erased fallback or actual monomorphization. All complete source migration/FI/resource/lifetime/safety/provider obligations remain OPEN.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/generic_iterable_constraint.xr",
+        "source_lf_sha256": "64c5612e9b6bf00193efd0ca8c195f17412862f98c23935694c2f693281fbfef"
+      },
+      "remaining_gates": [
+        "Both complete original generic programs,all32 outputs/32calls/30 exact semantic instances,all16 arithmetic loops and24for-body+4generator-body iterations retained.",
+        "Whole-source definition permissions and closed display/Iterable/Lengthable/Slice/function-type admission;no erased origin fallback. Real Checked specialization and sealed instances,VM/generatedC/native,all original compiler/runtime FI/resources/lifetime/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 14
     }
   ]
 }
