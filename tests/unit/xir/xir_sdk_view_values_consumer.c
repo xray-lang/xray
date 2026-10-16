@@ -52,6 +52,14 @@ int main(void) {
     const XrXirValue items[]={{XR_XIR_I64,0,11},{XR_XIR_I64,0,22},{XR_XIR_I64,0,33}};
     CHECK(xr_xir_array_new((XrXirType)256,items,3,&admission,&array)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_new(domain,arena,(XrXirType)257,&array,&admission,&root)==XR_XIR_VALUE_OK);
+    XrXirViewStorageSpec read_spec={scope.authority,0,3,XR_XIR_TYPE_SLICE};
+    CHECK(xr_xir_view_new((XrXirType)258,&root,NULL,&read_spec,&admission,&view)==XR_XIR_VALUE_OK);
+    scope.payloads[0]=view.payload;read_spec.offset=1;read_spec.length=1;
+    CHECK(xr_xir_view_reborrow((XrXirType)258,&view,&read_spec,&access,&shared)==XR_XIR_VALUE_OK);
+    scope.payloads[1]=shared.payload;xr_xir_value_drop(&view);
+    XrXirFaultDetail read_fault={0};
+    CHECK(xr_xir_view_get(&shared,0,&access,&result,&read_fault)==XR_XIR_VALUE_OK && result.payload==22);
+    xr_xir_value_drop(&result);xr_xir_value_drop(&shared);CHECK(xr_xir_cell_unborrowed(&root));
     XrXirViewStorageSpec spec={scope.authority,1,2,XR_XIR_TYPE_MUT_SLICE};
     CHECK(xr_xir_view_new((XrXirType)259,&root,NULL,&spec,&admission,&view)==XR_XIR_VALUE_OK);
     scope.payloads[0]=view.payload;

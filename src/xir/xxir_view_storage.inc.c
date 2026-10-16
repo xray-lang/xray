@@ -114,8 +114,11 @@ XR_FUNC XrXirValueStatus xr_xir_view_storage_reborrow(const XrXirViewStorage *pa
             return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     XrXirViewStorageSpec child=*spec;child.offset+=parent->offset;
+    /* A shared root with no exclusive ancestor still has live read authority.
+     * Only an actual exclusive ancestor supplies begin's parent reservation. */
+    const XrXirCellAuthority *root_parent=parent->kind==XR_XIR_TYPE_SLICE && !parent->parent ? NULL : authority;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status=view_storage_begin_operation(&parent->root,authority,&child,admission,output);
+    XrXirValueStatus status=view_storage_begin_operation(&parent->root,root_parent,&child,admission,output);
     xr_xir_value_graph_end();return status;
 }
 XR_FUNC void xr_xir_view_storage_end(XrXirViewStorage *view) {
