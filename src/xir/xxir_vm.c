@@ -28,6 +28,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_instance_value.h"
 #include "xxir_instance_function_internal.h"
+#include "xxir_instance_generator_internal.h"
 #include "xxir_struct.h"
 #include "xxir_class.h"
 #include "xxir_enum.h"
@@ -400,6 +401,21 @@ static XrXirRunStatus vm_go_step(ScalarRun *run, VmState *state, const XrXirInst
     return XR_XIR_RUN_OK;
 }
 
+static XrXirRunStatus vm_generator_new(ScalarRun *run,VmState *state,const XrXirInstruction *op,
+    XrXirAction *action,uint32_t destination) {
+    if(!run->view || op->args[1]>run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
+    for(uint32_t i=0;i<op->args[1];++i)
+        state->arguments[i]=vm_value_operand(run,run->function->operands[op->args[0]+i]);
+    XrXirValue iterator={0};
+    XrXirCallStatus status=xr_xir_instance_generator_at(run->view,
+        (uint32_t)(op-run->function->instructions),op->args[1] ? state->arguments : NULL,op->args[1],&iterator);
+    if(status!=XR_XIR_CALL_READY) {
+        *action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
+        return XR_XIR_RUN_OK;
+    }
+    xr_xir_owned_slot_move(run->frame,destination,&iterator);++state->instruction;return XR_XIR_RUN_OK;
+}
+
 static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirInstruction *op,
     XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -625,6 +641,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
         state->instruction = next;
         return vm_call_step(run, state, op, action, run->layout->offsets[result_id]);
+    case XR_XIR_GENERATOR_NEW:
+        return vm_generator_new(run,state,op,action,run->layout->offsets[result_id]);
     case XR_XIR_GO:
         return vm_go_step(run, state, op, action, run->layout->offsets[result_id]);
     case XR_XIR_TASK_AWAIT:

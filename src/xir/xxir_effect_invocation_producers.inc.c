@@ -351,9 +351,9 @@ static XrXirStatus effect_invocation_producer_actual_read(const EffectInvocation
         if (owner->final->sites[edge->producer].target!=target->body) return XR_XIR_BAD_STRUCTURE;
         captures=owner->final->sites[edge->producer].captures;
         if (parameter<captures) { *output=UINT32_MAX;return XR_XIR_OK; }
-    } else if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_GO ||
+    } else if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW ||
         op->op==XR_XIR_CLEANUP_REGISTER) {
-        if (edge->producer!=UINT32_MAX || edge->latent!=(op->op==XR_XIR_GO) ||
+        if (edge->producer!=UINT32_MAX || edge->latent!=(op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW) ||
             op->immediate<0 || (uint64_t)op->immediate!=target->body) return XR_XIR_BAD_STRUCTURE;
     } else { *output=UINT32_MAX;return XR_XIR_OK; }
     uint32_t actual=parameter-captures;

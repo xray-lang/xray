@@ -263,7 +263,7 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_RETURN:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_RETURN);
-    case XR_XIR_GO:
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_CHILD);
     case XR_XIR_CALL_REQUIREMENT:
         for (uint32_t a = 0; a < op->args[1]; ++a) {

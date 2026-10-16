@@ -24,6 +24,7 @@
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "xir_source_fixture_owner.h"
+#include "xir_generator85_golden.h"
 #include "xir_generator84_golden.h"
 #include "xir_generator74_golden.h"
 _Static_assert(XR_XIR_TYPE_ITERATOR==11,"Iterator excludes Map and Set descriptor ordinals");
@@ -64,6 +65,29 @@ static void vm_pull(const XrXirArtifact *lowered,uint32_t function,XrXirTypeAren
     CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees);
 }
 static void packet_models(const XrXirCompileContext *context) {
+    const struct {const uint8_t *bytes;size_t length;} previous84[]={
+        {generator84_i64,sizeof(generator84_i64)},
+        {generator84_unit,sizeof(generator84_unit)},
+        {generator84_no_role,sizeof(generator84_no_role)},
+        {generator84_scalar_result,sizeof(generator84_scalar_result)},
+        {generator84_wrong_value,sizeof(generator84_wrong_value)},
+        {generator84_return_arg,sizeof(generator84_return_arg)},
+        {generator84_no_suspend,sizeof(generator84_no_suspend)},
+        {generator84_ref_parameter,sizeof(generator84_ref_parameter)},
+        {generator84_unit_arg,sizeof(generator84_unit_arg)},
+        {generator84_unknown_role,sizeof(generator84_unknown_role)},
+        {generator84_initializer_role,sizeof(generator84_initializer_role)},
+        {generator84_entry_role,sizeof(generator84_entry_role)},
+        {generator84_reserved_map,sizeof(generator84_reserved_map)},
+        {generator84_reserved_set,sizeof(generator84_reserved_set)}};
+    for(unsigned i=0;i<sizeof(previous84)/sizeof(previous84[0]);++i) {
+        XrCompileResourceStats before={0},after={0};
+        CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+        XrXirArtifact *decoded=NULL;
+        CHECK(xr_xir_compile_checked_read(context,previous84[i].bytes,previous84[i].length,&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
+        CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+        CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
+    }
     const struct {const uint8_t *bytes;size_t length;} previous[]={
         {generator74_i64,sizeof(generator74_i64)},
         {generator74_unit,sizeof(generator74_unit)},
@@ -86,19 +110,19 @@ static void packet_models(const XrXirCompileContext *context) {
         CHECK(after.allocated_bytes==before.allocated_bytes && after.allocation_count==before.allocation_count && after.live_bytes==before.live_bytes);
     }
     const struct {const uint8_t *bytes;size_t length;XrXirStatus expected;} cases[]={
-        {generator84_i64,sizeof(generator84_i64),XR_XIR_OK},{generator84_unit,sizeof(generator84_unit),XR_XIR_OK},
-        {generator84_no_role,sizeof(generator84_no_role),XR_XIR_BAD_TYPE},
-        {generator84_scalar_result,sizeof(generator84_scalar_result),XR_XIR_BAD_TYPE},
-        {generator84_wrong_value,sizeof(generator84_wrong_value),XR_XIR_BAD_TYPE},
-        {generator84_return_arg,sizeof(generator84_return_arg),XR_XIR_BAD_STRUCTURE},
-        {generator84_no_suspend,sizeof(generator84_no_suspend),XR_XIR_BAD_STRUCTURE},
-        {generator84_ref_parameter,sizeof(generator84_ref_parameter),XR_XIR_BAD_TYPE},
-        {generator84_unit_arg,sizeof(generator84_unit_arg),XR_XIR_BAD_STRUCTURE},
-        {generator84_unknown_role,sizeof(generator84_unknown_role),XR_XIR_BAD_STRUCTURE},
-        {generator84_initializer_role,sizeof(generator84_initializer_role),XR_XIR_BAD_STRUCTURE},
-        {generator84_entry_role,sizeof(generator84_entry_role),XR_XIR_BAD_STRUCTURE},
-        {generator84_reserved_map,sizeof(generator84_reserved_map),XR_XIR_BAD_TYPE},
-        {generator84_reserved_set,sizeof(generator84_reserved_set),XR_XIR_BAD_TYPE}};
+        {generator85_i64,sizeof(generator85_i64),XR_XIR_OK},{generator85_unit,sizeof(generator85_unit),XR_XIR_OK},
+        {generator85_no_role,sizeof(generator85_no_role),XR_XIR_BAD_TYPE},
+        {generator85_scalar_result,sizeof(generator85_scalar_result),XR_XIR_BAD_TYPE},
+        {generator85_wrong_value,sizeof(generator85_wrong_value),XR_XIR_BAD_TYPE},
+        {generator85_return_arg,sizeof(generator85_return_arg),XR_XIR_BAD_STRUCTURE},
+        {generator85_no_suspend,sizeof(generator85_no_suspend),XR_XIR_BAD_STRUCTURE},
+        {generator85_ref_parameter,sizeof(generator85_ref_parameter),XR_XIR_BAD_TYPE},
+        {generator85_unit_arg,sizeof(generator85_unit_arg),XR_XIR_BAD_STRUCTURE},
+        {generator85_unknown_role,sizeof(generator85_unknown_role),XR_XIR_BAD_STRUCTURE},
+        {generator85_initializer_role,sizeof(generator85_initializer_role),XR_XIR_BAD_STRUCTURE},
+        {generator85_entry_role,sizeof(generator85_entry_role),XR_XIR_BAD_STRUCTURE},
+        {generator85_reserved_map,sizeof(generator85_reserved_map),XR_XIR_BAD_TYPE},
+        {generator85_reserved_set,sizeof(generator85_reserved_set),XR_XIR_BAD_TYPE}};
     for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         XrXirArtifact *decoded=NULL;XrXirStatus status=xr_xir_compile_checked_read(context,cases[i].bytes,cases[i].length,&decoded,NULL);
         if(status!=cases[i].expected) fprintf(stderr,"Independent packet%u status%u expected%u\n",i,status,cases[i].expected);
@@ -174,7 +198,7 @@ int main(int argc,char **argv) {
     reject_source(&owner.context,"fn bad()->i64 {yield 1}\nfn main(){}\n");
     reject_source(&owner.context,"fn bad()->Iterator<i64> {yield true}\nfn main(){}\n");
     reject_source(&owner.context,"fn bad()->Iterator<i64> {yield 1\nreturn 2}\nfn main(){}\n");
-    reject_source(&owner.context,"fn bad()->Iterator<i64> {yield 1}\nfn main(){bad()}\n");
+    reject_source(&owner.context,"fn bad(x:ref i64)->Iterator<i64> {yield x}\nfn main(){}\n");
     packet_models(&owner.context);
     source_fixture_owner_free(&owner);
     puts("Real Source/Checked/Lowered generator role, VM yields/Unit/wake and verified C emission PASS");return 0;

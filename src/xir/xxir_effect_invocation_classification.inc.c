@@ -40,6 +40,7 @@ typedef struct EffectPhysicalDomain {
  * Call identity, ROOT or NO_SUSPEND never substitute for its answer. */
 static bool effect_physical_error_empty_opcode(XrXirOp op) {
     switch (op) {
+    case XR_XIR_GENERATOR_NEW:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING: case XR_XIR_SLOT_LOAD:
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD:
     case XR_XIR_ATOMIC_STORE: case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
@@ -109,7 +110,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     case XR_XIR_SLOT_STORE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_SET:
     case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_SET:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_SET: case XR_XIR_ENUM_NEW:
-    case XR_XIR_TUPLE_NEW: case XR_XIR_NULLABLE_SOME:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_NULLABLE_SOME: case XR_XIR_GENERATOR_NEW:
         mask|=EFFECT_PHYSICAL_BARRIER;break;
     default:break;
     }
@@ -127,7 +128,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
-    case XR_XIR_GO: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
     case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_CELL_PROJECT:

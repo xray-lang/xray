@@ -180,7 +180,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (xr_xir_op_references_function(op->op)) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
             return XR_XIR_BAD_STRUCTURE;
-        if (xr_xir_function_is_generator(module,(uint32_t)op->immediate)) return XR_XIR_BAD_TYPE;
+        if (xr_xir_function_is_generator(module,(uint32_t)op->immediate)!=
+            (op->op==XR_XIR_GENERATOR_NEW)) return XR_XIR_BAD_TYPE;
         bool bound_helper=false,default_authorized=false;
         XrXirStatus helper_status=xr_xir_compile_default_helper(remaining, module, (uint32_t)op->immediate, &bound_helper);
         if (helper_status!=XR_XIR_OK) return helper_status;
@@ -310,7 +311,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL &&
-               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
+               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&

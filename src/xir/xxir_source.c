@@ -1137,7 +1137,9 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
     SourceDirectRequest direct={target->index,{0},NULL,result_context};
     SourceDirectArguments prepared={0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
-    XrXirInstruction call_op={XR_XIR_CALL,prepared.result,{0},{0},target->index,{0}};
+    XrXirOp kind=(ctx->identities[target->index].promises & XR_XIR_FUNCTION_GENERATOR) ?
+        XR_XIR_GENERATOR_NEW : XR_XIR_CALL;
+    XrXirInstruction call_op={kind,prepared.result,{0},{0},target->index,{0}};
     AstNode *reference=node->type==AST_CALL_EXPR?node->as.call_expr.callee:node;
     return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&call_op) &&
         source_query_reference(ctx,reference,binding,target,XR_XIR_SOURCE_CALL) &&
@@ -1295,7 +1297,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         SourceDirectRequest direct = {target->index,selected.method ? selected.substitution : (SourceSubstitution){0},NULL,result_context};
         SourceDirectArguments prepared = {0};
         if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
-        XrXirInstruction call_op = {XR_XIR_CALL,prepared.result,{0},{0},target->index,{0}};
+        XrXirOp kind=(ctx->identities[target->index].promises & XR_XIR_FUNCTION_GENERATOR) ?
+            XR_XIR_GENERATOR_NEW : XR_XIR_CALL;
+        XrXirInstruction call_op = {kind,prepared.result,{0},{0},target->index,{0}};
         return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&call_op) &&
             source_query_reference(ctx,callee,binding,target,XR_XIR_SOURCE_CALL) &&
             source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);

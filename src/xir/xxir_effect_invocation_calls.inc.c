@@ -587,7 +587,7 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
         return signature->flags&XR_XIR_CALLABLE_ROOT_UNRESOLVED?
             effect_invocation_defer(flow,instruction,changed):XR_XIR_OK;
     }
-    case XR_XIR_GO: {
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->body.domain.function_count)
             return XR_XIR_BAD_STRUCTURE;
         uint32_t target=(uint32_t)op->immediate;bool closed=false;EffectBodyFunctionHead head;

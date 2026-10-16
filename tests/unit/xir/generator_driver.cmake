@@ -35,7 +35,7 @@ endif()
 add_test(NAME test_xir_generator_native COMMAND test_xir_generator_native)
 set_tests_properties(test_xir_generator_native PROPERTIES LABELS "unit;xir;generator;generated-c;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 
-add_test(NAME test_xir_generator_packet_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator84_vectors.py")
+add_test(NAME test_xir_generator_packet_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator85_vectors.py")
 set_tests_properties(test_xir_generator_packet_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_cleanup_source xir/test_xir_generator_cleanup_source.c)
@@ -56,3 +56,25 @@ foreach(generator_cleanup_target test_xir_generator_cleanup_source test_xir_gene
     add_test(NAME ${generator_cleanup_target} COMMAND ${generator_cleanup_target})
     set_tests_properties(${generator_cleanup_target} PROPERTIES LABELS "unit;xir;generator;cleanup;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
+
+add_executable(test_xir_generator_factory_source xir/test_xir_generator_factory_source.c)
+target_link_libraries(test_xir_generator_factory_source PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_generator_factory_source PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set(XIR_GENERATOR_FACTORY_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_generator_factory.c")
+add_custom_command(OUTPUT "${XIR_GENERATOR_FACTORY_C}"
+    COMMAND $<TARGET_FILE:test_xir_generator_factory_source> "${XIR_GENERATOR_FACTORY_C}"
+    DEPENDS test_xir_generator_factory_source VERBATIM)
+add_executable(test_xir_generator_factory_native xir/test_xir_generator_factory_native.c "${XIR_GENERATOR_FACTORY_C}")
+target_link_libraries(test_xir_generator_factory_native PRIVATE xray_xir_scalar)
+foreach(generator_factory_target test_xir_generator_factory_source test_xir_generator_factory_native)
+    if(MSVC)
+        target_compile_options(${generator_factory_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${generator_factory_target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${generator_factory_target} COMMAND ${generator_factory_target})
+    set_tests_properties(${generator_factory_target} PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
+endforeach()
+
+add_test(NAME test_xir_generator_factory_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator_factory85_vectors.py")
+set_tests_properties(test_xir_generator_factory_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)

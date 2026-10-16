@@ -533,6 +533,18 @@ static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
         op->args[1] ? "state->arguments" : "NULL", op->args[1], destination);
 }
 
+static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
+    const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t index,uint32_t destination) {
+    EMIT_STATIC(buffer, es_ff1a07ada386851d, " { XrXirValue output = {0};\n");
+    for(uint32_t p=0;p<op->args[1] && emit_work(buffer,1);++p) {
+        uint32_t id=function->operands[op->args[0]+p];
+        EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            p,(uint32_t)xr_xir_operand_type(function,id),layout->offsets[id]);
+    }
+    EMIT_FORMAT(buffer, et_b78d6d2a0010d081, " XrXirCallStatus status = xr_xir_instance_generator_at(view, %uu, %s, %uu, &output);\n if (status != XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n xr_xir_owned_slot_move(state->frame, %uu, &output); }\n return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n",
+        index,op->args[1] ? "state->arguments" : "NULL",op->args[1],destination);
+}
+
 static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index) {
     if (!emit_work(buffer, 1)) return;
@@ -978,6 +990,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_BRANCH:
         emit_branch(buffer, function, layout, index, true);
         break;
+    case XR_XIR_GENERATOR_NEW:
+        emit_resume_generator(buffer,function,op,layout,index,destination);return;
     case XR_XIR_GO:
         emit_resume_go(buffer, function, op, layout, destination);
         return;
@@ -1613,8 +1627,8 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
-    EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
-           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
+    EMIT_FORMAT(buffer, et_4ed4b60b9d271b1f, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
            "#include \"xir/xxir_task.h\"\n"
