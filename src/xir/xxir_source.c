@@ -498,6 +498,9 @@ static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
     *record = (XrXirSourceDeclaration) {symbol->declaration, parent, 0, kind, symbol->name, range,
         {0}, NULL, 0, symbol->mutable,
         (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0, NULL, NULL};
+    if(kind==XR_XIR_SOURCE_BINDING&&symbol->node&&(symbol->node->type==AST_VAR_DECL||symbol->node->type==AST_CONST_DECL)&&
+        symbol->node->as.var_decl.initializer&&!symbol->node->as.var_decl.type_annotation)
+        ((XrXirSourceDeclarationSyntax *)ctx->syntax.declarations)[symbol->declaration-1].flags|=XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING;
     return true;
 }
 static bool source_root_type(SourceContext *ctx, XrXirType type, uint32_t depth);
@@ -2941,6 +2944,7 @@ static bool source_query_modules(SourceContext *ctx) {
 #include "xxir_source_calls_publish.inc.c"
 #include "xxir_source_type_facts_publish.inc.c"
 #include "xxir_source_native_query.inc.c"
+#include "xxir_source_display_names.inc.c"
 static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) {
     if (!output || !ctx->query_ready || ctx->diagnostic.status != XR_XIR_OK) {
         if (output) xr_xir_compile_source_result_free(output);
@@ -2951,6 +2955,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     ctx->query.diagnostic = ctx->diagnostic;
     ctx->query.types = ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL;
     if(!source_native_query_types(ctx)){xr_xir_compile_source_result_free(output);return;}
+    if(!source_display_names_publish(ctx)){xr_xir_compile_source_result_free(output);return;}
     const char *failure = "source query snapshot publication failed";
     XrXirStatus status = xr_xir_compile_source_snapshot_copy_v2(&ctx->compile, &ctx->query, xr_xir_compile_artifact_construction(output->checked), &output->snapshot);
     if (status == XR_XIR_OK) {

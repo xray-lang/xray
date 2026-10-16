@@ -10,7 +10,7 @@
  *   Deep-own display facts without construction or execution authority.
  */
 #include "xxir_types.h"
-/* Scalar syntax facts are copied after the semantic/construction owner exists,
+/* Display facts are copied after the semantic/construction owner exists,
  * before publication. A failed attachment leaves that owner unchanged. */
 static bool query_syntax_range(const XrXirSourceView *view,XrXirSourceRange range,bool absent) {
     if(range.module>=view->module_count)return false;
@@ -19,6 +19,20 @@ static bool query_syntax_range(const XrXirSourceView *view,XrXirSourceRange rang
 }
 static bool query_syntax_same_range(XrXirSourceRange a,XrXirSourceRange b) {
     return a.module==b.module&&a.line==b.line&&a.column==b.column&&a.end_line==b.end_line&&a.end_column==b.end_column;
+}
+static XrXirStatus query_syntax_names(SourceQueryCopy *copy,const XrXirSourceDeclarationSyntax *fact,
+    const XrXirSourceDeclaration *decl) {
+    if((!!fact->type_parameters!=!!fact->type_parameter_count)||fact->type_parameter_count>65536)
+        return XR_XIR_BAD_STRUCTURE;
+    if(!fact->type_parameter_count)return XR_XIR_OK;
+    if(fact->type_parameter_count!=decl->generic_parameter_count||
+        (decl->kind!=XR_XIR_SOURCE_FUNCTION&&decl->kind!=XR_XIR_SOURCE_TYPE&&
+            decl->kind!=XR_XIR_SOURCE_MEMBER&&decl->kind!=XR_XIR_SOURCE_INTRINSIC))return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t p=0;p<fact->type_parameter_count;++p) {
+        if(!query_work(copy,sizeof(*fact->type_parameters)))return copy->status;
+        if(!fact->type_parameters[p]||!*fact->type_parameters[p])return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
 }
 static XrXirStatus query_syntax_pattern_binding(SourceQueryCopy *copy,const XrXirSourceSyntaxView *syntax,
     const XrXirSourceMarker *marker) {
@@ -53,8 +67,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         bool absent=fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE||fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER;
         if((uint32_t)fact->role>XR_XIR_SOURCE_SYNTAX_UNRESOLVED||fact->name.module!=decl->range.module||fact->name.module>=view->module_count||
             (fact->role!=XR_XIR_SOURCE_SYNTAX_UNRESOLVED&&!query_syntax_range(view,fact->name,absent))||
-            (fact->flags&~XR_XIR_SOURCE_SYNTAX_STATIC)||
-            (fact->flags&&fact->role!=XR_XIR_SOURCE_SYNTAX_METHOD))return XR_XIR_BAD_STRUCTURE;
+            (fact->flags&~(XR_XIR_SOURCE_SYNTAX_STATIC|XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING))||
+            ((fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC)&&fact->role!=XR_XIR_SOURCE_SYNTAX_METHOD)||
+            ((fact->flags&XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING)&&
+                (fact->role!=XR_XIR_SOURCE_SYNTAX_NAME||decl->kind!=XR_XIR_SOURCE_BINDING)))return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus names_status=query_syntax_names(&copy,fact,decl);
+        if(names_status!=XR_XIR_OK)return names_status;
         if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD&&
             ((decl->kind!=XR_XIR_SOURCE_FUNCTION&&decl->kind!=XR_XIR_SOURCE_MEMBER)||!decl->parent||decl->parent>view->declaration_count||
                 view->declarations[decl->parent-1].kind!=XR_XIR_SOURCE_TYPE))return XR_XIR_BAD_STRUCTURE;
@@ -102,6 +120,13 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
     SourceQueryMemory *previous=snapshot->memory;
     XrXirSourceSyntaxView owned=*syntax;
     owned.declarations=query_copy(&copy,syntax->declarations,syntax->declaration_count,sizeof(*syntax->declarations));
+    for(uint32_t i=0;owned.declarations&&i<syntax->declaration_count&&query_work(&copy,1);++i) {
+        const XrXirSourceDeclarationSyntax *source=&syntax->declarations[i];
+        const char **names=query_allocate(&copy,source->type_parameter_count,sizeof(*names));
+        ((XrXirSourceDeclarationSyntax *)owned.declarations)[i].type_parameters=names;
+        for(uint32_t p=0;names&&p<source->type_parameter_count&&copy.status==XR_XIR_OK;++p)
+            names[p]=query_string(&copy,source->type_parameters[p]);
+    }
     owned.references=query_copy(&copy,syntax->references,syntax->reference_count,sizeof(*syntax->references));
     owned.markers=query_copy(&copy,syntax->markers,syntax->marker_count,sizeof(*syntax->markers));
     (void)query_work(&copy,sizeof(owned)+sizeof(snapshot->syntax_ready));

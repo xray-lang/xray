@@ -88,10 +88,15 @@ typedef enum XrXirSourceSyntaxRole {
     XR_XIR_SOURCE_SYNTAX_RECEIVER, XR_XIR_SOURCE_SYNTAX_UNRESOLVED
 } XrXirSourceSyntaxRole;
 #define XR_XIR_SOURCE_SYNTAX_STATIC 1u
+#define XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING 2u
 typedef struct XrXirSourceDeclarationSyntax {
     XrXirSourceRange name;
     XrXirSourceSyntaxRole role;
     uint32_t flags;
+    /* Actual definition-scope order, including a real enclosing prefix.
+     * NULL/count-zero is explicitly unavailable, never an invented name. */
+    const char *const *type_parameters;
+    uint32_t type_parameter_count;
 } XrXirSourceDeclarationSyntax;
 typedef enum XrXirSourceMarkerRole {
     XR_XIR_SOURCE_MARKER_REF = 1, XR_XIR_SOURCE_MARKER_MOVE, XR_XIR_SOURCE_MARKER_REF_ARGUMENT,

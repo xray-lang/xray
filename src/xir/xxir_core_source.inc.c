@@ -176,6 +176,7 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
         records[ctx->query.declaration_count-1]=original;
         XrXirSourceDeclarationSyntax fact=core->syntax.declarations[d];
         fact.name.module=module;
+        if(!source_display_names_copy(ctx,&fact))return false;
         if (!source_query_syntax_declaration(ctx,fact.name)) return false;
         XrXirSourceDeclarationSyntax *syntax=(XrXirSourceDeclarationSyntax *)&ctx->syntax.declarations[ctx->syntax.declaration_count-1];
         if (!source_copy_bytes(ctx,NULL,syntax,&fact,sizeof(fact))) return false;

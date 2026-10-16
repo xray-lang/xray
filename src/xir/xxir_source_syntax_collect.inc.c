@@ -10,7 +10,7 @@
  *   Collect observational roles and token ranges before the parser owner dies.
  */
 /* Parser-owned selections are consumed while source checking is active. Only
- * scalar role/range facts cross the immutable snapshot boundary. */
+ * owned display facts cross the immutable snapshot boundary. */
 static XrXirSourceRange source_query_name_span(SourceContext *ctx,XrNameSpan span,const char *name) {
     size_t length=source_text_size(ctx,name);
     if(span.line<=0||span.column<=0||!length||length>(size_t)(INT_MAX-span.column)) {
@@ -44,9 +44,9 @@ static bool source_query_syntax_declaration(SourceContext *ctx,XrXirSourceRange 
     XrXirSourceDeclarationSyntax *facts=source_query_append(ctx,ctx->syntax.declarations,
         &ctx->syntax.declaration_count,&ctx->syntax_declaration_capacity,sizeof(*facts));
     if(!facts)return false;ctx->syntax.declarations=facts;
-    XrXirSourceDeclarationSyntax fact={range,!range.line?XR_XIR_SOURCE_SYNTAX_NONE:
+    XrXirSourceDeclarationSyntax fact={.name=range,.role=!range.line?XR_XIR_SOURCE_SYNTAX_NONE:
         range.line==range.end_line&&range.column>0&&range.end_column>range.column?
-        XR_XIR_SOURCE_SYNTAX_NAME:XR_XIR_SOURCE_SYNTAX_UNRESOLVED,0};
+        XR_XIR_SOURCE_SYNTAX_NAME:XR_XIR_SOURCE_SYNTAX_UNRESOLVED};
     return source_copy_bytes(ctx,NULL,&facts[ctx->syntax.declaration_count-1],&fact,sizeof(fact));
 }
 static bool source_query_syntax_role(SourceContext *ctx,uint32_t declaration,XrXirSourceSyntaxRole role,uint32_t flags) {
