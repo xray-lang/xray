@@ -103,7 +103,7 @@ static void rejected(XrLspServer *server, const XlspRequestId *id, XrJsonValue *
 static void check_admission(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params) {
     XlspRequestId invalid = {0}, missing = {.kind = XLSP_ID_NUMBER, .as.number = 42};
     rejected(server, &invalid, params, 0, XR_XIR_BAD_STRUCTURE);
-    rejected(server, id, params, 17, XR_XIR_BAD_STRUCTURE);
+    rejected(server, id, params, 18, XR_XIR_BAD_STRUCTURE);
     rejected(server, &missing, params, 0, XR_XIR_BAD_STAGE);
     server->initialized = false; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->initialized = true;
     server->shutdown_received = true; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->shutdown_received = false;
@@ -218,7 +218,13 @@ static int run(int argc, char **argv) {
 #ifdef XLSP_PARAMETER_TASK
 #include "../lsp_parameter_task/task_cases.h"
 #endif
+#ifdef XLSP_FOLDING_TASK
+#include "../lsp_folding_task/task_cases.h"
+#endif
 static int dispatch_run(int argc, char **argv) {
+#ifdef XLSP_FOLDING_TASK
+    if(argc>=3&&!strcmp(argv[2],"--folding"))return folding_main(argc,argv);
+#endif
 #ifdef XLSP_PARAMETER_TASK
     if(argc>=3&&!strcmp(argv[2],"--parameter"))return parameter_main(argc,argv);
 #endif

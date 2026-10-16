@@ -19,7 +19,8 @@ typedef enum XlspSourceScopeQueryKind {
     XLSP_SOURCE_SEMANTIC_DELTA,
     XLSP_SOURCE_SEMANTIC_RANGE,
     XLSP_SOURCE_DOCUMENT_LINKS,
-    XLSP_SOURCE_INLAY_BINDINGS
+    XLSP_SOURCE_INLAY_BINDINGS,
+    XLSP_SOURCE_FOLDING
 } XlspSourceScopeQueryKind;
 /* Capture borrows editor state only on the dispatch thread. The one-shot run
  * uses canonical Source without accessing the server; hierarchy and CodeLens

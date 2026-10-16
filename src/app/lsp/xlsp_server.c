@@ -430,6 +430,7 @@ static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/semanticTokens/range"))return 13;
     if(!strcmp(method,"textDocument/documentLink"))return 14;
     if(!strcmp(method,"textDocument/signatureHelp"))return 15;
+    if(!strcmp(method,"textDocument/foldingRange"))return 17;
     return -1;
 }
 static bool source_request_submit(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params, unsigned mode) {
