@@ -112,6 +112,33 @@ class Reports(unittest.TestCase):
                     path.write_text(content, encoding="utf-8")
                     driver.records(path)
 
+    def test_real_file_changes_new_inputs_and_nearer_authority_fail_closed(self):
+        for mutation in ("bytes", "new_input", "nearer_manifest", "executable"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as name:
+                root = Path(name)
+                declared = copy.deepcopy(INPUTS)
+                for key in ("stdlib", "rooted", "file"):
+                    directory = root / key
+                    directory.mkdir()
+                    declared[key] = str(directory)
+                source = root / "stdlib" / "one.xr"
+                source.write_text("original", encoding="utf-8")
+                executable = root / "owned-test-binary"
+                executable.write_bytes(b"original executable identity")
+                identity = driver.sha(executable)
+                hashes, absent = driver.actual_files(declared)
+                driver.verify_actual_inputs(executable, identity, declared, hashes, absent)
+                if mutation == "bytes":
+                    source.write_text("changed", encoding="utf-8")
+                elif mutation == "new_input":
+                    (root / "rooted" / "new.xr").write_text("new", encoding="utf-8")
+                elif mutation == "nearer_manifest":
+                    (root / "rooted" / "xray.toml").write_text("[package]\n", encoding="utf-8")
+                else:
+                    executable.write_bytes(b"different executable identity")
+                with self.assertRaises(RuntimeError):
+                    driver.verify_actual_inputs(executable, identity, declared, hashes, absent)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -147,6 +147,12 @@ def actual_files(actual_inputs):
     return {str(p): sha(p) for p in sorted(files)}, sorted(str(p) for p in absent)
 
 
+def verify_actual_inputs(executable, executable_hash, actual_inputs, hashes, absent):
+    final_hashes, final_absent = actual_files(actual_inputs)
+    checked(sha(executable) == executable_hash and final_hashes == hashes and
+            final_absent == absent, "Actual inputs or authority changed")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", type=Path, required=True)
@@ -220,9 +226,7 @@ def main():
             checked(not union.intersection(points), "Duplicate fault points across processes")
             union.update(points)
         checked(union == set(range(1, sites + 1)), "Original allocation denominator is incomplete")
-        final_hashes, final_absent = actual_files(actual_inputs)
-        checked(sha(executable) == record["executable_sha256"] and
-                final_hashes == hashes and final_absent == absent, "Actual inputs or authority changed")
+        verify_actual_inputs(executable, record["executable_sha256"], actual_inputs, hashes, absent)
         remaining = job_processes(job)
         checked(not active and remaining == 1, "Unobserved descendants remain")
         checked(time.monotonic() < deadline, "Original 600-second overall deadline exhausted")
