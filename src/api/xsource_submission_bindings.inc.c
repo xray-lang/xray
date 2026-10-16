@@ -13,45 +13,63 @@ static XrXirStatus submission_compile_status(XrCompileResourceStatus status) {
 static XrXirStatus submission_binding_mismatch(SubmissionBindingDraft *draft,const char *message) {
     draft->failure=message;return XR_XIR_BAD_STRUCTURE;
 }
-static XrXirStatus submission_reader_key(XrSourceSubmission *owner,uint64_t source,uint32_t reader,uint8_t key[16]) {
+static XrXirStatus submission_accessor_key(XrSourceSubmission *owner,uint64_t source,uint32_t accessor,uint8_t key[16]) {
     XrXirStatus status=submission_compile_status(xr_compile_state_work(owner->state,16));
     if(status!=XR_XIR_OK)return status;
     /* An embedded NUL separates internal selectors from Source identifiers.
      * The serial and Checked ordinal select a copied binding, never authority. */
-    key[0]=0;key[1]='r';key[2]='d';key[3]='r';
+    key[0]=0;key[1]='a';key[2]='c';key[3]='c';
     for(unsigned i=0;i<8;++i)key[i+4]=(uint8_t)(source>>(i*8));
-    for(unsigned i=0;i<4;++i)key[i+12]=(uint8_t)(reader>>(i*8));
+    for(unsigned i=0;i<4;++i)key[i+12]=(uint8_t)(accessor>>(i*8));
     return XR_XIR_OK;
 }
-static XrXirStatus submission_receive_reader(SubmissionBindingDraft *draft,
-    const XrXirSpecializationMapView *mapping,const XrXirSourceGenerationDefinition *definition) {
-    if(definition->reader==UINT32_MAX)return XR_XIR_OK;
+static XrXirStatus submission_receive_accessor(SubmissionBindingDraft *draft,
+    const XrXirSpecializationMapView *mapping,const XrXirSourceGenerationDefinition *definition,bool write) {
+    uint32_t accessor=write ? definition->writer : definition->reader;
+    if(accessor==UINT32_MAX)return XR_XIR_OK;
+    const XrXirModule *source=xr_xir_compile_artifact_module(mapping->source);
     const XrXirModule *closed=xr_xir_compile_artifact_module(mapping->closed);
-    if(definition->reader>=mapping->function_count)return submission_binding_mismatch(draft,"Binding reader is outside its actual Checked owner");
-    uint32_t physical=mapping->identity ? definition->reader : mapping->functions[definition->reader];
+    if(accessor>=mapping->function_count)return submission_binding_mismatch(draft,"Binding accessor is outside its actual Checked owner");
+    uint32_t physical=mapping->identity ? accessor : mapping->functions[accessor];
     if(physical==UINT32_MAX || physical>=closed->function_count ||
         closed->declarations->functions[physical].module!=definition->module ||
         !closed->declarations->functions[physical].exported ||
         !(closed->declarations->functions[physical].promises&XR_XIR_FUNCTION_NO_SUSPEND) ||
-        closed->functions[physical].parameter_count)
-        return submission_binding_mismatch(draft,"Binding reader has no admitted ordinary zero-argument entry");
-    if(definition->reader==draft->repl_reader) {
+        closed->functions[physical].parameter_count!=source->functions[accessor].parameter_count ||
+        (!write && closed->functions[physical].parameter_count) ||
+        (write && (!definition->mutable || closed->functions[physical].result!=XR_XIR_UNIT)))
+        return submission_binding_mismatch(draft,"Binding accessor has no admitted ordinary entry");
+    if(definition->kind==XR_XIR_SOURCE_DEFINITION_BINDING || definition->kind==XR_XIR_SOURCE_DEFINITION_UNIT) {
+        XrXirType logical=XR_XIR_UNIT;
+        if(definition->kind==XR_XIR_SOURCE_DEFINITION_BINDING) {
+            if(definition->ordinal>=closed->declarations->slot_count)return XR_XIR_BAD_STRUCTURE;
+            XrXirType stored=closed->declarations->slots[definition->ordinal].type;
+            if(definition->mutable && !xr_xir_type_is_cell(closed->types,stored))return XR_XIR_BAD_STRUCTURE;
+            logical=definition->mutable ? xr_xir_cell_element(closed->types,stored) : stored;
+        }
+        uint32_t parameters=write && logical!=XR_XIR_UNIT ? 1u : 0u;
+        const XrXirFunction *function=&closed->functions[physical];
+        if(function->result!=(write ? XR_XIR_UNIT : logical) || function->parameter_count!=parameters ||
+            (parameters && (!function->parameters || function->parameters[0]!=logical)))
+            return submission_binding_mismatch(draft,"Binding accessor differs from its actual closed storage type");
+    }
+    if(!write && accessor==draft->repl_reader) {
         if(draft->repl_entry!=UINT32_MAX || definition->generation!=draft->owner->source_serial)
             return submission_binding_mismatch(draft,"Interactive result has no unique actual reader");
         draft->repl_entry=physical;
     }
     uint8_t prepared[16];
-    XrXirStatus status=submission_reader_key(draft->owner,definition->generation,definition->reader,prepared);
+    XrXirStatus status=submission_accessor_key(draft->owner,definition->generation,accessor,prepared);
     if(status!=XR_XIR_OK)return status;
-    for(uint32_t i=0;i<draft->readers;++i) {
+    for(uint32_t i=0;i<draft->accessors;++i) {
         if(xr_compile_state_work(draft->owner->state,16)!=XR_COMPILE_RESOURCE_OK)
             return submission_compile_status(xr_compile_state_status(draft->owner->state));
-        if(!memcmp(draft->reader_keys+(size_t)i*16,prepared,16))return XR_XIR_OK;
+        if(!memcmp(draft->accessor_keys+(size_t)i*16,prepared,16))return XR_XIR_OK;
     }
-    uint8_t *key=draft->reader_keys+(size_t)draft->readers*16;
+    uint8_t *key=draft->accessor_keys+(size_t)draft->accessors*16;
     status=submission_compile_status(xr_compile_state_copy(draft->owner->state,key,prepared,16));
     if(status==XR_XIR_OK) {
-        ++draft->readers;
+        ++draft->accessors;
         draft->rows[draft->count++]=(XrXirInstanceBindingSpec){(const char *)key,16,XR_XIR_INSTANCE_BINDING_FUNCTION,physical};
     }
     return status;
@@ -73,13 +91,16 @@ static XrXirStatus submission_receive_bindings(void *context,const XrXirSpeciali
         const XrXirSourceDeclaration *declaration=draft->names[i].declaration;
         if(draft->names[i].generation==owner->source_serial && declaration &&
             (declaration->kind==XR_XIR_SOURCE_FUNCTION || declaration->kind==XR_XIR_SOURCE_BINDING))
-            capacity+=2;
+        {
+            if(capacity>UINT32_MAX-3u)return XR_XIR_BUDGET;
+            capacity+=3;
+        }
     }
     if(capacity>UINT32_MAX)return XR_XIR_BUDGET;
     XrXirStatus status=capacity ? submission_compile_status(xr_compile_state_calloc(owner->state,
         capacity,sizeof(*draft->rows)+16,(void **)&draft->rows)) : XR_XIR_OK;
     if(status!=XR_XIR_OK)return status;
-    draft->reader_keys=capacity ? (uint8_t *)(draft->rows+capacity) : NULL;
+    draft->accessor_keys=capacity ? (uint8_t *)(draft->rows+capacity) : NULL;
     for(size_t i=0;i<draft->name_count;++i) {
         if(xr_compile_state_work(owner->state,1)!=XR_COMPILE_RESOURCE_OK)
             return submission_compile_status(xr_compile_state_status(owner->state));
@@ -121,7 +142,8 @@ static XrXirStatus submission_receive_bindings(void *context,const XrXirSpeciali
             if(!length || length>UINT32_MAX)return XR_XIR_BAD_STRUCTURE;
             draft->rows[draft->count++]=(XrXirInstanceBindingSpec){definition.name,(uint32_t)length,kind,ordinal};
         }
-        status=submission_receive_reader(draft,mapping,&definition);
+        status=submission_receive_accessor(draft,mapping,&definition,false);
+        if(status==XR_XIR_OK)status=submission_receive_accessor(draft,mapping,&definition,true);
         if(status!=XR_XIR_OK)return status;
     }
     return XR_XIR_OK;

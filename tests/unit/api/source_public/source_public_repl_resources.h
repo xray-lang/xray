@@ -15,7 +15,7 @@ typedef struct PublicReplOwners {
     XrSourceValue *value,*independent;
 } PublicReplOwners;
 static size_t public_repl_boundaries[11];
-static bool public_repl_rooted_case,public_repl_file_case,public_repl_array_case;
+static bool public_repl_rooted_case,public_repl_file_case,public_repl_array_case,public_repl_write_case;
 static void public_repl_close(PublicReplOwners *owners) {
     XrSourceEvent cleanup={0};
     CHECK(xray_source_repl_drop(&owners->owner,&cleanup)==XR_SOURCE_OK && !owners->owner);
@@ -102,8 +102,9 @@ static XrSourceStatus public_repl_normal_drive(const XrCompileResourceLimits *li
 #include "source_public_repl_rooted_resources.h"
 #include "source_public_repl_file_resources.h"
 #include "source_public_repl_array_resources.h"
+#include "source_public_repl_write_resources.h"
 static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,PublicReplOwners *owners) {
-    return public_repl_array_case ? public_repl_array_drive(limits,owners) : public_repl_file_case ? public_repl_file_drive(limits,owners) : public_repl_rooted_case ? public_repl_rooted_drive(limits,owners) :
+    return public_repl_write_case ? public_repl_write_drive(limits,owners) : public_repl_array_case ? public_repl_array_drive(limits,owners) : public_repl_file_case ? public_repl_file_drive(limits,owners) : public_repl_rooted_case ? public_repl_rooted_drive(limits,owners) :
         public_repl_inspection_case ? public_repl_inspection_drive(limits,owners) : public_repl_normal_drive(limits,owners);
 }
 static void public_repl_sticky(PublicReplOwners *owners) {
@@ -120,6 +121,10 @@ static void public_repl_sticky(PublicReplOwners *owners) {
         CHECK(state==XR_SOURCE_INPUT_INCOMPLETE &&
             (scan==XR_SOURCE_OUT_OF_MEMORY || scan==XR_SOURCE_BUDGET || scan==XR_SOURCE_BAD_STATE || scan==XR_SOURCE_BUSY) &&
             (file==XR_SOURCE_OUT_OF_MEMORY || file==XR_SOURCE_BUDGET || file==XR_SOURCE_BAD_STATE || file==XR_SOURCE_BUSY));
+    }
+    if(public_repl_write_case && owners->value) {
+        XrSourceStatus write=xray_source_repl_write(owners->owner,"state",owners->value);
+        CHECK(write==XR_SOURCE_OUT_OF_MEMORY || write==XR_SOURCE_BUDGET || write==XR_SOURCE_BAD_STATE || write==XR_SOURCE_BUSY);
     }
     CHECK(runtime_attempts==attempts && xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK &&
         !memcmp(&before,&after,sizeof(before)));
@@ -139,7 +144,8 @@ static void public_repl_faults(bool probe) {
         runtime_fail_at=SIZE_MAX;public_repl_close(&owners);
     }
     printf("public Source REPL %s actual allocation sites=%zu swept=%zu; %s; sticky retry and physical=0/0\n",
-        public_repl_array_case?"array-birth":public_repl_file_case?"file+input":public_repl_rooted_case?"rooted":public_repl_inspection_case?"inspection":"history",sites,probe?0:sites,
+        public_repl_write_case?"C-write":public_repl_array_case?"array-birth":public_repl_file_case?"file+input":public_repl_rooted_case?"rooted":public_repl_inspection_case?"inspection":"history",sites,probe?0:sites,
+        public_repl_write_case?"actual scalar/String/Array/struct/Class/Unit birth writes, same observations, state42/4/9/9 and owned String after producer death":
         public_repl_array_case?"actual checked birth push, const array read, panic old effect, owned array after producer death":
         public_repl_file_case?"real lexer/file intake, repeat path and exact old closure, syntax failure and owned bytes":
         public_repl_rooted_case?"real rooted imports, repeated path, invalid nearer authority, temporary type query and owned bytes after owner death":

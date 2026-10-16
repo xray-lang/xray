@@ -92,6 +92,12 @@ XRAY_API XrSourceStatus xray_source_repl_take(XrSourceRepl *, XrSourceResult **)
  * published bindings, never numeric slots or runtime permissions. A pending
  * input refuses reads; empty output is preserved on every failure. */
 XRAY_API XrSourceStatus xray_source_repl_read(XrSourceRepl *, const char *name, XrSourceValue **);
+/* Borrows a typed value for the selected mutable declaration's real checked
+ * birth writer. Instance admission requires its actual type and arena proof;
+ * no conversion, retagging or implicit declaration occurs. Pending input and
+ * callback reentry return BUSY. Uses the same cumulative limits, publishes no
+ * input and preserves it. Failed cleanup stops the owner. */
+XRAY_API XrSourceStatus xray_source_repl_write(XrSourceRepl *, const char *name, const XrSourceValue *);
 /* Drains the real transaction before freeing its Compiler/Catalog. Consumes
  * and clears the owner except on BUSY; NULL drop is a successful no-op. */
 XRAY_API XrSourceStatus xray_source_repl_drop(XrSourceRepl **, XrSourceEvent *cleanup);

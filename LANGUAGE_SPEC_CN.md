@@ -7697,6 +7697,10 @@ Cell读取与写入使用实际出生存储；跨池写入的身份查找在原�
 
 跨输入的可变Array push通过出生Program中的普通已检查操作函数修改其真实Cell；接收方只传已求值一次的精确元素值。这个函数在出生模块内执行SLOT_LOAD/CELL_PLACE/ARRAY_PUSH，不将Cell作为返回值泄出，不直接访问外模块slot，不复制另一个可变存储。普通只读Array访问调用真实出生reader，const写入仍拒绝。操作函数的序号和完整签名来自原Compiler拥有的语义记录及实际Checked接收表，并随其深拥有、收费及销毁；名称观察不授予权限。该接线不代表全部Array/结构路径/ref或额外可调用族已经完成。原REPL夹具迁到现行语法：类字段不写var、构造器写init；空结果由有准确Optional返回类型的匿名函数产生，独立保不显示、it存在及用户绑定为零的预期；无上下文null与旧字段修饰符继续拒绝。
 
+公共C写入借用真实Value，通过最新已发布可变声明的普通出生writer执行。writer的准确Checked签名经特化与Lowered对应登记到同一Instance；名字只选择声明，实际参数类型、arena身份、出生权限和运行预算由普通Instance准入决定。不转换或重标记值，不隐式创建声明，不发布新输入或替换it；const、函数声明、缺失名字、错误类型及无关同形arena拒绝。pending与回调重入返回BUSY，写入共享原累计ledger并在返回前清理实际activation；失败清理停止拥有者。旧函数仍读取同一出生Cell，返回的拥有读值可在整个拥有者销毁后存活。原字典测试以显式类型声明为前置，保真实C写入/读取、覆盖数量不变及缺失输出为空；损坏真实Checked类型表或函数范围不能授权后续输入。
+
+Class字段读取和即时贷款也保真实出生carrier：VM以当前已检查operand类型准入，值存储经原精确类型接收表回到真实owner arena，Class贷款、模块存储、worker和字段权限继续由原检查决定。历史Cell与Class的carrier序号不当作当前池序号，不重标记或按形状授予权限。
+
 ---
 
 ## 18. 错误码 (Error Codes)
