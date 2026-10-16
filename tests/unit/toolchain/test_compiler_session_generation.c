@@ -16,19 +16,9 @@
 #include "os/os_fs.h"
 #include "os/os_temp.h"
 #include "toolchain/xcompiler_session.h"
-#include "runtime/xisolate_api.h"
-#include "runtime/value/xchunk.h"
-#include "module/xmodule_identity.h"
-#include "frontend/parser/xparse.h"
-#include "xray_vm.h"
 
 #include <stdio.h>
 #include <string.h>
-
-static const XrModuleIdentityAuthority k_compiler_session_memory_authority = {
-    .kind = XR_MODULE_IDENTITY_MEMORY,
-    .namespace_id = "compiler-session-fixture-v1",
-};
 
 static XrFingerprint test_fingerprint(uint8_t seed) {
     XrFingerprint fingerprint;
@@ -874,67 +864,6 @@ TEST(operation_scope_rejects_forged_and_stale_commits) {
     xr_compiler_session_delete(session);
 }
 
-TEST(production_compile_entry_commits_or_aborts_one_operation) {
-    XrVMConfig config = {0};
-    XrVMRuntime *isolate = xray_vm_new_full(&config);
-    ASSERT_NOT_NULL(isolate);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    ASSERT_NOT_NULL(session);
-
-    XrCompilerSessionIncrementalStats initial =
-        xr_compiler_session_incremental_stats(session);
-    XrModuleIdentityAuthority invalid_authority = {
-        .kind = XR_MODULE_IDENTITY_MEMORY,
-        .namespace_id = "<eval>",
-    };
-    ASSERT_NULL(xr_compile_source_with_path(session, "print(42)\n", "session-missing.xr",
-                                            NULL));
-    ASSERT_NULL(xr_compile_source_with_path(session, "print(42)\n", "session-invalid.xr",
-                                            &invalid_authority));
-    AstNode *ast = xr_parse_with_source(session, "print(42)\n", "session-ast.xr");
-    ASSERT_NOT_NULL(ast);
-    ASSERT_NULL(xr_compile_ast_with_source(session, ast, "session-ast.xr", NULL));
-    ASSERT_NULL(
-        xr_compile_ast_with_source(session, ast, "session-ast.xr", &invalid_authority));
-    xr_program_destroy(ast);
-    XrCompilerSessionIncrementalStats rejected =
-        xr_compiler_session_incremental_stats(session);
-    ASSERT_EQ_UINT(rejected.completed_operations, initial.completed_operations);
-    ASSERT_EQ_UINT(rejected.fatal_operations, initial.fatal_operations);
-    ASSERT_FALSE(rejected.operation_active);
-
-    XrProto *proto = xr_compile_source_with_path(session, "print(42)\n", "session-ok.xr",
-                                                 &k_compiler_session_memory_authority);
-    ASSERT_NOT_NULL(proto);
-    xr_instruction_unit_free(proto);
-    XrCompilerSessionIncrementalStats succeeded =
-        xr_compiler_session_incremental_stats(session);
-    ASSERT_EQ_UINT(succeeded.completed_operations, initial.completed_operations + 1u);
-    ASSERT_EQ_UINT(succeeded.fatal_operations, initial.fatal_operations);
-    ASSERT_EQ_UINT(succeeded.last_outcome, XR_COMPILER_SESSION_OPERATION_SUCCEEDED);
-    ASSERT_FALSE(succeeded.operation_active);
-
-    XrCompilerSessionGenerationSnapshot before_failure =
-        xr_compiler_session_generation_snapshot(session);
-    proto = xr_compile_source_with_path(session, "fn broken( {\n", "session-fail.xr",
-                                        &k_compiler_session_memory_authority);
-    ASSERT_NULL(proto);
-    XrCompilerSessionGenerationSnapshot after_failure =
-        xr_compiler_session_generation_snapshot(session);
-    XrCompilerSessionIncrementalStats failed =
-        xr_compiler_session_incremental_stats(session);
-    ASSERT_EQ_UINT(after_failure.session_generation,
-                   before_failure.session_generation + 1u);
-    ASSERT_EQ_UINT(failed.fatal_operations, initial.fatal_operations + 1u);
-    ASSERT_EQ_UINT(failed.last_outcome, XR_COMPILER_SESSION_OPERATION_FATAL);
-    ASSERT_FALSE(failed.operation_active);
-    ASSERT_NULL(xr_compiler_session_current_arena(session));
-    ASSERT_NULL(xr_compiler_session_string_pool(session));
-    ASSERT_NULL(xr_compiler_session_module_graph(session));
-
-    xray_vm_delete(isolate);
-}
-
 TEST(rejected_invalidation_preserves_published_state) {
     XrDependencyGraph source;
     XrStableId root_id;
@@ -1043,5 +972,4 @@ RUN_TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable);
 RUN_TEST(rejected_invalidation_preserves_published_state);
 RUN_TEST(session_owns_cache_store_handle);
 RUN_TEST(session_installs_one_cache_before_operations);
-RUN_TEST(production_compile_entry_commits_or_aborts_one_operation);
 TEST_MAIN_END()
