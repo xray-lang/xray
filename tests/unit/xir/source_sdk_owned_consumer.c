@@ -45,6 +45,9 @@ static XrSourceWriteStatus sdk_repl_output(void *context,XrSourceOutputStream st
     CHECK(xray_source_repl_cancel(trace->owner)==XR_SOURCE_BUSY);
     const XrSourceReplBindingInfo *rows=NULL;size_t row_count=0;
     CHECK(xray_source_repl_bindings(trace->owner,&rows,&row_count)==XR_SOURCE_BUSY && !rows && !row_count);
+    XrSourceInputState state=XR_SOURCE_INPUT_INCOMPLETE;
+    CHECK(xray_source_repl_check_input(trace->owner,"42",2,&state)==XR_SOURCE_BUSY && state==XR_SOURCE_INPUT_INCOMPLETE);
+    CHECK(xray_source_repl_begin_file(trace->owner,"missing.xr",NULL)==XR_SOURCE_BUSY);
     memcpy(trace->bytes+trace->count,bytes,count);trace->count+=count;return XR_SOURCE_WRITE_OK;
 }
 static XrSourceStatus sdk_repl_begin(XrSourceRepl *owner,const char *source,XrSourceDiagnostic **diagnostic) {
@@ -177,8 +180,10 @@ static void sdk_repl_inspection_cases(const char *stdlib_path) {
     puts("Installed public REPL inspection: visible bindings, nonpublishing types and owned survivors PASS");
 }
 
+#include "source_sdk_repl_input_consumer.inc.c"
+
 int main(int argc,char **argv) {
-    CHECK(argc==2);
+    CHECK(argc==4);
     char source[]="fn initial()->i64{return 40}\nvar state=initial()\n"
         "export fn next(delta:i64)->i64{state+=delta;return state}\n"
         "export fn read()->i64{return state}\n"
@@ -241,5 +246,8 @@ int main(int argc,char **argv) {
     xray_source_value_free(independent);xray_source_value_free(forty_four);
     sdk_repl_cases(argv[1]);
     sdk_repl_inspection_cases(argv[1]);
+    sdk_repl_rooted_cases(argv[1],argv[2]);
+    sdk_repl_file_cases(argv[1],argv[3]);
+    sdk_repl_snapshot_input_cases(argv[1]);
     puts("Installed owning AST, typed values, persistent state, callable authority and producer death PASS");return 0;
 }

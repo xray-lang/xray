@@ -5,7 +5,9 @@ if(WIN32)
     target_link_libraries(test_source_sdk_faults PRIVATE ${XRAY_SOURCE_SDK_ARCHIVE_TARGETS})
     target_include_directories(test_source_sdk_faults PRIVATE "${PROJECT_SOURCE_DIR}/include"
         "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
-    target_compile_definitions(test_source_sdk_faults PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+    target_compile_definitions(test_source_sdk_faults PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+        XR_PUBLIC_REPL_FIXTURE="${PROJECT_SOURCE_DIR}/tests/unit/api/source_public_repl_rooted"
+        XR_PUBLIC_REPL_FILE_FIXTURE="${PROJECT_SOURCE_DIR}/tests/unit/api/source_public_repl_file")
     set_target_properties(test_source_sdk_faults PROPERTIES MSVC_RUNTIME_LIBRARY MultiThreadedDLL
         C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
     if(MSVC)
@@ -27,6 +29,16 @@ if(WIN32)
     add_test(NAME source_sdk_repl_inspect_samples COMMAND test_source_sdk_faults --repl-inspect-samples)
     set_tests_properties(source_sdk_repl_inspect_probe source_sdk_repl_inspect_budget source_sdk_repl_inspect_samples
         PROPERTIES TIMEOUT 120 LABELS "unit;api;source;sdk;ownership;repl;inspection;budget")
+    foreach(input_kind IN ITEMS rooted file)
+        add_test(NAME source_sdk_repl_${input_kind}_faults COMMAND test_source_sdk_faults --repl-${input_kind})
+        set_tests_properties(source_sdk_repl_${input_kind}_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
+            LABELS "unit;api;source;sdk;ownership;repl;compiler-faults;runtime-faults;${input_kind}")
+        foreach(mode IN ITEMS probe budget samples)
+            add_test(NAME source_sdk_repl_${input_kind}_${mode} COMMAND test_source_sdk_faults --repl-${input_kind}-${mode})
+            set_tests_properties(source_sdk_repl_${input_kind}_${mode} PROPERTIES TIMEOUT 120
+                LABELS "unit;api;source;sdk;ownership;repl;${input_kind};budget")
+        endforeach()
+    endforeach()
 endif()
 if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_SANITIZERS AND NOT ENABLE_UBSAN
     AND NOT ENABLE_TSAN AND NOT ENABLE_MSAN)

@@ -23,6 +23,7 @@ def main():
     out = Path(tempfile.mkdtemp(prefix='owned-sdk-', dir=parent))
     records = []
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
+    environment.pop('XRAY_STDLIB_PATH', None)
 
     def run(name, argv, okay=True):
         result = subprocess.run(list(map(str, argv)), cwd=out, env=environment,
@@ -51,6 +52,16 @@ def main():
     assert not (moved/'bin/xray.exe').exists() and not any(p.suffix == '.xr' for p in moved.rglob('*'))
     source = out/'consumer.c'
     source.write_bytes((root/'tests/unit/xir/source_sdk_owned_consumer.c').read_bytes())
+    fragment = 'source_sdk_repl_input_consumer.inc.c'
+    (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
+    fixtures = out/'fixtures'
+    fixtures.mkdir()
+    for name in ('source_public_repl_rooted', 'source_public_repl_file'):
+        original_fixture = root/'tests/unit/api'/name
+        shutil.copytree(original_fixture, fixtures/name)
+        for path in original_fixture.rglob('*'):
+            if path.is_file():
+                assert path.read_bytes() == (fixtures/name/path.relative_to(original_fixture)).read_bytes()
     empty = out/'empty-stdlib'
     empty.mkdir()
     compilers = [Path(shutil.which(args.compiler) or args.compiler).resolve()]
@@ -60,6 +71,9 @@ def main():
             compilers.append(secondary)
     expected = (b'Installed public REPL: typed history, busy callback, cancel/defer, resume and owned survivors PASS\n'
                 b'Installed public REPL inspection: visible bindings, nonpublishing types and owned survivors PASS\n'
+                b'Installed rooted REPL: real imports, repeated path births, old closure, type side effects and no fallback PASS\n'
+                b'Installed FILE REPL: real imports, repeated births, absent/directory/config refusals and owned survivors PASS\n'
+                b'Installed input and snapshot: exact lexer span, pending exclusion, removed file and producer death PASS\n'
                 b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n')
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
@@ -78,7 +92,13 @@ def main():
             run(label+'-link', ['link', '/nologo', '/incremental:no', '/out:'+str(exe), obj,
                               *[sdk/p for p in manifest['archives']], 'kernel32.lib',
                               '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
-            assert run(label+'-run', [exe, empty]).replace(b'\r\n', b'\n') == expected
+            snapshot = out/'installed-owned-snapshot.xr'
+            with snapshot.open('xb') as stream:
+                stream.write(b'const snapshot=72\nsnapshot\n')
+            assert snapshot.read_bytes() == b'const snapshot=72\nsnapshot\n'
+            assert run(label+'-run', [exe, empty, fixtures/'source_public_repl_rooted',
+                                     fixtures/'source_public_repl_file']).replace(b'\r\n', b'\n') == expected
+            assert not (out/'installed-owned-snapshot.xr').exists()
     probe = out/'config-probe'
     probe.mkdir()
     (probe/'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20)\n'
@@ -102,8 +122,10 @@ def main():
     summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++20'],
                    published_headers=sorted(headers), exact_NUL_UTF8=True, independent_persistent_instances=True,
                    foreign_callable_refused=True, all_producers_dead=True, owned_tuple_child=True, attacks=attacks,
-                   public_REPL_functions=11, borrowed_binding_facts=True, type_query_actual_side_effects=True,
+                   public_REPL_functions=13, borrowed_binding_facts=True, type_query_actual_side_effects=True,
                    type_query_preserves_it=True, type_result_survives_owner=True,
+                   rooted_real_imports_and_project_authority=True, repeated_real_path_births=True,
+                   FILE_snapshot_after_unlink=True, real_lexer_exact_span=True,
                    manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
                    scope='Source embedding host consumers; not Target AOT/mixed or complete FI/safety qualification',
                    production_release=False)
