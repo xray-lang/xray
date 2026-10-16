@@ -68,6 +68,29 @@ add_test(NAME test_dap_global_core_root_resources COMMAND test_dap_global_core -
 set_tests_properties(test_dap_global_core_root test_dap_global_core_child test_dap_global_core_borrow PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership")
 set_tests_properties(test_dap_global_core_root_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")
 
+add_executable(test_dap_globals test_globals.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_globals PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_globals PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
+    XR_DAP_GLOBAL_ROOT_FIXTURE="${XR_DAP_FIXTURE_DIR}/global_runtime.xr"
+    XR_DAP_GLOBAL_CHILD_FIXTURE="${XR_DAP_FIXTURE_DIR}/global_runtime_child.xr"
+    XR_DAP_GLOBAL_BORROW_FIXTURE="${XR_DAP_FIXTURE_DIR}/global_runtime_borrow.xr"
+    XR_DAP_GLOBAL_TYPES_FIXTURE="${XR_DAP_FIXTURE_DIR}/global_runtime_types.xr"
+    XR_DAP_GLOBAL_LIB_FIXTURE="${XR_DAP_FIXTURE_DIR}/global_runtime_library.xr")
+if(MSVC)
+    target_compile_options(test_dap_globals PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_globals PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_globals_root COMMAND test_dap_globals --root)
+add_test(NAME test_dap_globals_child COMMAND test_dap_globals --child)
+add_test(NAME test_dap_globals_borrow COMMAND test_dap_globals --borrow)
+add_test(NAME test_dap_globals_types COMMAND test_dap_globals --types)
+add_test(NAME test_dap_globals_faults COMMAND test_dap_globals --faults)
+add_test(NAME test_dap_globals_resources COMMAND test_dap_globals --resources)
+set_tests_properties(test_dap_globals_root test_dap_globals_child test_dap_globals_borrow test_dap_globals_types PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;evaluate;variables")
+set_tests_properties(test_dap_globals_faults test_dap_globals_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;variables;resources;fault-injection")
+
 add_executable(test_dap_source_globals test_source_globals.c)
 target_link_libraries(test_dap_source_globals PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_source_globals PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"

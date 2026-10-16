@@ -11,10 +11,10 @@
 #include "xdap_dispatch.h"
 #include "../../xir/xxir_output.h"
 #include "xdap_value.h"
-typedef struct XdapStopFrame { uint32_t handle, scope; } XdapStopFrame;
-/* A Source operand and path select a value, never a cached Call permission.
+typedef struct XdapStopFrame { uint32_t handle, scope,global_scope; } XdapStopFrame;
+/* A Source operand or module slot and path select a value, never a cached Call permission.
  * A readonly value root can reach a mutable Class identity but cannot rebind. */
-typedef struct XdapValueOrigin { uint64_t epoch,frame;uint32_t operand;XrXirValuePath path; } XdapValueOrigin;
+typedef struct XdapValueOrigin { uint64_t epoch,frame;uint32_t operand;XrXirValuePath path;bool slot; } XdapValueOrigin;
 typedef struct XdapValueRef { uint32_t handle,frame;XrXirValue value;XdapValueShape shape;XdapValueOrigin origin; } XdapValueRef;
 typedef struct XdapBreakpointPredicate {
     char *condition,*log;

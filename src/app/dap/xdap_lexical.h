@@ -21,4 +21,7 @@ typedef struct XdapLexicalView {
  * only the owned snapshot can admit a read. Failure preserves the output. */
 XR_FUNC XrXirStatus xdap_lexical_open(const XdapLaunch *,const XrXirVmDebugSnapshot *,uint32_t,XdapLexicalView *);
 XR_FUNC XrXirValueStatus xdap_lexical_read(const XdapLexicalView *,uint32_t,XrXirValue *,const char **,size_t *);
+/* The global ordinal selects owned producer facts. Actual slot values and
+ * access availability come exclusively from this frame's captured snapshot. */
+XR_FUNC XrXirValueStatus xdap_global_read(const XdapLexicalView *,uint32_t,XrXirValue *,const char **,size_t *);
 #endif // XDAP_LEXICAL_H

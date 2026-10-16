@@ -15,9 +15,9 @@
 static XrXirStatus inspect_finish(XdapAdapter *s,const XdapRequest *r,XdapJsonWriter *body) {
     XrXirStatus status=xdap_dispatch_response(s,r,true,body,NULL);xdap_json_writer_free(body);return status;
 }
-static uint32_t inspect_frame(const XdapAdapter *s,uint64_t handle,bool scope) {
+static uint32_t inspect_frame(const XdapAdapter *s,uint64_t handle,uint32_t scope) {
     for (uint32_t i=0;i<s->depth;++i)
-        if ((scope ? s->frames[i].scope : s->frames[i].handle)==handle) return i;
+        if ((scope==2 ? s->frames[i].global_scope : scope ? s->frames[i].scope : s->frames[i].handle)==handle) return i;
     return UINT32_MAX;
 }
 static bool inspect_position(XdapAdapter *s,XdapJsonWriter *w,uint32_t function,uint32_t instruction) {
@@ -107,10 +107,31 @@ static XrXirStatus inspect_scopes(XdapAdapter *s,const XdapRequest *r) {
     XrXirVmDebugFrameInfo info={0};XrXirValue name={0};
     if (xr_xir_vm_debug_snapshot_frame(s->snapshot,frame,&info,&name)!=XR_XIR_VALUE_OK) return XR_XIR_BUDGET;
     xr_xir_value_drop(&name);
+    bool globals=false;
+    if (info.code==XR_XIR_VM_DEBUG_VM && info.instruction!=UINT32_MAX &&
+        info.thread==xr_xir_vm_debug_snapshot_stopped_thread(s->snapshot)) {
+        const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(s->launch->source);
+        const XrXirSourceView *source=xr_xir_compile_source_product_view(s->launch->source);
+        if (!debug || !source || info.function>=s->launch->function_count) return XR_XIR_BAD_STRUCTURE;
+        uint32_t module=s->launch->functions[info.function].module;if (module>=s->launch->module_count) return XR_XIR_BAD_STRUCTURE;
+        if (xr_compile_resources_work(s->resources,debug->global_count)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+        for (uint32_t g=0;g<debug->global_count;++g) {
+            const XrXirSourceDeclaration *declaration=&source->declarations[debug->globals[g].declaration-1];
+            if (declaration->range.module==s->launch->modules[module].query_module) { globals=true;break; }
+        }
+    }
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
-    if (!info.value_count) { XDAP_TEXT(&body,"{\"scopes\":[]}");return inspect_finish(s,r,&body); }
-    XDAP_TEXT(&body,"{\"scopes\":[{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":");
-    xdap_json_unsigned(&body,s->frames[frame].scope);XDAP_TEXT(&body,",\"expensive\":false}]}");
+    XDAP_TEXT(&body,"{\"scopes\":[");
+    if (info.value_count) {
+        XDAP_TEXT(&body,"{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":");
+        xdap_json_unsigned(&body,s->frames[frame].scope);XDAP_TEXT(&body,",\"expensive\":false}");
+    }
+    if (globals) {
+        if (info.value_count) XDAP_TEXT(&body,",");
+        XDAP_TEXT(&body,"{\"name\":\"Globals\",\"presentationHint\":\"globals\",\"variablesReference\":");
+        xdap_json_unsigned(&body,s->frames[frame].global_scope);XDAP_TEXT(&body,",\"expensive\":false}");
+    }
+    XDAP_TEXT(&body,"]}");
     return inspect_finish(s,r,&body);
 }
 static bool inspect_value(XdapJsonWriter *body,const XrXirValue *value) {
@@ -196,6 +217,7 @@ static XrXirStatus inspect_children(XdapAdapter *s,const XdapRequest *r,const Xd
     if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
 }
 #include "xdap_dispatch_lexical.inc.c"
+#include "xdap_dispatch_globals.inc.c"
 static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
     uint64_t handle=0,start=0,count=0;XrXirStatus status=xdap_dispatch_number(r,"variablesReference",0,&handle);
     if (status==XR_XIR_OK && s->variable_paging) status=xdap_dispatch_number(r,"start",0,&start);
@@ -213,12 +235,13 @@ static XrXirStatus inspect_variables(XdapAdapter *s,const XdapRequest *r) {
         return inspect_children(s,r,&s->values[i],start,count);
     }
     uint32_t frame=inspect_frame(s,handle,true);
+    bool global=false;if (frame==UINT32_MAX) { frame=inspect_frame(s,handle,2);global=frame!=UINT32_MAX; }
     if (!s->snapshot || frame==UINT32_MAX) return xdap_dispatch_response(s,r,false,NULL,"Invalid or retired variable reference");
     if (indexed) {
         XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);XDAP_TEXT(&body,"{\"variables\":[]}");
         return inspect_finish(s,r,&body);
     }
-    return inspect_lexical(s,r,frame,start,count);
+    return global ? inspect_globals(s,r,frame,start,count) : inspect_lexical(s,r,frame,start,count);
 }
 /* Instruction addresses are indices in the owned flattened VM display code,
  * not host pointers or byte offsets into a native code lease. */

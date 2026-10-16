@@ -40,6 +40,18 @@ static bool expression_binding(ExpressionState *state,const char *name) {
         if (state->status!=XR_XIR_OK) return false;
         state->bindings[state->count++]=fresh;return true;
     }
+    const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(view->launch->source);
+    if (!debug) { state->status=XR_XIR_BAD_STRUCTURE;return false; }
+    for (uint32_t g=0;g<debug->global_count;++g) {
+        ExpressionBinding fresh={0};XrXirValueStatus read=xdap_global_read(view,g,&fresh.value,&fresh.name,&fresh.length);
+        if (read==XR_XIR_VALUE_BAD_ARGUMENT || read==XR_XIR_VALUE_UNSUPPORTED) continue;
+        state->status=expression_value_status(read);if (state->status!=XR_XIR_OK) return false;
+        if (fresh.length==length && !memcmp(fresh.name,name,length)) {
+            if (state->count==128) { xr_xir_value_drop(&fresh.value);state->status=XR_XIR_BUDGET;return false; }
+            state->bindings[state->count++]=fresh;return true;
+        }
+        xr_xir_value_drop(&fresh.value);
+    }
     state->status=XR_XIR_UNRESOLVED;return false;
 }
 static bool expression_node_allowed(const AstNode *node) {

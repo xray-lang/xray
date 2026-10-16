@@ -21,6 +21,22 @@ static XrXirStatus inspect_write_binding(const XdapLexicalView *lexical,const Xd
     }
     return XR_XIR_UNRESOLVED;
 }
+static XrXirStatus inspect_write_global(const XdapLexicalView *view,const XdapJsonNode *name,uint32_t *slot) {
+    const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(view->launch->source);
+    if (!debug) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t g=0;g<debug->global_count;++g) {
+        XrXirValue value={0};const char *text=NULL;size_t length=0;
+        XrXirValueStatus read=xdap_global_read(view,g,&value,&text,&length);
+        if (read==XR_XIR_VALUE_BAD_ARGUMENT || read==XR_XIR_VALUE_UNSUPPORTED) continue;
+        if (read!=XR_XIR_VALUE_OK) return inspect_write_status(read);
+        bool matches=length==name->length && !memcmp(text,name->text,length);xr_xir_value_drop(&value);
+        if (!matches) continue;
+        const XrXirSourceDeclaration *declaration=&view->source->declarations[debug->globals[g].declaration-1];
+        if (!declaration->mutable) return XR_XIR_BAD_TYPE;
+        *slot=debug->globals[g].slot;return XR_XIR_OK;
+    }
+    return XR_XIR_UNRESOLVED;
+}
 #include "xdap_dispatch_write_target.inc.c"
 static XrXirStatus inspect_write_body(XdapAdapter *s,const XrXirValue *value,uint32_t frame,const XdapValueOrigin *origin,uint32_t *reference,XdapJsonWriter *body) {
     XdapValueShape shape={0};body->status=inspect_reference(s,value,frame,origin,reference,&shape);
@@ -51,7 +67,8 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"name",&name);
     if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"value",&text);
     if (status!=XR_XIR_OK) return status;
-    uint32_t frame=inspect_frame(s,scope,true);const XdapValueRef *parent=NULL;
+    uint32_t frame=inspect_frame(s,scope,true);const XdapValueRef *parent=NULL;bool global=false;
+    if (frame==UINT32_MAX) { frame=inspect_frame(s,scope,2);global=frame!=UINT32_MAX; }
     if (frame==UINT32_MAX) for (uint32_t i=0;i<s->value_count;++i) if (s->values[i].handle==scope) { parent=&s->values[i];frame=parent->frame;break; }
     if (!s->snapshot || s->running || frame>=s->depth || !name || !text || r->document.nodes[name].kind!=XDAP_JSON_STRING ||
         r->document.nodes[text].kind!=XDAP_JSON_STRING || !r->document.nodes[name].length || !r->document.nodes[text].length)
@@ -61,8 +78,9 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     XrXirValuePathStep steps[128];XdapValueOrigin target={0};XrXirValue value={0};
     if (status==XR_XIR_OK && parent) status=inspect_write_child(s,parent,&r->document.nodes[name],steps,&target);
     else if (status==XR_XIR_OK) {
-        uint32_t operand=0;status=inspect_write_binding(&lexical,&r->document.nodes[name],&operand);
-        if (status==XR_XIR_OK) target=(XdapValueOrigin){lexical.epoch,lexical.frame_id,operand,{0}};
+        uint32_t operand=0;status=global ? inspect_write_global(&lexical,&r->document.nodes[name],&operand) :
+            inspect_write_binding(&lexical,&r->document.nodes[name],&operand);
+        if (status==XR_XIR_OK) target=(XdapValueOrigin){lexical.epoch,lexical.frame_id,operand,{0},global};
     }
     if (status==XR_XIR_OK && (target.epoch!=s->stop_epoch || target.frame!=lexical.frame_id)) status=XR_XIR_BAD_TYPE;
     if (status==XR_XIR_OK) {
@@ -81,7 +99,8 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,true,&body,NULL,&success);
     if (status==XR_XIR_OK) status=xdap_dispatch_stage_response(s,r,false,NULL,"The paused write was not admitted",&failure);
     if (status==XR_XIR_OK) {
-        XrXirValueStatus begun=xdap_current_write_begin(s->launch->control,s->stop_epoch,target.frame,target.operand,&target.path,&value);
+        XrXirValueStatus begun=target.slot ? xdap_current_write_slot_begin(s->launch->control,s->stop_epoch,target.frame,target.operand,&target.path,&value) :
+            xdap_current_write_begin(s->launch->control,s->stop_epoch,target.frame,target.operand,&target.path,&value);
         armed=begun==XR_XIR_VALUE_OK;status=inspect_write_status(begun);
     }
     if (armed) {

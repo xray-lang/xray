@@ -13,6 +13,15 @@
 #include "app/dap/xdap_dispatch_internal.h"
 #include "test_global_core_helpers.inc.c"
 static const XrXirValuePath global_whole={0};
+typedef struct GlobalWriteTarget { uint64_t epoch;uint32_t frame,slot; } GlobalWriteTarget;
+static XrXirValueStatus global_write(GlobalFixture *fixture,const GlobalWriteTarget *target,
+    const XrXirValuePath *path,const XrXirValue *value,XrXirVmDebugSnapshot **fresh) {
+    XdapCurrent *control=fixture->adapter->launch->control;
+    XrXirVmDebugFrameInfo info=global_frame(fixture->adapter->snapshot,target->frame);
+    CHECK(xdap_current_write_slot_begin(control,target->epoch,info.id,target->slot,path,value)==XR_XIR_VALUE_OK);
+    XdapCurrentResult result={0};CHECK(xdap_current_poll(control,1,&result)==XR_XIR_VALUE_OK && result.state==XDAP_CURRENT_STOPPED);
+    bool visited=false;XrXirValueStatus status=xdap_current_write_finish(control,&visited,fresh);CHECK(visited);xdap_current_result_drop(&result);return status;
+}
 static void global_text(const XrXirVmDebugSnapshot *snapshot,uint32_t frame,uint32_t slot,const char *expected,size_t length) {
     XrXirValue value={0};const char *text=NULL;size_t bytes=0;
     CHECK(xir_vm_debug_snapshot_slot(snapshot,frame,slot,&value)==XR_XIR_VALUE_OK);

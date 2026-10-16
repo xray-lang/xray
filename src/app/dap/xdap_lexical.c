@@ -7,6 +7,7 @@
  * xdap_lexical.c - Immutable lexical facts never grant execution or mutation
  */
 #include "xdap_lexical.h"
+#include "../../xir/xxir_vm_debug_internal.h"
 #include <string.h>
 XR_FUNC XrXirStatus xdap_lexical_open(const XdapLaunch *launch,const XrXirVmDebugSnapshot *snapshot,
     uint32_t frame,XdapLexicalView *output) {
@@ -49,5 +50,27 @@ XR_FUNC XrXirValueStatus xdap_lexical_read(const XdapLexicalView *view,uint32_t 
             xr_xir_vm_debug_snapshot_cell_value(view->snapshot,view->frame,binding->value,output) :
             xr_xir_vm_debug_snapshot_value(view->snapshot,view->frame,binding->value,output);
     if (status==XR_XIR_VALUE_OK) { *name=text;*length=bytes; }
+    return status;
+}
+XR_FUNC XrXirValueStatus xdap_global_read(const XdapLexicalView *view,uint32_t index,
+    XrXirValue *output,const char **name,size_t *length) {
+    if (!view || !view->launch || !view->source || !view->function || !view->snapshot || !output || !name || !length ||
+        output->type || output->reserved || output->payload || view->function->function>=view->launch->function_count)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(view->launch->source);
+    if (!debug || index>=debug->global_count || view->function->function>=debug->function_count ||
+        view->function!=&debug->functions[view->function->function] ||
+        view->source!=xr_xir_compile_source_product_view(view->launch->source)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    uint32_t module=view->launch->functions[view->function->function].module;
+    if (module>=view->launch->module_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (xr_compile_resources_work(view->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
+    const XrXirSourceDebugGlobal *global=&debug->globals[index];
+    if (!global->declaration || global->declaration>view->source->declaration_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirSourceDeclaration *declaration=&view->source->declarations[global->declaration-1];
+    if (declaration->range.module!=view->launch->modules[module].query_module || !declaration->name) return XR_XIR_VALUE_BAD_ARGUMENT;
+    size_t bytes=strlen(declaration->name);
+    if (xr_compile_resources_work(view->launch->resources,(uint64_t)bytes+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
+    XrXirValueStatus status=xir_vm_debug_snapshot_slot(view->snapshot,view->frame,global->slot,output);
+    if (status==XR_XIR_VALUE_OK) { *name=declaration->name;*length=bytes; }
     return status;
 }

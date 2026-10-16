@@ -28,7 +28,7 @@ static GlobalFixture global_open(const char *file) {
     config.instance.requested_value_limit=config.instance.requested_call_limit=1048576;
     config.instance.work_limit=128000000;config.instance.poll_limit=10000;config.instance.depth_limit=64;
     CHECK(xdap_adapter_new(&compiler,&config,&fixture.adapter)==XR_XIR_OK && !compiler);
-    request(fixture.adapter,"{\"seq\":1,\"type\":\"request\",\"command\":\"initialize\"}");
+    request(fixture.adapter,"{\"seq\":1,\"type\":\"request\",\"command\":\"initialize\",\"arguments\":{\"supportsVariablePaging\":true,\"supportsVariableType\":true}}");
     char message[1024];snprintf(message,sizeof(message),"{\"seq\":2,\"type\":\"request\",\"command\":\"launch\",\"arguments\":{\"program\":\"%s\"}}",file);
     request(fixture.adapter,message);XrJsonValue *reply=last_response("launch",true);xjson_free(reply);capture.count=0;return fixture;
 }
@@ -86,13 +86,4 @@ static void global_finish(GlobalFixture *fixture) {
     CHECK(!xr_xir_domain_budget_stats(fixture->domain).metadata_live);xr_xir_domain_drop(fixture->domain);
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(fixture->ledger,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==fixture->baseline.live_bytes);xr_compile_resources_release(fixture->ledger);CHECK(!runtime_live && !runtime_bytes);
-}
-typedef struct GlobalWriteTarget { uint64_t epoch;uint32_t frame,slot; } GlobalWriteTarget;
-static XrXirValueStatus global_write(GlobalFixture *fixture,const GlobalWriteTarget *target,
-    const XrXirValuePath *path,const XrXirValue *value,XrXirVmDebugSnapshot **fresh) {
-    XdapCurrent *control=fixture->adapter->launch->control;
-    XrXirVmDebugFrameInfo info=global_frame(fixture->adapter->snapshot,target->frame);
-    CHECK(xdap_current_write_slot_begin(control,target->epoch,info.id,target->slot,path,value)==XR_XIR_VALUE_OK);
-    XdapCurrentResult result={0};CHECK(xdap_current_poll(control,1,&result)==XR_XIR_VALUE_OK && result.state==XDAP_CURRENT_STOPPED);
-    bool visited=false;XrXirValueStatus status=xdap_current_write_finish(control,&visited,fresh);CHECK(visited);xdap_current_result_drop(&result);return status;
 }

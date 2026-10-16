@@ -8,7 +8,7 @@
  */
 static bool inspect_origin_equal(const XdapValueOrigin *left,const XdapValueOrigin *right) {
     if (!left->epoch) return !right || !right->epoch;
-    if (!right || left->epoch!=right->epoch || left->frame!=right->frame || left->operand!=right->operand ||
+    if (!right || left->epoch!=right->epoch || left->frame!=right->frame || left->operand!=right->operand || left->slot!=right->slot ||
         left->path.count!=right->path.count) return false;
     for (uint32_t i=0;i<left->path.count;++i) {
         const XrXirValuePathStep *a=&left->path.steps[i],*b=&right->path.steps[i];

@@ -1,0 +1,20 @@
+import "./global_runtime_library" as lib
+enum Choice { Number { value:i64 }, Empty }
+final class Box { value:i64 constructor(value:i64) { this.value=value } }
+fn first(value:i64)->i64 { return value+11 }
+fn second(value:i64)->i64 { return value+99 }
+fn score(value:Choice)->i64 { return match(value) { Choice.Number{value}->value, Choice.Empty->0 } }
+var pair:(i64,string)=(11,"old")
+const incomingPair:(i64,string)=(99,"new\0value")
+var optional:i64?=11
+const incomingOptional:i64?=99
+var choice:Choice=Choice.Number{value:11}
+const incomingChoice:Choice=Choice.Number{value:99}
+const box:Box=Box(11)
+var callback:fn(i64)->i64=first
+const incomingCallback:fn(i64)->i64=second
+fn inspect()->i64 {
+    const result=lib.leaf(5)
+    return pair.0+(optional ?? 0)+score(choice)+box.value+callback(0)+result
+}
+print(inspect())

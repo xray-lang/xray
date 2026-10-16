@@ -377,9 +377,9 @@ XR_FUNC XrXirStatus xdap_adapter_step(XdapAdapter *s,uint64_t quantum) {
             xr_xir_vm_debug_snapshot_drop(s->snapshot);s->snapshot=NULL;goto done;
         }
         s->depth=xr_xir_vm_debug_snapshot_depth(s->snapshot);
-        if (s->depth>64 || s->next_handle>INT32_MAX-s->depth*2) { status=XR_XIR_BUDGET;goto done; }
+        if (s->depth>64 || s->next_handle>INT32_MAX-s->depth*3) { status=XR_XIR_BUDGET;goto done; }
         for (uint32_t i=0;i<s->depth;++i) {
-            s->frames[i].handle=s->next_handle++;s->frames[i].scope=s->next_handle++;
+            s->frames[i].handle=s->next_handle++;s->frames[i].scope=s->next_handle++;s->frames[i].global_scope=s->next_handle++;
         }
         s->stop_epoch=result.debug_epoch;s->running=false;
         XrXirValue exception={0};XrXirValueStatus observed=xr_xir_vm_debug_snapshot_exception(s->snapshot,&exception);
