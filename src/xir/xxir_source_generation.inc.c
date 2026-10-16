@@ -117,11 +117,13 @@ static bool generation_root_declaration(SourceContext *compare,const SourceGener
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
     const XrXirSourceDeclaration *declaration=&view->declarations[index];
     uint32_t module=record->capture.module;
-    if(declaration->parent || declaration->range.module!=module || declaration->range.line<=0 ||
+    if(declaration->parent || declaration->range.module!=module ||
         (declaration->kind!=XR_XIR_SOURCE_FUNCTION && declaration->kind!=XR_XIR_SOURCE_BINDING &&
-         declaration->kind!=XR_XIR_SOURCE_TYPE && declaration->kind!=XR_XIR_SOURCE_IMPORT))return false;
-    /* Anonymous implementation bodies can have a root query range. Only an
-     * actual registered root name participates in the lexical environment. */
+         declaration->kind!=XR_XIR_SOURCE_TYPE && declaration->kind!=XR_XIR_SOURCE_IMPORT &&
+         declaration->kind!=XR_XIR_SOURCE_MODULE))return false;
+    /* Anonymous bodies can have a root query range, while import aliases have
+     * no individual token location. Exact root registration, not a nonzero
+     * display range, selects the actual lexical declaration. */
     const SourceSemanticEnvironment *semantic=record->capture.semantic;
     if(!semantic || module>=semantic->module_count)return false;
     const SourceName *symbol=find_name(compare,semantic->names[module],declaration->name);
@@ -212,6 +214,7 @@ static XrXirStatus generation_result_binding(XrXirSourceGenerations *owner,Sourc
 typedef struct GenerationInput {
     const XrXirSourceText *text;
     const XrXirSourceAstOwner *ast;
+    const XrXirSourceReplInput *repl;
     bool readers, interactive, type_query;
 } GenerationInput;
 static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
@@ -221,7 +224,14 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
     const XrXirSourceText *text=input->text;
     const XrXirSourceAstOwner *ast=input->ast;
     if (text && (!text->text || (text->logical_path && *text->logical_path))) return XR_XIR_BAD_STRUCTURE;
-    if (ast && (!ast->input.program || (ast->input.logical_path && *ast->input.logical_path) ||
+    const XrXirSourceReplInput *repl=input->repl;
+    bool rooted=repl && repl->authority;
+    if (repl && (repl->ast!=ast || !input->interactive ||
+        (rooted ? !repl->absolute_path || !*repl->absolute_path || !repl->logical_path || !*repl->logical_path ||
+            repl->authority->kind==XR_MODULE_IDENTITY_MEMORY || !repl->authority->physical_root :
+            repl->absolute_path || repl->logical_path || repl->lockfile))) return XR_XIR_BAD_STRUCTURE;
+    if (ast && (!ast->input.program || (!rooted && ast->input.logical_path && *ast->input.logical_path) ||
+        (rooted && (!ast->input.logical_path || !*ast->input.logical_path)) ||
         ast->resources!=owner->config.context.resources || !ast->owner || !ast->retain || !ast->release))
         return XR_XIR_BAD_STRUCTURE;
     if (owner->pending || (owner->published && owner->published->unit.interactive!=input->interactive))
@@ -248,11 +258,13 @@ static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
             opened==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;goto done;
     }
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,record->namespace_id,NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&owner->config.context,owner->config.stdlib_path,
-        owner->config.lockfile,XR_XIR_PROGRAM,owner->config.libraries};
-    SourceInput source={.supplied=text!=NULL,.text={NULL,record->source,text?text->length:0},
+    XrXirSourceRequest request={session,rooted?repl->absolute_path:NULL,rooted?repl->authority:&authority,
+        &owner->config.context,owner->config.stdlib_path,rooted?repl->lockfile:owner->config.lockfile,
+        XR_XIR_PROGRAM,owner->config.libraries};
+    SourceInput source={.supplied=text!=NULL,.text={rooted?repl->logical_path:NULL,record->source,text?text->length:0},
         .ast=ast?ast->input.program:NULL,.ast_input=ast!=NULL,.ast_owner=ast?&record->ast_owner:NULL,
         .capture=&record->capture,.binding_readers=input->readers,.interactive=input->interactive,.type_query=input->type_query,
+        .module_scope=input->interactive?record->namespace_id:NULL,
         .history=owner->published ? &owner->published->unit : NULL,.self=&record->unit};
     status=source_check_input(&request,source,&record->result,&location,NULL);
     if (status!=XR_XIR_OK) goto done;
@@ -290,13 +302,13 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_ast_bindings(XrXirS
     return generation_prepare(owner,&input,serial,diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_ast_bindings(XrXirSourceGenerations *owner,
-    const XrXirSourceAstOwner *ast,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
-    const GenerationInput input={.ast=ast,.readers=true,.interactive=true};
+    const XrXirSourceReplInput *repl,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
+    const GenerationInput input={.ast=repl?repl->ast:NULL,.repl=repl,.readers=true,.interactive=true};
     return generation_prepare(owner,&input,serial,diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(XrXirSourceGenerations *owner,
-    const XrXirSourceAstOwner *ast,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
-    const GenerationInput input={.ast=ast,.readers=true,.interactive=true,.type_query=true};
+    const XrXirSourceReplInput *repl,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
+    const GenerationInput input={.ast=repl?repl->ast:NULL,.repl=repl,.readers=true,.interactive=true,.type_query=true};
     return generation_prepare(owner,&input,serial,diagnostic);
 }
 /* Common specialization preserves module and slot ordinals. Complete code

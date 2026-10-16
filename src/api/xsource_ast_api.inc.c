@@ -54,7 +54,7 @@ static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceT
     ApiParseDiagnostic capture={state,diagnostic};
     XrParseDiagnostics options={api_parse_error,&capture,1};
     XrParseStatus parsed=interactive ? xr_compile_parse_repl_with_trivia(xr_source_compiler_session(compiler),
-        ast->source,&options,&ast->program) : xr_compile_parse_with_trivia(xr_source_compiler_session(compiler),
+        ast->source,ast->path,&options,&ast->program) : xr_compile_parse_with_trivia(xr_source_compiler_session(compiler),
         ast->source,ast->path,&options,&ast->program);
     return parsed==XR_PARSE_OK ? XR_SOURCE_OK : parsed==XR_PARSE_OUT_OF_MEMORY ? XR_SOURCE_OUT_OF_MEMORY :
         parsed==XR_PARSE_BUDGET ? XR_SOURCE_BUDGET : parsed==XR_PARSE_BAD_ARGUMENT ? XR_SOURCE_BAD_ARGUMENT :

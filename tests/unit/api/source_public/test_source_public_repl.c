@@ -8,6 +8,7 @@
  */
 #include "xray_source_repl.h"
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
@@ -146,7 +147,10 @@ static void cancellation(void) {
 }
 #include "source_public_repl_results.h"
 #include "source_public_repl_inspection.h"
-int main(void) {
+#include "source_public_repl_rooted.h"
+int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--rooted")){rooted_inputs();rooted_nominals();return 0;}
+    CHECK(argc==1);
     history();cancellation();typed_results();display_limit();metadata_inspection();
     puts("public Source REPL: real Compiler/Catalog, exact AST, paired publication, old closures, rollback, cumulative output, owned survivors, reentry and cancel/defer PASS");return 0;
 }

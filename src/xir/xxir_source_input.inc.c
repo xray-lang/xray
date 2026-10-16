@@ -27,6 +27,7 @@ typedef struct SourceInput {
     bool ast_input;
     bool binding_readers;
     bool interactive, type_query;
+    const char *module_scope;
     const SourceHistoryUnit *history, *self;
 } SourceInput;
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
@@ -53,7 +54,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     ctx.compile = *request->context;
     ctx.semantic_output=input.capture ? &input.capture->semantic : NULL;
     ctx.binding_readers=input.binding_readers;
-    ctx.interactive=input.interactive;ctx.type_query=input.type_query;
+    ctx.interactive=input.interactive;ctx.type_query=input.type_query;ctx.module_scope=input.module_scope;
     ctx.history_input=input.history;ctx.self_unit=input.self;
     ctx.remaining_blocks = ctx.compile.limits.blocks;
     ctx.remaining_instructions = ctx.compile.limits.instructions;

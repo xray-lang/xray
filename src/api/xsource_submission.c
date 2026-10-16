@@ -160,6 +160,7 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
 typedef struct SubmissionInput {
     const XrXirSourceText *text;
     const XrXirSourceAstOwner *ast;
+    const XrXirSourceReplInput *repl;
     bool interactive, type_query;
 } SubmissionInput;
 static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const SubmissionInput *input,
@@ -171,8 +172,8 @@ static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const Submiss
     if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;
     XrXirStatus prepared=input->type_query ? xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(owner->source,
-        input->ast,&owner->source_serial,diagnostic) : input->interactive ? xr_xir_compile_source_generation_prepare_repl_ast_bindings(owner->source,
-        input->ast,&owner->source_serial,diagnostic) : input->ast ? xr_xir_compile_source_generation_prepare_ast_bindings(owner->source,
+        input->repl,&owner->source_serial,diagnostic) : input->interactive ? xr_xir_compile_source_generation_prepare_repl_ast_bindings(owner->source,
+        input->repl,&owner->source_serial,diagnostic) : input->ast ? xr_xir_compile_source_generation_prepare_ast_bindings(owner->source,
         input->ast,&owner->source_serial,diagnostic) : xr_xir_compile_source_generation_prepare_bindings(owner->source,
         input->text,&owner->source_serial,diagnostic);
     status=submission_capture(owner,submission_xir(prepared));
@@ -207,14 +208,14 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *owne
     const SubmissionInput input={.ast=ast};
     return submission_prepare(owner,&input,diagnostic);
 }
-XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_ast(XrSourceSubmission *owner,const XrXirSourceAstOwner *ast,
+XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_ast(XrSourceSubmission *owner,const XrXirSourceReplInput *repl,
     XrXirSourceDiagnostic *diagnostic) {
-    const SubmissionInput input={.ast=ast,.interactive=true};
+    const SubmissionInput input={.ast=repl?repl->ast:NULL,.repl=repl,.interactive=true};
     return submission_prepare(owner,&input,diagnostic);
 }
-XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_type_ast(XrSourceSubmission *owner,const XrXirSourceAstOwner *ast,
+XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_type_ast(XrSourceSubmission *owner,const XrXirSourceReplInput *repl,
     XrXirSourceDiagnostic *diagnostic) {
-    const SubmissionInput input={.ast=ast,.interactive=true,.type_query=true};
+    const SubmissionInput input={.ast=repl?repl->ast:NULL,.repl=repl,.interactive=true,.type_query=true};
     return submission_prepare(owner,&input,diagnostic);
 }
 XR_FUNC bool xr_source_submission_repl_result(const XrSourceSubmission *owner) {

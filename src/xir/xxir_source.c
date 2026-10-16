@@ -2301,7 +2301,7 @@ static bool collect_declarations(SourceContext *ctx) {
     if (capacity > ctx->compile.limits.functions) capacity = ctx->compile.limits.functions;
     ctx->function_capacity = capacity;
     ctx->function_value_capacity=function_values;
-    if (!source_declaration_storage(ctx,nominals,interfaces)) return false;
+    if (!source_declaration_storage(ctx,nominals,interfaces) || !source_declaration_modules(ctx)) return false;
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
@@ -2324,7 +2324,7 @@ static bool collect_declarations(SourceContext *ctx) {
         !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx) ||
         !source_class_field_capabilities(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;
-    if (!source_declaration_modules(ctx) || !source_history_dependencies(ctx)) return false;
+    if (!source_history_dependencies(ctx)) return false;
     uint32_t function = count, slot = 0;
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;

@@ -24,6 +24,16 @@ typedef struct XrXirSourceGenerationConfig {
     struct XrLockfile *lockfile;
     const struct XrXirLibraryCatalog *libraries;
 } XrXirSourceGenerationConfig;
+/* AST ownership stays exact. Rooted locators and authority are borrowed only
+ * during preparation; the ordinary graph owns their admitted copies. NULL
+ * authority selects this owner's MEMORY namespace and requires empty paths. */
+typedef struct XrXirSourceReplInput {
+    const XrXirSourceAstOwner *ast;
+    const XrModuleIdentityAuthority *authority;
+    const char *absolute_path, *logical_path;
+    struct XrLockfile *lockfile;
+} XrXirSourceReplInput;
+
 typedef struct XrXirSourceGenerationView {
     uint64_t serial, parent;
     bool published, interactive, type_query;
@@ -94,12 +104,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_ast_bindings(XrXirS
  * the next input's it selects that exact published declaration. Ordinary and
  * interactive histories cannot be mixed in one owner. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_ast_bindings(XrXirSourceGenerations *owner,
-    const XrXirSourceAstOwner *ast, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
+    const XrXirSourceReplInput *input, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
 /* Evaluates one actual expression through typeName in the common checker.
  * Its ordinary result reader returns the real String; this temporary record
  * may only be aborted, never published into lexical history. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(XrXirSourceGenerations *,
-    const XrXirSourceAstOwner *, uint64_t *, XrXirSourceDiagnostic *);
+    const XrXirSourceReplInput *, uint64_t *, XrXirSourceDiagnostic *);
 /* Source publication allocates and charges nothing. The execution coordinator
  * calls this only after the corresponding Instance candidate returned normally.
  * These declaration observations do not authenticate runtime publication. */

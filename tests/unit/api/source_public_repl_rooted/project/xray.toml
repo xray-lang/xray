@@ -1,0 +1,3 @@
+[package]
+name = "tests/rooted-repl"
+version = "1.0.0"

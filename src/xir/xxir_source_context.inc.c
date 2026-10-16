@@ -97,6 +97,7 @@ typedef struct SourceContext {
     uint32_t module_count, entry_function;
     bool core_factory, binding_readers;
     bool interactive, type_query;
+    const char *module_scope;
     AstNode *repl_tail;
     SourceName *repl_result;
     SourceFunctionValue *function_values;

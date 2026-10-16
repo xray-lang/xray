@@ -165,6 +165,19 @@ static XrSourceCompileStatus compiler_capture(XrSourceCompiler *compiler, XrSour
     return compiler_resource(xr_compile_state_fail(xr_source_compiler_state(compiler),
         status == XR_SOURCE_COMPILE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY));
 }
+XR_FUNC XrSourceCompileStatus xr_source_compiler_open_input(XrSourceCompiler *compiler,const XrSourceEntryInput *input,
+    XrSourceAuthority **output,XrSourceCompileDiagnostic *diagnostic) {
+    if(!compiler || !input || !output || *output || !compiler_diagnostic_empty(diagnostic))
+        return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    XrSourceCompileDiagnostic detail={0};detail.stage=XR_SOURCE_COMPILE_AUTHORITY;
+    XrSourceCompileStatus status=compiler_resource(xr_compile_session_resource_status(compiler->session));
+    if(status==XR_SOURCE_COMPILE_OK) {
+        detail.authority_status=xr_source_authority_open_input(&compiler->context,input,compiler->libraries,
+            &compiler->manifest_limits,output,&detail.authority);
+        status=compiler_capture(compiler,compiler_manifest(detail.authority_status));
+    }
+    return compiler_publish(diagnostic,&detail,status);
+}
 XR_FUNC XrSourceCompileStatus xr_source_compiler_build_file(XrSourceCompiler *compiler, const char *absolute_path,
     XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
     if (!compiler || !compiler_diagnostic_empty(diagnostic)) return XR_SOURCE_COMPILE_BAD_ARGUMENT;
@@ -198,9 +211,7 @@ static XrSourceCompileStatus compiler_build_supplied(XrSourceCompiler *compiler,
         detail.stage = XR_SOURCE_COMPILE_AUTHORITY;
         XrSourceEntryInput rooted = {supplied.ast ? XR_SOURCE_ENTRY_AST : XR_SOURCE_ENTRY_TEXT,
             input->absolute_path, input->text, input->length};
-        detail.authority_status = xr_source_authority_open_input(&compiler->context, &rooted, compiler->libraries,
-            &compiler->manifest_limits, &authority, &detail.authority);
-        status = compiler_manifest(detail.authority_status);
+        status = xr_source_compiler_open_input(compiler, &rooted, &authority, &detail);
         if (status == XR_SOURCE_COMPILE_OK) {
             identity = xr_source_authority_entry(authority); entry = xr_source_authority_source_path(authority);
             lockfile = xr_source_authority_lockfile(authority);

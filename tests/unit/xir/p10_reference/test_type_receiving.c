@@ -35,6 +35,7 @@ static void no_change(const XrXirCompileContext *context,XrCompileResourceStats 
 #include "type_receiving_nested.h"
 #include "type_receiving_error.h"
 #include "type_receiving_function.h"
+#include "type_receiving_struct.h"
 int main(void) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     received_nested_arrays(&compiler);
@@ -121,6 +122,7 @@ int main(void) {
     xr_xir_value_drop(&cell);xr_xir_value_drop(&array);
     xr_xir_domain_drop(foreign);xr_xir_domain_drop(domain);
     xr_xir_compile_type_arena_drop(unrelated);xr_xir_compile_type_arena_drop(third);
+    receiving_struct_reads(&compiler);
     receiving_display_cases(&compiler);
     receiving_error_storage_cases(&compiler);
     receiving_storage_faults(&compiler);

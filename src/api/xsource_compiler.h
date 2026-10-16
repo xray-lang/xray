@@ -12,6 +12,7 @@
 #ifndef XSOURCE_COMPILER_H
 #define XSOURCE_COMPILER_H
 #include "xsource_compile.h"
+#include "xsource_authority.h"
 #include "../xir/xxir_source_generation.h"
 
 typedef struct XrSourceCompiler XrSourceCompiler;
@@ -49,6 +50,11 @@ XR_FUNC XrCompileResources *xr_source_compiler_resources(const XrSourceCompiler 
  * owner's ordinary admission. This observation creates no parser or ledger. */
 XR_FUNC XrSourceCompileStatus xr_source_compiler_generation_config(const XrSourceCompiler *,
     const char *namespace_id, XrXirSourceGenerationConfig *output);
+/* Discovers authority with this exact Compiler's Catalog, manifest limits and
+ * cumulative ledger. The caller closes a successful owner after graph capture;
+ * failure preserves empty output and latches the original resource cause. */
+XR_FUNC XrSourceCompileStatus xr_source_compiler_open_input(XrSourceCompiler *, const XrSourceEntryInput *,
+    XrSourceAuthority **, XrSourceCompileDiagnostic *);
 XR_FUNC XrSourceCompileStatus xr_source_compiler_build_file(XrSourceCompiler *, const char *absolute_path,
     XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic);
 /* Rooted text derives exact project/script authority and supports ordinary

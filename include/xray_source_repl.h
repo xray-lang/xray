@@ -39,11 +39,15 @@ XRAY_API XrSourceStatus xray_source_repl_bindings(const XrSourceRepl *,
  * Inputs use the common Source checker. A non-Unit tail owns an immutable
  * result declaration; it selects the last successfully displayed and published
  * result in later inputs. Unit and failed inputs preserve it. Top-level it
- * declarations are reserved; local bindings may shadow it. Files are not admitted. */
+ * declarations are reserved; local bindings may shadow it. */
 XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, const char *namespace_id,
     const XrSourceCallOptions *, XrSourceRepl **);
 /* Parses once and owns the exact AST through the paired transaction. MEMORY
- * namespace must match construction; source bytes may die after return.
+ * namespace must match construction. Rooted text requires an absolute_path
+ * and NULL namespace; it derives the real nearest project/script authority,
+ * lockfile and relative imports without creating an entry file. Invalid nearer
+ * projects never fall back to SCRIPT. Repeated paths retain exact birth state.
+ * Input bytes and path may die after return.
  * A pending input or an untaken terminal result excludes another begin.
  * Compile failure leaves published declarations and values intact. */
 XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);

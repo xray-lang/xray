@@ -57,7 +57,9 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *comp
     return status;
 }
 static XrSourceStatus api_repl_namespace(XrSourceRepl *owner,const XrSourceText *input) {
-    if(!input || !input->bytes || input->absolute_path || !input->namespace_id)return XR_SOURCE_BAD_ARGUMENT;
+    if(!input || !input->bytes)return XR_SOURCE_BAD_ARGUMENT;
+    if(input->absolute_path)return *input->absolute_path && !input->namespace_id ? XR_SOURCE_OK : XR_SOURCE_BAD_ARGUMENT;
+    if(!input->namespace_id)return XR_SOURCE_BAD_ARGUMENT;
     XrCompileState *state=xr_source_compiler_state(owner->compiler);
     size_t expected=0,actual=0;
     XrSourceStatus status=api_resource(xr_compile_state_string_length(state,owner->namespace_id,&expected));
@@ -109,11 +111,26 @@ static XrSourceStatus api_repl_begin(XrSourceRepl *owner,const XrSourceText *inp
     if(status==XR_SOURCE_OK)status=api_parse_text(owner->compiler,input,&ast,diagnostic?&detail:NULL,true);
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*result),(void **)&result));
     if(status==XR_SOURCE_OK && diagnostic)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*detail),(void **)&detail));
+    XrSourceAuthority *authority=NULL;XrXirSourceReplInput repl={0};
+    if(status==XR_SOURCE_OK && input->absolute_path) {
+        const XrSourceEntryInput rooted={XR_SOURCE_ENTRY_AST,ast->path,NULL,0};
+        status=api_compile(xr_source_compiler_open_input(owner->compiler,&rooted,&authority,detail?&detail->detail:NULL));
+        if(status==XR_SOURCE_OK) {
+            repl.authority=xr_source_authority_entry(authority);
+            repl.absolute_path=xr_source_authority_source_path(authority);
+            repl.logical_path=xr_source_authority_logical_path(authority);
+            repl.lockfile=xr_source_authority_lockfile(authority);
+            if(detail)status=api_resource(xr_compile_state_strdup(state,ast->path,&detail->detail.source.source_path));
+        }
+    }
     XrXirSourceAstOwner syntax={0};
     if(status==XR_SOURCE_OK)status=xr_source_ast_owned_input(ast,&syntax);
-    if(status==XR_SOURCE_OK)status=type_query ? xr_source_submission_prepare_repl_type_ast(owner->submission,&syntax,
-        detail?&detail->detail.source.source:NULL) : xr_source_submission_prepare_repl_ast(owner->submission,&syntax,
+    repl.ast=&syntax;
+    if(status==XR_SOURCE_OK && detail)detail->detail.stage=XR_SOURCE_COMPILE_PRODUCT;
+    if(status==XR_SOURCE_OK)status=type_query ? xr_source_submission_prepare_repl_type_ast(owner->submission,&repl,
+        detail?&detail->detail.source.source:NULL) : xr_source_submission_prepare_repl_ast(owner->submission,&repl,
         detail?&detail->detail.source.source:NULL);
+    xr_source_authority_close(authority);
     bool prepared=status==XR_SOURCE_OK;
     if(prepared && !type_query)status=api_repl_prepare_names(owner);
     xray_source_ast_free(ast);

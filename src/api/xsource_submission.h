@@ -35,10 +35,10 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *, co
  * genuine terminal outcome; failed copy preserves the terminal and output. */
 /* Same transaction with genuine interactive Source tail/result ownership. */
 XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_ast(XrSourceSubmission *owner,
-    const XrXirSourceAstOwner *ast, XrXirSourceDiagnostic *diagnostic);
+    const XrXirSourceReplInput *input, XrXirSourceDiagnostic *diagnostic);
 /* Temporary type inspection uses real expression execution and must abort. */
 XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_type_ast(XrSourceSubmission *,
-    const XrXirSourceAstOwner *, XrXirSourceDiagnostic *);
+    const XrXirSourceReplInput *, XrXirSourceDiagnostic *);
 /* Borrows the exact pending compiler fact; publication/abort clears it. */
 XR_FUNC bool xr_source_submission_repl_result(const XrSourceSubmission *owner);
 XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *, uint64_t quantum, XrXirInstanceResult *);

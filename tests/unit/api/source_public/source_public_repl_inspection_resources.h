@@ -9,7 +9,8 @@
 static bool public_repl_inspection_case;
 static XrSourceStatus public_repl_query(PublicReplOwners *owners) {
     static const char expression[]="next()\n";
-    XrSourceText text={NULL,"public-repl-resources",expression,sizeof(expression)-1};
+    XrSourceText text={public_repl_rooted_case?XR_PUBLIC_REPL_FIXTURE "/script/resources.xr":NULL,
+        public_repl_rooted_case?NULL:"public-repl-resources",expression,sizeof(expression)-1};
     XrSourceStatus status=xray_source_repl_begin_type(owners->owner,&text,&owners->diagnostic);
     if(status!=XR_SOURCE_OK)return status;
     XrSourceEvent event={0};size_t polls=0;
