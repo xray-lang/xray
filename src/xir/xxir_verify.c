@@ -690,6 +690,10 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
     const XrXirInstruction *op = &function->instructions[instruction];
     if (op->op == XR_XIR_SLOT_PLACE) return XR_XIR_OK;
     const XrXirTypes *types = context->module->types;
+    if (op->op==XR_XIR_STRING_COPY_BYTES) {
+        if (xr_xir_array_element(types,op->type)!=XR_XIR_U8) return XR_XIR_BAD_TYPE;
+        return role_operand(function,graph,context,instruction,0,XR_XIR_STRING);
+    }
     XrXirType array = op->type, cell = XR_XIR_UNIT;
     if (op->op == XR_XIR_CELL_PLACE) {
         cell = xr_xir_operand_type(function, op->args[0]);
@@ -880,7 +884,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             if (status != XR_XIR_OK) return status;
             continue;
         }
-        if ((op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) || op->op == XR_XIR_ARRAY_REPEAT ||
+        if (op->op==XR_XIR_STRING_COPY_BYTES || (op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) || op->op == XR_XIR_ARRAY_REPEAT ||
             (op->op >= XR_XIR_ARRAY_CAPACITY && op->op <= XR_XIR_ARRAY_RESERVE)) {
             XrXirStatus status = array_uses(graph, function, context, i);
             if (status != XR_XIR_OK) return status;

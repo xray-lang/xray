@@ -208,7 +208,10 @@ static XrXirRunStatus vm_array_step(ScalarRun *run, VmState *state,
     XrXirValue output = {0};
     XrXirFaultDetail fault = {0};
     XrXirCallStatus status;
-    if (op->op == XR_XIR_ARRAY_NEW) {
+    if (op->op==XR_XIR_STRING_COPY_BYTES) {
+        XrXirValue source=vm_value_operand(run,op->args[0]);
+        status=xr_xir_instance_string_copy_bytes(run->view,&source,op->type,&output);
+    } else if (op->op == XR_XIR_ARRAY_NEW) {
         for (uint32_t i = 0; i < op->args[1]; ++i)
             state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0] + i]);
         status = xr_xir_instance_array_new(run->view, op->type, state->arguments, op->args[1], &output);
@@ -575,7 +578,7 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         state->instruction = next;
         return vm_nominal_step(run, state, op, run->layout->offsets[result_id]);
     }
-    if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
+    if (op->op==XR_XIR_STRING_COPY_BYTES || (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN)) {
         state->instruction = next;
         return vm_array_step(run, state, op, run->layout->offsets[result_id], action);
     }

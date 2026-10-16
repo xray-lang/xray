@@ -185,7 +185,8 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 29 && XR_XIR_CHECKED_CONTRACT == 74 && XR_XIR_OP_COUNT == 153, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 29 && XR_XIR_CHECKED_CONTRACT == 74 && XR_XIR_OP_COUNT == 154, "packet revision");
+    _Static_assert(XR_XIR_STRING_COPY_BYTES == 153, "owned string byte copy appends its unary wire operation");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");

@@ -295,6 +295,8 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     }
     case XR_XIR_PLACE_WRITE:
         return effect_parameter_transfer(flow, op->args[0], op->args[1], XR_XIR_EFFECT_USE_STORE);
+    case XR_XIR_STRING_COPY_BYTES:
+        return effect_parameter_opaque(flow,op,XR_XIR_EFFECT_USE_OTHER);
     case XR_XIR_ARRAY_NEW: case XR_XIR_STRUCT_NEW: case XR_XIR_CLASS_NEW:
     case XR_XIR_ENUM_NEW: case XR_XIR_TUPLE_NEW:
         return effect_parameter_group(flow, op, XR_XIR_EFFECT_USE_STORE, true);

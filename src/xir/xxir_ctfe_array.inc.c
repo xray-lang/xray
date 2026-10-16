@@ -120,7 +120,7 @@ done:
     xr_compile_resources_free(stack);return status;
 }
 static bool ctfe_array_opcode(XrXirOp op) {
-    return op==XR_XIR_CELL_PROJECT || op==XR_XIR_RANGE_CHECK || op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
+    return op==XR_XIR_STRING_COPY_BYTES || op==XR_XIR_CELL_PROJECT || op==XR_XIR_RANGE_CHECK || op==XR_XIR_ARRAY_NEW || op==XR_XIR_ARRAY_REPEAT || op==XR_XIR_ARRAY_GET || op==XR_XIR_ARRAY_LEN ||
         op==XR_XIR_ARRAY_SET || op==XR_XIR_ARRAY_PUSH || op==XR_XIR_ARRAY_CAPACITY ||
         op==XR_XIR_ARRAY_WITH_CAPACITY || op==XR_XIR_ARRAY_RESERVE || op==XR_XIR_OBJECT_PLACE || op==XR_XIR_CELL_PLACE || op==XR_XIR_INDEX_PLACE || op==XR_XIR_FIELD_PLACE ||
         op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE;
@@ -148,7 +148,7 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
     XrXirValue result={0},receiver={0};XrXirValuePlace place={0};XrXirFaultDetail fault={0};
     XrXirCtfeStatus status=XR_XIR_CTFE_OK;XrXirValueStatus value_status=XR_XIR_VALUE_OK;
     const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&run->function->operands[op->args[0]]:op->args;
-    bool create=op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT || op->op==XR_XIR_ARRAY_WITH_CAPACITY;
+    bool create=op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT || op->op==XR_XIR_ARRAY_WITH_CAPACITY;
     if (!create && (xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_OBJECT || xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_INDEX || xr_xir_place_kind(run->function,ids[0])==XR_XIR_PLACE_FIELD))
         return ctfe_index_path_step(run,vm,state);
     if (!create) {
@@ -165,7 +165,15 @@ static XrXirCtfeStatus ctfe_array_step(ScalarRun *run,VmState *vm,CtfeOwnedState
         status=ctfe_admission_work(run,state,&receiver);if (status!=XR_XIR_CTFE_OK) return status;
     }
     if (create) { status=ctfe_validation_work(run,state,op->type);if (status!=XR_XIR_CTFE_OK) return status; }
-    if (op->op==XR_XIR_ARRAY_NEW) {
+    if (op->op==XR_XIR_STRING_COPY_BYTES) {
+        XrXirValue source=ctfe_array_operand(run,op->args[0]);const char *bytes=NULL;size_t count=0;
+        if (!xr_xir_string_view(&source,&bytes,&count)) return XR_XIR_CTFE_BAD_ARTIFACT;
+        if ((uint64_t)count>UINT64_MAX/2) return XR_XIR_CTFE_BUDGET;
+        if (!scalar_compile_work(run,(uint64_t)count+1)) return XR_XIR_CTFE_BUDGET;
+        status=ctfe_array_bytes_work(run,state,op->type,count<4 && count?4:(uint64_t)count*2);
+        if (status!=XR_XIR_CTFE_OK) return status;
+        value_status=xr_xir_string_copy_bytes(&source,op->type,&admission,&result);
+    } else if (op->op==XR_XIR_ARRAY_NEW) {
         uint32_t count=op->args[1];if (count && (!vm->arguments || count>run->layout->outgoing_count)) return XR_XIR_CTFE_BAD_ARTIFACT;
         if (!scalar_compile_work(run,(uint64_t)count*(sizeof(XrXirValue)+4))) return XR_XIR_CTFE_BUDGET;
         for (uint32_t i=0;i<count;++i) vm->arguments[i]=ctfe_array_operand(run,run->function->operands[op->args[0]+i]);

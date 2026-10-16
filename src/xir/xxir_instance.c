@@ -942,6 +942,12 @@ XrXirCallStatus xr_xir_instance_array_new(XrXirCallView *view, XrXirType type,
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     return value_call_status(xr_xir_array_new(type, values, count, admission, output));
 }
+XR_FUNC XrXirCallStatus xr_xir_instance_string_copy_bytes(XrXirCallView *view,
+    const XrXirValue *source,XrXirType type,XrXirValue *output) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!view_instance(view)) return XR_XIR_CALL_BAD_STATE;
+    return value_call_status(xr_xir_string_copy_bytes(source,type,xr_xir_call_admission(view),output));
+}
 XrXirCallStatus xr_xir_instance_array_repeat(XrXirCallView *view, XrXirType type,
     int64_t length, const XrXirValue *fill, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

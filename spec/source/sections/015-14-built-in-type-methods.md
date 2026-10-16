@@ -100,6 +100,8 @@ order: 015
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
 | `toString()` | 返回自身 |
 
+`copyBytes()` 无参数，复制完整 UTF-8 字节序列为拥有式 `Array<u8>`，包含内嵌 NUL，不附加终止符，也不按 rune 拆分。空串产生空数组；修改结果不改变原字符串或另一次复制。接收者只求值一次，结果独立保有数组存储与类型寿命。CTFE、VM 与生成 C 使用同一拥有式复制操作，受原分配、保留和工作预算约束；较小的请求逻辑结果限额继续生效，0 字节限额只接收空结果。失败不发布部分数组。
+
 `len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
 
 `contains`、`startsWith`、`endsWith` 接受一个 string 并返回 bool，按完整 UTF-8 字节查询，不做大小写折叠或 Unicode 归一化，NUL 不终止匹配。空模式对任意字符串返回 true，非空模式对空字符串返回 false。接收者先求值并取得值快照，再求值模式，各一次；实参求值期间修改原变量不改变快照。查询本身不分配、不修改或转移输入，不引入挂起或语言异常；操作数求值及持有仍可失败。普通泛型必须在定义处具备相应能力。
@@ -483,6 +485,8 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 | `repeat(n)` | repeat |
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `toString()` | return self |
+
+`copyBytes()` takes no arguments and copies the complete UTF-8 byte sequence into an owned `Array<u8>`, including embedded NUL, without a terminator or rune splitting. Empty strings produce empty arrays; mutating a result changes neither the source nor another copy. The receiver evaluates once, and the result independently retains array storage and type lifetime. CTFE, VM and generated C use the same owned copy operation under the original allocation, retention and work budgets. Smaller per-request logical result limits still apply; a zero-byte limit admits only an empty result. Failure publishes no partial array.
 
 `len(s)` reads the cached Unicode scalar count of validated UTF-8 and returns i64; the empty string has length zero and embedded NUL counts as one scalar. The query itself does not allocate; its argument evaluates exactly once with ordinary evaluation, initialization and retention failures. `==`/`!=` require two strings and compare their full byte lengths and contents, independently of object identity, with no case folding or Unicode normalization. Combining and precomposed sequences can differ. Operands evaluate left to right as value snapshots. These operations grant no string or Lengthable capability to an unconstrained generic definition.
 

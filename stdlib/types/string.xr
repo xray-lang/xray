@@ -29,6 +29,7 @@ struct string {
     // @native-operation STRING_ENDS_WITH allocation=no_heap failures=none ownership=owned
     endsWith(search: string) -> bool
     // Owned UTF-8 byte bridge.
+    // @native-operation STRING_COPY_BYTES allocation=may_heap failures=allocation,retain,limit ownership=owned
     copyBytes() -> Array<u8>
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered

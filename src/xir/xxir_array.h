@@ -17,6 +17,10 @@
 XR_FUNC XrXirValueStatus xr_xir_array_new(XrXirType array_type,
     const XrXirValue *values, size_t count, XrXirValueAdmission *admission,
     XrXirValue *output);
+/* Copies the complete UTF-8 byte sequence into an independent Array<U8>.
+ * The source and an occupied output remain unchanged on every failure. */
+XR_FUNC XrXirValueStatus xr_xir_string_copy_bytes(const XrXirValue *source,
+    XrXirType array_type, XrXirValueAdmission *admission, XrXirValue *output);
 /* A new array of `length` copies of `fill`; the caller rejects a negative length. */
 XR_FUNC XrXirValueStatus xr_xir_array_repeat(XrXirType array_type, int64_t length,
     const XrXirValue *fill, XrXirValueAdmission *admission, XrXirValue *output);

@@ -1420,6 +1420,32 @@ XR_FUNC XrXirValueStatus xr_xir_array_new(XrXirType type, const XrXirValue *valu
     return graph_outcome;
 }
 
+static XrXirValueStatus string_copy_bytes_graph_operation(const XrXirValue *source,
+    XrXirType type,XrXirValueAdmission *admission,XrXirValue *output) {
+    XrXirType element=XR_XIR_UNIT;uint32_t stride=0;const char *bytes=NULL;size_t count=0;
+    if (!unit_value(output) || !admission || !admission->domain ||
+        !array_layout(admission->arena,type,&element,&stride) || element!=XR_XIR_U8 || stride!=1 ||
+        !xr_xir_string_view(source,&bytes,&count)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    size_t capacity=0;
+    if (!array_capacity(count,stride,&capacity) || !admission->work || count>=admission->work)
+        return XR_XIR_VALUE_LIMIT;
+    if (!xr_xir_domain_work(admission->domain,(uint64_t)count+1)) return XR_XIR_VALUE_LIMIT;
+    admission->work-=(uint64_t)count+1;
+    XirArray *array=NULL;
+    XrXirValueStatus status=array_allocate(type,capacity,admission,&array);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (count) memcpy(array->data,bytes,count);
+    array->length=count;*output=array_value(array);
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_string_copy_bytes(const XrXirValue *source,
+    XrXirType type,XrXirValueAdmission *admission,XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=string_copy_bytes_graph_operation(source,type,admission,output);
+    xr_xir_value_graph_end();return status;
+}
+
 static XrXirValueStatus xr_xir_array_repeat_graph_operation(XrXirType type, int64_t length, const XrXirValue *fill,
     XrXirValueAdmission *admission, XrXirValue *output) {
     XrXirType element = XR_XIR_UNIT; uint32_t stride = 0;

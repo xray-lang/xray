@@ -596,7 +596,11 @@ static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     EMIT_STATIC(buffer, es_0eecdf36a03e6314, " { XrXirCallStatus status; XrXirFaultDetail fault = {0};\n");
     if (op->type != XR_XIR_UNIT) EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
-    if (op->op == XR_XIR_ARRAY_NEW) {
+    if (op->op==XR_XIR_STRING_COPY_BYTES) {
+        EMIT_LITERAL(buffer, " XrXirValue source = ");
+        emit_value(buffer,function,layout,op->args[0]);EMIT_LITERAL(buffer,";\n");
+        append(buffer," status = xr_xir_instance_string_copy_bytes(view, &source, (XrXirType) %u, &value);\n",(uint32_t)op->type);
+    } else if (op->op == XR_XIR_ARRAY_NEW) {
         for (uint32_t i = 0; i < op->args[1] && emit_work(buffer, 1); ++i) {
             EMIT_U_SHAPE(buffer, et_285705dd6fffa699, " state->arguments[%u] = ", " state->arguments[", "] = ", i);
             emit_value(buffer, function, layout, function->operands[op->args[0] + i]);
@@ -904,7 +908,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         emit_array_capacity_step(buffer, function, op, layout, destination, index);
         return;
     }
-    if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
+    if (op->op==XR_XIR_STRING_COPY_BYTES || (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN)) {
         emit_array_step(buffer, function, op, layout, destination, index);
         return;
     }

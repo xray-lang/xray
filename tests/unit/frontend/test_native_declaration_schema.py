@@ -27,7 +27,7 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(header[:3], (1, 'Array', 'T'))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
-                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(schema.array_recipe_contracts('T')))
+                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
 
@@ -74,8 +74,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr',
-                          'reserve', 'concat', 'sort', 'fill', 'toString',
+                         {'ptr', 'mutPtr', 'sort', 'toString',
                           'iterator', 'entriesIterator'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
@@ -172,8 +171,14 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'copyBytes'})
         for member in admitted:
+            if member.name == 'copyBytes':
+                self.assertEqual(schema.simple_term(member.result, ''), 'ARRAY_U8')
+                self.assertEqual(member.parameters, [])
+                self.assertEqual((member.receiver, member.allocation, member.failures, member.ownership),
+                                 ('READ', 'may_heap', 'allocation,retain,limit', 'owned'))
+                continue
             self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'BOOL')
             self.assertEqual(member.allocation, 'no_heap')
             self.assertEqual(member.failures, 'bounds,limit' if member.name == 'indexOf' else 'limit' if member.name == 'lastIndexOf' else 'none')
@@ -189,7 +194,14 @@ class NativeDeclarations(unittest.TestCase):
                               ('start?: i64', 'start: i64'), ('start?: i64', 'start?: string'),
                               ('indexOf(search: string', 'indexOf(search?: string'),
                               ('lastIndexOf(search: string', 'lastIndexOf(search?: string'),
-                              ('failures=bounds,limit', 'failures=none')]:
+                              ('failures=bounds,limit', 'failures=none'),
+                              ('copyBytes() -> Array<u8>', 'copyBytes() -> Array<i64>'),
+                              ('copyBytes() -> Array<u8>', 'copyBytes() -> Slice<u8>'),
+                              ('copyBytes()', 'copyBytes(value: i64)'),
+                              ('copyBytes()', 'ref copyBytes()'),
+                              ('STRING_COPY_BYTES allocation=may_heap', 'STRING_COPY_BYTES allocation=no_heap'),
+                              ('STRING_COPY_BYTES allocation=may_heap failures=allocation,retain,limit ownership=owned',
+                               'STRING_COPY_BYTES allocation=may_heap failures=allocation,retain,limit ownership=borrowed')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(source.replace(before, after), self.prelude)
 
@@ -253,7 +265,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
