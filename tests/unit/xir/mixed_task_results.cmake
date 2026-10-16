@@ -437,3 +437,17 @@ foreach(iterator_lifetime_backend IN ITEMS 0 1 vm native)
     set_tests_properties(test_xir_mixed_iterator_lifetime_${iterator_lifetime_backend} PROPERTIES
         TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;cell;timer;cleanup")
 endforeach()
+
+add_executable(test_xir_mixed_iterator_interleave xir/test_xir_mixed_iterator_interleave.c "${XIR_MIXED_ITERATOR_LIFETIME_C}")
+target_link_libraries(test_xir_mixed_iterator_interleave PRIVATE xray_xir_vm xray_xir_scalar)
+set_target_properties(test_xir_mixed_iterator_interleave PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_iterator_interleave PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_iterator_interleave PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(iterator_pair_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_iterator_interleave_${iterator_pair_backend} COMMAND test_xir_mixed_iterator_interleave ${iterator_pair_backend})
+    set_tests_properties(test_xir_mixed_iterator_interleave_${iterator_pair_backend} PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;cell;timer;cleanup;interleave;reentry")
+endforeach()
