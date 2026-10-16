@@ -41,8 +41,15 @@ typedef struct DebugWrite {
     XrXirVmDebugSnapshot *snapshot;
     uint64_t epoch,frame;
     uint32_t operand,phase,count;
+    bool slot;
     XrXirValueStatus result;
 } DebugWrite;
+typedef struct SnapshotGlobal {
+    XrXirValue value,cell_value;
+    uint32_t slot;
+    unsigned char known;
+    bool cell;
+} SnapshotGlobal;
 typedef struct SnapshotFrame {
     XrXirVmDebugFrameInfo info;
     XrXirValue name;
@@ -51,6 +58,8 @@ typedef struct SnapshotFrame {
     XrXirTypeArena *read_arena;
     unsigned char *nominal_visible;
     uint32_t nominal_count,nominal_owner;
+    SnapshotGlobal *globals;
+    uint32_t global_count;
 } SnapshotFrame;
 static const uint64_t debug_identity = UINT64_C(0x5852564d44424731);
 static const uint64_t snapshot_identity = UINT64_C(0x5852564d534e5031);
@@ -88,6 +97,9 @@ struct XrXirVmDebug {
     XrXirVmDebugSnapshot *snapshot;
     DebugWrite write;
 };
+static bool debug_unit_value(const XrXirValue *value) {
+    return value && value->type==XR_XIR_UNIT && !value->reserved && !value->payload;
+}
 static bool debug_valid(const XrXirVmDebug *debug) {
     return debug && debug->identity == debug_identity && atomic_load_explicit(&debug->references, memory_order_relaxed) &&
         xr_xir_domain_current(debug->domain);
@@ -146,6 +158,10 @@ XR_FUNC void xr_xir_vm_debug_snapshot_drop(XrXirVmDebugSnapshot *snapshot) {
             xr_xir_value_drop(&frame->values[j]);
         if (frame->cell_values) for (uint32_t j = 0; j < frame->info.value_count; ++j)
             xr_xir_value_drop(&frame->cell_values[j]);
+        if (frame->globals) for (uint32_t j=0;j<frame->global_count;++j) {
+            xr_xir_value_drop(&frame->globals[j].value);xr_xir_value_drop(&frame->globals[j].cell_value);
+        }
+        debug_deallocate(domain,frame->globals,(uint64_t)frame->global_count*sizeof(*frame->globals));
         xr_xir_value_drop(&frame->name);
         xr_xir_compile_type_arena_drop(frame->read_arena);
         debug_deallocate(domain,frame->nominal_visible,frame->nominal_count);
@@ -417,7 +433,11 @@ static XrXirValueStatus copy_frame_values(XrXirVmDebug *debug, const DebugFrame 
             if (read == XR_XIR_CALL_BAD_ARGUMENT || read == XR_XIR_CALL_BAD_STATE) continue;
             if (read != XR_XIR_CALL_READY) return read == XR_XIR_CALL_OOM ? XR_XIR_VALUE_OOM :
                 read == XR_XIR_CALL_LIMIT ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
-            status = xr_xir_value_admit(&observed, xr_xir_cell_element(module->types, type), admission);
+            XrXirType element=xr_xir_cell_element(module->types,type);
+            /* Unit is admitted under its real Cell schema, not as an ordinary
+             * callable argument. The copied payload must remain canonical. */
+            status=element==XR_XIR_UNIT ? (debug_unit_value(&observed) ? xr_xir_value_admit(&value,type,admission) :
+                XR_XIR_VALUE_BAD_ARGUMENT) : xr_xir_value_admit(&observed,element,admission);
             if (status == XR_XIR_VALUE_OK) status = xr_xir_value_copy(&observed, &frame->cell_values[i]);
             xr_xir_value_drop(&observed);
             if (status != XR_XIR_VALUE_OK) return status;
@@ -455,6 +475,7 @@ static XrXirValueStatus capture_read_scope(XrXirVmDebug *debug,uint32_t function
     }
     return XR_XIR_VALUE_OK;
 }
+#include "xxir_vm_debug_globals.inc.c"
 static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFrame *call,
     XrXirCallView *view,XrXirVmDebugSnapshot *snapshot,uint32_t index) {
     SnapshotFrame *frame=&snapshot->frames[index];
@@ -470,6 +491,7 @@ static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFram
     XrXirValueStatus status=xr_xir_string_new(debug->domain,function->name ? function->name : "",function->name_length,&frame->name);
     if (status!=XR_XIR_VALUE_OK || !values) return status;
     status=capture_read_scope(debug,call->event.entry,view,frame);if (status!=XR_XIR_VALUE_OK) return status;
+    status=capture_global_values(debug,call,view,frame);if (status!=XR_XIR_VALUE_OK) return status;
     if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
     return copy_frame_values(debug,live,view,frame);
 }

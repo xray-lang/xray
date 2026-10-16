@@ -41,6 +41,9 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *,const XrXirCompileCon
 /* Only actual matching logical rule groups are captured. A pause, step, throw
  * or ungrouped breakpoint is unfiltered and cannot be silently discarded. */
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot *,XirVmDebugStopCause *);
+/* Copies only the captured payload of a published, admitted module slot. A
+ * retained snapshot never supplies a live frame or module permission. */
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_slot(const XrXirVmDebugSnapshot *,uint32_t,uint32_t,XrXirValue *);
 /* Resume a filtered logical rule visit once, retaining the original step
  * thread/frame/depth/source anchor. Stale or unfiltered stops stay paused. */
 XR_FUNC XrXirValueStatus xir_vm_debug_continue_filtered(XrXirVmDebug *,uint64_t);
@@ -50,6 +53,7 @@ XR_FUNC XrXirValueStatus xir_vm_debug_continue_filtered(XrXirVmDebug *,uint64_t)
  * checks declaration writes and ordinary Instance/Call authority before commit.
  * Every begin must be paired with finish, including driver failure/cleanup. */
 XR_FUNC XrXirValueStatus xir_vm_debug_write_begin(XrXirVmDebug *,uint64_t,uint64_t,uint32_t,const XrXirValuePath *,const XrXirValue *);
+XR_FUNC XrXirValueStatus xir_vm_debug_write_slot_begin(XrXirVmDebug *,uint64_t,uint64_t,uint32_t,const XrXirValuePath *,const XrXirValue *);
 XR_FUNC bool xir_vm_debug_write_pending(const XrXirVmDebug *);
 XR_FUNC XrXirValueStatus xir_vm_debug_write_visit(XrXirVmDebug *);
 /* A successful applied write transfers its prepared snapshot even if the

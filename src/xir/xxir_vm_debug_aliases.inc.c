@@ -29,34 +29,54 @@ static XrXirValueStatus debug_alias_value(XrXirVmDebug *debug,const XrXirValuePa
 /* Known payloads were admitted by the fresh real Call. Bit 4 records a read
  * that passed its real authority and failed only at bounds; a replacement may
  * restore that descendant. Permission-denied roots never become readable. */
+typedef struct DebugAliasWrite {
+    XrXirVmDebug *debug;
+    const XrXirTypes *types;
+    const XrXirValue *cell,*replacement;
+    XrXirValuePath target;
+    XrXirValueAdmission *admission;
+    bool identity;
+} DebugAliasWrite;
+static XrXirValueStatus debug_alias_update(const DebugAliasWrite *write,
+    const XrXirValue *value,XrXirValue *payload,unsigned char *known) {
+    if (!(*known&1) || !(*known&6) || !xr_xir_type_is_cell(write->types,(XrXirType)value->type)) return XR_XIR_VALUE_OK;
+    if (write->identity) {
+        const XrXirValue *root=xr_xir_cell_canonical_root(value);
+        if (!root || root->type!=write->cell->type || root->payload!=write->cell->payload) return XR_XIR_VALUE_OK;
+    } else if (!xr_xir_cell_same_owner(write->cell,value)) return XR_XIR_VALUE_OK;
+    XrXirValuePath alias={0};XrXirValueStatus status=xir_cell_path_view(value,&alias);
+    if (status!=XR_XIR_VALUE_OK || (!(*known&2) && alias.count<=write->target.count)) return status;
+    XrXirValue owned={0};bool affected=false;
+    status=debug_alias_value(write->debug,&write->target,&alias,payload,write->replacement,write->admission,&affected,&owned);
+    if (status==XR_XIR_VALUE_BOUNDS) {
+        *known=(unsigned char)((*known&~2u)|4u);xr_xir_value_drop(payload);return XR_XIR_VALUE_OK;
+    }
+    if (status!=XR_XIR_VALUE_OK) { xr_xir_value_drop(&owned);return status; }
+    if (!affected) return XR_XIR_VALUE_OK;
+    XrXirType expected=xr_xir_cell_element(write->types,(XrXirType)value->type);
+    if (expected==XR_XIR_UNIT ? !debug_unit_value(&owned) : !xr_xir_value_argument(&owned,write->admission->arena,expected)) {
+        xr_xir_value_drop(&owned);return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    xr_xir_value_drop(payload);*payload=owned;*known=(unsigned char)((*known|2u)&~4u);return XR_XIR_VALUE_OK;
+}
 static XrXirValueStatus debug_write_aliases(XrXirVmDebug *debug,XrXirVmDebugSnapshot *snapshot,
     const XrXirValue *cell,const XrXirValuePath *identity_path,const XrXirValue *replacement,XrXirValueAdmission *admission) {
-    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);XrXirValuePath target={0};
+    const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
+    DebugAliasWrite write={debug,module->types,cell,replacement,{0},admission,identity_path!=NULL};
     XrXirValueStatus status=XR_XIR_VALUE_OK;
-    if (identity_path) target=*identity_path;else status=xir_cell_path_view(cell,&target);
+    if (identity_path) write.target=*identity_path;else status=xir_cell_path_view(cell,&write.target);
     if (status!=XR_XIR_VALUE_OK) return status;
     for (uint32_t f=0;f<snapshot->count;++f) {
         SnapshotFrame *frame=&snapshot->frames[f];
-        if (!xr_xir_domain_work(debug->domain,frame->info.value_count)) return XR_XIR_VALUE_LIMIT;
+        if (!xr_xir_domain_work(debug->domain,(uint64_t)frame->info.value_count+frame->global_count)) return XR_XIR_VALUE_LIMIT;
         for (uint32_t v=0;v<frame->info.value_count;++v) {
-            if (!(frame->known[v]&1) || !(frame->known[v]&6) || !xr_xir_type_is_cell(module->types,(XrXirType)frame->values[v].type)) continue;
-            if (identity_path) {
-                const XrXirValue *root=xr_xir_cell_canonical_root(&frame->values[v]);
-                if (!root || root->type!=cell->type || root->payload!=cell->payload) continue;
-            } else if (!xr_xir_cell_same_owner(cell,&frame->values[v])) continue;
-            XrXirValuePath alias={0};status=xir_cell_path_view(&frame->values[v],&alias);
+            status=debug_alias_update(&write,&frame->values[v],&frame->cell_values[v],&frame->known[v]);
             if (status!=XR_XIR_VALUE_OK) return status;
-            if (!(frame->known[v]&2) && alias.count<=target.count) continue;
-            XrXirValue owned={0};bool affected=false;
-            status=debug_alias_value(debug,&target,&alias,&frame->cell_values[v],replacement,admission,&affected,&owned);
-            if (status==XR_XIR_VALUE_BOUNDS) {
-                frame->known[v]=(unsigned char)((frame->known[v]&~2u)|4u);xr_xir_value_drop(&frame->cell_values[v]);continue;
-            }
-            if (status!=XR_XIR_VALUE_OK) { xr_xir_value_drop(&owned);return status; }
-            if (!affected) continue;
-            XrXirType expected=xr_xir_cell_element(module->types,(XrXirType)frame->values[v].type);
-            if (!xr_xir_value_argument(&owned,admission->arena,expected)) { xr_xir_value_drop(&owned);return XR_XIR_VALUE_BAD_ARGUMENT; }
-            xr_xir_value_drop(&frame->cell_values[v]);frame->cell_values[v]=owned;frame->known[v]=(unsigned char)((frame->known[v]|2u)&~4u);
+        }
+        for (uint32_t g=0;g<frame->global_count;++g) {
+            SnapshotGlobal *global=&frame->globals[g];
+            status=debug_alias_update(&write,&global->value,&global->cell_value,&global->known);
+            if (status!=XR_XIR_VALUE_OK) return status;
         }
     }
     return XR_XIR_VALUE_OK;

@@ -117,6 +117,9 @@ XR_FUNC XrXirValueStatus xdap_current_write_begin(XdapCurrent *session,uint64_t 
 XR_FUNC XrXirValueStatus xdap_current_write_finish(XdapCurrent *session,bool *visited,XrXirVmDebugSnapshot **snapshot) {
     return session && !session->driving ? xir_vm_debug_write_finish(session->debug,visited,snapshot) : XR_XIR_VALUE_BAD_ARGUMENT;
 }
+XR_FUNC XrXirValueStatus xdap_current_write_slot_begin(XdapCurrent *session,uint64_t epoch,uint64_t frame,uint32_t slot,const XrXirValuePath *path,const XrXirValue *value) {
+    return session && !session->driving && !session->ended ? xir_vm_debug_write_slot_begin(session->debug,epoch,frame,slot,path,value) : XR_XIR_VALUE_BAD_ARGUMENT;
+}
 XR_FUNC uint64_t xdap_current_stopped_epoch(const XdapCurrent *session) {
     return session && !session->driving && !session->ended ? xr_xir_vm_debug_epoch(session->debug) : 0;
 }

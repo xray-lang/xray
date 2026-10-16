@@ -963,12 +963,12 @@ XrXirCallStatus xr_xir_instance_utc_offset(XrXirCallView *view, int64_t seconds,
     if (status == XR_XIR_TIME_OK) *minutes = offset;
     return time_call_status(status);
 }
-XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, XrXirValue *output) {
-    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirInstance *instance = view_instance(view);
-    if (!instance || slot >= instance->program->declarations->slot_count) return XR_XIR_CALL_BAD_STATE;
+static XrXirCallStatus instance_slot_copy(XrXirCallView *view,XrXirInstance *instance,
+    uint32_t function,uint32_t slot,XrXirValue *output) {
+    if (!instance || function>=instance->program->entry_count || slot>=instance->program->declarations->slot_count)
+        return XR_XIR_CALL_BAD_STATE;
     const XrXirDeclarations *d = instance->program->declarations;
-    uint32_t function = xr_xir_call_current_entry(view->activation), module = d->slots[slot].module;
+    uint32_t module = d->slots[slot].module;
     if (view_is_child(instance, view) && !worker_slot_read(instance, slot)) return XR_XIR_CALL_BAD_STATE;
     if (!instance->published[slot] || d->functions[function].module != module ||
         (!instance->ready[module] && instance->current_module != module)) return XR_XIR_CALL_BAD_STATE;
@@ -976,6 +976,19 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
         (!instance_cell_published(instance, slot, &instance->slots[slot]) ||
          !xr_xir_cell_unborrowed(&instance->slots[slot]))) return XR_XIR_CALL_BAD_STATE;
     return value_call_status(xr_xir_value_copy(&instance->slots[slot], output));
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view,uint32_t slot,XrXirValue *output) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    return instance_slot_copy(view,view_instance(view),xr_xir_call_current_entry(view->activation),slot,output);
+}
+XR_FUNC XrXirCallStatus xir_instance_observe_slot(XrXirCallView *view,uint64_t frame,uint32_t slot,XrXirValue *output) {
+    XrXirInstance *instance=NULL;XrXirCallStatus status=instance_class_view(view,&instance);
+    if (status!=XR_XIR_CALL_READY) return status;
+    if (!output || !value_unit(*output) || !instance->driving || xr_xir_call_cleanup_active(view->activation))
+        return XR_XIR_CALL_BAD_STATE;
+    uint32_t function=UINT32_MAX;status=xir_call_vm_frame_entry(view,frame,&function);
+    if (status!=XR_XIR_CALL_READY) return status;
+    return instance_slot_copy(view,instance,function,slot,output);
 }
 XrXirCallStatus xr_xir_instance_slot_write(XrXirCallView *view, uint32_t slot,
                                           const XrXirValue *value, bool publish) {

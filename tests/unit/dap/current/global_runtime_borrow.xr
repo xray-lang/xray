@@ -1,0 +1,4 @@
+import "./global_runtime_library" as lib
+var changing:i64=11
+fn inspect()->i64 { return lib.borrow(ref changing) }
+print(inspect())

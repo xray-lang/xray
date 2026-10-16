@@ -39,6 +39,9 @@ static bool host_rejections(XrXirCallView *view,HostAccessWitness *witness) {
     const XrXirFaultDetail observed={XR_XIR_PANIC_BOUNDS,0,9,7};
     XrXirCallClassAccess access={0};
     CHECK(!xir_call_vm_view_current(view));XrXirCallView copied=*view;CHECK(!xir_call_vm_view_current(&copied));
+    uint32_t entry=UINT32_MAX-1;
+    CHECK(xir_call_vm_frame_entry(view,1,&entry)==XR_XIR_CALL_BAD_ARGUMENT && entry==UINT32_MAX-1);
+    CHECK(xir_call_vm_frame_entry(&copied,1,&entry)==XR_XIR_CALL_BAD_ARGUMENT && entry==UINT32_MAX-1);
     CHECK(xir_instance_debug_class_access(view,&value,&access)==XR_XIR_CALL_BAD_STATE);
     CHECK(!access.value && !access.loan.cell && !access.authority.activation);
     for (uint32_t occupied=0;occupied<2;++occupied) {
@@ -46,6 +49,8 @@ static bool host_rejections(XrXirCallView *view,HostAccessWitness *witness) {
         const XrXirValue original=output;
         XrXirFaultDetail fault=observed;
         CHECK(xir_instance_observe_cell(view,&value,&output)==XR_XIR_CALL_BAD_STATE);
+        CHECK(xir_instance_observe_slot(view,1,0,&output)==XR_XIR_CALL_BAD_STATE);
+        CHECK(xir_instance_observe_slot(&copied,1,0,&output)==XR_XIR_CALL_BAD_STATE);
         CHECK(xir_instance_debug_cell_write(view,&value,&value)==XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_cell_read_at(view,0,&value,&output,&fault)==XR_XIR_CALL_BAD_STATE);
         CHECK(xr_xir_instance_cell_write_at(view,0,&value,&value,&fault)==XR_XIR_CALL_BAD_STATE);
@@ -109,7 +114,7 @@ static bool host_call_control(bool current_domain) {
         accounting.allocations==accounting.frees && opaque==UINT64_C(0x619ce5372d48a0bf);
     xr_xir_domain_drop(domain);
     CHECK(passed);
-    printf("CLASS_HOST_OWNER domain=%u context_bytes=%zu callbacks=%u gates=16 live=0\n",
+    printf("CLASS_HOST_OWNER domain=%u context_bytes=%zu callbacks=%u gates=16 live=0 slot=DENIED frame=DENIED\n",
         current_domain?1u:0u,sizeof(opaque),witness.callbacks);
     return true;
 }

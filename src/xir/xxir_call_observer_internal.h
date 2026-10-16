@@ -50,6 +50,9 @@ XR_FUNC XrXirCallStatus xr_xir_call_observer_vm(const XrXirCallView *view);
 /* A synchronous fact about the exact active view, never a cached frame grant.
  * Copied/retired views and native or unmarked callbacks are not VM ingress. */
 XR_FUNC bool xir_call_vm_view_current(const XrXirCallView *view);
+/* Only at exact VM ingress. Resolve an entered VM frame on this activation's
+ * actual live ancestor chain without lending a view, state or invocation. */
+XR_FUNC XrXirCallStatus xir_call_vm_frame_entry(const XrXirCallView *,uint64_t,uint32_t *);
 /* The owning executor may visit only this exact already-entered VM frame.
  * This check lends no view and does not execute a callback. */
 XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *,const XrXirExecutorBinding *,uint64_t);

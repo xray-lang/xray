@@ -12,6 +12,9 @@
 #include "xxir_call_observer_internal.h"
 #include "xxir_call_internal.h"
 XR_FUNC XrXirCallStatus xir_instance_visit_vm(XrXirInstance *,const XrXirExecutorBinding *,uint64_t,bool *);
+/* A display slot is admitted only for a real entered VM ancestor in the exact
+ * current activation. Publication, module readiness and worker rules remain. */
+XR_FUNC XrXirCallStatus xir_instance_observe_slot(XrXirCallView *,uint64_t,uint32_t,XrXirValue *);
 /* Only a fresh genuine VM control callback may use this scope. It checks the
  * live invocation proof, publication and loan, without inventing an opcode.
  * Success owns one committed access; the caller must finish it on every exit. */

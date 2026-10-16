@@ -403,6 +403,19 @@ static uint64_t state_offset(void) {
     return (sizeof(CallFrame) + alignment - 1) / alignment * alignment;
 }
 #include "xxir_call_cell_loans.inc.c"
+XR_FUNC XrXirCallStatus xir_call_vm_frame_entry(const XrXirCallView *view,uint64_t identity,uint32_t *output) {
+    if (!identity || !output || !xir_call_vm_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirCall *call=view->activation;
+    if (call->cleaning || call->cancel_requested || call->aborting) return XR_XIR_CALL_BAD_STATE;
+    for (const CallFrame *frame=call->top;frame;frame=frame->parent) {
+        if (!call_cell_work(call,1)) return XR_XIR_CALL_LIMIT;
+        if (frame->epoch!=identity) continue;
+        if (!frame->entered || frame->exiting || frame->in_cleanup || frame->code_kind!=XR_XIR_CALL_CODE_VM)
+            return XR_XIR_CALL_BAD_STATE;
+        *output=(uint32_t)(frame->entry-call->config.entries);return XR_XIR_CALL_READY;
+    }
+    return XR_XIR_CALL_BAD_STATE;
+}
 XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *call,const XrXirExecutorBinding *binding,uint64_t frame) {
     if (!call_owner_current(call) || !call || !frame || !xr_xir_call_executor_member(call,binding)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (call->driving || call_observing(call) || call->cleaning || call->admitting || call->active_view) return XR_XIR_CALL_BUSY;
