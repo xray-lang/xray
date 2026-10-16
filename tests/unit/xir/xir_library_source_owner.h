@@ -13,7 +13,7 @@ typedef struct LibrarySourceFixture {
     const char *entry;XrModuleIdentityAuthority authority;
     XrXirLinkageKind kind;
 } LibrarySourceFixture;
-static XrXirStatus library_source_operation(const XrXirCompileContext *context,void *opaque) {
+static inline XrXirStatus library_source_operation(const XrXirCompileContext *context,void *opaque) {
     const LibrarySourceFixture *fixture=opaque;XrXirLibraryCatalog *catalog=NULL;
     XrCompilerSession *session=NULL;XrXirSourceResult result={0};XrXirCheckedPacket packet={0};
     XrXirStatus status=XR_XIR_OK;

@@ -67,8 +67,10 @@ static void lookup_boundaries(void) {
     }
     Work ledger={4,0,0};XrNativeDeclarationWork work={&ledger,charge};
     const XrNativeTypeDeclaration *out=NULL;
+    CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_WORK_LIMIT && !out && ledger.used==4);
+    ledger=(Work){10,0,0};
     CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_NOT_FOUND);
-    CHECK(!out && ledger.used==4 && ledger.calls==2);
+    CHECK(!out && ledger.used==10 && ledger.calls==5);
     ledger=(Work){0,0,0};
     CHECK(xr_native_declaration_find(&work,(const char *)(uintptr_t)1,&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
     CHECK(!out && !ledger.used && ledger.calls==1);
