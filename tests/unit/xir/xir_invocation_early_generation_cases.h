@@ -89,10 +89,10 @@ static XrXirStatus conditional_generation_counted_instruction(const EffectBodyRe
 static uint32_t conditional_generation_head_reads;
 static bool conditional_generation_head_refused;
 static XrXirStatus conditional_generation_counted_callee_head(const EffectBodyRequest *request,
-    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,XrXirType *result,EffectBodyFunctionParameters *formals) {
     ++conditional_generation_head_reads;
     if (conditional_generation_head_refused) return XR_XIR_BAD_STRUCTURE;
-    return effect_body_owned_head(request,function,output,dimensions);
+    return effect_body_owned_head(request,function,output,dimensions,result,formals);
 }
 
 static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileContext *context,
@@ -210,8 +210,9 @@ static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileCon
 
 /* These are literal owned-reader observations, never a permission cache. */
 static uint32_t conditional_generation_shape_reads,conditional_generation_full_heads,
-    conditional_generation_dimension_heads;
-static bool conditional_generation_shape_refused,conditional_generation_dimensions_refused;
+    conditional_generation_dimension_heads,conditional_generation_result_heads,conditional_generation_parameter_heads;
+static bool conditional_generation_shape_refused,conditional_generation_dimensions_refused,
+    conditional_generation_result_refused;
 static XrXirStatus conditional_generation_counted_shape(const EffectBodyRequest *request,
     uint32_t function,uint32_t ordinal,EffectBodyInstructionShape *output) {
     ++conditional_generation_shape_reads;
@@ -219,12 +220,16 @@ static XrXirStatus conditional_generation_counted_shape(const EffectBodyRequest 
     return effect_body_owned_shape(request,function,ordinal,output);
 }
 static XrXirStatus conditional_generation_counted_head(const EffectBodyRequest *request,
-    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,XrXirType *result,EffectBodyFunctionParameters *formals) {
     if (dimensions) {
         ++conditional_generation_dimension_heads;
         if (conditional_generation_dimensions_refused) return XR_XIR_BAD_STRUCTURE;
-    } else ++conditional_generation_full_heads;
-    return effect_body_owned_head(request,function,output,dimensions);
+    } else if (result) {
+        ++conditional_generation_result_heads;
+        if (conditional_generation_result_refused) return XR_XIR_BAD_STRUCTURE;
+    } else if (formals) ++conditional_generation_parameter_heads;
+    else ++conditional_generation_full_heads;
+    return effect_body_owned_head(request,function,output,dimensions,result,formals);
 }
 
 static void conditional_generation_alias_fixture(InvocationDeferredFixture *fixture,
@@ -264,12 +269,16 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
     uint32_t dimensions=owner->final.count;
     for (uint32_t n=0;n<owner->final.count;++n)
         if (owner->final.nodes[n].root!=owner->final.nodes[n].body) ++dimensions;
-    conditional_generation_full_heads=conditional_generation_dimension_heads=0;
+    conditional_generation_full_heads=conditional_generation_dimension_heads=conditional_generation_result_heads=conditional_generation_parameter_heads=0;
     conditional_generation_dimensions_refused=false;
     CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_OK &&
-        conditional_generation_full_heads==read.domain.function_count &&
+        conditional_generation_full_heads==0 && conditional_generation_result_heads==read.domain.function_count &&
         conditional_generation_dimension_heads==dimensions);
     size_t attempts=rp_attempts;uint32_t count=owner->final.count;
+    conditional_generation_result_refused=true;
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_BAD_STRUCTURE &&
+        owner->final.count==count && !owner->pending && rp_attempts==attempts);
+    conditional_generation_result_refused=false;
     conditional_generation_dimensions_refused=true;
     CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_BAD_STRUCTURE &&
         owner->final.count==count && !owner->pending && rp_attempts==attempts);

@@ -32,10 +32,10 @@ static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
     XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,edge.instruction,&body_op_1,&op);
     if (body_read_1!=XR_XIR_OK) return body_read_1;
-    EffectBodyFunctionHead target_head={0};
-    status=effect_invocation_flow_head(flow,target->body,&target_head);
+    EffectBodyFunctionDimensions target_dimensions={0};
+    status=effect_body_request_dimensions(&flow->body,target->body,&target_dimensions);
     if (status!=XR_XIR_OK) return status;
-    if (target->parameter_count!=target_head.parameter_count) return XR_XIR_BAD_STRUCTURE;
+    if (target->parameter_count!=target_dimensions.parameter_count) return XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         if (target->parameter_count || target->input) return XR_XIR_BAD_STRUCTURE;
         *matched=true;return XR_XIR_OK;
@@ -380,11 +380,10 @@ static XrXirStatus effect_invocation_coverage_verify_read(const EffectInvocation
         if (owner->final->nodes[n].body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus zero=effect_invocation_parameter_zero_shape(owner,request,n);
         if (zero!=XR_XIR_OK) return zero;
-        EffectBodyFunctionHead head={0};
-        XrXirStatus head_status=effect_body_request_head(request,owner->final->nodes[n].body,&head);
+        EffectBodyFunctionDimensions dimensions={0};
+        XrXirStatus head_status=effect_body_request_dimensions(request,owner->final->nodes[n].body,&dimensions);
         if (head_status!=XR_XIR_OK) return head_status;
-        const EffectBodyFunctionHead *function=&head;
-        uint64_t vertices=(uint64_t)function->parameter_count+function->instruction_count+1;
+        uint64_t vertices=(uint64_t)dimensions.parameter_count+dimensions.instruction_count+1;
         if (vertices>UINT64_MAX-maximum) return XR_XIR_BUDGET;
         maximum+=vertices;
     }

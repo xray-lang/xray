@@ -14,6 +14,9 @@ foreach(_root_parameter_gate contract resources instances wire visibility lower_
         LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
 endforeach()
 target_link_libraries(test_xir_root_parameter_visibility PRIVATE xray_xir_vm)
+add_test(NAME test_xir_root_parameter_visibility_normal COMMAND test_xir_root_parameter_visibility --normal)
+set_tests_properties(test_xir_root_parameter_visibility_normal PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership;normal" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
 add_executable(test_xir_root_parameter_source ${CMAKE_CURRENT_LIST_DIR}/test_xir_root_parameter_source.c)
 target_include_directories(test_xir_root_parameter_source PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(test_xir_root_parameter_source PRIVATE xray_xir_source)
@@ -31,3 +34,7 @@ set_tests_properties(test_xir_root_parameter_source PROPERTIES
 add_test(NAME test_xir_root_parameter_source_compiler COMMAND test_xir_root_parameter_source --compiler)
 set_tests_properties(test_xir_root_parameter_source_compiler PROPERTIES
     LABELS "unit;xir;source;root-effects;higher-order;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_root_parameter_visibility_resource_baselines COMMAND test_xir_root_parameter_visibility --resource-baselines)
+set_tests_properties(test_xir_root_parameter_visibility_resource_baselines PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership;baseline" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)

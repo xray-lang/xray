@@ -14,11 +14,10 @@
 static XrXirStatus effect_invocation_producer_return_read(const EffectInvocationRead *owner,
     const EffectBodyRequest *request,uint32_t body,bool *output) {
     if (!owner || !request || !output || body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionHead head={0};
-    XrXirStatus status=effect_body_request_head(request,body,&head);
+    XrXirType result=XR_XIR_UNIT;
+    XrXirStatus status=effect_body_request_result(request,body,&result);
     if (status!=XR_XIR_OK) return status;
-    const XrXirTypeNode *signature=xr_xir_callable_signature(request->domain.types,
-        head.result);
+    const XrXirTypeNode *signature=xr_xir_callable_signature(request->domain.types,result);
     if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
     if (signature && (!xr_xir_callable_flags_valid(signature->flags) ||
         (!!signature->parameters!=!!signature->parameter_count))) return XR_XIR_BAD_TYPE;
@@ -409,11 +408,10 @@ static XrXirStatus effect_invocation_producer_results(EffectInvocationFlow *flow
     const EffectInvocationRead *owner=flow->read;EffectInvocationEdge edge=owner->final->edges[edge_index];
     if (edge.latent) return XR_XIR_OK;
     const EffectInvocationNode *child=&owner->final->nodes[edge.target];
-    EffectBodyFunctionHead target_head={0};
-    XrXirStatus read_status=effect_invocation_flow_head(flow,child->body,&target_head);
+    EffectBodyFunctionDimensions dimensions={0};
+    XrXirStatus read_status=effect_body_request_dimensions(&flow->body,child->body,&dimensions);
     if (read_status!=XR_XIR_OK) return read_status;
-    const EffectBodyFunctionHead *target=&target_head;
-    uint64_t returned=(uint64_t)target->parameter_count+target->instruction_count;
+    uint64_t returned=(uint64_t)dimensions.parameter_count+dimensions.instruction_count;
     EffectBodyRecordCursor cursor;
     read_status=effect_body_request_sequence_begin(&flow->body,&cursor);
     if (read_status!=XR_XIR_OK) return read_status;
@@ -489,11 +487,11 @@ static XrXirStatus effect_invocation_producer_cause(EffectInvocationFlow *flow,
         if (edge->caller!=flow->node || edge->target!=fact->next_node || edge->latent ||
             fact->value>=flow->values || fact->instruction>=flow->function->instruction_count)
             return XR_XIR_BAD_STRUCTURE;
-        EffectBodyFunctionHead target_head={0};
-        XrXirStatus head_status=effect_invocation_flow_head(flow,owner->final->nodes[fact->next_node].body,&target_head);
+        EffectBodyFunctionDimensions dimensions={0};
+        XrXirStatus head_status=effect_body_request_dimensions(&flow->body,
+            owner->final->nodes[fact->next_node].body,&dimensions);
         if (head_status!=XR_XIR_OK) return head_status;
-        const EffectBodyFunctionHead *target=&target_head;
-        if (fact->next_value!=(uint64_t)target->parameter_count+target->instruction_count ||
+        if (fact->next_value!=(uint64_t)dimensions.parameter_count+dimensions.instruction_count ||
             fact->value!=flow->function->parameter_count+fact->instruction) return XR_XIR_BAD_STRUCTURE;
         XrXirInstruction body_op_3;const XrXirInstruction *op=NULL;
         XrXirStatus body_read_3=effect_invocation_flow_instruction(flow,fact->instruction,&body_op_3,&op);

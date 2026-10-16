@@ -93,7 +93,8 @@ static void capture_index_fixture(CaptureIndexFixture *f) {
 
 static XrXirStatus capture_index_order(const XrXirCompileContext *c, const XrXirModule *m, bool qualify) {
     EffectGraph graph={0};XrXirCompileContext context=*c;
-    XrXirStatus status=effect_reference_graph(m,&graph,5,&context);
+    XrXirStatus status=effect_graph_physical_refresh(&context,m,&graph,NULL);
+    if (status==XR_XIR_OK) status=effect_reference_graph(m,&graph,5,&context);
     if (status==XR_XIR_OK && qualify) {
         static const uint32_t callers[]={1,1,2};uint32_t edge=graph.reference_heads[3];
         for (uint32_t i=0;i<3;++i) {
@@ -185,10 +186,12 @@ static void capture_index_resources(void) {
         (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.work);
 }
 
-int main(void) {
+int main(int argc,char **argv) {
+    bool normal=argc==2 && !strcmp(argv[1],"--normal");
+    CHECK(argc==1 || normal);
     RootParameterMark physical=rp_mark();XrXirCompileContext c=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&c).live_bytes;XrXirArtifact *artifact=NULL;
     CHECK(capture_index_pipeline(&c,&artifact,true)==XR_XIR_OK && artifact);
     xr_xir_compile_artifact_free(artifact);rp_owner_free(&c,baseline);rp_balanced(physical);
-    capture_index_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    if (!normal) capture_index_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
 }

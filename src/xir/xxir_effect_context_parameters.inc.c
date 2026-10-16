@@ -19,6 +19,7 @@ typedef struct EffectOrdinaryNode {
 } EffectOrdinaryNode;
 
 typedef struct EffectOrdinaryContexts {
+    XrCompileResources *resources;
     EffectTerms terms;
     EffectOrdinaryNode *nodes;
     XrXirFunction *functions;
@@ -30,16 +31,30 @@ typedef struct EffectOrdinaryContexts {
     XrXirEffects uses;
 } EffectOrdinaryContexts;
 
-static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
-    if (!contexts) return;
-    xr_xir_compile_declarations_free(contexts->source_declarations);
-    xr_xir_compile_generics_free(contexts->source_generics,contexts->base_count);
+/* Only the constructor owns these parameter-use results and its Input
+ * reference. Final keeps its own retained Input; no descriptor is freed here. */
+static void effect_ordinary_results_free(EffectOrdinaryContexts *contexts) {
     effect_parameters_free(&contexts->uses);
     xr_compile_resources_free(contexts->uses.outcomes_work.root);
     xr_compile_resources_free(contexts->uses.outcomes_work.root_witnesses);
     xr_compile_resources_free(contexts->uses.outcomes_work.unresolved_witnesses);
     xr_compile_resources_free(contexts->uses.outcomes_work.functions);
     xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
+}
+
+static bool effect_ordinary_work_empty(const EffectOrdinaryContexts *contexts) {
+    const XrXirEffects *uses=&contexts->uses;
+    return !uses->resources && !uses->count && !uses->outcomes_owner && !uses->root_input &&
+        !uses->formula_terminals && !uses->constant_witnesses && !uses->cells &&
+        !uses->refinement && !uses->invocations && !uses->result_borrow && !uses->generation &&
+        effect_outcomes_empty(&uses->outcomes_work);
+}
+
+static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
+    if (!contexts) return;
+    xr_xir_compile_declarations_free(contexts->source_declarations);
+    xr_xir_compile_generics_free(contexts->source_generics,contexts->base_count);
+    effect_ordinary_results_free(contexts);
     xr_compile_resources_free(contexts->nodes);
     xr_compile_resources_free(contexts->functions);
     effect_terms_free(&contexts->terms);
@@ -461,6 +476,7 @@ static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
     if (status!=XR_XIR_OK) return status;
     EffectOrdinaryContexts *contexts=xir_compile_calloc(context,1,sizeof(*contexts),&status);
     if (!contexts) { effect_context_free(fresh);return status; }
+    contexts->resources=context->resources;
     contexts->terms.remaining=context;contexts->base_count=source->function_count;
     contexts->source_type_count=source->types->count;
     status=effect_terms_seed(&contexts->terms,source->types);
@@ -500,6 +516,7 @@ static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
     XrXirStatus status=XR_XIR_OK;
     EffectOrdinaryContexts *contexts=xir_compile_calloc(context,1,sizeof(*contexts),&status);
     if (!contexts) return status;
+    contexts->resources=context->resources;
     contexts->terms.remaining=context;contexts->base_count=source->function_count;
     contexts->source_type_count=source->types->count;
     status=effect_terms_seed(&contexts->terms,source->types);

@@ -61,8 +61,8 @@ static XrXirStatus effect_invocation_parameter_rank(const EffectInvocationRead *
     if (!owner->final->roots || n>=owner->final->count || owner->final->nodes[n].body>=request->domain.function_count ||
         parameter>=owner->final->nodes[n].parameter_count) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->final->nodes[n];
-    EffectBodyFunctionHead head={0};
-    XrXirStatus head_status=effect_body_request_head(request,node->body,&head);
+    EffectBodyFunctionParameters head={0};
+    XrXirStatus head_status=effect_body_request_parameters(request,node->body,&head);
     if (head_status!=XR_XIR_OK) return head_status;
     if (parameter>=head.parameter_count || !head.parameters) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
@@ -98,10 +98,10 @@ static XrXirStatus effect_invocation_parameter_zero_shape(const EffectInvocation
         !owner->final->nodes || n>=owner->final->count || owner->final->nodes[n].body>=request->domain.function_count)
         return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->final->nodes[n];
-    EffectBodyFunctionHead head={0};
-    XrXirStatus status=effect_body_request_head(request,node->body,&head);
+    EffectBodyFunctionParameters head={0};
+    XrXirStatus status=effect_body_request_parameters(request,node->body,&head);
     if (status!=XR_XIR_OK) return status;
-    const EffectBodyFunctionHead *function=&head;
+    const EffectBodyFunctionParameters *function=&head;
     if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
     uint32_t root=owner->final->roots[node->body];
     if (root>=owner->final->count || owner->final->nodes[root].body!=node->body) return XR_XIR_BAD_STRUCTURE;
@@ -122,8 +122,8 @@ static XrXirStatus effect_invocation_parameter_step_read(const EffectInvocationR
     bool verify=builder==NULL;
     if (!owner || !request || n>=owner->final->count || !changed ||
         owner->final->nodes[n].body>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionHead head={0};
-    XrXirStatus shape=effect_body_request_head(request,owner->final->nodes[n].body,&head);
+    EffectBodyFunctionParameters head={0};
+    XrXirStatus shape=effect_body_request_parameters(request,owner->final->nodes[n].body,&head);
     if (shape!=XR_XIR_OK) return shape;
     if (owner->final->nodes[n].parameter_count!=head.parameter_count ||
         (!!head.parameters!=!!owner->final->nodes[n].parameter_count) ||

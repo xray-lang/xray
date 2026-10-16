@@ -30,7 +30,7 @@ static void pc_final_all_terms_retired(const XrXirEffects *effects) {
     pc_final_terms_retired(&owner->forest->terms,"forest");
     pc_final_terms_retired(&owner->forest->invocations->terms,"forest-certificate");
     pc_final_body_terms_retired(owner->forest->invocations->body,"forest-input");
-    pc_final_body_terms_retired(owner->ordinary->uses.generation,"ordinary-input");
+    CHECK(effect_ordinary_work_empty(owner->ordinary) && owner->ordinary->resources==effects->resources);
 }
 
 static void pc_final_retired_terms_rejections(const XrXirCompileContext *context,
@@ -122,6 +122,9 @@ static void pc_source_terminal_literal(uint32_t mutation) {
     CHECK(status==(mutation?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
 }
 
+#include "xir_ordinary_retirement_cases.h"
+
 static void pc_source_terminal_literals(void) {
+    pc_ordinary_retirement_literals();
     for (uint32_t mutation=0;mutation<3;++mutation) pc_source_terminal_literal(mutation);
 }

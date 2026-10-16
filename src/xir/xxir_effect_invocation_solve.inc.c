@@ -314,9 +314,9 @@ static XrXirStatus effect_invocation_root_input(EffectInvocationWorkspace *owner
     if (!owner->final.root_spaces || owner->final.root_spaces[function]>=owner->read.body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationBasis basis={0};XrXirStatus status=effect_invocation_basis(&owner->read,owner->final.root_spaces[function],&basis);
     if (status!=XR_XIR_OK) return status;
-    EffectBodyFunctionHead head={0};status=effect_invocation_head(&owner->read,function,&head);
+    EffectBodyFunctionParameters head={0};status=effect_invocation_parameters(&owner->read,function,&head);
     if (status!=XR_XIR_OK) return status;
-    const EffectBodyFunctionHead *body=&head;
+    const EffectBodyFunctionParameters *body=&head;
     uint64_t words=(uint64_t)body->parameter_count*basis.row_words;
     if (words>SIZE_MAX/sizeof(uint64_t)) return XR_XIR_BUDGET;
     uint64_t *input=words ? xir_compile_calloc(owner->read.work,(size_t)words,sizeof(*input),&status) : NULL;
@@ -389,9 +389,9 @@ static XrXirStatus effect_invocation_root_spaces(EffectInvocationWorkspace *owne
     if (!owner->final.root_spaces) return status;
     uint32_t shared=UINT32_MAX;
     for (uint32_t f=0;f<count;++f) {
-        EffectBodyFunctionHead head={0};status=effect_invocation_head(&owner->read,f,&head);
+        EffectBodyFunctionParameters head={0};status=effect_invocation_parameters(&owner->read,f,&head);
         if (status!=XR_XIR_OK) return status;
-        const EffectBodyFunctionHead *function=&head;bool tracked=false;
+        const EffectBodyFunctionParameters *function=&head;bool tracked=false;
         for (uint32_t p=0;p<function->parameter_count;++p) {
             if (!xir_compile_work(owner->read.work,3)) return XR_XIR_BUDGET;
             XrXirType type=function->parameters[p];
@@ -849,10 +849,10 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) {
         for (uint32_t f=0;f<owner->final.physical->count;++f) {
             if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
-            EffectBodyFunctionHead head={0};status=effect_invocation_head(&owner->read,f,&head);
+            XrXirType result=XR_XIR_UNIT;status=effect_invocation_result(&owner->read,f,&result);
             if (status!=XR_XIR_OK) break;
             owner->read.class_enabled|=owner->final.physical->functions[f].classes!=0 ||
-                xr_xir_type_is_class(owner->read.body.domain.types,head.result);
+                xr_xir_type_is_class(owner->read.body.domain.types,result);
         }
     }
     if (status==XR_XIR_OK && owner->read.class_enabled) {

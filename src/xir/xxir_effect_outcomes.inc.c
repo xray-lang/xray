@@ -36,6 +36,7 @@ static const EffectFinalOutcomes *effect_final_outcomes(const XrXirEffects *effe
         final->words!=((uint64_t)final->atom_count+65)/64 || final->error_rows<final->count ||
         (uint64_t)final->error_rows>(uint64_t)final->count+effects->invocations->final->count)
         return NULL;
+    if (final->contexts && !effect_context_owner_published(effects->resources,final->contexts)) return NULL;
     return final;
 }
 

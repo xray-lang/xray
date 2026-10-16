@@ -198,6 +198,18 @@ static XrXirStatus effect_invocation_head(const EffectInvocationRead *owner,uint
     EffectBodyRequest request=effect_invocation_body(owner);
     return effect_body_request_head(&request,function,output);
 }
+static XrXirStatus effect_invocation_result(const EffectInvocationRead *owner,uint32_t function,
+    XrXirType *output) {
+    if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_invocation_body(owner);
+    return effect_body_request_result(&request,function,output);
+}
+static XrXirStatus effect_invocation_parameters(const EffectInvocationRead *owner,uint32_t function,
+    EffectBodyFunctionParameters *output) {
+    if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRequest request=effect_invocation_body(owner);
+    return effect_body_request_parameters(&request,function,output);
+}
 static XrXirStatus effect_invocation_dimensions(const EffectInvocationRead *owner,uint32_t function,
     EffectBodyFunctionDimensions *output) {
     if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
