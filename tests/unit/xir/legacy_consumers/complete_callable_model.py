@@ -4,6 +4,9 @@ import hashlib
 import math
 
 ROOT = Path(__file__).resolve().parent.parents[3]
+_UNIT_NAME = 'known_empty_call_result_is_null'
+_UNIT_ORIGINAL = 'tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr'
+_UNIT_PORT = 'tests/unit/xir/legacy_consumers/fixtures/unit_call_result/root.xr'
 _INPUTS = {'tests/diff/cases/semantics/functions/unproven_callee_targets.xr': '559ec30a96887af5d4e77a632fb9ef66c01fa6422d0ca3c4f50b2e6a8a428511',
  'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
  'spec/source/sections/004-3-expressions.md': '1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c',
@@ -26,7 +29,9 @@ _INPUTS = {'tests/diff/cases/semantics/functions/unproven_callee_targets.xr': '5
  'tests/diff/cases/semantics/functions/unit_return_expression.xr': '4b81fbb553915041991acedf1aeeb839106aed96534178019fddb0a0a8a6aace',
  'tests/diff/cases/semantics/functions/unit_value_rendering.xr': '124a25aebe1c994719ac358c459883f16bb65f2e7ca40855d68d9458a22c6a33',
  'tests/unit/xir/legacy_consumers/fixtures/callable_explicit_fill/root.xr': '1a26a78e2aca830df18cde987175eb16ae6d0f31e684976a896ce8f0b3d2cb92'}
-_REQUIRED_INPUTS = ('tests/diff/cases/semantics/functions/unproven_callee_targets.xr',
+_INPUTS[_UNIT_ORIGINAL] = '130cdccab3b462b0b294870f5de4d18dd29675d080d275debd8d0b570e1e8865'
+_INPUTS[_UNIT_PORT] = 'dc9fe5d9f7a3c802bab14cdd06f9122bbb48a2527e4b58420d3a453838a4db9b'
+_REQUIRED_INPUTS = (_UNIT_ORIGINAL, _UNIT_PORT, 'tests/diff/cases/semantics/functions/unproven_callee_targets.xr',
  'spec/source/sections/003-2-type-system.md',
  'spec/source/sections/004-3-expressions.md',
  'spec/source/sections/005-4-statements.md',
@@ -62,7 +67,8 @@ _PROGRAMS = {'unproven_callee_targets': 'tests/diff/cases/semantics/functions/un
  'string_result_direct_call': 'tests/diff/cases/semantics/functions/string_result_direct_call.xr',
  'unit_return_expression': 'tests/diff/cases/semantics/functions/unit_return_expression.xr',
  'unit_value_rendering': 'tests/diff/cases/semantics/functions/unit_value_rendering.xr'}
-_NAMES = frozenset({
+_PROGRAMS[_UNIT_NAME] = _UNIT_ORIGINAL
+_NAMES = frozenset({_UNIT_NAME,
     'unproven_callee_targets',
     'call_through_function_parameter', 'capture_forms', 'nested_closure_transitive_capture',
     'bare_lambda_expression_positions', 'default_param_as_function_value', 'function_type_surface',
@@ -86,6 +92,53 @@ def render(value):
         return '(' + ', '.join(render(item) for item in value) + (',' if len(value) == 1 else '') + ')'
     if type(value) is list: return '[' + ', '.join(render(item) for item in value) + ']'
     raise ValueError('Callable trace requires an explicit printable value; Unit is the empty tuple')
+
+
+def unit_call_port(text):
+    before = '// value the caller may bind, and that value compares equal to null. Inlining the'
+    after = '// value the caller may bind. It is Unit (), distinct from null. Inlining the'
+    if text.count(before) != 1 or text.count('== "null"') != 2:
+        raise ValueError('Complete original empty-call source lost its exact Unit migration sites')
+    return text.replace(before, after).replace('== "null"', '== "()"')
+
+
+def unit_type_name(value):
+    if type(value) is not tuple or len(value) != 0:
+        raise ValueError('The empty-call reflection obligation requires Unit, not an absent Optional or scalar')
+    return '()'
+
+
+def unit_call_trace():
+    calls = []
+    values = []
+    names = []
+    events = []
+    def empty():
+        calls.append('empty')
+        events.append('call:empty')
+        return ()
+    def observe(binding, value):
+        name = unit_type_name(value)
+        names.append(name)
+        events.append('typeName:' + binding)
+        if name != '()':
+            raise ValueError('Unit type-name assertion failed')
+        events.append('assert:' + binding)
+        values.append(value)
+        events.append('print:' + binding)
+    def run():
+        calls.append('run')
+        events.append('call:run')
+        def local_empty():
+            calls.append('local_empty')
+            events.append('call:local_empty')
+            return ()
+        result = empty()
+        observe('result', result)
+        nested = local_empty()
+        observe('nested', nested)
+    run()
+    return {'calls': calls, 'values': values, 'type_names': names, 'assertions': 2, 'events': events}
 
 
 def observations():
@@ -184,6 +237,7 @@ def observations():
     traces['unit_return_expression'] = events
     def nothing(): return ()
     traces['unit_value_rendering'] = [nothing(),(1,2)]
+    traces[_UNIT_NAME] = unit_call_trace()['values']
     if set(traces) != _NAMES: raise ValueError('Complete callable trace lost a program')
     return traces
 
@@ -206,9 +260,12 @@ def expected_rows():
     text = (ROOT/original).read_bytes().replace(b'\r\n',b'\n').decode('utf-8')
     if text.count(before) != 1 or (ROOT/selected).read_bytes().replace(b'\r\n',b'\n') != text.replace(before,after).encode('utf-8'):
         raise ValueError('Callable array port must preserve the entire original program with explicit valid fill')
+    original_unit = (ROOT/_UNIT_ORIGINAL).read_bytes().replace(b'\r\n',b'\n').decode('utf-8')
+    if (ROOT/_UNIT_PORT).read_bytes().replace(b'\r\n',b'\n') != unit_call_port(original_unit).encode('utf-8'):
+        raise ValueError('Unit migration changed more than the two obsolete assertions and comment')
     traces = observations()
-    return [{'id':'complete_callable_'+name, 'source':selected if name=='bare_lambda_expression_positions' else source, 'original_source':source,
+    return [{'id':'complete_callable_'+name, 'source':_UNIT_PORT if name==_UNIT_NAME else selected if name=='bare_lambda_expression_positions' else source, 'original_source':source,
              'required_target':None, 'expected':{'exit_code':0,'stderr_utf8':'',
              'stdout_utf8':''.join(render(value)+'\n' for value in traces[name])},
-             'model':'Full unchanged original program: source-bound independent call/capture/default/ref/Unit state trace; output does not prove physical release or complete FI.',
+             'model':('Complete original top-level/local empty call-result bindings, two typeName assertions and two prints. Only obsolete null assertions and their comment migrate to the published Unit() identity. No result binding/body/observation removed;physical slots,inlining,FI,lifetime and full providers remain unqualified.' if name==_UNIT_NAME else 'Full unchanged original program: source-bound independent call/capture/default/ref/Unit state trace; output does not prove physical release or complete FI.'),
              'observation_count':len(traces[name])} for name,source in sorted(_PROGRAMS.items())]

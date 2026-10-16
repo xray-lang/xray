@@ -30597,6 +30597,41 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 11
+    },
+    {
+      "id": "complete_callable_known_empty_call_result_is_null",
+      "oracle_id": "complete_callable_known_empty_call_result_is_null",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/unit_call_result/root.xr",
+      "source_lf_sha256": "dc9fe5d9f7a3c802bab14cdd06f9122bbb48a2527e4b58420d3a453838a4db9b",
+      "entry": "run",
+      "stdout_utf8": "()\n()\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original top-level/local empty call-result bindings, two typeName assertions and two prints. Only obsolete null assertions and their comment migrate to the published Unit() identity. No result binding/body/observation removed;physical slots,inlining,FI,lifetime and full providers remain unqualified.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/optimizer/known_empty_call_result_is_null.xr",
+        "source_lf_sha256": "130cdccab3b462b0b294870f5de4d18dd29675d080d275debd8d0b570e1e8865"
+      },
+      "remaining_gates": [
+        "Complete original empty/local call body, all three function declarations, two result bindings, two assertions and two prints kept.",
+        "Exact public Unit typeName/value behavior,real VM/C/native,all applicable compiler/runtime FI/resources/lifetime/sanitizer/provider/mixed;no null alias or synthetic output."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
     }
   ]
 }

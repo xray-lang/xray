@@ -107874,7 +107874,22 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve the whole original positive/effect/stress responsibility. Published methods, witness/query metadata, borrow/layout/provider contracts and actual full execution remain unqualified."
+      "target_contract_review": "REQUIRED; preserve the whole original positive/effect/stress responsibility. Published methods, witness/query metadata, borrow/layout/provider contracts and actual full execution remain unqualified.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/unit_call_result/root.xr",
+        "lf_sha256": "dc9fe5d9f7a3c802bab14cdd06f9122bbb48a2527e4b58420d3a453838a4db9b",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Type system2.3.6 and published value-query13.3: implicit empty returns Unit and typeName(Unit) is(). Preserve full original top-level and nested functions, both result bindings, both assertions and prints;only two obsolete null labels and inaccurate comment change. No erased-null alias or direct output replacement."
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_EMPTY_CALL_UNIT_IDENTITY_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Type system2.3.6 and published value-query13.3: implicit empty returns Unit and typeName(Unit) is(). Preserve full original top-level and nested functions, both result bindings, both assertions and prints;only two obsolete null labels and inaccurate comment change. No erased-null alias or direct output replacement."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/optimizer/known_loop_exit_dropped_by_full_pipeline.xr",
