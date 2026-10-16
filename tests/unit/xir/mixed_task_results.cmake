@@ -313,3 +313,31 @@ foreach(task_struct_control_backend IN ITEMS 0 1 vm native)
     set_tests_properties(test_xir_mixed_task_struct_control_${task_struct_control_backend} PROPERTIES
         TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;struct;ownership;generated-c;lifecycle;atomic;cow;cancel;prefix")
 endforeach()
+
+
+add_executable(test_xir_mixed_task_struct_resources xir/test_xir_mixed_task_struct_resources.c "${XIR_MIXED_TASK_STRUCT_C}")
+target_link_libraries(test_xir_mixed_task_struct_resources PRIVATE xray_xir_vm xray_xir_scalar)
+target_compile_definitions(test_xir_mixed_task_struct_resources PRIVATE XR_MIXED_TASK_RESULT_MODULES=3)
+set_target_properties(test_xir_mixed_task_struct_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_task_struct_resources PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_task_struct_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(task_struct_resource_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_task_struct_resources_${task_struct_resource_backend}_axes
+        COMMAND test_xir_mixed_task_struct_resources ${task_struct_resource_backend} axes)
+    set_tests_properties(test_xir_mixed_task_struct_resources_${task_struct_resource_backend}_axes PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;task;struct;ownership;generated-c;lifecycle;atomic;cow;cancel;resource;axes")
+endforeach()
+
+set(XIR_TASK_STRUCT_RESOURCE_SITES 63 57 45 45)
+foreach(task_struct_resource_backend IN ITEMS 0 1 vm native)
+    foreach(task_struct_resource_mode RANGE 0 3)
+        list(GET XIR_TASK_STRUCT_RESOURCE_SITES ${task_struct_resource_mode} task_struct_resource_sites)
+        add_test(NAME test_xir_mixed_task_struct_resources_${task_struct_resource_backend}_fi_${task_struct_resource_mode}
+            COMMAND test_xir_mixed_task_struct_resources ${task_struct_resource_backend} fi ${task_struct_resource_mode} ${task_struct_resource_sites})
+        set_tests_properties(test_xir_mixed_task_struct_resources_${task_struct_resource_backend}_fi_${task_struct_resource_mode} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;struct;ownership;generated-c;lifecycle;atomic;cow;cancel;resource;fault-injection")
+    endforeach()
+endforeach()
