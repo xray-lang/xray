@@ -325,7 +325,7 @@ static void generation_range_dispatch_singleton(EffectInvocationWorkspace *owner
             rp_stats(owner->read.work).live_bytes==before.live_bytes);
         flow.body=original;
     }
-    xr_compile_resources_free(flow.memory);
+    effect_invocation_flow_finish(&flow);
 }
 
 static void generation_range_origin_bindings(const XrXirCompileContext *context,
@@ -368,7 +368,7 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     generation_range_mixed_origins(&flow);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_faults(&flow);
     generation_range_dispatch_singleton(owner);
-    xr_compile_resources_free(flow.memory);effect_invocation_free(owner);
+    effect_invocation_flow_finish(&flow);effect_invocation_free(owner);
     effect_body_material_free(other);effect_graph_free(&trial->graph);
     trial->graph=(EffectGraph){.material=material,.physical=material->physical};
     CHECK(effect_body_source_match(context,material,source)==XR_XIR_OK &&
@@ -387,7 +387,7 @@ static void generation_range_dispatch_other(const XrXirCompileContext *context,
     CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed &&
         flow.physical->count>1 && material->functions[0].run_count>1);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_singleton(owner);
-    xr_compile_resources_free(flow.memory);effect_invocation_free(owner);effect_graph_free(&trial->graph);
+    effect_invocation_flow_finish(&flow);effect_invocation_free(owner);effect_graph_free(&trial->graph);
     trial->graph=(EffectGraph){.material=material,.physical=material->physical};
 }
 
@@ -513,7 +513,7 @@ static void generation_sequence_producers(void) {
         uint64_t returned=UINT64_MAX;
         CHECK(effect_invocation_coverage_return_read(&owner->read,&request,n,&returned)==XR_XIR_OK &&
             returned==owner->final.nodes[n].return_coverage);
-        xr_compile_resources_free(flow.memory);
+        effect_invocation_flow_finish(&flow);
     }
     CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK &&
         effect_invocation_coverage_verify(owner)==XR_XIR_OK);

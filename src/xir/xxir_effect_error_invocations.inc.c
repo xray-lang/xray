@@ -272,9 +272,9 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     XrXirStatus status=effect_body_physical_match(flow->remaining,sealed->physical,certificate->body);
     ErrorInvocationContexts *contexts=NULL;
     if (status==XR_XIR_OK) status=error_invocation_storage(flow,certificate,&contexts);
-    EffectInvocationRead owner={0};
+    EffectInvocationRead owner={0};EffectInvocationScratch *replay_storage=NULL;
     if (status==XR_XIR_OK) status=effect_invocation_read_open(flow->remaining,
-        flow->effects,certificate->declared,sealed,&owner);
+        flow->effects,certificate->declared,sealed,&replay_storage,&owner);
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final->count;++n) {
         EffectInvocationFlow replay={.read=&owner,.node=n,.instruction=UINT32_MAX};
         status=effect_invocation_origins(&replay);
@@ -303,7 +303,7 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
             call->handled=true;
         }
         xr_compile_resources_free(coverage.memory);
-        xr_compile_resources_free(replay.memory);
+        effect_invocation_flow_finish(&replay);
     }
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final->count;++n) {
         EffectBodyFunctionDimensions head={0};

@@ -142,7 +142,7 @@ static XrXirStatus invocation_storage_rows(EffectInvocationWorkspace *owner,uint
             CHECK(effect_invocation_origin_join(&flow,4,2)==XR_XIR_OK);
         }
     }
-    xr_compile_resources_free(flow.memory);return status;
+    effect_invocation_flow_finish(&flow);return status;
 }
 
 static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {

@@ -57,8 +57,8 @@ static void invocation_class_cell_fixture(InvocationClassCellFixture *f,uint32_t
 static void conditional_class_cell_controls(const XrXirCompileContext *context,
     XrXirEffects *effects,uint32_t place,uint32_t project,uint32_t mode) {
     EffectInvocationCertificate *certificate=effects->invocations;
-    EffectInvocationRead replay={0};
-    XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
+    EffectInvocationRead replay={0};EffectInvocationScratch *replay_storage=NULL;
+    XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay_storage,&replay);
     CHECK(opening==XR_XIR_OK);
     replay.work=context;replay.effects=effects;replay.declared=certificate->declared;
     EffectInvocationFlow flow={.read=&replay,.node=replay.final->roots[3]};
@@ -100,7 +100,7 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
     }
     node->local_mask=local_mask;node->intrinsic_mask=intrinsic_mask;
     CHECK(effect_invocation_class_terminals_match(&flow)==XR_XIR_OK);
-    xr_compile_resources_free(flow.memory);effect_invocation_read_close(&replay);
+    effect_invocation_flow_finish(&flow);effect_invocation_read_close(&replay);
 }
 
 static XrXirStatus conditional_class_cell_case(const XrXirCompileContext *context,

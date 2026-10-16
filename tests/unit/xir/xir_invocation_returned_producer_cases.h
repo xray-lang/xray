@@ -182,8 +182,8 @@ static bool invocation_returned_work(void *owner,uint64_t units) {
 static void invocation_returned_environment_owned(const XrXirCompileContext *context,
     const EffectInvocationCertificate *certificate,XrXirEffects *published) {
     const EffectInvocationFinal *owner=certificate->final;EffectInvocationBasis basis={0};
-    EffectInvocationRead replay={0};
-    CHECK(effect_invocation_read_open(context,published,certificate->declared,owner,&replay)==XR_XIR_OK);replay.work=context;replay.effects=published;
+    EffectInvocationRead replay={0};EffectInvocationScratch *replay_storage=NULL;
+    CHECK(effect_invocation_read_open(context,published,certificate->declared,owner,&replay_storage,&replay)==XR_XIR_OK);replay.work=context;replay.effects=published;
     replay.declared=certificate->declared;
     EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
     CHECK(replay.final==certificate->final && replay.body.owner==certificate->body &&

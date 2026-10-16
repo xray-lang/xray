@@ -49,7 +49,7 @@ static XrXirStatus effect_invocation_parameter_edge(EffectInvocationFlow *source
         if (status==XR_XIR_OK)
             status=effect_invocation_coverage_source(&coverage,actual,maximum,complete);
     }
-    xr_compile_resources_free(coverage.memory);xr_compile_resources_free(flow.memory);
+    xr_compile_resources_free(coverage.memory);effect_invocation_flow_finish(&flow);
     return status;
 }
 
@@ -72,7 +72,7 @@ static XrXirStatus effect_invocation_parameter_rank(const EffectInvocationRead *
     XrXirStatus status=effect_invocation_origins_read(&flow,request);
     EffectInvocationCoverage view={.flow=&flow};bool complete=false;
     if (status==XR_XIR_OK) status=effect_invocation_coverage_sites(&view,parameter,true,&complete);
-    xr_compile_resources_free(flow.memory);
+    effect_invocation_flow_finish(&flow);
     if (status!=XR_XIR_OK || !complete) return status;
     uint64_t maximum=0;uint32_t count=0,walked=0;
     for (uint32_t e=owner->consumers[n];status==XR_XIR_OK && e!=UINT32_MAX;e=owner->final->edges[e].consumer_next) {

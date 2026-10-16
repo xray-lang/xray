@@ -6,6 +6,13 @@ if(MSVC)
 else()
     target_compile_options(test_xir_effect_final_read PRIVATE -Wall -Wextra -Werror)
 endif()
+add_test(NAME test_xir_effect_replay_storage
+    COMMAND test_xir_effect_final_read --replay-storage-values)
+add_test(NAME test_xir_effect_replay_storage_faults
+    COMMAND test_xir_effect_final_read --replay-storage-faults)
+set_tests_properties(test_xir_effect_replay_storage test_xir_effect_replay_storage_faults PROPERTIES
+    LABELS "unit;xir;metadata;ownership;final-read" TIMEOUT 30)
+set_tests_properties(test_xir_effect_replay_storage_faults PROPERTIES RUN_SERIAL TRUE)
 add_test(NAME test_xir_effect_final_read_allocation_bounds
     COMMAND test_xir_effect_final_read --read-allocation-bounds)
 set_tests_properties(test_xir_effect_final_read_allocation_bounds PROPERTIES

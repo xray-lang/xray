@@ -236,13 +236,13 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             invocation_final_initializer_erasure(context,certificate);
             invocation_final_trace_callback(context,certificate);
             EffectInvocationFinal damaged=*certificate->final;
-            damaged.physical=NULL;EffectInvocationRead refused={0};size_t admission_attempts=rp_attempts;
+            damaged.physical=NULL;EffectInvocationRead refused={0};EffectInvocationScratch *replay_storage=NULL;size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
-            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&replay_storage,&refused)==XR_XIR_BAD_STRUCTURE &&
                 !refused.work && !refused.consumers && !refused.final && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             refused.work=context;
-            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
+            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&replay_storage,&refused)==XR_XIR_BAD_STRUCTURE &&
                 refused.work==context && !refused.consumers && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             CHECK(caller_mask==(primitive_slot && !(mode&1)?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&

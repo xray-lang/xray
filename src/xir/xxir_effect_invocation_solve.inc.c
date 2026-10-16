@@ -204,7 +204,7 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
     if (status==XR_XIR_OK && owner->read.producer_enabled)
         status=effect_invocation_producer_step(&flow,changed,false);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
-    xr_compile_resources_free(flow.memory);
+    effect_invocation_flow_finish(&flow);
     if (status==XR_XIR_OK) {
         EffectInvocationNode *record=&owner->final.nodes[node];
         uint32_t dependencies=(uint32_t)(((uint64_t)flow.basis.parameters+63)/64);
@@ -234,7 +234,7 @@ static XrXirStatus effect_invocation_precision(EffectInvocationWorkspace *owner,
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->read.producer_enabled) status=effect_invocation_producer_step(&flow,changed,false);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
-    xr_compile_resources_free(flow.memory);return status;
+    effect_invocation_flow_finish(&flow);return status;
 }
 
 /* The local ROOT declaration seed is expanded once. Finite producer deltas
@@ -828,7 +828,8 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
     if (!xir_compile_work(work,sizeof(*owner))) {
         xr_compile_resources_free(owner);return XR_XIR_BUDGET; }
     *owner=(EffectInvocationWorkspace){.effects=effects,.graph=graph,.maximum=(uint32_t)maximum,
-        .read={.work=work,.final=&owner->final,.effects=effects,.declared=declared,.body=*body_request},
+        .read={.work=work,.final=&owner->final,.effects=effects,.declared=declared,.body=*body_request,
+            .replay_scratch=&owner->replay_scratch},
         .final={.material=graph->material,.physical=graph->material->physical,.cells=graph->material->cells}};
     EffectInvocationLocalInput *local_inputs=NULL;
     status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
@@ -887,10 +888,10 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
  * verification scratch and never contains a solver queue or copied inventory. */
 static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
     const XrXirEffects *effects,const EffectInvocationDeclaredBounds *declared,
-    const EffectInvocationFinal *final,EffectInvocationRead *read) {
-    if (!xir_compile_context_valid(work) || !final || !read ||
+    const EffectInvocationFinal *final,EffectInvocationScratch **replay_scratch,EffectInvocationRead *read) {
+    if (!xir_compile_context_valid(work) || !final || !read || !replay_scratch || *replay_scratch ||
         !effect_body_material_shape(final->material) || final->material->resources!=work->resources ||
-        read->work || read->consumers || read->final ||
+        read->work || read->consumers || read->final || read->replay_scratch ||
         !final->physical || final->physical!=final->material->physical ||
         final->physical->resources!=work->resources ||
         final->physical->count!=effect_body_count(final->material) || !final->physical->functions ||
@@ -898,7 +899,7 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
         (final->edge_count && !final->edges)) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(*read))) return XR_XIR_BUDGET;
     *read=(EffectInvocationRead){.work=work,.effects=effects,.declared=declared,.final=final,
-        .body=effect_body_owned_request(work,final->material)};
+        .body=effect_body_owned_request(work,final->material),.replay_scratch=replay_scratch};
     for (uint32_t f=0;f<effect_body_count(final->material);++f) {
         bool supported=false;XrXirStatus status=effect_invocation_producer_return_read(read,&read->body,f,&supported);
         if (status!=XR_XIR_OK) return status;
@@ -940,5 +941,7 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
     return status;
 }
 static void effect_invocation_read_close(EffectInvocationRead *read) {
+    effect_invocation_scratch_free(read);
     xr_compile_resources_free(read->consumers);read->consumers=NULL;
+    read->replay_scratch=NULL;
 }

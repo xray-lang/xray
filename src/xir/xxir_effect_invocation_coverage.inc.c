@@ -307,7 +307,7 @@ static XrXirStatus effect_invocation_coverage_return_read(const EffectInvocation
         if (maximum==UINT64_MAX) status=XR_XIR_BUDGET;
         else *output=maximum+1;
     }
-    xr_compile_resources_free(coverage.memory);xr_compile_resources_free(flow.memory);return status;
+    xr_compile_resources_free(coverage.memory);effect_invocation_flow_finish(&flow);return status;
 }
 static XrXirStatus effect_invocation_coverage_return(EffectInvocationWorkspace *owner,
     uint32_t n,uint64_t *output) {

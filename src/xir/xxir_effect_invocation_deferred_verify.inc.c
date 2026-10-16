@@ -141,7 +141,7 @@ static XrXirStatus effect_invocation_deferred_verify(const EffectInvocationRead 
         EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX};
         status=effect_invocation_origins(&flow);
         if (status==XR_XIR_OK) status=effect_invocation_deferred_frontiers(&flow,&matched);
-        xr_compile_resources_free(flow.memory);
+        effect_invocation_flow_finish(&flow);
         if (status!=XR_XIR_OK) return status;
     }
     return matched==owner->final->deferred_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;

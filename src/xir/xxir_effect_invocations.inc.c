@@ -142,6 +142,15 @@ typedef struct EffectInvocationFinal {
     uint32_t count,capacity,edge_count,edge_capacity;
 } EffectInvocationFinal;
 
+/* Replays share only released storage; every live replay owns a distinct block.
+ * A new initialization preserves no origin, flag or permission from reuse. */
+typedef struct EffectInvocationScratch {
+    struct EffectInvocationScratch *next;
+    XrCompileResources *resources;
+    size_t capacity;
+    bool claimed;
+} EffectInvocationScratch;
+
 /* A verification request borrows the sole Final and immutable Input. Its
  * incoming index is fresh request scratch; no solver state or semantic copy
  * exists in this view. The builder supplies the same view of its live Final. */
@@ -151,6 +160,7 @@ typedef struct EffectInvocationRead {
     const XrXirEffects *effects;
     const EffectInvocationDeclaredBounds *declared;
     EffectBodyRequest body;
+    EffectInvocationScratch **replay_scratch;
     uint32_t *consumers;
     bool producer_enabled,class_enabled;
 } EffectInvocationRead;
@@ -163,6 +173,7 @@ typedef struct EffectInvocationWorkspace {
     EffectFinalFunctions *prepared_result;
     uint32_t *edge_index;
     size_t edge_index_capacity;
+    EffectInvocationScratch *replay_scratch;
     EffectInvocationState *states;
     uint32_t maximum;
     uint32_t front,back,pending;
@@ -223,6 +234,7 @@ static void effect_invocation_result_free(EffectFinalFunctions *result);
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
     const XrXirRootEffectWitness *b);
 
+#include "xxir_effect_invocation_scratch.inc.c"
 #include "xxir_effect_invocation_class_nodes.inc.c"
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
