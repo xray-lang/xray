@@ -49,7 +49,9 @@ static XrXirValueStatus value_observe_child_operation(const XrXirValue *value,co
     }
     const XrXirValue *child=tuple ? &ordered->fields[step->selector] : nullable ? payload : &record->fields[step->selector];
     if (!value_observe_work(admission,value_observe_header_work(types,(XrXirType)child->type))) return XR_XIR_VALUE_LIMIT;
-    if (!xr_xir_value_argument(child,admission->arena,(XrXirType)child->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    /* Unit is valid stored data but is deliberately not a call argument. */
+    if (child->type==XR_XIR_UNIT ? !unit_value(child) :
+        !xr_xir_value_argument(child,admission->arena,(XrXirType)child->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     return xr_xir_value_copy(child,output);
 }
 XR_FUNC XrXirValueStatus xir_value_observe_child(const XrXirValue *value,const XrXirValuePathStep *step,
