@@ -878,6 +878,18 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 所有准备、复制、完整复验与观察先付同一原ledger费用，失败保全空输出、不退work或累计分配；最终释放不分配。原work/allocated/live、steps/frame/depth/output上限、错误映射、Value/SourceContext布局、schema、opcode与构造接口保持。本入口只完成关闭实例执行结果的拥有和对应边界；依赖类型实参的逐实例Source comptime接回仍未实现，17.71的拒绝边界不变。完整逐分配故障、原owner重试、精确边界、正式安全与provider资格必须分别绑定实际固定输入，不由小门或此接口的存在推导。
 
+### 17.73 真实关闭实例结果的独立 Source 提供函数
+
+编译器内部的实例常量接收入口从实际文件、文本或overlay完整构造Program Source，再执行普通特化。请求以原定义和本次真实收集实例的一对序号选择目标；完整INSTANCE来源、定义对应、实际非空类型替换和零运行期实参仍由原检查与17.72工厂验证，不能按裸名字、跨池类型ID或调用者提供的Value选择结果。每个请求独立执行唯一CTFE，显式target及原steps/frame/output/depth限制不变。
+
+接收者在另一份SourceContext中对同一仍保活、不可变的真实模块图重新构造普通定义，仅将已执行结果通过原常量配方写成新的无运行期实参函数。原泛型AST只在各次普通Source构造中检查，不按每个关闭实例重解释。新函数的声明祖先、模块和lexical nominal owner来自当前真实原定义；不从结果类型或名字伪造来源。原泛型定义及其要求调用保留，经完整普通Checker、根效果推导、查询发布、packet接收及后续特化重新建立证据；不删除原关闭证据再把私有witness边当普通公开调用。
+
+实际关闭类型实参按自己的已验证类型树复制并驻留到当前Source池，保留原替换深度128和原ledger费用。共享子树使用本次接收拥有的映射；活动inline依赖拒绝。nominal身份必须对应当前真实声明，字段缓存由当前声明和实际替换重新推导；外来字段缓存不授权限。这样可接收仅在特化后出现的构造类型，不要求其本地ID已存在于原Source池。同一接收可为不同实际替换生成不同Array、Nullable、Tuple和nominal结果，String保留完整显式字节长度，Unit不产生虚构值槽。
+
+函数外的私有拥有式结果继续使用17.67的真实声明owner、literal-only materializer与精确调用绑定，不把数据观察升级为一般私有构造权。结果函数保持私有，获得其序号不授予运行期外部入口权限。所有Source、特化、工厂、类型接收、配方和发布共用原有限compiler ledger；失败保全空输出、全部前缀可释放，不退work/累计分配，最终释放不分配。公开SourceContext/Value/Call/Instance布局、schema、opcode、构造接口和预算不变。
+
+该入口建立普通Program Source中真实关闭实例的结果接收与提供函数，不把提供函数自动接回某个comptime语法站点。目前含comptime站点的输入、Library模板后续绑定和无当前Source声明节点的定义仍拒绝；依赖外围T的逐实例comptime语法接线继续OPEN，17.71不变。这些限制不是完整C0/C1完成定义的缩减。完整物理FI、原owner重试、精确边界、当前完整矩阵、正式安全和provider证据必须分别取得，不能由定向正例推导。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1887,5 +1899,17 @@ The compiler-internal closed-instance owner receives an authentic Checked artifa
 The owner retains independently owned closed Checked and Lowered artifacts, the genuine original generic definition/substitution, and an owning Value. They may outlive the original Source, packet, input artifact and ledger caller. Before publishing a borrowed view, it completely verifies both current owned artifacts and writes current Checked bytes again, requiring exact byte correspondence with the Lowered artifact's actual source packet. Equal signatures or result types, another valid substitution, a digest or earlier verification success cannot replace current input correspondence. Observation identifies genuine origins without granting construction, member, private-call, loan or instruction-rewrite authority. Callers must keep the owner alive and exclude mutation throughout each borrow.
 
 Preparation, copying, complete verification and observation prepay the same original ledger. Failure preserves empty outputs without refunding work or cumulative allocation; final destruction allocates nothing. Original work/allocated/live, steps/frame/depth/output ceilings, error mappings, Value/SourceContext layouts, schema, opcodes and construction interface remain. This entry establishes ownership and correspondence for closed-instance execution results only. Receiving type-dependent per-instance Source comptime remains unimplemented, preserving17.71's refusal boundary. Complete physical fault injection, original-owner retries, exact bounds, formal safety and provider qualification each require their actual fixed-input evidence; neither small gates nor this interface's existence implies them.
+
+### 17.73 Independent Source providers for genuine closed instance results
+
+The compiler-internal instance-constant receiver completely constructs Program Source from actual files, text or overlays, then performs ordinary specialization. A request selects a pair of original-definition and actually collected instance ordinals. Original checking and17.72's factory still verify complete INSTANCE provenance, definition correspondence, actual nonempty type substitution and zero runtime arguments. Bare names, cross-pool type IDs and caller-provided Values cannot select results. Every selection freshly executes the sole CTFE with an explicit target and original steps/frame/output/depth limits.
+
+A separate SourceContext reconstructs ordinary definitions from the same live immutable authentic module graph, using the existing constant recipe writer only to create new zero-runtime-argument result functions. Original generic AST is checked during each ordinary Source construction, without reinterpretation for each closed instance. New declaration ancestry, modules and lexical nominal owners come from current genuine original definitions, never inferred from result types or names. Original generic definitions and requirement calls remain. Complete ordinary checking, root-effect derivation, query publication, packet receiving and later specialization establish fresh evidence; private witness edges do not become ordinary public calls by discarding closed-instance provenance.
+
+Actual closed arguments are copied and interned from their verified type trees into the current Source pool, retaining the original substitution depth128 and ledger charging. A receiving-owned mapping shares repeated subtrees and rejects active inline dependencies. Nominal identity must correspond to the genuine current declaration; current declarations and actual substitutions derive field caches without granting authority from foreign caches. Constructed types appearing only after specialization need not already have local IDs in the original Source pool. One receiver can publish distinct Array, Nullable, Tuple and nominal results for different real substitutions. Strings retain complete explicit byte lengths; Unit creates no fictitious value slot.
+
+Private owned results outside their declaration still use17.67's genuine declaration owner, literal-only materializer and exact call bindings, without turning data observation into general private construction permission. Result functions remain private: knowing their ordinal grants no runtime external-entry permission. Source construction, specialization, factories, type receiving, recipes and publication share the original finite compiler ledger. Failure preserves empty outputs and releasable prefixes without refunding work or cumulative allocation; final destruction allocates nothing. Public SourceContext/Value/Call/Instance layouts, schema, opcodes, construction interface and budgets remain unchanged.
+
+This entry establishes result receiving and provider functions for genuine closed instances in ordinary Program Source; it does not automatically bind providers to comptime syntax sites. Inputs containing comptime sites, later Library-template bindings and definitions without current Source declaration nodes remain refused. Type-dependent per-instance comptime syntax remains OPEN and17.71 is unchanged. These limits do not narrow complete C0/C1 completion criteria. Complete physical FI, original-owner retries, exact bounds, current full matrices, formal safety and provider evidence each remain necessary; focused positive cases cannot imply them.
 
 <!-- /xr-spec:en -->

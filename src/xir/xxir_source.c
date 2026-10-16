@@ -11,6 +11,7 @@
  */
 #include "xxir_source.h"
 #include "xxir_ctfe.h"
+#include "xxir_source_instance_internal.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
 #include "xxir_operand_roles.h"
@@ -197,6 +198,11 @@ typedef struct SourceRootQuery {
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
 typedef struct SourceComptimeSite SourceComptimeSite;
+typedef struct SourceInstanceBatch {
+    const XirCtfeInstanceView *views;
+    uint32_t *providers;
+    uint32_t count;
+} SourceInstanceBatch;
 typedef struct SourceMaterialization SourceMaterialization;
 typedef struct SourceContext {
     XrModuleGraph *graph;
@@ -246,6 +252,7 @@ typedef struct SourceContext {
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
     SourceComptimeSite *comptime_sites;
+    const SourceInstanceBatch *instance_constants;
     const SourceComptimeSite *comptime_input;
     const XrXirTypes *comptime_input_types;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
@@ -2821,6 +2828,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 #include "xxir_source_materialization_finish.inc.c"
+#include "xxir_source_instance_writer.inc.c"
 static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
     for (int t = 0; t < ctx->graph->topo_count; ++t) {
@@ -2935,4 +2943,5 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 }
 #include "xxir_core_source.inc.c"
 #include "xxir_source_comptime_pipeline.inc.c"
+#include "xxir_source_instance_pipeline.inc.c"
 #include "xxir_source_input.inc.c"

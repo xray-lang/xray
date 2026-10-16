@@ -7,7 +7,8 @@
  * instance_foreign.h - Actual private witness edges retain their definitions
  */
 static XrXirStatus instance_foreign_source(const XrXirSourceRequest *original,
-    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic) {
+    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic,XirSourceInstanceConstants *constants,
+    const XirSourceInstanceSelection *selections,uint32_t count) {
     static const char root[]="import {foreign} from \"./generic\"\n"
         "export fn run()->i64{return foreign<i8>()+foreign<string>()-42}\n";
     static const char protocol[]="export interface Getter{get()->i64}\n";
@@ -26,6 +27,12 @@ static XrXirStatus instance_foreign_source(const XrXirSourceRequest *original,
         inputs[i]=(XrModuleOverlayInput){authority,names[i],paths[i],texts[i],strlen(texts[i])};
     }
     XrXirSourceRequest request=*original;request.entry_path=paths[0];request.authority=&authority;
+    if (constants) {
+        XirSourceInstanceRequest input={.source=&request,.overlays=inputs,.overlay_count=4,.selections=selections,.count=count,
+            .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+            .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+        return xr_xir_compile_source_instance_constants(&input,constants,diagnostic);
+    }
     return xr_xir_compile_source_check_overlay(&request,inputs,4,output,diagnostic,NULL);
 }
 static void instance_foreign_edges(const XrXirArtifact *artifact) {

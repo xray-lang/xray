@@ -22,7 +22,7 @@ static bool source_materialization_receive(SourceContext *ctx,AstNode *node,
     const XrXirValue *value,XrXirType type,SourceValue *output,bool *handled) {
     *handled=false;
     const XrXirTypeNode *target=xr_xir_type_node(&ctx->types,type);
-    if (!ctx->comptime_input || !target || target->kind!=XR_XIR_TYPE_NOMINAL)
+    if ((!ctx->comptime_input && !ctx->instance_constants) || !target || target->kind!=XR_XIR_TYPE_NOMINAL)
         return true;
     uint32_t nominal=target->nominal.declaration;
     if (nominal>=ctx->nominals.count) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant declaration is absent");

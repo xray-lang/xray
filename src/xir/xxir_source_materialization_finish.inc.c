@@ -53,7 +53,7 @@ static bool source_materialization_birth(SourceContext *ctx,const SourceMaterial
     return true;
 }
 static bool source_materialization_finish(SourceContext *ctx) {
-    if (!ctx->comptime_input) return true;
+    if (!ctx->comptime_input && !ctx->instance_constants) return true;
     if (ctx->function_count!=ctx->materialization_begin)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"ordinary constant function inventory changed");
     SourceComptimeScope saved=source_comptime_scope(ctx);bool ok=true;

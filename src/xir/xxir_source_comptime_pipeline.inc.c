@@ -16,6 +16,8 @@ static bool source_comptime_failure(SourceContext *ctx,AstNode *node,XrXirCtfeSt
         status==XR_XIR_CTFE_FRAME_LIMIT || status==XR_XIR_CTFE_OUTPUT_LIMIT?XR_XIR_BUDGET:
         status==XR_XIR_CTFE_BAD_ARTIFACT || status==XR_XIR_CTFE_IDENTITY?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
     const char *message=status==XR_XIR_CTFE_STEP_LIMIT?"comptime step limit exceeded":
+        status==XR_XIR_CTFE_OUTPUT_LIMIT?"comptime logical output limit exceeded":
+        status==XR_XIR_CTFE_PROFILE?"comptime target profile is unsupported":
         status==XR_XIR_CTFE_DEPTH_LIMIT?"comptime call depth exceeded":
         status==XR_XIR_CTFE_FRAME_LIMIT?"comptime whole-stack frame limit exceeded":
         status==XR_XIR_CTFE_OUT_OF_MEMORY?"comptime allocation failed":

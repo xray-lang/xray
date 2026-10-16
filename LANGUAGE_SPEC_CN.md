@@ -7918,6 +7918,18 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 所有准备、复制、完整复验与观察先付同一原ledger费用，失败保全空输出、不退work或累计分配；最终释放不分配。原work/allocated/live、steps/frame/depth/output上限、错误映射、Value/SourceContext布局、schema、opcode与构造接口保持。本入口只完成关闭实例执行结果的拥有和对应边界；依赖类型实参的逐实例Source comptime接回仍未实现，17.71的拒绝边界不变。完整逐分配故障、原owner重试、精确边界、正式安全与provider资格必须分别绑定实际固定输入，不由小门或此接口的存在推导。
 
+### 17.73 真实关闭实例结果的独立 Source 提供函数
+
+编译器内部的实例常量接收入口从实际文件、文本或overlay完整构造Program Source，再执行普通特化。请求以原定义和本次真实收集实例的一对序号选择目标；完整INSTANCE来源、定义对应、实际非空类型替换和零运行期实参仍由原检查与17.72工厂验证，不能按裸名字、跨池类型ID或调用者提供的Value选择结果。每个请求独立执行唯一CTFE，显式target及原steps/frame/output/depth限制不变。
+
+接收者在另一份SourceContext中对同一仍保活、不可变的真实模块图重新构造普通定义，仅将已执行结果通过原常量配方写成新的无运行期实参函数。原泛型AST只在各次普通Source构造中检查，不按每个关闭实例重解释。新函数的声明祖先、模块和lexical nominal owner来自当前真实原定义；不从结果类型或名字伪造来源。原泛型定义及其要求调用保留，经完整普通Checker、根效果推导、查询发布、packet接收及后续特化重新建立证据；不删除原关闭证据再把私有witness边当普通公开调用。
+
+实际关闭类型实参按自己的已验证类型树复制并驻留到当前Source池，保留原替换深度128和原ledger费用。共享子树使用本次接收拥有的映射；活动inline依赖拒绝。nominal身份必须对应当前真实声明，字段缓存由当前声明和实际替换重新推导；外来字段缓存不授权限。这样可接收仅在特化后出现的构造类型，不要求其本地ID已存在于原Source池。同一接收可为不同实际替换生成不同Array、Nullable、Tuple和nominal结果，String保留完整显式字节长度，Unit不产生虚构值槽。
+
+函数外的私有拥有式结果继续使用17.67的真实声明owner、literal-only materializer与精确调用绑定，不把数据观察升级为一般私有构造权。结果函数保持私有，获得其序号不授予运行期外部入口权限。所有Source、特化、工厂、类型接收、配方和发布共用原有限compiler ledger；失败保全空输出、全部前缀可释放，不退work/累计分配，最终释放不分配。公开SourceContext/Value/Call/Instance布局、schema、opcode、构造接口和预算不变。
+
+该入口建立普通Program Source中真实关闭实例的结果接收与提供函数，不把提供函数自动接回某个comptime语法站点。目前含comptime站点的输入、Library模板后续绑定和无当前Source声明节点的定义仍拒绝；依赖外围T的逐实例comptime语法接线继续OPEN，17.71不变。这些限制不是完整C0/C1完成定义的缩减。完整物理FI、原owner重试、精确边界、当前完整矩阵、正式安全和provider证据必须分别取得，不能由定向正例推导。
+
 ---
 
 ## 18. 错误码 (Error Codes)
