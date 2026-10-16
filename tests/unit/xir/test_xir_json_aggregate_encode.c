@@ -13,6 +13,7 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +21,7 @@
 #include "xir_json_aggregate_encode_runtime.h"
 #include "xir_generated_schema.h"
 #include "xir_json_aggregate_encode_source.h"
+#include "xir_json_aggregate_source.h"
 static XrXirCompileContext aggregate_context(void) {
     XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();return context;
@@ -45,6 +47,20 @@ static uint32_t aggregate_entry(const XrXirModule *module,const char *name) {
         !memcmp(module->functions[f].name,name,strlen(name))){CHECK(found==UINT32_MAX);found=f;}
     CHECK(found!=UINT32_MAX);return found;
 }
+static XrXirCheckedPacket aggregate_fixture(const XrXirCompileContext *transport) {
+    char source[24000];int n=snprintf(source,sizeof(source),aggregate_generator_format,generated_schema_source,
+        XR_XIR_CONST_STRING,XR_XIR_STRUCT_GET,XR_XIR_TO_STRING,XR_XIR_CONCAT_STRING,XR_XIR_RETURN,XR_XIR_CALL,
+        XR_XIR_I64,XR_XIR_TYPE_ARRAY,XR_XIR_TYPE_NULLABLE,XR_XIR_STRING);CHECK(n>0 && n<(int)sizeof(source));
+    CHECK(sizeof(aggregate_helper_source)<=sizeof(source)-(size_t)n);memcpy(source+n,aggregate_helper_source,sizeof(aggregate_helper_source));
+    XrXirCompileContext producer=aggregate_context();XrXirSourceResult result={0};
+    aggregate_source(&producer,NULL,source,XR_XIR_LIBRARY,&result);memset(source,0xa5,sizeof(source));
+    XrXirCheckedPacket original={0},packet={0};CHECK(xr_xir_compile_checked_write(result.checked,&original,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_result_free(&result);void *owned=NULL;
+    CHECK(xr_compile_resources_alloc(transport->resources,original.length,&owned)==XR_COMPILE_RESOURCE_OK);
+    packet.bytes=owned;packet.length=original.length;memcpy(packet.bytes,original.bytes,packet.length);
+    memset(original.bytes,0xa5,original.length);xr_xir_compile_checked_packet_free(&original);xr_compile_resources_release(producer.resources);
+    return packet;
+}
 static void aggregate_emit(XrXirArtifact *lowered,const uint32_t selection[10],const char *path) {
     XrXirCSource output={0};XrXirStatus status=xr_xir_compile_emit_c(lowered,"fixture_json_aggregate",8388608,&output);
     fprintf(stderr,"Aggregate actual C11 emit%u bytes%zu\n",(unsigned)status,output.length);CHECK(status==XR_XIR_OK);
@@ -57,20 +73,11 @@ static void aggregate_emit(XrXirArtifact *lowered,const uint32_t selection[10],c
     for(unsigned i=0;i<10;++i)CHECK(fprintf(file,"%s%uu",i?",":"",selection[i])>0);
     CHECK(fprintf(file,"};\n")>0 && !fclose(file));xr_xir_compile_c_source_free(&output);
 }
+#include "xir_json_aggregate_encode_resources.h"
 int main(int argc,char **argv) {
+    if(argc>1 && strcmp(argv[1],"--negative") && strcmp(argv[1],"--emit-native"))return aggregate_resource_main(argc,argv);
     bool negative=argc==2 && !strcmp(argv[1],"--negative"),emit=argc==4 && !strcmp(argv[1],"--emit-native");CHECK(argc==1 || negative || emit);
-    char source[24000];int n=snprintf(source,sizeof(source),aggregate_generator_format,generated_schema_source,
-        XR_XIR_CONST_STRING,XR_XIR_STRUCT_GET,XR_XIR_TO_STRING,XR_XIR_CONCAT_STRING,XR_XIR_RETURN,XR_XIR_CALL,
-        XR_XIR_I64,XR_XIR_TYPE_ARRAY,XR_XIR_TYPE_NULLABLE,XR_XIR_STRING);CHECK(n>0 && n<(int)sizeof(source));
-    FILE *helper=fopen(XR_JSON_AGGREGATE_SOURCE,"rb");CHECK(helper);size_t count=fread(source+n,1,sizeof(source)-(size_t)n-1,helper);
-    CHECK(!ferror(helper) && feof(helper) && !fclose(helper));source[n+count]=0;
-    XrXirCompileContext producer=aggregate_context(),transport=aggregate_context();XrXirSourceResult result={0};
-    aggregate_source(&producer,NULL,source,XR_XIR_LIBRARY,&result);memset(source,0xa5,sizeof(source));
-    XrXirCheckedPacket original={0},packet={0};CHECK(xr_xir_compile_checked_write(result.checked,&original,NULL)==XR_XIR_OK);
-    xr_xir_compile_source_result_free(&result);void *owned=NULL;
-    CHECK(xr_compile_resources_alloc(transport.resources,original.length,&owned)==XR_COMPILE_RESOURCE_OK);
-    packet.bytes=owned;packet.length=original.length;memcpy(packet.bytes,original.bytes,packet.length);
-    memset(original.bytes,0xa5,original.length);xr_xir_compile_checked_packet_free(&original);xr_compile_resources_release(producer.resources);
+    XrXirCompileContext transport=aggregate_context();XrXirCheckedPacket packet=aggregate_fixture(&transport);XrXirSourceResult result={0};
     if(negative) {
         for(unsigned variant=0;variant<4;++variant)aggregate_reject(&packet,variant);
         memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_release(transport.resources);

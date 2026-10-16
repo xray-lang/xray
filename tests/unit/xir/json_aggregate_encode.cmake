@@ -2,10 +2,14 @@ add_executable(test_xir_json_aggregate_encode "${CMAKE_CURRENT_LIST_DIR}/test_xi
 target_link_libraries(test_xir_json_aggregate_encode PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 set(XR_JSON_AGGREGATE_WORK "${CMAKE_CURRENT_BINARY_DIR}/json-aggregate-encode-work")
 file(MAKE_DIRECTORY "${XR_JSON_AGGREGATE_WORK}")
-target_compile_definitions(test_xir_json_aggregate_encode PRIVATE XR_JSON_AGGREGATE_WORK="${XR_JSON_AGGREGATE_WORK}"
-    XR_JSON_AGGREGATE_SOURCE="${PROJECT_SOURCE_DIR}/stdlib/json/aggregate-encoding.xr")
-set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/test_xir_json_aggregate_encode.c" APPEND PROPERTY OBJECT_DEPENDS
-    "${PROJECT_SOURCE_DIR}/stdlib/json/aggregate-encoding.xr")
+target_compile_definitions(test_xir_json_aggregate_encode PRIVATE XR_JSON_AGGREGATE_WORK="${XR_JSON_AGGREGATE_WORK}")
+set(aggregate_source_header "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_json_aggregate_source.h")
+add_custom_command(OUTPUT ${aggregate_source_header}
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_LIST_DIR}/write_json_aggregate_source.py"
+        "${PROJECT_SOURCE_DIR}/stdlib/json/aggregate-encoding.xr" ${aggregate_source_header}
+    DEPENDS "${PROJECT_SOURCE_DIR}/stdlib/json/aggregate-encoding.xr" "${CMAKE_CURRENT_LIST_DIR}/write_json_aggregate_source.py" VERBATIM)
+target_sources(test_xir_json_aggregate_encode PRIVATE ${aggregate_source_header})
+target_include_directories(test_xir_json_aggregate_encode PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set_target_properties(test_xir_json_aggregate_encode PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_xir_json_aggregate_encode PRIVATE /utf-8 /W4 /WX)
@@ -49,3 +53,11 @@ endforeach()
 add_test(NAME test_xir_json_aggregate_encode_vm_runtime_resources COMMAND test_xir_json_aggregate_encode_mixed --vm-runtime-resources)
 set_tests_properties(test_xir_json_aggregate_encode_vm_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;source;generated;json;library;ownership;runtime-fault;resources")
+add_test(NAME test_xir_json_aggregate_encode_compiler_controls COMMAND test_xir_json_aggregate_encode --compiler-controls)
+set_tests_properties(test_xir_json_aggregate_encode_compiler_controls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;ctfe;generated;json;library;ownership;compiler-fault;resources")
+add_test(NAME test_xir_json_aggregate_encode_compiler_resources COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/run_source_derivation_compiler_faults.py" --exe $<TARGET_FILE:test_xir_json_aggregate_encode>
+    --output "${CMAKE_CURRENT_BINARY_DIR}/json-aggregate-compiler-fi")
+set_tests_properties(test_xir_json_aggregate_encode_compiler_resources PROPERTIES TIMEOUT 600 COST 600 PROCESSORS 8 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;ctfe;generated;json;library;ownership;compiler-fault;resources")
