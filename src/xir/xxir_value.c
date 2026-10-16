@@ -125,6 +125,8 @@ static void domain_unlock(XrXirDomain *domain) {
     atomic_store_explicit(&domain->locked, false, memory_order_release);
 }
 static bool value_object_kind_known(uint32_t kind);
+static XrXirValueStatus struct_observe_operation(const XrXirValue *value,uint32_t field,
+    XrXirValueAdmission *admission,XrXirValue *output,bool receiving);
 #include "xxir_value_graph_control.inc.c"
 static bool unit_value(const XrXirValue *value) {
     return value && !value->type && !value->reserved && !value->payload;
@@ -310,6 +312,18 @@ XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena
     if (type == XR_XIR_ERROR || (uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
         return arena && object_pointer(value)->arena == arena;
     return type != XR_XIR_UNIT;
+}
+XR_FUNC XrXirValueStatus xr_xir_compile_value_arena_borrow(XrCompileResources *resources,
+    const XrXirValue *value, const XrXirTypeArena **output) {
+    if (!resources || !output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (xr_compile_resources_work(resources,64)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if (value && value->type>=XR_XIR_CONSTRUCTED_TYPE_BASE && value_header_valid(value)) {
+        const XrXirTypeArena *arena=object_pointer(value)->arena;
+        if (arena) { *output=arena;status=XR_XIR_VALUE_OK; }
+    }
+    xr_xir_value_graph_end();return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output) {
     if (!output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -654,7 +668,7 @@ static bool empty_enum_object(const XirObject *object) {
         !((const XirNominalValue *) object)->count &&
         xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena), object->type);
 }
-static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *source, XrXirValue *output) {
+static XrXirValueStatus value_copy_on_domain(const XrXirValue *source,XrXirDomain *work_owner,XrXirValue *output) {
     if (!unit_value(output) || !source ||
         !xr_xir_value_valid(source))
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -662,7 +676,8 @@ static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *sour
         XirObject *object = object_pointer(source);
         /* Empty enum storage belongs to its arena, with no value domain.
          * Execution owners charge their copy/admission work before retaining. */
-        if (!empty_enum_object(object) && !xr_xir_domain_work(object->domain, 1)) return XR_XIR_VALUE_LIMIT;
+        if ((work_owner || !empty_enum_object(object)) &&
+            !xr_xir_domain_work(work_owner?work_owner:object->domain,1)) return XR_XIR_VALUE_LIMIT;
         if (!(empty_enum_object(object) ? xr_xir_compile_type_arena_retain(object->arena) :
             graph_object_retain(object))) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     }
@@ -671,7 +686,7 @@ static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *sour
 }
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output) {
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_value_copy_graph_operation(source, output);
+    XrXirValueStatus graph_outcome = value_copy_on_domain(source,NULL,output);
     xr_xir_value_graph_end();
     return graph_outcome;
 }
@@ -1599,7 +1614,7 @@ XR_FUNC XrXirValueStatus xr_xir_array_get(const XrXirValue *value, int64_t index
     return graph_outcome;
 }
 static XrXirValueStatus array_observe_operation(const XrXirValue *value, int64_t index,
-    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault,bool receiving) {
     if (fault) *fault=(XrXirFaultDetail){0};
     if (!value || !fault || !unit_value(output) || !admission || !admission->domain || !admission->arena)
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -1609,20 +1624,52 @@ static XrXirValueStatus array_observe_operation(const XrXirValue *value, int64_t
         !xr_xir_type_is_array(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XirArray *array=(XirArray *)object_pointer(value);
-    if (array->object.domain!=admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!receiving && array->object.domain!=admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (index<0 || (uint64_t)index>=array->length) {
         *fault=(XrXirFaultDetail){430,0,index,(int64_t)array->length};return XR_XIR_VALUE_BOUNDS;
     }
     if (!admission->work) return XR_XIR_VALUE_LIMIT;
     --admission->work;
     StorageSpan span={array->element,array_slot(array,(size_t)index)};
-    return storage_unpack(span,admission,output);
+    return receiving?storage_unpack_operation(span,admission,output,true):storage_unpack(span,admission,output);
 }
 XR_FUNC XrXirValueStatus xr_xir_array_observe(const XrXirValue *array, int64_t index,
     XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status=array_observe_operation(array,index,admission,output,fault);
+    XrXirValueStatus status=array_observe_operation(array,index,admission,output,fault,false);
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_compile_value_observe(XrCompileResources *resources,
+    const XrXirValue *value,uint64_t index,XrXirValueAdmission *admission,XrXirValue *output) {
+    if (!resources || !value || !admission || !xr_xir_domain_current(admission->domain) ||
+        admission->domain->compile_resources!=resources || index>INT64_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type);
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if (node && node->kind==XR_XIR_TYPE_ARRAY) {
+        XrXirFaultDetail fault={0};
+        status=array_observe_operation(value,(int64_t)index,admission,output,&fault,true);
+    } else if (node && xr_xir_type_is_struct(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type) && index<=UINT32_MAX)
+        status=struct_observe_operation(value,(uint32_t)index,admission,output,true);
+    else if (node) {
+        if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) status=XR_XIR_VALUE_LIMIT;
+        else {
+            admission->work-=64;
+            if (xr_xir_value_argument(value,admission->arena,(XrXirType)value->type)) {
+                const XrXirValue *child=NULL;
+                if (node->kind==XR_XIR_TYPE_TUPLE) {
+                    const XirTuple *tuple=(const XirTuple *)object_pointer(value);
+                    if (index<tuple->count) child=&tuple->fields[index];
+                } else if (node->kind==XR_XIR_TYPE_NULLABLE ||
+                    xr_xir_type_is_enum(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type)) {
+                    const XirNominalValue *record=(const XirNominalValue *)object_pointer(value);
+                    if (index<record->count) child=&record->fields[index];
+                }
+                if (child) status=value_copy_on_domain(child,admission->domain,output);
+            }
+        }
+    }
     xr_xir_value_graph_end();return status;
 }
 
