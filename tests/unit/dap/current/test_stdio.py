@@ -15,7 +15,8 @@ parser.add_argument('--xray',type=Path,required=True)
 parser.add_argument('--fixture',type=Path,required=True)
 parser.add_argument('--start-request',choices=('launch','attach'),default='launch')
 parser.add_argument('--transport',choices=('stdio','tcp'),default='stdio')
-parser.add_argument('--scenario',choices=('legacy','disconnect-clean','stop-on-entry','line-breakpoint','logpoint','mutate-oracle','owned-oracle'),default='legacy')
+parser.add_argument('--scenario',choices=('legacy','disconnect-clean','stop-on-entry','line-breakpoint','logpoint','mutate-oracle','owned-oracle',
+    'source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle'),default='legacy')
 parser.add_argument('--oracle',type=Path)
 args=parser.parse_args()
 if args.scenario!='legacy' and args.scenario!='disconnect-clean':assert args.oracle
@@ -321,5 +322,106 @@ def original_wire():
             client.process.kill()
             client.process.wait(timeout=20)
 
+def original_breakpoints(client,breakpoints):
+    reply=client.send('setBreakpoints',{'source':{'path':args.fixture.resolve().as_posix()},'breakpoints':breakpoints})
+    assert reply['success'],reply
+    actual=reply['body']['breakpoints']
+    assert len(actual)==len(breakpoints) and all(item['verified'] for item in actual),reply
+    assert [item['line'] for item in actual]==[item['line'] for item in breakpoints],reply
+
+
+def original_frames(client,thread):
+    reply=client.send('stackTrace',{'threadId':thread})
+    assert reply['success'],reply
+    frames=reply['body']['stackFrames']
+    assert frames and all(frame['id']>0 for frame in frames),frames
+    assert Path(frames[0]['source']['path']).resolve()==args.fixture.resolve(),frames
+    return frames
+
+
+def original_locals(client,frame,expected):
+    reply=client.send('scopes',{'frameId':frame['id']})
+    assert reply['success'],reply
+    scope=reply['body']['scopes'][0]['variablesReference']
+    reply=client.send('variables',{'variablesReference':scope})
+    assert reply['success'],reply
+    observed={value['name']:value['value'] for value in reply['body']['variables']}
+    assert all(observed.get(name)==str(value) for name,value in expected.items()),(observed,expected)
+
+
+def original_control_wire():
+    client=original_session()
+    try:
+        stepping=args.scenario.startswith('source-')
+        case=oracle_case('stack-and-step' if stepping else 'conditional-and-hit')
+        assert client.send('launch',{'program':args.fixture.resolve().as_posix()})['success']
+        marker=('inner_update' if args.scenario=='source-step-out' else 'outer_call') if stepping else 'loop_body'
+        breakpoint={'line':marker_line(marker)}
+        if args.scenario=='condition-oracle':breakpoint['condition']='index == 2'
+        elif args.scenario in ('hit-oracle','replace-oracle'):breakpoint['hitCondition']='3'
+        if args.scenario=='replace-oracle':breakpoint['condition']='index == 2'
+        original_breakpoints(client,[breakpoint])
+        assert client.send('configurationDone')['success']
+        stopped=client.event('stopped')
+        assert stopped['body']['reason']=='breakpoint',stopped
+        thread=stopped['body']['threadId']
+        frames=original_frames(client,thread)
+        assert frames[0]['line']==marker_line(marker),frames
+        assert not any(item['event']=='output' for item in client.events)
+        retired_frames=[frame['id'] for frame in frames]
+        if stepping:
+            expected=next(stop for stop in case['stops'] if stop['marker']==marker)
+            assert frames[0]['name']==expected['function'],frames
+            original_locals(client,frames[0],expected['locals'])
+            if args.scenario=='source-step-in':
+                assert not client.send('evaluate',{'frameId':frames[0]['id'],'expression':'missing_name'})['success']
+                assert not client.send('variables',{'variablesReference':2147483647})['success']
+                original_locals(client,frames[0],expected['locals'])
+            original_breakpoints(client,[])
+            command={'source-step-in':'stepIn','source-next':'next','source-step-out':'stepOut'}[args.scenario]
+            assert client.send(command,{'threadId':thread})['success']
+            stopped=client.event('stopped')
+            assert stopped['body']['reason']=='step' and stopped['body']['threadId']==thread,stopped
+            fresh=original_frames(client,thread)
+            assert not set(retired_frames).intersection(frame['id'] for frame in fresh),fresh
+            for frame in retired_frames:assert not client.send('scopes',{'frameId':frame})['success']
+            assert not client.send('evaluate',{'frameId':retired_frames[0],'expression':'value'})['success']
+            if args.scenario=='source-step-in':
+                assert fresh[0]['name']=='inner' and fresh[1]['name']=='outer',fresh
+                assert len(fresh)==len(frames)+1,fresh
+                original_locals(client,fresh[0],{'value':20})
+                original_locals(client,fresh[1],expected['locals'])
+            else:
+                expected=next(stop for stop in case['stops'] if stop['marker']=='outer_return')
+                assert fresh[0]['name']==expected['function'] and fresh[0]['line']==marker_line('outer_return'),fresh
+                assert len(fresh)==len(frames)-(1 if args.scenario=='source-step-out' else 0),fresh
+                original_locals(client,fresh[0],expected['locals'])
+            retired_frames.extend(frame['id'] for frame in fresh)
+        else:
+            visits=next(stop for stop in case['stops'] if stop['marker']==marker)['visits']
+            original_locals(client,frames[0],visits[2])
+            if args.scenario in ('hit-oracle','replace-oracle'):
+                if args.scenario=='replace-oracle':
+                    original_breakpoints(client,[{'line':marker_line(marker),'condition':'index == 3','hitCondition':'==1'}])
+                assert client.send('continue',{'threadId':thread})['success']
+                stopped=client.event('stopped')
+                assert stopped['body']['reason']=='breakpoint' and stopped['body']['threadId']==thread,stopped
+                fresh=original_frames(client,thread)
+                assert fresh[0]['name']=='accumulate' and fresh[0]['line']==marker_line(marker),fresh
+                original_locals(client,fresh[0],visits[3])
+                for frame in retired_frames:assert not client.send('scopes',{'frameId':frame})['success']
+                retired_frames.extend(frame['id'] for frame in fresh)
+                if args.scenario=='replace-oracle':original_breakpoints(client,[])
+        assert client.send('continue',{'threadId':thread})['success']
+        original_finish(client,case,retired_frames=retired_frames)
+        assert not any(item['event']=='stopped' for item in client.events),client.events
+        print(f'Original Source {args.scenario}: independent control, fixed locals/output and retired frames PASS')
+    finally:
+        if client.process.poll() is None:
+            client.process.kill()
+            client.process.wait(timeout=20)
+
+
 if args.scenario=='legacy':legacy_wire()
+elif args.scenario.startswith('source-') or args.scenario in ('condition-oracle','hit-oracle','replace-oracle'):original_control_wire()
 else:original_wire()
