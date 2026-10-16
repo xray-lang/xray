@@ -60,7 +60,10 @@ def main():
         executable = work/'source-host.exe'
         native.link(args, executable, objects, libraries)
         actual = checked([str(executable)]).replace(b'\r\n', b'\n')
-        expected = b'Production host archive: first suspension cancellation, independent resume and owned result PASS\n'
+        expected = (
+            b'opaque persistent host: state, callable authority, independent owners, child drain and owned result PASS\n'
+            b'Production host archive: first suspension cancellation, independent resume and owned result PASS\n'
+        )
         assert actual == expected, (actual, expected)
         summary = dict(provider=args.provider, generated_sha256=hashlib.sha256(generated.read_bytes()).hexdigest(),
             generated_bytes=generated.stat().st_size, executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
