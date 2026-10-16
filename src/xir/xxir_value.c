@@ -331,6 +331,20 @@ static XrXirValueStatus domain_compile_status(XrCompileResourceStatus status) {
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_VALUE_OOM :
         status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
 }
+XR_FUNC XrXirValueStatus xr_xir_compile_value_domain_borrow(XrCompileResources *resources,
+    const XrXirValue *value, const XrXirTypeArena *arena, XrXirDomain **output) {
+    if (!resources || !value || !arena || !output || *output ||
+        value->type<XR_XIR_CONSTRUCTED_TYPE_BASE || value->type>=XR_XIR_CONSTRUCTED_TYPE_LIMIT)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=domain_compile_status(xr_compile_resources_work(resources,64));
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!xr_xir_value_argument(value,arena,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirObject *object=object_pointer(value);
+    if (object->kind!=XR_XIR_TYPE_ARRAY && object->kind!=XR_XIR_TYPE_NOMINAL &&
+        object->kind!=XR_XIR_TYPE_NULLABLE && object->kind!=XR_XIR_TYPE_TUPLE) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!object->domain || object->domain->compile_resources!=resources) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=object->domain;return XR_XIR_VALUE_OK;
+}
 XR_FUNC XrXirValueStatus xr_xir_compile_domain_new(XrCompileResources *resources,
     uint64_t limit, XrXirDomain **output) {
     if (!resources || !output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;

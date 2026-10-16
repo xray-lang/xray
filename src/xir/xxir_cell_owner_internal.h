@@ -42,6 +42,12 @@ XR_FUNC bool xr_xir_cell_same_owner(const XrXirValue *left, const XrXirValue *ri
 XR_FUNC bool xr_xir_cell_unborrowed(const XrXirValue *cell);
 /* A projection is scoped even while its canonical root is unborrowed. */
 XR_FUNC bool xr_xir_cell_is_projection(const XrXirValue *cell);
+/* Query only immutable selector metadata on the exact arena/Domain. The caller
+ * prepays complete shallow canonical-root validation and keeps the Cell live.
+ * Fixed64 work is charged; failure preserves output. No root or leaf value,
+ * selector address or additional access authority is returned. */
+XR_FUNC XrXirValueStatus xr_xir_cell_projection_steps(const XrXirValue *cell,
+    XrXirValueAdmission *admission,uint32_t *output);
 XR_FUNC const XrXirValue *xr_xir_cell_canonical_root(const XrXirValue *cell);
 /* Only the immediate live parent authority may authorize a nested loan. */
 /* Output is zero. Prepare owns the root's exclusive reservation until abort or commit;

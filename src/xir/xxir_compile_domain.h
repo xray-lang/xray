@@ -22,4 +22,12 @@
  * retains it thereafter; final drop allocates nothing and refunds only live. */
 XR_FUNC XrXirValueStatus xr_xir_compile_domain_new(XrCompileResources *resources,
     uint64_t byte_limit, XrXirDomain **output);
+/* Borrow an aggregate's authentic Domain only on its exact compiler ledger.
+ * The caller prepays full shallow header validation and keeps the Value live
+ * for the entire borrow. The fixed query charge is 64 work units. The pointer
+ * grants no member, construction, call or loan authority and must not escape
+ * the synchronous observation or be dropped as an owning Domain reference.
+ * Empty output is preserved on every failure. */
+XR_FUNC XrXirValueStatus xr_xir_compile_value_domain_borrow(XrCompileResources *resources,
+    const XrXirValue *value, const XrXirTypeArena *arena, XrXirDomain **output);
 #endif // XXIR_COMPILE_DOMAIN_H
