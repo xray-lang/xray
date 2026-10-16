@@ -38,7 +38,7 @@ static XrXirArtifact *enum_ops_checked(const XrXirCompileContext *context, unsig
     XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0},
         {"make",4,NULL,0,(XrXirType)256,&block,1,entry,11,operands,6}};
-    XrXirSourceModule source = {"alpha",5,NULL,0,0, 0};
+    XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirLiteral literal = {"constructed",11};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};

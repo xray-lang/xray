@@ -315,7 +315,7 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
     const XrXirSourceModule *original=&module->declarations->modules[0];
     char *identity=NULL;uint32_t length=0;
     if (!source_core_install_identity(ctx,original,&identity,&length)) return false;
-    modules[ctx->module_count]=(XrXirSourceModule){identity,length,NULL,0,first,0};
+    modules[ctx->module_count]=(XrXirSourceModule){identity,length,NULL,0,first,0,XR_XIR_MODULE_FRESH_STORAGE};
     ctx->modules=modules;
     for (uint32_t d=0;d<module->defaults->count;++d) {
         const XrXirDefaultBinding *binding=&module->defaults->records[d];

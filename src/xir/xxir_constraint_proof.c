@@ -878,9 +878,11 @@ XrXirStatus xr_xir_compile_module_constraints_verify(const XrXirCompileContext *
     for (uint32_t s = 0; status == XR_XIR_OK && declarations && s < declarations->slot_count; ++s) {
         const XrXirSlot *slot = &declarations->slots[s];
         status = xr_xir_compile_type_use_verify_scratch(budget, &closed, slot->type,&scratch);
-        /* Private mutable state belongs to the instance root execution.
-         * Immutable library values retain their cross-execution requirement. */
-        if (status == XR_XIR_OK && !slot->mutable && slot->module != declarations->root_module)
+        /* Actual birth storage remains Instance-bound, including immutable
+         * non-Sendable values. It cannot execute without published receiving;
+         * ordinary library constants retain their cross-execution obligation. */
+        if (status == XR_XIR_OK && !slot->mutable && slot->module != declarations->root_module &&
+            declarations->modules[slot->module].storage!=XR_XIR_MODULE_BIRTH_STORAGE)
             status = xr_xir_compile_type_markers_prove(budget, &closed, slot->type, XR_XIR_CONSTRAINT_SENDABLE);
     }
     xr_xir_constraint_scratch_free(&scratch); return status;

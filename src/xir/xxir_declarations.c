@@ -220,6 +220,12 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions, work);
     if (status != XR_XIR_OK) return status;
+    for (uint32_t m=0;m<d->module_count;++m) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        if (d->modules[m].storage>XR_XIR_MODULE_BIRTH_STORAGE ||
+            (d->modules[m].storage==XR_XIR_MODULE_BIRTH_STORAGE &&
+                (kind!=XR_XIR_PROGRAM || m==d->root_module))) return XR_XIR_BAD_STRUCTURE;
+    }
     for (uint32_t i = 0; i < functions; ++i) {
         const XrXirFunctionIdentity *identity = &d->functions[i];
         if (identity->cleanup_owner) {

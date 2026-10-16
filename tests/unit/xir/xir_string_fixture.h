@@ -57,7 +57,7 @@ static XrXirArtifact *string_fixture(const XrXirCompileContext *context, uint32_
         {"main",4,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0}
     };
     ErrorFixture error; error_fixture_init(&error,false);
-    const XrXirSourceModule source={"alpha",5,NULL,0,3, 0};
+    const XrXirSourceModule source={"alpha",5,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity ids[5]={{.exported=1},{0},{.exported=1},{0},{0}};
     const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,4, NULL};
     const XrXirModule built = {XR_XIR_BUILT, functions, 5, &declarations, NULL, mode ? &error.types : NULL, NULL, XR_XIR_PROGRAM, NULL};

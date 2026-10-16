@@ -19,6 +19,7 @@
 #include "xxir_value_internal.h"
 #include "xxir_task_internal.h"
 #include "xxir_type_arena.h"
+#include "xxir_type_arena_internal.h"
 #include "xxir_types.h"
 #include "xxir_panic.h"
 #include "../shared/xr_error_core.h"
@@ -243,6 +244,18 @@ static XrXirCallStatus admit_value(const XrXirValue *value, XrXirType type,
     if (status == XR_XIR_VALUE_UNSUPPORTED) return XR_XIR_CALL_UNSUPPORTED;
     if (status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT) return XR_XIR_CALL_LIMIT;
     return XR_XIR_CALL_BAD_ARGUMENT;
+}
+static XrXirCallStatus admit_function_carrier(const XrXirValue *value,XrXirValueAdmission *admission) {
+    XrXirType type=(XrXirType)value->type;
+    const XrXirTypeArena *source=xr_xir_value_arena(value);
+    if (source!=admission->arena) {
+        uint64_t work=xir_type_arena_lookup_work(admission->arena);
+        if (work>admission->work || (admission->domain && !xr_xir_domain_work(admission->domain,work)))
+            return XR_XIR_CALL_LIMIT;
+        admission->work-=work;
+        if (!xir_type_arena_local_type(admission->arena,source,type,&type)) return XR_XIR_CALL_BAD_ARGUMENT;
+    }
+    return admit_value(value,type,admission);
 }
 
 static void *call_allocate(const XrXirCallConfig *config, XrXirCallBudget *budget, uint64_t bytes,
@@ -729,13 +742,17 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
     }
     const XrXirFunctionBinding *binding = xr_xir_function_binding(&action.value);
-    if ((!binding && !boundary_value(action.value, XR_XIR_UNIT)) || (binding && binding->entry != action.callee)) {
+    if (!binding && !boundary_value(action.value, XR_XIR_UNIT)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
+    if (binding) {
+        XrXirCallStatus matched=xir_instance_function_entry_match(call->active_view,&action.value,action.callee);
+        if (matched!=XR_XIR_CALL_READY) {abort_frames(call,matched);return;}
+    }
     CallFrame *parent = call->top;
     call->admitting = true;
-    XrXirCallStatus status = binding ? admit_value(&action.value, (XrXirType) action.value.type,
+    XrXirCallStatus status = binding ? admit_function_carrier(&action.value,
         &call->config.admission) : XR_XIR_CALL_READY;
     if (status == XR_XIR_CALL_READY)
         status = entry_arguments(&call->config.entries[action.callee], action.arguments,

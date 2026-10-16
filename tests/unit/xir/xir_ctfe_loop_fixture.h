@@ -36,7 +36,7 @@ static XrXirStatus ctfe_phi_build(const XrXirCompileContext *context,
     uint32_t operands[]={0,0,2,5,0,1,2,4,0,2,2,10};
     XrXirFunction fn={"swap",4,NULL,0,XR_XIR_I64,blocks,4,ops,16,operands,12};
     char module_name[]="ctfe-phi";
-    XrXirSourceModule source={module_name,8,NULL,0,1, 0};
+    XrXirSourceModule source={module_name,8,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[]={{.module=0,.exported=1},{.module=0}};
     XrXirInstruction init={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock init_block={0,1,0,0};

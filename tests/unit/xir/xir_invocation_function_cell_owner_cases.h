@@ -82,7 +82,7 @@ static void function_cell_runtime_fixture(FunctionCellRuntimeFixture *f,bool sca
     f->functions[5]=(XrXirFunction){.name="apply",.name_length=5,.result=XR_XIR_I64,
         .parameters=&f->callback,.parameter_count=1,.instructions=f->apply,.instruction_count=2,
         .blocks=&f->blocks[7],.block_count=1};
-    f->identities[1].exported=1;f->source=(XrXirSourceModule){"runtime-edge",12,NULL,0,0, 0};
+    f->identities[1].exported=1;f->source=(XrXirSourceModule){"runtime-edge",12,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->slot=(XrXirSlot){0,f->cell,1};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .slots=&f->slot,.slot_count=1,.entry_function=1};

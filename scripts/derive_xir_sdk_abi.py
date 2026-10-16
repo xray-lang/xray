@@ -100,6 +100,8 @@ PUBLIC_STRUCTURES = [
  (4400, 'XrXirAtomicOutcome', [('status','enum'),('permission','enum'),('continuing','bool')]),
  (4500, 'XrXirClassEvent', [('serial','u64'),('type','u32'),('declaration','u32'),
      ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
+ (4600,'XrXirSourceModule',[('name','ptr'),('name_length','u32'),('dependencies','ptr'),
+     ('dependency_count','u32'),('initializer','u32'),('lexical_scope','u32'),('storage','u32')]),
 ]
 
 PUBLIC_SCALARS = [

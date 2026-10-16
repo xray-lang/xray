@@ -16,6 +16,8 @@ typedef struct XirGenerationStorage {
     XrXirProgram *source, *target;
     const uint32_t *modules, *slots;
     uint32_t module_count, slot_count;
+    const uint32_t *functions;
+    uint32_t function_count;
 } XirGenerationStorage;
 /* Private compiler consumer. The caller has derived exact Source-to-Program
  * code correspondence and owns every map array until this synchronous call

@@ -75,7 +75,7 @@ static void class_owned_fixture(ClassOwnedFixture *f) {
     f->functions[4]=(XrXirFunction){"id",2,&f->generic_parameter,1,f->generic_parameter,&f->blocks[4],1,f->generic_return,1,NULL,0};
     f->identities[1]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR};
     f->identities[2]=(XrXirFunctionIdentity){.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD};
-    f->literal=(XrXirLiteral){"counter",7};f->source=(XrXirSourceModule){"root",4,NULL,0,0, 0};
+    f->literal=(XrXirLiteral){"counter",7};f->source=(XrXirSourceModule){"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .literals=&f->literal,.literal_count=1,.entry_function=3};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,5,&f->declarations,f->generics,&f->types,NULL, XR_XIR_PROGRAM, NULL};

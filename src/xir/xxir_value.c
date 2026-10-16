@@ -1197,12 +1197,19 @@ static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain,
     XrXirValueStatus admitted = admission->function(admission->context, binding, type, &admission->work);
     if (admitted != XR_XIR_VALUE_OK) return admitted;
     for (uint32_t i = 0; i < binding->capture_count; ++i) {
+        XrXirType capture_type=(XrXirType)binding->captures[i].type;
+        const XrXirTypeArena *source=xr_xir_value_arena(&binding->captures[i]);
+        if (source!=arena && (capture_type==XR_XIR_ERROR || (uint32_t)capture_type>=XR_XIR_CONSTRUCTED_TYPE_BASE)) {
+            uint64_t work=xir_type_arena_lookup_work(arena);
+            if (work>admission->work || !xr_xir_domain_work(domain,work)) return XR_XIR_VALUE_LIMIT;
+            admission->work-=work;
+            if (!xir_type_arena_local_type(arena,source,capture_type,&capture_type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        }
         if (xr_xir_type_is_cell(xr_xir_compile_type_arena_types(arena),
-                (XrXirType)binding->captures[i].type) &&
+                capture_type) &&
             (!xr_xir_cell_unborrowed(&binding->captures[i]) ||
              xr_xir_cell_module_storage(&binding->captures[i]))) return XR_XIR_VALUE_BAD_ARGUMENT;
-        XrXirValueStatus status = xr_xir_value_admit(&binding->captures[i],
-            (XrXirType) binding->captures[i].type, admission);
+        XrXirValueStatus status = xr_xir_value_admit(&binding->captures[i],capture_type,admission);
         if (status != XR_XIR_VALUE_OK) return status;
     }
     XrXirValueStatus status = XR_XIR_VALUE_OK;

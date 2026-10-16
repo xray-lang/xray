@@ -71,7 +71,7 @@ static void rp_capture_use(bool escape, bool copy) {
         {.op=XR_XIR_RETURN,.args={0,0}}};XrXirBlock entry_block={.count=2};
     functions[3]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
         .blocks=&entry_block,.block_count=1,.instructions=entry,.instruction_count=2};
-    XrXirSourceModule source={"probe",5,NULL,0,2, 0};XrXirFunctionIdentity identities[4]={{0}};
+    XrXirSourceModule source={"probe",5,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[4]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=3};
     contracts[2].formula.constant_mask=4;
     XrXirProvenance evidence = {.kind=1,.contracts=contracts,.contract_count=4};
@@ -334,7 +334,7 @@ static void rp_conditional_known(void) {
             .blocks=&three,.block_count=1,.instructions=ops,.instruction_count=3,.operands=operands,.operand_count=2}};
     XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={0,&application,1};
     XrXirGeneric generics[3]={{0}};generics[2].constraints=&constraint;generics[2].parameter_count=1;
-    XrXirSourceModule source={"probe",5,NULL,0,1, 0};XrXirFunctionIdentity identities[3]={{0}};
+    XrXirSourceModule source={"probe",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
     XrXirEffectParameter effect_parameters[2]={{0,0},{2,3}};XrXirRootTerm term={2,1};
     XrXirFunctionEffectContract contracts[3]={0};contracts[1].formula.constant_mask=4;

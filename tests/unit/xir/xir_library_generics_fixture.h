@@ -31,7 +31,7 @@ static XrXirStatus generic_library_fixture(const XrXirCompileContext *context,
     XrXirGeneric generics[]={
         {&constraint,1,NULL,0,NULL},{0},{&constraint,1,invalid?NULL:&t,invalid?0:1,NULL}};
     XrXirFunctionIdentity identities[3]={{0},{0},{.exported=1}};
-    XrXirSourceModule module={canonical,(uint32_t)strlen(canonical),NULL,0,1, 0};
+    XrXirSourceModule module={canonical,(uint32_t)strlen(canonical),NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&module,.module_count=1,.functions=identities,
         .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
@@ -58,7 +58,7 @@ static XrXirStatus generic_library_admission_fixture(const XrXirCompileContext *
         {"identity",8,&t,1,t,&block,1,instructions,1,NULL,0},
         {"$init",5,NULL,0,XR_XIR_UNIT,&block,1,instructions,1,NULL,0}};
     XrXirFunctionIdentity identities[]={{.exported=1},{0}};
-    XrXirSourceModule module={canonical,(uint32_t)strlen(canonical),NULL,0,1, 0};
+    XrXirSourceModule module={canonical,(uint32_t)strlen(canonical),NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&module,.module_count=1,.functions=identities,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,
         .types=family==2?NULL:&types,.declarations=&declarations,.generics=family==0?NULL:generics,.linkage_kind=XR_XIR_LIBRARY};

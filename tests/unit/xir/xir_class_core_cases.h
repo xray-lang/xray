@@ -38,7 +38,7 @@ static void class_core_cases(void){
  XrXirBlock blocks[]={{0,1,0,0},{0,2,0,0},{0,4,0,0}};
  XrXirFunction functions[]={ {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0}, {"new",3,cp,2,ct,&blocks[1],1,ctor,2,operands,2}, {"add",3,ap,2,XR_XIR_I64,&blocks[2],1,add,4,NULL,0}, {"entry",5,NULL,0,XR_XIR_I64,&entryblock,1,entry,6,entryops,4}};
  XrXirFunctionIdentity ids[]={{0},{.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},{0}};
- XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0, 0};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
+ XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
  XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};XrXirDiagnostic d;XrXirStatus s=xir_fixture_verify(&stage_context, &m, &d);
  CLASS_CHECK(s==XR_XIR_OK);
  XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;CLASS_CHECK(xir_fixture_check(&stage_context, &m, &checked, &d)==XR_XIR_OK);

@@ -186,7 +186,7 @@ static inline void rp_binding_fixture(RootParameterBindingFixture *f,
     f->initializer_block=(XrXirBlock){.count=1};
     f->functions[3]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .blocks=&f->initializer_block,.block_count=1,.instructions=&f->initializer,.instruction_count=1};
-    f->source_module=(XrXirSourceModule){"probe",5,NULL,0,3, 0};
+    f->source_module=(XrXirSourceModule){"probe",5,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source_module,.module_count=1,
         .functions=f->identities,.entry_function=capture?2u:0u};
     f->contracts[3].formula.constant_mask=4;

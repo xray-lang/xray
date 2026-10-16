@@ -109,7 +109,7 @@ static void fixture(DeclarationFixture *f) {
     f->functions[3].parameters=&f->projected_field;f->functions[3].parameter_count=1;
     f->generics[1]=(XrXirGeneric){.constraints=&f->bound,.parameter_count=1};
     f->generics[2]=f->generics[1];
-    f->source=(XrXirSourceModule){"proofs",6,NULL,0,0, 0};
+    f->source=(XrXirSourceModule){"proofs",6,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->slot=(XrXirSlot){.module=0,.type=constructed(0)};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .slots=&f->slot,.slot_count=1,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
@@ -258,7 +258,7 @@ static void batch_fixture(BatchFixture *f) {
     f->function=(XrXirFunction){.name="inspect",.name_length=7,.parameters=&f->receiver,.parameter_count=1,
         .result=XR_XIR_UNIT,.blocks=&f->block,.block_count=1,.instructions=&f->instruction,.instruction_count=1};
     f->generic=(XrXirGeneric){.constraints=f->goals,.parameter_count=2};
-    f->source=(XrXirSourceModule){"batch",5,NULL,0,0, 0};
+    f->source=(XrXirSourceModule){"batch",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->identity=(XrXirFunctionIdentity){.exported=1,.nominal_owner=1,
         .method_kind=XR_XIR_READ_METHOD,.member_access=XR_XIR_MEMBER_PUBLIC};
     f->binding=(XrXirImplementationBinding){.requirement={0,f->arguments,1},.member=0,.function=0};

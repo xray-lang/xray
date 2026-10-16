@@ -167,7 +167,7 @@ static XrXirArtifact *group_lower(const XrXirCompileContext *context,bool unit) 
     XrXirFunction functions[]={
         {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,unit?unit_init:init,unit?2u:8u,unit?NULL:operands,unit?0:6},
         {"main",4,NULL,0,XR_XIR_I64,&blocks[1],1,entry,2,NULL,0}};
-    XrXirSourceModule source_module={"root",4,NULL,0,0, 0};
+    XrXirSourceModule source_module={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[]={{.module=0},{.module=0,.exported=true}};
     XrXirSlot slots[]={{0,unit?XR_XIR_UNIT:(XrXirType)256,false},{0,XR_XIR_UNIT,false},
                       {0,unit?XR_XIR_UNIT:(XrXirType)256,false}};

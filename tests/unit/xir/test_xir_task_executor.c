@@ -97,7 +97,7 @@ static void task_fixture_new(TaskFixture *fixture) {
     XrXirFunctionIdentity functions[7] = {0};
     for (unsigned i = 1; i < 6; ++i) functions[i].exported = 1;
     functions[6].cleanup_owner = 6;
-    const XrXirSourceModule module = {"task-test", 9, NULL, 0, 0, 0};
+    const XrXirSourceModule module = {"task-test", 9, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations = {&module, 1, functions, NULL, 0, NULL, 0, 0, 3, NULL};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
         entries, 7, &declarations, {&fixture->witness, task_test_code_drop}, NULL, {0}};

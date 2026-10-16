@@ -1568,7 +1568,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
         EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", source->name_length);
         if (source->dependency_count) append(buffer, "%s_dependencies_%u", prefix, m);
         else EMIT_LITERAL(buffer, "NULL");
-        append(buffer, ", %uu, %uu, %uu},\n", source->dependency_count, source->initializer, source->lexical_scope);
+        append(buffer, ", %uu, %uu, %uu, %uu},\n", source->dependency_count, source->initializer, source->lexical_scope,source->storage);
     }
     EMIT_FORMAT(buffer, et_69a1907ec586c822, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)

@@ -328,7 +328,7 @@ static void constraint_proof_scalar_slot_sharing(void) {
         {"root_init",9,NULL,0,XR_XIR_UNIT,&block,1,&op,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,&main_block,1,entry,2,NULL,0}};
     uint32_t dependency = 0;
-    XrXirSourceModule modules[] = {{"provider",8,NULL,0,0, 0},{"root",4,&dependency,1,1, 0}};
+    XrXirSourceModule modules[] = {{"provider",8,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"root",4,&dependency,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{.module=1}};
     XrXirSlot slot = {1,XR_XIR_ERROR,0};
     XrXirDeclarations declarations = {modules,2,identities,&slot,1,NULL,0,1,2,NULL};

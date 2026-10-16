@@ -79,7 +79,7 @@ static void fixture(ErrorFixture *f) {
     f->functions[2]=(XrXirFunction){.name="pure",.name_length=4,.result=XR_XIR_UNIT,.blocks=&f->pure_block,.block_count=1,.instructions=f->pure,.instruction_count=33};
     f->functions[3]=(XrXirFunction){.name="handled",.name_length=7,.parameters=&f->error_parameter,.parameter_count=1,.result=XR_XIR_UNIT,.blocks=f->branches,.block_count=3,.instructions=f->handled,.instruction_count=4,.operands=&f->argument,.operand_count=1};
     f->functions[4]=f->functions[3];f->functions[4].name="rethrow";f->functions[4].instructions=f->rethrow;
-    f->source=(XrXirSourceModule){"errors",6,NULL,0,0, 0};
+    f->source=(XrXirSourceModule){"errors",6,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     f->module=(XrXirModule){.stage=XR_XIR_CHECKED,.functions=f->functions,.function_count=5,.declarations=&f->declarations,.linkage_kind=XR_XIR_LIBRARY};
 }

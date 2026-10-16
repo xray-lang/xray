@@ -96,7 +96,7 @@ static XrXirStatus conditional_metadata_default(const XrXirCompileContext *conte
          .blocks=&one,.block_count=1,.instructions=&done,.instruction_count=1},
         {.name="default",.name_length=7,.result=XR_XIR_I64,.blocks=&two,.block_count=1,.instructions=value,.instruction_count=2},
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,.instructions=&done,.instruction_count=1}};
-    XrXirFunctionIdentity identities[4]={0};XrXirSourceModule source={"metadata",8,NULL,0,3, 0};
+    XrXirFunctionIdentity identities[4]={0};XrXirSourceModule source={"metadata",8,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,1,0,2};
     XrXirDefaultTable defaults={&binding,1};
