@@ -29470,6 +29470,397 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_1141_concurrent_producer_consumer",
+      "oracle_id": "complete_parallel_workload_1141_concurrent_producer_consumer",
+      "source": "tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr",
+      "source_lf_sha256": "f9436e174ca16f94f2181b0ff2b50b99f00a52c2dae86072e3aa2c90f1c0f5d5",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged parallel workload;pure task/string values,commutative reports and typed tuple checksum retain all original loops/sleeps/close/depth. Declaration entries do not run annotated bodies. No actual scheduler/wakeup/cancel/buffer transfer/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr",
+        "source_lf_sha256": "f9436e174ca16f94f2181b0ff2b50b99f00a52c2dae86072e3aa2c90f1c0f5d5"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_1146_multicore_string_concat",
+      "oracle_id": "complete_parallel_workload_1146_multicore_string_concat",
+      "source": "tests/regression/11_coroutine/1146_multicore_string_concat.xr",
+      "source_lf_sha256": "f873b61b11a0ff3fc4d3258b1b8f508e895ee8161330d2b6e0852efeaf38806e",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged parallel workload;pure task/string values,commutative reports and typed tuple checksum retain all original loops/sleeps/close/depth. Declaration entries do not run annotated bodies. No actual scheduler/wakeup/cancel/buffer transfer/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1146_multicore_string_concat.xr",
+        "source_lf_sha256": "f873b61b11a0ff3fc4d3258b1b8f508e895ee8161330d2b6e0852efeaf38806e"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_1147_preempt_test",
+      "oracle_id": "complete_parallel_workload_1147_preempt_test",
+      "source": "tests/regression/11_coroutine/1147_preempt_test.xr",
+      "source_lf_sha256": "8214622466163d7f9835b5b1a0154a5b2632ef0cd7faf0944f6523d73fc91a19",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged parallel workload;pure task/string values,commutative reports and typed tuple checksum retain all original loops/sleeps/close/depth. Declaration entries do not run annotated bodies. No actual scheduler/wakeup/cancel/buffer transfer/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1147_preempt_test.xr",
+        "source_lf_sha256": "8214622466163d7f9835b5b1a0154a5b2632ef0cd7faf0944f6523d73fc91a19"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_1148_scope_race_stress",
+      "oracle_id": "complete_parallel_workload_1148_scope_race_stress",
+      "source": "tests/regression/11_coroutine/1148_scope_race_stress.xr",
+      "source_lf_sha256": "298b0d5d1fdd40431ee384822a77417d29b0f7ec80cdfcf3f241a433fd57378e",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged parallel workload;pure task/string values,commutative reports and typed tuple checksum retain all original loops/sleeps/close/depth. Declaration entries do not run annotated bodies. No actual scheduler/wakeup/cancel/buffer transfer/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1148_scope_race_stress.xr",
+        "source_lf_sha256": "298b0d5d1fdd40431ee384822a77417d29b0f7ec80cdfcf3f241a433fd57378e"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_1151_inject_queue_spill",
+      "oracle_id": "complete_parallel_workload_1151_inject_queue_spill",
+      "source": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+      "source_lf_sha256": "ae419ce6243abfe696843fbba0c8b1ac600a59417c442b266e65222b93709182",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged parallel workload;pure task/string values,commutative reports and typed tuple checksum retain all original loops/sleeps/close/depth. Declaration entries do not run annotated bodies. No actual scheduler/wakeup/cancel/buffer transfer/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+        "source_lf_sha256": "ae419ce6243abfe696843fbba0c8b1ac600a59417c442b266e65222b93709182"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_1174_channel_tuple_buffer_transfer",
+      "oracle_id": "complete_parallel_workload_1174_channel_tuple_buffer_transfer",
+      "source": "tests/regression/11_coroutine/1174_channel_tuple_buffer_transfer.xr",
+      "source_lf_sha256": "c6a5da5bba6050f46a7dd4e4223527763f9e13cda7e75467453089d0b7a91ced",
+      "entry": "run",
+      "stdout_utf8": "405312\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged parallel workload;pure task/string values,commutative reports and typed tuple checksum retain all original loops/sleeps/close/depth. Declaration entries do not run annotated bodies. No actual scheduler/wakeup/cancel/buffer transfer/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1174_channel_tuple_buffer_transfer.xr",
+        "source_lf_sha256": "c6a5da5bba6050f46a7dd4e4223527763f9e13cda7e75467453089d0b7a91ced"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_parallel_workload_1175_channel_tuple_scalar_transfer",
+      "oracle_id": "complete_parallel_workload_1175_channel_tuple_scalar_transfer",
+      "source": "tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr",
+      "source_lf_sha256": "6b358944b68ba4c6b6672046b06ef2e6b8756c9f04bab24bca5dc63e816a98d1",
+      "entry": "run",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged parallel workload;pure task/string values,commutative reports and typed tuple checksum retain all original loops/sleeps/close/depth. Declaration entries do not run annotated bodies. No actual scheduler/wakeup/cancel/buffer transfer/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr",
+        "source_lf_sha256": "6b358944b68ba4c6b6672046b06ef2e6b8756c9f04bab24bca5dc63e816a98d1"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_parallel_workload_named_1141_concurrent_producer_consumer",
+      "oracle_id": "complete_parallel_workload_named_1141_concurrent_producer_consumer",
+      "source": "tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr",
+      "source_lf_sha256": "f9436e174ca16f94f2181b0ff2b50b99f00a52c2dae86072e3aa2c90f1c0f5d5",
+      "entry": "test",
+      "stdout_utf8": "100\n101\n102\n200\n201\n202\ntrue\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Every complete original annotated body in source order;requires real CLI discovery of all names plus whole-source VM/C/native adapters. All219 assertions across the five files retained. Symbolic values are not real stress/scheduling/physical/resource/cancellation qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr",
+        "source_lf_sha256": "f9436e174ca16f94f2181b0ff2b50b99f00a52c2dae86072e3aa2c90f1c0f5d5"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_named_1146_multicore_string_concat",
+      "oracle_id": "complete_parallel_workload_named_1146_multicore_string_concat",
+      "source": "tests/regression/11_coroutine/1146_multicore_string_concat.xr",
+      "source_lf_sha256": "f873b61b11a0ff3fc4d3258b1b8f508e895ee8161330d2b6e0852efeaf38806e",
+      "entry": "test",
+      "stdout_utf8": "\n[测试1] 多协程并发短字符串拼接\n\n[测试2] 多协程并发长字符串拼接\n\n[测试3] 多协程混合短长字符串拼接\n\n[测试4] 高并发循环拼接\n\n[测试5] 并发阈值边界拼接\n\n[测试6] 并发数据隔离性验证\n\n[测试7] 大规模并发压力测试\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Every complete original annotated body in source order;requires real CLI discovery of all names plus whole-source VM/C/native adapters. All219 assertions across the five files retained. Symbolic values are not real stress/scheduling/physical/resource/cancellation qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1146_multicore_string_concat.xr",
+        "source_lf_sha256": "f873b61b11a0ff3fc4d3258b1b8f508e895ee8161330d2b6e0852efeaf38806e"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_named_1147_preempt_test",
+      "oracle_id": "complete_parallel_workload_named_1147_preempt_test",
+      "source": "tests/regression/11_coroutine/1147_preempt_test.xr",
+      "source_lf_sha256": "8214622466163d7f9835b5b1a0154a5b2632ef0cd7faf0944f6523d73fc91a19",
+      "entry": "test",
+      "stdout_utf8": "启动 4 个协程...\n协程 0 完成\n协程 1 完成\n协程 2 完成\n协程 3 完成\n调度测试通过：4/4 协程完成\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Every complete original annotated body in source order;requires real CLI discovery of all names plus whole-source VM/C/native adapters. All219 assertions across the five files retained. Symbolic values are not real stress/scheduling/physical/resource/cancellation qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1147_preempt_test.xr",
+        "source_lf_sha256": "8214622466163d7f9835b5b1a0154a5b2632ef0cd7faf0944f6523d73fc91a19"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_named_1148_scope_race_stress",
+      "oracle_id": "complete_parallel_workload_named_1148_scope_race_stress",
+      "source": "tests/regression/11_coroutine/1148_scope_race_stress.xr",
+      "source_lf_sha256": "298b0d5d1fdd40431ee384822a77417d29b0f7ec80cdfcf3f241a433fd57378e",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Every complete original annotated body in source order;requires real CLI discovery of all names plus whole-source VM/C/native adapters. All219 assertions across the five files retained. Symbolic values are not real stress/scheduling/physical/resource/cancellation qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1148_scope_race_stress.xr",
+        "source_lf_sha256": "298b0d5d1fdd40431ee384822a77417d29b0f7ec80cdfcf3f241a433fd57378e"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_parallel_workload_named_1151_inject_queue_spill",
+      "oracle_id": "complete_parallel_workload_named_1151_inject_queue_spill",
+      "source": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+      "source_lf_sha256": "ae419ce6243abfe696843fbba0c8b1ac600a59417c442b266e65222b93709182",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Every complete original annotated body in source order;requires real CLI discovery of all names plus whole-source VM/C/native adapters. All219 assertions across the five files retained. Symbolic values are not real stress/scheduling/physical/resource/cancellation qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+        "source_lf_sha256": "ae419ce6243abfe696843fbba0c8b1ac600a59417c442b266e65222b93709182"
+      },
+      "remaining_gates": [
+        "All7complete originals and all13annotated bodies across5real named entries;all219assertions,330stringtasks,13500plain-scope reports,2048depth,256bufferframes and original sleeps/close/loops retained.",
+        "Real scheduler/preemption/linked cancellation/Channel and aggregate transfer/string isolation/buffer lifetime/physical release;all original compiler/runtime FI,resources/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
     }
   ]
 }
