@@ -49,7 +49,15 @@ static void evaluate_start(XdapAdapter *adapter) {
 }
 static void evaluate_request(XdapAdapter *adapter,const char *expression,uint32_t frame,const char *expected) {
     char message[1024];snprintf(message,sizeof(message),"{\"seq\":5,\"type\":\"request\",\"command\":\"evaluate\",\"arguments\":{\"expression\":\"%s\",\"frameId\":%u}}",expression,frame);
-    request(adapter,message);
+    XrXirStatus requested=xdap_adapter_request(adapter,message,strlen(message));
+    if (requested!=XR_XIR_OK) fprintf(stderr,"Evaluate request [%s] status=%d\n",expression,(int)requested);
+    if (requested!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(adapter->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Evaluate work=%llu allocated=%llu live=%llu peak=%llu\n",
+            (unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,
+            (unsigned long long)stats.live_bytes,(unsigned long long)stats.peak_bytes);
+    }
+    CHECK(requested==XR_XIR_OK);
     XrJsonValue *last=capture.count ? xjson_parse(capture.messages[capture.count-1].bytes,capture.messages[capture.count-1].size) : NULL;
     if (!last || xjson_get_bool(last,"success")!=(expected!=NULL))
         fprintf(stderr,"Evaluate [%s] expected=%s response=%s\n",expression,expected ? expected : "DENIED",capture.count ? capture.messages[capture.count-1].bytes : "NONE");
@@ -74,6 +82,13 @@ static void evaluate_normal(void) {
     evaluate_request(adapter,"((doubled+2)*3-2)/2",inner,"62");
     evaluate_request(adapter,"doubled>1 ? doubled+2 : value",inner,"42");
     evaluate_request(adapter,"label",inner,"inner");evaluate_request(adapter,"(label)",inner,"inner");
+    evaluate_request(adapter,"label + \\\"!\\\"",inner,"inner!");
+    evaluate_request(adapter,"label == \\\"inner\\\"",inner,"true");
+    evaluate_request(adapter,"label.length + 1",inner,NULL);
+    evaluate_request(adapter,"label[0] == 'i'",inner,NULL);
+    evaluate_request(adapter,"'i' == 'i'",inner,"true");
+    evaluate_request(adapter,"1.25 + 0.5",inner,"1.75");
+    evaluate_request(adapter,"[\\\"a\\\",\\\"b\\\"][1] + label",inner,"binner");
     evaluate_request(adapter,"value // trailing comment",inner,"20");
     const char *rejected[]={"input","missing","1 +","1; print(2)","doubled = 99","print(value)","doubled / 0"};
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) evaluate_request(adapter,rejected[i],inner,NULL);
@@ -106,8 +121,12 @@ static size_t evaluate_fault(size_t fail) {
     CHECK(after.live_bytes==before.live_bytes && after.work>before.work && after.allocated_bytes>=before.allocated_bytes);
     evaluate_dispose(&fixture);return sites;
 }
+#include "test_evaluate_data.inc.c"
 int main(int argc,char **argv) {
-    xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
+    xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");
+    bool managed_resources=argc==2 && !strcmp(argv[1],"--managed-resources");
+    bool managed=managed_resources || (argc==2 && !strcmp(argv[1],"--managed"));CHECK(argc==1 || resources || managed);
+    if (managed) { evaluate_data();evaluate_data_failures(managed_resources);puts("Source data expressions, exact bits/NUL/nested Nullable and producer disposal PASS");return 0; }
     evaluate_normal();size_t sites=evaluate_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) evaluate_fault(i);
     else { evaluate_fault(0);if (sites>1) evaluate_fault(sites-1); }

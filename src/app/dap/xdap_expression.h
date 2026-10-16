@@ -15,8 +15,9 @@ typedef struct XdapExpressionRequest {
     const char *text;
     size_t length,source_limit;
 } XdapExpressionRequest;
-/* Identifiers read owned data. Scalar operations pass through ordinary Source
- * inference, closed proof and finite CTFE. No target execution or write occurs.
+/* Identifiers read owned data. Ordinary Source inference and closed proof
+ * feed finite scalar CTFE or an isolated, bounded data Program. Structural
+ * inputs are rebuilt from actual owned observations; the target never runs.
  * Unsupported expressions fail with the empty output unchanged. */
 XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *,XrXirValue *);
 /* Syntax and supported expression shape only. Name/type admission still uses

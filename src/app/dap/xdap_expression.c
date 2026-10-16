@@ -18,6 +18,7 @@ typedef struct ExpressionState {
     ExpressionBinding bindings[128];
     uint32_t count,depth;
     XrXirStatus status;
+    bool runtime;
 } ExpressionState;
 static XrXirStatus expression_value_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
@@ -38,6 +39,7 @@ static bool expression_binding(ExpressionState *state,const char *name) {
         ExpressionBinding fresh={0};
         state->status=expression_value_status(xdap_lexical_read(view,b,&fresh.value,&fresh.name,&fresh.length));
         if (state->status!=XR_XIR_OK) return false;
+        if (fresh.value.type!=XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType)fresh.value.type)) state->runtime=true;
         state->bindings[state->count++]=fresh;return true;
     }
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(view->launch->source);
@@ -48,6 +50,7 @@ static bool expression_binding(ExpressionState *state,const char *name) {
         state->status=expression_value_status(read);if (state->status!=XR_XIR_OK) return false;
         if (fresh.length==length && !memcmp(fresh.name,name,length)) {
             if (state->count==128) { xr_xir_value_drop(&fresh.value);state->status=XR_XIR_BUDGET;return false; }
+            if (fresh.value.type!=XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType)fresh.value.type)) state->runtime=true;
             state->bindings[state->count++]=fresh;return true;
         }
         xr_xir_value_drop(&fresh.value);
@@ -56,21 +59,27 @@ static bool expression_binding(ExpressionState *state,const char *name) {
 }
 static bool expression_node_allowed(const AstNode *node) {
     return node && (node->type==AST_VARIABLE || node->type==AST_LITERAL_INT || node->type==AST_LITERAL_TRUE || node->type==AST_LITERAL_FALSE ||
-        node->type==AST_GROUPING || node->type==AST_TERNARY ||
+        node->type==AST_LITERAL_FLOAT || node->type==AST_LITERAL_RUNE || node->type==AST_LITERAL_STRING || node->type==AST_LITERAL_NULL ||
+        node->type==AST_ARRAY_LITERAL || node->type==AST_TUPLE_LITERAL || node->type==AST_INDEX_GET || node->type==AST_MEMBER_ACCESS ||
+        node->type==AST_GROUPING || node->type==AST_TERNARY || node->type==AST_FORCE_UNWRAP || node->type==AST_NULLISH_COALESCE ||
         (node->type>=AST_BINARY_ADD && node->type<=AST_BINARY_OR) ||
         (node->type>=AST_UNARY_NEG && node->type<=AST_UNARY_BNOT));
 }
 static bool expression_visit(AstNode *node,void *context) {
     ExpressionState *state=context;
-    if (!node || state->depth==128) { state->status=XR_XIR_BUDGET;return false; }
+    if (!node) return true;
+    if (state->depth==128) { state->status=XR_XIR_BUDGET;return false; }
     if (xr_compile_resources_work(state->request->lexical->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
     if (node->type==AST_VARIABLE) return expression_binding(state,node->as.variable.name);
     if (!expression_node_allowed(node)) { state->status=XR_XIR_BAD_TYPE;return false; }
+    if (node->type==AST_LITERAL_FLOAT || node->type==AST_LITERAL_RUNE || node->type==AST_LITERAL_STRING || node->type==AST_LITERAL_NULL ||
+        node->type==AST_ARRAY_LITERAL || node->type==AST_TUPLE_LITERAL || node->type==AST_INDEX_GET || node->type==AST_MEMBER_ACCESS || node->type==AST_FORCE_UNWRAP || node->type==AST_NULLISH_COALESCE) state->runtime=true;
     ++state->depth;bool ok=xr_ast_for_each_child(node,expression_visit,state);--state->depth;return ok;
 }
 typedef struct ExpressionSyntax { XrCompileResources *resources;uint32_t depth;XrXirStatus status; } ExpressionSyntax;
 static bool expression_syntax(AstNode *node,void *context) {
     ExpressionSyntax *syntax=context;
+    if (!node) return true;
     if (syntax->depth==128 || xr_compile_resources_work(syntax->resources,1)!=XR_COMPILE_RESOURCE_OK) { syntax->status=XR_XIR_BUDGET;return false; }
     if (!expression_node_allowed(node)) { syntax->status=XR_XIR_BAD_TYPE;return false; }
     ++syntax->depth;bool ok=xr_ast_for_each_child(node,expression_syntax,syntax);--syntax->depth;return ok;
@@ -91,22 +100,27 @@ XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const ch
     }
     xr_program_destroy(program);xr_compile_resources_free(owned);return syntax.status;
 }
-static XrXirStatus expression_scalar(ExpressionState *state,XrXirValue *output) {
+#include "xdap_expression_source.inc.c"
+#include "xdap_expression_runtime.inc.c"
+static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output) {
     const XdapExpressionRequest *request=state->request;const XdapLexicalView *view=request->lexical;
     XdapJsonWriter source=xdap_json_writer(view->launch->resources,request->source_limit);
+    ExpressionData data={0};XrXirValue scalar_arguments[128]={{0}};
+    XrXirStatus status=state->runtime ? expression_data_prepare(state,&data) : XR_XIR_OK;
     const char prefix[]="const evaluator = fn(";xdap_json_text(&source,prefix,sizeof(prefix)-1);
-    XrXirValue arguments[128]={{0}};
-    for (uint32_t i=0;i<state->count && source.status==XR_XIR_OK;++i) {
+    if (state->runtime) xdap_json_text(&source,data.parameters.bytes,data.parameters.length);
+    else for (uint32_t i=0;i<state->count && source.status==XR_XIR_OK;++i) {
         const ExpressionBinding *binding=&state->bindings[i];XrXirType type=(XrXirType)binding->value.type;
         if (type!=XR_XIR_BOOL && !xr_xir_type_is_integer(type)) { source.status=XR_XIR_BAD_TYPE;break; }
-        const char *name=type==XR_XIR_BOOL ? "bool" :
-            type==XR_XIR_I8 ? "i8" : type==XR_XIR_I16 ? "i16" : type==XR_XIR_I32 ? "i32" : type==XR_XIR_I64 ? "i64" :
-            type==XR_XIR_U8 ? "u8" : type==XR_XIR_U16 ? "u16" : type==XR_XIR_U32 ? "u32" : "u64";
+        const char *name=expression_primitive(type);
         if (i) xdap_json_text(&source,",",1);xdap_json_text(&source,binding->name,binding->length);
-        xdap_json_text(&source,":",1);xdap_json_text(&source,name,strlen(name));arguments[i]=binding->value;
+        xdap_json_text(&source,":",1);xdap_json_text(&source,name,strlen(name));scalar_arguments[i]=binding->value;
     }
-    xdap_json_text(&source,") { return (",12);xdap_json_text(&source,request->text,request->length);xdap_json_text(&source,"\n) }\n",5);
-    XrXirStatus status=source.status;XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};
+    xdap_json_text(&source,") {\n",4);
+    if (state->runtime) xdap_json_text(&source,data.body.bytes,data.body.length);
+    xdap_json_text(&source,"return (",8);xdap_json_text(&source,request->text,request->length);xdap_json_text(&source,"\n) }\n",5);
+    if (status==XR_XIR_OK) status=source.status;
+    XrXirSourceProduct *product=NULL;XrSourceCompileDiagnostic diagnostic={0};
     if (status==XR_XIR_OK) {
         XrSourceCompilerText input={NULL,"dap-expression",source.bytes,source.length};
         XrSourceCompileStatus built=xr_source_compiler_build_text(request->compiler,&input,&product,&diagnostic);
@@ -114,25 +128,20 @@ static XrXirStatus expression_scalar(ExpressionState *state,XrXirValue *output) 
             built==XR_SOURCE_COMPILE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
     }
     if (status==XR_XIR_OK) {
-        const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(product);
-        const XrXirSourceView *facts=xr_xir_compile_source_product_view(product);uint32_t function=UINT32_MAX;
-        for (uint32_t f=0;f<debug->function_count;++f) {
-            if (xr_compile_resources_work(view->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) { status=XR_XIR_BUDGET;break; }
-            const XrXirSourceDebugFunction *entry=&debug->functions[f];
-            if (!entry->declaration || facts->declarations[entry->declaration-1].kind!=XR_XIR_SOURCE_FUNCTION) continue;
-            if (function!=UINT32_MAX || entry->parameter_count!=state->count || facts->declarations[entry->declaration-1].parent) { status=XR_XIR_BAD_STRUCTURE;break; }
-            function=f;
-        }
-        if (status==XR_XIR_OK && function==UINT32_MAX) status=XR_XIR_BAD_STRUCTURE;
-        if (status==XR_XIR_OK) {
+        uint32_t function=UINT32_MAX;uint32_t count=state->runtime ? data.count : state->count;
+        status=expression_function(product,count,&function);
+        if (status==XR_XIR_OK && state->runtime) status=expression_export(state,&data,&product,&function);
+        if (status==XR_XIR_OK && state->runtime) status=expression_runtime(state,product,function,data.arguments,data.count,output);
+        else if (status==XR_XIR_OK) {
             XrXirCtfeLimits limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES};
-            XrXirCtfeStatus evaluated=xr_xir_compile_source_product_scalar(product,function,arguments,state->count,limits,output);
+            XrXirCtfeStatus evaluated=xr_xir_compile_source_product_scalar(product,function,scalar_arguments,state->count,limits,output);
             status=evaluated==XR_XIR_CTFE_OK ? XR_XIR_OK : evaluated==XR_XIR_CTFE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
                 evaluated==XR_XIR_CTFE_BUDGET || evaluated==XR_XIR_CTFE_STEP_LIMIT || evaluated==XR_XIR_CTFE_FRAME_LIMIT ||
                 evaluated==XR_XIR_CTFE_OUTPUT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
         }
     }
-    xr_source_compile_diagnostic_free(&diagnostic);xr_xir_compile_source_product_free(product);xdap_json_writer_free(&source);return status;
+    xr_source_compile_diagnostic_free(&diagnostic);xr_xir_compile_source_product_free(product);
+    expression_data_free(&data);xdap_json_writer_free(&source);return status;
 }
 XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *request,XrXirValue *output) {
     if (!request || !request->compiler || !request->lexical || !request->text || !request->length || !request->source_limit ||
@@ -154,7 +163,7 @@ XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *reques
     if (state.status==XR_XIR_OK && expression_visit(expression,&state)) {
         while (expression->type==AST_GROUPING) expression=expression->as.grouping;
         if (expression->type==AST_VARIABLE) { *output=state.bindings[0].value;state.bindings[0].value=(XrXirValue){0}; }
-        else state.status=expression_scalar(&state,output);
+        else state.status=expression_compiled(&state,output);
     }
     for (uint32_t i=0;i<state.count;++i) xr_xir_value_drop(&state.bindings[i].value);
     xr_program_destroy(program);xr_compile_resources_free(text);return state.status;
