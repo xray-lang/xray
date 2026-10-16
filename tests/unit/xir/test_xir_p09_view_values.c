@@ -74,6 +74,44 @@ static XrXirValueStatus view_values_fixture(XrCompileResources *resources,XrXirT
     const XrXirDomainBudgetControls controls={65536,65536,1000000,65536,65536};
     return xr_xir_domain_budget_bind(*domain,&controls);
 }
+static XrXirValueStatus view_origin_pin_sequence(XrXirValue *root,const XrXirValue *restore,
+    const XrXirViewAccess *access) {
+    XrXirValueAdmission *admission=access->values;ViewScope *scope=access->context;
+    XrXirCellAuthority authority={admission->domain,scope,500};
+    XrXirViewStorageSpec spec={authority,0,4,XR_XIR_TYPE_MUT_SLICE};
+    XrXirValue view={0},read={0},pinned={0};XrXirViewOriginPin pins[2]={{0}};
+    XrXirViewOriginInfo info={0};XrXirFaultDetail fault={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
+    TRY_VALUE(xr_xir_view_new((XrXirType)259,root,NULL,&spec,admission,&view));view_bind(scope,&view,authority);
+    TRY_VALUE(xr_xir_view_origin_pin(&view,access,&pins[0]));
+    TRY_VALUE(xr_xir_view_origin_pin(&view,access,&pins[1]));CHECK(pins[0].body==pins[1].body);
+    TRY_VALUE(xr_xir_view_origin_info(&pins[0],admission,&info));
+    CHECK(info.logical_active && info.kind==XR_XIR_TYPE_MUT_SLICE && info.element==XR_XIR_I64 &&
+        !info.offset && info.length==4 && info.authority.epoch==authority.epoch && xr_xir_cell_same_owner(info.root,root));
+    uint64_t terminal_work=admission->work;xr_xir_view_origin_unpin(&pins[1]);xr_xir_view_origin_unpin(&pins[1]);
+    CHECK(admission->work==terminal_work);
+    pinned=view;xr_xir_value_drop(&view);CHECK(xr_xir_cell_unborrowed(root));
+    CHECK(xr_xir_value_valid(&pinned) && xr_xir_view_get(&pinned,0,access,&read,&fault)==XR_XIR_VALUE_BAD_ARGUMENT);
+    TRY_VALUE(xr_xir_view_origin_info(&pins[0],admission,&info));CHECK(!info.logical_active && info.length==4);
+    TRY_VALUE(xr_xir_array_new((XrXirType)256,NULL,0,admission,&read));
+    TRY_VALUE(xr_xir_cell_write(root,&read,admission));xr_xir_value_drop(&read);CHECK(xr_xir_value_valid(&pinned));
+    TRY_VALUE(xr_xir_view_origin_info(&pins[0],admission,&info));CHECK(!info.logical_active && info.length==4);
+    terminal_work=admission->work;xr_xir_view_origin_unpin(&pins[0]);CHECK(admission->work==terminal_work);
+    TRY_VALUE(xr_xir_cell_write(root,restore,admission));
+    authority.epoch=501;spec=(XrXirViewStorageSpec){authority,1,2,XR_XIR_TYPE_SLICE};
+    TRY_VALUE(xr_xir_view_new((XrXirType)258,root,NULL,&spec,admission,&view));view_bind(scope,&view,authority);
+    TRY_VALUE(xr_xir_view_origin_pin(&view,access,&pins[0]));
+    XrXirCellAuthority child_authority=authority;child_authority.epoch=502;
+    XrXirViewStorageSpec child_spec={child_authority,0,1,XR_XIR_TYPE_SLICE};
+    TRY_VALUE(xr_xir_view_reborrow((XrXirType)258,&view,&child_spec,access,&read));view_bind(scope,&read,child_authority);
+    xr_xir_value_drop(&view);CHECK(!xr_xir_cell_unborrowed(root));
+    XrXirValue element={0};TRY_VALUE(xr_xir_view_get(&read,0,access,&element,&fault));CHECK(element.type==XR_XIR_I64);
+    xr_xir_value_drop(&element);xr_xir_value_drop(&read);CHECK(xr_xir_cell_unborrowed(root));
+    TRY_VALUE(xr_xir_cell_write(root,restore,admission));
+    TRY_VALUE(xr_xir_view_origin_info(&pins[0],admission,&info));CHECK(!info.logical_active && info.kind==XR_XIR_TYPE_SLICE);
+done:
+    for (unsigned i=2;i;--i) xr_xir_view_origin_unpin(&pins[i-1]);
+    xr_xir_value_drop(&read);xr_xir_value_drop(&view);return status;
+}
 static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     XrXirTypeArena *arena=NULL;XrXirDomain *domain=NULL;XrXirValue values[12]={{0}},fields[2]={{0}};
     XrXirValue chain[80]={{0}};XrXirCellLoan origin={0};
@@ -176,6 +214,7 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     TRY_VALUE(xr_xir_cell_read(&values[1],&values[11]));xr_xir_value_drop(&values[11]);
     TRY_VALUE(xr_xir_view_get(&values[4],0,&access,&values[11],&fault));CHECK(values[11].payload==11);
     xr_xir_value_drop(&values[11]);xr_xir_value_drop(&values[4]);CHECK(xr_xir_cell_unborrowed(&values[1]));
+    TRY_VALUE(view_origin_pin_sequence(&values[1],&values[0],&access));
     TRY_VALUE(xr_xir_cell_loan_prepare(&values[1],NULL,&origin));xr_xir_cell_loan_commit(&values[1],&origin,&c);
     spec=(XrXirViewStorageSpec){c,0,4,XR_XIR_TYPE_SLICE};
     TRY_VALUE(xr_xir_view_new((XrXirType)258,&values[1],&c,&spec,&admission,&values[3]));view_bind(&scope,&values[3],c);
@@ -217,6 +256,27 @@ static void view_values_guards(XrCompileResources *resources) {
     CHECK(xr_xir_view_get(&value,0,&access,&copy,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&copy));
     scope.active=true;scope.wrong=true;
     CHECK(xr_xir_view_get(&value,0,&access,&copy,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&copy));scope.wrong=false;
+    XrXirViewOriginPin pin={0},rejected={0};XrXirViewOriginInfo info={.kind=123};
+    CHECK(xr_xir_view_origin_info(&pin,&admission,&info)==XR_XIR_VALUE_BAD_ARGUMENT && info.kind==123);
+    XirView *body=(XirView *)object_pointer(&value);uint32_t references=atomic_load(&body->object.references);
+    body->children=UINT32_MAX;
+    CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_REFCOUNT_LIMIT && !pin.body &&
+        atomic_load(&body->object.references)==references);body->children=0;
+    atomic_store(&body->object.references,UINT32_MAX);
+    CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_REFCOUNT_LIMIT && !pin.body && !body->children);
+    atomic_store(&body->object.references,references);
+    uint64_t work=admission.work;admission.work=0;
+    CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_LIMIT && !pin.body);admission.work=work;
+    CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_BAD_ARGUMENT && body->children==1);
+    work=admission.work;admission.work=0;
+    CHECK(xr_xir_view_origin_info(&pin,&admission,&info)==XR_XIR_VALUE_LIMIT && info.kind==123);admission.work=work;
+    scope.active=false;
+    CHECK(xr_xir_view_origin_info(&pin,&admission,&info)==XR_XIR_VALUE_OK && info.logical_active);
+    CHECK(xr_xir_view_origin_pin(&value,&access,&rejected)==XR_XIR_VALUE_BAD_ARGUMENT && !rejected.body);
+    CHECK(xr_xir_view_get(&value,0,&access,&copy,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&copy));scope.active=true;
+    work=admission.work;xr_xir_view_origin_unpin(&pin);xr_xir_view_origin_unpin(&pin);
+    CHECK(admission.work==work && !body->children && atomic_load(&body->object.references)==references);
     CHECK(xr_xir_borrowed_some_new_move((XrXirType)260,&value,&access,&some)==XR_XIR_VALUE_OK && unit_value(&value));
     CHECK(xr_xir_value_copy(&some,&copy)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&copy));
     XrXirCallConfig config={0};XrXirCallAccounting accounting={0};XrXirCall *call=NULL;

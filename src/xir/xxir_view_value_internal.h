@@ -26,9 +26,32 @@ typedef struct XrXirViewAccess {
     void *context;
 } XrXirViewAccess;
 
-/* Only the authenticated root producer constructs a view. It preserves the
- * actual origin scope and any parent frame until retirement. Storage lives at
- * a stable heap address; a logical move transfers only the Value handle. */
+/* A physical origin pin is not a logical handle or an access permission. Its
+ * noncopyable record keeps one exact identity stable after logical retirement. */
+typedef struct XrXirViewOriginPin {
+    void *body;
+    XrXirCellAuthority authority;
+} XrXirViewOriginPin;
+typedef struct XrXirViewOriginInfo {
+    const XrXirValue *root;
+    XrXirCellAuthority authority;
+    uint32_t kind;
+    XrXirType element;
+    int64_t offset, length;
+    bool logical_active;
+} XrXirViewOriginInfo;
+/* Only pin creation authenticates the current logical binding. The metadata
+ * snapshot never proves a live origin; root is borrowed until pin drop. */
+XR_FUNC XrXirValueStatus xr_xir_view_origin_pin(const XrXirValue *value,
+    const XrXirViewAccess *access, XrXirViewOriginPin *output);
+XR_FUNC XrXirValueStatus xr_xir_view_origin_info(const XrXirViewOriginPin *pin,
+    XrXirValueAdmission *admission, XrXirViewOriginInfo *output);
+/* Empty release is idempotent; terminal pin retirement cannot allocate or fail. */
+XR_FUNC void xr_xir_view_origin_unpin(XrXirViewOriginPin *pin);
+
+/* Only the authenticated root producer constructs a view. The caller preserves
+ * the actual origin scope and any parent frame until logical retirement;
+ * physical pins cannot prove that lifetime. A move transfers only the handle. */
 XR_FUNC XrXirValueStatus xr_xir_view_new(XrXirType type, const XrXirValue *root,
     const XrXirCellAuthority *parent, const XrXirViewStorageSpec *spec,
     XrXirValueAdmission *admission, XrXirValue *output);

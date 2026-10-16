@@ -82,6 +82,51 @@ static bool view_value_type(XrXirType type,const XrXirViewStorageSpec *spec,
     if (!node || !view_value_kind(node->kind) || node->kind!=spec->kind) return false;
     *element=node->element;return true;
 }
+XR_FUNC XrXirValueStatus xr_xir_view_origin_pin(const XrXirValue *value,
+    const XrXirViewAccess *access,XrXirViewOriginPin *output) {
+    if (!output || output->body || output->authority.activation || output->authority.frame ||
+        output->authority.epoch) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XrXirCellAuthority authority={0};
+    XrXirValueStatus status=view_value_permission(value,access,false,&authority);
+    if (status==XR_XIR_VALUE_OK) {
+        XirView *view=(XirView *)object_pointer(value);
+        if (view->children==UINT32_MAX) status=XR_XIR_VALUE_REFCOUNT_LIMIT;
+        else if (!view_storage_work(access->values,sizeof(*output)+2*sizeof(void *))) status=XR_XIR_VALUE_LIMIT;
+        else if (!graph_object_retain(&view->object)) status=XR_XIR_VALUE_REFCOUNT_LIMIT;
+        else {
+            ++view->children;
+            *output=(XrXirViewOriginPin){view,authority};
+        }
+    }
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_view_origin_info(const XrXirViewOriginPin *pin,
+    XrXirValueAdmission *admission,XrXirViewOriginInfo *output) {
+    if (!pin || !pin->body || !cell_authority_valid(&pin->authority) || !output ||
+        !admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirView *view=pin->body;XrXirValue value=view_value_handle(view);
+    if (!xr_xir_value_valid(&value) || !view_value_kind(view->object.kind) || !view->children ||
+        !admission_owner(admission,view->object.arena,view->object.domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!view_storage_work(admission,sizeof(*output))) return XR_XIR_VALUE_LIMIT;
+    bool logical=view->state==XIR_VIEW_ACTIVE &&
+        (view->storage.kind==XR_XIR_TYPE_MUT_SLICE || view->storage.loan.shared.previous);
+    *output=(XrXirViewOriginInfo){&view->storage.root,pin->authority,view->storage.kind,
+        view->storage.element,view->storage.offset,view->storage.length,logical};
+    return XR_XIR_VALUE_OK;
+}
+XR_FUNC void xr_xir_view_origin_unpin(XrXirViewOriginPin *pin) {
+    if (!pin) return;
+    if (!pin->body) {
+        XR_CHECK(!pin->authority.activation && !pin->authority.frame && !pin->authority.epoch,
+            "an empty physical origin pin has no authority snapshot");
+        return;
+    }
+    xr_xir_value_graph_begin();XirView *view=pin->body;XrXirValue value=view_value_handle(view);
+    XR_CHECK(cell_authority_valid(&pin->authority) && xr_xir_value_valid(&value) &&
+        view_value_kind(view->object.kind) && view->children,"physical origin release owns one exact retained identity");
+    --view->children;*pin=(XrXirViewOriginPin){0};
+    xr_xir_value_drop(&value);xr_xir_value_graph_end();
+}
 static XrXirValueStatus view_value_new_operation(XrXirType type,const XrXirValue *root,
     const XrXirCellAuthority *parent,const XrXirViewStorageSpec *spec,
     XrXirValueAdmission *admission,XrXirValue *output) {

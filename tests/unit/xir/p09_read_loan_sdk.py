@@ -37,7 +37,8 @@ def main():
             assert actual==[dict(id=row['id'],value=row['value']) for row in expected]
             for name,expected_line in [('read_loan',b'read-loan-sdk-ok\n'),('view_types',b'view-types-sdk-ok\n'),
                                        ('view_storage',b'view-storage-sdk-ok\n'),('view_values',b'view-values-sdk-ok\n'),
-                                       ('view_retire',b'view-retire-sdk-ok\n'),('return_move',b'return-move-sdk-ok\n')]:
+                                       ('view_retire',b'view-retire-sdk-ok\n'),('return_move',b'return-move-sdk-ok\n'),
+                                       ('view_origin_pin',b'view-origin-pin-sdk-ok\n')]:
                 source=root/('tests/unit/xir/xir_sdk_'+name+'_consumer.c')
                 object_file=work/(name+'.obj');executable=work/(name+'.exe')
                 compile_source(args,sdk,source,object_file)

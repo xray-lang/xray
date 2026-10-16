@@ -91,6 +91,7 @@ typedef struct XirView {
     XirObject object;
     XrXirViewStorage storage;
     XrXirValue parent;
+    /* Physical dependents keep identity alive without retaining permission. */
     uint32_t children, state;
 } XirView;
 enum { XIR_VIEW_ACTIVE, XIR_VIEW_RETIRED };
