@@ -45,27 +45,33 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     if (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call requires its exact explicit type arguments or an omitted list");
     SourceCallStorage storage={0};
-    if (!source_call_storage(ctx,count,function.parameter_count,&storage)) return false;
+    if (!source_call_storage(ctx,count,0,&storage)) return false;
     XrXirType *types=storage.types;
-    SourceValue *values=storage.values;
     for (uint32_t p=0;p<prefix;++p) {
         if (!source_work(ctx,node)) return false;
         types[p]=request->prefix.types[p];
     }
-    if (offset) values[0]=*request->receiver;
     bool ok = false;
     SourceSubstitution substitution = {types,count};
     SourceCallPlan plan = {SOURCE_CALL_FUNCTION,request->prefix,substitution,function.parameters,NULL,
-        function.result,request->expected_result,values,offset,offset,ctx->generics[index].parameter_kinds,NULL};
-    if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
+        function.result,request->expected_result,NULL,offset,offset,ctx->generics[index].parameter_kinds,NULL,0,0};
+    if (!source_call_rest_shape(ctx,node,index,&plan) ||
+        !source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
     supplied=(uint32_t)syntax.arg_count+offset;
-    if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
+    if (!source_argument_arity(ctx,node,index,supplied)) return false;
+    uint32_t capacity=supplied>function.parameter_count ? supplied : function.parameter_count;
+    SourceValue *values=capacity ? source_recipe_storage(ctx,capacity,sizeof(*values)) : NULL;
+    if (capacity && !values) return false;
+    plan.values=values;
+    if (offset) values[0]=*request->receiver;
+    if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) goto done;
-    for (uint32_t p=supplied;p<function.parameter_count;++p)
+    uint32_t fixed=function.parameter_count-(plan.rest_parameter!=0);
+    for (uint32_t p=supplied;p<fixed;++p)
         if (!source_argument_default(ctx,node,index,p,&substitution,&values[p])) goto done;
     SourceCallConversions conversions={SOURCE_CALL_FUNCTION,substitution,function.parameters,NULL,
-        values,function.parameter_count,0};
-    if (!source_call_conversions(ctx,node,&conversions)) goto done;
+        values,supplied>fixed ? supplied : fixed,0,plan.rest_parameter,plan.rest_element};
+    if (!source_call_conversions(ctx,node,&conversions) || !source_call_rest_pack(ctx,node,&plan,supplied)) goto done;
     XrXirType result;
     if (!source_substitute(ctx,&substitution,function.result,0,&result)) goto done;
     *output=(SourceDirectArguments){substitution,values,function.parameter_count,result}; ok=true;

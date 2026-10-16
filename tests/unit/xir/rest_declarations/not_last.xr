@@ -1,0 +1,1 @@
+fn bad(...values:i64,last:i64) {}

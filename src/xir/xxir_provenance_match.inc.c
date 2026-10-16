@@ -402,7 +402,8 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             if (identity->module != actual->module || ((!c->effects || is_default) ? identity->exported : 0) != actual->exported ||
                 identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access ||
                 identity->promises != actual->promises || identity->method_kind != actual->method_kind ||
-                identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds)
+                identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds ||
+                identity->variadic != actual->variadic)
                 return XR_XIR_BAD_STRUCTURE;
             if (!!identity->cleanup_owner != !!actual->cleanup_owner) return XR_XIR_BAD_STRUCTURE;
             if (identity->cleanup_owner) {

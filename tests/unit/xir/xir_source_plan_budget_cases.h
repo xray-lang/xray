@@ -99,7 +99,7 @@ static void source_plan_context_cases(void) {
 static void source_plan_conversion_budget_cases(void) {
     XrXirCallableParameter parameters[]={{XR_XIR_I64,0},{XR_XIR_I64,0}};
     SourceValue values[]={{0,XR_XIR_I64},{1,XR_XIR_I64}};
-    SourceCallConversions request={SOURCE_CALL_REQUIREMENT,{0},NULL,parameters,values,2,0};
+    SourceCallConversions request={SOURCE_CALL_REQUIREMENT,{0},NULL,parameters,values,2,0,0,0};
     XrXirType input_types[]={XR_XIR_I64,XR_XIR_I64};
     XrXirFunction binding_function={0};binding_function.parameter_count=2;binding_function.parameters=input_types;
     SourceFunction binding_body={0};

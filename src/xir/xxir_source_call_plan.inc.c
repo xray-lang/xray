@@ -77,10 +77,13 @@ typedef struct SourceCallPlan {
     uint32_t parameter_offset, value_offset;
     const uint32_t *parameter_kinds;
     const SourceExpectedType *argument_contexts;
+    uint32_t rest_parameter;
+    XrXirType rest_element;
 } SourceCallPlan;
 /* Variadic READ recipes repeat one already instantiated caller-pool type. */
 static XrXirType source_call_parameter_type(const SourceCallPlan *plan,uint32_t index) {
     if (plan->family==SOURCE_CALL_REQUIREMENT) return plan->requirement_parameters[index].type;
+    if (plan->rest_parameter && index>=plan->rest_parameter-1) return plan->rest_element;
     return plan->function_parameters[plan->family==SOURCE_CALL_VARIADIC_READ ? 0 : index];
 }
 static bool source_call_caller_parameters(const SourceCallPlan *plan) {
@@ -166,7 +169,7 @@ static bool source_call_collect_arguments(SourceContext *ctx,AstNode *node,const
         if (!source_work(ctx,node)) {ok=false;break;}
         uint32_t parameter=a+plan->parameter_offset;
         references[a]=(plan->family==SOURCE_CALL_FUNCTION || plan->family==SOURCE_CALL_INDIRECT) &&
-            xr_xir_type_is_cell(&ctx->types,plan->function_parameters[parameter]);
+            xr_xir_type_is_cell(&ctx->types,source_call_parameter_type(plan,parameter));
         arguments[a].value=NULL;
         if (references[a]) {
             /* The place recipe completes these same selector plans once. */
@@ -352,6 +355,8 @@ typedef struct SourceCallConversions {
     const XrXirCallableParameter *concrete;
     SourceValue *values;
     uint32_t count, value_offset;
+    uint32_t rest_parameter;
+    XrXirType rest_element;
 } SourceCallConversions;
 static bool source_call_conversions(SourceContext *ctx, AstNode *node, const SourceCallConversions *request) {
     if (!request->count) return true;
@@ -361,9 +366,11 @@ static bool source_call_conversions(SourceContext *ctx, AstNode *node, const Sou
     for (uint32_t p=0;p<request->count;++p) {
         if (!source_work(ctx,node)) goto done;
         XrXirType expected;
+        XrXirType formal=request->rest_parameter && p>=request->rest_parameter-1 ?
+            request->rest_element : request->formals ? request->formals[p] : request->concrete[p].type;
         if (request->family==SOURCE_CALL_FUNCTION) {
-            if (!source_substitute(ctx,&request->substitution,request->formals[p],0,&expected)) goto done;
-        } else expected=request->concrete[p].type;
+            if (!source_substitute(ctx,&request->substitution,formal,0,&expected)) goto done;
+        } else expected=formal;
         bool binding = false;
         if (!source_effect_argument_bound(ctx,request->values[p+request->value_offset],expected,&binding)) goto done;
         if (binding) {

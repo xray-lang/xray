@@ -120,7 +120,7 @@ static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, 
         {"captured",8,NULL,0,XR_XIR_STRING,&blocks[5],1,captured,9,captured_operands,3}};
     uint32_t dependency = 1;
     XrXirSourceModule modules[] = {{"root",4,&dependency,1,0, 0},{"library",7,NULL,0,1, 0}};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
     XrXirSlot slots[] = {{1,a,0,0,0},{0,cell,1,0,0},{0,cell,1,0,0}};
     XrXirLiteral literals[] = {{"red",3},{"blue",4},{"green",5}};
     XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2, NULL};

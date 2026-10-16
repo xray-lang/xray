@@ -12,12 +12,12 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_nominal.h"
 #include "base/xsha256.h"
-#include "root_construction77_goldens.h"
+#include "root_construction78_goldens.h"
 _Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_ADD_INT == 25 && XR_XIR_CALL == 28 &&
     XR_XIR_RETURN == 33 && XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83,
     "Independent construction vector opcode identities changed");
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 77u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 31u && XR_XIR_CHECKED_CONTRACT == 78u &&
     XR_XIR_CALLABLE_ROOT_REQUIRED == 4u, "Independent construction wire facts changed");
 
 static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
@@ -48,11 +48,11 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
         {"b",1,NULL,0,XR_XIR_I64,&blocks[3],1,b,2,NULL,0}};
     XrXirSourceModule construction_source_module = {"alpha",5,NULL,0,0, 0};
     XrXirFunctionIdentity identities[] = {
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
-        {0,1,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
-        {0,1,1,0,0,0,XR_XIR_CONSTRUCTOR,0,0},
-        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0},
-        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0}};
+        {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0,0},
+        {0,1,0,0,0,0,XR_XIR_NON_MEMBER,0,0,0},
+        {0,1,1,0,0,0,XR_XIR_CONSTRUCTOR,0,0,0},
+        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0,0},
+        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0,0}};
     XrXirDeclarations declarations = {&construction_source_module,1,identities,NULL,0,NULL,0,0,1,NULL};
     XrXirNominalField fields[] = {{{"a",1},XR_XIR_I64,0},{{"b",1},XR_XIR_I64,0}};
     XrXirNominalDeclaration nominal = {{"alpha",5},{"Pair",4},1,NULL,0,fields,2,

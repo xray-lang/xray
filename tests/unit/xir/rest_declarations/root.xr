@@ -1,0 +1,20 @@
+import "./rest" as r
+import {sum,choose,Collector} from "./rest"
+var trace:i64=0
+fn mark(n:i64)->i64 { trace=trace*10+n;return n }
+export fn result()->i64 {
+    trace=0
+    const direct=sum(mark(1),mark(2),mark(3))
+    const order=trace
+    const item=Collector(4,5)
+    return direct+order+item.add(6,7)+Collector.total(8,9)+r.sum(0,...(10,11))
+}
+export fn empty()->i64 { return sum()+r.sum(2)+choose(3)+Collector().add()+Collector.total() }
+export fn indirect()->i64 {
+    const call=r.sum
+    const member=Collector(4).add
+    const staticCall=Collector.total
+    const generic=choose<i64>
+    return call(1,2,3)+member(5,6)+staticCall(...(7,8))+generic(9,10,11)
+}
+export fn folded()->i64 { const value=comptime sum(1,2,3);return value }

@@ -1024,6 +1024,7 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 #include "xxir_source_inference_result.inc.c"
 #include "xxir_source_tuple.inc.c"
 #include "xxir_source_call_plan.inc.c"
+#include "xxir_source_rest.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
 #include "xxir_source_indirect_call.inc.c"
 #include "xxir_source_native_read_arguments.inc.c"
@@ -2151,19 +2152,21 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         bool by_reference = param->passing_mode == XR_PARAM_REF;
-        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || param->is_rest ||
+        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern ||
             (by_reference && param->default_value) ||
             !source_type(ctx, param->type, &body->parameters[i]))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
         /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
          * caller's binding through it, exactly as a captured mutable variable does. */
         if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
+        if (!source_rest_parameter(ctx,node,param,i+1==decl->param_count,&body->parameters[i])) return false;
         for (int j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (source_text_same(ctx, NULL, param->name, decl->params[j]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
         }
     }
+    identity.variadic=decl->param_count && decl->params[decl->param_count-1]->is_rest;
     ctx->identities[index] = identity;
     return source_query_parameters(ctx, symbol->declaration);
 }

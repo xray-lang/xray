@@ -154,6 +154,7 @@ typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCa
 #define XR_XIR_CALLABLE_ROOT_REQUIRED 4u
 #define XR_XIR_CALLABLE_ROOT_UNRESOLVED 8u
 #define XR_XIR_CALLABLE_ROOT_MASK 14u
+#define XR_XIR_CALLABLE_VARIADIC 16u
 typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CALLABLE = 1,
     XR_XIR_TYPE_ARRAY = 2,

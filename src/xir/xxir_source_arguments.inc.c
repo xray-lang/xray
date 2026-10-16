@@ -51,7 +51,9 @@ static bool source_default_binding_get(SourceContext *ctx, AstNode *node,
 }
 static bool source_argument_arity(SourceContext *ctx, AstNode *node, uint32_t index, uint32_t supplied) {
     uint32_t count = ctx->functions[index].parameter_count;
-    if (supplied > count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "too many call arguments");
+    bool variadic=ctx->identities[index].variadic!=0;
+    if (!variadic && supplied > count) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "too many call arguments");
+    count-=variadic;
     for (uint32_t p = supplied; p < count; ++p) {
         const XrXirDefaultBinding *binding = NULL;
         if (!source_work(ctx, node) || !source_default_binding_get(ctx, node, index, p, &binding)) return false;
@@ -90,6 +92,10 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
         for (uint32_t p = 0; p < count; ++p) {
             if (!source_work(ctx, node)) return false;
             AstNode *expression = parameters[p]->default_value;
+            if (parameters[p]->is_rest) {
+                if (expression) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"a rest parameter cannot have a default");
+                continue;
+            }
             if (!expression) {
                 if (seen) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "default parameters must be a trailing suffix");
                 continue;
@@ -110,6 +116,7 @@ static bool source_argument_functions(SourceContext *ctx, uint32_t *next) {
             ctx->identities[helper] = ctx->identities[f];
             ctx->identities[helper].test_role = XR_XIR_TEST_ROLE_NONE;
             ctx->identities[helper].test_timeout_seconds = 0;
+            ctx->identities[helper].variadic = 0;
             ctx->identities[helper].exported = false;
             ctx->identities[helper].promises = 0;
             ctx->identities[helper].method_kind = ctx->identities[helper].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;

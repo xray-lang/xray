@@ -1,0 +1,92 @@
+[
+  {
+    "source": "compile_owner/checked_sizing77_golden.h",
+    "target": "compile_owner/checked_sizing78_golden.h",
+    "sha256": "fcc99d836ff12760eacfc84435178883ac2df41a468b217c1f670cf91961cd9b",
+    "models": [
+      "sizing77_golden",
+      "sizing77_embedded_golden",
+      "sizing77_empty_golden"
+    ]
+  },
+  {
+    "source": "root_construction77_goldens.h",
+    "target": "root_construction78_goldens.h",
+    "sha256": "fe21f3c4ca8f04d97c08e8df349d6bdf17389d38ac28543fdb682429201006b5",
+    "models": [
+      "root_construction72_checked",
+      "root_construction72_instance"
+    ],
+    "offset_models": {
+      "ROOT_CONSTRUCTION72_CHECKED_OWNER": "root_construction72_checked",
+      "ROOT_CONSTRUCTION72_RECURSIVE_OWNER": "root_construction72_instance"
+    }
+  },
+  {
+    "source": "unit_values/unit77_wire_golden.h",
+    "target": "unit_values/unit78_wire_golden.h",
+    "sha256": "86e51b57340cab8f8a777225f4d01c2e68bd5ac4485e5168ece29118caf8b55a",
+    "models": [
+      "unit77_packet"
+    ]
+  },
+  {
+    "source": "xir_assert_panics77_golden.h",
+    "target": "xir_assert_panics78_golden.h",
+    "sha256": "1bcac0aba57fad71b6c5193dcade4780241f67988dffd9288593f52833b78ed4",
+    "models": [
+      "assert_panics77_golden"
+    ],
+    "offset_models": {
+      "XR_PANICS77_": "assert_panics77_golden"
+    }
+  },
+  {
+    "source": "xir_checked_range77_golden.h",
+    "target": "xir_checked_range78_golden.h",
+    "sha256": "0f692eee3ff5fcd81f6039da488891fb0856aa7baa1ddc754a58eff9ef14ac5c",
+    "models": [
+      "checked_range77_golden"
+    ]
+  },
+  {
+    "source": "xir_checked_scalar77_golden.h",
+    "target": "xir_checked_scalar78_golden.h",
+    "sha256": "870cba7945469d528e73f9e2e86767d19a330cd08ed9df63c71832822fb2ae4c",
+    "models": [
+      "checked_scalar77_golden"
+    ]
+  },
+  {
+    "source": "xir_error_marker77_golden.h",
+    "target": "xir_error_marker78_golden.h",
+    "sha256": "8a585d6448bb32b16dcc731c543f4bb3ba4f33312e3e9c8a52b8befdc28aae22",
+    "models": [
+      "error_marker77_golden"
+    ],
+    "offset_models": {
+      "ERROR_MARKER77_": "error_marker77_golden"
+    }
+  },
+  {
+    "source": "xir_generic_method77_golden.h",
+    "target": "xir_generic_method78_golden.h",
+    "sha256": "71d444db4acb72aac402dbb806d90f0741d436543e40b84f3a4cdc3c35bffd05",
+    "models": [
+      "generic_method77_golden",
+      "generic_method77_invalid_flags0",
+      "generic_method77_invalid_flags1"
+    ],
+    "offset_models": {
+      "GENERIC_METHOD77_": "generic_method77_golden"
+    }
+  },
+  {
+    "source": "xir_rune77_golden.h",
+    "target": "xir_rune78_golden.h",
+    "sha256": "ce63fb9f8b0e95d1ff4fa02b6632c59fe2dbd2fade1318286a2cd7af04e03929",
+    "models": [
+      "rune77_golden"
+    ]
+  }
+]

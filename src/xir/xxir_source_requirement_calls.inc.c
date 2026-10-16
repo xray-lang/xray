@@ -125,6 +125,8 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     const XrXirInterfaceMethod *method = &ctx->interfaces.declarations[application.declaration].methods[selected.member];
     /* Copy the node before argument expressions append to the descriptor arena. */
     XrXirTypeNode formal = *xr_xir_callable_signature(&ctx->types,method->signature);
+    if (formal.flags&XR_XIR_CALLABLE_VARIADIC)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"rest interface call shape is not admitted");
     uint32_t own = method->own_parameter_count, parent = application.argument_count;
     if (parent > 65536 || own > 65536-parent || call->type_arg_count < 0 ||
         (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))) {
@@ -142,7 +144,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     SourceValue *arguments=storage.values;
     arguments[0] = receiver;
     SourceCallPlan plan = {SOURCE_CALL_REQUIREMENT,{application.arguments,parent},substitution,NULL,
-        formal.parameters,formal.result,result_context,arguments,0,1,NULL,NULL};
+        formal.parameters,formal.result,result_context,arguments,0,1,NULL,NULL,0,0};
     SourceCallSyntax syntax;
     if (!source_call_syntax(ctx,node,&syntax) || !source_call_expand(ctx,node,&syntax,&plan,formal.parameter_count)) goto done;
     if ((uint32_t)syntax.arg_count!=formal.parameter_count) {
@@ -152,7 +154,7 @@ static bool source_requirement_call(SourceContext *ctx, AstNode *node,
     if (!source_requirement_prove(ctx,node,selected.member,application,substitution,&signature)) goto done;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,signature);
     SourceCallConversions conversions={SOURCE_CALL_REQUIREMENT,substitution,NULL,callable.parameters,
-        arguments,callable.parameter_count,1};
+        arguments,callable.parameter_count,1,0,0};
     if (!source_call_conversions(ctx,node,&conversions)) goto done;
     XrXirInstruction op = {XR_XIR_CALL_REQUIREMENT,callable.result,{0},
         {application.declaration,selected.member},0,{0}};

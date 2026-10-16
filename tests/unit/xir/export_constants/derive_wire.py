@@ -15,13 +15,13 @@ def model():
     decl_at=64+len(body)
     body+=word(2,2,2,1,2)
     body+=blob(b'lib')+word(0,0,0)+blob(b'root')+word(1,0,1,0)
-    body+=word(0,0,0,0,0,0,0,0,0)+word(1,0,0,0,0,0,0,0,0)+word(1,1,0,0,0,0,0,0,0)
+    body+=word(0,0,0,0,0,0,0,0,0,0)+word(1,0,0,0,0,0,0,0,0,0)+word(1,1,0,0,0,0,0,0,0,0)
     slot_at=64+len(body)
     body+=word(0,2,0,1,0)+word(0,2,0,0,0)
     literal_at=64+len(body)
     body+=blob(b'answer')+blob(b'secret')+word(0)
     body+=word(0,0,0,0,0,0,0)
-    head=b'XRCHK\0\0\0'+word(30,77,2,0)+struct.pack('<Q',len(body))
+    head=b'XRCHK\0\0\0'+word(31,78,2,0)+struct.pack('<Q',len(body))
     return head+hashlib.sha256(head+body).digest()+body,dict(SLOT=slot_at,DECL=decl_at,READ=read_at,LITERAL=literal_at)
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--write',action='store_true');args=parser.parse_args()
@@ -38,6 +38,11 @@ def main():
     assert len(raw)==706 and hashlib.sha256(raw).hexdigest()=='f4cbd63d606ca10c84d738f4d29591d2f04df81a2bec7cb2210f61981fd17671'
     assert struct.unpack_from('<II',raw,8)==(29,76)
     assert struct.unpack_from('<Q',raw,24)[0]==len(raw)-64
+    assert hashlib.sha256(raw[:32]+raw[64:]).digest()==raw[32:64]
+    prior=Path(__file__).with_name('retired30_constants.h').read_text()
+    raw=bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',prior))
+    assert len(raw)==796 and hashlib.sha256(raw).hexdigest()=='7743f95438acc6ae35cf9851a864783d95227530b6b174a06e61608e540678b3'
+    assert struct.unpack_from('<II',raw,8)==(30,77)
     assert hashlib.sha256(raw[:32]+raw[64:]).digest()==raw[32:64]
     print('Independent exported/private slot packet:',len(data),hashlib.sha256(data).hexdigest(),positions)
 if __name__=='__main__':main()

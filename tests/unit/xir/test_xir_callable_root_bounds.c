@@ -21,7 +21,7 @@
 _Static_assert(XR_XIR_CALLABLE_NO_SUSPEND==1 && XR_XIR_CALLABLE_ROOT_NONE==2 &&
     XR_XIR_CALLABLE_ROOT_REQUIRED==4 && XR_XIR_CALLABLE_ROOT_UNRESOLVED==8 &&
     XR_XIR_CALLABLE_ROOT_MASK==14,"The closed bound bit assignments are one contract");
-_Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==77,"The callable dependency contract has one wire identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==78,"The callable dependency contract has one wire identity");
 
 static void bound_matrix(void) {
     static const bool admitted[16]={false,false,true,true,true,true,false,false,true,true,false,false,true,true,false,false};
@@ -55,7 +55,8 @@ static void bound_matrix(void) {
     }
     CHECK(accepted==33 && rejected==31);
     uint32_t untouched=71;
-    CHECK(!xr_xir_callable_flags_valid(18));
+    CHECK(xr_xir_callable_flags_valid(18));
+    CHECK(!xr_xir_callable_flags_valid(34));
     CHECK(!xr_xir_callable_flags_join(0,2,&untouched) && untouched==71);
     CHECK(!xr_xir_callable_flags_join(2,1,&untouched) && untouched==71);
     CHECK(!xr_xir_callable_flags_join(2,2,NULL));
@@ -95,6 +96,9 @@ static void bound_facts(void) {
     for(uint32_t f=0;f<13;++f) {
         XrXirEffectFacts actual_read=xr_xir_effects_read(effects,f);
         const XrXirRootEffects *actual=(actual_read.status==XR_XIR_OK?&actual_read.root:NULL);CHECK(actual);
+        if(actual->requires_root!=expected[f][0] || actual->unresolved!=expected[f][1])
+            fprintf(stderr,"bound function%u actual root%u unresolved%u expected%u/%u\n",f,
+                actual->requires_root,actual->unresolved,expected[f][0],expected[f][1]);
         CHECK(actual->requires_root==expected[f][0] && actual->unresolved==expected[f][1]);
         CHECK(((xr_xir_effects_read(effects,f).status==XR_XIR_OK && xr_xir_effects_read(effects,f).root_witness.cause!=0))==expected[f][0]);
         CHECK(((xr_xir_effects_read(effects,f).status==XR_XIR_OK && xr_xir_effects_read(effects,f).unresolved_witness.cause!=0))==expected[f][1]);

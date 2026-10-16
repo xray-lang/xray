@@ -52,7 +52,7 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
     XrXirType parameters[2]={XR_XIR_UNIT,XR_XIR_UNIT};
     SourceExpectedType contexts[2]={{0},{0}};SourceValue values[2]={{0},{0}};
     SourceCallPlan plan={SOURCE_CALL_INDIRECT,{0},{0},parameters,NULL,XR_XIR_UNIT,
-        {0},values,0,0,NULL,contexts};
+        {0},values,0,0,NULL,contexts,0,0};
     SourceCallSyntax syntax;
     if (!source_call_syntax(ctx,node,&syntax)) return false;
     if (syntax.type_arg_count)

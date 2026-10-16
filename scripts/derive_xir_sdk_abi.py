@@ -100,6 +100,7 @@ PUBLIC_STRUCTURES = [
  (4400, 'XrXirAtomicOutcome', [('status','enum'),('permission','enum'),('continuing','bool')]),
  (4500, 'XrXirClassEvent', [('serial','u64'),('type','u32'),('declaration','u32'),
      ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
+ (4700, 'XrXirFunctionIdentity', [('module','u32'),('exported','u32'),('nominal_owner','u32'),('member_access','u32'),('cleanup_owner','u32'),('promises','u32'),('method_kind','u32'),('test_role','u32'),('test_timeout_seconds','u32'),('variadic','u32')]),
  (4600, 'XrXirSlot', [('module','u32'),('type','enum'),('mutable','u32'),('exported','u32'),('name','u32')]),
 ]
 
@@ -161,6 +162,11 @@ def prepare(output: Path) -> None:
     rows += [{'id':base,'name':f'{name}.array2.bytes','value':2*layout[name][0],
               'expression':f'sizeof({name}[2])'} for base,name in
              [(3200,'XrXirNominalDeclaration'),(3201,'XrXirNominalIdentity')]]
+    # Declaration facts append after the complete preceding inventory. Existing
+    # row order is part of the independently specified canonical SDK framing.
+    declaration_rows=[row for row in rows if 4700<=row['id']<4712]
+    assert len(declaration_rows)==12
+    rows=[row for row in rows if not 4700<=row['id']<4712]+declaration_rows
     assert len({row['id'] for row in rows}) == len(rows), 'ABI field IDs must be unique'
     document = {'recipe':'xray:xir-runtime-abi-measurements:v1','rows':rows,
                 'basis':'Independent natural Windows x86_64 C layout: pointer/size_t/u64 align8, '

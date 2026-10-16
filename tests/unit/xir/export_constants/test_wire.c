@@ -19,6 +19,7 @@
 #include "../xir_library_compile_owner.h"
 #include "wire_golden.h"
 #include "retired29_slot.h"
+#include "retired30_constants.h"
 static XrXirStatus constant_wire_operation(const XrXirCompileContext *context,void *unused) {
     (void)unused;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
     XrXirStatus status=xr_xir_compile_checked_read(context,constant_wire,sizeof(constant_wire),&artifact,NULL);
@@ -70,7 +71,7 @@ static void constant_program_match(const XrXirCompileContext *context) {
     CHECK(xr_xir_compile_program_match(context,&spec,layouts,lowered)==XR_XIR_BAD_STRUCTURE);
     slots[0].name=0;slots[1].exported=1;slots[1].name=1;
     CHECK(xr_xir_compile_program_match(context,&spec,layouts,lowered)==XR_XIR_BAD_STRUCTURE);
-    memcpy(slots,module->declarations->slots,sizeof(slots));spec.abi_version=31;
+    memcpy(slots,module->declarations->slots,sizeof(slots));spec.abi_version=32;
     XrXirProgram *old=NULL;
     CHECK(xr_xir_compile_program_seal(context,&spec,&old)!=XR_XIR_OK && !old);
     xr_compile_resources_free(bindings);xr_compile_resources_free(entries);
@@ -81,6 +82,8 @@ int main(void) {
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
     XrCompileResourceStats before=library_compile_stats(&owner.context);size_t attempts=source_program_compile_attempts;
     XrXirArtifact *old=NULL;
+    CHECK(xr_xir_compile_checked_read(&owner.context,retired30_constants,sizeof(retired30_constants),&old,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!old && source_program_compile_attempts==attempts);
     CHECK(xr_xir_compile_checked_read(&owner.context,retired29_slot,sizeof(retired29_slot),&old,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!old && source_program_compile_attempts==attempts);
     XrCompileResourceStats after=library_compile_stats(&owner.context);

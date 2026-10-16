@@ -213,7 +213,9 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (op->op == XR_XIR_FUNCTION_REF) {
             signature = xr_xir_callable_signature(module->types, op->type);
             if (!module->declarations || !signature || op->args[1] > callee->parameter_count ||
-                signature->parameter_count != callee->parameter_count - op->args[1])
+                signature->parameter_count != callee->parameter_count - op->args[1] ||
+                !!(signature->flags & XR_XIR_CALLABLE_VARIADIC) !=
+                    (module->declarations->functions[op->immediate].variadic!=0))
                 return XR_XIR_BAD_TYPE;
             if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
                 !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
@@ -359,6 +361,10 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         function->parameter_count > UINT32_MAX - function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t function_id = (uint32_t) (function - context->module->functions);
+    const XrXirDeclarations *declarations=context->module->declarations;
+    if (declarations && declarations->functions[function_id].variadic &&
+        (!function->parameter_count || !xr_xir_type_is_array(context->module->types,
+            function->parameters[function->parameter_count-1]))) return XR_XIR_BAD_TYPE;
     if (xr_xir_type_is_cell(context->module->types, function->result)) return XR_XIR_BAD_TYPE;
     if (function->result != XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->result))
         return XR_XIR_BAD_TYPE;

@@ -3013,6 +3013,8 @@ sum(1, 2, 3)        // total = 6
 - The actual internal type of `...T` is `Array<T>`.
 - Only one rest parameter is allowed.
 
+Rest follows the ordinary READ contract and cannot use `ref`, `move`, or a default value; fixed prefix parameters may have defaults. The caller evaluates actual values exactly once in source order, then packs the tail into one real `Array<T>` physical parameter, including an empty Array for an empty tail. An inferred function value retains its rest call shape and is not interchangeable with a fixed `Array<T>` parameter function. Ordinary storage, copyability, visibility, and generic constraints still apply; rest syntax does not enlarge the admitted type domain of `T`.
+
 #### 5.2.6 Function hoisting
 
 ```xray

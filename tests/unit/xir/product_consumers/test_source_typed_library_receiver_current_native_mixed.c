@@ -62,12 +62,12 @@ static void record_failure(const char *domain, const char *operation, bool has_s
     if (receiver_cleanup_enabled) { longjmp(receiver_failure, 1); } exit(1); } } while (0)
 /* Public Git reference 9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e pins interface facts.
  * Producer adoption and execution require separately qualified materials. */
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 77u, "Formal Checked identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 31u && XR_XIR_CHECKED_CONTRACT == 78u, "Formal Checked identity");
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
 #endif
 _Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 32u, "Formal public runtime identity");
+    XR_XIR_PROGRAM_ABI_VERSION == 33u, "Formal public runtime identity");
 
 typedef struct ReceiverRoles {
     uint32_t entry, answer, private_answer, child, constructor, nominal, library_module;

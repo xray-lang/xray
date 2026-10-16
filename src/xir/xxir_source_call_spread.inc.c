@@ -184,7 +184,7 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
     if (!present) return true;
     SourceCallExpansion *expanded=source_recipe_storage(ctx,1,sizeof(*expanded));
     if (!expanded) return false;
-    bool variadic=formal->family==SOURCE_CALL_VARIADIC_READ;
+    bool variadic=formal->family==SOURCE_CALL_VARIADIC_READ || formal->rest_parameter;
     expanded->entry_capacity=variadic ? 0 : parameter_count;
     expanded->entries=expanded->entry_capacity ? source_recipe_storage(ctx,expanded->entry_capacity,sizeof(*expanded->entries)) : NULL;
     expanded->spreads=source_recipe_storage(ctx,(uint32_t)call->arg_count,sizeof(*expanded->spreads));
@@ -231,7 +231,8 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
             }
             if (!source_planned_effects(ctx,spread->source,0)) goto done;
         }
-        if (formal->parameter_offset>parameter_count || arity>parameter_count-formal->parameter_offset-count) {
+        uint32_t limit=variadic ? 65536 : parameter_count-formal->parameter_offset;
+        if ((!variadic && formal->parameter_offset>parameter_count) || count>limit || arity>limit-count) {
             source_fail(ctx,input,XR_XIR_BAD_TYPE,"too many call arguments");goto done;
         }
         if (variadic && !source_call_expand_reserve(ctx,input,expanded,count,count+arity)) goto done;
@@ -239,7 +240,7 @@ static bool source_call_expand(SourceContext *ctx,AstNode *node,SourceCallSyntax
             uint32_t parameter=count+formal->parameter_offset;
             SourceCallEntry *entry=&expanded->entries[count++];entry->syntax=input;entry->access=access;
             entry->reference=(formal->family==SOURCE_CALL_FUNCTION || formal->family==SOURCE_CALL_INDIRECT) &&
-                xr_xir_type_is_cell(&ctx->types,formal->function_parameters[parameter]);
+                xr_xir_type_is_cell(&ctx->types,source_call_parameter_type(formal,parameter));
             if (spread) {
                 if (entry->reference) {source_fail(ctx,input,XR_XIR_BAD_TYPE,"call spread cannot satisfy a ref parameter");goto done;}
                 SourceCallProjection *projection=source_recipe_storage(ctx,1,sizeof(*projection));

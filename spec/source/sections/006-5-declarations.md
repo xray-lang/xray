@@ -218,6 +218,8 @@ sum(1, 2, 3)        // total = 6
 - 类型 `...T` 内部实际是 `Array<T>`。
 - 只能有一个 rest 参数。
 
+rest 遵循普通 READ 合同，不能使用 `ref`、`move` 或默认值；固定前缀可有默认值。调用端按源码顺序将实际值各求值一次，再将尾部值打包为一个真实 `Array<T>` 物理参数，空尾部也产生 Array。推导得到的函数值保留 rest 的调用形状，不能与固定 `Array<T>` 形参的函数相互替换。正常的存储、copyability、可见性与泛型约束继续适用；rest 语法本身不扩大 `T` 的合法类型域。
+
 #### 5.2.6 函数提升
 
 ```xray
@@ -1479,6 +1481,8 @@ sum(1, 2, 3)        // total = 6
 - The rest parameter must be **last**.
 - The actual internal type of `...T` is `Array<T>`.
 - Only one rest parameter is allowed.
+
+Rest follows the ordinary READ contract and cannot use `ref`, `move`, or a default value; fixed prefix parameters may have defaults. The caller evaluates actual values exactly once in source order, then packs the tail into one real `Array<T>` physical parameter, including an empty Array for an empty tail. An inferred function value retains its rest call shape and is not interchangeable with a fixed `Array<T>` parameter function. Ordinary storage, copyability, visibility, and generic constraints still apply; rest syntax does not enlarge the admitted type domain of `T`.
 
 #### 5.2.6 Function hoisting
 

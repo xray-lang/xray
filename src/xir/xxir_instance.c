@@ -162,7 +162,8 @@ static bool function_bound_admitted(const XrXirProgram *program, uint32_t entry,
         permissions->function_count != program->entry_count ||
         permissions->slot_count != program->declarations->slot_count) return false;
     const XrXirProgramPermission *permission = &permissions->entries[entry];
-    return xr_xir_callable_root_accepts(permission->requires_root, permission->unresolved, signature->flags) &&
+    return !!(signature->flags & XR_XIR_CALLABLE_VARIADIC) == (program->declarations->functions[entry].variadic!=0) &&
+        xr_xir_callable_root_accepts(permission->requires_root, permission->unresolved, signature->flags) &&
         (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) ||
          (program->declarations->functions[entry].promises & XR_XIR_FUNCTION_NO_SUSPEND));
 }

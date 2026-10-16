@@ -225,7 +225,7 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 owner->node->type != AST_CLASS_DECL;
             if ((method->is_private && method->is_protected) ||
                 method->is_override || method->is_getter || method->is_setter || method->is_static_constructor ||
-                method->is_variadic || method->is_operator || (method->receiver_mode != XR_PARAM_READ && !by_reference) ||
+                method->is_operator || (method->receiver_mode != XR_PARAM_READ && !by_reference) ||
                 method->attr_count || method->borrow_origin_count ||
                 method->borrow_origin_syntax || !method->body || method->param_count < 0 || method->param_count >= 65536)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method declaration contract is not admitted");
@@ -271,11 +271,12 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 bool parameter_reference = param->passing_mode == XR_PARAM_REF;
                 if (!param->type || (param->passing_mode != XR_PARAM_READ && !parameter_reference) ||
                     (parameter_reference && param->default_value) ||
-                    param->pattern || param->is_rest || source_text_same(ctx, NULL, param->name, "this") ||
+                    param->pattern || source_text_same(ctx, NULL, param->name, "this") ||
                     !source_type(ctx, param->type, &body->parameters[i + offset]))
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "method parameter contract is not admitted");
                 if (parameter_reference && !source_cell_type(ctx, body->parameters[i + offset], &body->parameters[i + offset]))
                     return false;
+                if (!source_rest_parameter(ctx,node,param,i+1==method->param_count,&body->parameters[i+offset])) return false;
                 for (int j = 0; j < i; ++j) {
                     if (!source_work(ctx, node)) return false;
                     if (source_text_same(ctx, NULL, param->name, method->params[j]->name))
@@ -285,7 +286,8 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
             uint32_t access = method->is_private ? XR_XIR_MEMBER_PRIVATE :
                 method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
             ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
-                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0};
+                access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0,0};
+            ctx->identities[index].variadic=method->param_count && method->params[method->param_count-1]->is_rest;
             if (!source_query_parameters(ctx, symbol->declaration)) return false;
         }
     }

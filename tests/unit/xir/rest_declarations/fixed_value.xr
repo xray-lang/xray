@@ -1,0 +1,2 @@
+import {sum} from "./rest"
+const bad:fn(i64,Array<i64>)->i64=sum

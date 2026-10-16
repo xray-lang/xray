@@ -250,7 +250,7 @@ static XrXirStatus effect_context_dense_function(EffectContextOwner *owner,
         const XrXirTypeNode *signature=xr_xir_callable_signature(&dense->terms.types,instructions[i].type);
         if (!signature) return XR_XIR_BAD_TYPE;
         XrXirTypeNode bottom=*signature;
-        bottom.flags=(bottom.flags&XR_XIR_CALLABLE_NO_SUSPEND)|XR_XIR_CALLABLE_ROOT_NONE;
+        bottom.flags=(bottom.flags&(XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_VARIADIC))|XR_XIR_CALLABLE_ROOT_NONE;
         instructions[i].type=effect_term_intern(&dense->terms,bottom);
         if (dense->terms.status!=XR_XIR_OK) return dense->terms.status;
     }
@@ -415,7 +415,7 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
                 operation==XR_XIR_LOCAL_NEW || operation==XR_XIR_LOCAL_READ || operation==XR_XIR_PHI;
             if (signature && carrier) {
                 XrXirTypeNode bound=*signature;
-                bound.flags=(bound.flags&XR_XIR_CALLABLE_NO_SUSPEND)|XR_XIR_CALLABLE_ROOT_UNRESOLVED;
+                bound.flags=(bound.flags&(XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_VARIADIC))|XR_XIR_CALLABLE_ROOT_UNRESOLVED;
                 declared[v]=effect_term_intern(&dense->terms,bound);
                 if (dense->terms.status!=XR_XIR_OK) return dense->terms.status;
             }

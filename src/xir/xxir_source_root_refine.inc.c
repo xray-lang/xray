@@ -79,7 +79,7 @@ static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,op->type);
     if (!facts || !signature) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"inferred reference lost its authentic target");
     XrXirTypeNode refined = *signature;
-    refined.flags &= XR_XIR_CALLABLE_NO_SUSPEND;
+    refined.flags &= (XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_VARIADIC);
     refined.flags |= facts->requires_root ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0;
     refined.flags |= facts->unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0;
     if (!(refined.flags & XR_XIR_CALLABLE_ROOT_MASK)) refined.flags |= XR_XIR_CALLABLE_ROOT_NONE;

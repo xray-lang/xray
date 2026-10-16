@@ -49,6 +49,8 @@ typedef struct XrXirFunctionIdentity {
     uint32_t promises;
     uint32_t method_kind;
     uint32_t test_role, test_timeout_seconds;
+    /* A rest declaration receives one ordinary READ Array as its last parameter. */
+    uint32_t variadic;
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u

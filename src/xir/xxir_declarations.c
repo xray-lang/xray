@@ -193,6 +193,9 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
             d->functions[i].method_kind > XR_XIR_MEMBER_HELPER ||
+            d->functions[i].variadic > 1 ||
+            (d->functions[i].variadic && (d->functions[i].test_role || d->functions[i].cleanup_owner ||
+                i==d->entry_function || d->modules[d->functions[i].module].initializer==i)) ||
             d->functions[i].test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
             (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_seconds) ||
             d->functions[i].test_timeout_seconds > INT_MAX ||
