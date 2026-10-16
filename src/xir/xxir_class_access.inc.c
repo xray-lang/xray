@@ -26,7 +26,7 @@ XR_FUNC XrXirValueStatus xr_xir_class_loan_prepare(const XrXirValue *value,
         class_origin_cancel(identity);return XR_XIR_VALUE_BAD_ARGUMENT;
     }
     /* NULL scope is a whole Class identity, never a leaf or interior address. */
-    *output=(XrXirCellLoan){identity,NULL,top,{0}};return XR_XIR_VALUE_OK;
+    *output=(XrXirCellLoan){.cell=identity,.previous=top};return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_class_access_loan_prepare(const XrXirValue *value,
     const XrXirCellAuthority *parent,XrXirValueAdmission *admission,XrXirCellLoan *output) {
@@ -52,7 +52,12 @@ XR_FUNC void xr_xir_class_loan_commit(const XrXirValue *value,XrXirCellLoan *loa
     uint32_t state=class_origin_state(identity);
     XR_CHECK(identity->object.kind==XIR_OBJECT_CLASS && identity->borrow_top==loan->previous &&
         (state&XIR_CLASS_ORIGIN_PREPARED),"whole Class access preserves its reserved parent");
-    loan->authority=*authority;identity->borrow_top=loan;
+    loan->authority=*authority;
+    if (loan->previous) {
+        XR_CHECK(!loan->previous->child,"a Class parent publishes only its exact youngest reservation");
+        loan->previous->child=loan;
+    }
+    identity->borrow_top=loan;
     atomic_store_explicit(&identity->publication_state,
         (state|XIR_CLASS_ORIGIN_BORROWED)&~(uint32_t)XIR_CLASS_ORIGIN_PREPARED,memory_order_release);
 }

@@ -36,9 +36,9 @@ def main():
     parser.add_argument('--write',action='store_true')
     args=parser.parse_args()
     records=list(frames().items())
-    for version in (25,26):
+    for version in (25,26,27):
         arrays={name:data for group in frames(version,84).values() for name,data in group.items()}
-        records.append(('xir_hash84_identity.h' if version==25 else 'xir_view_value26_identity.h',arrays))
+        records.append(('xir_hash84_identity.h' if version==25 else 'xir_view_value'+str(version)+'_identity.h',arrays))
     for filename,arrays in records:
         path=ROOT/filename
         source=path.read_text(encoding='utf-8')
@@ -47,14 +47,14 @@ def main():
             match=re.search(pattern,source,re.S)
             assert match,name
             actual=bytes(int(value,16) for value in re.findall(r'0x([0-9a-fA-F]{2})',match[2]))
-            if args.write and filename!='xir_hash84_identity.h':
+            if args.write and filename not in ('xir_hash84_identity.h','xir_view_value26_identity.h'):
                 rows='\n'+''.join('    '+','.join(f'0x{byte:02x}' for byte in expected[i:i+12])+',\n' for i in range(0,len(expected),12))
                 source=source[:match.start(2)]+rows+source[match.end(2):]
             else:
                 assert actual==expected,(filename,name,actual.hex(),expected.hex())
-        if args.write and filename!='xir_hash84_identity.h':
+        if args.write and filename not in ('xir_hash84_identity.h','xir_view_value26_identity.h'):
             path.write_text(source,encoding='utf-8')
-    print('Independent SourceProduct complete Value24, retired84/Value25 and current84/Value26 frames: PASS')
+    print('Independent SourceProduct complete Value24, retired84/Value25 and retired84/Value26 and current84/Value27 frames: PASS')
 
 if __name__=='__main__':
     main()

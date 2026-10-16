@@ -56,7 +56,7 @@ static void record_failure(const char *domain, const char *operation, bool has_s
     if (receiver_cleanup_enabled) { longjmp(receiver_failure, 1); } exit(1); } } while (0)
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 84u, "Formal Checked identity");
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
-_Static_assert(XR_XIR_VALUE_ABI_VERSION == 26u && XR_XIR_CALL_ABI_VERSION == 29u &&
+_Static_assert(XR_XIR_VALUE_ABI_VERSION == 27u && XR_XIR_CALL_ABI_VERSION == 29u &&
     XR_XIR_PROGRAM_ABI_VERSION == 30u, "Formal public runtime identity");
 
 typedef struct ReceiverRoles {

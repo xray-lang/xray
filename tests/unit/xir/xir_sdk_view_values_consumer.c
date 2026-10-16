@@ -27,7 +27,7 @@ static XrXirValueStatus sdk_view_authorize(void *context,const XrXirValue *value
     *output=scope->authority;return XR_XIR_VALUE_OK;
 }
 int main(void) {
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==26,"scoped view Value ABI");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==27,"scoped view Value ABI");
     const XrCompileResourceLimits limits={1048576,1048576,4000000};
     XrXirCompileContext c={0};CHECK(xr_compile_resources_new(&limits,&c.resources)==XR_COMPILE_RESOURCE_OK);
     c.limits=xr_xir_compile_default_limits();XrCompileResourceStats initial={0},final={0};

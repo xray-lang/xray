@@ -14,13 +14,25 @@
 #include "test_xir_compile_domain.c"
 #undef XR_COMPILE_DOMAIN_ENTRY
 
+typedef struct ViewLoan26 {
+    void *cell;const void *scope;struct ViewLoan26 *previous;XrXirCellAuthority authority;
+} ViewLoan26;
+typedef struct ViewStorage26 {
+    XrXirValue root;uint32_t kind;XrXirType element;int64_t offset,length;const ViewLoan26 *parent;
+    union {XrXirCellReadLoan shared;ViewLoan26 exclusive;} loan;
+} ViewStorage26;
+typedef struct ViewBody26 {XirObject object;ViewStorage26 storage;XrXirValue parent;uint32_t children;} ViewBody26;
+_Static_assert(sizeof(XrXirCellLoan)==sizeof(ViewLoan26)+sizeof(void *),"exclusive reservation adds one terminal child link");
+_Static_assert(sizeof(XrXirViewStorage)==sizeof(ViewStorage26) && sizeof(XirView)==sizeof(ViewBody26),
+    "one canonical parent and existing tail padding preserve view body size");
+
 typedef struct ViewBinding {int64_t payload;XrXirCellAuthority authority;} ViewBinding;
-typedef struct ViewScope {bool active,wrong;uint32_t count,calls;ViewBinding bindings[16];} ViewScope;
+typedef struct ViewScope {bool active,wrong;uint32_t count,calls;ViewBinding bindings[128];} ViewScope;
 static void view_bind(ViewScope *scope,const XrXirValue *value,XrXirCellAuthority authority) {
     for (uint32_t i=0;i<scope->count;++i) if (scope->bindings[i].payload==value->payload) {
         scope->bindings[i].authority=authority;return;
     }
-    CHECK(scope->count<16);scope->bindings[scope->count++]=(ViewBinding){value->payload,authority};
+    CHECK(scope->count<128);scope->bindings[scope->count++]=(ViewBinding){value->payload,authority};
 }
 static XrXirValueStatus view_authorize(void *context,const XrXirValue *value,bool writable,
     XrXirValueAdmission *admission,XrXirCellAuthority *output) {
@@ -64,6 +76,7 @@ static XrXirValueStatus view_values_fixture(XrCompileResources *resources,XrXirT
 }
 static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     XrXirTypeArena *arena=NULL;XrXirDomain *domain=NULL;XrXirValue values[12]={{0}},fields[2]={{0}};
+    XrXirValue chain[80]={{0}};XrXirCellLoan origin={0};
     XrXirValueStatus status=view_values_fixture(resources,&arena,&domain);if (status!=XR_XIR_VALUE_OK) goto done;
     XrXirValueAdmission admission={arena,domain,NULL,NULL,1000000,65536};
     ViewScope scope={.active=true};XrXirViewAccess access={&admission,view_authorize,&scope};
@@ -98,7 +111,12 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     TRY_VALUE(xr_xir_borrowed_some_take(&values[6],&access,&values[5]));CHECK(unit_value(&values[6]));
     TRY_VALUE(xr_xir_borrowed_tuple_unpack_move(&values[5],fields,2,&access));
     CHECK(unit_value(&values[5]) && fields[0].type==259 && fields[1].payload==55);
+    XrXirValue retired_parent=fields[0];
     xr_xir_value_drop(&fields[0]);xr_xir_value_drop(&fields[1]);xr_xir_value_drop(&values[3]);
+    CHECK(xr_xir_value_valid(&retired_parent));
+    CHECK(xr_xir_view_get(&retired_parent,0,&access,&values[11],&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&values[11]));
+    TRY_VALUE(xr_xir_cell_read(&values[1],&values[11]));xr_xir_value_drop(&values[11]);
+    CHECK(xr_xir_cell_write(&values[1],&values[0],&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
     spec=(XrXirViewStorageSpec){c,0,1,XR_XIR_TYPE_SLICE};
     TRY_VALUE(xr_xir_view_reborrow((XrXirType)258,&values[4],&spec,&access,&values[3]));view_bind(&scope,&values[3],c);
     TRY_VALUE(xr_xir_view_get(&values[3],0,&access,&values[11],&fault));CHECK(values[11].payload==22);
@@ -142,8 +160,39 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     uint32_t before_calls=scope.calls;uint64_t work=xr_xir_domain_budget_stats(domain).work;
     TRY_VALUE(xr_xir_borrowed_value_admit(&values[3],dag_type,&access));
     CHECK(scope.calls==before_calls+1 && xr_xir_domain_budget_stats(domain).work-work<20000);
+    xr_xir_value_drop(&values[3]);
+    for (uint32_t i=0;i<80;++i) {
+        XrXirCellAuthority authority={domain,&scope,100+i};
+        spec=(XrXirViewStorageSpec){authority,0,1,XR_XIR_TYPE_MUT_SLICE};
+        if (!i) TRY_VALUE(xr_xir_view_new((XrXirType)259,&values[1],NULL,&spec,&admission,&chain[i]));
+        else TRY_VALUE(xr_xir_view_reborrow((XrXirType)259,&chain[i-1],&spec,&access,&chain[i]));
+        view_bind(&scope,&chain[i],authority);
+    }
+    for (uint32_t i=0;i<79;i+=2) xr_xir_value_drop(&chain[i]);
+    for (uint32_t i=1;i<79;i+=2) xr_xir_value_drop(&chain[i]);
+    spec=(XrXirViewStorageSpec){{domain,&scope,179},0,1,XR_XIR_TYPE_SLICE};
+    TRY_VALUE(xr_xir_view_reborrow((XrXirType)258,&chain[79],&spec,&access,&values[4]));view_bind(&scope,&values[4],spec.authority);
+    xr_xir_value_drop(&chain[79]);
+    TRY_VALUE(xr_xir_cell_read(&values[1],&values[11]));xr_xir_value_drop(&values[11]);
+    TRY_VALUE(xr_xir_view_get(&values[4],0,&access,&values[11],&fault));CHECK(values[11].payload==11);
+    xr_xir_value_drop(&values[11]);xr_xir_value_drop(&values[4]);CHECK(xr_xir_cell_unborrowed(&values[1]));
+    TRY_VALUE(xr_xir_cell_loan_prepare(&values[1],NULL,&origin));xr_xir_cell_loan_commit(&values[1],&origin,&c);
+    spec=(XrXirViewStorageSpec){c,0,4,XR_XIR_TYPE_SLICE};
+    TRY_VALUE(xr_xir_view_new((XrXirType)258,&values[1],&c,&spec,&admission,&values[3]));view_bind(&scope,&values[3],c);
+    spec=(XrXirViewStorageSpec){b,1,1,XR_XIR_TYPE_SLICE};
+    TRY_VALUE(xr_xir_view_reborrow((XrXirType)258,&values[3],&spec,&access,&values[4]));view_bind(&scope,&values[4],b);
+    xr_xir_cell_loan_release(&origin);
+    CHECK(xr_xir_value_valid(&values[3]) && xr_xir_value_valid(&values[4]) && xr_xir_cell_unborrowed(&values[1]));
+    CHECK(xr_xir_view_get(&values[3],0,&access,&values[11],&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&values[11]));
+    CHECK(xr_xir_view_get(&values[4],0,&access,&values[11],&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&values[11]));
+    TRY_VALUE(xr_xir_array_new((XrXirType)256,NULL,0,&admission,&values[11]));
+    TRY_VALUE(xr_xir_cell_write(&values[1],&values[11],&admission));xr_xir_value_drop(&values[11]);
+    CHECK(xr_xir_value_valid(&values[3]) && xr_xir_value_valid(&values[4]));
 done:
+    for (unsigned i=80;i;--i) xr_xir_value_drop(&chain[i-1]);
     for (unsigned i=2;i;--i) xr_xir_value_drop(&fields[i-1]);
+    xr_xir_value_drop(&values[3]);
+    if (origin.cell) xr_xir_cell_loan_release(&origin);
     for (unsigned i=12;i;--i) xr_xir_value_drop(&values[i-1]);
     xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);CHECK(!live);return status;
 }
@@ -178,13 +227,15 @@ static void view_values_guards(XrCompileResources *resources) {
     xr_xir_value_drop(&some);xr_xir_value_drop(&cell);xr_xir_value_drop(&array);xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);
     const unsigned char retired25[8]={0x58,0x52,0x44,0x4d,0x19,0,0,1};
     CHECK(!xr_xir_domain_current((const XrXirDomain *)retired25));
+    const unsigned char retired26[8]={0x58,0x52,0x44,0x4d,0x1a,0,0,1};
+    CHECK(!xr_xir_domain_current((const XrXirDomain *)retired26));
 }
 int main(void) {
     XrCompileResourceLimits limits=compile_domain_limits();XrCompileResources *resources=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);size_t first=value_compile_calls;
     CHECK(view_values_sequence(resources)==XR_XIR_VALUE_OK);size_t sites=value_compile_calls-first;
     XrCompileResourceStats measured=compile_domain_stats(resources);CHECK(measured.live_bytes==sizeof(*resources));
-    xr_compile_resources_release(resources);CHECK(!value_compile_live && !value_compile_bytes && sites>20 && sites<128);
+    xr_compile_resources_release(resources);CHECK(!value_compile_live && !value_compile_bytes && sites>100 && sites<256);
     for (size_t at=0;at<sites;++at) {
         resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
         value_compile_injected=false;value_compile_fail_at=value_compile_calls+at;
@@ -207,5 +258,5 @@ int main(void) {
     resources=NULL;CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);view_values_guards(resources);
     CHECK(compile_domain_stats(resources).live_bytes==sizeof(*resources));xr_compile_resources_release(resources);
     CHECK(!value_compile_live && !value_compile_bytes && !live && !calls);
-    printf("View Value26: scope authority, affine move/aggregate, child pins, %zu allocation failures, exact axes and physical0 PASS\n",sites);return 0;
+    printf("View Value27: logical loan retirement, independent shared guards, %zu allocation failures, exact axes and physical0 PASS\n",sites);return 0;
 }

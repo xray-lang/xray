@@ -9,7 +9,7 @@
 XR_FUNC XrXirValueStatus xr_xir_call_class_access_prepare(const XrXirCallView *view,
     const XrXirValue *value,XrXirCallClassAccess *output) {
     if (!view || !value || !call_owner_current(view->activation) || !output || output->value ||
-        (output->loan.cell || output->loan.scope || output->loan.previous ||
+        (output->loan.cell || output->loan.scope || output->loan.previous || output->loan.child ||
         output->loan.authority.activation || output->loan.authority.frame || output->loan.authority.epoch) || output->authority.activation ||
         output->authority.frame || output->authority.epoch) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority authority={0};

@@ -127,7 +127,7 @@ XR_FUNC const XrXirValue *xr_xir_cell_canonical_root(const XrXirValue *value) {
     return cell ? (cell->projection_count ? &cell->value : value) : NULL;
 }
 static bool cell_loan_empty(const XrXirCellLoan *loan) {
-    return loan && !loan->cell && !loan->scope && !loan->previous &&
+    return loan && !loan->cell && !loan->scope && !loan->previous && !loan->child &&
         !loan->authority.activation && !loan->authority.frame && !loan->authority.epoch;
 }
 static XrXirValueStatus cell_loan_prepare_operation(const XrXirValue *value,
@@ -154,7 +154,7 @@ static XrXirValueStatus cell_loan_prepare_operation(const XrXirValue *value,
         if (identity) class_origin_cancel(identity);
         return status != XR_XIR_VALUE_OK ? status : XR_XIR_VALUE_BAD_ARGUMENT;
     }
-    *output = (XrXirCellLoan){owner, cell, *top, {0}};
+    *output = (XrXirCellLoan){.cell=owner,.scope=cell,.previous=*top};
     /* Preparation excludes all aliases until this exact record commits or aborts. */
     if (storage) storage->prepared_loan = output;
     return XR_XIR_VALUE_OK;
@@ -191,7 +191,12 @@ XR_FUNC void xr_xir_cell_loan_commit(const XrXirValue *value, XrXirCellLoan *loa
         "Class loan commit owns the actual exclusive reservation");
     XR_CHECK(owner->kind != XIR_OBJECT_CELL || ((XirCell *)owner)->prepared_loan == loan,
         "Cell loan commit owns its exact exclusive reservation");
-    loan->authority = *authority; *top = loan;
+    loan->authority = *authority;
+    if (loan->previous) {
+        XR_CHECK(!loan->previous->child,"the published parent has no younger exclusive reservation");
+        loan->previous->child=loan;
+    }
+    *top = loan;
     if (owner->kind == XIR_OBJECT_CLASS)
         atomic_store_explicit(&((XirClassObject *)owner)->publication_state,
             (state | XIR_CLASS_ORIGIN_BORROWED) & ~(uint32_t)XIR_CLASS_ORIGIN_PREPARED, memory_order_release);
@@ -209,14 +214,53 @@ XR_FUNC void xr_xir_cell_loan_release(XrXirCellLoan *loan) {
     XR_CHECK(identity || !((const XirCell *)owner)->prepared_read_loan,
         "live Cell loan release cannot race a prepared read reservation");
     XrXirCellLoan **top = cell_root_loans(owner);
-    XR_CHECK(top && *top == loan, "cell loans restore their exact immediate parent");
+    XR_CHECK(top && *top == loan && !loan->child, "cell loans restore their exact immediate parent");
+    if (!identity) {
+        XirCell *cell=(XirCell *)owner;
+        /* Read guards exclude new exclusive loans, so every published guard
+         * descends from this ending scope. Delegation may change its authority;
+         * revoking every link visits each prepaid record at most once. */
+        XrXirCellReadLoan *read=cell->read_loans;
+        while (read) {
+            XrXirCellReadLoan *next=read->next;
+            XR_CHECK(read->previous && *read->previous==read,"scope revocation owns the exact read link");
+            *read->previous=next;
+            if (next) next->previous=read->previous;
+            read->previous=NULL;read->next=NULL;read->authority=(XrXirCellAuthority){0};
+            read=next;
+        }
+    }
     *top = loan->previous;
+    if (loan->previous) {
+        XR_CHECK(loan->previous->child==loan,"exclusive parent preserves its exact youngest child");
+        loan->previous->child=NULL;
+    }
     if (identity) {
         uint32_t state = class_origin_state(identity) & ~(uint32_t)XIR_CLASS_ORIGIN_PREPARED;
         if (!*top) state &= ~(uint32_t)XIR_CLASS_ORIGIN_BORROWED;
         atomic_store_explicit(&identity->publication_state, state, memory_order_release);
     }
     *loan = (XrXirCellLoan){0};
+}
+/* Whole-Cell view reservations may retire before their physical child pins.
+ * Both stack directions make terminal unlink independent of stack depth. */
+static void cell_loan_detach(XrXirCellLoan *loan) {
+    XR_CHECK(loan && loan->cell && cell_authority_valid(&loan->authority),"detachment owns a live exclusive reservation");
+    XirCell *cell=loan->cell;
+    XR_CHECK(cell->object.kind==XIR_OBJECT_CELL && loan->scope==cell && !cell->projection_count &&
+        !cell->prepared_loan && !cell->prepared_read_loan,"view detachment preserves its whole stable root");
+    if (loan->child) {
+        XR_CHECK(loan->child->previous==loan,"detachment preserves the exact younger reservation");
+        loan->child->previous=loan->previous;
+    } else {
+        XR_CHECK(cell->borrow_top==loan,"the youngest detached reservation is the root head");
+        cell->borrow_top=loan->previous;
+    }
+    if (loan->previous) {
+        XR_CHECK(loan->previous->child==loan,"detachment preserves the exact older reservation");
+        loan->previous->child=loan->child;
+    }
+    *loan=(XrXirCellLoan){0};
 }
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_read(const XrXirValue *value,
     const XrXirCellAuthority *authority, XrXirValue *output) {

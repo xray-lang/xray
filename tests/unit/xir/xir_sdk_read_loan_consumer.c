@@ -36,10 +36,10 @@ int main(void) {
     CHECK(xr_xir_array_new((XrXirType)256,items,2,&admission,&array)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_new(domain,arena,(XrXirType)257,&array,&admission,&cell)==XR_XIR_VALUE_OK);
     const XrXirCellAuthority authority={context.resources,arena,7};XrXirCellReadLoan first={0},second={0};
-    CHECK(xr_xir_cell_read_loan_prepare(&cell,&authority,&admission,&first)==XR_XIR_VALUE_OK);
-    xr_xir_cell_read_loan_commit(&cell,&first,&authority);
-    CHECK(xr_xir_cell_read_loan_prepare(&cell,&authority,&admission,&second)==XR_XIR_VALUE_OK);
-    xr_xir_cell_read_loan_commit(&cell,&second,&authority);
+    CHECK(xr_xir_cell_read_loan_prepare(&cell,&authority,NULL,&admission,&first)==XR_XIR_VALUE_OK);
+    xr_xir_cell_read_loan_commit(&cell,&first,&authority,NULL);
+    CHECK(xr_xir_cell_read_loan_prepare(&cell,&authority,NULL,&admission,&second)==XR_XIR_VALUE_OK);
+    xr_xir_cell_read_loan_commit(&cell,&second,&authority,NULL);
     const XrXirValuePathStep step={XR_XIR_PATH_INDEX,(XrXirType)256,0};
     const XrXirValuePath path={&step,1};XrXirFaultDetail fault={0};
     CHECK(xr_xir_cell_authorized_path_write(&cell,&authority,&path,&number,&admission,&fault)==XR_XIR_VALUE_BAD_ARGUMENT);

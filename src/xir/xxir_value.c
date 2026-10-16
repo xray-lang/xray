@@ -91,9 +91,11 @@ typedef struct XirView {
     XirObject object;
     XrXirViewStorage storage;
     XrXirValue parent;
-    uint32_t children;
+    uint32_t children, state;
 } XirView;
+enum { XIR_VIEW_ACTIVE, XIR_VIEW_RETIRED };
 static bool view_value_valid(const XirView *view);
+static void view_value_detach(XirView *view);
 _Static_assert(sizeof(XrXirCellAuthority)==2*sizeof(XrXirCellReadLoan *)+sizeof(uint64_t),
     "whole-root read links reuse the projection-only authority storage");
 static bool cell_projection_valid(const XirCell *cell);
@@ -132,7 +134,7 @@ _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8
 static void class_observation_dispose(XrXirDomain *domain);
 /* The immutable prefix is readable before any generation-specific field.
  * Its fifth byte excludes both supported old atomic-bool representations. */
-static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x1a,0x00,0x00,0x01};
+static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x1b,0x00,0x00,0x01};
 _Static_assert(offsetof(XrXirDomain, identity) == 0 && sizeof(atomic_bool) == 1 &&
     sizeof(_Atomic(uint32_t)) == 4, "domain identity rejects the complete retired prefix");
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain) {
@@ -735,6 +737,11 @@ static void queue_release(const XrXirValue *value, XirObject **pending) {
     if (!owned_carrier_type((XrXirType) value->type)) return;
     XirObject *object = object_pointer(value);
     if (empty_enum_object(object)) { xr_xir_compile_type_arena_drop(object->arena); return; }
+    if (object->kind==XR_XIR_TYPE_MUT_SLICE || object->kind==XR_XIR_TYPE_SLICE) {
+        XirView *view=(XirView *)object;
+        if (view->state==XIR_VIEW_ACTIVE && (uint64_t)atomic_load_explicit(&object->references,memory_order_acquire)==
+            (uint64_t)view->children+1u) view_value_detach(view);
+    }
     graph_lock();
     graph_object_release_locked(object, pending);
     graph_unlock();
@@ -833,7 +840,8 @@ static void release_pending(XirObject *pending) {
         } else if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
             XirView *view=(XirView *)object;
             XR_CHECK(!object->graph_dead && !view->children,"view retirement follows all physical child pins");
-            xr_xir_view_storage_end(&view->storage);
+            if (view->state==XIR_VIEW_RETIRED) xr_xir_value_drop(&view->storage.root);
+            else xr_xir_view_storage_end(&view->storage);
             if (!unit_value(&view->parent)) {
                 XirView *parent=(XirView *)object_pointer(&view->parent);
                 XR_CHECK(parent->children,"a child retires its exact parent reservation");

@@ -20,8 +20,7 @@ typedef struct XrXirViewStorage {
     uint32_t kind;
     XrXirType element;
     int64_t offset, length;
-    const XrXirCellLoan *parent;
-    union { XrXirCellReadLoan shared; XrXirCellLoan exclusive; } loan;
+    union { XrXirCellLoan exclusive; XrXirCellReadLoan shared; } loan;
 } XrXirViewStorage;
 
 typedef struct XrXirViewStorageSpec {

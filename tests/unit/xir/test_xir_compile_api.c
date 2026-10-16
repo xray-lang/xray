@@ -52,5 +52,5 @@ _Static_assert(offsetof(XrXirCompileLimits,functions)==0 && offsetof(XrXirCompil
 _Static_assert(sizeof(XrXirCompileContext)==32 && _Alignof(XrXirCompileContext)==8 &&
     offsetof(XrXirCompileContext,resources)==0 && offsetof(XrXirCompileContext,limits)==8,"compile context layout");
 _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==30 && XR_XIR_CALL_ABI_VERSION==29 &&
-    XR_XIR_VALUE_ABI_VERSION==26,"compile owner admission ABI");
+    XR_XIR_VALUE_ABI_VERSION==27,"compile owner admission ABI");
 int main(void) { return 0; }
