@@ -38,6 +38,20 @@ TEST(spec_find_command_run) {
     ASSERT_TRUE(spec->allow_passthrough);
 }
 
+TEST(spec_source_repl_namespace_registered) {
+    const XrCliCommandSpec *spec=xr_cli_find_command("repl");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_EQ_INT(spec->positional_min,0);
+    ASSERT_EQ_INT(spec->positional_max,0);
+    ASSERT_FALSE(spec->allow_passthrough);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options),1);
+    char *argv[]={"--module-id","genuine-session"};XrCliInvocation invocation={0};
+    XrCliContext context={.program="xray"};
+    ASSERT_EQ_INT(xr_cli_parse_command(spec,2,argv,&context,&invocation),XR_CLI_EXIT_OK);
+    ASSERT_STR_EQ(xr_cli_opt_string(&invocation.options,"module-id",NULL),"genuine-session");
+    xr_cli_invocation_free(&invocation);
+}
+
 TEST(spec_retired_eval_command_removed) {
     ASSERT_NULL(xr_cli_find_command("eval"));
 }
@@ -795,7 +809,22 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Command Registry");
 RUN_TEST(spec_get_commands_not_null);
 RUN_TEST(spec_find_command_run);
-RUN_TEST(spec_retired_eval_command_removed);
+RUN_TEST(spec_source_repl_namespace_registered);
+RUN_TEST(spec_source_repl_namespace_registered) {
+    const XrCliCommandSpec *spec=xr_cli_find_command("repl");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_EQ_INT(spec->positional_min,0);
+    ASSERT_EQ_INT(spec->positional_max,0);
+    ASSERT_FALSE(spec->allow_passthrough);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options),1);
+    char *argv[]={"--module-id","genuine-session"};XrCliInvocation invocation={0};
+    XrCliContext context={.program="xray"};
+    ASSERT_EQ_INT(xr_cli_parse_command(spec,2,argv,&context,&invocation),XR_CLI_EXIT_OK);
+    ASSERT_STR_EQ(xr_cli_opt_string(&invocation.options,"module-id",NULL),"genuine-session");
+    xr_cli_invocation_free(&invocation);
+}
+
+TEST(spec_retired_eval_command_removed);
 RUN_TEST(spec_find_command_test_options);
 RUN_TEST(spec_find_command_self_subcommands);
 RUN_TEST(spec_retired_fix_command_removed);
