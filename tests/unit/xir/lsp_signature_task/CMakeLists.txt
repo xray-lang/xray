@@ -17,3 +17,11 @@ foreach(mode normal resources counterfactual)
     set_tests_properties(test_lsp_signature_task_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership;allocation")
 endforeach()
 set_tests_properties(test_lsp_signature_task_resources PROPERTIES PROCESSORS 8 COST 290)
+
+foreach(variant 18 20 21 22 24)
+    add_test(NAME test_lsp_signature_task_generic_resources_${variant}
+        COMMAND "${Python3_EXECUTABLE}" -X utf8 "${CMAKE_CURRENT_LIST_DIR}/test_signature.py"
+        "$<TARGET_FILE:test_lsp_signature_task>" "${PROJECT_SOURCE_DIR}/stdlib" --generic-resources ${variant})
+    set_tests_properties(test_lsp_signature_task_generic_resources_${variant} PROPERTIES
+        TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 8 COST 290 LABELS "unit;lsp;source;ownership;allocation")
+endforeach()

@@ -40,6 +40,29 @@ static void signature_fixture(SignatureFixture *f,const SignatureOptions *option
         text="import { Box } from \"./lib\"\nfn main()->i64 {\n const box=Box{value:1}\n return box.add(\n  2\n )\n}\n";
         library="export struct Box {\n const value:i64\n add(other:i64)->i64 {return this.value+other}\n}\n";
     }
+    if(options->scenario==18||options->scenario==19||options->scenario==23) {
+        library="export fn mix<T>(left:T,right:T)->T {return left}\n";
+        if(options->scenario==18)
+            text="import { mix } from \"./lib\"\nfn main()->i64 {\n return mix<i64>(\n  1,\n  2\n )\n}\n";
+        if(options->scenario==23)
+            text="import { mix } from \"./lib\"\nfn main()->i64 {\n return mix(\n  mix(1,2),\n  3\n )\n}\n";
+    }
+    if(options->scenario==20) {
+        text="import { Box } from \"./lib\"\nfn main()->i64 {\n const box=Box<i64>{value:1}\n return box.add(\n  2\n )\n}\n";
+        library="export struct Box<T> {\n const value:T\n add(other:T)->T {return other}\n}\n";
+    }
+    if(options->scenario==21) {
+        text="import { Box } from \"./lib\"\nfn main()->i64 {\n return Box<i64>.pick(\n  2\n )\n}\n";row=3;
+        library="export struct Box<T> {\n const value:T\n static pick(value:T)->T {return value}\n}\n";
+    }
+    if(options->scenario==22) {
+        text="import { mix } from \"./lib\"\nfn main()->(i64,i64) {\n return mix<i64>(\n  1,\n  2\n )\n}\n";
+        library="export fn mix<T>(left:T,right:T)->(T,T) {return (left,right)}\n";
+    }
+    if(options->scenario==24) {
+        text="import { mix } from \"./lib\"\nfn wrapper<Item>(value:Item)->Item {\n return mix(\n  value,\n  value\n )\n}\nfn main()->i64 {return wrapper(1)}\n";
+        library="export fn mix<T>(left:T,right:T)->T {return left}\n";
+    }
     add_document(&f->server,options->uri,text,1);add_document(&f->server,options->library,library,7);
     f->params=parameters(options->uri);XrJsonValue *position=xjson_get_object(f->params,"position");
     xjson_get(position,"line")->as.integer=row;xjson_get(position,"character")->as.integer=column;
@@ -154,12 +177,12 @@ static int signature_main(int argc,char **argv) {
     SignatureMetrics metrics={0};
     if(!strcmp(argv[4],"--resource")){CHECK(argc==8);options.source_fault=(size_t)strtoull(argv[5],NULL,10);
         options.json_fault=(size_t)strtoull(argv[6],NULL,10);options.scenario=(unsigned)strtoul(argv[7],NULL,10);
-        CHECK(options.scenario==0||(options.scenario>=10&&options.scenario<=12));return signature_once(&options,&metrics);}
+        CHECK(options.scenario==0||(options.scenario>=10&&options.scenario<=12)||(options.scenario>=18&&options.scenario<=24));return signature_once(&options,&metrics);}
     if(!strcmp(argv[4],"--chunk")) {
         CHECK(argc==10);bool source=!strcmp(argv[5],"source");CHECK(source||!strcmp(argv[5],"json"));
         size_t start=(size_t)strtoull(argv[6],NULL,10),count=(size_t)strtoull(argv[7],NULL,10),total=(size_t)strtoull(argv[8],NULL,10);
         CHECK(count&&start<total&&count<=total-start);options.report=false;options.scenario=(unsigned)strtoul(argv[9],NULL,10);
-        CHECK(options.scenario==0||(options.scenario>=10&&options.scenario<=12));
+        CHECK(options.scenario==0||(options.scenario>=10&&options.scenario<=12)||(options.scenario>=18&&options.scenario<=24));
         for(size_t i=0;i<count;++i){options.source_fault=source?start+i:SIZE_MAX;options.json_fault=source?SIZE_MAX:start+i;
             CHECK(!signature_once(&options,&metrics));}
         fprintf(stderr,"SIGNATURE_CHUNK domain=%s start=%zu count=%zu total=%zu checked=%zu physical0/0 JSON0/0 app0/0\n",
@@ -167,7 +190,7 @@ static int signature_main(int argc,char **argv) {
     }
     if(!strcmp(argv[4],"--axes")) {
         CHECK(argc==9);options.report=false;options.scenario=(unsigned)strtoul(argv[8],NULL,10);
-        CHECK(options.scenario==0||(options.scenario>=10&&options.scenario<=12));
+        CHECK(options.scenario==0||(options.scenario>=10&&options.scenario<=12)||(options.scenario>=18&&options.scenario<=24));
         XrCompileResourceLimits baseline={(uint64_t)strtoull(argv[5],NULL,10),(uint64_t)strtoull(argv[6],NULL,10),(uint64_t)strtoull(argv[7],NULL,10)};
         CHECK(baseline.allocated_bytes<=UINT64_C(64)*1024*1024&&baseline.live_bytes<=UINT64_C(8)*1024*1024&&baseline.work<=UINT64_C(128000000));
         for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){XrCompileResourceLimits cut=baseline;
@@ -175,7 +198,7 @@ static int signature_main(int argc,char **argv) {
             *bound=(uint64_t)((int64_t)*bound+delta);options.limits=&cut;options.budget=delta<0;CHECK(!signature_once(&options,&metrics));}
         fprintf(stderr,"SIGNATURE_AXES checked=9 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
     }
-    CHECK(argc==5);options.scenario=(unsigned)strtoul(argv[4],NULL,10);CHECK(options.scenario<=17);
+    CHECK(argc==5);options.scenario=(unsigned)strtoul(argv[4],NULL,10);CHECK(options.scenario<=24);
     return signature_once(&options,&metrics);
 }
 #endif // LSP_SIGNATURE_TASK_CASES_H

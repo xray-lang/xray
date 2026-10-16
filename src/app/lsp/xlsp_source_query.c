@@ -1,6 +1,7 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #include "xlsp_source_query.h"
 #include "xlsp_source_signature.h"
+#include "../../xir/xxir_source_calls.h"
 #include "../../module/xmodule_overlay.h"
 #include "../../shared/xr_utf8_core.h"
 #include <limits.h>

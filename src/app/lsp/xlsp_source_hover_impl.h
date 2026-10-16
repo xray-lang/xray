@@ -59,7 +59,8 @@ static void hover_mode(LspHoverBuilder *b,uint32_t mode) {
 typedef struct LspHoverTypeFrame {XrXirType type;uint32_t stage,index;} LspHoverTypeFrame;
 /* Explicit traversal stack: no native recursion and no guessed depth bound.
  * A verified type graph is acyclic; an active path cannot exceed pool+1. */
-static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source) {
+static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source,
+    const char *const *names,uint32_t name_count,uint32_t name_owner) {
     if(b->status!=XR_XIR_OK)return;
     if(!source.known){b->status=XR_XIR_UNRESOLVED;return;}
     LspHoverTypeFrame *stack=NULL;size_t count=0,capacity=0;
@@ -80,7 +81,13 @@ static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceTy
         LspHoverTypeFrame *f=&stack[count-1];
         const char *builtin=hover_builtin(f->type);
         if(builtin){hover_text(b,builtin);--count;continue;}
-        if((uint32_t)f->type>=XR_XIR_TYPE_PARAMETER_BASE){b->status=XR_XIR_UNSUPPORTED;break;}
+        if((uint32_t)f->type>=XR_XIR_TYPE_PARAMETER_BASE) {
+            uint32_t ordinal=(uint32_t)f->type-XR_XIR_TYPE_PARAMETER_BASE;
+            if(!source.generic_owner||source.generic_owner!=name_owner||ordinal>=name_count||!names||!names[ordinal]) {
+                b->status=XR_XIR_UNSUPPORTED;break;
+            }
+            hover_text(b,names[ordinal]);--count;continue;
+        }
         const XrXirTypeNode *n=hover_node(v,f->type);
         if(!n){b->status=XR_XIR_BAD_TYPE;break;}
         if(n->kind==XR_XIR_TYPE_ARRAY||n->kind==XR_XIR_TYPE_CELL||n->kind==XR_XIR_TYPE_ATOMIC||n->kind==XR_XIR_TYPE_TASK||n->kind==XR_XIR_TYPE_NULLABLE) {
@@ -132,6 +139,9 @@ static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceTy
         b->status=XR_XIR_UNSUPPORTED;
     }
     xr_compile_resources_free(stack);
+}
+static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source) {
+    hover_type_named(b,v,source,NULL,0,0);
 }
 static void hover_qualified_name(LspHoverBuilder *b,const XrXirSourceView *v,const XrXirSourceDeclaration *d) {
     /* A member's actual immediate owner supplies the qualifier. Do not invent

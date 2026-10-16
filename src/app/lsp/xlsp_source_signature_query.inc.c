@@ -34,8 +34,62 @@ static XrXirStatus signature_parameter_mode(const XlspSourceSnapshot *s,
     *out=mode;return XR_XIR_OK;
 }
 
+static XrXirStatus signature_call_equal(const XlspSourceSnapshot *s,const XrXirSourceCallSignature *a,
+    const XrXirSourceCallSignature *b) {
+    if(a->parameter_count!=b->parameter_count||a->receiver_count!=b->receiver_count||
+        a->result.type!=b->result.type||a->result.generic_owner!=b->result.generic_owner||
+        a->type_parameter_count!=b->type_parameter_count||a->type_parameter_owner!=b->type_parameter_owner)
+        return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t p=0;p<a->type_parameter_count;++p)for(size_t c=0;;++c) {
+        XrXirStatus status=lsp_work(s,2);if(status!=XR_XIR_OK)return status;
+        if(a->type_parameters[p][c]!=b->type_parameters[p][c])return XR_XIR_BAD_STRUCTURE;
+        if(!a->type_parameters[p][c])break;
+    }
+    for(uint32_t i=0;i<a->parameter_count;++i) {
+        XrXirStatus status=lsp_work(s,sizeof(XrXirSourceType));if(status!=XR_XIR_OK)return status;
+        if(a->parameters[i].type!=b->parameters[i].type||
+            a->parameters[i].generic_owner!=b->parameters[i].generic_owner)return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus signature_call_observation(const XlspSourceSnapshot *s,
+    const XlspSourceSignatureSelection *selection,uint32_t target,const XrXirSourceCallSignature **out) {
+    const LspSourceText *text=NULL;
+    for(size_t i=0;i<s->count;++i) {
+        XrXirStatus status=lsp_work(s,1);if(status!=XR_XIR_OK)return status;
+        if(s->texts[i].uri_length!=selection->uri_length)continue;
+        bool equal=false;status=lsp_equal(s,s->texts[i].uri,selection->uri,selection->uri_length,&equal);
+        if(status!=XR_XIR_OK)return status;if(equal){text=&s->texts[i];break;}
+    }
+    if(!text)return XR_XIR_UNRESOLVED;
+    XlspSourceCursor start={0},end={0};
+    XrXirStatus status=xlsp_source_cursor(s->resources,text->text,text->length,selection->call.callee.start,&start);
+    if(status==XR_XIR_OK)status=xlsp_source_cursor(s->resources,text->text,text->length,selection->call.callee.end,&end);
+    if(status!=XR_XIR_OK)return status;
+    const XrXirSourceCalls *calls=xr_xir_compile_source_snapshot_calls(s->query);
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(s->query);
+    if(!calls)return XR_XIR_UNSUPPORTED;
+    const XrXirSourceCallSignature *accepted=NULL;
+    for(uint32_t i=0;i<calls->count;++i) {
+        status=lsp_work(s,sizeof(XrXirSourceCall));if(status!=XR_XIR_OK)return status;
+        const XrXirSourceCall *call=&calls->items[i];
+        if(!call->selection_known||call->range.line!=start.line||call->range.column!=start.column||
+            call->range.end_line!=end.line||call->range.end_column!=end.column)continue;
+        bool matches=false;status=lsp_text_has_module(s,text,call->range.module,&matches);
+        if(status!=XR_XIR_OK)return status;if(!matches)continue;
+        if(call->reference>=view->reference_count||!call->signature.known)return XR_XIR_UNSUPPORTED;
+        uint32_t candidate=view->references[call->reference].target;
+        status=lsp_target(s,view,&candidate);if(status!=XR_XIR_OK)return status;
+        status=lsp_symbol_equal(s,view,target,candidate,&matches);if(status!=XR_XIR_OK)return status;
+        if(!matches)return XR_XIR_BAD_STRUCTURE;
+        if(accepted){status=signature_call_equal(s,accepted,&call->signature);if(status!=XR_XIR_OK)return status;}
+        else accepted=&call->signature;
+    }
+    if(!accepted)return XR_XIR_UNSUPPORTED;*out=accepted;return XR_XIR_OK;
+}
 static XrXirStatus signature_parameters(const XlspSourceSnapshot *s,const XrXirSourceView *view,
-    const XrXirSourceDeclaration *declaration,const XrXirSourceSyntaxView *syntax,XlspSourceSignature *result) {
+    const XrXirSourceDeclaration *declaration,const XrXirSourceSyntaxView *syntax,
+    const XrXirSourceCallSignature *call,XlspSourceSignature *result) {
     uint32_t index=0;
     for(uint32_t i=0;i<view->declaration_count;++i) {
         XrXirStatus status=lsp_work(s,sizeof(XrXirSourceDeclaration));if(status!=XR_XIR_OK)return status;
@@ -44,14 +98,17 @@ static XrXirStatus signature_parameters(const XlspSourceSnapshot *s,const XrXirS
         if(index>=declaration->parameter_count||!declaration->parameters||!parameter->type.known||
             !declaration->parameters[index].known||parameter->type.type!=declaration->parameters[index].type||
             parameter->type.generic_owner!=declaration->parameters[index].generic_owner)return XR_XIR_BAD_STRUCTURE;
-        ++index;
-        if(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_RECEIVER)continue;
+        if(index>=call->parameter_count||!call->parameters[index].known)return XR_XIR_BAD_STRUCTURE;
+        bool receiver=syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_RECEIVER;
+        if(receiver!=(index<call->receiver_count))return XR_XIR_BAD_STRUCTURE;
+        XrXirSourceType shown=call->parameters[index++];
+        if(receiver)continue;
         if(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED)return XR_XIR_UNSUPPORTED;
         uint32_t mode=0;status=signature_parameter_mode(s,syntax,parameter,&mode);
         if(status!=XR_XIR_OK)return status;
         LspHoverBuilder builder={s,NULL,0,0,XR_XIR_OK};
         hover_text(&builder,parameter->name);hover_text(&builder,": ");hover_mode(&builder,mode);
-        hover_type(&builder,view,parameter->type);
+        hover_type_named(&builder,view,shown,call->type_parameters,call->type_parameter_count,call->type_parameter_owner);
         if(builder.status!=XR_XIR_OK){xr_compile_resources_free(builder.text);return builder.status;}
         result->parameters[result->parameter_count++]=(XlspSourceHover){builder.text,builder.length};
     }
@@ -70,24 +127,32 @@ XR_FUNC XrXirStatus xlsp_source_signature(const XlspSourceSnapshot *s,
     const XrXirSourceSyntaxView *syntax=lsp_syntax(s,view);
     if(!syntax||!id||id>view->declaration_count)return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceDeclaration *declaration=&view->declarations[id-1];
-    if(declaration->kind!=XR_XIR_SOURCE_FUNCTION||declaration->generic_parameter_count||
-        declaration->generic_parent_count||declaration->native_identity||declaration->signature)
+    if(declaration->kind!=XR_XIR_SOURCE_FUNCTION||declaration->native_identity||declaration->signature)
         return XR_XIR_UNSUPPORTED;
+    const XrXirSourceCallSignature *call=NULL;
+    status=signature_call_observation(s,selection,id,&call);if(status!=XR_XIR_OK)return status;
+    if(call->parameter_count!=declaration->parameter_count)return XR_XIR_BAD_STRUCTURE;
     XlspSourceSignature result={0};result.active_argument=selection->call.active_argument;
     if(declaration->parameter_count) {
         status=lsp_resource_status(xr_compile_resources_calloc(s->resources,declaration->parameter_count,
             sizeof(*result.parameters),(void **)&result.parameters));
         if(status!=XR_XIR_OK)return status;
     }
-    status=signature_parameters(s,view,declaration,syntax,&result);
+    status=signature_parameters(s,view,declaration,syntax,call,&result);
     if(status!=XR_XIR_OK)goto done;
     LspHoverBuilder builder={s,NULL,0,0,XR_XIR_OK};
-    hover_text(&builder,"fn ");hover_qualified_name(&builder,view,declaration);hover_text(&builder,"(");
+    hover_text(&builder,"fn ");
+    if(call->receiver_count&&declaration->parent&&view->declarations[declaration->parent-1].kind==XR_XIR_SOURCE_TYPE) {
+        hover_type_named(&builder,view,call->parameters[0],call->type_parameters,call->type_parameter_count,call->type_parameter_owner);
+        hover_text(&builder,".");hover_text(&builder,declaration->name);
+    } else hover_qualified_name(&builder,view,declaration);
+    hover_text(&builder,"(");
     for(size_t i=0;i<result.parameter_count&&builder.status==XR_XIR_OK;++i) {
         if(i)hover_text(&builder,", ");
         hover_bytes(&builder,result.parameters[i].text,result.parameters[i].length);
     }
-    hover_text(&builder,") -> ");hover_type(&builder,view,declaration->type);
+    hover_text(&builder,") -> ");
+    hover_type_named(&builder,view,call->result,call->type_parameters,call->type_parameter_count,call->type_parameter_owner);
     status=builder.status;result.label=(XlspSourceHover){builder.text,builder.length};
     if(status==XR_XIR_OK){*out=result;result=(XlspSourceSignature){0};}
 done:
