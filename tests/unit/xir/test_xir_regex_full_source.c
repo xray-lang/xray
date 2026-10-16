@@ -14,19 +14,50 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
 #ifdef XR_BUILD_ASAN
 #define xr_compile_resources_work full_regex_resource_work
+#define xr_compile_resources_alloc full_regex_resource_alloc
+#define xr_compile_resources_calloc full_regex_resource_calloc
+#define xr_compile_resources_resize full_regex_resource_resize
 #endif
 #include "xir_source_compile_owner.h"
 #ifdef XR_BUILD_ASAN
 #undef xr_compile_resources_work
+#undef xr_compile_resources_alloc
+#undef xr_compile_resources_calloc
+#undef xr_compile_resources_resize
 #include <sanitizer/common_interface_defs.h>
+static bool full_regex_trace;
+static uint64_t full_regex_trace_next=8000000;
+static void full_regex_work_trace(XrCompileResources *resources,uint64_t units) {
+ if(!full_regex_trace)return;
+ static uint64_t observed;observed+=units;if(observed<full_regex_trace_next)return;
+ full_regex_trace_next+=8000000;XrCompileResourceStats stats={0};
+ CHECK(xr_compile_resources_stats(resources,&stats)==XR_COMPILE_RESOURCE_OK);
+ fprintf(stderr,"Actual Regex work sample%llu allocated%llu live%llu\n",(unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes);__sanitizer_print_stack_trace();
+}
 XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources,uint64_t units) {
  XrCompileResourceStatus status=full_regex_resource_work(resources,units);
+ if(status==XR_COMPILE_RESOURCE_OK)full_regex_work_trace(resources,units);
+ if(status==XR_COMPILE_RESOURCE_BUDGET)__sanitizer_print_stack_trace();return status;
+}
+XR_FUNC XrCompileResourceStatus xr_compile_resources_alloc(XrCompileResources *resources,size_t bytes,void **output) {
+ XrCompileResourceStatus status=full_regex_resource_alloc(resources,bytes,output);
+ if(status==XR_COMPILE_RESOURCE_BUDGET)__sanitizer_print_stack_trace();return status;
+}
+XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(XrCompileResources *resources,size_t count,size_t size,void **output) {
+ XrCompileResourceStatus status=full_regex_resource_calloc(resources,count,size,output);
+ if(status==XR_COMPILE_RESOURCE_BUDGET)__sanitizer_print_stack_trace();return status;
+}
+XR_FUNC XrCompileResourceStatus xr_compile_resources_resize(XrCompileResources *resources,void **memory,size_t bytes) {
+ XrCompileResourceStatus status=full_regex_resource_resize(resources,memory,bytes);
  if(status==XR_COMPILE_RESOURCE_BUDGET)__sanitizer_print_stack_trace();return status;
 }
 #endif
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_source.h"
 int main(void) {
+#ifdef XR_BUILD_ASAN
+ full_regex_trace=getenv("XR_REGEX_WORK_TRACE")!=NULL;
+#endif
  FILE *file=fopen(XR_REGEX_FULL_SOURCE,"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>0 && length<1048576 && !fseek(file,0,SEEK_SET));
  char *bytes=xr_malloc((size_t)length);CHECK(bytes && fread(bytes,1,(size_t)length,file)==(size_t)length && !fclose(file));
  uint8_t digest[32];xr_sha256((const uint8_t *)bytes,(size_t)length,digest);fprintf(stderr,"Actual full Regex source bytes=%ld sha256=",length);for(unsigned i=0;i<32;++i)fprintf(stderr,"%02x",(unsigned)digest[i]);fputc('\n',stderr);
