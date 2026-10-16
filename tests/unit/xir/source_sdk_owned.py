@@ -59,6 +59,7 @@ def main():
         if not secondary.samefile(compilers[0]):
             compilers.append(secondary)
     expected = (b'Installed public REPL: typed history, busy callback, cancel/defer, resume and owned survivors PASS\n'
+                b'Installed public REPL inspection: visible bindings, nonpublishing types and owned survivors PASS\n'
                 b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n')
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
@@ -101,6 +102,8 @@ def main():
     summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++20'],
                    published_headers=sorted(headers), exact_NUL_UTF8=True, independent_persistent_instances=True,
                    foreign_callable_refused=True, all_producers_dead=True, owned_tuple_child=True, attacks=attacks,
+                   public_REPL_functions=11, borrowed_binding_facts=True, type_query_actual_side_effects=True,
+                   type_query_preserves_it=True, type_result_survives_owner=True,
                    manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
                    scope='Source embedding host consumers; not Target AOT/mixed or complete FI/safety qualification',
                    production_release=False)

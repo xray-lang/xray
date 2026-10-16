@@ -38,6 +38,8 @@ static XrSourceWriteStatus sdk_repl_output(void *context,XrSourceOutputStream st
     SdkReplTrace *trace=(SdkReplTrace *)context;
     CHECK(stream==XR_SOURCE_STDOUT && count<=sizeof(trace->bytes)-trace->count);
     CHECK(xray_source_repl_cancel(trace->owner)==XR_SOURCE_BUSY);
+    const XrSourceReplBindingInfo *rows=NULL;size_t row_count=0;
+    CHECK(xray_source_repl_bindings(trace->owner,&rows,&row_count)==XR_SOURCE_BUSY && !rows && !row_count);
     memcpy(trace->bytes+trace->count,bytes,count);trace->count+=count;return XR_SOURCE_WRITE_OK;
 }
 static XrSourceStatus sdk_repl_begin(XrSourceRepl *owner,const char *source,XrSourceDiagnostic **diagnostic) {
@@ -114,6 +116,63 @@ static void sdk_repl_cases(const char *stdlib_path) {
     puts("Installed public REPL: typed history, busy callback, cancel/defer, resume and owned survivors PASS");
 }
 
+static const XrSourceReplBindingInfo *sdk_repl_binding(XrSourceRepl *owner,const char *name,size_t expected) {
+    const XrSourceReplBindingInfo *rows=NULL;size_t count=0;
+    CHECK(xray_source_repl_bindings(owner,&rows,&count)==XR_SOURCE_OK && count==expected);
+    const XrSourceReplBindingInfo *found=NULL;
+    for(size_t i=0;i<count;++i) {
+        CHECK(rows[i].name && rows[i].name[0]!='$');
+        if(!strcmp(rows[i].name,name)){CHECK(!found);found=&rows[i];}
+    }
+    return found;
+}
+static void sdk_repl_inspection_cases(const char *stdlib_path) {
+    XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
+    CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    CHECK(sizeof(XrSourceReplBindingInfo)==40);
+    SdkReplTrace trace;memset(&trace,0,sizeof(trace));
+    compiler.stdlib_path=stdlib_path;runtime.write=sdk_repl_output;runtime.context=&trace;runtime.output_byte_limit=sizeof(trace.bytes);
+    XrSourceRepl *owner=NULL;
+    CHECK(xray_source_repl_new(&compiler,"installed-repl",&runtime,&owner)==XR_SOURCE_OK && owner);trace.owner=owner;
+    CHECK(!sdk_repl_binding(owner,"it",0));
+    CHECK(sdk_repl_begin(owner,"var value=40\nconst fixed=2\nfn next()->i64{value+=1;return value}\n",NULL)==XR_SOURCE_OK);
+    const XrSourceReplBindingInfo *rows=NULL;size_t count=0;
+    CHECK(xray_source_repl_bindings(owner,&rows,&count)==XR_SOURCE_BUSY && !rows && !count);
+    static const char query[]="next()\n";
+    XrSourceText text={NULL,"installed-repl",query,sizeof(query)-1};
+    CHECK(xray_source_repl_begin_type(owner,&text,NULL)==XR_SOURCE_BUSY);
+    CHECK(sdk_repl_pump(owner).state==XR_SOURCE_RUN_RETURNED);
+    xray_source_result_free(sdk_repl_take(owner,XR_SOURCE_RUN_RETURNED));
+    const XrSourceReplBindingInfo *row=sdk_repl_binding(owner,"value",3);
+    CHECK(row && row->kind==XR_SOURCE_REPL_VALUE && !row->is_const && !row->implicit_result && !strcmp(row->type_name,"i64"));
+    row=sdk_repl_binding(owner,"fixed",3);CHECK(row && row->is_const && !row->implicit_result);
+    row=sdk_repl_binding(owner,"next",3);CHECK(row && row->kind==XR_SOURCE_REPL_FUNCTION && !strcmp(row->type_name,"function"));
+    CHECK(sdk_repl_begin(owner,"9\n",NULL)==XR_SOURCE_OK);
+    CHECK(sdk_repl_pump(owner).state==XR_SOURCE_RUN_RETURNED);
+    xray_source_result_free(sdk_repl_take(owner,XR_SOURCE_RUN_RETURNED));
+    const XrSourceReplBindingInfo *published=sdk_repl_binding(owner,"it",4);
+    CHECK(published && published->is_const && published->implicit_result);uint64_t birth=published->generation;
+    CHECK(xray_source_repl_begin_type(owner,&text,NULL)==XR_SOURCE_OK);
+    CHECK(sdk_repl_pump(owner).state==XR_SOURCE_RUN_RETURNED);
+    XrSourceResult *survivor=sdk_repl_take(owner,XR_SOURCE_RUN_RETURNED);
+    sdk_repl_integer(owner,"value",41);sdk_repl_integer(owner,"it",9);
+    CHECK(published->generation==birth && !strcmp(published->name,"it"));
+    row=sdk_repl_binding(owner,"it",4);CHECK(row && row->generation==birth);
+    static const char declaration[]="const leaked=4\n";
+    XrSourceText rejected={NULL,"installed-repl",declaration,sizeof(declaration)-1};
+    CHECK(xray_source_repl_begin_type(owner,&rejected,NULL)==XR_SOURCE_REJECTED);
+    CHECK(!sdk_repl_binding(owner,"leaked",4));
+    CHECK(trace.count==6 && !memcmp(trace.bytes,"9\ni64\n",6));
+    XrSourceEvent cleanup;
+    CHECK(xray_source_repl_drop(&owner,&cleanup)==XR_SOURCE_OK && !owner && cleanup.state==XR_SOURCE_RUN_READY);trace.owner=NULL;
+    XrSourceValue *type=NULL;const char *bytes=NULL;size_t length=0;
+    CHECK(xray_source_result_value(survivor,&type)==XR_SOURCE_OK && type);
+    CHECK(xray_source_value_bytes(type,&bytes,&length)==XR_SOURCE_OK && length==3 && !memcmp(bytes,"i64",3));
+    xray_source_value_free(type);xray_source_result_free(survivor);
+    puts("Installed public REPL inspection: visible bindings, nonpublishing types and owned survivors PASS");
+}
+
 int main(int argc,char **argv) {
     CHECK(argc==2);
     char source[]="fn initial()->i64{return 40}\nvar state=initial()\n"
@@ -177,5 +236,6 @@ int main(int argc,char **argv) {
     xray_source_value_free(field);xray_source_value_free(echoed);xray_source_value_free(answer);
     xray_source_value_free(independent);xray_source_value_free(forty_four);
     sdk_repl_cases(argv[1]);
+    sdk_repl_inspection_cases(argv[1]);
     puts("Installed owning AST, typed values, persistent state, callable authority and producer death PASS");return 0;
 }

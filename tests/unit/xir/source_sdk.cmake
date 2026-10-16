@@ -19,6 +19,14 @@ if(WIN32)
     add_test(NAME source_sdk_repl_faults COMMAND test_source_sdk_faults --repl)
     set_tests_properties(source_sdk_repl_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
         LABELS "unit;api;source;sdk;ownership;repl;compiler-faults;runtime-faults")
+    add_test(NAME source_sdk_repl_inspect_faults COMMAND test_source_sdk_faults --repl-inspect)
+    set_tests_properties(source_sdk_repl_inspect_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
+        LABELS "unit;api;source;sdk;ownership;repl;inspection;compiler-faults;runtime-faults")
+    add_test(NAME source_sdk_repl_inspect_probe COMMAND test_source_sdk_faults --repl-inspect-probe)
+    add_test(NAME source_sdk_repl_inspect_budget COMMAND test_source_sdk_faults --repl-inspect-budget)
+    add_test(NAME source_sdk_repl_inspect_samples COMMAND test_source_sdk_faults --repl-inspect-samples)
+    set_tests_properties(source_sdk_repl_inspect_probe source_sdk_repl_inspect_budget source_sdk_repl_inspect_samples
+        PROPERTIES TIMEOUT 120 LABELS "unit;api;source;sdk;ownership;repl;inspection;budget")
 endif()
 if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_SANITIZERS AND NOT ENABLE_UBSAN
     AND NOT ENABLE_TSAN AND NOT ENABLE_MSAN)
