@@ -86,6 +86,14 @@ static void json_resource_trial(const XrXirCheckedPacket *packet,const char *pat
         CHECK(report.status==XR_XIR_BUDGET || report.status==XR_XIR_OUT_OF_MEMORY);
         XrCompileResources *same=context.resources;
         XrXirStatus again=json_resource_whole(&context,packet,path);
+        if(again!=(report.status==XR_XIR_OUT_OF_MEMORY?XR_XIR_OK:XR_XIR_BUDGET)) {
+            XrCompileResourceStats after=json_resource_stats(&context);
+            fprintf(stderr,"JSON retry fault%zu first%u again%u caps=%llu/%llu/%llu spent=%llu/%llu/%llu after=%llu/%llu/%llu\n",
+                fault,(unsigned)report.status,(unsigned)again,
+                (unsigned long long)caps->allocated_bytes,(unsigned long long)caps->live_bytes,(unsigned long long)caps->work,
+                (unsigned long long)report.spent.allocated_bytes,(unsigned long long)report.spent.peak_bytes,(unsigned long long)report.spent.work,
+                (unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes,(unsigned long long)after.work);
+        }
         CHECK(again==(report.status==XR_XIR_OUT_OF_MEMORY?XR_XIR_OK:XR_XIR_BUDGET));
         XrCompileResourceStats after=json_resource_stats(&context);json_resource_monotonic(report.spent,after);
         CHECK(context.resources==same && after.live_bytes==baseline.live_bytes &&
