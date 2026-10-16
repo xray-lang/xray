@@ -26,7 +26,8 @@ typedef struct XrXirSourceGenerationConfig {
 } XrXirSourceGenerationConfig;
 typedef struct XrXirSourceGenerationView {
     uint64_t serial, parent;
-    bool published;
+    bool published, interactive;
+    const XrXirSourceDeclaration *repl_result;
     const char *source, *identity;
     size_t length;
     XrFingerprint fingerprint;
@@ -80,6 +81,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_bindings(XrXirSourc
  * MEMORY path rules and actual parser/ledger admission remain unchanged.
  * Failure releases any temporary pin and preserves input and empty serial. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_ast_bindings(XrXirSourceGenerations *owner,
+    const XrXirSourceAstOwner *ast, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
+/* Interactive Source preparation uses the same immutable AST and checker.
+ * An actual non-Unit tail owns an ordinary immutable root slot and reader;
+ * the next input's it selects that exact published declaration. Ordinary and
+ * interactive histories cannot be mixed in one owner. */
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_ast_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceAstOwner *ast, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
 /* Source publication allocates and charges nothing. The execution coordinator
  * calls this only after the corresponding Instance candidate returned normally.

@@ -57,7 +57,7 @@ static XrSourceResult *take(XrSourceRepl *owner,XrSourceRunState expected) {
 }
 static void execute(XrSourceRepl *owner,const char *source) {
     XrSourceDiagnostic *diagnostic=NULL;XrSourceStatus status=begin(owner,source,&diagnostic);
-    if(diagnostic) {XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"%u: %s\n",(unsigned)status,info.message);}
+    if(diagnostic) {XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"%u: %s input: %s\n",(unsigned)status,info.message,source);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);
     CHECK(pause_or_finish(owner).state==XR_SOURCE_RUN_RETURNED);
     xray_source_result_free(take(owner,XR_SOURCE_RUN_RETURNED));
@@ -139,7 +139,8 @@ static void cancellation(void) {
     execute(owner,"const afterCancel=state\n");integer(owner,"afterCancel",11);
     XrSourceEvent cleanup;CHECK(xray_source_repl_drop(&owner,&cleanup)==XR_SOURCE_OK && cleanup.state==XR_SOURCE_RUN_READY);
 }
+#include "source_public_repl_results.h"
 int main(void) {
-    history();cancellation();
+    history();cancellation();typed_results();display_limit();
     puts("public Source REPL: real Compiler/Catalog, exact AST, paired publication, old closures, rollback, cumulative output, owned survivors, reentry and cancel/defer PASS");return 0;
 }

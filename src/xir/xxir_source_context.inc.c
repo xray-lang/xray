@@ -18,6 +18,7 @@ typedef struct SourceHistoryCorrespondence {
 struct SourceSemanticEnvironment {
     XrModuleGraph *graph;
     SourceName **names, *symbols, **latest;
+    SourceName *implicit_result;
     uint32_t module_count, symbol_count, latest_count;
     uint32_t *binding_reads, *binding_writes;
     uint32_t slot_count;
@@ -31,12 +32,14 @@ typedef struct XrXirSourceHistoryUnit {
     XrXirProgram *program;
     uint32_t entry_module;
     bool published;
+    bool interactive;
 } SourceHistoryUnit;
 typedef struct SourceHistoryEdge { uint32_t from,to; } SourceHistoryEdge;
 typedef struct SourceHistoryReceive {
     const SourceHistoryUnit *unit;
     struct SourceLibraryMap *map;
     SourceName **symbols, **latest;
+    SourceName *implicit_result;
     uint32_t latest_count;
     SourceHistoryEdge *edges;
     uint32_t edge_count, edge_capacity;
@@ -86,8 +89,12 @@ typedef struct SourceContext {
     uint64_t next_epoch;
     uint32_t flow_alternatives;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
+    uint32_t slot_capacity;
     uint32_t module_count, entry_function;
     bool core_factory, binding_readers;
+    bool interactive;
+    AstNode *repl_tail;
+    SourceName *repl_result;
     uint32_t *binding_reads, *binding_writes;
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;

@@ -73,12 +73,12 @@ XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *owner,const XrSourc
     owner->busy=true;status=api_repl_namespace(owner,input);
     XrCompileState *state=xr_source_compiler_state(owner->compiler);
     XrSourceAst *ast=NULL;XrSourceDiagnostic *detail=NULL;XrSourceResult *result=NULL;
-    if(status==XR_SOURCE_OK)status=xray_source_parse_text(owner->compiler,input,&ast,diagnostic?&detail:NULL);
+    if(status==XR_SOURCE_OK)status=api_parse_text(owner->compiler,input,&ast,diagnostic?&detail:NULL,true);
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*result),(void **)&result));
     if(status==XR_SOURCE_OK && diagnostic)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*detail),(void **)&detail));
     XrXirSourceAstOwner syntax={0};
     if(status==XR_SOURCE_OK)status=xr_source_ast_owned_input(ast,&syntax);
-    if(status==XR_SOURCE_OK)status=xr_source_submission_prepare_ast(owner->submission,&syntax,
+    if(status==XR_SOURCE_OK)status=xr_source_submission_prepare_repl_ast(owner->submission,&syntax,
         detail?&detail->detail.source.source:NULL);
     xray_source_ast_free(ast);
     if(status==XR_SOURCE_OK) {
@@ -91,9 +91,52 @@ XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *owner,const XrSourc
     }
     status=api_repl_capture(owner,status);owner->busy=false;return status;
 }
+typedef struct ApiReplBuffer {
+    XrCompileState *state;
+    char *bytes;
+    size_t used, limit;
+    XrSourceStatus status;
+} ApiReplBuffer;
+static int api_repl_buffer(void *context,const void *bytes,size_t length) {
+    ApiReplBuffer *buffer=context;
+    if(length>buffer->limit-buffer->used){buffer->status=XR_SOURCE_LIMIT;return 0;}
+    buffer->status=api_resource(xr_compile_state_work(buffer->state,length?length:1));
+    if(buffer->status!=XR_SOURCE_OK)return 0;
+    if(buffer->bytes && length)memcpy(buffer->bytes+buffer->used,bytes,length);
+    buffer->used+=length;return 1;
+}
+static XrSourceStatus api_repl_display(XrSourceRepl *owner) {
+    const XrXirValue *value=&owner->result->value.value,*payload=NULL;bool some=false;
+    if(xr_xir_nullable_view(value,&some,&payload)) {
+        if(!some)return XR_SOURCE_OK;
+        value=payload;
+    }
+    size_t remaining=owner->sink.sink.byte_limit;
+    if(!remaining)return XR_SOURCE_LIMIT;
+    ApiReplBuffer buffer={.state=xr_source_compiler_state(owner->compiler),.limit=remaining-1,.status=XR_SOURCE_OK};
+    XrXirFormatContext format={0};
+    if(!xr_value_format_value(xr_xir_value_format_reader(&format),(XrValueFormatNode){value,0},
+        (XrValueFormatSink){&buffer,api_repl_buffer},0))return buffer.status==XR_SOURCE_OK?XR_SOURCE_INVALID:buffer.status;
+    size_t total=buffer.used+1;
+    XrSourceStatus status=api_resource(xr_compile_state_calloc(buffer.state,total,1,(void **)&buffer.bytes));
+    if(status!=XR_SOURCE_OK)return status;
+    buffer.used=0;buffer.limit=total-1;format=(XrXirFormatContext){0};
+    if(!xr_value_format_value(xr_xir_value_format_reader(&format),(XrValueFormatNode){value,0},
+        (XrValueFormatSink){&buffer,api_repl_buffer},0) || buffer.used!=total-1)
+        status=buffer.status==XR_SOURCE_OK?XR_SOURCE_INVALID:buffer.status;
+    if(status==XR_SOURCE_OK) {
+        buffer.bytes[buffer.used]='\n';
+        XrXirOutputStatus written=api_output(&owner->sink,XR_XIR_STDOUT,buffer.bytes,total);
+        status=written==XR_XIR_OUTPUT_OK?XR_SOURCE_OK:written==XR_XIR_OUTPUT_OOM?XR_SOURCE_OUT_OF_MEMORY:
+            written==XR_XIR_OUTPUT_LIMIT?XR_SOURCE_LIMIT:XR_SOURCE_IO;
+    }
+    xr_compile_state_free(buffer.bytes);return status;
+}
 static XrSourceStatus api_repl_finish(XrSourceRepl *owner,const XrXirInstanceResult *observed) {
     XrSourceStatus status=xr_source_submission_take(owner->submission,&owner->result->value);
     XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    if(status==XR_SOURCE_OK && observed->outcome.status==XR_XIR_CALL_RETURNED &&
+        xr_source_submission_repl_result(owner->submission))status=api_repl_display(owner);
     if(status==XR_SOURCE_OK && observed->outcome.status==XR_XIR_CALL_RETURNED)
         status=xr_source_submission_publish(owner->submission);
     if(status!=XR_SOURCE_OK || observed->outcome.status!=XR_XIR_CALL_RETURNED) {
@@ -101,6 +144,7 @@ static XrSourceStatus api_repl_finish(XrSourceRepl *owner,const XrXirInstanceRes
         if(aborted!=XR_SOURCE_OK)owner->stopped=true;
     }
     if(status!=XR_SOURCE_OK) {
+        owner->stopped=true;
         xray_source_result_free(owner->result);owner->result=NULL;owner->active=false;
         return status;
     }

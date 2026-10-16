@@ -30,7 +30,7 @@ XRAY_API void xray_source_ast_free(XrSourceAst *ast) {
     xr_compile_state_release(ast->state);xr_compile_state_free(ast);
 }
 static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceText *text,
-    XrSourceAst *ast,XrSourceDiagnostic *diagnostic) {
+    XrSourceAst *ast,XrSourceDiagnostic *diagnostic,bool interactive) {
     XrCompileState *state=xr_source_compiler_state(compiler);
     XrSourceStatus status=api_resource(xr_compile_state_strndup(state,text->bytes,text->length,&ast->source));
     if(status==XR_SOURCE_OK && text->absolute_path)
@@ -53,14 +53,15 @@ static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceT
     if(status!=XR_SOURCE_OK)return status;
     ApiParseDiagnostic capture={state,diagnostic};
     XrParseDiagnostics options={api_parse_error,&capture,1};
-    XrParseStatus parsed=xr_compile_parse_with_trivia(xr_source_compiler_session(compiler),ast->source,
-        ast->path,&options,&ast->program);
+    XrParseStatus parsed=interactive ? xr_compile_parse_repl_with_trivia(xr_source_compiler_session(compiler),
+        ast->source,&options,&ast->program) : xr_compile_parse_with_trivia(xr_source_compiler_session(compiler),
+        ast->source,ast->path,&options,&ast->program);
     return parsed==XR_PARSE_OK ? XR_SOURCE_OK : parsed==XR_PARSE_OUT_OF_MEMORY ? XR_SOURCE_OUT_OF_MEMORY :
         parsed==XR_PARSE_BUDGET ? XR_SOURCE_BUDGET : parsed==XR_PARSE_BAD_ARGUMENT ? XR_SOURCE_BAD_ARGUMENT :
         parsed==XR_PARSE_IO ? XR_SOURCE_IO : XR_SOURCE_INVALID;
 }
-XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *compiler,const XrSourceText *text,
-    XrSourceAst **output,XrSourceDiagnostic **diagnostic) {
+static XrSourceStatus api_parse_text(XrSourceCompiler *compiler,const XrSourceText *text,
+    XrSourceAst **output,XrSourceDiagnostic **diagnostic,bool interactive) {
     if(!compiler || !text || !text->bytes || text->length==SIZE_MAX || !output || *output ||
         (diagnostic && *diagnostic) || (text->absolute_path ? !*text->absolute_path || text->namespace_id :
             !text->namespace_id || !*text->namespace_id))return XR_SOURCE_BAD_ARGUMENT;
@@ -73,7 +74,7 @@ XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *compiler,const 
     if(status==XR_SOURCE_OK) {
         ast->references=1;
         status=api_resource(xr_compile_state_retain(state));
-        if(status==XR_SOURCE_OK){ast->state=state;status=api_parse_owned(compiler,text,ast,detail);}
+        if(status==XR_SOURCE_OK){ast->state=state;status=api_parse_owned(compiler,text,ast,detail,interactive);}
     }
     if(status==XR_SOURCE_BUDGET || status==XR_SOURCE_OUT_OF_MEMORY)
         (void)xr_compile_state_fail(state,status==XR_SOURCE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
@@ -83,6 +84,10 @@ XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *compiler,const 
         if(detail){detail->detail.status=api_compile_failure(status);detail->detail.stage=XR_SOURCE_COMPILE_INPUT;*diagnostic=detail;}
     }
     return status;
+}
+XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *compiler,const XrSourceText *text,
+    XrSourceAst **output,XrSourceDiagnostic **diagnostic) {
+    return api_parse_text(compiler,text,output,diagnostic,false);
 }
 static XrXirStatus api_ast_retain(void *context,const XrXirSourceAst *input) {
     XrSourceAst *ast=context;

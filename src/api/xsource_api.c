@@ -22,6 +22,7 @@
 #include "../xir/xxir_vm.h"
 #include "../xir/xxir_output.h"
 #include "../xir/xxir_format.h"
+#include "../xir/xxir_nullable.h"
 #include "../xir/xxir_compile_domain.h"
 #include "../xir/xxir_error.h"
 #include "../shared/xr_utf8_core.h"

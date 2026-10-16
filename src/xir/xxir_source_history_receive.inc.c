@@ -43,6 +43,12 @@ static bool source_history_latest(SourceContext *ctx) {
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history latest binding lost its actual registration");
         ctx->history->latest[i]=ctx->history->symbols[index];
     }
+    if (environment->implicit_result) {
+        size_t index=(size_t)(environment->implicit_result-environment->symbols);
+        if (index>=environment->symbol_count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history result lost its actual registration");
+        ctx->history->implicit_result=ctx->history->symbols[index];
+    }
     return true;
 }
 static bool source_history_bindings(SourceContext *ctx,bool types_only) {
@@ -217,29 +223,34 @@ static bool source_history_dependencies(SourceContext *ctx) {
     }
     return true;
 }
+static SourceName *source_history_select(SourceContext *ctx,SourceName *binding) {
+    if (!binding) return NULL;
+    uint32_t target=binding->module;
+    if (target>=(uint32_t)ctx->graph->spec_count || !source_owned_checked(&ctx->graph->specs[target])) {
+        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history reference has no received module");return NULL;
+    }
+    bool known=false;
+    for (uint32_t e=0;e<ctx->history->edge_count;++e) {
+        if (!source_work(ctx,NULL)) return NULL;
+        known|=ctx->history->edges[e].from==ctx->module && ctx->history->edges[e].to==target;
+    }
+    if (!known) {
+        SourceHistoryEdge *edges=source_query_append(ctx,ctx->history->edges,&ctx->history->edge_count,
+            &ctx->history->edge_capacity,sizeof(*edges));
+        if (!edges) return NULL;
+        ctx->history->edges=edges;edges[ctx->history->edge_count-1]=(SourceHistoryEdge){ctx->module,target};
+        if (!source_history_module_dependency(ctx,ctx->module,target)) return NULL;
+    }
+    return binding;
+}
 static SourceName *source_history_name(SourceContext *ctx,const char *name) {
     if (!ctx->history || !ctx->graph || ctx->module!=(uint32_t)ctx->graph->entry_index) return NULL;
+    if (ctx->interactive && source_text_same(ctx,NULL,name,"it"))
+        return source_history_select(ctx,ctx->history->implicit_result);
     for (uint32_t i=0;i<ctx->history->latest_count;++i) {
         SourceName *binding=ctx->history->latest[i];
         if (!source_work(ctx,NULL)) return NULL;
-        if (!binding || !source_text_same(ctx,NULL,binding->name,name)) continue;
-        uint32_t target=binding->module;
-        if (target>=(uint32_t)ctx->graph->spec_count || !source_owned_checked(&ctx->graph->specs[target])) {
-            source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"history reference has no received module");return NULL;
-        }
-        bool known=false;
-        for (uint32_t e=0;e<ctx->history->edge_count;++e) {
-            if (!source_work(ctx,NULL)) return NULL;
-            known|=ctx->history->edges[e].from==ctx->module && ctx->history->edges[e].to==target;
-        }
-        if (!known) {
-            SourceHistoryEdge *edges=source_query_append(ctx,ctx->history->edges,&ctx->history->edge_count,
-                &ctx->history->edge_capacity,sizeof(*edges));
-            if (!edges) return NULL;
-            ctx->history->edges=edges;edges[ctx->history->edge_count-1]=(SourceHistoryEdge){ctx->module,target};
-            if (!source_history_module_dependency(ctx,ctx->module,target)) return NULL;
-        }
-        return binding;
+        if (binding && source_text_same(ctx,NULL,binding->name,name)) return source_history_select(ctx,binding);
     }
     return NULL;
 }

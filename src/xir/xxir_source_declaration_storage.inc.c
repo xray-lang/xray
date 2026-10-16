@@ -8,6 +8,11 @@
  */
 static bool source_declaration_storage(SourceContext *ctx,uint32_t nominals,uint32_t interfaces) {
     uint32_t count=ctx->module_count,capacity=ctx->function_capacity,slots=ctx->slot_count;
+    if(ctx->repl_tail) {
+        if(slots==UINT32_MAX)return source_fail(ctx,ctx->repl_tail,XR_XIR_BUDGET,"implicit result slot capacity exhausted");
+        ++slots;
+    }
+    ctx->slot_capacity=slots;
     ctx->functions = source_alloc(ctx, capacity, sizeof(*ctx->functions));
     ctx->bodies = source_alloc(ctx, capacity, sizeof(*ctx->bodies));
     ctx->identities = source_alloc(ctx, capacity, sizeof(*ctx->identities));

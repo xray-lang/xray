@@ -1754,6 +1754,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     source_query_binding_type(ctx, symbol);
     return source_facts_assign(ctx, symbol, initial_some);
 }
+#include "xxir_source_repl.inc.c"
 /* A nested function is a closure value bound immutably from its declaration on. */
 static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     FunctionDeclNode *decl = &node->as.function_decl;
@@ -1986,6 +1987,7 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
     case AST_EXPR_STMT: {
+        if(top && node==ctx->repl_tail)return source_repl_result(ctx,node);
         SourceValue value; AstNode *expr=node->as.expr_stmt;
         bool appended = false;
         if (!source_string_append_statement(ctx, expr, &appended)) return false;
@@ -2201,7 +2203,7 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
 
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
-    uint32_t readers = 0;
+    uint32_t readers = ctx->repl_tail ? 1u : 0u;
     SourceClosureCount closures = {ctx,0,0,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
@@ -2870,12 +2872,15 @@ static bool build_bodies(SourceContext *ctx) {
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"closure declaration was not checked");
     if (ctx->linkage_kind == XR_XIR_LIBRARY) return true;
     ctx->function = ctx->entry_function; ctx->module = (uint32_t) ctx->graph->entry_index;
+    ctx->locals=ctx->scope=NULL;ctx->loop=NULL;ctx->facts=NULL;ctx->epochs=NULL;
+    ctx->flow_alternatives=0;ctx->returned=false;
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,
         NULL, 0, NULL, 0, NULL, 0};
-    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 0, {0}}, NULL) ||
-        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}, NULL)) return false;
+    SourceValue value={0};
+    if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&value))return false;
+    if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL))return false;
     ctx->returned = true;
     return finish_body(ctx);
 }

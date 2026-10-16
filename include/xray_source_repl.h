@@ -19,8 +19,10 @@ typedef struct XrSourceRepl XrSourceRepl;
  * caller exclusion; mutation during an output callback returns BUSY.
  * OOM/BUDGET from preparation or reading latches the same Compiler state;
  * retry cannot allocate or obtain a fresh allowance after that first failure.
- * Inputs are complete ordinary Source units. This boundary does not yet
- * elaborate a tail expression, install implicit it or admit rooted files. */
+ * Inputs use the common Source checker. A non-Unit tail owns an immutable
+ * result declaration; it selects the last successfully displayed and published
+ * result in later inputs. Unit and failed inputs preserve it. Top-level it
+ * declarations are reserved; local bindings may shadow it. Files are not admitted. */
 XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, const char *namespace_id,
     const XrSourceCallOptions *, XrSourceRepl **);
 /* Parses once and owns the exact AST through the paired transaction. MEMORY
@@ -30,8 +32,12 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, co
 XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);
 /* Bounded polls publish only an actual normally returned candidate. Other
  * outcomes drain and abort it, preserving ordinary prior-state side effects.
- * Publication spends no resources; terminal data stays owned until take/drop.
- * Cleanup failure stops the owner and reports CLEANUP_FAILED. */
+ * A meaningful tail is formatted from the actual owned outcome, within
+ * the same cumulative output allowance, before resource-free publication.
+ * None suppresses display while publishing its actual optional value.
+ * Display failure aborts the candidate, returns the host status and stops the
+ * owner. Terminal data stays owned until take/drop. Cleanup failure stops the
+ * owner and reports CLEANUP_FAILED. */
 XRAY_API XrSourceStatus xray_source_repl_poll(XrSourceRepl *, uint64_t quantum, XrSourceEvent *);
 XRAY_API XrSourceStatus xray_source_repl_wait_request(const XrSourceRepl *, uint64_t epoch, uint64_t wake,
     XrSourceWait *, size_t);

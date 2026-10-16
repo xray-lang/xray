@@ -143,10 +143,16 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
         environment->latest=source_semantic_alloc(ctx,count,sizeof(*environment->latest));
         if (!environment->latest) goto failed;
     }
+    const SourceName *implicit=ctx->repl_result ? ctx->repl_result :
+        ctx->history ? ctx->history->implicit_result : NULL;
+    if (implicit) {
+        environment->implicit_result=source_semantic_binding(ctx,environment,implicit);
+        if (!environment->implicit_result) goto failed;
+    }
     uint32_t entry=(uint32_t)ctx->graph->entry_index;
     for (SourceName *symbol=environment->names[entry];symbol;symbol=symbol->next) {
         if (!source_work(ctx,NULL)) goto failed;
-        environment->latest[environment->latest_count++]=symbol;
+        if (symbol!=environment->implicit_result) environment->latest[environment->latest_count++]=symbol;
     }
     for (uint32_t i=0;ctx->history && i<ctx->history->latest_count;++i) {
         const SourceName *symbol=ctx->history->latest[i];

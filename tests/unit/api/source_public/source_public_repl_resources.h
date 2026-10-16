@@ -14,7 +14,7 @@ typedef struct PublicReplOwners {
     XrSourceDiagnostic *diagnostic;
     XrSourceValue *value,*independent;
 } PublicReplOwners;
-static size_t public_repl_boundaries[10];
+static size_t public_repl_boundaries[11];
 static void public_repl_close(PublicReplOwners *owners) {
     XrSourceEvent cleanup={0};
     CHECK(xray_source_repl_drop(&owners->owner,&cleanup)==XR_SOURCE_OK && !owners->owner);
@@ -57,7 +57,7 @@ static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,Pu
     status=public_repl_input(owners,"var state=40\nconst bytes=\"owned\\0中\"\nfn next()->i64{state+=1;return state}\n",XR_SOURCE_RUN_RETURNED);
     if(status!=XR_SOURCE_OK)return status;
     public_repl_boundaries[1]=runtime_attempts;
-    status=public_repl_input(owners,"var state=\"shadow\"\nconst observed=next()\n",XR_SOURCE_RUN_RETURNED);
+    status=public_repl_input(owners,"var state=\"shadow\"\nconst observed=next()\nbytes\n",XR_SOURCE_RUN_RETURNED);
     if(status!=XR_SOURCE_OK)return status;
     public_repl_boundaries[2]=runtime_attempts;
     XrSourceText rejected={NULL,"public-repl-resources","const absent=missingDefinition\n",0};rejected.length=strlen(rejected.bytes);
@@ -65,10 +65,10 @@ static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,Pu
     if(status!=XR_SOURCE_REJECTED)return status;
     CHECK(owners->diagnostic);xray_source_diagnostic_free(owners->diagnostic);owners->diagnostic=NULL;
     public_repl_boundaries[3]=runtime_attempts;
-    status=public_repl_input(owners,"const abandoned=next()\nassert(false)\n",XR_SOURCE_RUN_PANICKED);
+    status=public_repl_input(owners,"const abandoned=next()\nassert(false)\n77\n",XR_SOURCE_RUN_PANICKED);
     if(status!=XR_SOURCE_OK)return status;
     public_repl_boundaries[4]=runtime_attempts;
-    status=public_repl_input(owners,"const after=next()\n",XR_SOURCE_RUN_RETURNED);
+    status=public_repl_input(owners,"const prior=it\nconst after=next()\nafter\n",XR_SOURCE_RUN_RETURNED);
     if(status!=XR_SOURCE_OK)return status;
     public_repl_boundaries[5]=runtime_attempts;
     status=xray_source_repl_read(owners->owner,"after",&owners->value);if(status!=XR_SOURCE_OK)return status;
@@ -76,14 +76,18 @@ static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,Pu
     XrSourceScalar scalar={0};CHECK(xray_source_value_scalar(owners->value,&scalar)==XR_SOURCE_OK &&
         scalar.kind==XR_SOURCE_VALUE_I64 && scalar.value.signed_value==43);
     xray_source_value_free(owners->value);owners->value=NULL;
-    status=xray_source_repl_read(owners->owner,"bytes",&owners->value);if(status!=XR_SOURCE_OK)return status;
+    status=xray_source_repl_read(owners->owner,"it",&owners->value);if(status!=XR_SOURCE_OK)return status;
     public_repl_boundaries[7]=runtime_attempts;
+    CHECK(xray_source_value_scalar(owners->value,&scalar)==XR_SOURCE_OK && scalar.value.signed_value==43);
+    xray_source_value_free(owners->value);owners->value=NULL;
+    status=xray_source_repl_read(owners->owner,"bytes",&owners->value);if(status!=XR_SOURCE_OK)return status;
+    public_repl_boundaries[8]=runtime_attempts;
     XrSourceEvent cleanup={0};status=xray_source_repl_drop(&owners->owner,&cleanup);
     if(status!=XR_SOURCE_OK)return status;
     CHECK(!owners->owner && cleanup.state==XR_SOURCE_RUN_READY);
-    public_repl_boundaries[8]=runtime_attempts;
-    status=xray_source_value_copy(owners->value,&owners->independent);if(status!=XR_SOURCE_OK)return status;
     public_repl_boundaries[9]=runtime_attempts;
+    status=xray_source_value_copy(owners->value,&owners->independent);if(status!=XR_SOURCE_OK)return status;
+    public_repl_boundaries[10]=runtime_attempts;
     xray_source_value_free(owners->value);owners->value=NULL;
     static const char expected[]="owned\0中";const char *bytes=NULL;size_t length=0;
     CHECK(xray_source_value_bytes(owners->independent,&bytes,&length)==XR_SOURCE_OK &&
@@ -114,15 +118,15 @@ static void public_repl_faults(bool probe) {
         }
         runtime_fail_at=SIZE_MAX;public_repl_close(&owners);
     }
-    printf("public Source REPL actual allocation sites=%zu swept=%zu; four published/aborted inputs, actual old state/closure, owned bytes, sticky retry and physical=0/0\n",sites,probe?0:sites);
+    printf("public Source REPL actual allocation sites=%zu swept=%zu; four published/aborted inputs, typed tails/it/display, actual old state/closure, owned bytes, sticky retry and physical=0/0\n",sites,probe?0:sites);
 }
 static void public_repl_samples(void) {
     const XrCompileResourceLimits limits={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
     PublicReplOwners owners={0};runtime_attempts=0;runtime_fail_at=SIZE_MAX;
     CHECK(public_repl_drive(&limits,&owners)==XR_SOURCE_OK);size_t sites=runtime_attempts;
-    size_t boundaries[10];memcpy(boundaries,public_repl_boundaries,sizeof(boundaries));public_repl_close(&owners);
+    size_t boundaries[11];memcpy(boundaries,public_repl_boundaries,sizeof(boundaries));public_repl_close(&owners);
     size_t previous=0;unsigned cuts=0;
-    for(unsigned i=0;i<10;++i) {
+    for(unsigned i=0;i<11;++i) {
         CHECK(boundaries[i]>0 && boundaries[i]<=sites);
         if(boundaries[i]==previous)continue;
         previous=boundaries[i];runtime_attempts=0;runtime_fail_at=boundaries[i]-1;
@@ -153,5 +157,26 @@ static void public_repl_budgets(void) {
     }
     printf("public Source REPL compiler axes allocated=%llu peak=%llu work=%llu; exact/minus-one/plus-one and physical=0/0\n",
         (unsigned long long)required.allocated_bytes,(unsigned long long)required.peak_bytes,(unsigned long long)required.work);
+}
+static void public_repl_display_failure(void) {
+    PublicReplOwners owners={0};XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
+    CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
+    compiler.stdlib_path=XR_PUBLIC_STDLIB;runtime.write=discard;runtime.output_byte_limit=2;
+    runtime_fail_at=SIZE_MAX;
+    CHECK(xray_source_repl_new(&compiler,"public-repl-resources",&runtime,&owners.owner)==XR_SOURCE_OK);
+    CHECK(public_repl_input(&owners,"var state=0\n1\n",XR_SOURCE_RUN_RETURNED)==XR_SOURCE_OK);
+    XrXirSourceGenerationBinding before={0},after={0};
+    CHECK(xr_source_submission_lookup(owners.owner->submission,"it",&before)==XR_SOURCE_OK && before.declaration);
+    CHECK(public_repl_input(&owners,"state=7\n2\n",XR_SOURCE_RUN_RETURNED)==XR_SOURCE_LIMIT);
+    CHECK(owners.owner->stopped && !owners.owner->active && !owners.owner->result);
+    CHECK(xr_source_submission_lookup(owners.owner->submission,"it",&after)==XR_SOURCE_OK &&
+        after.generation==before.generation && after.declaration==before.declaration);
+    XrXirValue actual={0};
+    CHECK(xr_source_submission_read(owners.owner->submission,"it",&actual)==XR_SOURCE_OK && actual.payload==1);
+    xr_xir_value_drop(&actual);
+    CHECK(xr_source_submission_read(owners.owner->submission,"state",&actual)==XR_SOURCE_OK && actual.payload==7);
+    xr_xir_value_drop(&actual);public_repl_close(&owners);
+    puts("public REPL display failure: exact old result declaration/reader, old-state write survives, candidate unpublished, owner stopped, physical=0/0");
 }
 #endif // SOURCE_PUBLIC_REPL_RESOURCES_H

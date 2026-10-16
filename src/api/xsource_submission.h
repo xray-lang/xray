@@ -33,6 +33,11 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare(XrSourceSubmission *, const 
 XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *, const XrXirSourceAstOwner *, XrXirSourceDiagnostic *);
 /* Poll output borrows until the next successful state change. Take copies one
  * genuine terminal outcome; failed copy preserves the terminal and output. */
+/* Same transaction with genuine interactive Source tail/result ownership. */
+XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_ast(XrSourceSubmission *owner,
+    const XrXirSourceAstOwner *ast, XrXirSourceDiagnostic *diagnostic);
+/* Borrows the exact pending compiler fact; publication/abort clears it. */
+XR_FUNC bool xr_source_submission_repl_result(const XrSourceSubmission *owner);
 XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *, uint64_t quantum, XrXirInstanceResult *);
 XR_FUNC XrSourceStatus xr_source_submission_wait(const XrSourceSubmission *, uint64_t epoch, uint64_t wake, XrXirWaitRequest *);
 XR_FUNC XrSourceStatus xr_source_submission_resume(XrSourceSubmission *, uint64_t epoch, uint64_t wake);
