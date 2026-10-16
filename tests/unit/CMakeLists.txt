@@ -4585,3 +4585,5 @@ add_test(NAME test_xir_source_array_reorder_query COMMAND test_xir_source_arrays
 set_tests_properties(test_xir_source_array_reorder_query PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;query;target-impact")
 
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_map_key_path.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_source_borrow.cmake)

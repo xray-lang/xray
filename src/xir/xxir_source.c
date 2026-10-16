@@ -778,6 +778,7 @@ static bool source_recipe_append(SourceContext *ctx, XrXirInstruction op, Source
     ++body->count; ++body->blocks[body->current_block.identity].block.count; --ctx->remaining_instructions;
     return true;
 }
+#include "xxir_source_borrow_call.inc.c"
 #include "xxir_source_invoke.inc.c"
 #include "xxir_source_binding_cell.inc.c"
 static bool source_root_type(SourceContext *ctx, XrXirType type, uint32_t depth) {
