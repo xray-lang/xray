@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_repl_runtime_authority.c - Original runtime/profile and corrupted-authority obligations
+ * test_repl_runtime_authority.c - Original runtime and product-profile obligations
  *
  * KEY CONCEPT:
  *   Covers the REPL symbol table lifecycle, the persistent analyzer
@@ -111,60 +111,6 @@ TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
     xr_target_profile_free(expected);
 }
 
-TEST(globals_dict_set_get_round_trip) {
-    /* Set a binding under a name; get returns the same XrValue.
-     * Uses xr_string_intern_permanent so the key is a real interned
-     * XrString, mirroring the runtime contract for OP_SETGLOBAL. */
-    XrVMRuntime *iso = make_repl_iso();
-    ASSERT_NOT_NULL(iso);
-
-    XrString *name = xr_string_intern_permanent(iso, "answer", 6);
-    ASSERT_NOT_NULL(name);
-    XrValue v;
-    v.tag = 0;
-    v.i = 42;
-    xr_global_dict_set(iso->vm.globals, name, v);
-
-    ASSERT_TRUE(xr_global_dict_has(iso->vm.globals, name));
-    ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 1);
-    XrValue out = xr_global_dict_get(iso->vm.globals, name);
-    ASSERT_EQ_INT((int) out.i, 42);
-
-    xray_vm_delete(iso);
-}
-
-TEST(globals_dict_overwrite_keeps_count) {
-    /* Reassigning the same name must not grow the dict — the binding
-     * is identified by name, the integer count is the # of distinct
-     * names. */
-    XrVMRuntime *iso = make_repl_iso();
-    ASSERT_NOT_NULL(iso);
-
-    XrString *name = xr_string_intern_permanent(iso, "x", 1);
-    XrValue a = {.i = 1, .tag = 0};
-    XrValue b = {.i = 2, .tag = 0};
-    xr_global_dict_set(iso->vm.globals, name, a);
-    xr_global_dict_set(iso->vm.globals, name, b);
-
-    ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 1);
-    XrValue out = xr_global_dict_get(iso->vm.globals, name);
-    ASSERT_EQ_INT((int) out.i, 2);
-
-    xray_vm_delete(iso);
-}
-
-TEST(globals_dict_missing_key_returns_null) {
-    XrVMRuntime *iso = make_repl_iso();
-    ASSERT_NOT_NULL(iso);
-
-    XrString *name = xr_string_intern_permanent(iso, "ghost", 5);
-    ASSERT_FALSE(xr_global_dict_has(iso->vm.globals, name));
-    XrValue out = xr_global_dict_get(iso->vm.globals, name);
-    ASSERT_TRUE(XR_IS_NULL(out));
-
-    xray_vm_delete(iso);
-}
-
 TEST(sync_root_elides_coroutine_with_ordinary_allocation) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
@@ -202,55 +148,8 @@ TEST(repl_profile_clears_each_call) {
     ASSERT_FALSE(p.trace_execution);
 }
 
-TEST(repl_cross_input_call_rejects_missing_type_authority) {
-    XrVMRuntime *iso = make_repl_iso();
-    ASSERT_NOT_NULL(iso);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
-
-    XrProto *p1 = eval_repl(session, iso, "fn inc(n: i64) -> i64 { return n + 1 }\n");
-    ASSERT_NOT_NULL(p1);
-    XrReplSymbolTable *table = xr_repl_symbols_of(iso);
-    int index = find_symbol(table, "inc");
-    ASSERT_GE(index, 0);
-    table->symbols[index].type = NULL;
-
-    XrReplEvalResult rejected =
-        xr_repl_eval(session, iso, "var r = inc(10)\n", &k_repl_memory_authority);
-    ASSERT_EQ_INT(rejected.status, XR_REPL_EVAL_COMPILE_ERROR);
-    ASSERT_NULL(rejected.proto);
-
-    xr_free_code(iso, p1);
-    xray_vm_delete(iso);
-}
-
-TEST(repl_cross_input_call_rejects_invalid_symbol_authority) {
-    XrVMRuntime *iso = make_repl_iso();
-    ASSERT_NOT_NULL(iso);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
-
-    XrProto *p1 = eval_repl(session, iso, "fn inc(n: i64) -> i64 { return n + 1 }\n");
-    ASSERT_NOT_NULL(p1);
-    XrReplSymbolTable *table = xr_repl_symbols_of(iso);
-    int index = find_symbol(table, "inc");
-    ASSERT_GE(index, 0);
-    table->symbols[index].symbol_id = UINT32_MAX;
-
-    XrReplEvalResult rejected =
-        xr_repl_eval(session, iso, "var r = inc(10)\n", &k_repl_memory_authority);
-    ASSERT_EQ_INT(rejected.status, XR_REPL_EVAL_COMPILE_ERROR);
-    ASSERT_NULL(rejected.proto);
-
-    xr_free_code(iso, p1);
-    xray_vm_delete(iso);
-}
-
 TEST_MAIN_BEGIN()
 RUN_TEST(product_profiles_install_exact_authority_and_reject_missing_profile);
-RUN_TEST(globals_dict_set_get_round_trip);
-RUN_TEST(globals_dict_overwrite_keeps_count);
-RUN_TEST(globals_dict_missing_key_returns_null);
 RUN_TEST(sync_root_elides_coroutine_with_ordinary_allocation);
 RUN_TEST(repl_profile_clears_each_call);
-RUN_TEST(repl_cross_input_call_rejects_missing_type_authority);
-RUN_TEST(repl_cross_input_call_rejects_invalid_symbol_authority);
 TEST_MAIN_END()

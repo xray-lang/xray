@@ -313,6 +313,15 @@ XRAY_API XrSourceStatus xray_source_repl_read(XrSourceRepl *owner,const char *na
     if(status==XR_SOURCE_OK)*output=value;else xray_source_value_free(value);
     status=api_repl_capture(owner,status);owner->busy=false;return status;
 }
+XRAY_API XrSourceStatus xray_source_repl_write(XrSourceRepl *owner,const char *name,const XrSourceValue *value) {
+    if(!name || !value)return XR_SOURCE_BAD_ARGUMENT;
+    XrSourceStatus status=api_repl_admit(owner);if(status!=XR_SOURCE_OK)return status;
+    if(owner->active)return XR_SOURCE_BUSY;
+    owner->busy=true;XrXirCallStatus cleanup=XR_XIR_CALL_READY;
+    status=xr_source_submission_write(owner->submission,name,&value->value,&cleanup);
+    if(cleanup!=XR_XIR_CALL_READY || status==XR_SOURCE_LIMIT)owner->stopped=true;
+    status=api_repl_capture(owner,status);owner->busy=false;return status;
+}
 XRAY_API XrSourceStatus xray_source_repl_drop(XrSourceRepl **output,XrSourceEvent *cleanup) {
     if(!output)return XR_SOURCE_BAD_ARGUMENT;
     if(!*output){if(cleanup)*cleanup=api_event(XR_XIR_CALL_READY,0,0);return XR_SOURCE_OK;}

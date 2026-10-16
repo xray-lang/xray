@@ -138,7 +138,7 @@ int main(int argc,char **argv) {
         !strcmp(argv[1],"--repl-samples") || !strcmp(argv[1],"--repl-display") || !strcmp(argv[1],"--repl-inspect") || !strcmp(argv[1],"--repl-inspect-probe") || !strcmp(argv[1],"--repl-inspect-budget") || !strcmp(argv[1],"--repl-inspect-samples") || !strcmp(argv[1],"--repl-rooted") || !strcmp(argv[1],"--repl-rooted-probe") ||
         !strcmp(argv[1],"--repl-rooted-budget") || !strcmp(argv[1],"--repl-rooted-samples") || !strcmp(argv[1],"--repl-file") || !strcmp(argv[1],"--repl-file-probe") ||
         !strcmp(argv[1],"--repl-file-budget") || !strcmp(argv[1],"--repl-file-samples") || !strcmp(argv[1],"--repl-array") || !strcmp(argv[1],"--repl-array-probe") ||
-        !strcmp(argv[1],"--repl-array-budget") || !strcmp(argv[1],"--repl-array-samples"))));
+        !strcmp(argv[1],"--repl-array-budget") || !strcmp(argv[1],"--repl-array-samples") || !strcmp(argv[1],"--repl-write") || !strcmp(argv[1],"--repl-write-probe") || !strcmp(argv[1],"--repl-write-budget") || !strcmp(argv[1],"--repl-write-samples"))));
     if(argc==1)allocation_faults(0,3,false);
     else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4,false);
     else if(!strcmp(argv[1],"--constructed-task"))allocation_faults(4,5,false);
@@ -168,6 +168,11 @@ int main(int argc,char **argv) {
     else if(!strcmp(argv[1],"--repl-array") || !strcmp(argv[1],"--repl-array-probe")) {
         public_repl_array_case=true;public_repl_faults(!strcmp(argv[1],"--repl-array-probe"));
     }
+    else if(!strcmp(argv[1],"--repl-write") || !strcmp(argv[1],"--repl-write-probe")) {
+        public_repl_write_case=true;public_repl_faults(!strcmp(argv[1],"--repl-write-probe"));
+    }
+    else if(!strcmp(argv[1],"--repl-write-budget")){public_repl_write_case=true;public_repl_budgets();}
+    else if(!strcmp(argv[1],"--repl-write-samples")){public_repl_write_case=true;public_repl_samples();}
     else if(!strcmp(argv[1],"--repl-array-budget")){public_repl_array_case=true;public_repl_budgets();}
     else if(!strcmp(argv[1],"--repl-array-samples")){public_repl_array_case=true;public_repl_samples();}
     else if(!strcmp(argv[1],"--repl-file-budget")){public_repl_file_case=true;public_repl_budgets();}

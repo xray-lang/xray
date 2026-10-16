@@ -8,6 +8,46 @@
  */
 #include "source_repl_original_support.h"
 
+TEST(globals_dict_set_get_round_trip) {
+    original_open();ASSERT_TRUE(original_eval("var answer = 0\n"));
+    XrSourceValue *value=original_scalar(42);ASSERT_NOT_NULL(value);
+    ASSERT_EQ_INT(xray_source_repl_write(fixture.owner,"answer",value),XR_SOURCE_OK);
+    ASSERT_NOT_NULL(original_find("answer"));ASSERT_EQ_INT(original_names(),1);
+    ASSERT_TRUE(original_integer("answer",42));ASSERT_EQ_INT(original_births(false,NULL),1);ASSERT_NULL(original_find("it"));
+}
+TEST(globals_dict_overwrite_keeps_count) {
+    original_open();ASSERT_TRUE(original_eval("var x = 0\n"));
+    XrSourceValue *a=original_scalar(1),*b=original_scalar(2);ASSERT_NOT_NULL(a);ASSERT_NOT_NULL(b);
+    ASSERT_EQ_INT(xray_source_repl_write(fixture.owner,"x",a),XR_SOURCE_OK);
+    ASSERT_EQ_INT(xray_source_repl_write(fixture.owner,"x",b),XR_SOURCE_OK);
+    ASSERT_EQ_INT(original_names(),1);ASSERT_TRUE(original_integer("x",2));ASSERT_EQ_INT(original_births(false,NULL),1);
+}
+TEST(globals_dict_missing_key_returns_null) {
+    original_open();XrSourceValue *missing=NULL,*value=original_scalar(42);ASSERT_NOT_NULL(value);
+    ASSERT_NULL(original_find("ghost"));ASSERT_TRUE(xray_source_repl_read(fixture.owner,"ghost",&missing)!=XR_SOURCE_OK);
+    ASSERT_NULL(missing);ASSERT_TRUE(xray_source_repl_write(fixture.owner,"ghost",value)!=XR_SOURCE_OK);
+    ASSERT_EQ_INT(original_names(),0);ASSERT_EQ_INT(original_births(false,NULL),0);
+}
+TEST(repl_cross_input_call_rejects_missing_type_authority) {
+    original_open();ASSERT_TRUE(original_eval("fn inc(n: i64) -> i64 { return n + 1 }\n"));
+    XrXirSourceGenerationView view={0};
+    ASSERT_EQ_INT(xr_xir_compile_source_generation_view(fixture.owner->submission->source,1,&view),XR_XIR_OK);
+    XrXirModule *checked=(XrXirModule *)xr_xir_compile_artifact_module(view.result->checked);
+    ASSERT_NOT_NULL(checked);const XrXirTypes *types=checked->types;ASSERT_NOT_NULL(types);
+    checked->types=NULL;XrSourceStatus rejected=original_submit("var r = inc(10)\n",false);checked->types=types;
+    ASSERT_TRUE(rejected!=XR_SOURCE_OK);ASSERT_NULL(original_find("r"));ASSERT_EQ_INT(original_births(false,NULL),1);
+    ASSERT_TRUE(original_eval("var r = inc(10)\n"));ASSERT_TRUE(original_integer("r",11));
+}
+TEST(repl_cross_input_call_rejects_invalid_symbol_authority) {
+    original_open();ASSERT_TRUE(original_eval("fn inc(n: i64) -> i64 { return n + 1 }\n"));
+    XrXirSourceGenerationView view={0};
+    ASSERT_EQ_INT(xr_xir_compile_source_generation_view(fixture.owner->submission->source,1,&view),XR_XIR_OK);
+    XrXirModule *checked=(XrXirModule *)xr_xir_compile_artifact_module(view.result->checked);
+    ASSERT_NOT_NULL(checked);uint32_t count=checked->function_count;ASSERT_TRUE(count>0);
+    checked->function_count=0;XrSourceStatus rejected=original_submit("var r = inc(10)\n",false);checked->function_count=count;
+    ASSERT_TRUE(rejected!=XR_SOURCE_OK);ASSERT_NULL(original_find("r"));ASSERT_EQ_INT(original_births(false,NULL),1);
+    ASSERT_TRUE(original_eval("var r = inc(10)\n"));ASSERT_TRUE(original_integer("r",11));
+}
 TEST(repl_symbols_new_and_free) {
     original_open();ASSERT_NOT_NULL(fixture.owner);ASSERT_EQ_INT(original_names(),0);
 }
@@ -175,6 +215,11 @@ TEST(repl_failed_callable_input_cannot_change_published_targets) {
 }
 
 TEST_MAIN_BEGIN()
+RUN_TEST(globals_dict_set_get_round_trip);
+RUN_TEST(globals_dict_overwrite_keeps_count);
+RUN_TEST(globals_dict_missing_key_returns_null);
+RUN_TEST(repl_cross_input_call_rejects_missing_type_authority);
+RUN_TEST(repl_cross_input_call_rejects_invalid_symbol_authority);
 RUN_TEST(repl_symbols_new_and_free);
 RUN_TEST(repl_symbols_free_null_is_noop);
 RUN_TEST(repl_symbols_of_null_isolate);

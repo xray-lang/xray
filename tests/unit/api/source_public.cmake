@@ -204,3 +204,16 @@ set_tests_properties(source_public_repl_array_history source_public_repl_array_p
 add_test(NAME source_public_repl_array_faults COMMAND test_source_public_faults --repl-array)
 set_tests_properties(source_public_repl_array_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
     LABELS "unit;api;source;repl;array;compiler-faults;runtime-faults;slow")
+
+add_test(NAME source_public_repl_write COMMAND test_source_public_repl --write)
+add_test(NAME source_public_repl_write_probe COMMAND test_source_public_faults --repl-write-probe)
+add_test(NAME source_public_repl_write_budget COMMAND test_source_public_faults --repl-write-budget)
+add_test(NAME source_public_repl_write_samples COMMAND test_source_public_faults --repl-write-samples)
+set_tests_properties(source_public_repl_write source_public_repl_write_probe source_public_repl_write_budget
+    source_public_repl_write_samples PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;write;ownership;budget")
+add_test(NAME source_public_repl_write_faults COMMAND test_source_public_faults --repl-write)
+set_tests_properties(source_public_repl_write_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
+    LABELS "unit;api;source;repl;write;compiler-faults;runtime-faults;slow")
+
+add_test(NAME source_public_repl_write_class_history COMMAND test_source_public_repl --write-class-history)
+set_tests_properties(source_public_repl_write_class_history PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;write;class;ownership")

@@ -580,7 +580,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourc
     if (!checked || !checked->declarations || module>=checked->declarations->module_count)
         return XR_XIR_BAD_STRUCTURE;
     XrXirSourceGenerationDefinition definition={.generation=serial,.module=module,
-        .ordinal=symbol->index,.dependency=UINT32_MAX,.reader=UINT32_MAX,.name=symbol->name,.syntax=symbol->node,
+        .ordinal=symbol->index,.dependency=UINT32_MAX,.reader=UINT32_MAX,.writer=UINT32_MAX,.name=symbol->name,.syntax=symbol->node,
         .checked=record->result.checked,.mutable=symbol->mutable};
     switch (symbol->kind) {
     case SOURCE_UNIT_SLOT:
@@ -638,6 +638,17 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourc
             !checked->declarations->functions[reader].exported ||
             !(checked->declarations->functions[reader].promises&XR_XIR_FUNCTION_NO_SUSPEND))return XR_XIR_BAD_STRUCTURE;
         definition.reader=reader;
+        if(symbol->mutable) {
+            if(!environment->binding_writes || !environment->binding_writes[symbol->index])return XR_XIR_BAD_STRUCTURE;
+            uint32_t writer=environment->binding_writes[symbol->index]-1;
+            uint32_t parameters=symbol->type==XR_XIR_UNIT ? 0u : 1u;
+            if(writer>=checked->function_count || checked->functions[writer].parameter_count!=parameters ||
+                (parameters && (!checked->functions[writer].parameters || checked->functions[writer].parameters[0]!=symbol->type)) ||
+                checked->functions[writer].result!=XR_XIR_UNIT || checked->declarations->functions[writer].module!=module ||
+                !checked->declarations->functions[writer].exported ||
+                !(checked->declarations->functions[writer].promises&XR_XIR_FUNCTION_NO_SUSPEND))return XR_XIR_BAD_STRUCTURE;
+            definition.writer=writer;
+        }
     }
     *output=definition;return XR_XIR_OK;
 }

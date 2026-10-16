@@ -16,7 +16,8 @@
 typedef struct OriginalReplFixture {
     XrSourceRepl *owner;
     XrSourceResult *results[16];
-    size_t result_count,output_length;
+    XrSourceValue *values[16];
+    size_t result_count,value_count,output_length;
     XrSourceDiagnostic *diagnostic;
     XrSourceEvent event;
     char output[4096];
@@ -38,6 +39,7 @@ static void original_close(void) {
     XrSourceEvent cleanup={0};
     XrSourceStatus status=xray_source_repl_drop(&fixture.owner,&cleanup);
     for(size_t i=0;i<fixture.result_count;++i)xray_source_result_free(fixture.results[i]);
+    for(size_t i=0;i<fixture.value_count;++i)xray_source_value_free(fixture.values[i]);
     xray_source_diagnostic_free(fixture.diagnostic);
     memset(&fixture,0,sizeof(fixture));
     ASSERT_EQ_INT(status,XR_SOURCE_OK);ASSERT_EQ_INT(cleanup.state,XR_SOURCE_RUN_READY);
@@ -87,6 +89,13 @@ static bool original_integer(const char *name,int64_t expected) {
     if(status==XR_SOURCE_OK)status=xray_source_value_scalar(value,&scalar);
     bool equal=status==XR_SOURCE_OK && scalar.kind==XR_SOURCE_VALUE_I64 && scalar.value.signed_value==expected;
     xray_source_value_free(value);return equal;
+}
+static XrSourceValue *original_scalar(int64_t number) {
+    if(fixture.value_count==sizeof(fixture.values)/sizeof(*fixture.values))return NULL;
+    XrSourceScalar scalar={.kind=XR_SOURCE_VALUE_I64};scalar.value.signed_value=number;
+    XrSourceValue *value=NULL;
+    if(xray_source_value_new_scalar(fixture.owner->compiler,&scalar,&value)!=XR_SOURCE_OK)return NULL;
+    fixture.values[fixture.value_count++]=value;return value;
 }
 static bool original_string(const char *name,const char *expected) {
     XrSourceValue *value=NULL;const char *bytes=NULL;size_t length=0;

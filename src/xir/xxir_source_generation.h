@@ -64,7 +64,7 @@ typedef enum XrXirSourceDefinitionKind {
 typedef struct XrXirSourceGenerationDefinition {
     uint64_t generation;
     XrXirSourceDefinitionKind kind;
-    uint32_t module, ordinal, dependency, reader;
+    uint32_t module, ordinal, dependency, reader, writer;
     XrXirType logical_type, stored_type;
     bool mutable;
     const char *name, *imported;

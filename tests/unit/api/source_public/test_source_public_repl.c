@@ -13,7 +13,7 @@
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 static const char namespace_id[]="public-real-repl";
-typedef struct Trace { XrSourceRepl *owner;char bytes[128];size_t count;unsigned callbacks; } Trace;
+typedef struct Trace { XrSourceRepl *owner;char bytes[128];size_t count;unsigned callbacks;const XrSourceValue *write_value; } Trace;
 static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,const char *bytes,size_t count) {
     Trace *trace=context;CHECK(stream==XR_SOURCE_STDOUT && count<=sizeof(trace->bytes)-trace->count);
     if(trace->owner) {
@@ -24,6 +24,7 @@ static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,con
         CHECK(xray_source_repl_begin(owner,&text,NULL)==XR_SOURCE_BUSY);
         CHECK(xray_source_repl_poll(owner,1,&event)==XR_SOURCE_BUSY && event.engine_status==777);
         CHECK(xray_source_repl_read(owner,"value",&value)==XR_SOURCE_BUSY && !value);
+        if(trace->write_value)CHECK(xray_source_repl_write(owner,"value",trace->write_value)==XR_SOURCE_BUSY);
         CHECK(xray_source_repl_take(owner,&result)==XR_SOURCE_BUSY && !result);
         CHECK(xray_source_repl_cancel(owner)==XR_SOURCE_BUSY);
         const XrSourceReplBindingInfo *rows=NULL;size_t names=0;
@@ -66,7 +67,10 @@ static void execute(XrSourceRepl *owner,const char *source) {
     XrSourceDiagnostic *diagnostic=NULL;XrSourceStatus status=begin(owner,source,&diagnostic);
     if(diagnostic) {XrSourceDiagnosticInfo info;CHECK(xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK);fprintf(stderr,"%u: %s input: %s\n",(unsigned)status,info.message,source);}
     CHECK(status==XR_SOURCE_OK && !diagnostic);
-    CHECK(pause_or_finish(owner).state==XR_SOURCE_RUN_RETURNED);
+    XrSourceEvent terminal=pause_or_finish(owner);
+    if(terminal.state!=XR_SOURCE_RUN_RETURNED)fprintf(stderr,"run state=%u engine=%u input: %s\n",
+        (unsigned)terminal.state,terminal.engine_status,source);
+    CHECK(terminal.state==XR_SOURCE_RUN_RETURNED);
     xray_source_result_free(take(owner,XR_SOURCE_RUN_RETURNED));
 }
 static XrSourceValue *read_value(XrSourceRepl *owner,const char *name) {
@@ -154,11 +158,14 @@ static void cancellation(void) {
 #include "source_public_repl_file.h"
 #include "source_public_repl_input.h"
 #include "source_public_repl_array_history.h"
+#include "source_public_repl_write.h"
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--rooted")){rooted_inputs();rooted_nominals();return 0;}
     if(argc==2 && !strcmp(argv[1],"--array-history")){array_history();return 0;}
+    if(argc==2 && !strcmp(argv[1],"--write")){binding_writes();composite_binding_writes();return 0;}
     if(argc==2 && !strcmp(argv[1],"--input")){input_observations();return 0;}
     if(argc==2 && !strcmp(argv[1],"--files")){file_inputs();file_snapshot();return 0;}
+    if(argc==2 && !strcmp(argv[1],"--write-class-history")){class_binding_write_history();return 0;}
     CHECK(argc==1);
     history();cancellation();typed_results();display_limit();metadata_inspection();
     puts("public Source REPL: real Compiler/Catalog, exact AST, paired publication, old closures, rollback, cumulative output, owned survivors, reentry and cancel/defer PASS");return 0;

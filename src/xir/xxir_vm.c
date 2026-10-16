@@ -252,7 +252,7 @@ static XrXirRunStatus vm_class_step(ScalarRun *run, VmState *state,
             XrXirValue value=vm_value_operand(run,op->args[1]);
             return value_run_status(xr_xir_class_set(&receiver,(uint32_t)op->immediate,&value,admission));
         }
-        status=xr_xir_value_admit(&receiver,(XrXirType)receiver.type,admission);
+        status=xr_xir_value_admit(&receiver,xr_xir_operand_type(run->function,op->args[0]),admission);
         if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,(uint32_t)op->immediate,admission,&output);
     }
     if(status != XR_XIR_VALUE_OK) return value_run_status(status);

@@ -65,6 +65,11 @@ XR_FUNC XrSourceStatus xr_source_submission_lookup_runtime(const XrSourceSubmiss
  * survives the coordinator; its normal runtime ownership rules still apply.
  * Reading performs no initializer replay or metadata-based slot access. */
 XR_FUNC XrSourceStatus xr_source_submission_read(XrSourceSubmission *, const char *, XrXirValue *output);
+/* Borrows an exact typed value for the selected mutable declaration's ordinary
+ * birth writer. Instance admission retains arena identity and permissions.
+ * No input is published. Cleanup failure stops the real Instance. */
+XR_FUNC XrSourceStatus xr_source_submission_write(XrSourceSubmission *, const char *,
+    const XrXirValue *, XrXirCallStatus *cleanup);
 /* Immutable prepared/published display observations, never runtime authority. */
 XR_FUNC XrSourceStatus xr_source_submission_names(const XrSourceSubmission *, bool pending,
     const XrXirSourceGenerationName **, size_t *);

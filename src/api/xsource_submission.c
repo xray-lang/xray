@@ -12,6 +12,8 @@
 #include "../xir/xxir_generic.h"
 #include "../xir/xxir_specialization_bindings.h"
 #include "../xir/xxir_vm.h"
+#include "../xir/xxir_types.h"
+#include "../xir/xxir_instance_activation.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -95,8 +97,8 @@ typedef struct SubmissionBindingDraft {
     uint32_t count;
     bool received;
     const char *failure;
-    uint8_t *reader_keys;
-    uint32_t readers, repl_reader, repl_entry;
+    uint8_t *accessor_keys;
+    uint32_t accessors, repl_reader, repl_entry;
 } SubmissionBindingDraft;
 #include "xsource_submission_bindings.inc.c"
 static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram **output,uint32_t *entry,
@@ -336,7 +338,7 @@ static XrSourceStatus submission_read_binding(XrSourceSubmission *owner,const ch
         birth=birth->previous;
     }
     if(!birth)return XR_SOURCE_BAD_STATE;
-    uint8_t key[16];status=submission_xir(submission_reader_key(owner,selected.generation,definition.reader,key));
+    uint8_t key[16];status=submission_xir(submission_accessor_key(owner,selected.generation,definition.reader,key));
     if(status!=XR_SOURCE_OK)return status;
     const XrXirInstanceBinding *binding=NULL;
     status=submission_call(xr_xir_instance_binding_lookup(owner->runtime,(const char *)key,sizeof(key),&binding));
@@ -362,6 +364,7 @@ XR_FUNC XrSourceStatus xr_source_submission_read(XrSourceSubmission *owner,const
     if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;status=submission_read_binding(owner,name,output);owner->busy=false;return status;
 }
+#include "xsource_submission_write.inc.c"
 XR_FUNC XrSourceStatus xr_source_submission_names(const XrSourceSubmission *owner,bool pending,
     const XrXirSourceGenerationName **output,size_t *count) {
     if(!owner || !output || *output || !count || *count)return XR_SOURCE_BAD_ARGUMENT;
