@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 29u
+#define XR_XIR_CALL_ABI_VERSION 30u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -30,7 +30,9 @@ typedef enum XrXirCallStatus {
     /* A host service failed. It is never a language panic and no handler observes it. */
     XR_XIR_CALL_HOST_ERROR,
     /* A language panic whose detail code alone names it, such as unwrapping null. */
-    XR_XIR_CALL_RUNTIME_PANIC, XR_XIR_CALL_UNSUPPORTED
+    XR_XIR_CALL_RUNTIME_PANIC, XR_XIR_CALL_UNSUPPORTED,
+    /* A pull-produced owner; its activation remains live and has no wake. */
+    XR_XIR_CALL_YIELDED
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
@@ -46,7 +48,8 @@ typedef enum XrXirActionKind {
     /* value is the nonzero I64 millisecond duration the activation waits for. */
     XR_XIR_ACTION_TIMER,
     /* value borrows the true Task handle until the driver retains its wait lease. */
-    XR_XIR_ACTION_AWAIT_TASK
+    XR_XIR_ACTION_AWAIT_TASK,
+    XR_XIR_ACTION_GENERATOR_YIELD
 } XrXirActionKind;
 /* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
 #define XR_XIR_ACTION_PROTECTED 1u
@@ -54,6 +57,7 @@ typedef enum XrXirActionKind {
 #define XR_XIR_ACTION_LEAVE_ERROR 4u
 #define XR_XIR_ACTION_LEAVE_PANIC 8u
 #define XR_XIR_ENTRY_EXIT 1u
+#define XR_XIR_ENTRY_GENERATOR 2u
 typedef enum XrXirCallPhase { XR_XIR_CALL_NORMAL, XR_XIR_CALL_EXIT } XrXirCallPhase;
 typedef struct XrXirAction {
     XrXirActionKind kind;

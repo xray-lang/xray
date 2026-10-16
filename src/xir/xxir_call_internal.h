@@ -74,6 +74,8 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_path_write(const XrXirCallView *view,
     const XrXirValue *value, XrXirFaultDetail *fault, bool append);
 XR_FUNC void *xr_xir_call_budget_allocate(XrXirCallBudget *budget, uint64_t bytes, XrXirCallStatus *status);
 XR_FUNC void xr_xir_call_budget_deallocate(XrXirCallBudget *budget, void *memory, uint64_t bytes);
+XR_FUNC XrXirCallStatus xr_xir_call_generator_new_budgeted(const XrXirCallConfig *config,
+    const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output);
 XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,
     const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output);
 /* A registered language cleanup was physically released before retirement. */

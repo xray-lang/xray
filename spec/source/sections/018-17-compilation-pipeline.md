@@ -534,7 +534,7 @@ Iterator使用唯一Type池中的元素描述符kind9。参数数组、result、
 
 Source的Iterator<T>类型拼写绑定stdlib/types/iterator.xr及prelude唯一注册；共同生成器拥有完整声明、真实位置及源码指纹，不以同名用户声明或接收上下文制造原生权限。泛型元素没有额外Sendable要求；隐藏frame可能保存非Sendable环境，因此元素Sendable不构成Iterator的Sendable证明，Task<Iterator<T>>仍拒绝。
 
-这只是规范类型和Source注解的开发切片；类型身份、拥有式元数据及布局不授予构造或方法recipe。真实generator产值、hasNext/next/close、独立frame、借用/取消/cleanup及VM/AOT/mixed执行继续单独实施和验收。调度WAIT_YIELD不是Generator产值；仅有类型管线通过不构成生成器或Channel完成。
+这只是规范类型和Source注解的开发切片；类型身份、拥有式元数据及布局不授予构造或方法recipe。真实generator产值、hasNext/next/close、独立frame、借用/取消/cleanup及VM/AOT/mixed执行继续单独实施和验收。共同Call驱动已预留独立的YIELDED拥有值状态和GENERATOR_YIELD动作：只有显式generator入口能产出其Iterator元素，正常完成返回Unit；取走产值恢复原frame就绪，产值没有wake且不能作为Task终态。此驱动接口不授予Source/op、隐藏环境、Program代码lease或语言执行资格；Call30拒绝旧Call29，公开结构字段与布局不变。调度WAIT_YIELD不是Generator产值；仅有类型管线通过不构成生成器或Channel完成。
 
 <!-- /xr-spec:cn -->
 
@@ -1181,6 +1181,6 @@ Iterator has one element descriptor, kind9, in the sole Type pool. Parameters, r
 
 Source Iterator<T> binds the complete stdlib/types/iterator.xr declaration and its unique prelude registration. The shared generator owns real locations and source fingerprints; same-name user declarations and receiving contexts grant no native authority. The element gains no additional Sendable requirement. A hidden frame may retain a nonSendable environment, so a Sendable element never proves Iterator Sendable; Task<Iterator<T>> still rejects.
 
-This is a development slice for canonical types and Source annotations. Type identity, owned metadata and layout grant no constructor or member recipe. Real generator values, hasNext/next/close, independent frames, borrowing, cancellation, cleanup and VM/AOT/mixed execution require separate implementation and qualification. Scheduling WAIT_YIELD is not generator output. Type-pipeline success alone completes neither Generator nor Channel.
+This is a development slice for canonical types and Source annotations. Type identity, owned metadata and layout grant no constructor or member recipe. Real generator values, hasNext/next/close, independent frames, borrowing, cancellation, cleanup and VM/AOT/mixed execution require separate implementation and qualification. The common Call driver reserves an independent owned YIELDED state and GENERATOR_YIELD action: only an explicit generator entry may produce its Iterator element, and normal completion returns Unit. Taking a value readies the same frame; a value has no wake and cannot be a Task outcome. This driver interface grants no Source/op, hidden-environment, Program code-lease or language-execution qualification. Call30 rejects Call29 while public structure fields and layouts remain unchanged. Scheduling WAIT_YIELD is not generator output. Type-pipeline success alone completes neither Generator nor Channel.
 
 <!-- /xr-spec:en -->
