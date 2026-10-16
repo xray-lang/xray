@@ -49,9 +49,22 @@ static void regex_source_refusal(const XrXirCheckedPacket *packet,unsigned which
  CHECK(context->resources==same && after.live_bytes==baseline.live_bytes && after.work>=baseline.work && after.allocated_bytes>=baseline.allocated_bytes);
  xr_xir_compile_library_catalog_free(catalog);source_fixture_source_owner_close(context);
 }
+static void regex_image_refusals(const XrXirCheckedPacket *packet) {
+ const char *images[]={"[]","[2,0]","[1,-1]","[1,9223372036854775807]","[1,1,99,0]","[1,1,97,2]","[1,0,97,0]"};
+ for(unsigned which=0;which<sizeof(images)/sizeof(*images);++which){
+  const XrXirCompileContext *context=source_fixture_source_owner(67108864,128000000);
+  XrXirLibraryModuleInput binding[2];XrXirLibraryInput input=regex_input(packet,binding);XrXirLibraryCatalog *catalog=NULL;
+  CHECK(xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog)==XR_XIR_OK);
+  char text[512];int n=snprintf(text,sizeof(text),"import {matchesRegex} from \"./regex\"\nexport fn run()->bool{return comptime matchesRegex(%s,\"a\")}\n",images[which]);CHECK(n>0 && n<(int)sizeof(text));
+  XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
+  CHECK(regex_source(context,text,catalog,NULL,&output,&diagnostic)==XR_XIR_BAD_TYPE && !output.checked && !output.snapshot);
+  CHECK(diagnostic.line==2 && diagnostic.column>0 && strstr(diagnostic.message,"comptime assertion failed"));
+  xr_xir_compile_library_catalog_free(catalog);source_fixture_source_owner_close(context);
+ }
+}
 static void regex_refusals(const XrXirCheckedPacket *packet) {
  size_t blocks=source_fixture_compile_live,bytes=source_fixture_compile_bytes;
- regex_binding_refusals(packet);for(unsigned which=0;which<4;++which)regex_source_refusal(packet,which);
+ regex_binding_refusals(packet);regex_image_refusals(packet);for(unsigned which=0;which<4;++which)regex_source_refusal(packet,which);
  CHECK(source_fixture_compile_live==blocks && source_fixture_compile_bytes==bytes);
 }
 #endif // XIR_REGEX_PRECOMPILE_NEGATIVE_H

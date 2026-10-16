@@ -12,33 +12,44 @@ export fn compileRegex(pattern:string)->Array<i64> {
  }
  code[1]=(len(code)-2)/2;return code
 }
-export fn matchesRegex(code:Array<i64>,text:string)->bool {
- assert(len(code)>=2,"regex image header")
- assert(code[0]==1 && code[1]>=0 && code[1]<=(len(code)-2)/2,"regex image identity")
- const count=code[1];assert(len(code)==2+2*count,"regex image length")
- var current:Array<bool>=[true];var state:i64=0
- while(state<count) {
-  assert((code[2+2*state]==97 || code[2+2*state]==98) && (code[3+2*state]==0 || code[3+2*state]==1),"regex image instruction")
-  current.push(false);state=state+1
+fn validRegexProgram(code:Array<i64>)->bool {
+ if(len(code)<2){return false}
+ const count=code[1]
+ if(code[0]!=1 || count<0 || count>(len(code)-2)/2){return false}
+ if(len(code)!=2+2*count){return false}
+ var state:i64=0
+ while(state<count){
+  if((code[2+2*state]!=97 && code[2+2*state]!=98) || (code[3+2*state]!=0 && code[3+2*state]!=1)){return false}
+  state=state+1
  }
- state=0
- while(state<count){if(current[state] && code[3+2*state]==1){current[state+1]=true};state=state+1}
+ return true
+}
+fn regexClear(states:ref Array<bool>) {
+ var i:i64=0;while(i<len(states)){states[i]=false;i=i+1}
+}
+fn regexEpsilon(code:Array<i64>,states:ref Array<bool>) {
+ var i:i64=0;while(i<code[1]){if(states[i] && code[3+2*i]==1){states[i+1]=true};i=i+1}
+}
+export fn matchesRegex(code:Array<i64>,text:string)->bool {
+ assert(validRegexProgram(code),"invalid regex program")
+ const count=code[1];const a="a";const b="b"
+ var current:Array<bool>=[true];var next:Array<bool>=[false];var state:i64=0
+ while(state<count){current.push(false);next.push(false);state=state+1}
+ regexEpsilon(code,ref current)
  var at:i64=0
  while(at<len(text)) {
-  var next:Array<bool>=[];state=0
-  while(state<=count){next.push(false);state=state+1}
+  regexClear(ref next)
   state=0
   while(state<count) {
    if(current[state]) {
     const atom=code[2+2*state]
-    const accepts=(atom==97 && text.indexOf("a",at)==at) || (atom==98 && text.indexOf("b",at)==at)
+    const accepts=(atom==97 && text.indexOf(a,at)==at) || (atom==98 && text.indexOf(b,at)==at)
     if(accepts){if(code[3+2*state]==1){next[state]=true}else{next[state+1]=true}}
    }
    state=state+1
   }
-  state=0
-  while(state<count){if(next[state] && code[3+2*state]==1){next[state+1]=true};state=state+1}
-  current=next;at=at+1
+  regexEpsilon(code,ref next)
+  const previous=current;current=next;next=previous;at=at+1
  }
  return current[count]
 }

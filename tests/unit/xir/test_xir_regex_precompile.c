@@ -21,6 +21,7 @@
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_emit_c.h"
 #include <ctype.h>
+#include "xir_regex_precompile_library.h"
 static const char regex_user[]=
  "import {compileRegex,matchesRegex} from \"./regex\"\n"
  "fn prepareRegex()->(Array<Array<i64>>,i64){\n"
@@ -54,6 +55,7 @@ static XrXirStatus regex_source(const XrXirCompileContext *context,const char *t
  if(report)*report=diagnostic;xr_compile_session_free(session);memset(bytes,0xa5,sizeof(bytes));memset(path,0xa5,sizeof(path));return status;
 }
 #include "xir_regex_precompile_negative.h"
+#include "xir_regex_precompile_resources.h"
 static void regex_execute(const XrXirCompileContext *context,XrXirSourceResult *source,const char *emit,const char *packet_path) {
  const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);const XrXirFunction *fold=&module->functions[regex_function(module,"program")];
  for(uint32_t i=0;i<fold->instruction_count;++i)CHECK(fold->instructions[i].op!=XR_XIR_CALL && fold->instructions[i].op!=XR_XIR_CALL_INDIRECT);
@@ -80,12 +82,21 @@ static void regex_execute(const XrXirCompileContext *context,XrXirSourceResult *
  for(unsigned i=0;i<3;++i){regex_value(&values[i],i);xr_xir_value_drop(&values[i]);}
 }
 int main(int argc,char **argv) {
- bool emit=argc==4 && !strcmp(argv[1],"--emit-native");CHECK(argc==1 || emit);
+ if(argc==7 && !strcmp(argv[1],"--compiler-fi")){regex_compiler_partition(argv);return 0;}
+ bool generator_packet=argc==3 && !strcmp(argv[1],"--emit-generator");
+ bool compiler=argc==2 && (!strcmp(argv[1],"--compiler-controls") || !strcmp(argv[1],"--compiler-resources"));
+ bool emit=argc==4 && !strcmp(argv[1],"--emit-native");CHECK(argc==1 || emit || generator_packet || compiler);
  XrXirCompileContext storage={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
  CHECK(xr_compile_resources_new(&caps,&storage.resources)==XR_COMPILE_RESOURCE_OK);storage.limits=xr_xir_compile_default_limits();const XrXirCompileContext *context=&storage;
- char library[16384];FILE *file=fopen(XR_REGEX_PRECOMPILE_SOURCE,"rb");CHECK(file);size_t length=fread(library,1,sizeof(library)-1,file);CHECK(!ferror(file) && feof(file) && !fclose(file));library[length]=0;
+ char library[16384];_Static_assert(sizeof(regex_library_source)<=sizeof(library),"Embedded library fits the bounded caller buffer");memcpy(library,regex_library_source,sizeof(regex_library_source));
  XrXirSourceResult producer={0};CHECK(regex_source(context,library,NULL,NULL,&producer,NULL)==XR_XIR_OK);memset(library,0xa5,sizeof(library));
   XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(producer.checked,&packet,NULL)==XR_XIR_OK);xr_xir_compile_source_result_free(&producer);
+ if(generator_packet || compiler){
+  if(generator_packet){FILE *output=fopen(argv[2],"wb");CHECK(output && fwrite(packet.bytes,1,packet.length,output)==packet.length && !fclose(output));}
+  else {char path[2048];int n=snprintf(path,sizeof(path),"%s/user.xr",XR_REGEX_PRECOMPILE_WORK);CHECK(n>0 && n<(int)sizeof(path));regex_compiler_resources(&packet,path,!strcmp(argv[1],"--compiler-resources"));}
+  xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_release(context->resources);
+  CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);return 0;
+ }
  if(!emit)regex_refusals(&packet);
  char memory_namespace[]="xray-core-assertions-v1";
  XrXirLibraryModuleInput binding[2]={{{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_REGEX_PRECOMPILE_WORK},"regex.xr"},{{XR_MODULE_IDENTITY_MEMORY,memory_namespace,NULL},NULL}};XrXirLibraryInput input={packet.bytes,packet.length,{0},binding,2};xr_sha256(packet.bytes,packet.length,input.sha256);
