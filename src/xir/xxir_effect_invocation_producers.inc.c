@@ -409,6 +409,8 @@ static XrXirStatus effect_invocation_producer_results(EffectInvocationFlow *flow
     XrXirStatus read_status=effect_invocation_flow_head(flow,child->body,&target_head);
     if (read_status!=XR_XIR_OK) return read_status;
     const EffectBodyFunctionHead *target=&target_head;
+    if (!xr_xir_callable_signature(flow->body.domain.types,target->result) &&
+        !xr_xir_type_span(flow->body.domain.types,target->result)) return XR_XIR_OK;
     uint64_t returned=(uint64_t)target->parameter_count+target->instruction_count;
     EffectBodyRecordCursor cursor;
     read_status=effect_body_request_sequence_begin(&flow->body,&cursor);
@@ -439,8 +441,24 @@ static XrXirStatus effect_invocation_producer_results(EffectInvocationFlow *flow
 
 static XrXirStatus effect_invocation_producer_step(EffectInvocationFlow *flow,
     bool *changed,bool verify) {
-    if (!flow || !changed || !flow->owner->producer_enabled) return XR_XIR_BAD_STRUCTURE;
+    if (!flow || !changed || !flow->owner || !flow->function || !flow->owner->producer_enabled ||
+        flow->node>=flow->owner->final.count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationWorkspace *owner=flow->owner;EffectBodyRecordCursor cursor;
+    /* Without a physical callable value there is no producer input, alias,
+     * capture or returned identity to add. All other semantic passes remain;
+     * delegated requests still perform their original reads and refusals. */
+    if (flow->physical && !flow->physical->rows && !owner->final.nodes[flow->node].producer_count &&
+        !xr_xir_callable_signature(flow->body.domain.types,flow->function->result) &&
+        !xr_xir_type_span(flow->body.domain.types,flow->function->result) &&
+        effect_body_request_owned_matches(owner->work,&flow->body,owner->final.material)) {
+        const EffectPhysicalDomain *domain=owner->final.physical;
+        uint32_t body=owner->final.nodes[flow->node].body;
+        if (!domain || domain!=owner->final.material->physical || domain->resources!=owner->work->resources ||
+            body>=domain->count || !domain->functions || flow->physical!=&domain->functions[body] ||
+            flow->values!=flow->physical->values) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(owner->work,12)) return XR_XIR_BUDGET;
+        return XR_XIR_OK;
+    }
     XrXirStatus read_status=effect_body_request_sequence_begin(&flow->body,&cursor);
     if (read_status!=XR_XIR_OK) return read_status;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
