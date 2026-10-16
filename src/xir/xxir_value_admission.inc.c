@@ -209,8 +209,11 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                     if (object->kind == XIR_OBJECT_FUNCTION) {
                         if (!admission->function) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                        const XrXirTypeArena *caller_arena=admission->arena;
+                        admission->arena=arena;
                         status = admission->function(admission->context,
                             &((XirFunction *) object)->binding, type, &admission->work);
+                        admission->arena=caller_arena;
                         if (status != XR_XIR_VALUE_OK) break;
                     } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
                         /* Atomic cells have scalar payloads and no graph children. */

@@ -91,7 +91,10 @@ static XrXirCallStatus generation_prepare(XrXirInstance *instance,
     if (status != XR_XIR_CALL_READY) return status;
     if (instance->prepared_generation) return XR_XIR_CALL_BUSY;
     XrXirInstance *current = instance_current(instance);
-    if (storage && (!current->program || storage->source!=current->program || storage->target!=program))
+    /* Storage correspondence follows publication; abort separately restores
+     * the prior active call and its still-owned result. */
+    XrXirInstance *published=instance_entry_state(instance);
+    if (storage && (!published->program || storage->source!=published->program || storage->target!=program))
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (current->executor && !xr_xir_task_executor_root_idle(current->executor)) return XR_XIR_CALL_BUSY;
     if (current->executor && xr_xir_task_executor_completion_status(current->executor) != XR_XIR_CALL_READY)
@@ -109,7 +112,7 @@ static XrXirCallStatus generation_prepare(XrXirInstance *instance,
     instance->driving = true;
     XrXirInstance *candidate = NULL;
     status = instance_new_state(program, &instance->config, instance, &candidate);
-    if (status==XR_XIR_CALL_READY && storage) status=generation_storage_receive(candidate,current,storage);
+    if (status==XR_XIR_CALL_READY && storage) status=generation_storage_receive(candidate,published,storage);
     if (status == XR_XIR_CALL_READY && current->call)
         status = instance_executor_new(current, &candidate->replacement_executor);
     if (status != XR_XIR_CALL_READY && candidate) {
