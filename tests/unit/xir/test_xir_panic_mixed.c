@@ -6,6 +6,7 @@
  *
  * test_xir_panic_mixed.c - Panic unwinding across both VM/native call directions
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -32,7 +33,7 @@ static void panic_mixed_free(void *pointer) {
 static void panic_mixed(bool root_native) {
     const XrXirCompileContext context = *effects_source_owner(UINT64_C(64)*1024*1024, UINT64_C(128000000));
     XrXirArtifact *checked = NULL, *closed = NULL;
-    CHECK(xr_xir_compile_checked_read(&context, panic_source_program.proof.bytes, panic_source_program.proof.length,
+    CHECK(xr_xir_compile_checked_read(&context, panic_source_program.packet.bytes, panic_source_program.packet.length,
         &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
@@ -55,7 +56,7 @@ static void panic_mixed(bool root_native) {
     }
     CHECK(native && vm);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,
-        module->declarations, {owner, panic_mixed_free}, module->types, xr_xir_compile_program_proof(owner->artifact)};
+        module->declarations, {owner, panic_mixed_free}, module->types, xir_program_packet_borrow(owner->artifact)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&context, &spec, &program) == XR_XIR_OK);
     panic_cases(program, panic_source_functions);

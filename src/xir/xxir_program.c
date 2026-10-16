@@ -133,16 +133,24 @@ static XrXirStatus program_copy_entries(XrXirProgram *program, const XrXirProgra
     }
     return status;
 }
-XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, XrXirProgram **output) {
-    if (!output || *output || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,XrXirProgramInput **input,
+    XrXirCallEntry **owned_entries,XrXirProgram **output) {
+    if (!output || *output || !input || !*input || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirProgramInput *original_input=*input;
+    if ((uintptr_t)original_input%_Alignof(XrXirProgramInput)) return XR_XIR_BAD_STRUCTURE;
+    XrCompileResourceStatus input_extent=xr_compile_resources_extent(context->resources,
+        original_input,sizeof(*original_input));
+    if (input_extent!=XR_COMPILE_RESOURCE_OK)
+        return input_extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrXirArtifact *original_artifact=original_input->artifact;
     XrXirStatus status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
     const XrXirProgramSpec physical = *spec;
     const XrXirCodeLease code = physical.code;
-    const XrXirProgramProof proof = physical.proof;
+    const XrXirProgramPacket packet=physical.packet;
     XrXirProgramPermissions *permissions = NULL;
-    status = xr_xir_compile_program_proof_verify(context, &physical, &proof, &permissions);
+    status = xir_program_input_prepare(context,&physical,*input,&permissions);
     if (status != XR_XIR_OK) return status;
     const XrXirTypes *types = NULL;
     const XrXirDeclarations *declarations = NULL;
@@ -161,7 +169,18 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     atomic_init(&program->references, 1);
     program->context = *context;
     program->entry_count = permissions->function_count;
-    status = program_copy_entries(program, &physical);
+    if (owned_entries) {
+        if (*owned_entries!=physical.entries) { status=XR_XIR_BAD_STRUCTURE;goto failed; }
+        XrCompileResourceStatus extent=xr_compile_resources_extent(context->resources,
+            *owned_entries,(size_t)physical.entry_count*sizeof(**owned_entries));
+        if (extent!=XR_COMPILE_RESOURCE_OK) {
+            status=extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+            goto failed;
+        }
+        /* The same current descriptor proof checks both copied and moved rows.
+         * This slot transfers physical storage only; it grants no permission. */
+        program->entries=*owned_entries;*owned_entries=NULL;
+    } else status = program_copy_entries(program, &physical);
     program->order = xir_compile_calloc(context, declarations->module_count, sizeof(*program->order), &status);
     program->active_modules = xir_compile_calloc(context, declarations->module_count, 1, &status);
     program->module_slots = xir_compile_calloc(context, declarations->module_count, sizeof(*program->module_slots), &status);
@@ -189,28 +208,45 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     /* Every preparation callback has finished. The independently checked
      * canonical fields also prove the copied descriptors' structural shape. */
     if (*output || spec->code.owner!=code.owner || spec->code.release!=code.release ||
-        spec->proof.bytes!=proof.bytes || spec->proof.length!=proof.length ||
-        spec->proof.identity!=proof.identity || spec->proof.layouts!=proof.layouts) {
+        *input!=original_input || spec->packet.bytes!=packet.bytes || spec->packet.length!=packet.length ||
+        spec->packet.identity!=packet.identity) {
         status=XR_XIR_BAD_STRUCTURE;goto failed;
     }
-    status=xr_xir_compile_program_descriptor_match(context,spec,permissions);
+    status=xir_program_input_verify(context,*input);
+    if (status==XR_XIR_OK && (original_input->artifact!=original_artifact ||
+        original_artifact->program_final!=permissions->effects || original_artifact->layouts!=permissions->layouts))
+        status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK) status=xr_xir_compile_program_body_match(context,permissions,original_artifact);
+    if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,spec,permissions);
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,&owned,permissions);
-    if (status==XR_XIR_OK) {
-        if (proof.length>UINT64_MAX-32 || !xir_compile_work(context,proof.length+32)) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK && (packet.bytes || packet.length || packet.identity)) {
+        if (!packet.bytes || !packet.identity) status=XR_XIR_BAD_STRUCTURE;
+        else if (packet.length>UINT64_MAX-32 || !xir_compile_work(context,packet.length+32)) status=XR_XIR_BUDGET;
         else {
             uint8_t digest[32];
-            xr_sha256(proof.bytes,proof.length,digest);
-            if (memcmp(digest,permissions->packet_identity,32) || memcmp(proof.identity,digest,32))
+            xr_sha256(packet.bytes,packet.length,digest);
+            if (memcmp(digest,permissions->packet_identity,32) || memcmp(packet.identity,digest,32))
                 status=XR_XIR_BAD_STRUCTURE;
         }
     }
     if (status!=XR_XIR_OK) goto failed;
+    permissions->input=*input;*input=NULL;
     program->code = code;
     *output = program;
     return XR_XIR_OK;
 failed:
     program_dispose(program);
     return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,XrXirProgram **output) {
+    if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=program_shape(context,spec);
+    if (status!=XR_XIR_OK) return status;
+    XrXirProgramInput *input=NULL;
+    status=xir_program_input_read(context,&spec->packet,&spec->target,&input);
+    if (status==XR_XIR_OK) status=xir_program_receive(context,spec,&input,NULL,output);
+    xir_program_input_free(input);return status;
 }
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program) {
     if (!program) return false;

@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   The same owned Checked program supplies independent VM and native expectations.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
@@ -65,7 +66,7 @@ int main(void){
     CHECK(owner->entries[entries.values[1]].resume!=fixture_enum_program.entries[entries.values[1]].resume);
     CHECK(owner->entries[entries.values[2]].resume==fixture_enum_program.entries[entries.values[2]].resume);
     CHECK(owner->entries[entries.values[3]].resume!=fixture_enum_program.entries[entries.values[3]].resume);
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,module->declarations,{owner,enum_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,module->declarations,{owner,enum_release},module->types,xir_program_packet_borrow(owner->artifact)};
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&spec,&program)==XR_XIR_OK);
     XrXirValue retained[2][4]={{{0}}};
     source_enum_identity_pair(program,entries,retained);

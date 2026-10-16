@@ -310,7 +310,7 @@ static void cs_strict(const CsMetrics *m, const char *path) {
 
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
-    _Static_assert(XR_XIR_CHECKED_CONTRACT == 70u, "Explicit root bounds are required.");
+    _Static_assert(XR_XIR_CHECKED_CONTRACT == 73u, "Current explicit root and Error bounds are required.");
     CHECK(argc == 2 || argc == 3);
     bool normal = !strcmp(argv[1], "normal");
     bool census = !strcmp(argv[1], "census");

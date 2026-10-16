@@ -47,10 +47,7 @@ typedef enum XrXirOperandRole {
 } XrXirOperandRole;
 
 /* Classification grants neither type validity nor permissions or dominance. */
-static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, uint32_t value) {
-    if (!function || !function->instructions || value < function->parameter_count ||
-        value - function->parameter_count >= function->instruction_count) return XR_XIR_PLACE_NONE;
-    XrXirOp op = function->instructions[value - function->parameter_count].op;
+static inline XrXirPlaceKind xr_xir_place_op_kind(XrXirOp op) {
     if (op == XR_XIR_LOCAL_UNINIT || op == XR_XIR_LOCAL_NEW || op == XR_XIR_SCALAR_LOCAL_NEW || op == XR_XIR_OWNED_LOCAL_NEW)
         return XR_XIR_PLACE_LOCAL;
     if (op == XR_XIR_CELL_PLACE) return XR_XIR_PLACE_CELL;
@@ -59,6 +56,12 @@ static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, ui
     if (op == XR_XIR_INDEX_PLACE) return XR_XIR_PLACE_INDEX;
     if (op == XR_XIR_OBJECT_PLACE) return XR_XIR_PLACE_OBJECT;
     return XR_XIR_PLACE_NONE;
+}
+
+static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, uint32_t value) {
+    if (!function || !function->instructions || value < function->parameter_count ||
+        value - function->parameter_count >= function->instruction_count) return XR_XIR_PLACE_NONE;
+    return xr_xir_place_op_kind(function->instructions[value - function->parameter_count].op);
 }
 
 /* Ordinals describe expanded semantic operands, including ARRAY_SET's table. */

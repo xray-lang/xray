@@ -841,6 +841,7 @@ XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
 
 #include "xxir_effect_outcomes.inc.c"
 #include "xxir_effect_control_verify.inc.c"
+#include "xxir_effect_error_empty_current.inc.c"
 #include "xxir_effect_source_terminal.inc.c"
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_context,
@@ -1004,6 +1005,8 @@ XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContex
         if (parameters[p]!=body->parameters[p]) return XR_XIR_BAD_STRUCTURE;
     return XR_XIR_OK;
 }
+
+#include "xxir_effect_program_receive.inc.c"
 
 XrXirStatus xr_xir_compile_effects_analyze(const XrXirArtifact *artifact, XrXirEffects **output) {
     if (!artifact) return XR_XIR_BAD_STRUCTURE;

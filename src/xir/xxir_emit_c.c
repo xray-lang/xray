@@ -16,6 +16,7 @@
 #include "xxir_emit_c.h"
 #include "xxir_checked.h"
 #include "xxir_program.h"
+#include "xxir_program_packet_internal.h"
 #include "xxir_atomic.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -1447,7 +1448,7 @@ static void emit_types(CBuffer *buffer, const XrXirTypes *types, const char *pre
 /* An omitted zero run belongs to C11 static array initialization, not a
  * compressed runtime format. Sequential elements after a designator retain
  * their original proof indices; the declaration fixes the complete length. */
-static void emit_checked_proof_element(CBuffer *buffer, size_t *elements,
+static void emit_checked_packet_element(CBuffer *buffer, size_t *elements,
     size_t index, unsigned byte, bool designator) {
     if (!emit_work(buffer, 1)) return;
     if (!(*elements % 16)) EMIT_LITERAL(buffer, "\n    ");
@@ -1460,7 +1461,7 @@ static void emit_checked_proof_element(CBuffer *buffer, size_t *elements,
     emit_byte(buffer, ',');
     ++*elements;
 }
-static void emit_checked_proof_bytes(CBuffer *buffer, const uint8_t *bytes,
+static void emit_checked_packet_bytes(CBuffer *buffer, const uint8_t *bytes,
     size_t length, const char *prefix) {
     if (!bytes || !length) { emit_reject(buffer, XR_XIR_BAD_STRUCTURE); return; }
     append(buffer, "static const uint8_t %s_checked[%llu] = {", prefix,
@@ -1487,56 +1488,26 @@ static void emit_checked_proof_bytes(CBuffer *buffer, const uint8_t *bytes,
             designator = zeros > (size_t)(digits + 3) / 2;
             if (!designator) {
                 for (size_t n = zeros; n && emit_work(buffer, 1); --n)
-                    emit_checked_proof_element(buffer, &elements,
+                    emit_checked_packet_element(buffer, &elements,
                         position - n, 0, false);
             }
             zeros = 0;
         }
-        emit_checked_proof_element(buffer, &elements, i - 1, byte, designator);
+        emit_checked_packet_element(buffer, &elements, i - 1, byte, designator);
     }
     /* An all-zero independent private test span still has a standard C11
      * initializer. Real Checked packets also preserve their exact tail zeros. */
     if (!elements) EMIT_LITERAL(buffer, "0");
 }
-static void emit_proof(CBuffer *buffer, const XrXirArtifact *artifact, const char *prefix) {
-    XrXirProgramProof proof = xr_xir_compile_program_proof(artifact);
-    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    emit_checked_proof_bytes(buffer, proof.bytes, proof.length, prefix);
-    append(buffer, "\n};\nstatic const uint8_t %s_identity[32] = {", prefix);
-    for (unsigned i = 0; i < 32 && emit_work(buffer, 1); ++i) {
-        emit_unsigned(buffer, (unsigned)proof.identity[i], 10, 0);
-        emit_byte(buffer, ',');
+static void emit_packet(CBuffer *buffer,const XrXirArtifact *artifact,const char *prefix) {
+    XrXirProgramPacket packet=xir_program_packet_borrow(artifact);
+    emit_checked_packet_bytes(buffer,packet.bytes,packet.length,prefix);
+    append(buffer,"\n};\nstatic const uint8_t %s_identity[32] = {",prefix);
+    for(unsigned i=0;i<32 && emit_work(buffer,1);++i) {
+        emit_unsigned(buffer,(unsigned)packet.identity[i],10,0);
+        emit_byte(buffer,',');
     }
-    EMIT_LITERAL(buffer, "};\n");
-    for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f) {
-        const XrXirFunctionLayout *layout = &proof.layouts[f];
-        append(buffer, "static const uint32_t %s_offsets_%u[] = {", prefix, f);
-        for (uint32_t i = 0; i < layout->slot_count && emit_work(buffer, 1); ++i) EMIT_U_SHAPE(buffer, et_84635448af4d156a, "%uu,", "", "u,", layout->offsets[i]);
-        EMIT_LITERAL(buffer, "};\n");
-        if (layout->owned_count) {
-            append(buffer, "static const uint32_t %s_owned_%u[] = {", prefix, f);
-            for (uint32_t i = 0; i < layout->owned_count && emit_work(buffer, 1); ++i) EMIT_U_SHAPE(buffer, et_84635448af4d156a, "%uu,", "", "u,", layout->owned_offsets[i]);
-            EMIT_LITERAL(buffer, "};\n");
-        }
-        if (module->functions[f].parameter_count) {
-            append(buffer, "static const XrXirLayout %s_physical_%u[] = {", prefix, f);
-            for (uint32_t i = 0; i < module->functions[f].parameter_count && emit_work(buffer, 1); ++i)
-                append(buffer, "{%uu,%uu},", layout->parameters[i].size, layout->parameters[i].alignment);
-            EMIT_LITERAL(buffer, "};\n");
-        }
-    }
-    EMIT_FORMAT(buffer, et_7f6931bf43b4143b, "static const XrXirFunctionLayout %s_layouts[] = {\n", prefix);
-    for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f) {
-        const XrXirFunctionLayout *layout = &proof.layouts[f];
-        append(buffer, "    {%uu,%uu,%s_offsets_%u,", layout->slot_count, layout->frame_bytes, prefix, f);
-        if (module->functions[f].parameter_count) append(buffer, "%s_physical_%u,", prefix, f);
-        else EMIT_LITERAL(buffer, "NULL,");
-        append(buffer, "{%uu,%uu},%uu,", layout->result.size, layout->result.alignment, layout->owned_count);
-        if (layout->owned_count) append(buffer, "%s_owned_%u,", prefix, f);
-        else EMIT_LITERAL(buffer, "NULL,");
-        append(buffer, "%uu,%uu},\n", layout->outgoing_count, layout->path_count);
-    }
-    EMIT_LITERAL(buffer, "};\n");
+    EMIT_LITERAL(buffer,"};\n");
 }
 
 static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const char *prefix) {
@@ -1544,7 +1515,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     const XrXirDeclarations *d = module->declarations;
     if (!d) return;
     emit_types(buffer, module->types, prefix);
-    emit_proof(buffer, artifact, prefix);
+    emit_packet(buffer, artifact, prefix);
     for (uint32_t m = 0; m < d->module_count && emit_work(buffer, 1); ++m) {
         const XrXirSourceModule *source = &d->modules[m];
         if (!source->dependency_count) continue;
@@ -1598,8 +1569,8 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
         "{XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, %s_entries, %uu, &%s_declarations, {NULL, NULL}, ",
         XR_XIR_PROGRAM_ABI_VERSION, prefix, prefix, module->function_count, prefix);
     if (module->types) append(buffer, "&%s_types", prefix); else EMIT_LITERAL(buffer, "NULL");
-    append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity, %s_layouts}};\n",
-        prefix, prefix, prefix, prefix);
+    append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity}};\n",
+        prefix, prefix, prefix);
 }
 
 /* Sizing and writing traverse the same immutable Lowered artifact. */

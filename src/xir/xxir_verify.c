@@ -1126,7 +1126,8 @@ static XrXirStatus verify_metadata_parameter_count(const XrXirModule *module, Xr
 
 static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,const XrXirEffects *program_effects,
+    XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -1220,7 +1221,9 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     context.graph_storage = NULL; context.graph_capacity = 0;
     if (status == XR_XIR_OK) {
         XrXirCellProvenance *cell_proof = NULL;
-        status = xr_xir_compile_cell_provenance_verified(&context.remaining, module, &cell_proof, &context.location);
+        if (program_effects)
+            status=xir_effects_program_cells_match(&context.remaining,program_effects,&context.location);
+        else status = xr_xir_compile_cell_provenance_verified(&context.remaining, module, &cell_proof, &context.location);
         xr_xir_compile_cell_provenance_free(cell_proof);
     }
     if (status == XR_XIR_OK && module->provenance)
@@ -1236,7 +1239,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
 
 XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {
-    return structure_verify_source(context,module,construction,NULL,diagnostic);
+    return structure_verify_source(context,module,construction,NULL,NULL,diagnostic);
 }
 
 /* Every use repeats complete current Source admission before consuming this
@@ -1247,7 +1250,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileCo
     if (!xir_compile_context_valid(context) || !effects || !source || !source->provenance ||
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,source,construction,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location);
     if (status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
@@ -1266,7 +1269,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
     if (!xir_compile_context_valid(context) || !module || !module->provenance ||
         module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(module,&remaining,&location,NULL,NULL);
@@ -1277,11 +1280,14 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
 
 /* The same complete checker consumes either freshly inferred facts or the
  * private prepared owner; neither path omits declarations or permissions. */
-XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
-    const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+static XrXirStatus verify_effects_body(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,const XrXirEffects *program_effects,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location = {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status = xr_xir_compile_structure_verify_v2(context,module,construction,&location);
+    XrXirStatus status = structure_verify_source(context,module,construction,NULL,program_effects,&location);
+    if (status==XR_XIR_OK && program_effects)
+        status=xir_effects_program_body_match(context,module,program_effects);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
         status = declaration_effects_verify(module,&remaining,&location,effects,NULL);
@@ -1289,6 +1295,17 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *
     location.status = status;
     if (diagnostic) *diagnostic = location;
     return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    return verify_effects_body(context,module,construction,effects,NULL,diagnostic);
+}
+XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    if (!effects) return XR_XIR_BAD_STRUCTURE;
+    return verify_effects_body(context,module,construction,effects,effects,diagnostic);
 }
 /* Structural, source and permission checks finish before the fresh owner
  * becomes observable. Only the Template consumer restricts this collector's
@@ -1299,7 +1316,7 @@ static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(module,&remaining,&location,NULL,&owned);

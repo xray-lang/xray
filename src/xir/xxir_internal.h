@@ -50,6 +50,10 @@ XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *cont
 XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
     uint32_t parameter_count, XrXirType result);
+XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *context,
+    const XrXirModule *source,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_program_layout_match(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirTarget *target,XrXirFunctionLayout *layouts);
 
 /* Metadata shape cannot authorize substitutions; the common owner derives facts. */
 XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,
@@ -116,6 +120,7 @@ struct XrXirArtifact {
     XrXirCheckedPacket checked_packet;
     uint8_t checked_identity[32];
     XirSourceFacts *source_facts;
+    XrXirEffects *program_final;
 };
 
 /* Immutable Source inputs are owned only by a genuine final Checked Template.
@@ -141,6 +146,14 @@ typedef struct XrXirRootRefiner {
 } XrXirRootRefiner;
 XR_FUNC XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic);
+/* These current readers consume genuine canonical Input and Final storage. */
+XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_program_cells_match(const XrXirCompileContext *context,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic);
 XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic);
 /* This same-call Source borrow is never a verification exemption. Fresh
@@ -210,15 +223,5 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
     const void *bytes, size_t length, const XrXirTarget *target,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 
-/* This private byte reader returns two fresh owners from one complete final
- * check. Neither owner is accepted from a caller or retained in an artifact.
- * Rejection preserves occupied output; failure publishes neither owner. */
-typedef struct XirLoweredEffects {
-    XrXirArtifact *artifact;
-    XrXirEffects *effects;
-} XirLoweredEffects;
-XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower_effects(const XrXirCompileContext *context,
-    const void *bytes, size_t length, const XrXirTarget *target,
-    XirLoweredEffects *output, XrXirDiagnostic *diagnostic);
 
 #endif // XXIR_INTERNAL_H

@@ -6,6 +6,7 @@
  *
  * test_xir_source_nested_nullable_execution.c - Actual Source native and two mixed directions
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -19,8 +20,8 @@ extern const XrXirProgramSpec source_nested_nullable_program;
 static void sn_execution(bool direction) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrXirProgramSpec spec=source_nested_nullable_program;XrXirArtifact *proof=NULL,*lowered=NULL;
-    CHECK(spec.proof.bytes && spec.proof.identity && spec.types && spec.declarations && spec.entry_count);
-    CHECK(xr_xir_compile_checked_read(&owner.context,spec.proof.bytes,spec.proof.length,&proof,NULL)==XR_XIR_OK);
+    CHECK(spec.packet.bytes && spec.packet.identity && spec.types && spec.declarations && spec.entry_count);
+    CHECK(xr_xir_compile_checked_read(&owner.context,spec.packet.bytes,spec.packet.length,&proof,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(proof);uint32_t functions[SN_COUNT];sn_find(module,functions);
     CHECK(module->function_count==spec.entry_count && module->declarations->entry_function==spec.declarations->entry_function);
     XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;
@@ -40,9 +41,9 @@ static void sn_execution(bool direction) {
         }
         CHECK(vm && native);module=xr_xir_compile_artifact_module(lowered);
         spec.entries=entries;spec.types=module->types;spec.declarations=module->declarations;
-        XrXirProgramProof matching=xr_xir_compile_program_proof(lowered);
-        CHECK(matching.identity && matching.length==spec.proof.length && !memcmp(matching.identity,spec.proof.identity,32) &&
-            !memcmp(matching.bytes,spec.proof.bytes,matching.length));spec.proof=matching;
+        XrXirProgramPacket matching=xir_program_packet_borrow(lowered);
+        CHECK(matching.identity && matching.length==spec.packet.length && !memcmp(matching.identity,spec.packet.identity,32) &&
+            !memcmp(matching.bytes,spec.packet.bytes,matching.length));spec.packet=matching;
     }
     xr_xir_compile_artifact_free(proof);
     XrXirProgram *program=NULL;XrXirProgramSpec wrong=spec;

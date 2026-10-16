@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Factory faults and runtime faults have separate complete physical censuses.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_STRING_FACTORY_CASES_H
 #define XIR_STRING_FACTORY_CASES_H
 typedef struct StringFactoryCensus {
@@ -18,7 +19,7 @@ typedef struct StringFactoryCensus {
 static const XrCompileResourceLimits string_factory_limits={
     UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
 static XrXirStatus string_factory_operation(const XrXirCompileContext *context,
-    const XrXirProgramProof *proof) {
+    const XrXirProgramPacket *proof) {
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *artifact=NULL;XrXirProgram *program=NULL;
     XrXirStatus status=xr_xir_compile_checked_read_lower(context,proof->bytes,proof->length,
@@ -33,7 +34,7 @@ static XrXirStatus string_factory_operation(const XrXirCompileContext *context,
     xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(artifact);
     return status;
 }
-static XrXirStatus string_factory_trial(const XrXirProgramProof *proof,
+static XrXirStatus string_factory_trial(const XrXirProgramPacket *proof,
     const XrCompileResourceLimits *limits,size_t metadata_failure,size_t runtime_failure,
     StringFactoryCensus *census) {
     const uint64_t compiler_bytes=metadata_bytes,compiler_blocks=metadata_live;
@@ -68,8 +69,8 @@ static void string_factory_failures(void) {
         reset_metadata();runtime_fail_at=SIZE_MAX;
         SourceFixtureOwner producer={0};source_fixture_owner_new(&producer);
         XrXirArtifact *artifact=string_fixture(&producer.context,variant);
-        XrXirProgramProof proof=xr_xir_compile_program_proof(artifact);
-        CHECK(proof.bytes && proof.length && proof.identity && proof.layouts);
+        XrXirProgramPacket proof=xir_program_packet_borrow(artifact);
+        CHECK(proof.bytes && proof.length && proof.identity && xr_xir_compile_artifact_layout(artifact, 0));
         StringFactoryCensus census={0};
         CHECK(string_factory_trial(&proof,&string_factory_limits,SIZE_MAX,SIZE_MAX,&census)==XR_XIR_OK);
         CHECK(census.metadata_sites && census.stats.allocated_bytes && census.stats.peak_bytes && census.stats.work);

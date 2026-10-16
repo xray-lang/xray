@@ -12,6 +12,7 @@
  *   retain the Lowered lease after the caller drops its Program, and every
  *   exported scalar call keeps the original independent result.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_construction.h"
@@ -26,8 +27,8 @@
 #include "xir_runtime_allocations.h"
 #include "static_methods_source_shape.h"
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u, "Exact formal Checked identity");
-_Static_assert(XR_XIR_VALUE_ABI_VERSION == 23u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 30u, "Exact formal public runtime identity");
+_Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
+    XR_XIR_PROGRAM_ABI_VERSION == 31u, "Exact formal public runtime identity");
 
 /* Observe an actual owner. Complete admission belongs to the public verifier. */
 static void construction_owner(const XrXirArtifact *artifact, const XrXirCompileContext *caller) {
@@ -180,13 +181,13 @@ int main(int argc, char **argv) {
         construction_owner(lowered, context);
         StaticEntries actual = source_entries(xr_xir_compile_artifact_module(lowered));
         CHECK(actual.entry == entries.entry && actual.answer == entries.answer && actual.private_answer == entries.private_answer);
-        XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
-        CHECK(proof.bytes && proof.length && proof.identity && proof.layouts);
+        XrXirProgramPacket proof = xir_program_packet_borrow(lowered);
+        CHECK(proof.bytes && proof.length && proof.identity && xr_xir_compile_artifact_layout(lowered, 0));
         XrXirProgram *program = NULL;
         /* The public take performs complete bind/proof/program_seal on this Lowered. */
         CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK);
         CHECK(!lowered && program);
-        proof = (XrXirProgramProof){0}; /* End the caller's borrowed proof observation. */
+        proof = (XrXirProgramPacket){0}; /* End the caller's borrowed proof observation. */
         XrXirInstanceConfig config;
         CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         config.value_limit = UINT64_C(1048576);

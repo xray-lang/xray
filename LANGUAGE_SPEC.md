@@ -7259,6 +7259,29 @@ The initial instance interface admits exclusive driving by one host thread only.
 The precise internal interface is verified by `test_xir_instances`; source and
 serialized/cache admission require separate qualification.
 
+Internal VM reception transfers the actual Lowered Artifact and its canonical
+Input/Final into the Program, without decoding an internal packet or lowering
+it again. External native descriptors carry only the bytes, length and identity
+of `XrXirProgramPacket`; one boundary decode enters the same owning receiver.
+Packets carry no caller-supplied layout authority. Reception independently
+checks current semantics, bodies, declarations, layouts and wiring before
+transferring the Input, entry table and code lease. Failure preserves caller
+inputs and publishes no Program. Internal packet destruction before reception
+and external packet/spec destruction afterwards cannot invalidate a successful
+Program. Old Program ABIs and the old Proof/getter interface reject without an
+adapter path.
+
+After the last preparation callback, a complete current Input containing only
+empty escaping transfers and internal direct calls has the least empty Error
+solution, including recursive call components without a seed. Current Error
+rows and both public throws/task_errors projections must match that solution.
+This check allocates and releases nothing, charges actual reads, and rejects a
+joint forgery of a row and its two projections. Inputs with real error seeds,
+precise indirect calls or general generic bindings retain the separate complete
+current Error verification obligation. An owning carrier does not qualify the
+general Final proof, retirement of every construction Workspace, or complete
+fault, resource and safety gates.
+
 ### 17.9 New XIR Source Admission Boundary
 
 The source owner reuses the real parser and module resolver/graph, checks source
@@ -7329,7 +7352,8 @@ wiring to that same input. These final comparisons allocate and release no
 storage. A content digest only detects packet drift; it grants no semantic
 permission. Failure leaves the caller's artifact and code lease unconsumed and
 publishes no Program. This boundary does not authenticate arbitrary native
-callback behavior or replace the remaining owned Final transition.
+callback behavior or replace general independent Final verification and
+retirement of every construction Workspace.
 
 Preparation copies semantic metadata from the independent canonical input,
 so a caller metadata table invalidated by a preparation callback is never used

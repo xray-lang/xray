@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Source hands off its first owned Checked; other modes never link the frontend.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
@@ -53,7 +54,7 @@ static XrXirProgramSpec library_string_vm_spec(XrXirArtifact *lowered,XrXirCallE
     const XrXirModule *m=xr_xir_compile_artifact_module(lowered);CHECK(m->function_count<=128);
     XrXirProgramSpec spec={0};spec.abi_version=XR_XIR_PROGRAM_ABI_VERSION;
     spec.target=(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};spec.entry_count=m->function_count;
-    spec.types=m->types;spec.declarations=m->declarations;spec.proof=xr_xir_compile_program_proof(lowered);
+    spec.types=m->types;spec.declarations=m->declarations;spec.packet=xir_program_packet_borrow(lowered);
     for(uint32_t f=0;f<m->function_count;++f)CHECK(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);
     spec.entries=entries;return spec;
 }
@@ -88,7 +89,7 @@ int main(int argc,char **argv) {
 #else
     CHECK(argc==1);(void)argv;spec=library_string_program;memcpy(ids,library_string_export_indices,sizeof(ids));
 #if CONSUMER_KIND==2
-    CHECK(xr_xir_compile_checked_read(&compiler.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
 #endif
 #endif

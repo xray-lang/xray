@@ -219,8 +219,7 @@ XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileCo
         MATCH(entry->flags,flags);
         TRY(xir_effects_program_signature_match(context,permissions->effects,f,
             entry->parameters,entry->parameter_count,entry->result));
-        if (spec->proof.layouts)
-            TRY(match_layout(&spec->proof.layouts[f],&permissions->layouts[f],entry->parameter_count,context));
+
     }
     return XR_XIR_OK;
 }
@@ -233,36 +232,27 @@ XR_FUNC XrXirStatus xr_xir_compile_program_body_match(const XrXirCompileContext 
     MATCH(lowered->target.architecture,permissions->target.architecture);
     MATCH(lowered->target.abi_version,permissions->target.abi_version);
     TRY(xir_effects_program_body_match(context,&lowered->module,permissions->effects));
+    XrXirStatus layout_status=xir_effects_program_layout_match(context,permissions->effects,
+        &permissions->target,permissions->layouts);
+    if (layout_status==XR_XIR_OK) layout_status=xr_xir_compile_layout_match_verified(lowered);
+    if (layout_status!=XR_XIR_OK) return layout_status==XR_XIR_BAD_LAYOUT ? XR_XIR_BAD_STRUCTURE : layout_status;
     for (uint32_t f=0;f<permissions->function_count;++f)
         TRY(match_layout(xr_xir_compile_artifact_layout(lowered,f),&permissions->layouts[f],
             lowered->module.functions[f].parameter_count,context));
-    const XrXirCheckedPacket *packet=&lowered->checked_packet;
-    if (!packet->bytes || packet->length<64) return XR_XIR_BAD_STRUCTURE;
-    if (packet->length>UINT64_MAX-64 || !xir_compile_work(context,packet->length+64)) return XR_XIR_BUDGET;
-    uint8_t identity[32];
-    xr_sha256(packet->bytes,packet->length,identity);
-    return memcmp(identity,permissions->packet_identity,32) ||
-        memcmp(lowered->checked_identity,permissions->packet_identity,32) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+    return XR_XIR_OK;
 }
 #undef MATCH
 #undef TRY
 
 XR_FUNC void xir_program_permissions_free(XrXirProgramPermissions *permissions) {
     if (!permissions) return;
-    xr_xir_compile_effects_free(permissions->effects);
-    if (permissions->layouts) for (uint32_t f=0;f<permissions->function_count;++f) {
-        xr_compile_resources_free((void *)permissions->layouts[f].offsets);
-        xr_compile_resources_free((void *)permissions->layouts[f].parameters);
-        xr_compile_resources_free((void *)permissions->layouts[f].owned_offsets);
-    }
-    xr_compile_resources_free(permissions->layouts);
+    xir_program_input_free(permissions->input);
     xr_compile_resources_free(permissions);
 }
 
 static XrXirStatus program_permissions(const XrXirCompileContext *context,
-    const XrXirArtifact *lowered, XrXirEffects **owned_effects, XrXirProgramPermissions **output) {
+    const XrXirArtifact *lowered, XrXirEffects *effects, XrXirProgramPermissions **output) {
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
-    XrXirEffects *effects = *owned_effects;
     if (!xir_effects_context_matches(context, effects, module->function_count)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = XR_XIR_OK;
     XrXirProgramPermissions *permissions = NULL;
@@ -362,45 +352,24 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     }
     if (status == XR_XIR_OK && (root_parameter_at != root_parameters || reference_at != references))
         status = XR_XIR_BAD_STRUCTURE;
-    if (status == XR_XIR_OK && !xir_compile_work(context, sizeof(*owned_effects))) status = XR_XIR_BUDGET;
+    if (status == XR_XIR_OK && !xir_compile_work(context, sizeof(effects))) status = XR_XIR_BUDGET;
     if (status != XR_XIR_OK) { xir_program_permissions_free(permissions);return status; }
     permissions->effects=effects;
-    *owned_effects=NULL;
     *output = permissions;
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirProgramPermissions **permissions) {
-    if (!xir_compile_context_valid(context) || !spec || !proof || !proof->bytes ||
-        proof->length < 64 || !proof->identity || !proof->layouts || !permissions || *permissions)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context, proof->length)) return XR_XIR_BUDGET;
-    uint8_t digest[32];
-    xr_sha256(proof->bytes, proof->length, digest);
-    if (!xir_compile_work(context, sizeof(digest))) return XR_XIR_BUDGET;
-    if (memcmp(digest, proof->identity, sizeof(digest))) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context, sizeof(XirLoweredEffects))) return XR_XIR_BUDGET;
-    XirLoweredEffects lowered = {0};
-    XrXirStatus status = xr_xir_compile_checked_read_lower_effects(context, proof->bytes, proof->length,
-        &spec->target, &lowered, NULL);
-    if (status == XR_XIR_OK)
-        status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered.artifact);
-    if (status == XR_XIR_OK)
-        status = program_permissions(context, lowered.artifact, &lowered.effects, permissions);
-    if (status == XR_XIR_OK) {
-        (*permissions)->layouts=lowered.artifact->layouts;
-        lowered.artifact->layouts=NULL;
-        (*permissions)->target=lowered.artifact->target;
-        memcpy((*permissions)->packet_identity,digest,sizeof(digest));
+XR_FUNC XrXirStatus xir_program_input_prepare(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,const XrXirProgramInput *input,XrXirProgramPermissions **permissions) {
+    if (!spec || !permissions || *permissions) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xir_program_input_verify(context,input);
+    if (status==XR_XIR_OK) status=xr_xir_compile_program_match(context,spec,
+        input->artifact->layouts,input->artifact);
+    if (status==XR_XIR_OK) status=program_permissions(context,input->artifact,
+        input->artifact->program_final,permissions);
+    if (status==XR_XIR_OK) {
+        (*permissions)->layouts=input->artifact->layouts;
+        (*permissions)->target=input->artifact->target;
+        memcpy((*permissions)->packet_identity,input->artifact->checked_identity,32);
     }
-    xr_xir_compile_effects_free(lowered.effects);
-    xr_xir_compile_artifact_free(lowered.artifact);
     return status;
-}
-
-XR_FUNC XrXirProgramProof xr_xir_compile_program_proof(const XrXirArtifact *artifact) {
-    if (!artifact || artifact->module.stage != XR_XIR_LOWERED)
-        return (XrXirProgramProof) {0};
-    return (XrXirProgramProof) {artifact->checked_packet.bytes, artifact->checked_packet.length,
-        artifact->checked_identity, artifact->layouts};
 }

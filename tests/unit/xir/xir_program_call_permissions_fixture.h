@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Real checked bodies and bound VM entries survive source and packet destruction.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 #define XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 
@@ -221,7 +222,7 @@ static void pce_build(PceFixture *f, PceMode mode) {
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, f->functions,
-        m->declarations, {f,pce_code_release}, m->types, xr_xir_compile_program_proof(f->lowered)};
+        m->declarations, {f,pce_code_release}, m->types, xir_program_packet_borrow(f->lowered)};
     CHECK(xr_xir_compile_program_seal(&f->compiler, &spec, &f->program) == XR_XIR_OK);
     pce_check_facts(f);
 }

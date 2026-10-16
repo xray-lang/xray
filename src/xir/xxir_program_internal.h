@@ -13,6 +13,7 @@
 #ifndef XXIR_PROGRAM_INTERNAL_H
 #define XXIR_PROGRAM_INTERNAL_H
 #include "xxir_program.h"
+#include "xxir_program_input_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_types.h"
 #include "xxir_type_arena.h"
@@ -38,6 +39,7 @@ typedef struct XrXirProgramPermissions {
     uint8_t *cell_roles;
     uint32_t root_parameter_count, reference_count;
     struct XrXirEffects *effects;
+    XrXirProgramInput *input;
     XrXirFunctionLayout *layouts;
     XrXirTarget target;
     uint8_t packet_identity[32];
@@ -72,10 +74,13 @@ XR_FUNC XrXirStatus xr_xir_compile_program_body_match(const XrXirCompileContext 
  * No allocator or cleanup callback runs during this final comparison. */
 XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec, const XrXirProgramPermissions *permissions);
-/* Decode, lowering and comparison consume the same owner. Successful
- * verification transfers only required layout metadata, not temporary artifacts. */
-XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirProgramPermissions **permissions);
+/* Both transports prepare the same real input. Every reception repeats
+ * current semantic, metadata and layout proof before the ownership move. */
+XR_FUNC XrXirStatus xir_program_input_prepare(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,const XrXirProgramInput *input,XrXirProgramPermissions **permissions);
+XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec,XrXirProgramInput **input,
+    XrXirCallEntry **owned_entries,XrXirProgram **output);
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program);
 /* Only the real synthetic initializer can report missing publication after
  * its owned module initializer returned Unit. This is not a host-fault waiver. */

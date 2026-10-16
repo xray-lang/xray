@@ -11,6 +11,8 @@
  */
 #ifndef XIR_ARRAY_CONCAT_PIPELINE_H
 #define XIR_ARRAY_CONCAT_PIPELINE_H
+#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_types.h"
 #include "base/xsha256.h"
 #ifndef XR_CONCAT_COMPONENT
 #define XR_CONCAT_COMPONENT "transaction"
@@ -45,9 +47,9 @@ static XrXirStatus concat_allocate(const XrXirCompileContext *context, size_t co
 static XrXirStatus concat_seal(ConcatCompile *run, unsigned mode) {
     if (!mode) return xr_xir_compile_vm_program_take(&run->lowered, &run->program);
 #if defined(XR_CONCAT_NATIVE)
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.length == array_concat_program.proof.length && !memcmp(proof.identity, array_concat_program.proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, array_concat_program.proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.length == array_concat_program.packet.length && !memcmp(proof.identity, array_concat_program.packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, array_concat_program.packet.bytes, proof.length));
     if (mode == 1) return xr_xir_compile_program_seal(&run->context, &array_concat_program, &run->program);
     ConcatMixed *owner = NULL;
     XrXirStatus status = concat_allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
@@ -68,7 +70,7 @@ static XrXirStatus concat_seal(ConcatCompile *run, unsigned mode) {
         CHECK(native && vm);
         XrXirProgramSpec spec = array_concat_program;
         spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
-        spec.proof = xr_xir_compile_program_proof(artifact); spec.code = (XrXirCodeLease){owner, concat_mixed_free};
+        spec.packet = xir_program_packet_borrow(artifact); spec.code = (XrXirCodeLease){owner, concat_mixed_free};
         status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     }
     if (status != XR_XIR_OK) { CHECK(!run->program); concat_mixed_free(owner); }
@@ -135,7 +137,20 @@ static ConcatCompile concat_build(size_t failure, XrCompileResourceLimits limits
         const XrXirSourceDeclaration *declaration = &view->declarations[d];
         if (declaration->native_identity == 14) {
             CHECK(!declaration->mutable && declaration->parameter_count == 1 && declaration->exported);
-            CHECK(!declaration->type.known && !strcmp(declaration->signature, "(...arrays: Array<T>) -> Array<T>"));
+            CHECK(!strcmp(declaration->name, "concat") &&
+                !strcmp(declaration->signature, "(...arrays: Array<T>) -> Array<T>"));
+            CHECK(declaration->kind == XR_XIR_SOURCE_MEMBER && declaration->parent &&
+                declaration->parent <= view->declaration_count);
+            const XrXirSourceDeclaration *array = &view->declarations[declaration->parent - 1];
+            CHECK(array->kind == XR_XIR_SOURCE_TYPE && !strcmp(array->name, "Array") &&
+                array->generic_parameter_count == 1);
+            CHECK(declaration->type.known && declaration->type.generic_owner == array->id);
+            const XrXirTypeNode *schema = xr_xir_type_node(view->types, declaration->type.type);
+            CHECK(schema && schema->kind == XR_XIR_TYPE_ARRAY &&
+                schema->element == (XrXirType) XR_XIR_TYPE_PARAMETER_BASE);
+            CHECK(declaration->parameters && declaration->parameters[0].known &&
+                declaration->parameters[0].generic_owner == array->id &&
+                declaration->parameters[0].type == declaration->type.type);
             ++concat_members;
         }
     }
@@ -163,7 +178,7 @@ static ConcatCompile concat_build(size_t failure, XrCompileResourceLimits limits
     run.prefix_references = run.context.resources->references;
     run.prefix_blocks = instance_compile_live; run.prefix_bytes = instance_compile_bytes;
     if (concat_compiler_digest) {
-        XrXirProgramProof proof = xr_xir_compile_program_proof(run.lowered);
+        XrXirProgramPacket proof = xir_program_packet_borrow(run.lowered);
         concat_digest(source.text, source.length, run.c_sha); concat_digest(proof.bytes, proof.length, run.proof_sha);
     }
     run.c_bytes = source.length;

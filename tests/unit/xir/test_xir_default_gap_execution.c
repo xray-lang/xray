@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   The same Checked packet feeds source-free VM, generated C and mixed execution.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
@@ -91,7 +92,7 @@ static XrXirStatus default_build(const XrXirCompileContext *context,unsigned var
     if(status==XR_XIR_OK){xr_xir_compile_artifact_free(checked);checked=NULL;status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL);}
 #endif
 #else
-    status=xr_xir_compile_checked_read(context,DEFAULT_SPEC.proof.bytes,DEFAULT_SPEC.proof.length,&checked,NULL);
+    status=xr_xir_compile_checked_read(context,DEFAULT_SPEC.packet.bytes,DEFAULT_SPEC.packet.length,&checked,NULL);
 #endif
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(checked,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
@@ -120,7 +121,7 @@ static XrXirStatus default_build(const XrXirCompileContext *context,unsigned var
     if(status==XR_XIR_OK){CHECK(owner->program->context.resources==context->resources);unsigned native=0,vm=0;
         for(uint32_t f=0;f<module->function_count;++f){if(f%2){owner->entries[f]=DEFAULT_SPEC.entries[f];++native;}else{owner->entries[f]=owner->program->entries[f];++vm;}}
         CHECK(native && vm);XrXirProgramSpec spec=DEFAULT_SPEC;spec.entries=owner->entries;spec.types=module->types;spec.declarations=module->declarations;
-        spec.proof=xr_xir_compile_program_proof(proof);spec.code=(XrXirCodeLease){owner,default_mixed_free};
+        spec.packet=xir_program_packet_borrow(proof);spec.code=(XrXirCodeLease){owner,default_mixed_free};
         status=xr_xir_compile_program_seal(context,&spec,output);if(status==XR_XIR_OK)owner=NULL;}
 #endif
     if(status!=XR_XIR_OK)CHECK(!*output);

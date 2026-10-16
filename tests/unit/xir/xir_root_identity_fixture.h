@@ -13,6 +13,7 @@
  */
 #ifndef XIR_ROOT_IDENTITY_FIXTURE_H
 #define XIR_ROOT_IDENTITY_FIXTURE_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "xir/xxir_declarations.h"
 #include "xir/xxir_instance_value.h"
@@ -192,7 +193,7 @@ static void ri_fixture(RiFixture *f, bool fail_initialization) {
     }
     const XrXirModule *module = xr_xir_compile_artifact_module(f->lowered);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, RI_FUNCTIONS,
-        module->declarations, {f, ri_code_drop}, module->types, xr_xir_compile_program_proof(f->lowered)};
+        module->declarations, {f, ri_code_drop}, module->types, xir_program_packet_borrow(f->lowered)};
     CHECK(xr_xir_compile_program_seal(context, &spec, &f->program) == XR_XIR_OK && f->program);
 }
 #endif // XIR_ROOT_IDENTITY_FIXTURE_H

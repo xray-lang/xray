@@ -1,3 +1,4 @@
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
@@ -159,7 +160,7 @@ static XrXirStatus rb_seal(const RbOwner *owner, RiFixture *f, const XrXirCallEn
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirModule *module = xr_xir_compile_artifact_module(f->lowered);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, RI_FUNCTIONS,
-        module->declarations, {f, ri_code_drop}, module->types, xr_xir_compile_program_proof(f->lowered)};
+        module->declarations, {f, ri_code_drop}, module->types, xir_program_packet_borrow(f->lowered)};
     return xr_xir_compile_program_seal(&owner->source->context, &spec, &f->program);
 }
 static XrXirStatus rb_pipeline(const RbOwner *owner, RiFixture *f, RbTrace *trace) {

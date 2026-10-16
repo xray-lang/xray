@@ -348,12 +348,19 @@ static XrXirStatus effect_source_outcomes(const XrXirCompileContext *work,const 
     EffectGraph graph={.material=effects->invocations->body,.physical=effects->invocations->body->physical};
     if (!xir_compile_work(work,sizeof(current)+sizeof(fresh)+sizeof(graph)+sizeof(input))) return XR_XIR_BUDGET;
     XrXirStatus status=effect_final_control_prepare(work,effects,&input);
-    if (status==XR_XIR_OK) status=effect_control_dependencies_move(work,&input,&graph);
-    if (status==XR_XIR_OK) status=effect_source_outcomes_prepare(work,effects,&fresh);
-    if (status==XR_XIR_OK) status=effect_errors_analyze(&fresh,&graph,&current);
-    if (status==XR_XIR_OK) status=effect_source_outcomes_match(work,effects,&fresh);
-    if (status==XR_XIR_OK) status=effect_source_errors_match(work,effects,&fresh);
-    effect_graph_free(&graph);effect_control_check_free(&input);effect_source_outcomes_free(&fresh);return status;
+    bool empty=false;
+    if (status==XR_XIR_OK) status=effect_error_empty_current(work,effects,&empty);
+    if (status==XR_XIR_OK && !empty) status=effect_control_dependencies_move(work,&input,&graph);
+    if (status==XR_XIR_OK && !empty) status=effect_source_outcomes_prepare(work,effects,&fresh);
+    if (status==XR_XIR_OK && !empty) status=effect_errors_analyze(&fresh,&graph,&current);
+    if (status==XR_XIR_OK && !empty) status=effect_source_outcomes_match(work,effects,&fresh);
+    if (status==XR_XIR_OK && !empty) status=effect_source_errors_match(work,effects,&fresh);
+    effect_graph_free(&graph);effect_control_check_free(&input);effect_source_outcomes_free(&fresh);
+    if (status==XR_XIR_OK && empty) {
+        status=effect_error_empty_current(work,effects,&empty);
+        if (status==XR_XIR_OK && !empty) status=XR_XIR_BAD_STRUCTURE;
+    }
+    return status;
 }
 
 XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,

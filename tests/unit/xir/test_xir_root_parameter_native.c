@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Authentic bodies preserve their active view while observations count edges.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_output.h"
 #include "xir/xxir_vm.h"
@@ -107,22 +108,22 @@ static H1ExecFixture h1n_program(const XrXirProgramSpec *native, uint32_t run,
     XrXirProgramSpec spec = *native;
 #ifdef H1_MIXED
     XrXirArtifact *checked = NULL, *closed = NULL;
-    CHECK(xr_xir_compile_checked_read(&context,native->proof.bytes,native->proof.length,&checked,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&context,native->packet.bytes,native->packet.length,&checked,NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_verify(closed,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(closed,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == native->proof.length && !memcmp(packet.bytes,native->proof.bytes,packet.length));
+    CHECK(packet.length == native->packet.length && !memcmp(packet.bytes,native->packet.bytes,packet.length));
     memset(packet.bytes,0xa5,packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_lower(closed,&native->target,&owner->lowered,NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     CHECK(xr_xir_compile_artifact_verify(owner->lowered,NULL) == XR_XIR_OK);
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->lowered);
     CHECK(module && module->function_count == native->entry_count);
-    spec.proof = xr_xir_compile_program_proof(owner->lowered);
-    CHECK(spec.proof.length == native->proof.length && !memcmp(spec.proof.bytes,native->proof.bytes,spec.proof.length));
-    CHECK(!memcmp(spec.proof.identity,native->proof.identity,32));
+    spec.packet = xir_program_packet_borrow(owner->lowered);
+    CHECK(spec.packet.length == native->packet.length && !memcmp(spec.packet.bytes,native->packet.bytes,spec.packet.length));
+    CHECK(!memcmp(spec.packet.identity,native->packet.identity,32));
     spec.declarations = module->declarations; spec.types = module->types;
 #else
     CHECK(run_native);

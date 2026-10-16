@@ -5,6 +5,7 @@
  * Licensed under the MIT License
  */
 /* Same complete program through VM, native and both actual mixed call directions. */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
@@ -89,7 +90,7 @@ static XrXirProgramSpec prelude_vm_spec(XrXirArtifact *lowered,XrXirCallEntry *e
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);CHECK(module->function_count<=128);
     XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.entry_count=module->function_count,
-        .types=module->types,.declarations=module->declarations,.proof=xr_xir_compile_program_proof(lowered)};
+        .types=module->types,.declarations=module->declarations,.packet=xir_program_packet_borrow(lowered)};
     for (uint32_t f=0;f<module->function_count;++f) CHECK(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);
     spec.entries=entries;return spec;
 }
@@ -113,7 +114,7 @@ XR_FUNC XrXirStatus xr_test_prelude_compile_pipeline(const XrXirCompileContext *
     }
     XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,.target=target,
         .entries=entries,.entry_count=module->function_count,.types=module->types,
-        .declarations=module->declarations,.proof=xr_xir_compile_program_proof(lowered)};
+        .declarations=module->declarations,.packet=xir_program_packet_borrow(lowered)};
     status=xr_xir_compile_program_seal(context,&spec,&program);CHECK(status==XR_XIR_OK ? program!=NULL : program==NULL);
 done:
     xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(special);return status;
@@ -142,7 +143,7 @@ int main(int argc,char **argv) {
 #else
     CHECK(argc==1);(void)argv;spec=prelude_program;answer=prelude_consumer_answer;
 #if CONSUMER_KIND==2 || CONSUMER_KIND==4
-    CHECK(xr_xir_compile_checked_read(&compiler.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
 #endif
 #endif

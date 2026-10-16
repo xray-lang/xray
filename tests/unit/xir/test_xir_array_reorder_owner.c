@@ -10,6 +10,7 @@
  *   Method publication precedes fallible ordinary return admission. Physical
  *   allocator indices and cancellable prefixes independently locate that edge.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
@@ -315,10 +316,10 @@ static void runtime_faults(void) {
     uint32_t functions[OWNER_FUNCTION_COUNT]; owner_functions(xr_xir_compile_artifact_module(compiled.lowered),functions);
     XrXirProgram *program=NULL;
 #if defined(XR_REORDER_NATIVE)
-    XrXirProgramProof proof=xr_xir_compile_program_proof(compiled.lowered);
-    CHECK(proof.length==reorder_owner_program.proof.length);
-    CHECK(!memcmp(proof.identity,reorder_owner_program.proof.identity,32));
-    CHECK(!memcmp(proof.bytes,reorder_owner_program.proof.bytes,proof.length));
+    XrXirProgramPacket proof=xir_program_packet_borrow(compiled.lowered);
+    CHECK(proof.length==reorder_owner_program.packet.length);
+    CHECK(!memcmp(proof.identity,reorder_owner_program.packet.identity,32));
+    CHECK(!memcmp(proof.bytes,reorder_owner_program.packet.bytes,proof.length));
     xr_xir_compile_artifact_free(compiled.lowered); compiled.lowered=NULL;
     CHECK(xr_xir_compile_program_seal(&compiled.context,&reorder_owner_program,&program)==XR_XIR_OK);
 #else

@@ -6,6 +6,7 @@
  *
  * test_xir_cleanup_mixed.c - Source cleanup across both VM/native body boundaries
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_checked.h"
 #include <stdio.h>
@@ -37,7 +38,7 @@ static XrXirStatus cleanup_mixed_build(const XrXirCompileContext *context,unsign
     CleanupMixedOwner *owner=NULL;XrXirArtifact *checked=NULL;
     XrXirStatus status=cleanup_mixed_allocate(context,1,sizeof(*owner),(void **)&owner);
     if(status!=XR_XIR_OK)return status;
-    status=xr_xir_compile_checked_read(context,cleanup_source_program.proof.bytes,cleanup_source_program.proof.length,&checked,NULL);
+    status=xr_xir_compile_checked_read(context,cleanup_source_program.packet.bytes,cleanup_source_program.packet.length,&checked,NULL);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(checked,&target,&owner->artifact,NULL);
     xr_xir_compile_artifact_free(checked);
@@ -64,7 +65,7 @@ static XrXirStatus cleanup_mixed_build(const XrXirCompileContext *context,unsign
         CHECK(native && vm);
         XrXirProgramSpec spec=cleanup_source_program;spec.entries=owner->entries;
         spec.declarations=module->declarations;spec.types=module->types;
-        spec.proof=xr_xir_compile_program_proof(proof_artifact);spec.code=(XrXirCodeLease){owner,cleanup_mixed_free};
+        spec.packet=xir_program_packet_borrow(proof_artifact);spec.code=(XrXirCodeLease){owner,cleanup_mixed_free};
         status=xr_xir_compile_program_seal(context,&spec,output);
     }
     if(status!=XR_XIR_OK){CHECK(!*output);cleanup_mixed_free(owner);}return status;

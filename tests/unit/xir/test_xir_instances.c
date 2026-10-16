@@ -10,6 +10,7 @@
  * KEY CONCEPT:
  *   Host callbacks exercise the runtime contract without a compiler oracle.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_program_internal.h"
 #include "xir/xxir_atomic.h"
@@ -223,7 +224,7 @@ static void fixture(Fixture *f, uint32_t mode) {
     CHECK(native_fixture_owner_new(&f->compiler) == XR_XIR_OK);
     CHECK(native_metadata_fixture(&f->compiler.context, &f->spec, &f->proof) == XR_XIR_OK);
     f->spec.types=xr_xir_compile_artifact_module(f->proof)->types;
-    f->spec.proof = xr_xir_compile_program_proof(f->proof);
+    f->spec.packet = xir_program_packet_borrow(f->proof);
 }
 static XrXirInstance *new_instance(XrXirProgram *program, Trace *log) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
@@ -399,7 +400,6 @@ static void seal_rejection(void) {
         Fixture f; fixture(&f, 0);
         uint32_t cycle = 0;
         uint8_t identity[32];
-        XrXirFunctionLayout layouts[10];
         switch (invalid) {
         case 0: f.spec.abi_version = 0; break;
         case 1: f.spec.target.abi_version = 2; break;
@@ -431,17 +431,17 @@ static void seal_rejection(void) {
         case 18:
             f.spec.abi_version = 11;
             f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
-            f.spec.proof.bytes = (const uint8_t *) (uintptr_t) 1;
-            f.spec.proof.layouts = (const XrXirFunctionLayout *) (uintptr_t) 1;
+            f.spec.packet.bytes = (const uint8_t *) (uintptr_t) 1;
+            f.spec.packet.identity = (const uint8_t *) (uintptr_t) 1;
             break;
-        case 19: f.spec.proof.bytes = NULL; break;
+        case 19: f.spec.packet.bytes = NULL; break;
         case 20:
-            memcpy(identity, f.spec.proof.identity, sizeof(identity)); identity[0] ^= 1;
-            f.spec.proof.identity = identity; break;
-        case 21: --f.spec.proof.length; break;
+            memcpy(identity, f.spec.packet.identity, sizeof(identity)); identity[0] ^= 1;
+            f.spec.packet.identity = identity; break;
+        case 21: --f.spec.packet.length; break;
         case 22:
-            memcpy(layouts, f.spec.proof.layouts, sizeof(layouts)); ++layouts[0].frame_bytes;
-            f.spec.proof.layouts = layouts; break;
+            /* Packet has no caller layout; attack the real received Input below. */
+            break;
         case 23: f.slots[0].mutable ^= 1; break;
         case 24: f.identities[3].promises = XR_XIR_FUNCTION_NO_SUSPEND; break;
         case 25:
@@ -454,13 +454,20 @@ static void seal_rejection(void) {
             f.spec.abi_version = 22;
             f.spec.declarations = (const XrXirDeclarations *) (uintptr_t) 1;
             f.spec.types = (const XrXirTypes *) (uintptr_t) 1;
-            f.spec.proof.bytes = (const uint8_t *) (uintptr_t) 1;
+            f.spec.packet.bytes = (const uint8_t *) (uintptr_t) 1;
             break;
         }
         XrXirProgram *program = NULL;
         const XrXirCompileContext *context = xr_xir_compile_artifact_context(f.proof);
         void *reservation = invalid == 9 ? native_fixture_one_byte_remaining(context) : NULL;
-        XrXirStatus status = xr_xir_compile_program_seal(context, &f.spec, &program);
+        XrXirStatus status;
+        if (invalid == 22) {
+            XrXirProgramInput *input = NULL;
+            CHECK(xir_program_input_read(context, &f.spec.packet, &f.spec.target, &input) == XR_XIR_OK);
+            ++input->artifact->layouts[0].frame_bytes;
+            status = xir_program_receive(context, &f.spec, &input, NULL, &program);
+            xir_program_input_free(input);
+        } else status = xr_xir_compile_program_seal(context, &f.spec, &program);
         XrXirStatus expected_rejection = invalid == 23 ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE;
         if (invalid == 23)
             fprintf(stderr, "INSTANCE_SEAL_TYPE_REJECTION invalid=%u status=%u expected=%u "
@@ -493,7 +500,7 @@ static void compiler_pipeline_faults(void) {
             XrXirProgram *program = NULL;
             if (status == XR_XIR_OK) {
                 f.spec.types = xr_xir_compile_artifact_module(f.proof)->types;
-                f.spec.proof = xr_xir_compile_program_proof(f.proof);
+                f.spec.packet = xir_program_packet_borrow(f.proof);
                 status = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(f.proof), &f.spec, &program);
             }
             const size_t attempts = instance_compile_attempts;

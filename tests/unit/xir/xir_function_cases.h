@@ -11,6 +11,7 @@
  */
 #ifndef XIR_FUNCTION_CASES_H
 #define XIR_FUNCTION_CASES_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_program.h"
 #include <string.h>
 typedef struct FunctionCaseFrame { uint32_t phase; XrXirValue owned, cell; } FunctionCaseFrame;
@@ -79,7 +80,7 @@ static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program
     XrXirArtifact *proof = NULL;
     XrXirStatus prepared = native_metadata_fixture(&compiler.context, &spec, &proof);
     if (prepared != XR_XIR_OK) { native_fixture_owner_free(&compiler); return prepared; }
-    spec.proof = xr_xir_compile_program_proof(proof);
+    spec.packet = xir_program_packet_borrow(proof);
     nodes[0].result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; nodes[0].parameter_span = 1;
     XrXirStatus rejected = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, program);
     if (rejected == XR_XIR_OUT_OF_MEMORY) { xr_xir_compile_artifact_free(proof); native_fixture_owner_free(&compiler); return rejected; }

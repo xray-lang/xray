@@ -6,6 +6,7 @@
  *
  * test_xir_assert_panics_native.c - Actual native and mixed typed discard outcomes
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_source_query.h"
@@ -47,7 +48,7 @@ static void panics_native_cases(XrXirProgram *program,bool matrix) {
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
 }
 static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool root_native) {
-    XrXirArtifact *checked=NULL;CHECK(xr_xir_compile_checked_read(assert_compile_context,native->proof.bytes,native->proof.length,&checked,NULL)==XR_XIR_OK);
+    XrXirArtifact *checked=NULL;CHECK(xr_xir_compile_checked_read(assert_compile_context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     PanicsNativeOwner *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
     CHECK(xr_xir_compile_lower(checked,&native->target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==native->entry_count);
@@ -61,15 +62,15 @@ static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool 
     }
     CHECK(native_count && vm_count);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,native->target,owner->entries,module->function_count,
-        module->declarations,{owner,panics_native_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
+        module->declarations,{owner,panics_native_release},module->types,xir_program_packet_borrow(owner->artifact)};
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(assert_compile_context,&spec,&program)==XR_XIR_OK);
     panics_native_cases(program,matrix);
 }
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==22 && XR_XIR_CALL_ABI_VERSION==28 &&
-        XR_XIR_PROGRAM_ABI_VERSION==29,"current typed execution ABI");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 &&
+        XR_XIR_PROGRAM_ABI_VERSION==31,"current typed execution ABI");
     _Static_assert(sizeof(XrXirValue)==16 && _Alignof(XrXirValue)==8 &&
         offsetof(XrXirValue,type)==0 && offsetof(XrXirValue,reserved)==4 &&
         offsetof(XrXirValue,payload)==8,"XrXirValue complete current carrier layout");
@@ -99,11 +100,11 @@ int main(void) {
         offsetof(XrXirCallEntry,state_bytes)==24 && offsetof(XrXirCallEntry,resume)==32 &&
         offsetof(XrXirCallEntry,release)==40 && offsetof(XrXirCallEntry,environment)==48 &&
         offsetof(XrXirCallEntry,flags)==56 && offsetof(XrXirCallEntry,cleanup_owner)==60,"XrXirCallEntry complete current carrier layout");
-    _Static_assert(sizeof(XrXirProgramSpec)==96 && _Alignof(XrXirProgramSpec)==8 &&
+    _Static_assert(sizeof(XrXirProgramSpec)==88 && _Alignof(XrXirProgramSpec)==8 &&
         offsetof(XrXirProgramSpec,abi_version)==0 && offsetof(XrXirProgramSpec,target)==4 &&
         offsetof(XrXirProgramSpec,entries)==16 && offsetof(XrXirProgramSpec,entry_count)==24 &&
         offsetof(XrXirProgramSpec,declarations)==32 && offsetof(XrXirProgramSpec,code)==40 &&
-        offsetof(XrXirProgramSpec,types)==56 && offsetof(XrXirProgramSpec,proof)==64,"XrXirProgramSpec complete current carrier layout");
+        offsetof(XrXirProgramSpec,types)==56 && offsetof(XrXirProgramSpec,packet)==64,"XrXirProgramSpec complete current carrier layout");
     for (uint32_t matrix=0;matrix<2;++matrix) {
         const XrXirProgramSpec *spec=matrix ? &panics_matrix_program : &panics_checked_program;
         XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(assert_compile_context,spec,&program)==XR_XIR_OK);

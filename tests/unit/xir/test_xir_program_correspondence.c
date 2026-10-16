@@ -10,6 +10,7 @@
  * KEY CONCEPT:
  *   Valid programs with equal descriptors must not exchange canonical bodies.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_internal.h"
 static bool probe_armed, probe_injected, probe_allocations;
@@ -219,7 +220,7 @@ static void seal_callback_refusal(const XrXirCompileContext *context,bool alloca
         CHECK(xr_xir_compile_vm_bind(artifact, f, &bindings[f], &entries[f]) == XR_XIR_OK);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, artifact->target,
         entries, 2, artifact->module.declarations, {0}, artifact->module.types,
-        xr_xir_compile_program_proof(artifact)};
+        xir_program_packet_borrow(artifact)};
     XrXirProgram *program = NULL;
     probe_artifact = artifact;
     const XrXirSourceModule *saved_modules=spec.declarations->modules;

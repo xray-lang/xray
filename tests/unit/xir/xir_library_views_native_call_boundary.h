@@ -74,7 +74,8 @@ static void views_call_tight(const RootParameterSourceOracle *oracle, const H1Ex
             h1r_audit(&t, i, "tight_S0");
             CHECK(h1r_step(&t, i, refused) == XR_XIR_CALL_LIMIT);
             CHECK(w->instance == identity && w->domain == domain && &identity->budget == budget);
-            CHECK(identity->epoch == epoch && w->state == (deeper ? XR_XIR_INSTANCE_FAILED : XR_XIR_INSTANCE_READY));
+            CHECK(identity->epoch == epoch && (uint32_t)w->state ==
+                (uint32_t)(deeper ? XR_XIR_INSTANCE_FAILED : XR_XIR_INSTANCE_READY));
             CHECK(w->output.groups == (deeper ? 0u : 1u) && w->output.writes == w->output.groups);
             CHECK((unsigned)budget->exhausted == (deeper ? 0u : 1u));
             h1r_no_refund(w, &before, domain, budget); h1r_audit(&t, i, "tight_S1");

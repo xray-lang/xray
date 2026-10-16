@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Frozen Checked bytes feed independent source-free runtime expectations.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
@@ -29,7 +30,7 @@ int main(void){
  XrXirProgramSpec spec=dependency_ready_program;XrXirArtifact *checked=NULL,*lowered=NULL;
  XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;
  ReadyEntries selected={dependency_ready_functions[0],dependency_ready_functions[1],dependency_ready_functions[2]};
- if(XR_DEPENDENCY_MIXED){CHECK(xr_xir_compile_checked_read(&compile,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+ if(XR_DEPENDENCY_MIXED){CHECK(xr_xir_compile_checked_read(&compile,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
  CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  CHECK(xr_compile_resources_calloc(compile.resources,spec.entry_count,sizeof(*entries),(void **)&entries)==XR_COMPILE_RESOURCE_OK);
  CHECK(xr_compile_resources_calloc(compile.resources,spec.entry_count,sizeof(*bindings),(void **)&bindings)==XR_COMPILE_RESOURCE_OK);
@@ -40,7 +41,7 @@ int main(void){
  if(choose){entries[i]=spec.entries[i];++native;}else{CHECK(entries[i].resume!=spec.entries[i].resume);++vm;}}
  CHECK(native&&vm);CHECK(entries[selected.answer].resume==spec.entries[selected.answer].resume);
  CHECK(entries[selected.retained].resume!=spec.entries[selected.retained].resume);CHECK(entries[selected.values].resume==spec.entries[selected.values].resume);
- spec.entries=entries;spec.types=module->types;spec.declarations=module->declarations;spec.proof=xr_xir_compile_program_proof(lowered);
+ spec.entries=entries;spec.types=module->types;spec.declarations=module->declarations;spec.packet=xir_program_packet_borrow(lowered);
  }
  XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&compile,&spec,&program)==XR_XIR_OK);
  XrXirValue held[2][2]={{{0}}};ready_pair(program,selected,held);ready_runtime_faults(program,selected);

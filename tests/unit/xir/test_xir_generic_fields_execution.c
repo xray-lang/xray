@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Frozen Checked bytes feed independent source-free runtime expectations.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
@@ -27,7 +28,7 @@ XrXirArtifact *checked=NULL,*lowered=NULL;
 XrXirCallEntry *entries=NULL;
 XrXirVmBinding *bindings=NULL;
 
- CHECK(xr_xir_compile_checked_read(&compiler.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
 GenericFieldEntries selected=generic_fields_entries(xr_xir_compile_artifact_module(checked));
  if(XR_GENERIC_FIELDS_MIXED){
 CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
@@ -48,10 +49,10 @@ const XrXirModule *m=xr_xir_compile_artifact_module(lowered);
 spec.entries=entries;
 spec.types=m->types;
 spec.declarations=m->declarations;
-XrXirProgramProof proof=xr_xir_compile_program_proof(lowered);
-CHECK(proof.identity&&spec.proof.identity&&proof.length==spec.proof.length&&
-    !memcmp(proof.identity,spec.proof.identity,32)&&!memcmp(proof.bytes,spec.proof.bytes,proof.length));
-spec.proof=proof;
+XrXirProgramPacket proof=xir_program_packet_borrow(lowered);
+CHECK(proof.identity&&spec.packet.identity&&proof.length==spec.packet.length&&
+    !memcmp(proof.identity,spec.packet.identity,32)&&!memcmp(proof.bytes,spec.packet.bytes,proof.length));
+spec.packet=proof;
 }
  xr_xir_compile_artifact_free(checked);
  XrXirProgram *program=NULL;
