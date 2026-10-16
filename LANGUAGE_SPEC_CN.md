@@ -7939,6 +7939,8 @@ native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/
 
 Source已接准确记录类型/别名、标识符字面量、字段简写、展开、点读写、泛型值参数、记录数组及当前可重建的编译期结果。字段表达式按书写顺序各求值一次，再按规范序构造；显式重复字段拒绝。字符串键由parser拒绝，Map保留独立语法。构造、字段路径、Cell根与Array内记录沿现有失败原子发布/COW；旧快照不被新写入污染。Tuple公开操作不能准入记录，记录操作也不能准入Tuple。逻辑Unit字段不授予const根写权限。函数字段沿原唯一Final与显式FUNCTION_WEAKEN保持声明接收上界，不从形状或存储推导执行权限。
 
+深准入已先由父字段声明认证盒装子值，随后保留子值实际出生arena与type；不能用父池解释该子值的局部序号。重新排序的已接收Record/Tuple、COW后新池Array子值、函数准入回调的重入/拒绝与同形未认证池分别核验；调用方Domain、gate/context、work/scratch和失败原子性保持。该元数据/存储回归不授予实际跨Program调用执行权限。
+
 VM、真实生成C及双向mixed已覆盖上述有限路径，真实Checked独立包另覆盖空记录、Unit字段、开放泛型描述和直接字段替换。编译期记录沿原预算、类型准入、字段路径与拥有式重建，不产生第二evaluator。结构约束的定义处只读字段/借用来源、完整模式、真实跨池函数字段gate、全部FI/预算/取消/安全与完整provider资格仍未完成。Readonly字段注解当前明确拒绝，仍是待实现的合法目标。普通Iterable/Lengthable/FromLiteral、union、views及完整公共REPL不由此获得资格。
 
 ---

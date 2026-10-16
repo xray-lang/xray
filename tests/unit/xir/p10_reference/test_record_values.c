@@ -94,4 +94,5 @@ static void record_values(void) {
     printf("Record exact/empty/Unit identity,snapshot replacement,%zu allocation failures,all work prefixes0..%llu,physical0/0 PASS\n",
         sites,(unsigned long long)(work-1));
 }
-int main(void) {record_values();return 0;}
+#include "record_receiving_resources.h"
+int main(void) {record_values();record_receiving_resources();return 0;}

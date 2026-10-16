@@ -255,6 +255,9 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
         arena=admission_frame_arena(&stack.frames[stack.depth-1]);
         admission_child(&stack.frames[stack.depth - 1], arena, &current, &span, &inlined, &tuple_field);
         type = inlined ? span.type : (XrXirType)current.type;
+        /* The parent authenticated boxed fields against its declarations.
+         * Each child still carries coordinates from its actual object header. */
+        if (!inlined && owned_carrier_type(type)) arena=object_pointer(&current)->arena;
     }
     if (stack.frames) {
         if (stack.frames != &stack.first)

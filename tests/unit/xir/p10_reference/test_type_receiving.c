@@ -38,6 +38,7 @@ static void no_change(const XrXirCompileContext *context,XrCompileResourceStats 
 #include "type_receiving_equal.h"
 #include "type_receiving_hash.h"
 #include "type_receiving_hash_function.h"
+#include "type_receiving_record.h"
 int main(void) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     received_nested_arrays(&compiler);
@@ -48,6 +49,7 @@ int main(void) {
     received_value_equality(&compiler);
     received_hash_storage(&compiler);
     received_hash_functions(&compiler);
+    received_record_storage(&compiler);
     XrXirTypeArena *source=arena(&compiler,0),*target=arena(&compiler,1),*unrelated=arena(&compiler,1);
     XrXirTypeArena *parent=arena(&compiler,0),*child=arena(&compiler,1);
     XirTypeReceivingRoot down={type(1),type(2)},up={type(2),type(1)};
