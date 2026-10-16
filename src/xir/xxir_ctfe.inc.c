@@ -186,9 +186,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     if (request->argument_count != body->parameter_count) return XR_XIR_CTFE_BAD_ARGUMENT;
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(&artifact->context, 1)) return XR_XIR_CTFE_BUDGET;
-        if (!ctfe_parameter_type(body->parameters[p])) return XR_XIR_CTFE_NOT_SUPPORTED;
-        if (!xr_xir_value_argument(&request->arguments[p], NULL, body->parameters[p]))
-            return XR_XIR_CTFE_BAD_ARGUMENT;
+        status=ctfe_external_argument_admit(artifact,body->parameters[p],&request->arguments[p],NULL);
+        if (status!=XR_XIR_CTFE_OK) return status;
     }
     if (!xr_xir_type_is_owned(artifact->module.types,body->result)) {
         XrXirLayout storage={0};
@@ -224,7 +223,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     }
     for (uint32_t p = 0; p < body->parameter_count; ++p) {
         if (!xir_compile_work(&artifact->context, 1)) { status = XR_XIR_CTFE_BUDGET; goto done; }
-        status = ctfe_argument_store(&run, layout->offsets[p], &request->arguments[p], &owned, true);
+        status = ctfe_external_argument_store(&run,layout->offsets[p],body->parameters[p],&request->arguments[p],&owned);
         if (status != XR_XIR_CTFE_OK) goto done;
     }
     {

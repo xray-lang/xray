@@ -211,3 +211,4 @@ static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types
 #include "xxir_ctfe_function.inc.c"
 
 #include "xxir_ctfe_identity.inc.c"
+#include "xxir_ctfe_import.inc.c"

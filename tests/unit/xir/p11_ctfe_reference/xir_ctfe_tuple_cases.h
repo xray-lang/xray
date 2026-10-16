@@ -99,11 +99,11 @@ static void reference_tuple(const XrXirCompileContext *context,XrXirSourceResult
             if (lowered_module->functions[f].parameter_count==1 && lowered_module->functions[f].parameters[0]==(XrXirType)output.type) parameter=f;
         CHECK(parameter!=UINT32_MAX);XrXirValue refused={0};XrXirCtfeRequest entry=request;
         entry.function=parameter;entry.arguments=&output;entry.argument_count=1;
-        CHECK(xr_xir_compile_ctfe_leaf(&entry,&refused)==XR_XIR_CTFE_NOT_SUPPORTED);
-        CHECK(!refused.type && !refused.reserved && !refused.payload);reference_tuple_value(&output,selected);
+        CHECK(xr_xir_compile_ctfe_leaf(&entry,&refused)==XR_XIR_CTFE_OK);
+        reference_tuple_value(&refused,selected);xr_xir_value_drop(&refused);reference_tuple_value(&output,selected);
         XrXirCtfeCallRequest calls={entry,XR_XIR_CTFE_MAX_CALL_DEPTH};
-        CHECK(xr_xir_compile_ctfe_calls(&calls,&refused)==XR_XIR_CTFE_NOT_SUPPORTED);
-        CHECK(!refused.type && !refused.reserved && !refused.payload);reference_tuple_value(&output,selected);
+        CHECK(xr_xir_compile_ctfe_calls(&calls,&refused)==XR_XIR_CTFE_OK);
+        reference_tuple_value(&refused,selected);xr_xir_value_drop(&refused);reference_tuple_value(&output,selected);
     }
     xr_xir_compile_artifact_free(lowered);
     reference_tuple_value(&output,selected);xr_xir_value_drop(&output);
