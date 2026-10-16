@@ -74,7 +74,10 @@ done:
 }
 
 static bool source_direct_signature_names(SourceContext *ctx,AstNode *node,XrXirSourceCallSignature *signature) {
-    uint32_t owner=signature->result.generic_owner;
+    uint32_t owner=signature->owner_type.generic_owner;
+    if(owner&&signature->result.generic_owner&&owner!=signature->result.generic_owner)
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"call signature result owner diverged");
+    if(signature->result.generic_owner)owner=signature->result.generic_owner;
     for(uint32_t p=0;p<signature->parameter_count;++p) {
         if(!source_work(ctx,node))return false;
         uint32_t candidate=signature->parameters[p].generic_owner;
@@ -126,6 +129,15 @@ static bool source_direct_call_signature(SourceContext *ctx,AstNode *node,uint32
     }
     XrXirSourceCallSignature signature={.parameters=parameters,.parameter_count=prepared->count,
         .receiver_count=prepared->receiver_count,.result=source_query_type(ctx,prepared->result),.known=true};
+    uint32_t declaration_id=ctx->bodies[function].declaration;
+    uint32_t owner=declaration_id?ctx->query.declarations[declaration_id-1].parent:0;
+    if(owner&&ctx->query.declarations[owner-1].kind==XR_XIR_SOURCE_TYPE) {
+        XrXirType actual;
+        if(!ctx->query.declarations[owner-1].type.known)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"method signature owner type is unknown");
+        if(!source_substitute(ctx,&prepared->substitution,ctx->query.declarations[owner-1].type.type,0,&actual))return false;
+        signature.owner_type=source_query_type(ctx,actual);
+    }
     if(!source_direct_signature_names(ctx,node,&signature))return false;
     XrXirSourceCall *call=(XrXirSourceCall *)&ctx->calls.items[ctx->calls.count-1];
     return source_copy_bytes(ctx,node,&call->signature,&signature,sizeof(signature));

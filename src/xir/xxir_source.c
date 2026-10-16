@@ -2940,6 +2940,7 @@ static bool source_query_modules(SourceContext *ctx) {
 #include "xxir_source_dependencies.inc.c"
 #include "xxir_source_calls_publish.inc.c"
 #include "xxir_source_type_facts_publish.inc.c"
+#include "xxir_source_native_query.inc.c"
 static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) {
     if (!output || !ctx->query_ready || ctx->diagnostic.status != XR_XIR_OK) {
         if (output) xr_xir_compile_source_result_free(output);
@@ -2949,6 +2950,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
     ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
     ctx->query.diagnostic = ctx->diagnostic;
     ctx->query.types = ctx->types.count || ctx->types.nominals || ctx->types.interfaces ? &ctx->types : NULL;
+    if(!source_native_query_types(ctx)){xr_xir_compile_source_result_free(output);return;}
     const char *failure = "source query snapshot publication failed";
     XrXirStatus status = xr_xir_compile_source_snapshot_copy_v2(&ctx->compile, &ctx->query, xr_xir_compile_artifact_construction(output->checked), &output->snapshot);
     if (status == XR_XIR_OK) {

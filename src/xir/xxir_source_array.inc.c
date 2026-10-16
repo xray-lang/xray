@@ -25,10 +25,8 @@ static XrXirSourceType source_array_schema_type(SourceContext *ctx, XrNativeType
     if (term == XR_NATIVE_TERM_ELEMENT)
         return (XrXirSourceType) {(XrXirType) XR_XIR_TYPE_PARAMETER_BASE, ctx->array_declaration, true};
     if (term == XR_NATIVE_TERM_ARRAY_ELEMENT) {
-        XrXirType array = XR_XIR_UNIT;
-        if (!source_intern_type(ctx, (XrXirTypeNode) {.kind = XR_XIR_TYPE_ARRAY,
-            .element = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE}, &array)) return (XrXirSourceType) {0};
-        return (XrXirSourceType) {array, ctx->array_declaration, true};
+        /* Declaration-only open nodes are projected after executable checking. */
+        return (XrXirSourceType) {0};
     }
     XrXirType scalar = term == XR_NATIVE_TERM_I64 ? XR_XIR_I64 : term == XR_NATIVE_TERM_STRING ? XR_XIR_STRING :
         term == XR_NATIVE_TERM_BOOL ? XR_XIR_BOOL : XR_XIR_UNIT;
@@ -61,10 +59,18 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
         record->parameters = parameters; record->parameter_count = member->parameter_count;
         record->exported = true; record->mutable = member->receiver == XR_NATIVE_RECEIVER_REF;
         record->generic_parent = ctx->array_declaration; record->generic_parent_count = 1;
+        for(uint32_t p=0;p<member->parameter_count;++p) {
+            if(!source_work(ctx,node))return false;
+            SourceName parameter={0};parameter.name=source_owned_text(ctx,member->parameters[p].name);
+            if(!parameter.name||!source_query_declare(ctx,&parameter,XR_XIR_SOURCE_PARAMETER,symbol.declaration,
+                (XrXirSourceRange){ctx->array_module,0,0,0,0}))return false;
+            ((XrXirSourceDeclaration *)ctx->query.declarations)[parameter.declaration-1].type=parameters[p];
+        }
     }
     return source_query_target_token_reference(ctx,node,
         ctx->array_members[operation], member->is_method ? XR_XIR_SOURCE_CALL : XR_XIR_SOURCE_READ);
 }
+#include "xxir_source_native_calls.inc.c"
 static bool source_array_static_receiver(SourceContext *ctx, AstNode *node) {
     return node && node->type == AST_NEW_EXPR && node->as.new_expr.is_type_namespace &&
         node->as.new_expr.class_name && source_text_same(ctx, NULL, node->as.new_expr.class_name, "Array") &&
@@ -93,7 +99,8 @@ static bool source_array_static_call(SourceContext *ctx, AstNode *node, SourceVa
     if (capacity.type != XR_XIR_I64)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array capacity must be exact i64");
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_WITH_CAPACITY, type,
-        {capacity.id, 0}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member);
+        {capacity.id, 0}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member) &&
+        source_array_call_signature(ctx,node,&(SourceNativeCallShape){type,&capacity.type,1},value->type);
 }
 static SourceName *source_array_root(SourceContext *ctx, AstNode *node) {
     if (!node || node->type != AST_VARIABLE) return NULL;
@@ -205,7 +212,8 @@ static bool source_array_get(SourceContext *ctx, AstNode *node, AstNode *receive
     if (!member) member = source_array_member(ctx, node, "get");
     if (!member || member->operation != XR_NATIVE_OPERATION_ARRAY_GET) return false;
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_GET, xr_xir_array_element(&ctx->types, array.type),
-        {array.id, at.id}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member);
+        {array.id, at.id}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member) &&
+        source_array_call_signature(ctx,node,&(SourceNativeCallShape){array.type,&at.type,1},value->type);
 }
 static bool source_array_set(SourceContext *ctx, AstNode *node, AstNode *receiver, AstNode *index,
     AstNode *rhs, const XrNativeMemberDeclaration *member, bool assignment, SourceValue *value) {
@@ -216,7 +224,9 @@ static bool source_array_set(SourceContext *ctx, AstNode *node, AstNode *receive
     if (!member) member = source_array_member(ctx, node, "set");
     if (!member || member->operation != XR_NATIVE_OPERATION_ARRAY_SET) return false;
     if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0}, {0}, 0, {0}}, args, 3, value) ||
-        !source_array_member_reference(ctx, node, member)) return false;
+        !source_array_member_reference(ctx, node, member)||
+        !source_array_call_signature(ctx,node,&(SourceNativeCallShape){args[0].type,
+            (XrXirType[]){args[1].type,args[2].type},2},XR_XIR_UNIT)) return false;
     if (assignment) *value = args[2];
     return true;
 }
@@ -251,7 +261,8 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
                 {current.id, capacity.id}, {0}, 0, {0}}, &candidate) &&
             source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT,
                 {root.id, candidate.id}, {0}, 0, {0}}, NULL) &&
-            source_array_member_reference(ctx, node, member) && (*value = candidate, true);
+            source_array_member_reference(ctx, node, member) && (*value = candidate, true) &&
+            source_array_call_signature(ctx,node,&(SourceNativeCallShape){root.type,&capacity.type,1},value->type);
     }
     case XR_NATIVE_OPERATION_ARRAY_GET:
         return source_array_get(ctx, node, access->object, call->arguments[0], evaluated, member, value);
@@ -262,7 +273,8 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
         if (!source_array_receiver(ctx, access->object, NULL, true, &place) ||
             !source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){xr_xir_array_element(&ctx->types, place.type) != XR_XIR_UNIT,xr_xir_array_element(&ctx->types, place.type), false, false}, &input)) return false;
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {place.id, input.id}, {0}, 0, {0}}, value) &&
-            source_array_member_reference(ctx, node, member);
+            source_array_member_reference(ctx, node, member) &&
+            source_array_call_signature(ctx,node,&(SourceNativeCallShape){place.type,&input.type,1},value->type);
     }
     default: return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array member operation is not implemented");
     }

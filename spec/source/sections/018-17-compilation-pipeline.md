@@ -377,7 +377,12 @@ GET及索引读返回独立拥有的元素，并保留索引求值前选定的�
 
 源码查询快照独立拥有Array类型节点、成员签名、泛型声明owner、源码位置及内容身份，编译会话释放后仍有效；查询不重新解析、推断或执行。原生声明的查询来源不产生可执行initializer。失败的私有、别名或未准入成员查找不发布成功绑定；资源失败不发布Checked或快照。查询中的core len记录其稳定身份，未知源码来源保持未知。
 
-源码调用观察额外拥有规范实参推导及转换完成后的直接调用显示签名：实际替换的参数向量、真实接收者前缀和结果类型。残留类型参数保留调用方声明owner及真实参数名；有序名称向量独立拥有，不从序号合成。附件校验声明参数数、接收者身份和类型表达式，深复制到接收快照，失败原子回滚且不重置原资源账本。签名查询结合这些观察、声明名称及参数模式，不重复推导。间接或原生调用的未知观察保持未知。这些显示事实不构造可执行调用，也不授予Final或效果权威。
+源码调用观察额外拥有规范实参推导及转换完成后的直接调用显示签名：实际替换的参数向量、真实接收者前缀和结果类型。残留类型参数保留调用方声明owner及真实参数名；有序名称向量独立拥有，不从序号合成。附件校验声明参数数、接收者身份和类型表达式，深复制到接收快照，失败原子回滚且不重置原资源账本。签名查询结合这些观察、声明名称及参数模式，不重复推导。间接或尚未准入的原生调用观察保持未知。这些显示事实不构造可执行调用，也不授予Final或效果权威。
+
+已准入的Array调用还保存实际实例化owner、检查及转换后的显式参数类型、结果和原生声明的optional/variadic标记；不为原生值操作虚构receiver参数。参数名来自受治理的原生声明，附件独立核对原生owner/member身份、名称、源码路径、内容指纹、位置及参数数，不能仅凭显示标签或同名用户类型绑定。查询消费者按真实variadic末参数选择活动参数，跨入口合并还核对声明来源；原生来源不虚构编辑器文档版本或跳转URI。
+
+原生声明的开放Array<T> schema只属于拥有式查询类型池。成功Checked后，查询投影保留全部可执行类型ID前缀，并复用已有规范开放节点或追加独立查询节点；不把声明schema插入可执行类型池。Array recipe中的临时存储保留已检查receiver元素的声明类型界限，不作为新的用户类型推断变量。此边界不授予执行、构造、Final或效果权限。
+
 
 此子集的Windows源码VM、native、混合条目及Checked重载按独立预期验证两模块字符串程序，输出为`red\nblue\n2\ngreen\nblue\ngreen\n3\n`；实例隔离、结果寿命、初始化越界粘滞与分配失败物理释放另有断言。输出golden不替代OOM、retain、工作预算或全量sanitizer门。完整批次资格仍要求受影响目标重建、回归、合同和sanitizer门；本节不声明这些完整门或macOS已通过。
 
@@ -1011,7 +1016,12 @@ An escaped Array owns the TypeArena and backing lifetime needed for reading, cop
 
 Source query snapshots independently own Array type nodes, member signatures, generic declaration owners, source positions and content identities, and remain valid after compiler-session release. Queries do not resolve, infer or execute. Native declaration provenance does not create an executable initializer. Failed private, alias or unadmitted-member lookups publish no successful binding; resource failure publishes neither Checked nor a snapshot. A core len query records its stable identity and leaves unknown source provenance unknown.
 
-Source call observations additionally own direct-call display signatures after the canonical argument inference and conversion pass: the actual substituted parameter vector, the real receiver prefix and the result type. A remaining type parameter retains its caller declaration owner and exact parameter name; the ordered name vector is independently owned and is never synthesized from an ordinal. Attachment validates the declaration arity, receiver identity and type expressions, deeply copies the vector into the receiving snapshot and rolls back on failure without resetting its resource ledger. Signature queries use these observations together with declaration names and parameter modes; they do not repeat inference. Unknown indirect or native observations remain unknown. These display facts neither construct executable calls nor establish Final or effect authority.
+Source call observations additionally own direct-call display signatures after the canonical argument inference and conversion pass: the actual substituted parameter vector, the real receiver prefix and the result type. A remaining type parameter retains its caller declaration owner and exact parameter name; the ordered name vector is independently owned and is never synthesized from an ordinal. Attachment validates the declaration arity, receiver identity and type expressions, deeply copies the vector into the receiving snapshot and rolls back on failure without resetting its resource ledger. Signature queries use these observations together with declaration names and parameter modes; they do not repeat inference. Unknown indirect or unadmitted native observations remain unknown. These display facts neither construct executable calls nor establish Final or effect authority.
+
+Admitted Array calls also retain the actual instantiated owner, checked and converted explicit parameter types, result and governed optional/variadic parameter flags. Native value operations acquire no invented receiver parameter. Parameter names come from governed native declarations. Attachment independently checks native owner/member identities, names, source path, content fingerprint, ranges and arity; a display label or a same-named user type cannot establish identity. The consumer selects the real final variadic parameter and compares declaration provenance across entry snapshots. Native provenance invents neither an editor document version nor a navigation URI.
+
+An open Array<T> native declaration schema belongs only to the owned query type pool. After successful Checked construction, query projection preserves the complete executable type-ID prefix and either reuses an existing canonical open node or appends a separate query node. Declaration schemas never enter the executable pool. Array recipe temporaries retain the declared type bound of the checked receiver element rather than becoming new user inference variables. This boundary grants no execution, construction, Final or effect authority.
+
 
 The Windows source VM, native, mixed-entry and Checked-reload paths verify the two-module string program against independent expectations: `red\nblue\n2\ngreen\nblue\ngreen\n3\n`. Separate assertions cover instance isolation, result lifetime, sticky initialization bounds and physical release after allocation failure. The output golden does not replace OOM, retain, work-budget or full sanitizer gates. Complete batch qualification still requires fresh affected targets, regression, contract and sanitizer gates; this section does not claim those complete gates or macOS have passed.
 
