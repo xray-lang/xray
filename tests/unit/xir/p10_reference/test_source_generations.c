@@ -21,6 +21,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 #include "source_history_cell_fixture.h"
+#include "source_history_function_fixture.h"
 #if defined(XR_SOURCE_HISTORY_NATIVE)
 #include "source_history_native_generated.h"
 static bool history_native_case;
@@ -260,6 +261,7 @@ static void class_ref_coordinates(XrXirSourceGenerations *owner,uint64_t first,
         (unsigned)classes[0],(unsigned)classes[1],(unsigned)string_cells[0],(unsigned)string_cells[1]);
     CHECK(classes[0]!=XR_XIR_UNIT && classes[1]!=XR_XIR_UNIT && classes[0]!=classes[1] && !string_cells[0] && string_cells[1]);
 }
+#include "source_history_function_value.h"
 static int history_check(const char *mode) {
     bool definition_cell=!strcmp(mode,"--definitions-cell");
     bool class_ref=!strcmp(mode,"--history-class-ref");
@@ -398,6 +400,13 @@ static int history_check(const char *mode) {
     return 0;
 }
 int main(int argc,char **argv) {
+    if (argc==2 && (!strcmp(argv[1],"--history-function-value") || !strcmp(argv[1],"--history-function-call"))) {
+        bool escaped=!strcmp(argv[1],"--history-function-value");
+#if defined(XR_SOURCE_HISTORY_NATIVE)
+        history_native_case=true;history_native_kind=escaped?10:9;
+#endif
+        return escaped?history_function_value():history_function_call();
+    }
     if (argc==2) return history_check(argv[1]);
     CHECK(argc==1);
     binding_frame_limits();

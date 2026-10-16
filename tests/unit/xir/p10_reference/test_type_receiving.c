@@ -34,6 +34,7 @@ static void no_change(const XrXirCompileContext *context,XrCompileResourceStats 
 #include "type_receiving_error.h"
 #include "type_receiving_class.h"
 #include "type_receiving_struct.h"
+#include "type_receiving_function.h"
 #include "type_receiving_equal.h"
 int main(void) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
@@ -41,6 +42,7 @@ int main(void) {
     received_error_arrays(&compiler);
     received_class_storage(&compiler);
     received_struct_storage(&compiler);
+    received_function_storage(&compiler);
     received_value_equality(&compiler);
     XrXirTypeArena *source=arena(&compiler,0),*target=arena(&compiler,1),*unrelated=arena(&compiler,1);
     XrXirTypeArena *parent=arena(&compiler,0),*child=arena(&compiler,1);
