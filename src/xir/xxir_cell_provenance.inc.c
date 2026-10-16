@@ -151,8 +151,8 @@ static bool cell_proof_inventory_parameter(CellProofBuild *build,uint32_t f,
         return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_TYPE);
     *tracked|=cell_proof_cell(&build->body->domain,type);return true;
 }
-/* Both readers validate the physical range and independent actual type before
- * this shared instruction inventory; no shape temporary or permission is passed. */
+/* Every reader validates the current physical range and actual type before
+ * this shared instruction inventory. No stored permission selects a row. */
 static bool cell_proof_inventory_instruction(CellProofBuild *build,uint32_t f,
     uint32_t i,XrXirType type,XrXirOp opcode,bool *tracked) {
     if (!tracked) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
@@ -282,6 +282,8 @@ static bool cell_proof_inventory(CellProofBuild *build) {
     const XirMetadataDomain *module=&build->body->domain;
     if (!cell_proof_inventory_begin(build)) return false;
     XrXirCellProvenance *proof=build->proof;
+    if (!module->function_count && cell_proof_raw_callbacks(build->body) &&
+        !cell_proof_raw_current(build)) return false;
     uint64_t values = 0, physical = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
@@ -294,19 +296,30 @@ static bool cell_proof_inventory(CellProofBuild *build) {
         if (count > UINT32_MAX || physical > UINT32_MAX)
             return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BUDGET);
         bool tracked = false;
-        if (build->body->range) {
+        bool raw=cell_proof_raw_callbacks(build->body);
+        if (raw && !cell_proof_raw_current(build)) return false;
+        if (build->body->range || raw) {
             for (uint32_t v=0;v<function->parameter_count;++v) {
                 if (!cell_proof_work(build,3)) return false;
                 XrXirType type=cell_proof_type(build,f,v);
                 if (build->status!=XR_XIR_OK ||
                     !cell_proof_inventory_parameter(build,f,function,v,type,&tracked)) return false;
             }
-            if (!cell_proof_work(build,sizeof(XrXirCellProofRunCursor))) return false;
-            XrXirCellProofRunCursor cursor={.function=f};
-            while (cursor.next<function->instruction_count) {
-                XrXirCellProofRun run;
-                if (!cell_proof_run(build,function,&cursor,&run) ||
-                    !cell_proof_inventory_run(build,&cursor,function,&run,&tracked)) return false;
+            if (raw) {
+                for (uint32_t i=0;i<function->instruction_count;++i) {
+                    if (!cell_proof_work(build,3)) return false;
+                    XrXirCellProofInstructionShape shape;
+                    if (!cell_proof_shape(build,f,i,&shape) ||
+                        !cell_proof_inventory_instruction(build,f,i,shape.type,shape.op,&tracked)) return false;
+                }
+            } else {
+                if (!cell_proof_work(build,sizeof(XrXirCellProofRunCursor))) return false;
+                XrXirCellProofRunCursor cursor={.function=f};
+                while (cursor.next<function->instruction_count) {
+                    XrXirCellProofRun run;
+                    if (!cell_proof_run(build,function,&cursor,&run) ||
+                        !cell_proof_inventory_run(build,&cursor,function,&run,&tracked)) return false;
+                }
             }
         } else {
             for (uint32_t v = 0; v < (uint32_t)count; ++v) {
