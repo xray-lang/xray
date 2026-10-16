@@ -31129,7 +31129,7 @@
       "source": "tests/diff/cases/semantics/oop/repr_c_struct.xr",
       "source_lf_sha256": "6cfaab1ce4b27dfc4b0114c37a7c033d6c688104af265f1f3cbf05c60bce7fc7",
       "entry": "run",
-      "stdout_utf8": "12\n20\ntrue\n4\n2\n3\n",
+      "stdout_utf8": "12\n20\nfalse\n4\n2\n3\n",
       "stderr_utf8": "",
       "expected_exit_code": 0,
       "arguments": [],

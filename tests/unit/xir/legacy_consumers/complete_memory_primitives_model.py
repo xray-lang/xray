@@ -269,7 +269,7 @@ class RecordValue:
         import copy
         self.declaration,self.fields=declaration,copy.deepcopy(fields)
     def copy(self):return RecordValue(self.declaration,self.fields)
-    def __eq__(self,other):return isinstance(other,RecordValue) and self.declaration==other.declaration and self.fields==other.fields
+    def __eq__(self,other):return self is other
 
 
 class UnionValue:

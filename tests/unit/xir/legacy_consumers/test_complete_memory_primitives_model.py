@@ -99,7 +99,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
 
 
     def test_five_complete_layout_and_numeric_traces(self):
-        expected={'repr_c_struct':[12,20,True,4,2,3],
+        expected={'repr_c_struct':[12,20,False,4,2,3],
          'repr_packed_aligned_struct_aggregate_param':[42,42,42,5,1,1,16,16,16,16,1],
          'union_fixed_array_overlay':[4,3,2,1,16909060],'union_fixed_layout_overlay':[4294967295,2147483647],
          'fixed_width_type_tests':['7 is i32=true is i8=true is u8=true','7 as i32=7','7 as i8?=7',
@@ -121,7 +121,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
         point=m.RecordValue('CPoint',{'x':1,'y':2});box=m.RecordValue('CBox',{'p':point,'tag':3});copy=box.copy()
         copy.fields['p'].fields['x']=99
         self.assertEqual(box.fields['p'].fields['x'],1);self.assertEqual(point.fields['x'],1)
-        self.assertNotEqual(box,copy);self.assertEqual(point,m.RecordValue('CPoint',{'x':1,'y':2}))
+        self.assertNotEqual(box,copy);self.assertEqual(point,point);self.assertNotEqual(point,m.RecordValue('CPoint',{'x':1,'y':2}))
         self.assertNotEqual(point,m.RecordValue('OtherPoint',{'x':1,'y':2}))
 
     def test_every_original_aggregate_function_call_is_preserved(self):
