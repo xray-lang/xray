@@ -12,6 +12,7 @@
 #include "xlsp_source_call_hierarchy.h"
 #include "xlsp_source_type_hierarchy.h"
 #include "xlsp_source_binding_lenses.h"
+#include "xlsp_source_links.h"
 #include "xlsp_token_update.h"
 #include "../../base/xchecks.h"
 #include <limits.h>
@@ -39,6 +40,7 @@ struct XlspHierarchyRequest {
     bool started, selected;
 };
 static unsigned hierarchy_stage(XlspSourceScopeQueryKind kind) {
+    if (kind == XLSP_SOURCE_DOCUMENT_LINKS) return 15u;
     return kind >= XLSP_SOURCE_SEMANTIC_FULL ? 11u :
         kind == XLSP_SOURCE_BINDING_LENSES ? 12u : kind == XLSP_SOURCE_TYPE_HIERARCHY ? 25u : 24u;
 }
@@ -219,7 +221,9 @@ static XrXirStatus hierarchy_semantic_document(XlspHierarchyRequest *request,con
     if(status!=XR_XIR_OK)return status;
     if(memcmp(doc->uri,request->uri,length))return XR_XIR_OK;
     if(request->selected)return XR_XIR_BAD_STRUCTURE;
-    request->selected=true;request->version=doc->version;request->previous_result_id=doc->sem_token_result_id;
+    request->selected=true;request->version=doc->version;
+    if (request->kind == XLSP_SOURCE_DOCUMENT_LINKS) return XR_XIR_OK;
+    request->previous_result_id=doc->sem_token_result_id;
     if(request->kind!=XLSP_SOURCE_SEMANTIC_RANGE&&doc->sem_token_result_id==UINT32_MAX)return XR_XIR_BUDGET;
     if(request->kind==XLSP_SOURCE_SEMANTIC_DELTA&&doc->source_tokens){
         char id[16];int size=snprintf(id,sizeof(id),"%u",doc->sem_token_result_id);
@@ -268,7 +272,7 @@ static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspSe
 XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *server, const XrJsonValue *params,
     unsigned mode, XlspSourceScopeQueryKind kind, XlspHierarchyRequest **out) {
     if (!server || !out || *out || kind < XLSP_SOURCE_CALL_HIERARCHY ||
-        kind > XLSP_SOURCE_SEMANTIC_RANGE || mode > 2 || (kind >= XLSP_SOURCE_BINDING_LENSES && mode))
+        kind > XLSP_SOURCE_DOCUMENT_LINKS || mode > 2 || (kind >= XLSP_SOURCE_BINDING_LENSES && mode))
         return XR_XIR_BAD_STRUCTURE;
     server->source_failure.stage = hierarchy_stage(kind); server->source_failure.status = XR_XIR_BAD_STRUCTURE;
     if (!params || server->shutdown_received || server->workspace_folder_count < 0 ||
@@ -332,6 +336,25 @@ done:
     }
     return status;
 }
+static XrXirStatus hierarchy_links(XlspHierarchyRequest *request, XrJsonValue **out) {
+    size_t entry = SIZE_MAX;
+    XrCompileResources *resources = request->context.resources;
+    for (size_t i = 0; i < request->count; ++i) {
+        XrXirStatus status = hierarchy_resource(xr_compile_resources_work(resources, sizeof(*request->documents)));
+        if (status != XR_XIR_OK) return status;
+        const XlspSourceDocument *document = &request->documents[i];
+        if (document->uri_length != request->uri_length) continue;
+        status = hierarchy_resource(xr_compile_resources_work(resources, request->uri_length));
+        if (status != XR_XIR_OK) return status;
+        if (!memcmp(document->uri, request->uri, request->uri_length)) entry = i;
+    }
+    if (entry == SIZE_MAX) return XR_XIR_BAD_STRUCTURE;
+    XlspSourceLinks *links = NULL;
+    XrXirStatus status = xlsp_source_links_build(&request->context, request->documents, request->count, entry, &links);
+    if (status == XR_XIR_OK) status = xlsp_source_links_json(links, out);
+    xlsp_source_links_free(links);
+    return status;
+}
 XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *request,
     const _Atomic bool *cancel, XlspSourceRequestResult *out) {
     if (!request || request->started || !out || out->json || out->token_update || out->stage || out->cancelled ||
@@ -347,7 +370,8 @@ XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *request,
         bound = true;
     }
     if(request->kind>=XLSP_SOURCE_SEMANTIC_FULL){
-        result.status=hierarchy_semantic(request,&result);
+        result.status=request->kind==XLSP_SOURCE_DOCUMENT_LINKS ? hierarchy_links(request,&result.json) :
+            hierarchy_semantic(request,&result);
         if(result.status==XR_XIR_OK)result.stage=0;
         goto done;
     }

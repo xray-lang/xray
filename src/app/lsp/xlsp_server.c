@@ -428,6 +428,7 @@ static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/semanticTokens/full"))return 11;
     if(!strcmp(method,"textDocument/semanticTokens/full/delta"))return 12;
     if(!strcmp(method,"textDocument/semanticTokens/range"))return 13;
+    if(!strcmp(method,"textDocument/documentLink"))return 14;
     return -1;
 }
 static bool source_request_submit(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params, unsigned mode) {

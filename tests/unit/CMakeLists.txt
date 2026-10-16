@@ -4611,3 +4611,4 @@ include(xir/lsp_json_clone/CMakeLists.txt)
 include(xir/lsp_hierarchy_task/CMakeLists.txt)
 
 include(xir/lsp_semantic_task/CMakeLists.txt)
+include(xir/lsp_links_task/CMakeLists.txt)

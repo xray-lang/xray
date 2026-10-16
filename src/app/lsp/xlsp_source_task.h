@@ -18,5 +18,6 @@
 // Mode 10 produces CodeLens reference counts from the same captured corpus.
 // Modes 11-13 produce semantic full/delta/range; successful terminal output
 // commits full/delta cache proposals exclusively on the dispatch thread.
+// Mode 14 resolves document links from captured texts and project authority.
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *, const XlspRequestId *, XrJsonValue *, unsigned mode);
 #endif // XLSP_SOURCE_TASK_H
