@@ -730,8 +730,7 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,24+sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t functions=body_request->domain.function_count;
-    uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
-    if (maximum>UINT32_MAX) maximum=UINT32_MAX;
+    uint32_t maximum=effect_equation_maximum(work);
     if (!maximum || maximum<functions) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     /* The aggregate initializes every live and unused field once. It needs

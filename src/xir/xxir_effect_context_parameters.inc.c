@@ -63,7 +63,10 @@ static void *effect_ordinary_descriptor_alloc(EffectOrdinaryContexts *contexts,
 static XrXirStatus effect_ordinary_capacity(EffectOrdinaryContexts *contexts, uint32_t needed) {
     if (contexts->terms.status!=XR_XIR_OK) return contexts->terms.status;
     if (needed<=contexts->capacity) return XR_XIR_OK;
-    uint32_t maximum=contexts->terms.remaining->limits.functions;
+    if (contexts->base_count>contexts->terms.remaining->limits.functions) {
+        contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status;
+    }
+    uint32_t maximum=effect_equation_maximum(contexts->terms.remaining);
     if (needed>maximum) { contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status; }
     uint32_t capacity=contexts->capacity<8 ? 8 : contexts->capacity;
     while (capacity<needed) {
@@ -276,6 +279,8 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
         module->stage!=source->stage || module->linkage_kind!=source->linkage_kind)
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,13)) return XR_XIR_BUDGET;
+    if (source->function_count>work->limits.functions || contexts->count>effect_equation_maximum(work))
+        return XR_XIR_BUDGET;
     const XrXirDeclarations *expected=source->declarations,*actual=module->declarations;
     if (actual->modules!=expected->modules || actual->module_count!=expected->module_count ||
         actual->slots!=expected->slots || actual->slot_count!=expected->slot_count ||

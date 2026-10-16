@@ -640,7 +640,7 @@ endif()
 add_test(NAME test_xir_source_text COMMAND test_xir_source_text)
 set_tests_properties(test_xir_source_text PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
 
-target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format)
+target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format xray_xir_vm)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
 add_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
 target_link_libraries(test_xir_source_allocations PRIVATE xray_xir_source xray_xir xray_xir_scalar)

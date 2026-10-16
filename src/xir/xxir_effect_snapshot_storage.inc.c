@@ -220,7 +220,8 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
     const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output) {
     if (!xir_compile_context_valid(work) || !source || !output || *output ||
         (!!source->function_count!=!!source->functions)) return XR_XIR_BAD_STRUCTURE;
-    if (source->function_count>work->limits.functions) return XR_XIR_BUDGET;
+    uint32_t maximum=ordinary ? effect_equation_maximum(work) : work->limits.functions;
+    if (source->function_count>maximum) return XR_XIR_BUDGET;
     XrXirStatus status=ordinary ? effect_body_ordinary_input_verify(work,source,ordinary) :
         xir_effect_contract_shape_verify(work,source);
     if (status!=XR_XIR_OK) return status;

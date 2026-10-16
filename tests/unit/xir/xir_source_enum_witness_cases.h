@@ -90,15 +90,15 @@ static void source_enum_ref_permission_rejections(XrXirSourceRequest *request) {
         "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{const e=E.V;return e.f()}\n",
         "enum E { V ref f()->i64{return 41} }\nfn bad(e:E)->i64{return e.f()}\n",
         "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{return E.V.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nvar e=E.V\nfn bad()->i64{return e.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{var es=[E.V];return es[0].f()}\n"
+        "enum E { V ref f()->i64{return 41} }\nconst e=E.V\nfn bad()->i64{return e.f()}\n",
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{const es=[E.V];return es[0].f()}\n"
     };
     const char *reasons[] = {
-        "ref receiver requires a mutable local binding",
-        "ref receiver requires a mutable local binding",
+        "ref requires a mutable stored binding",
+        "ref requires a mutable stored binding",
         "expression cannot satisfy its declared type",
-        "ref receiver of module state is not implemented in XIR",
-        "ref receiver place is not implemented in XIR"
+        "ref requires a mutable stored binding",
+        "ref requires a mutable stored binding"
     };
     unsigned mismatches = 0;
     for (uint32_t i = 0; i < sizeof(sources)/sizeof(*sources); ++i) {
@@ -177,6 +177,14 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
     source_enum_witness_run(request,
         "enum E { V ref f()->i64{return 41} }\n"
         "export fn enumWitness()->i64{var e=E.V;return e.f()}\n");
+    source_enum_witness_run(request,
+        "enum E { V, W ref f()->i64{return swap(ref this)} }\n"
+        "fn swap(value:ref E)->i64{value=E.W;return 41}\nvar e=E.V\n"
+        "export fn enumWitness()->i64{const result=e.f();if(e.ordinal!=1){return 0};return result}\n");
+    source_enum_witness_run(request,
+        "enum E { V, W ref f()->i64{return swap(ref this)} }\n"
+        "fn swap(value:ref E)->i64{value=E.W;return 41}\n"
+        "export fn enumWitness()->i64{var es=[E.V];const result=es[0].f();if(es[0].ordinal!=1){return 0};return result}\n");
     source_enum_ref_permission_rejections(request);
 }
 static void source_enum_witness_cases(XrXirSourceRequest *request) {

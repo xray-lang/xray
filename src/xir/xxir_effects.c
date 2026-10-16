@@ -22,6 +22,13 @@
 #include "xxir_cell_provenance_internal.h"
 #include "../base/xmalloc.h"
 
+/* Private execution contexts share the existing equation-ID bound. Repeated
+ * environments do not add declarations to the admitted source function table. */
+static uint32_t effect_equation_maximum(const XrXirCompileContext *work) {
+    uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
+    return maximum>UINT32_MAX ? UINT32_MAX : (uint32_t)maximum;
+}
+
 #include "xxir_effect_contract.inc.c"
 
 typedef struct EffectContextOwner EffectContextOwner;
