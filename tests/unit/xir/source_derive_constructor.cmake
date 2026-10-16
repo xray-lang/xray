@@ -100,3 +100,6 @@ foreach(derived_scope RANGE 0 1)
         LABELS "unit;xir;source;ctfe;generated;library;ownership;compiler-fault;resources")
 endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/source_derived_library_native.cmake")
+add_test(NAME test_xir_source_derived_library_import_controls COMMAND test_xir_source_derived_library --import-controls)
+set_tests_properties(test_xir_source_derived_library_import_controls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;ctfe;generated;library;ownership;receiving;negative")

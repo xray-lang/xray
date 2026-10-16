@@ -234,8 +234,10 @@ static int library_normal(const char *emit,const char *packet_path) {
 }
 
 #include "xir_source_derived_library_resources.h"
+#include "xir_source_derived_library_import_controls.h"
 int main(int argc,char **argv) {
     if(argc==1)return library_normal(NULL,NULL);
+    if(argc==2 && !strcmp(argv[1],"--import-controls"))return library_import_controls();
     if(argc==4 && !strcmp(argv[1],"--emit-native"))return library_normal(argv[2],argv[3]);
     return library_resource_main(argc,argv);
 }
