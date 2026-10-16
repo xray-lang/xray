@@ -40,8 +40,16 @@ static XrXirStatus submission_receive_reader(SubmissionBindingDraft *draft,
             return submission_binding_mismatch(draft,"Interactive result has no unique actual reader");
         draft->repl_entry=physical;
     }
+    uint8_t prepared[16];
+    XrXirStatus status=submission_reader_key(draft->owner,definition->generation,definition->reader,prepared);
+    if(status!=XR_XIR_OK)return status;
+    for(uint32_t i=0;i<draft->readers;++i) {
+        if(xr_compile_state_work(draft->owner->state,16)!=XR_COMPILE_RESOURCE_OK)
+            return submission_compile_status(xr_compile_state_status(draft->owner->state));
+        if(!memcmp(draft->reader_keys+(size_t)i*16,prepared,16))return XR_XIR_OK;
+    }
     uint8_t *key=draft->reader_keys+(size_t)draft->readers*16;
-    XrXirStatus status=submission_reader_key(draft->owner,definition->generation,definition->reader,key);
+    status=submission_compile_status(xr_compile_state_copy(draft->owner->state,key,prepared,16));
     if(status==XR_XIR_OK) {
         ++draft->readers;
         draft->rows[draft->count++]=(XrXirInstanceBindingSpec){(const char *)key,16,XR_XIR_INSTANCE_BINDING_FUNCTION,physical};
@@ -65,7 +73,7 @@ static XrXirStatus submission_receive_bindings(void *context,const XrXirSpeciali
         const XrXirSourceDeclaration *declaration=draft->names[i].declaration;
         if(draft->names[i].generation==owner->source_serial && declaration &&
             (declaration->kind==XR_XIR_SOURCE_FUNCTION || declaration->kind==XR_XIR_SOURCE_BINDING))
-            capacity+=declaration->kind==XR_XIR_SOURCE_BINDING ? 2 : 1;
+            capacity+=2;
     }
     if(capacity>UINT32_MAX)return XR_XIR_BUDGET;
     XrXirStatus status=capacity ? submission_compile_status(xr_compile_state_calloc(owner->state,

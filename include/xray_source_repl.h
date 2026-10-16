@@ -13,6 +13,23 @@
 extern "C" {
 #endif
 typedef struct XrSourceRepl XrSourceRepl;
+typedef enum XrSourceReplBindingKind {
+    XR_SOURCE_REPL_VALUE, XR_SOURCE_REPL_FUNCTION, XR_SOURCE_REPL_TYPE,
+    XR_SOURCE_REPL_IMPORT, XR_SOURCE_REPL_MODULE
+} XrSourceReplBindingKind;
+typedef struct XrSourceReplBindingInfo {
+    const char *name, *type_name;
+    uint64_t generation;
+    XrSourceReplBindingKind kind;
+    int is_const, implicit_result;
+} XrSourceReplBindingInfo;
+/* Borrows immutable published display facts until the next successful
+ * publication or drop. Internal generated names are absent; the one it row
+ * is marked separately from user declarations. A NULL type_name means no
+ * admitted display spelling. Observations grant no type or runtime authority.
+ * Pending input and callback reentry return BUSY, preserving empty outputs. */
+XRAY_API XrSourceStatus xray_source_repl_bindings(const XrSourceRepl *,
+    const XrSourceReplBindingInfo **, size_t *);
 /* Owns one compiler, its real Catalog and one cumulative runtime Instance.
  * Options and namespace are copied during construction. Output callbacks and
  * their context remain caller-owned until drop. Every operation requires
@@ -30,6 +47,11 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, co
  * A pending input or an untaken terminal result excludes another begin.
  * Compile failure leaves published declarations and values intact. */
 XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);
+/* Inspects exactly one expression. The same checker evaluates its real
+ * typeName once, including ordinary effects, and returns/displays that String.
+ * The temporary candidate is aborted; published declarations and it stay fixed.
+ * Uses the same poll/wait/resume/cancel/take lifecycle and cumulative limits. */
+XRAY_API XrSourceStatus xray_source_repl_begin_type(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);
 /* Bounded polls publish only an actual normally returned candidate. Other
  * outcomes drain and abort it, preserving ordinary prior-state side effects.
  * A meaningful tail is formatted from the actual owned outcome, within

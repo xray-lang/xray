@@ -26,7 +26,7 @@ typedef struct XrXirSourceGenerationConfig {
 } XrXirSourceGenerationConfig;
 typedef struct XrXirSourceGenerationView {
     uint64_t serial, parent;
-    bool published, interactive;
+    bool published, interactive, type_query;
     const XrXirSourceDeclaration *repl_result;
     const char *source, *identity;
     size_t length;
@@ -38,6 +38,13 @@ typedef struct XrXirSourceGenerationBinding {
     uint64_t generation;
     const XrXirSourceDeclaration *declaration;
 } XrXirSourceGenerationBinding;
+/* Prepared immutable display observations, never execution authority. */
+typedef struct XrXirSourceGenerationName {
+    XrXirSourceGenerationBinding binding;
+    const char *name, *type_name;
+    bool implicit_result;
+} XrXirSourceGenerationName;
+
 typedef enum XrXirSourceDefinitionKind {
     XR_XIR_SOURCE_DEFINITION_BINDING, XR_XIR_SOURCE_DEFINITION_UNIT,
     XR_XIR_SOURCE_DEFINITION_FUNCTION, XR_XIR_SOURCE_DEFINITION_NOMINAL,
@@ -88,6 +95,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_ast_bindings(XrXirS
  * interactive histories cannot be mixed in one owner. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_ast_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceAstOwner *ast, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
+/* Evaluates one actual expression through typeName in the common checker.
+ * Its ordinary result reader returns the real String; this temporary record
+ * may only be aborted, never published into lexical history. */
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(XrXirSourceGenerations *,
+    const XrXirSourceAstOwner *, uint64_t *, XrXirSourceDiagnostic *);
 /* Source publication allocates and charges nothing. The execution coordinator
  * calls this only after the corresponding Instance candidate returned normally.
  * These declaration observations do not authenticate runtime publication. */
@@ -133,4 +145,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_definition(const XrXirSourc
  * must be empty, and failure preserves them. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_candidate_bindings(const XrXirSourceGenerations *owner,
     uint64_t serial, const XrXirSourceGenerationBinding **output, size_t *count);
+/* A zero serial selects published observations, including an empty owner.
+ * A pending serial selects its prepared facts. Query-only records have none.
+ * Rows and strings borrow the owner; failure preserves empty outputs. */
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_names(const XrXirSourceGenerations *,
+    uint64_t serial, const XrXirSourceGenerationName **, size_t *);
 #endif // XXIR_SOURCE_GENERATION_H

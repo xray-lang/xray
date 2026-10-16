@@ -53,13 +53,19 @@ static bool source_binding_readers(SourceContext *ctx) {
     }
     if(!source_history_binding_accessors(ctx))return false;
     uint32_t root=(uint32_t)ctx->graph->entry_index;
-    for(const SourceName *symbol=ctx->names[root];symbol;symbol=symbol->next) {
+    for(SourceName *symbol=ctx->names[root];symbol;symbol=symbol->next) {
         if(!source_work(ctx,symbol->node))return false;
         if(symbol->kind!=SOURCE_SLOT && symbol->kind!=SOURCE_UNIT_SLOT)continue;
         if(symbol->index>=ctx->slot_count || ctx->slots[symbol->index].module!=root || ctx->binding_reads[symbol->index])
             return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"binding reader has no unique actual root slot");
         if(!source_binding_accessor(ctx,symbol,false,&ctx->binding_reads[symbol->index]))return false;
         if(symbol->mutable && !source_binding_accessor(ctx,symbol,true,&ctx->binding_writes[symbol->index]))return false;
+    }
+    for(SourceFunctionValue *pair=ctx->function_values;pair;pair=pair->next) {
+        if(!source_work(ctx,pair->function->node))return false;
+        if(pair->value->index>=ctx->slot_count || !ctx->binding_reads[pair->value->index])
+            return source_fail(ctx,pair->function->node,XR_XIR_BAD_STRUCTURE,"function value has no actual slot reader");
+        pair->function->reader=ctx->binding_reads[pair->value->index];
     }
     return true;
 }

@@ -152,7 +152,7 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
     uint32_t entry=(uint32_t)ctx->graph->entry_index;
     for (SourceName *symbol=environment->names[entry];symbol;symbol=symbol->next) {
         if (!source_work(ctx,NULL)) goto failed;
-        if (symbol!=environment->implicit_result) environment->latest[environment->latest_count++]=symbol;
+        if (!symbol->hidden) environment->latest[environment->latest_count++]=symbol;
     }
     for (uint32_t i=0;ctx->history && i<ctx->history->latest_count;++i) {
         const SourceName *symbol=ctx->history->latest[i];
