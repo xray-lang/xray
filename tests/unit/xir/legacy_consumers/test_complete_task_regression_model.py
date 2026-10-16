@@ -1,5 +1,6 @@
 """Independent complete task entry traces, named bodies and state distinctions."""
 from pathlib import Path
+import json
 import unittest
 from unittest import mock
 import complete_task_regression_model as model
@@ -94,6 +95,17 @@ class TaskRegressionTraces(unittest.TestCase):
         swapped=dict(model._PROGRAMS);names=sorted(swapped);swapped[names[0]],swapped[names[1]]=swapped[names[1]],swapped[names[0]]
         for attribute,value in [('_PROGRAMS',swapped),('_PROGRAMS',{}),('_INPUTS',{})]:
             with self.subTest(attribute=attribute),mock.patch.object(model,attribute,value),self.assertRaises(ValueError):model.expected_rows()
+
+    def test_complete_entries_and_named_bodies_use_their_own_real_routes(self):
+        cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
+        for named,rows in [(False,model.expected_rows()),(True,model.named_expected_rows())]:
+            for expected in rows:
+                with self.subTest(case=expected['id']):
+                    case=cases[expected['id']]
+                    self.assertEqual(case['entry'],'test' if named else 'run')
+                    self.assertEqual(case['source'],expected['original_source'])
+                    self.assertEqual(case['stdout_utf8'],expected['expected']['stdout_utf8'])
+                    self.assertEqual(case.get('source_context'),'original_absolute' if not named else None)
 
 
 if __name__=='__main__':unittest.main()

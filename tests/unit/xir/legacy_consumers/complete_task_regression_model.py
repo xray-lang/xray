@@ -5,7 +5,7 @@ not a scheduler or an execution engine. Timing, wakeups, resources, ownership,
 provider behavior and real cancellation checkpoints require product evidence.
 """
 from pathlib import Path
-import copy,hashlib,itertools
+import copy,hashlib,itertools,re
 from complete_async_events_model import Channel,Scope,TypedError
 
 ROOT=Path(__file__).resolve().parents[4]
@@ -239,6 +239,10 @@ def expected_rows():
         raise ValueError('Task model lost an exact program or normative input')
     for path,digest in _INPUTS.items():
         if hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Task source or authority changed: '+path)
+    for name,function in _DECLARATION_ONLY.items():
+        declarations=re.findall(r'(?m)^\s*@test\s*\n\s*fn\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(',
+                                (ROOT/_PROGRAMS[name]).read_text(encoding='utf-8'))
+        if declarations!=[function]:raise ValueError('Separate named task body lost its exact declaration')
     named=named_requirements();rows=[]
     for name,values in sorted(observations().items()):
         row={'id':'complete_task_regression_'+name,'source':_PROGRAMS[name],'original_source':_PROGRAMS[name],'required_target':None,
