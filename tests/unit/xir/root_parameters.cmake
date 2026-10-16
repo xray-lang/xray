@@ -14,6 +14,9 @@ foreach(_root_parameter_gate contract resources instances wire visibility lower_
         LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
 endforeach()
 target_link_libraries(test_xir_root_parameter_visibility PRIVATE xray_xir_vm)
+add_test(NAME test_xir_root_parameter_wire_normal COMMAND test_xir_root_parameter_wire --normal)
+set_tests_properties(test_xir_root_parameter_wire_normal PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership;finite-control" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
 add_test(NAME test_xir_root_parameter_visibility_normal COMMAND test_xir_root_parameter_visibility --normal)
 set_tests_properties(test_xir_root_parameter_visibility_normal PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler;ownership;normal" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)

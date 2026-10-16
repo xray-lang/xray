@@ -178,7 +178,11 @@ static void rw_resources(void) {
     }
     printf("literal Checked75 reader actual OOM sites=%zu\n",sites);
 }
-int main(void) {
+int main(int argc,char **argv) {
+    bool normal=argc==2;
+    CHECK(argc==1 || (normal && !strcmp(argv[1],"--normal")));
     rw_roundtrip();rw_previous_literal();rw_previous_parameter_literal();
-    rw_rejections();rw_formula_category();rw_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    rw_rejections();rw_formula_category();
+    if (!normal) rw_resources();
+    CHECK(!rp_live && !rp_live_bytes);return 0;
 }
