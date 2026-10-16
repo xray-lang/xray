@@ -9,6 +9,8 @@
  * The same provider proves each true place subject. Only the exact equation's
  * complete masks and descending ranks substitute its conservative Class bit.
  */
+#include "xxir_effect_cell_replay.inc.c"
+
 static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
     const EffectBodyRequest *body) {
     if (!owner || !body || !owner->work || !owner->effects || !owner->final->cells ||
@@ -17,6 +19,7 @@ static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRea
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     XrXirStatus status=effect_cell_body_request(owner->work,body,&adapter,&read);
     if (status!=XR_XIR_OK) return status;
+    if (effect_body_request_sequence_owned(body)) return effect_invocation_class_cells_materialized(owner,body);
     return xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final->cells,&read,NULL);
 }
 

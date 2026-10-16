@@ -1161,6 +1161,14 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_body_matches(const XrXirCompi
     return status;
 }
 
+XR_FUNC XrXirStatus xir_cell_provenance_module_matches(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,const XrXirModule *module,XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(context) || !module ||
+        (module->function_count && !module->functions)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCellProofBodyRead body=cell_proof_raw_body(context,module);
+    return xr_xir_compile_cell_provenance_body_matches(context,proof,&body,diagnostic);
+}
+
 XR_FUNC uint32_t xr_xir_cell_provenance_origin(const XrXirCellProvenance *proof,
     uint32_t function, uint32_t value) {
     if (!proof || function >= proof->function_count || value >= proof->functions[function].count)
