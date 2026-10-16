@@ -1,0 +1,52 @@
+// Number syntax is independent of a consumer's representable numeric range.
+fn jsonNumberEnd(bytes:Array<u8>,start:i64)->i64 {
+    const size=len(bytes)
+    var i=start
+    if(i>=size){return -1}
+    if(bytes[i]==45){i=i+1}
+    if(i>=size){return -1}
+    if(bytes[i]==48){i=i+1}
+    else {
+        if(bytes[i]<49 || bytes[i]>57){return -1}
+        i=i+1
+        while(i<size && bytes[i]>=48 && bytes[i]<=57){i=i+1}
+    }
+    if(i<size && bytes[i]==46) {
+        i=i+1
+        const first=i
+        while(i<size && bytes[i]>=48 && bytes[i]<=57){i=i+1}
+        if(i==first){return -1}
+    }
+    if(i<size && (bytes[i]==69 || bytes[i]==101)) {
+        i=i+1
+        if(i<size && (bytes[i]==43 || bytes[i]==45)){i=i+1}
+        const first=i
+        while(i<size && bytes[i]>=48 && bytes[i]<=57){i=i+1}
+        if(i==first){return -1}
+    }
+    return i
+}
+export fn jsonNumberToken(text:string)->bool {
+    const bytes=text.copyBytes()
+    return jsonNumberEnd(bytes,0)==len(bytes)
+}
+// Accumulating negatively keeps the minimum signed value representable.
+export fn jsonInteger(text:string)->i64? {
+    const bytes=text.copyBytes()
+    const size=len(bytes)
+    if(jsonNumberEnd(bytes,0)!=size){return null}
+    const negative=bytes[0]==45
+    const limit=negative?(-9223372036854775807-1):-9223372036854775807
+    const cutoff=limit/10
+    const last=-(limit%10)
+    var value:i64=0
+    var i:i64=negative?1:0
+    while(i<size) {
+        const digit=(bytes[i] as i64)-48
+        if(digit<0 || digit>9){return null}
+        if(value<cutoff || (value==cutoff && digit>last)){return null}
+        value=value*10-digit
+        i=i+1
+    }
+    return negative?value:-value
+}
