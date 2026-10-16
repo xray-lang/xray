@@ -57,7 +57,9 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *comp
     return status;
 }
 static XrSourceStatus api_repl_namespace(XrSourceRepl *owner,const XrSourceText *input) {
-    if(!input || !input->bytes || input->absolute_path || !input->namespace_id)return XR_SOURCE_BAD_ARGUMENT;
+    if(!input || !input->bytes)return XR_SOURCE_BAD_ARGUMENT;
+    if(input->absolute_path)return *input->absolute_path && !input->namespace_id ? XR_SOURCE_OK : XR_SOURCE_BAD_ARGUMENT;
+    if(!input->namespace_id)return XR_SOURCE_BAD_ARGUMENT;
     XrCompileState *state=xr_source_compiler_state(owner->compiler);
     size_t expected=0,actual=0;
     XrSourceStatus status=api_resource(xr_compile_state_string_length(state,owner->namespace_id,&expected));
@@ -98,22 +100,36 @@ XRAY_API XrSourceStatus xray_source_repl_bindings(const XrSourceRepl *owner,
     if(owner->busy || owner->active)return XR_SOURCE_BUSY;
     *output=owner->names;*count=owner->name_count;return XR_SOURCE_OK;
 }
-static XrSourceStatus api_repl_begin(XrSourceRepl *owner,const XrSourceText *input,
-    XrSourceDiagnostic **diagnostic,bool type_query) {
-    if(diagnostic && *diagnostic)return XR_SOURCE_BAD_ARGUMENT;
-    XrSourceStatus status=api_repl_admit(owner);if(status!=XR_SOURCE_OK)return status;
-    if(owner->active || owner->result)return XR_SOURCE_BUSY;
-    owner->busy=true;status=api_repl_namespace(owner,input);
+static XrSourceStatus api_repl_prepare(XrSourceRepl *owner,const XrSourceText *input,
+    const XrSourceAuthority *borrowed,XrSourceDiagnostic **diagnostic,bool type_query) {
+    XrSourceStatus status=XR_SOURCE_OK;
     XrCompileState *state=xr_source_compiler_state(owner->compiler);
     XrSourceAst *ast=NULL;XrSourceDiagnostic *detail=NULL;XrSourceResult *result=NULL;
     if(status==XR_SOURCE_OK)status=api_parse_text(owner->compiler,input,&ast,diagnostic?&detail:NULL,true);
     if(status==XR_SOURCE_OK)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*result),(void **)&result));
     if(status==XR_SOURCE_OK && diagnostic)status=api_resource(xr_compile_state_calloc(state,1,sizeof(*detail),(void **)&detail));
+    XrSourceAuthority *opened=NULL;const XrSourceAuthority *authority=borrowed;
+    XrXirSourceReplInput repl={0};
+    if(status==XR_SOURCE_OK && input->absolute_path && !authority) {
+        const XrSourceEntryInput rooted={XR_SOURCE_ENTRY_AST,ast->path,NULL,0};
+        status=api_compile(xr_source_compiler_open_input(owner->compiler,&rooted,&opened,detail?&detail->detail:NULL));
+        authority=opened;
+    }
+    if(status==XR_SOURCE_OK && authority) {
+        repl.authority=xr_source_authority_entry(authority);
+        repl.absolute_path=xr_source_authority_source_path(authority);
+        repl.logical_path=xr_source_authority_logical_path(authority);
+        repl.lockfile=xr_source_authority_lockfile(authority);
+        if(detail)status=api_resource(xr_compile_state_strdup(state,ast->path,&detail->detail.source.source_path));
+    }
     XrXirSourceAstOwner syntax={0};
     if(status==XR_SOURCE_OK)status=xr_source_ast_owned_input(ast,&syntax);
-    if(status==XR_SOURCE_OK)status=type_query ? xr_source_submission_prepare_repl_type_ast(owner->submission,&syntax,
-        detail?&detail->detail.source.source:NULL) : xr_source_submission_prepare_repl_ast(owner->submission,&syntax,
+    repl.ast=&syntax;
+    if(status==XR_SOURCE_OK && detail)detail->detail.stage=XR_SOURCE_COMPILE_PRODUCT;
+    if(status==XR_SOURCE_OK)status=type_query ? xr_source_submission_prepare_repl_type_ast(owner->submission,&repl,
+        detail?&detail->detail.source.source:NULL) : xr_source_submission_prepare_repl_ast(owner->submission,&repl,
         detail?&detail->detail.source.source:NULL);
+    xr_source_authority_close(opened);
     bool prepared=status==XR_SOURCE_OK;
     if(prepared && !type_query)status=api_repl_prepare_names(owner);
     xray_source_ast_free(ast);
@@ -130,6 +146,34 @@ static XrSourceStatus api_repl_begin(XrSourceRepl *owner,const XrSourceText *inp
         xray_source_result_free(result);
         if(detail){detail->detail.status=api_compile_failure(status);*diagnostic=detail;}
     }
+    return status;
+}
+static XrSourceStatus api_repl_begin(XrSourceRepl *owner,const XrSourceText *input,
+    XrSourceDiagnostic **diagnostic,bool type_query) {
+    if(diagnostic && *diagnostic)return XR_SOURCE_BAD_ARGUMENT;
+    XrSourceStatus status=api_repl_admit(owner);if(status!=XR_SOURCE_OK)return status;
+    if(owner->active || owner->result)return XR_SOURCE_BUSY;
+    owner->busy=true;status=api_repl_namespace(owner,input);
+    if(status==XR_SOURCE_OK)status=api_repl_prepare(owner,input,NULL,diagnostic,type_query);
+    status=api_repl_capture(owner,status);owner->busy=false;return status;
+}
+XRAY_API XrSourceStatus xray_source_repl_begin_file(XrSourceRepl *owner,const char *path,
+    XrSourceDiagnostic **diagnostic) {
+    if(diagnostic && *diagnostic)return XR_SOURCE_BAD_ARGUMENT;
+    XrSourceStatus status=api_repl_admit(owner);if(status!=XR_SOURCE_OK)return status;
+    if(owner->active || owner->result)return XR_SOURCE_BUSY;
+    if(!path || !*path)return XR_SOURCE_BAD_ARGUMENT;
+    owner->busy=true;XrSourceCompilerFile file={0};XrSourceDiagnostic *detail=NULL;
+    if(diagnostic)status=api_resource(xr_compile_state_calloc(xr_source_compiler_state(owner->compiler),
+        1,sizeof(*detail),(void **)&detail));
+    if(status==XR_SOURCE_OK)status=api_compile(xr_source_compiler_read_file(owner->compiler,path,&file,
+        detail?&detail->detail:NULL));
+    if(status==XR_SOURCE_OK) {
+        xray_source_diagnostic_free(detail);detail=NULL;
+        const XrSourceText input={xr_source_authority_source_path(file.authority),NULL,(const char *)file.bytes,file.length};
+        status=api_repl_prepare(owner,&input,file.authority,diagnostic,false);
+    } else if(detail)*diagnostic=detail;
+    xr_source_compiler_file_clear(&file);
     status=api_repl_capture(owner,status);owner->busy=false;return status;
 }
 XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *owner,const XrSourceText *input,
@@ -282,3 +326,5 @@ XRAY_API XrSourceStatus xray_source_repl_drop(XrSourceRepl **output,XrSourceEven
     xr_compile_state_free(owner->namespace_id);xr_compile_state_free(owner);*output=NULL;
     xray_source_compiler_free(compiler);return XR_SOURCE_OK;
 }
+
+#include "xsource_repl_input.inc.c"

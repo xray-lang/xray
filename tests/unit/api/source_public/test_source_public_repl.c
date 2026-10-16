@@ -8,6 +8,7 @@
  */
 #include "xray_source_repl.h"
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
@@ -28,6 +29,9 @@ static XrSourceWriteStatus collect(void *context,XrSourceOutputStream stream,con
         const XrSourceReplBindingInfo *rows=NULL;size_t names=0;
         CHECK(xray_source_repl_bindings(owner,&rows,&names)==XR_SOURCE_BUSY && !rows && !names);
         CHECK(xray_source_repl_begin_type(owner,&text,NULL)==XR_SOURCE_BUSY);
+        XrSourceInputState complete=XR_SOURCE_INPUT_INCOMPLETE;
+        CHECK(xray_source_repl_check_input(owner,"42",2,&complete)==XR_SOURCE_BUSY && complete==XR_SOURCE_INPUT_INCOMPLETE);
+        CHECK(xray_source_repl_begin_file(owner,XR_PUBLIC_REPL_FILE_FIXTURE "/main.xr",NULL)==XR_SOURCE_BUSY);
     }
     memcpy(trace->bytes+trace->count,bytes,count);trace->count+=count;++trace->callbacks;return XR_SOURCE_WRITE_OK;
 }
@@ -146,7 +150,14 @@ static void cancellation(void) {
 }
 #include "source_public_repl_results.h"
 #include "source_public_repl_inspection.h"
-int main(void) {
+#include "source_public_repl_rooted.h"
+#include "source_public_repl_file.h"
+#include "source_public_repl_input.h"
+int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--rooted")){rooted_inputs();rooted_nominals();return 0;}
+    if(argc==2 && !strcmp(argv[1],"--input")){input_observations();return 0;}
+    if(argc==2 && !strcmp(argv[1],"--files")){file_inputs();file_snapshot();return 0;}
+    CHECK(argc==1);
     history();cancellation();typed_results();display_limit();metadata_inspection();
     puts("public Source REPL: real Compiler/Catalog, exact AST, paired publication, old closures, rollback, cumulative output, owned survivors, reentry and cancel/defer PASS");return 0;
 }

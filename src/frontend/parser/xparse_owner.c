@@ -233,8 +233,8 @@ XrParseStatus xr_compile_parse_repl_unit(XrCompilerSession *session, const char 
 }
 
 XrParseStatus xr_compile_parse_repl_with_trivia(XrCompilerSession *session, const char *source,
-    const XrParseDiagnostics *diagnostics, AstNode **output) {
-    return parse_owned(session, source, "<repl>", true, true, false, diagnostics, output);
+    const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output) {
+    return parse_owned(session, source, source_file?source_file:"<repl>", true, true, false, diagnostics, output);
 }
 
 XrParseStatus xr_compile_parse_with_source(XrCompilerSession *session, const char *source,

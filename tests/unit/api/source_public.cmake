@@ -1,7 +1,10 @@
 add_executable(test_source_public_api "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_public.c")
 add_executable(test_source_public_repl "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_public_repl.c")
 target_link_libraries(test_source_public_repl PRIVATE xray_source_api)
-target_compile_definitions(test_source_public_repl PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+target_compile_definitions(test_source_public_repl PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_PUBLIC_REPL_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_rooted"
+    XR_PUBLIC_REPL_FILE_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_file"
+    XR_PUBLIC_REPL_FILE_TEMP_ROOT="${CMAKE_CURRENT_BINARY_DIR}")
 set_target_properties(test_source_public_repl PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_source_public_repl PRIVATE /W4 /WX /utf-8)
@@ -10,6 +13,10 @@ else()
 endif()
 add_test(NAME source_public_repl COMMAND test_source_public_repl)
 set_tests_properties(source_public_repl PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl")
+add_test(NAME source_public_repl_file COMMAND test_source_public_repl --files)
+set_tests_properties(source_public_repl_file PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;authority;file")
+add_test(NAME source_public_repl_rooted COMMAND test_source_public_repl --rooted)
+set_tests_properties(source_public_repl_rooted PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;authority")
 add_test(NAME source_public_repl_probe COMMAND test_source_public_faults --repl-probe)
 add_test(NAME source_public_repl_faults COMMAND test_source_public_faults --repl)
 add_test(NAME source_public_repl_budget COMMAND test_source_public_faults --repl-budget)
@@ -23,6 +30,12 @@ add_test(NAME source_public_repl_inspect_budget COMMAND test_source_public_fault
 add_test(NAME source_public_repl_inspect_samples COMMAND test_source_public_faults --repl-inspect-samples)
 set_tests_properties(source_public_repl_inspect_probe source_public_repl_inspect_budget source_public_repl_inspect_samples PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;budget;inspection")
 set_tests_properties(source_public_repl_inspect_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120 LABELS "unit;api;source;ownership;repl;compiler-faults;runtime-faults;slow;inspection")
+add_test(NAME source_public_repl_rooted_faults COMMAND test_source_public_faults --repl-rooted)
+add_test(NAME source_public_repl_rooted_probe COMMAND test_source_public_faults --repl-rooted-probe)
+add_test(NAME source_public_repl_rooted_budget COMMAND test_source_public_faults --repl-rooted-budget)
+add_test(NAME source_public_repl_rooted_samples COMMAND test_source_public_faults --repl-rooted-samples)
+set_tests_properties(source_public_repl_rooted_probe source_public_repl_rooted_budget source_public_repl_rooted_samples PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;budget;authority")
+set_tests_properties(source_public_repl_rooted_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120 LABELS "unit;api;source;ownership;repl;compiler-faults;runtime-faults;slow;authority")
 add_executable(test_source_public_instance "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_public_instance.c")
 target_link_libraries(test_source_public_instance PRIVATE xray_source_api)
 target_compile_definitions(test_source_public_instance PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
@@ -83,7 +96,9 @@ target_link_libraries(test_source_public_ast_faults PRIVATE xray_source_api)
 target_include_directories(test_source_public_ast_faults PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
 target_compile_definitions(test_source_public_ast_faults PRIVATE
     XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
-    XR_PUBLIC_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_product_text")
+    XR_PUBLIC_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_product_text"
+    XR_PUBLIC_REPL_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_rooted"
+    XR_PUBLIC_REPL_FILE_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_file")
 set_target_properties(test_source_public_ast_faults PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_source_public_ast_faults PRIVATE /W4 /WX /utf-8)
@@ -99,7 +114,9 @@ set_tests_properties(source_public_ast_faults PROPERTIES TIMEOUT 600 RUN_SERIAL 
 add_executable(test_source_public_faults "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_public_faults.c")
 target_link_libraries(test_source_public_faults PRIVATE xray_source_api)
 target_include_directories(test_source_public_faults PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
-target_compile_definitions(test_source_public_faults PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+target_compile_definitions(test_source_public_faults PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_PUBLIC_REPL_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_rooted"
+    XR_PUBLIC_REPL_FILE_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_file")
 set_target_properties(test_source_public_faults PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_source_public_faults PRIVATE /W4 /WX /utf-8)
@@ -165,3 +182,15 @@ add_test(NAME source_public_value_projection_probe COMMAND test_source_public_fa
 add_test(NAME source_public_value_projection_faults COMMAND test_source_public_faults --value-projections)
 set_tests_properties(source_public_value_projection_probe PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;allocations;values")
 set_tests_properties(source_public_value_projection_faults PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "unit;api;source;ownership;compiler-faults;runtime-faults;budget;values")
+
+add_test(NAME source_public_repl_input COMMAND test_source_public_repl --input)
+set_tests_properties(source_public_repl_input PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl")
+
+add_test(NAME source_public_repl_file_probe COMMAND test_source_public_faults --repl-file-probe)
+add_test(NAME source_public_repl_file_budget COMMAND test_source_public_faults --repl-file-budget)
+add_test(NAME source_public_repl_file_samples COMMAND test_source_public_faults --repl-file-samples)
+set_tests_properties(source_public_repl_file_probe source_public_repl_file_budget source_public_repl_file_samples
+    PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;file;budget;ownership")
+add_test(NAME source_public_repl_file_faults COMMAND test_source_public_faults --repl-file)
+set_tests_properties(source_public_repl_file_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
+    LABELS "unit;api;source;repl;file;compiler-faults;runtime-faults;slow")

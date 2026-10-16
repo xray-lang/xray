@@ -62,6 +62,7 @@ static int string_distance(const char *s1, const char *s2) {
 
 /* ========== Handler Forward Declarations ========== */
 
+XR_FUNC int cmd_repl(const XrCliInvocation *inv);
 XR_FUNC int cmd_run(const XrCliInvocation *inv);
 XR_FUNC int cmd_test(const XrCliInvocation *inv);
 XR_FUNC int cmd_check(const XrCliInvocation *inv);
@@ -78,6 +79,7 @@ XR_FUNC int cmd_help(const XrCliInvocation *inv);
 /* Register all command handlers into the spec table.
  * Must be called once before xr_cli_main(). */
 void xr_cli_register_all_handlers(void) {
+    xr_cli_register_handler("repl", cmd_repl);
     xr_cli_register_handler("run", cmd_run);
     xr_cli_register_handler("test", cmd_test);
     xr_cli_register_handler("check", cmd_check);

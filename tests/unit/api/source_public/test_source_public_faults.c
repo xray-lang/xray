@@ -135,7 +135,9 @@ int main(int argc,char **argv) {
         !strcmp(argv[1],"--invoke-values-budget") || !strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe") ||
         !strcmp(argv[1],"--instance") || !strcmp(argv[1],"--instance-probe") || !strcmp(argv[1],"--instance-budget") ||
         !strcmp(argv[1],"--repl") || !strcmp(argv[1],"--repl-probe") || !strcmp(argv[1],"--repl-budget") ||
-        !strcmp(argv[1],"--repl-samples") || !strcmp(argv[1],"--repl-display") || !strcmp(argv[1],"--repl-inspect") || !strcmp(argv[1],"--repl-inspect-probe") || !strcmp(argv[1],"--repl-inspect-budget") || !strcmp(argv[1],"--repl-inspect-samples"))));
+        !strcmp(argv[1],"--repl-samples") || !strcmp(argv[1],"--repl-display") || !strcmp(argv[1],"--repl-inspect") || !strcmp(argv[1],"--repl-inspect-probe") || !strcmp(argv[1],"--repl-inspect-budget") || !strcmp(argv[1],"--repl-inspect-samples") || !strcmp(argv[1],"--repl-rooted") || !strcmp(argv[1],"--repl-rooted-probe") ||
+        !strcmp(argv[1],"--repl-rooted-budget") || !strcmp(argv[1],"--repl-rooted-samples") || !strcmp(argv[1],"--repl-file") || !strcmp(argv[1],"--repl-file-probe") ||
+        !strcmp(argv[1],"--repl-file-budget") || !strcmp(argv[1],"--repl-file-samples"))));
     if(argc==1)allocation_faults(0,3,false);
     else if(!strcmp(argv[1],"--scalar-task"))allocation_faults(3,4,false);
     else if(!strcmp(argv[1],"--constructed-task"))allocation_faults(4,5,false);
@@ -156,6 +158,16 @@ int main(int argc,char **argv) {
     }
     else if(!strcmp(argv[1],"--repl-inspect-budget")){public_repl_inspection_case=true;public_repl_budgets();}
     else if(!strcmp(argv[1],"--repl-inspect-samples")){public_repl_inspection_case=true;public_repl_samples();}
+    else if(!strcmp(argv[1],"--repl-rooted") || !strcmp(argv[1],"--repl-rooted-probe")) {
+        public_repl_rooted_case=true;public_repl_faults(!strcmp(argv[1],"--repl-rooted-probe"));
+    }
+    else if(!strcmp(argv[1],"--repl-file") || !strcmp(argv[1],"--repl-file-probe")) {
+        public_repl_file_case=true;public_repl_faults(!strcmp(argv[1],"--repl-file-probe"));
+    }
+    else if(!strcmp(argv[1],"--repl-file-budget")){public_repl_file_case=true;public_repl_budgets();}
+    else if(!strcmp(argv[1],"--repl-file-samples")){public_repl_file_case=true;public_repl_samples();}
+    else if(!strcmp(argv[1],"--repl-rooted-budget")){public_repl_rooted_case=true;public_repl_budgets();}
+    else if(!strcmp(argv[1],"--repl-rooted-samples")){public_repl_rooted_case=true;public_repl_samples();}
     else if(!strcmp(argv[1],"--invoke-values-budget"))invoke_values_budgets();
     else if(!strcmp(argv[1],"--value-projections") || !strcmp(argv[1],"--value-projections-probe")) {
         projection_faults(!strcmp(argv[1],"--value-projections-probe"));

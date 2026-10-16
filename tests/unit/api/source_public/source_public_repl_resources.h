@@ -15,6 +15,7 @@ typedef struct PublicReplOwners {
     XrSourceValue *value,*independent;
 } PublicReplOwners;
 static size_t public_repl_boundaries[11];
+static bool public_repl_rooted_case,public_repl_file_case;
 static void public_repl_close(PublicReplOwners *owners) {
     XrSourceEvent cleanup={0};
     CHECK(xray_source_repl_drop(&owners->owner,&cleanup)==XR_SOURCE_OK && !owners->owner);
@@ -24,9 +25,8 @@ static void public_repl_close(PublicReplOwners *owners) {
     xray_source_value_free(owners->value);xray_source_value_free(owners->independent);
     *owners=(PublicReplOwners){0};CHECK(!runtime_live && !runtime_bytes);
 }
-static XrSourceStatus public_repl_input(PublicReplOwners *owners,const char *source,XrSourceRunState expected) {
-    XrSourceText text={NULL,"public-repl-resources",source,strlen(source)};
-    XrSourceStatus status=xray_source_repl_begin(owners->owner,&text,&owners->diagnostic);
+static XrSourceStatus public_repl_text(PublicReplOwners *owners,const XrSourceText *text,XrSourceRunState expected) {
+    XrSourceStatus status=xray_source_repl_begin(owners->owner,text,&owners->diagnostic);
     if(status!=XR_SOURCE_OK)return status;
     XrSourceEvent event={0};size_t polls=0;
     do {status=xray_source_repl_poll(owners->owner,8,&event);CHECK(++polls<10000);}
@@ -44,6 +44,10 @@ static XrSourceStatus public_repl_input(PublicReplOwners *owners,const char *sou
         xray_source_result_free(owners->result);owners->result=NULL;
     }
     return status;
+}
+static XrSourceStatus public_repl_input(PublicReplOwners *owners,const char *source,XrSourceRunState expected) {
+    XrSourceText text={NULL,"public-repl-resources",source,strlen(source)};
+    return public_repl_text(owners,&text,expected);
 }
 static XrSourceStatus public_repl_normal_drive(const XrCompileResourceLimits *limits,PublicReplOwners *owners) {
     memset(public_repl_boundaries,0,sizeof(public_repl_boundaries));
@@ -95,8 +99,11 @@ static XrSourceStatus public_repl_normal_drive(const XrCompileResourceLimits *li
     return XR_SOURCE_OK;
 }
 #include "source_public_repl_inspection_resources.h"
+#include "source_public_repl_rooted_resources.h"
+#include "source_public_repl_file_resources.h"
 static XrSourceStatus public_repl_drive(const XrCompileResourceLimits *limits,PublicReplOwners *owners) {
-    return public_repl_inspection_case ? public_repl_inspection_drive(limits,owners) : public_repl_normal_drive(limits,owners);
+    return public_repl_file_case ? public_repl_file_drive(limits,owners) : public_repl_rooted_case ? public_repl_rooted_drive(limits,owners) :
+        public_repl_inspection_case ? public_repl_inspection_drive(limits,owners) : public_repl_normal_drive(limits,owners);
 }
 static void public_repl_sticky(PublicReplOwners *owners) {
     if(!owners->owner)return;
@@ -105,6 +112,14 @@ static void public_repl_sticky(PublicReplOwners *owners) {
     size_t attempts=runtime_attempts;XrSourceText text={NULL,"public-repl-resources","const retry=1\n",14};
     XrSourceStatus retried=xray_source_repl_begin(owners->owner,&text,NULL);
     CHECK(retried==XR_SOURCE_OUT_OF_MEMORY || retried==XR_SOURCE_BUDGET || retried==XR_SOURCE_BAD_STATE || retried==XR_SOURCE_BUSY);
+    if(public_repl_file_case) {
+        XrSourceInputState state=XR_SOURCE_INPUT_INCOMPLETE;
+        XrSourceStatus scan=xray_source_repl_check_input(owners->owner,"42",2,&state);
+        XrSourceStatus file=xray_source_repl_begin_file(owners->owner,XR_PUBLIC_REPL_FILE_FIXTURE "/main.xr",NULL);
+        CHECK(state==XR_SOURCE_INPUT_INCOMPLETE &&
+            (scan==XR_SOURCE_OUT_OF_MEMORY || scan==XR_SOURCE_BUDGET || scan==XR_SOURCE_BAD_STATE || scan==XR_SOURCE_BUSY) &&
+            (file==XR_SOURCE_OUT_OF_MEMORY || file==XR_SOURCE_BUDGET || file==XR_SOURCE_BAD_STATE || file==XR_SOURCE_BUSY));
+    }
     CHECK(runtime_attempts==attempts && xr_compile_resources_stats(resources,&after)==XR_COMPILE_RESOURCE_OK &&
         !memcmp(&before,&after,sizeof(before)));
 }
@@ -123,7 +138,9 @@ static void public_repl_faults(bool probe) {
         runtime_fail_at=SIZE_MAX;public_repl_close(&owners);
     }
     printf("public Source REPL %s actual allocation sites=%zu swept=%zu; %s; sticky retry and physical=0/0\n",
-        public_repl_inspection_case?"inspection":"history",sites,probe?0:sites,
+        public_repl_file_case?"file+input":public_repl_rooted_case?"rooted":public_repl_inspection_case?"inspection":"history",sites,probe?0:sites,
+        public_repl_file_case?"real lexer/file intake, repeat path and exact old closure, syntax failure and owned bytes":
+        public_repl_rooted_case?"real rooted imports, repeated path, invalid nearer authority, temporary type query and owned bytes after owner death":
         public_repl_inspection_case?"real typeName, unchanged published observations/it, state41 and owned result after owner death":
             "four published/aborted inputs, typed tails/it/display, actual old state/closure and owned bytes");
 }

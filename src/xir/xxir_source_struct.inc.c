@@ -94,7 +94,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     symbol->kind = SOURCE_NOMINAL; symbol->index = ctx->nominals.count++;
     symbol->module = ctx->module; ctx->nominal_sources[symbol->index] = symbol;
     XrXirNominalDeclaration *record = (XrXirNominalDeclaration *) &ctx->nominals.declarations[symbol->index];
-    const char *module = ctx->graph->specs[ctx->module].canonical;
+    const char *module = ctx->modules[ctx->module].name;
     *record = (XrXirNominalDeclaration) {{module, (uint32_t) source_text_size(ctx, module)},
         {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0, {0}};
     if (!source_prelude_bind(ctx, symbol, record)) return false;

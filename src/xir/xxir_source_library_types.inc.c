@@ -101,7 +101,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         unit->nominals[n]=symbol->index; ctx->nominal_sources[symbol->index]=symbol;
         XrXirNominalDeclaration *out=(XrXirNominalDeclaration *)&ctx->nominals.declarations[symbol->index];
         *out=*in;
-        out->module=(XrXirLiteral){ctx->graph->specs[m].canonical,(uint32_t)source_text_size(ctx,ctx->graph->specs[m].canonical)};
+        out->module=(XrXirLiteral){ctx->modules[m].name,ctx->modules[m].name_length};
         out->name=(XrXirLiteral){name,in->name.length};
         out->constraints=NULL; out->fields=NULL; out->field_count=0; out->variants=NULL;
         const XrXirConstructionRow *construction=xr_xir_compile_construction_row(unit->construction,n);
@@ -126,7 +126,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         unit->interfaces[i]=symbol->index; ctx->interface_sources[symbol->index]=symbol;
         XrXirInterfaceDeclaration *out=(XrXirInterfaceDeclaration *)&ctx->interfaces.declarations[symbol->index];
         *out=*in;
-        out->module=(XrXirLiteral){ctx->graph->specs[m].canonical,(uint32_t)source_text_size(ctx,ctx->graph->specs[m].canonical)};
+        out->module=(XrXirLiteral){ctx->modules[m].name,ctx->modules[m].name_length};
         out->name=(XrXirLiteral){name,in->name.length};
         out->constraints=NULL;out->parents=NULL;out->methods=NULL;out->method_count=0;
         if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_TYPE,0,(XrXirSourceRange){m,0,0,0,0})) return false;

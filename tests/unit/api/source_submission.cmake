@@ -67,7 +67,9 @@ set_tests_properties(source_submission_ast PROPERTIES TIMEOUT 120 LABELS "unit;a
 add_executable(test_source_submission_ast_resources "${CMAKE_CURRENT_LIST_DIR}/source_submission/test_source_submission_ast_resources.c")
 target_link_libraries(test_source_submission_ast_resources PRIVATE xray_source_api)
 target_include_directories(test_source_submission_ast_resources PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
-target_compile_definitions(test_source_submission_ast_resources PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+target_compile_definitions(test_source_submission_ast_resources PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_PUBLIC_REPL_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_rooted"
+    XR_PUBLIC_REPL_FILE_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_public_repl_file")
 set_target_properties(test_source_submission_ast_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_source_submission_ast_resources PRIVATE /W4 /WX /utf-8)

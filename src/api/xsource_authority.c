@@ -254,7 +254,7 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContex
         }
     }
     if(status==XR_MANIFEST_OK) {
-        if (input->kind == XR_SOURCE_ENTRY_AST) { authority->logical_path=logical; logical=NULL; }
+        if (input->kind != XR_SOURCE_ENTRY_TEXT) { authority->logical_path=logical; logical=NULL; }
         if(io_work(&io,1)){*output=authority;authority=NULL;}
         else status=authority_status(io.status);
     }

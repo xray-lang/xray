@@ -39,14 +39,34 @@ XRAY_API XrSourceStatus xray_source_repl_bindings(const XrSourceRepl *,
  * Inputs use the common Source checker. A non-Unit tail owns an immutable
  * result declaration; it selects the last successfully displayed and published
  * result in later inputs. Unit and failed inputs preserve it. Top-level it
- * declarations are reserved; local bindings may shadow it. Files are not admitted. */
+ * declarations are reserved; local bindings may shadow it. */
 XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *, const char *namespace_id,
     const XrSourceCallOptions *, XrSourceRepl **);
 /* Parses once and owns the exact AST through the paired transaction. MEMORY
- * namespace must match construction; source bytes may die after return.
+ * namespace must match construction. Rooted text requires an absolute_path
+ * and NULL namespace; it derives the real nearest project/script authority,
+ * lockfile and relative imports without creating an entry file. Invalid nearer
+ * projects never fall back to SCRIPT. Repeated paths retain exact birth state.
+ * Input bytes and path may die after return.
  * A pending input or an untaken terminal result excludes another begin.
  * Compile failure leaves published declarations and values intact. */
 XRAY_API XrSourceStatus xray_source_repl_begin(XrSourceRepl *, const XrSourceText *, XrSourceDiagnostic **);
+/* Reads an exact regular-file snapshot with the original Compiler ledger and
+ * genuine FILE authority, then parses once into the same paired transaction.
+ * Relative paths resolve from the real working directory on that same ledger.
+ * Relative imports use its real project/script root and lockfile. The path and
+ * file contents may change after return; execution retains the admitted AST.
+ * Missing/nonregular files and invalid nearer configuration never fall back
+ * to MEMORY or an unsaved input. Lifecycle and sticky limits match begin. */
+XRAY_API XrSourceStatus xray_source_repl_begin_file(XrSourceRepl *, const char *path, XrSourceDiagnostic **);
+typedef enum XrSourceInputState { XR_SOURCE_INPUT_COMPLETE, XR_SOURCE_INPUT_INCOMPLETE } XrSourceInputState;
+/* Scans an exact input span with the real lexer and this Compiler's cumulative
+ * ledger. Empty input is complete; open delimiters or unterminated literals
+ * need more input. Other syntax errors are complete and remain for the parser.
+ * This observation grants no checking or execution authority. Pending input,
+ * callback reentry and failed resource state preserve the output. */
+XRAY_API XrSourceStatus xray_source_repl_check_input(XrSourceRepl *, const char *bytes, size_t length,
+    XrSourceInputState *);
 /* Inspects exactly one expression. The same checker evaluates its real
  * typeName once, including ordinary effects, and returns/displays that String.
  * The temporary candidate is aborted; published declarations and it stay fixed.

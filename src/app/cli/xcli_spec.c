@@ -20,6 +20,10 @@
 
 /* ========== Option Specs per Command ========== */
 
+static const XrCliOptionSpec repl_options[] = {
+    {"module-id",0,XR_CLI_VALUE_STRING,false,false,"NAMESPACE","Explicit interactive MEMORY namespace"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec run_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec test_options[] = {
@@ -169,6 +173,7 @@ static const XrCliCommandSpec doctor_subcommands[] = {
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, true, false, NULL, NULL, 0},
+    {"repl", "Interactive Source session", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
