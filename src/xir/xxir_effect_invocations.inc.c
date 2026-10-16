@@ -155,6 +155,8 @@ typedef struct EffectInvocationWorkspace {
     EffectInvocationState *states;
     uint32_t maximum;
     uint32_t front,back,pending;
+    uint64_t class_rank_limit;
+    uint32_t class_rank_nodes;
     bool producer_enabled,class_enabled;
 } EffectInvocationWorkspace;
 

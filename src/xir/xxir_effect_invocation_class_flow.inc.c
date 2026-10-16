@@ -260,7 +260,11 @@ static XrXirStatus effect_invocation_class_step(EffectInvocationFlow *flow,
     if (!changed || flow->node>=flow->owner->final.count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationWorkspace *owner=flow->owner;
     if (!owner->class_enabled) return XR_XIR_OK;
-    uint64_t limit=0;XrXirStatus status=effect_invocation_class_rank_limit_count(owner,flow->body.domain.function_count,&limit);
+    /* This equation has no Class value or Class return to certify. The
+     * complete physical inventory and independent seal still validate it. */
+    if (!owner->final.nodes[flow->node].class_count &&
+        !xr_xir_type_is_class(flow->body.domain.types,flow->function->result)) return XR_XIR_OK;
+    uint64_t limit=0;XrXirStatus status=effect_invocation_class_rank_current(owner,flow->body.domain.function_count,&limit);
     if (status!=XR_XIR_OK) return status;
     bool again=true;
     while (again) {
