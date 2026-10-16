@@ -17,6 +17,7 @@ static bool source_debug_environment(SourceContext *ctx,uint32_t *output) {
             uint32_t capacity=count ? count*2 : 16;
             SourceName **names=source_alloc(ctx,capacity,sizeof(*names));
             if (!names || !source_copy_bytes(ctx,NULL,names,ctx->debug_names,(size_t)count*sizeof(*names))) return false;
+            source_retire_array(ctx,ctx->debug_names);
             ctx->debug_names=names;ctx->debug_name_capacity=capacity;
         }
         ctx->debug_names[count++]=name;

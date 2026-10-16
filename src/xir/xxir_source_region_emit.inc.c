@@ -250,6 +250,8 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             if (!source_work(ctx,NULL)) goto done;
             if (query->function == ctx->function && !source_region_id(map,value_count,query->value,&query->value)) goto invalid;
         }
+        source_retire_array(ctx,body->operands);
+        body->operands=NULL;body->operand_count=body->operand_capacity=0;
         body->region_sealed=true; body->root_values=root_values;body->debug_points=views.points;
         while (body->recipe_storage) {
             SourceRecipeStorage *storage=body->recipe_storage;body->recipe_storage=storage->next;

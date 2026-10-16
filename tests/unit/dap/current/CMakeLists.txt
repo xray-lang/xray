@@ -661,3 +661,15 @@ set_tests_properties(test_dap_lexical_visibility_source_resources PROPERTIES TIM
 
 add_test(NAME test_xir_source_text_facts COMMAND $<TARGET_FILE:test_xir_source_text> --facts)
 set_tests_properties(test_xir_source_text_facts PROPERTIES TIMEOUT 120 LABELS "dap;source;metadata;ownership")
+
+add_executable(test_xir_source_query_retirement test_source_query_retirement.c)
+target_link_libraries(test_xir_source_query_retirement PRIVATE xray_xir_source xray_xir_vm)
+if(MSVC)
+    target_compile_options(test_xir_source_query_retirement PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_source_query_retirement PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_query_retirement COMMAND test_xir_source_query_retirement)
+add_test(NAME test_xir_source_query_retirement_resources COMMAND test_xir_source_query_retirement --resources)
+set_tests_properties(test_xir_source_query_retirement PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;metadata")
+set_tests_properties(test_xir_source_query_retirement_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;metadata;resources;fault-injection")

@@ -212,7 +212,7 @@ typedef struct SourceContext {
     XrXirCompileContext compile;
     uint32_t remaining_blocks, remaining_instructions;
     XrXirSourceDiagnostic diagnostic;
-    SourceMemory *memory;
+    SourceMemory *memory,*retired_arrays;
     XrXirConstruction *construction;
     SourceLibraryUnit *library_units;
     SourceRootQuery *root_queries;
@@ -355,6 +355,23 @@ static void source_release_private(void *pointer) {
     if (memory->next) memory->next->previous=memory->previous;
     xr_compile_resources_free(memory);
 }
+/* Array element borrows remain valid while semantic construction is active.
+ * Obsolete versions are released only at checker or snapshot-copy handoff. */
+static void source_retire_array(SourceContext *ctx,const void *array) {
+    if (!array) return;
+    SourceMemory *memory=(SourceMemory *)array-1;
+    XR_CHECK(memory->previous,"retired source array must still have its original owner");
+    *memory->previous=memory->next;
+    if (memory->next) memory->next->previous=memory->previous;
+    memory->previous=NULL;memory->next=ctx->retired_arrays;ctx->retired_arrays=memory;
+}
+static void source_release_retired_arrays(SourceContext *ctx) {
+    while (ctx->retired_arrays) {
+        SourceMemory *memory=ctx->retired_arrays;ctx->retired_arrays=memory->next;
+        XR_CHECK(!memory->previous,"retired source storage has no active arena list link");
+        xr_compile_resources_free(memory);
+    }
+}
 static void *source_recipe_storage(SourceContext *ctx, uint32_t count, size_t size) {
     if (count>(SIZE_MAX-sizeof(SourceRecipeStorage))/size) {
         source_fail(ctx,NULL,XR_XIR_BUDGET,"source region storage exhausted"); return NULL;
@@ -475,6 +492,7 @@ static void *source_query_append(SourceContext *ctx, const void *array, uint32_t
         void *grown = source_alloc(ctx, next, size);
         if (!grown) return NULL;
         if (!source_copy_bytes(ctx, NULL, grown, array, (size_t) *count * size)) return NULL;
+        source_retire_array(ctx,array);
         array = grown; *capacity = next;
     }
     ++*count;
@@ -907,6 +925,7 @@ static bool source_recipe_group(SourceContext *ctx, XrXirInstruction op, const S
         uint32_t *operands = source_alloc(ctx, capacity, sizeof(*operands));
         if (!operands) return false;
         if (!source_copy_bytes(ctx, NULL, operands, body->operands, body->operand_count * sizeof(*operands))) return false;
+        source_retire_array(ctx,body->operands);
         body->operands = operands; body->operand_capacity = capacity;
     }
     op.args[0] = count ? body->operand_count : 0; op.args[1] = count;
@@ -1014,6 +1033,7 @@ static bool source_type_arguments(SourceContext *ctx, AstNode *node, const XrXir
         XrXirType *table = source_alloc(ctx, capacity, sizeof(*table));
         if (!table) return false;
         if (!source_copy_bytes(ctx, node, table, caller->arguments, caller->argument_count * sizeof(*table))) return false;
+        source_retire_array(ctx,caller->arguments);
         caller->arguments = table; body->type_capacity = capacity;
     }
     op->type_arguments[0] = count ? caller->argument_count : 0; op->type_arguments[1] = count;
@@ -1120,6 +1140,7 @@ static bool source_literal_append(SourceContext *ctx, AstNode *node, const char 
         if (!literals) return false;
         if (!source_work_units(ctx, node, (uint64_t)ctx->literal_count * sizeof(*literals))) return false;
         if (!source_copy_bytes(ctx, NULL, literals, ctx->literals, ctx->literal_count * sizeof(*literals))) return false;
+        source_retire_array(ctx,ctx->literals);
         ctx->literals = literals; ctx->literal_capacity = capacity;
     }
     uint32_t id = ctx->literal_count;
@@ -2875,6 +2896,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         return;
     }
     if (!source_array_query_types(ctx)) { xr_xir_compile_source_result_free(output); return; }
+    source_release_retired_arrays(ctx);
     ctx->query.complete = ctx->diagnostic.status == XR_XIR_OK;
     ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
     ctx->query.diagnostic = ctx->diagnostic;
