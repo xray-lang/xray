@@ -127,6 +127,10 @@ XR_FUNC uint32_t xr_xir_compile_type_arena_borrowed(const XrXirTypeArena *arena,
     return arena && arena->borrowed && xr_xir_type_node(&arena->types,type) ?
         arena->borrowed[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u : 0;
 }
+XR_FUNC uint32_t xr_xir_compile_type_arena_borrowed_leaves(const XrXirTypeArena *arena,XrXirType type) {
+    return arena && arena->borrowed && xr_xir_type_node(&arena->types,type) ?
+        arena->borrowed[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]>>2 : 0;
+}
 XR_FUNC bool xr_xir_compile_type_arena_has_borrowed(const XrXirTypeArena *arena) {
     return arena && arena->borrowed;
 }

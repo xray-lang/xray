@@ -82,21 +82,30 @@ static XrXirValueStatus borrowed_visit_push(BorrowedVisit *visit,const XrXirValu
     }
     visit->objects[visit->count++]=object;visit->slots[at]=object;return XR_XIR_VALUE_OK;
 }
-static XrXirValueStatus borrowed_admit_operation(const XrXirValue *value,XrXirType type,
-    const XrXirViewAccess *access) {
+typedef XrXirValueStatus (*BorrowedLeafInspection)(const XirView *view,
+    const XrXirCellAuthority *authority,XrXirValueAdmission *admission,void *context);
+static XrXirValueStatus borrowed_leaf_inspect(const XrXirValue *value,const XrXirViewAccess *access,
+    BorrowedLeafInspection inspect,void *context) {
+    XrXirCellAuthority authority={0};
+    XrXirValueStatus status=view_value_permission(value,access,false,&authority);
+    return status==XR_XIR_VALUE_OK && inspect ?
+        inspect((const XirView *)object_pointer(value),&authority,access->values,context) : status;
+}
+static XrXirValueStatus borrowed_inspect_operation(const XrXirValue *value,XrXirType type,
+    const XrXirViewAccess *access,BorrowedLeafInspection inspect,void *context) {
     if (!access || !access->authorize || !admission_domain_current(access->values)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueAdmission *admission=access->values;
     if (owned_carrier_type(type) && xr_xir_value_argument(value,admission->arena,type) &&
         view_value_kind(object_pointer(value)->kind)) {
-        XrXirCellAuthority authority={0};return view_value_permission(value,access,false,&authority);
+        return borrowed_leaf_inspect(value,access,inspect,context);
     }
     XirObject *first[192];BorrowedVisit visit={.first=first};
     XrXirValueStatus status=borrowed_visit_push(&visit,value,type,access);
     for (uint32_t at=0;at<visit.count && status==XR_XIR_VALUE_OK;++at) {
         XirObject *object=visit.objects[at];
         if (view_value_kind(object->kind)) {
-            XrXirCellAuthority authority={0};XrXirValue handle=view_value_handle((const XirView *)object);
-            status=view_value_permission(&handle,access,false,&authority);continue;
+            XrXirValue handle=view_value_handle((const XirView *)object);
+            status=borrowed_leaf_inspect(&handle,access,inspect,context);continue;
         }
         const XrXirValue *fields=NULL;uint32_t count=0;
         if (object->kind==XR_XIR_TYPE_TUPLE) {fields=((const XirTuple *)object)->fields;count=((const XirTuple *)object)->count;}
@@ -112,10 +121,100 @@ static XrXirValueStatus borrowed_admit_operation(const XrXirValue *value,XrXirTy
     }
     return status;
 }
+static XrXirValueStatus borrowed_admit_operation(const XrXirValue *value,XrXirType type,
+    const XrXirViewAccess *access) {
+    return borrowed_inspect_operation(value,type,access,NULL,NULL);
+}
 XR_FUNC XrXirValueStatus xr_xir_borrowed_value_admit(const XrXirValue *value,XrXirType type,
     const XrXirViewAccess *access) {
     xr_xir_value_graph_begin();XrXirValueStatus status=borrowed_admit_operation(value,type,access);
     xr_xir_value_graph_end();return status;
+}
+typedef struct ViewOriginMatch {
+    const XirView *origin;
+    BorrowedVisit proven;
+    bool memoize;
+} ViewOriginMatch;
+static XrXirValueStatus view_origin_proven(const BorrowedVisit *visit,const XirObject *object,
+    XrXirValueAdmission *admission,bool *output) {
+    *output=false;
+    if (!visit->capacity) return XR_XIR_VALUE_OK;
+    uint32_t at=borrowed_hash(object)&(visit->capacity*2u-1u);
+    while (visit->slots[at]) {
+        if (!view_storage_work(admission,1)) return XR_XIR_VALUE_LIMIT;
+        if (visit->slots[at]==object) {*output=true;break;}
+        at=(at+1u)&(visit->capacity*2u-1u);
+    }
+    return XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus view_origin_leaf_match(const XirView *leaf,
+    const XrXirCellAuthority *authority,XrXirValueAdmission *admission,void *context) {
+    ViewOriginMatch *match=context;(void)authority;
+    if (!match->origin) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirView *view=leaf;XrXirValueStatus status=XR_XIR_VALUE_OK;bool proven=false;
+    while (view!=match->origin) {
+        if (!view_storage_work(admission,1)) return XR_XIR_VALUE_LIMIT;
+        status=view_origin_proven(&match->proven,&view->object,admission,&proven);
+        if (status!=XR_XIR_VALUE_OK || proven) break;
+        if (unit_value(&view->parent) || !xr_xir_value_valid(&view->parent)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        const XirObject *parent=object_pointer(&view->parent);
+        if (!view_value_kind(parent->kind) || parent->arena!=admission->arena || parent->domain!=admission->domain)
+            return XR_XIR_VALUE_BAD_ARGUMENT;
+        view=(const XirView *)parent;
+    }
+    if (status!=XR_XIR_VALUE_OK) return status;
+    /* A direct view has no other returned leaf that could reuse this prefix. */
+    if (!match->memoize) return XR_XIR_VALUE_OK;
+    /* Publish only proven prefixes. An unproved cycle cannot become a match;
+     * each ancestry edge is metered even before any memo allocation succeeds. */
+    view=leaf;XrXirViewAccess physical={.values=admission};
+    while (view!=match->origin) {
+        status=view_origin_proven(&match->proven,&view->object,admission,&proven);
+        if (status!=XR_XIR_VALUE_OK || proven) break;
+        XrXirValue value=view_value_handle(view);
+        status=borrowed_visit_push(&match->proven,&value,(XrXirType)value.type,&physical);
+        if (status!=XR_XIR_VALUE_OK) break;
+        view=(const XirView *)object_pointer(&view->parent);
+    }
+    return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_borrowed_value_origin_match(const XrXirValue *value,XrXirType type,
+    const XrXirViewOriginPin *candidate,const XrXirViewAccess *access) {
+    if (!access || !access->authorize || !admission_domain_current(access->values) ||
+        !xr_xir_compile_type_arena_borrowed(access->values->arena,type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (candidate && !candidate->body && (candidate->authority.activation || candidate->authority.frame ||
+        candidate->authority.epoch)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XrXirValueAdmission *admission=access->values;
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),type);
+    XirObject *first[192];ViewOriginMatch match={.origin=candidate ? candidate->body : NULL,
+        .proven={.first=first},.memoize=!view_value_kind(node->kind)};
+    XrXirValueStatus status=XR_XIR_VALUE_OK;
+    if (match.origin) {
+        XrXirViewOriginInfo info={0};status=xr_xir_view_origin_info(candidate,admission,&info);
+    }
+    if (status==XR_XIR_VALUE_OK) status=borrowed_inspect_operation(value,type,access,view_origin_leaf_match,&match);
+    if (match.proven.objects) {
+        if (match.proven.objects!=match.proven.first)
+            xr_xir_domain_deallocate(admission->domain,match.proven.objects,(size_t)match.proven.bytes);
+        admission->scratch_bytes+=match.proven.bytes;
+    }
+    xr_xir_value_graph_end();return status;
+}
+static XrXirValueStatus borrowed_origin_pin_leaf(const XirView *view,
+    const XrXirCellAuthority *authority,XrXirValueAdmission *admission,void *context) {
+    XrXirViewOriginPin *pin=context;
+    if (pin->body) return XR_XIR_VALUE_BAD_ARGUMENT;
+    return view_origin_pin_hold((XirView *)view,authority,admission,pin);
+}
+XR_FUNC XrXirValueStatus xr_xir_borrowed_value_origin_pin(const XrXirValue *value,XrXirType type,
+    const XrXirViewAccess *access,XrXirViewOriginPin *output) {
+    if (!output || output->body || output->authority.activation || output->authority.frame || output->authority.epoch ||
+        !access || !access->authorize || !admission_domain_current(access->values) ||
+        xr_xir_compile_type_arena_borrowed_leaves(access->values->arena,type)!=1) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();XrXirViewOriginPin prepared={0};
+    XrXirValueStatus status=borrowed_inspect_operation(value,type,access,borrowed_origin_pin_leaf,&prepared);
+    if (status==XR_XIR_VALUE_OK) {*output=prepared;prepared=(XrXirViewOriginPin){0};}
+    xr_xir_view_origin_unpin(&prepared);xr_xir_value_graph_end();return status;
 }
 static XrXirValueStatus borrowed_tuple_move_operation(XrXirType type,XrXirValue *fields,
     uint32_t count,const XrXirViewAccess *access,XrXirValue *output) {

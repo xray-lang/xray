@@ -12,6 +12,7 @@
 #include "xir/xxir_view_value_internal.h"
 #include "xir/xxir_type_arena.h"
 #include "xir/xxir_array.h"
+#include "xir/xxir_nullable.h"
 #include <stdio.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);return 1;}} while (0)
 typedef struct PinScope {bool active;XrXirCellAuthority authority;} PinScope;
@@ -30,25 +31,39 @@ int main(void) {
         {.kind=XR_XIR_TYPE_CELL,.element=(XrXirType)256},
         {.kind=XR_XIR_TYPE_MUT_SLICE,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING},
-        {.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8}
+        {.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_U8},
+        {.kind=XR_XIR_TYPE_SLICE,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_NULLABLE,.element=(XrXirType)258}
     };
-    const XrXirTypes types={nodes,5,NULL,NULL};XrXirTypeArena *arena=NULL;XrXirDomain *domain=NULL;
+    const XrXirTypes types={nodes,7,NULL,NULL};XrXirTypeArena *arena=NULL;XrXirDomain *domain=NULL;
     CHECK(xr_xir_compile_type_arena_new(&c,&types,&arena)==XR_XIR_VALUE_OK && xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
     XrXirValueAdmission admission={arena,domain,NULL,NULL,100000,65536};PinScope scope={true,{domain,arena,73}};
     XrXirViewAccess access={&admission,pin_authorize,&scope};XrXirViewOriginPin pin={0};XrXirViewOriginInfo info={0};
-    XrXirValue array={0},cell={0},view={0},read={0},text={0},replacement={0};XrXirFaultDetail fault={0};
+    XrXirValue array={0},cell={0},view={0},read={0},text={0},replacement={0},child={0},other={0},some={0},none={0};XrXirFaultDetail fault={0};
     const XrXirValue item={XR_XIR_I64,0,9};
     CHECK(xr_xir_array_new((XrXirType)256,&item,1,&admission,&array)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_new(domain,arena,(XrXirType)257,&array,&admission,&cell)==XR_XIR_VALUE_OK);
     XrXirViewStorageSpec spec={scope.authority,0,1,XR_XIR_TYPE_MUT_SLICE};
     CHECK(xr_xir_view_new((XrXirType)258,&cell,NULL,&spec,&admission,&view)==XR_XIR_VALUE_OK);
-    CHECK(xr_xir_view_origin_pin(&view,&access,&pin)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_borrowed_some_new_move((XrXirType)262,&view,&access,&some)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_borrowed_value_origin_pin(&some,(XrXirType)262,&access,&pin)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_borrowed_some_take(&some,&access,&view)==XR_XIR_VALUE_OK);
+    spec=(XrXirViewStorageSpec){scope.authority,0,1,XR_XIR_TYPE_SLICE};
+    CHECK(xr_xir_view_reborrow((XrXirType)261,&view,&spec,&access,&child)==XR_XIR_VALUE_OK);
     XrXirValue shadow=view;xr_xir_value_drop(&view);scope.active=false;
-    CHECK(xr_xir_cell_unborrowed(&cell) && xr_xir_cell_read(&cell,&read)==XR_XIR_VALUE_OK);xr_xir_value_drop(&read);
+    CHECK(!xr_xir_cell_unborrowed(&cell) && xr_xir_cell_read(&cell,&read)==XR_XIR_VALUE_OK);xr_xir_value_drop(&read);
     CHECK(xr_xir_view_origin_info(&pin,&admission,&info)==XR_XIR_VALUE_OK && !info.logical_active && info.length==1);
     CHECK(xr_xir_view_get(&shadow,0,&access,&read,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && !read.type);
+    CHECK(xr_xir_borrowed_value_origin_match(&child,(XrXirType)261,&pin,&access)==XR_XIR_VALUE_BAD_ARGUMENT);
+    scope.active=true;CHECK(xr_xir_borrowed_value_origin_match(&child,(XrXirType)261,&pin,&access)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_view_new((XrXirType)261,&cell,NULL,&spec,&admission,&other)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_borrowed_value_origin_match(&other,(XrXirType)261,&pin,&access)==XR_XIR_VALUE_BAD_ARGUMENT);
+    xr_xir_value_drop(&other);xr_xir_value_drop(&child);CHECK(xr_xir_cell_unborrowed(&cell));
     CHECK(xr_xir_cell_write(&cell,&array,&admission)==XR_XIR_VALUE_OK);
     xr_xir_view_origin_unpin(&pin);xr_xir_value_drop(&cell);xr_xir_value_drop(&array);scope.active=true;
+    CHECK(xr_xir_nullable_new((XrXirType)262,NULL,&admission,&none)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_borrowed_value_origin_pin(&none,(XrXirType)262,&access,&pin)==XR_XIR_VALUE_OK && !pin.body);
+    CHECK(xr_xir_borrowed_value_origin_match(&none,(XrXirType)262,&pin,&access)==XR_XIR_VALUE_OK);xr_xir_value_drop(&none);
     CHECK(xr_xir_string_new(domain,"x\0y",3,&text)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_new(domain,arena,(XrXirType)259,&text,&admission,&cell)==XR_XIR_VALUE_OK);
     spec=(XrXirViewStorageSpec){scope.authority,0,3,XR_XIR_TYPE_SLICE};

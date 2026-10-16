@@ -70,6 +70,16 @@ XR_FUNC XrXirValueStatus xr_xir_view_copy(XrXirType array, const XrXirValue *val
  * and allocation succeeds. Ordinary admission still rejects borrowed storage. */
 XR_FUNC XrXirValueStatus xr_xir_borrowed_value_admit(const XrXirValue *value,
     XrXirType type, const XrXirViewAccess *access);
+/* Capture the unique declared view leaf without consuming Tuple/Optional
+ * owners. None succeeds with a canonical empty pin; failures publish nothing. */
+XR_FUNC XrXirValueStatus xr_xir_borrowed_value_origin_pin(const XrXirValue *value,
+    XrXirType type, const XrXirViewAccess *access, XrXirViewOriginPin *output);
+/* Match every actual returned leaf to one pinned view input, including retired
+ * physical parents. An empty candidate accepts only values with no view leaf.
+ * Inputs remain held and unchanged for the whole check. This matches ancestry,
+ * never adopts authority or proves the root lifetime. */
+XR_FUNC XrXirValueStatus xr_xir_borrowed_value_origin_match(const XrXirValue *value,
+    XrXirType type, const XrXirViewOriginPin *candidate, const XrXirViewAccess *access);
 XR_FUNC XrXirValueStatus xr_xir_borrowed_tuple_new_move(XrXirType type,
     XrXirValue *fields, uint32_t count, const XrXirViewAccess *access, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_borrowed_some_new_move(XrXirType type,

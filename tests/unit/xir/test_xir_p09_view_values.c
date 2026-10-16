@@ -14,6 +14,11 @@
 #include "test_xir_compile_domain.c"
 #undef XR_COMPILE_DOMAIN_ENTRY
 
+#undef TRY_VALUE
+#define TRY_VALUE(call) do { status=(call); if (status!=XR_XIR_VALUE_OK) { \
+    if (!value_compile_injected) fprintf(stderr,"%d: %s returned %u\n",__LINE__,#call,(unsigned)status); \
+    goto done; } } while (0)
+
 typedef struct ViewLoan26 {
     void *cell;const void *scope;struct ViewLoan26 *previous;XrXirCellAuthority authority;
 } ViewLoan26;
@@ -79,11 +84,13 @@ static XrXirValueStatus view_origin_pin_sequence(XrXirValue *root,const XrXirVal
     XrXirValueAdmission *admission=access->values;ViewScope *scope=access->context;
     XrXirCellAuthority authority={admission->domain,scope,500};
     XrXirViewStorageSpec spec={authority,0,4,XR_XIR_TYPE_MUT_SLICE};
-    XrXirValue view={0},read={0},pinned={0};XrXirViewOriginPin pins[2]={{0}};
+    XrXirValue view={0},read={0},pinned={0},aggregate={0},fields[2]={{0}};XrXirViewOriginPin pins[2]={{0}};
     XrXirViewOriginInfo info={0};XrXirFaultDetail fault={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
     TRY_VALUE(xr_xir_view_new((XrXirType)259,root,NULL,&spec,admission,&view));view_bind(scope,&view,authority);
     TRY_VALUE(xr_xir_view_origin_pin(&view,access,&pins[0]));
     TRY_VALUE(xr_xir_view_origin_pin(&view,access,&pins[1]));CHECK(pins[0].body==pins[1].body);
+    TRY_VALUE(xr_xir_borrowed_value_origin_match(&view,(XrXirType)259,&pins[0],access));
+    CHECK(xr_xir_borrowed_value_origin_match(&view,(XrXirType)259,NULL,access)==XR_XIR_VALUE_BAD_ARGUMENT);
     TRY_VALUE(xr_xir_view_origin_info(&pins[0],admission,&info));
     CHECK(info.logical_active && info.kind==XR_XIR_TYPE_MUT_SLICE && info.element==XR_XIR_I64 &&
         !info.offset && info.length==4 && info.authority.epoch==authority.epoch && xr_xir_cell_same_owner(info.root,root));
@@ -91,6 +98,7 @@ static XrXirValueStatus view_origin_pin_sequence(XrXirValue *root,const XrXirVal
     CHECK(admission->work==terminal_work);
     pinned=view;xr_xir_value_drop(&view);CHECK(xr_xir_cell_unborrowed(root));
     CHECK(xr_xir_value_valid(&pinned) && xr_xir_view_get(&pinned,0,access,&read,&fault)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_borrowed_value_origin_match(&pinned,(XrXirType)259,&pins[0],access)==XR_XIR_VALUE_BAD_ARGUMENT);
     TRY_VALUE(xr_xir_view_origin_info(&pins[0],admission,&info));CHECK(!info.logical_active && info.length==4);
     TRY_VALUE(xr_xir_array_new((XrXirType)256,NULL,0,admission,&read));
     TRY_VALUE(xr_xir_cell_write(root,&read,admission));xr_xir_value_drop(&read);CHECK(xr_xir_value_valid(&pinned));
@@ -104,17 +112,39 @@ static XrXirValueStatus view_origin_pin_sequence(XrXirValue *root,const XrXirVal
     XrXirViewStorageSpec child_spec={child_authority,0,1,XR_XIR_TYPE_SLICE};
     TRY_VALUE(xr_xir_view_reborrow((XrXirType)258,&view,&child_spec,access,&read));view_bind(scope,&read,child_authority);
     xr_xir_value_drop(&view);CHECK(!xr_xir_cell_unborrowed(root));
+    uint64_t scratch=admission->scratch_bytes;admission->scratch_bytes=0;
+    CHECK(xr_xir_borrowed_value_origin_match(&read,(XrXirType)258,&pins[0],access)==XR_XIR_VALUE_OK &&
+        !admission->scratch_bytes && pins[0].body);admission->scratch_bytes=scratch;
+    TRY_VALUE(xr_xir_borrowed_value_origin_match(&read,(XrXirType)258,&pins[0],access));
+    child_authority.epoch=503;child_spec=(XrXirViewStorageSpec){child_authority,0,1,XR_XIR_TYPE_SLICE};
+    TRY_VALUE(xr_xir_view_reborrow((XrXirType)258,&read,&child_spec,access,&view));view_bind(scope,&view,child_authority);
+    TRY_VALUE(xr_xir_value_copy(&read,&fields[0]));TRY_VALUE(xr_xir_value_copy(&view,&fields[1]));
+    TRY_VALUE(xr_xir_borrowed_tuple_new_move((XrXirType)262,fields,2,access,&aggregate));
+    admission->scratch_bytes=0;
+    CHECK(xr_xir_borrowed_value_origin_match(&aggregate,(XrXirType)262,&pins[0],access)==XR_XIR_VALUE_LIMIT &&
+        !admission->scratch_bytes && xr_xir_value_valid(&aggregate));admission->scratch_bytes=scratch;
+    uint32_t before_calls=scope->calls;
+    TRY_VALUE(xr_xir_borrowed_value_origin_match(&aggregate,(XrXirType)262,&pins[0],access));CHECK(scope->calls==before_calls+2);
+    xr_xir_value_drop(&aggregate);xr_xir_value_drop(&view);
+    child_authority.epoch=504;child_spec=(XrXirViewStorageSpec){child_authority,1,1,XR_XIR_TYPE_SLICE};
+    TRY_VALUE(xr_xir_view_new((XrXirType)258,root,NULL,&child_spec,admission,&view));view_bind(scope,&view,child_authority);
+    CHECK(xr_xir_borrowed_value_origin_match(&view,(XrXirType)258,&pins[0],access)==XR_XIR_VALUE_BAD_ARGUMENT);
+    TRY_VALUE(xr_xir_value_copy(&read,&fields[0]));TRY_VALUE(xr_xir_value_copy(&view,&fields[1]));
+    TRY_VALUE(xr_xir_borrowed_tuple_new_move((XrXirType)262,fields,2,access,&aggregate));
+    CHECK(xr_xir_borrowed_value_origin_match(&aggregate,(XrXirType)262,&pins[0],access)==XR_XIR_VALUE_BAD_ARGUMENT);
+    xr_xir_value_drop(&aggregate);xr_xir_value_drop(&view);
     XrXirValue element={0};TRY_VALUE(xr_xir_view_get(&read,0,access,&element,&fault));CHECK(element.type==XR_XIR_I64);
     xr_xir_value_drop(&element);xr_xir_value_drop(&read);CHECK(xr_xir_cell_unborrowed(root));
     TRY_VALUE(xr_xir_cell_write(root,restore,admission));
     TRY_VALUE(xr_xir_view_origin_info(&pins[0],admission,&info));CHECK(!info.logical_active && info.kind==XR_XIR_TYPE_SLICE);
 done:
     for (unsigned i=2;i;--i) xr_xir_view_origin_unpin(&pins[i-1]);
-    xr_xir_value_drop(&read);xr_xir_value_drop(&view);return status;
+    for (unsigned i=2;i;--i) xr_xir_value_drop(&fields[i-1]);
+    xr_xir_value_drop(&aggregate);xr_xir_value_drop(&read);xr_xir_value_drop(&view);return status;
 }
 static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     XrXirTypeArena *arena=NULL;XrXirDomain *domain=NULL;XrXirValue values[12]={{0}},fields[2]={{0}};
-    XrXirValue chain[80]={{0}};XrXirCellLoan origin={0};
+    XrXirValue chain[80]={{0}};XrXirCellLoan origin={0};XrXirViewOriginPin input_origin={0},rejected_origin={0};
     XrXirValueStatus status=view_values_fixture(resources,&arena,&domain);if (status!=XR_XIR_VALUE_OK) goto done;
     XrXirValueAdmission admission={arena,domain,NULL,NULL,1000000,65536};
     ViewScope scope={.active=true};XrXirViewAccess access={&admission,view_authorize,&scope};
@@ -146,6 +176,8 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     status=xr_xir_borrowed_some_new_move((XrXirType)263,&values[5],&access,&values[6]);
     if (status!=XR_XIR_VALUE_OK) {CHECK(values[5].payload==before.payload && unit_value(&values[6]));goto done;}
     CHECK(unit_value(&values[5]));
+    TRY_VALUE(xr_xir_borrowed_value_origin_pin(&values[6],(XrXirType)263,&access,&input_origin));
+    TRY_VALUE(xr_xir_borrowed_value_origin_match(&values[6],(XrXirType)263,&input_origin,&access));
     TRY_VALUE(xr_xir_borrowed_some_take(&values[6],&access,&values[5]));CHECK(unit_value(&values[6]));
     TRY_VALUE(xr_xir_borrowed_tuple_unpack_move(&values[5],fields,2,&access));
     CHECK(unit_value(&values[5]) && fields[0].type==259 && fields[1].payload==55);
@@ -160,10 +192,14 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     TRY_VALUE(xr_xir_view_get(&values[3],0,&access,&values[11],&fault));CHECK(values[11].payload==22);
     xr_xir_value_drop(&values[11]);xr_xir_value_drop(&values[3]);
     TRY_VALUE(xr_xir_view_get(&values[4],0,&access,&values[11],&fault));CHECK(values[11].payload==22);xr_xir_value_drop(&values[11]);
+    TRY_VALUE(xr_xir_borrowed_value_origin_match(&values[4],(XrXirType)258,&input_origin,&access));
     TRY_VALUE(xr_xir_view_copy((XrXirType)256,&values[4],&access,&values[7]));
     xr_xir_value_drop(&values[4]);CHECK(xr_xir_cell_unborrowed(&values[1]));
+    xr_xir_view_origin_unpin(&input_origin);
     TRY_VALUE(xr_xir_nullable_new((XrXirType)260,NULL,&admission,&values[8]));
     TRY_VALUE(xr_xir_borrowed_value_admit(&values[8],(XrXirType)260,&access));
+    TRY_VALUE(xr_xir_borrowed_value_origin_pin(&values[8],(XrXirType)260,&access,&input_origin));CHECK(!input_origin.body);
+    TRY_VALUE(xr_xir_borrowed_value_origin_match(&values[8],(XrXirType)260,NULL,&access));
     TRY_VALUE(xr_xir_string_new(domain,"a\0\xc3\xa9",4,&values[9]));
     TRY_VALUE(xr_xir_cell_new(domain,arena,(XrXirType)266,&values[9],&admission,&values[10]));
     spec=(XrXirViewStorageSpec){a,1,3,XR_XIR_TYPE_SLICE};
@@ -188,6 +224,7 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     xr_xir_value_drop(&values[11]);xr_xir_value_drop(&values[3]);CHECK(xr_xir_cell_unborrowed(&values[1]));
     spec=(XrXirViewStorageSpec){a,0,4,XR_XIR_TYPE_SLICE};
     TRY_VALUE(xr_xir_view_new((XrXirType)258,&values[1],NULL,&spec,&admission,&values[3]));view_bind(&scope,&values[3],a);
+    TRY_VALUE(xr_xir_view_origin_pin(&values[3],&access,&input_origin));
     XrXirType dag_type=(XrXirType)258;
     for (uint32_t layer=0;layer<69;++layer) {
         TRY_VALUE(xr_xir_value_copy(&values[3],&fields[0]));TRY_VALUE(xr_xir_value_copy(&values[3],&fields[1]));
@@ -196,21 +233,33 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
         xr_xir_value_drop(&values[3]);TRY_VALUE(xr_xir_value_move(&values[4],&values[3]));
     }
     uint32_t before_calls=scope.calls;uint64_t work=xr_xir_domain_budget_stats(domain).work;
+    CHECK(xr_xir_borrowed_value_origin_pin(&values[3],dag_type,&access,&rejected_origin)==XR_XIR_VALUE_BAD_ARGUMENT &&
+        !rejected_origin.body && scope.calls==before_calls);
     TRY_VALUE(xr_xir_borrowed_value_admit(&values[3],dag_type,&access));
     CHECK(scope.calls==before_calls+1 && xr_xir_domain_budget_stats(domain).work-work<20000);
-    xr_xir_value_drop(&values[3]);
+    xr_xir_value_drop(&values[3]);xr_xir_view_origin_unpin(&input_origin);
     for (uint32_t i=0;i<80;++i) {
         XrXirCellAuthority authority={domain,&scope,100+i};
         spec=(XrXirViewStorageSpec){authority,0,1,XR_XIR_TYPE_MUT_SLICE};
         if (!i) TRY_VALUE(xr_xir_view_new((XrXirType)259,&values[1],NULL,&spec,&admission,&chain[i]));
         else TRY_VALUE(xr_xir_view_reborrow((XrXirType)259,&chain[i-1],&spec,&access,&chain[i]));
         view_bind(&scope,&chain[i],authority);
+        if (!i) TRY_VALUE(xr_xir_view_origin_pin(&chain[i],&access,&input_origin));
     }
     for (uint32_t i=0;i<79;i+=2) xr_xir_value_drop(&chain[i]);
     for (uint32_t i=1;i<79;i+=2) xr_xir_value_drop(&chain[i]);
     spec=(XrXirViewStorageSpec){{domain,&scope,179},0,1,XR_XIR_TYPE_SLICE};
     TRY_VALUE(xr_xir_view_reborrow((XrXirType)258,&chain[79],&spec,&access,&values[4]));view_bind(&scope,&values[4],spec.authority);
     xr_xir_value_drop(&chain[79]);
+    status=xr_xir_borrowed_value_origin_match(&values[4],(XrXirType)258,&input_origin,&access);
+    if (status!=XR_XIR_VALUE_OK) {
+        if (!value_compile_injected) fprintf(stderr,"origin chain status%u admission work%llu scratch%llu domain request%llu/%llu work%llu/%llu\n",
+            (unsigned)status,(unsigned long long)admission.work,(unsigned long long)admission.scratch_bytes,
+            (unsigned long long)domain->budget.requested_bytes,(unsigned long long)domain->budget.requested_limit,
+            (unsigned long long)domain->budget.work,(unsigned long long)domain->budget.work_limit);
+        goto done;
+    }
+    xr_xir_view_origin_unpin(&input_origin);
     TRY_VALUE(xr_xir_cell_read(&values[1],&values[11]));xr_xir_value_drop(&values[11]);
     TRY_VALUE(xr_xir_view_get(&values[4],0,&access,&values[11],&fault));CHECK(values[11].payload==11);
     xr_xir_value_drop(&values[11]);xr_xir_value_drop(&values[4]);CHECK(xr_xir_cell_unborrowed(&values[1]));
@@ -229,6 +278,8 @@ static XrXirValueStatus view_values_sequence(XrCompileResources *resources) {
     CHECK(xr_xir_value_valid(&values[3]) && xr_xir_value_valid(&values[4]));
 done:
     for (unsigned i=80;i;--i) xr_xir_value_drop(&chain[i-1]);
+    xr_xir_view_origin_unpin(&input_origin);
+    xr_xir_view_origin_unpin(&rejected_origin);
     for (unsigned i=2;i;--i) xr_xir_value_drop(&fields[i-1]);
     xr_xir_value_drop(&values[3]);
     if (origin.cell) xr_xir_cell_loan_release(&origin);
@@ -269,12 +320,26 @@ static void view_values_guards(XrCompileResources *resources) {
     CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_LIMIT && !pin.body);admission.work=work;
     CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_view_origin_pin(&value,&access,&pin)==XR_XIR_VALUE_BAD_ARGUMENT && body->children==1);
+    CHECK(xr_xir_borrowed_value_origin_pin(&value,(XrXirType)259,&access,&pin)==XR_XIR_VALUE_BAD_ARGUMENT && body->children==1);
+    CHECK(xr_xir_compile_type_arena_borrowed_leaves(arena,(XrXirType)259)==1 &&
+        xr_xir_compile_type_arena_borrowed_leaves(arena,(XrXirType)263)==1 &&
+        xr_xir_compile_type_arena_borrowed_leaves(arena,(XrXirType)262)==2 &&
+        xr_xir_compile_type_arena_borrowed_leaves(arena,XR_XIR_I64)==0);
     work=admission.work;admission.work=0;
     CHECK(xr_xir_view_origin_info(&pin,&admission,&info)==XR_XIR_VALUE_LIMIT && info.kind==123);admission.work=work;
     scope.active=false;
     CHECK(xr_xir_view_origin_info(&pin,&admission,&info)==XR_XIR_VALUE_OK && info.logical_active);
+    CHECK(xr_xir_borrowed_value_origin_match(&value,(XrXirType)259,&pin,&access)==XR_XIR_VALUE_BAD_ARGUMENT);
     CHECK(xr_xir_view_origin_pin(&value,&access,&rejected)==XR_XIR_VALUE_BAD_ARGUMENT && !rejected.body);
     CHECK(xr_xir_view_get(&value,0,&access,&copy,&fault)==XR_XIR_VALUE_BAD_ARGUMENT && unit_value(&copy));scope.active=true;
+    rejected.authority=a;
+    CHECK(xr_xir_borrowed_value_origin_match(&value,(XrXirType)259,&rejected,&access)==XR_XIR_VALUE_BAD_ARGUMENT);
+    rejected=(XrXirViewOriginPin){0};
+    work=admission.work;CHECK(xr_xir_borrowed_value_origin_match(&value,(XrXirType)259,&pin,&access)==XR_XIR_VALUE_OK);
+    uint64_t match_work=work-admission.work;CHECK(match_work);work=admission.work;admission.work=match_work-1;
+    CHECK(xr_xir_borrowed_value_origin_match(&value,(XrXirType)259,&pin,&access)==XR_XIR_VALUE_LIMIT);
+    admission.work=match_work;CHECK(xr_xir_borrowed_value_origin_match(&value,(XrXirType)259,&pin,&access)==XR_XIR_VALUE_OK && !admission.work);
+    admission.work=work;
     work=admission.work;xr_xir_view_origin_unpin(&pin);xr_xir_view_origin_unpin(&pin);
     CHECK(admission.work==work && !body->children && atomic_load(&body->object.references)==references);
     CHECK(xr_xir_borrowed_some_new_move((XrXirType)260,&value,&access,&some)==XR_XIR_VALUE_OK && unit_value(&value));
@@ -290,7 +355,10 @@ static void view_values_guards(XrCompileResources *resources) {
     const unsigned char retired26[8]={0x58,0x52,0x44,0x4d,0x1a,0,0,1};
     CHECK(!xr_xir_domain_current((const XrXirDomain *)retired26));
 }
-int main(void) {
+#ifndef XR_VIEW_VALUES_ENTRY
+#define XR_VIEW_VALUES_ENTRY main
+#endif
+int XR_VIEW_VALUES_ENTRY(void) {
     XrCompileResourceLimits limits=compile_domain_limits();XrCompileResources *resources=NULL;
     CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);size_t first=value_compile_calls;
     CHECK(view_values_sequence(resources)==XR_XIR_VALUE_OK);size_t sites=value_compile_calls-first;

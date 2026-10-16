@@ -82,22 +82,22 @@ static bool view_value_type(XrXirType type,const XrXirViewStorageSpec *spec,
     if (!node || !view_value_kind(node->kind) || node->kind!=spec->kind) return false;
     *element=node->element;return true;
 }
+static XrXirValueStatus view_origin_pin_hold(XirView *view,const XrXirCellAuthority *authority,
+    XrXirValueAdmission *admission,XrXirViewOriginPin *output) {
+    XR_CHECK(output && !output->body && cell_authority_valid(authority),"origin publication follows exact leaf authentication");
+    if (view->children==UINT32_MAX) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    if (!view_storage_work(admission,sizeof(*output)+2*sizeof(void *))) return XR_XIR_VALUE_LIMIT;
+    if (!graph_object_retain(&view->object)) return XR_XIR_VALUE_REFCOUNT_LIMIT;
+    ++view->children;*output=(XrXirViewOriginPin){view,*authority};return XR_XIR_VALUE_OK;
+}
 XR_FUNC XrXirValueStatus xr_xir_view_origin_pin(const XrXirValue *value,
     const XrXirViewAccess *access,XrXirViewOriginPin *output) {
     if (!output || output->body || output->authority.activation || output->authority.frame ||
         output->authority.epoch) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();XrXirCellAuthority authority={0};
     XrXirValueStatus status=view_value_permission(value,access,false,&authority);
-    if (status==XR_XIR_VALUE_OK) {
-        XirView *view=(XirView *)object_pointer(value);
-        if (view->children==UINT32_MAX) status=XR_XIR_VALUE_REFCOUNT_LIMIT;
-        else if (!view_storage_work(access->values,sizeof(*output)+2*sizeof(void *))) status=XR_XIR_VALUE_LIMIT;
-        else if (!graph_object_retain(&view->object)) status=XR_XIR_VALUE_REFCOUNT_LIMIT;
-        else {
-            ++view->children;
-            *output=(XrXirViewOriginPin){view,authority};
-        }
-    }
+    if (status==XR_XIR_VALUE_OK)
+        status=view_origin_pin_hold((XirView *)object_pointer(value),&authority,access->values,output);
     xr_xir_value_graph_end();return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_view_origin_info(const XrXirViewOriginPin *pin,
