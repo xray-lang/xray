@@ -24,6 +24,7 @@ static uint32_t inspect_frame(const XdapAdapter *s,uint64_t handle,uint32_t scop
         if ((scope==2 ? s->frames[i].global_scope : scope ? s->frames[i].scope : s->frames[i].handle)==handle) return i;
     return UINT32_MAX;
 }
+#include "xdap_watches.inc.c"
 static bool inspect_position(XdapAdapter *s,XdapJsonWriter *w,uint32_t function,uint32_t instruction) {
     if (!s->launch || function>=s->launch->function_count || instruction>=s->launch->functions[function].instructions) {
         w->status=XR_XIR_BAD_STRUCTURE;return false;
@@ -348,14 +349,14 @@ static XrXirStatus inspect_evaluate(XdapAdapter *s,const XdapRequest *r) {
     if (!s->snapshot || frame>=s->depth) return xdap_dispatch_response(s,r,false,NULL,"Invalid or retired stopped frame");
     if (!expression || r->document.nodes[expression].kind!=XDAP_JSON_STRING || !r->document.nodes[expression].length)
         return xdap_dispatch_response(s,r,false,NULL,"A complete expression is required");
-    XdapLexicalView lexical={0};status=xdap_lexical_open(s->launch,s->snapshot,frame,&lexical);
+    const XdapJsonNode *text=&r->document.nodes[expression];XdapWatchText candidate={0};const XdapWatchText *selected=NULL;
+    bool watch=context && r->document.nodes[context].length==5 && !memcmp(r->document.nodes[context].text,"watch",5);
+    if (watch) status=watch_prepare(s,text->text,text->length,true,&candidate,&selected);
     XrXirValue value={0};
-    if (status==XR_XIR_OK) {
-        const XdapJsonNode *text=&r->document.nodes[expression];
-        XdapExpressionRequest request={s->compiler,&lexical,text->text,text->length,s->config.message_limit};
-        status=xdap_expression_evaluate(&request,&value);
-    }
+    if (status==XR_XIR_OK) status=watch_evaluate_text(s,selected ? selected->bytes : text->text,
+        selected ? selected->length : text->length,frame,&value);
     if (status!=XR_XIR_OK) {
+        xdap_watch_text_drop(&candidate);
         if (status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_BUDGET) return status;
         return xdap_dispatch_response(s,r,false,NULL,"Expression is not admitted in the selected stopped frame");
     }
@@ -374,7 +375,9 @@ static XrXirStatus inspect_evaluate(XdapAdapter *s,const XdapRequest *r) {
     if (shape.children) { XDAP_TEXT(&body,",");const char *key=shape.indexed ? "indexedVariables" : "namedVariables";
         xdap_json_quote(&body,key,strlen(key));XDAP_TEXT(&body,":");xdap_json_unsigned(&body,shape.children); }
     XDAP_TEXT(&body,"}");xr_xir_value_drop(&value);status=inspect_finish(s,r,&body);
-    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);return status;
+    if (status!=XR_XIR_OK) inspect_rollback_values(s,before);
+    else watch_commit(s,&candidate);
+    xdap_watch_text_drop(&candidate);return status;
 }
 #include "xdap_dispatch_write.inc.c"
 XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *s,const XdapRequest *r,const char *command) {

@@ -113,7 +113,7 @@ XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapt
         xr_xir_domain_drop(config->observer_metadata);
         return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     }
-    s->compiler=*compiler;s->resources=context->resources;s->config=*config;s->seq=1;s->next_handle=1;
+    s->compiler=*compiler;s->resources=context->resources;s->config=*config;s->seq=1;s->next_handle=1;s->next_watch_id=1;
     allocated=xr_compile_resources_calloc(context->resources,1,sizeof(*s->execution),(void **)&s->execution);
     if (allocated!=XR_COMPILE_RESOURCE_OK) {
         xr_compile_resources_free(s);xr_xir_domain_drop(config->observer_metadata);
@@ -142,7 +142,7 @@ XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *s) {
         xr_compile_resources_free(s->source_breakpoints[i].identity);xdap_predicate_free(&s->source_breakpoints[i].predicate);
     }
     if (s->execution) { s->execution->adapter=NULL;xdap_detached_free(s->execution); }
-    xr_source_compiler_free(s->compiler);
+    xdap_watches_dispose(s);xr_source_compiler_free(s->compiler);
     xr_xir_domain_drop(s->config.observer_metadata);xr_compile_resources_free(s);return status;
 }
 static XrXirStatus dispatch_request_parse(XdapAdapter *s,const char *bytes,size_t length,XdapRequest *r) {

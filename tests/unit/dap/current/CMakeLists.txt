@@ -466,6 +466,20 @@ add_test(NAME test_dap_expression_product COMMAND test_dap_expression_product)
 add_test(NAME test_dap_expression_product_resources COMMAND test_dap_expression_product --resources)
 set_tests_properties(test_dap_expression_product test_dap_expression_product_resources PROPERTIES TIMEOUT 120 LABELS "dap;expression;ctfe;source;ownership;fault-injection;resources")
 
+add_executable(test_dap_watches test_watches.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_watches PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_watches PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_EXPRESSION_FIXTURE="${XR_DAP_FIXTURE_DIR}/expression_data.xr")
+if(MSVC)
+    target_compile_options(test_dap_watches PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_watches PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_watches COMMAND test_dap_watches)
+add_test(NAME test_dap_watches_resources COMMAND test_dap_watches --resources)
+set_tests_properties(test_dap_watches test_dap_watches_resources PROPERTIES TIMEOUT 120 LABELS "dap;watches;source;ownership;resources;fault-injection")
+
 add_executable(test_dap_evaluate test_evaluate.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_evaluate PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_evaluate PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"

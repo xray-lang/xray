@@ -143,6 +143,20 @@ static bool expression_syntax(AstNode *node,void *context) {
     } else ok=xr_ast_for_each_child(node,expression_syntax,syntax);
     --syntax->depth;return ok;
 }
+/* A debugger parse is a separate request owner on the original ledger. Its
+ * sticky failure must not poison the target compiler's later requests. The
+ * compiler's own pre-existing failure remains authoritative and is never reset. */
+static XrParseStatus expression_parse(XrSourceCompiler *compiler,const char *text,const char *file,AstNode **output) {
+    XrCompileResourceStatus status=xr_compile_session_resource_status(xr_source_compiler_session(compiler));
+    if (status!=XR_COMPILE_RESOURCE_OK) return status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
+        status==XR_COMPILE_RESOURCE_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_BAD_ARGUMENT;
+    XrCompilerSession *parser=NULL;
+    XrCompilerSessionStatus opened=xr_compile_session_new(xr_source_compiler_resources(compiler),&parser);
+    if (opened!=XR_COMPILER_SESSION_OK) return opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_PARSE_OUT_OF_MEMORY :
+        opened==XR_COMPILER_SESSION_BUDGET ? XR_PARSE_BUDGET : XR_PARSE_BAD_ARGUMENT;
+    XrParseStatus parsed=xr_compile_parse_expression_string(parser,text,file,output);
+    xr_compile_session_free(parser);return parsed;
+}
 XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const char *text,size_t length) {
     if (!compiler || !text || !length) return XR_XIR_BAD_TYPE;
     XrCompileResources *resources=xr_source_compiler_resources(compiler);
@@ -151,7 +165,7 @@ XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const ch
     char *owned=NULL;XrCompileResourceStatus allocated=xr_compile_resources_alloc(resources,length+1,(void **)&owned);
     if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     memcpy(owned,text,length);owned[length]=0;AstNode *program=NULL;
-    XrParseStatus parsed=xr_compile_parse_expression_string(xr_source_compiler_session(compiler),owned,"<breakpoint-expression>",&program);
+    XrParseStatus parsed=expression_parse(compiler,owned,"<breakpoint-expression>",&program);
     ExpressionSyntax syntax={resources,0,XR_XIR_OK};
     if (parsed!=XR_PARSE_OK) syntax.status=parsed==XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : parsed==XR_PARSE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
     else if (program->type!=AST_PROGRAM || program->as.program.count!=1 || !expression_syntax(program->as.program.statements[0],&syntax)) {
@@ -215,7 +229,7 @@ XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *reques
     char *text=NULL;XrCompileResourceStatus allocated=xr_compile_resources_alloc(request->lexical->launch->resources,request->length+1,(void **)&text);
     if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     memcpy(text,request->text,request->length);text[request->length]=0;
-    AstNode *program=NULL;XrParseStatus parsed=xr_compile_parse_expression_string(xr_source_compiler_session(request->compiler),text,"<debug-expression>",&program);
+    AstNode *program=NULL;XrParseStatus parsed=expression_parse(request->compiler,text,"<debug-expression>",&program);
     if (parsed!=XR_PARSE_OK) { xr_compile_resources_free(text);return parsed==XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : parsed==XR_PARSE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE; }
     XdapExpressionRequest owned=*request;owned.text=text;ExpressionState state={.request=&owned};
     if (program->type!=AST_PROGRAM || program->as.program.count!=1) state.status=XR_XIR_BAD_STRUCTURE;

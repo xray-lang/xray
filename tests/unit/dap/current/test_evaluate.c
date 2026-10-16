@@ -143,7 +143,10 @@ static size_t evaluate_fault(size_t fail) {
 }
 #include "test_evaluate_data.inc.c"
 #include "test_evaluate_intrinsic.inc.c"
-int main(int argc,char **argv) {
+#ifndef XDAP_EVALUATE_MAIN
+#define XDAP_EVALUATE_MAIN main
+#endif
+int XDAP_EVALUATE_MAIN(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");
     bool managed_resources=argc==2 && !strcmp(argv[1],"--managed-resources");
     bool managed=managed_resources || (argc==2 && !strcmp(argv[1],"--managed"));CHECK(argc==1 || resources || managed);

@@ -9,6 +9,7 @@
 #ifndef XDAP_DISPATCH_INTERNAL_H
 #define XDAP_DISPATCH_INTERNAL_H
 #include "xdap_dispatch.h"
+#include "xdap_watch.h"
 #include "../../xir/xxir_output.h"
 #include "xdap_value.h"
 typedef struct XdapStopFrame { uint32_t handle, scope,global_scope; } XdapStopFrame;
@@ -57,6 +58,9 @@ struct XdapAdapter {
     XdapStopFrame frames[64];
     XdapValueRef values[128];
     uint32_t value_count;
+    XdapWatchText watches[128];
+    uint32_t watch_count,next_watch_id;
+    size_t watch_bytes;
     char *function_breakpoints[32];
     XrXirVmDebugRule function_rules[32];
     XdapBreakpointPredicate function_predicates[32];
@@ -90,6 +94,8 @@ XR_FUNC XrXirStatus xdap_dispatch_number(const XdapRequest *,const char *,uint64
 XR_FUNC XrXirStatus xdap_dispatch_inspect(XdapAdapter *,const XdapRequest *,const char *);
 XR_FUNC XrXirStatus xdap_dispatch_exception(XdapAdapter *,const XdapRequest *,bool configure);
 XR_FUNC void xdap_dispatch_clear_stop(XdapAdapter *);
+/* Destructor cleanup does not need another work admission. */
+XR_FUNC void xdap_watches_dispose(XdapAdapter *);
 XR_FUNC void xdap_value_ref_drop(XdapValueRef *);
 XR_FUNC XrXirStatus xdap_breakpoints_collect(const XdapLaunch *,const XdapBreakpointSet *,XrXirVmDebugRule *,uint32_t *);
 XR_FUNC XrXirStatus xdap_dispatch_source_breakpoints(XdapAdapter *,const XdapRequest *);
