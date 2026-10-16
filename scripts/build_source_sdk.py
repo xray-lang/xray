@@ -42,7 +42,7 @@ def build_bundle(root, build, output, args):
         relative = 'lib/'+row['name']+archive.suffix
         publish(archive, relative)
         recipe.append(dict(target=row['name'], object_target=row['target'], archive=relative, sources=sources))
-    for name in ('xray_source.h', 'xray_export.h', 'xray_source_ast.h', 'xray_source_value.h', 'xray_source_entry.h', 'xray_source_instance.h'):
+    for name in ('xray_source.h', 'xray_export.h', 'xray_source_ast.h', 'xray_source_value.h', 'xray_source_entry.h', 'xray_source_instance.h', 'xray_source_repl.h'):
         publish(root/'include'/name, 'include/'+name)
     record = dict(schema=1, purpose='explicit Source compiler and VM embedding; separate from AOT runtime',
                   archives=recipe, system_libraries=['kernel32'])

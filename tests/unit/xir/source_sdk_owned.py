@@ -41,7 +41,7 @@ def main():
     sdk = moved/'lib/xray/source-sdk'
     manifest = json.loads((sdk/'source_sdk_manifest.json').read_text(encoding='utf-8'))
     headers = {'xray_source.h', 'xray_export.h', 'xray_source_ast.h',
-               'xray_source_value.h', 'xray_source_entry.h', 'xray_source_instance.h'}
+               'xray_source_value.h', 'xray_source_entry.h', 'xray_source_instance.h', 'xray_source_repl.h'}
     assert manifest['api_version'] == 2 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
     assert len(manifest['archives']) == 15
     assert {Path(r['path']).name for r in manifest['files'] if r['path'].startswith('include/')} == headers
@@ -58,7 +58,8 @@ def main():
         secondary = Path(shutil.which(args.secondary_compiler) or args.secondary_compiler).resolve()
         if not secondary.samefile(compilers[0]):
             compilers.append(secondary)
-    expected = b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n'
+    expected = (b'Installed public REPL: typed history, busy callback, cancel/defer, resume and owned survivors PASS\n'
+                b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n')
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
             label = f'provider{index}-{language}'
