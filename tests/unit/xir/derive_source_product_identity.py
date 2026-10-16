@@ -25,7 +25,7 @@ def frames():
     policies={}
     for prefix in ('linked','original'):
         text=(prefix+'_source').encode('ascii')
-        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,73,24,30,30,len(text))+text
+        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,74,24,30,30,len(text))+text
         policies[prefix+'_policy_value24_preimage']=frame
         policies[prefix+'_policy_value24']=hashlib.sha256(frame).digest()
     result['xir_native_projection_expectations.h']=policies

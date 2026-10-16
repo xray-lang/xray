@@ -209,7 +209,10 @@ static XrXirStatus effect_parameter_opaque(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use) {
     if (xr_xir_op_uses_operand_table(op->op)) return effect_parameter_group(flow, op, use, false);
     uint32_t count = effect_parameter_operands[op->op];
-    if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT;
+    if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT &&
+        !(flow->body.domain.declarations && (flow->body.domain.declarations->functions[flow->function_index].promises & XR_XIR_FUNCTION_GENERATOR));
+    if (op->op==XR_XIR_GENERATOR_YIELD)
+        count=xr_xir_iterator_element(flow->body.domain.types,flow->function->result)!=XR_XIR_UNIT;
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
         count = xr_xir_slot_payload_operands(flow->body.domain.declarations->slots,
             flow->body.domain.declarations->slot_count, op);
@@ -257,6 +260,7 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     }
     case XR_XIR_FUNCTION_WEAKEN:
         return effect_parameter_use(flow, op->args[0], XR_XIR_EFFECT_USE_FIXED, false);
+    case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_RETURN:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_RETURN);
     case XR_XIR_GO:

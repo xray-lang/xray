@@ -125,7 +125,7 @@ static EffectRootSeedRule effect_root_seed_rule(XrXirOp op) {
     case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN: case XR_XIR_CONCAT_STRING:
     case XR_XIR_OUTPUT: case XR_XIR_WRITE_STREAM: case XR_XIR_PRINT:
     case XR_XIR_ADD_INT: case XR_XIR_EQ_INT: case XR_XIR_LT_INT:
-    case XR_XIR_CALL: case XR_XIR_SUSPEND: case XR_XIR_THROW:
+    case XR_XIR_CALL: case XR_XIR_SUSPEND: case XR_XIR_GENERATOR_YIELD: case XR_XIR_THROW:
     case XR_XIR_JUMP: case XR_XIR_BRANCH: case XR_XIR_RETURN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_WRITE:

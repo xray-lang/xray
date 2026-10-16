@@ -534,6 +534,10 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT)
         return vm_io_step(run, state, action);
+    if (op->op==XR_XIR_RETURN && xr_xir_function_is_generator(run->module,
+        (uint32_t)(run->function-run->module->functions))) {
+        state->instruction=next;action->kind=XR_XIR_ACTION_RETURN;return XR_XIR_RUN_OK;
+    }
     if (xir_scalar_core_opcode(op->op)) {
         XirScalarCoreRun core={run->module,run->function,run->layout,run->frame,
             run->view ? run->view->arena : NULL,run->compile_resources};
@@ -640,6 +644,12 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         if (status != XR_XIR_VALUE_OK) return value_run_status(status);
         xr_xir_owned_slot_move(run->frame, run->layout->offsets[result_id], &message);
         return XR_XIR_RUN_OK;
+    }
+    case XR_XIR_GENERATOR_YIELD: {
+        XrXirType element=xr_xir_iterator_element(run->module->types,run->function->result);
+        action->kind=XR_XIR_ACTION_GENERATOR_YIELD;
+        if (element!=XR_XIR_UNIT) action->value=vm_value_operand(run,op->args[0]);
+        break;
     }
     case XR_XIR_SUSPEND:
         action->kind = XR_XIR_ACTION_SUSPEND;
@@ -851,9 +861,10 @@ static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t functio
         body->result, (uint32_t)bytes, vm_resume, vm_release, binding, 0, 0};
     if (module->declarations) {
         result.cleanup_owner = module->declarations->functions[function].cleanup_owner;
+        if (xr_xir_function_is_generator(module,function)) result.flags|=XR_XIR_ENTRY_GENERATOR;
         for (uint32_t i = function + 1; i < module->function_count; ++i) {
             if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
-            if (module->declarations->functions[i].cleanup_owner == function + 1) result.flags = XR_XIR_ENTRY_EXIT;
+            if (module->declarations->functions[i].cleanup_owner == function + 1) result.flags |= XR_XIR_ENTRY_EXIT;
         }
     }
     if (!xir_compile_work(context, sizeof(*binding) + sizeof(*entry))) return XR_XIR_BUDGET;

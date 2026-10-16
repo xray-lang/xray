@@ -182,7 +182,9 @@ static uint32_t cell_proof_operand_count(CellProofBuild *build,uint32_t f,
     XrXirType cell=XR_XIR_UNIT;
     if (op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE)
         cell=cell_proof_type(build,f,op->args[0]);
-    return operand_count_metadata(build->body->domain.types,build->body->domain.declarations,head->result,cell,op);
+    return operand_count_metadata(build->body->domain.types,build->body->domain.declarations,head->result,cell,
+        build->body->domain.declarations &&
+        (build->body->domain.declarations->functions[f].promises & XR_XIR_FUNCTION_GENERATOR)!=0,op);
 }
 static bool cell_proof_compare_bytes(const XrXirCompileContext *context,const void *a,const void *b,
     size_t count,size_t stride,XrXirStatus *status) {

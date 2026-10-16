@@ -7573,13 +7573,17 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
-### 17.39 Iterator 规范描述符开发切片
+### 17.39 Iterator 与 Generator body 规范开发切片
 
 Iterator使用唯一Type池中的元素描述符kind9。参数数组、result、flags及nominal字段均为空，parameter_span等于元素的真实span；元素可为Unit或已准入普通类型，内部Cell、未知类型及自身/前向边拒绝。同元素描述符不得重复。Checked沿现有kind/span/element字段编码，独立重读、克隆、定义上下文、普通泛型替换/推断、访问与Lowered验证仍检查真实元素。协议版本只由§17.6定义，本切片不增加公开Value/Call/Program字段或布局。
 
 Source的Iterator<T>类型拼写绑定stdlib/types/iterator.xr及prelude唯一注册；共同生成器拥有完整声明、真实位置及源码指纹，不以同名用户声明或接收上下文制造原生权限。泛型元素没有额外Sendable要求；隐藏frame可能保存非Sendable环境，因此元素Sendable不构成Iterator的Sendable证明，Task<Iterator<T>>仍拒绝。
 
-这只是规范类型和Source注解的开发切片；类型身份、拥有式元数据及布局不授予构造或方法recipe。真实generator产值、hasNext/next/close、独立frame、借用/取消/cleanup及VM/AOT/mixed执行继续单独实施和验收。共同Call驱动已预留独立的YIELDED拥有值状态和GENERATOR_YIELD动作：只有显式generator入口能产出其Iterator元素，正常完成返回Unit；取走产值恢复原frame就绪，产值没有wake且不能作为Task终态。此驱动接口不授予Source/op、隐藏环境、Program代码lease或语言执行资格；Call30拒绝旧Call29，公开结构字段与布局不变。调度WAIT_YIELD不是Generator产值；仅有类型管线通过不构成生成器或Channel完成。
+有真实yield的Iterator<T>函数按所属词法body标记Generator角色；不信任旧analyzer的is_generator，也不把嵌套函数的yield算入外层。角色保存在既有FunctionIdentity的独立GENERATOR位；NoSuspend义务只读取自己的位，不能把非零角色当作NoSuspend承诺。规范GENERATOR_YIELD操作的指令类型为Unit，可选操作数必须匹配Iterator真实元素；Unit元素没有SSA载荷。声明结果仍为Iterator，generator body的正常RETURN完成类型为Unit，因此产值与EOS不同。当前可验证范围包括真实Source→Checked独立重读→特化/Lowered→VM及真实生成C的本机执行，含调度Coro.yield()与yield ()的区分。
+
+此角色及操作以Checked语义74原子接收，wire28及Value24/Call30/Program30布局不变；完整旧73包在头部拒绝且不分配。新Generator完整包从独立命名字段模型构造，正例与角色、元素、Unit载荷、ref参数及未知位拒例不得以product writer输出推导。generator入口必须具有封闭Iterator结果，产值经共同Call的拥有式YIELDED状态转移；正常完成返回Unit。取走产值恢复同一frame就绪，不分配wake；只有真实调度挂起产生wake。普通结果take、Task终态和resume都不能消费产值，取消须释放尚未取走的owner。
+
+这些是规范类型、body和驱动的开发输入，不授予可公开构造的Iterator语言值或完整Program执行资格。当前generator作为普通CALL/FUNCTION_REF/GO目标拒绝，Program仍拒绝generator入口flag；低层宿主驱动已验证的VM/生成C入口不替代认证的工厂操作。Source工厂/closure、运行期carrier、hasNext/next/close/for-in、隐藏环境与内部视图、GC/最后代码lease、错误/取消/cleanup及完整双向mixed继续实施和验收。调度WAIT_YIELD不是Generator产值；此切片不构成Generator或Channel完成。
 
 ---
 

@@ -1004,6 +1004,12 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         " status == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             " xr_xir_owned_slot_move(state->frame, %uu, &message); }\n", destination);
         break;
+    case XR_XIR_GENERATOR_YIELD:
+        EMIT_LITERAL(buffer," return (XrXirAction){XR_XIR_ACTION_GENERATOR_YIELD,0,NULL,0,");
+        if (xr_xir_iterator_element(module->types,function->result)==XR_XIR_UNIT) EMIT_LITERAL(buffer,"{0}");
+        else emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer,",{0},0};\n");
+        return;
     case XR_XIR_SUSPEND:
         EMIT_STATIC(buffer, es_8f684e666599ad6f, " return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
         return;
@@ -1100,7 +1106,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     case XR_XIR_THROW:
     case XR_XIR_RETURN: {
-        uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) function->result;
+        uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) xr_xir_function_completion(module,(uint32_t)(function-module->functions));
         if (op->op == XR_XIR_THROW && type == XR_XIR_ERROR) {
             EMIT_LITERAL(buffer, " { XrXirValue erased = "); emit_value(buffer, function, layout, op->args[0]);
             EMIT_STATIC(buffer, es_6425bce0e09f44b7, "; XrXirValue concrete = {0};\n"
@@ -1645,8 +1651,9 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
         uint32_t owner = 0, flags = 0;
         if (module->declarations) {
             owner = module->declarations->functions[f].cleanup_owner;
+            if (xr_xir_function_is_generator(module,f)) flags|=XR_XIR_ENTRY_GENERATOR;
             for (uint32_t child = f + 1; child < module->function_count && emit_work(buffer, 1); ++child)
-                if (module->declarations->functions[child].cleanup_owner == f + 1) flags = XR_XIR_ENTRY_EXIT;
+                if (module->declarations->functions[child].cleanup_owner == f + 1) flags |= XR_XIR_ENTRY_EXIT;
         }
         append(buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_release_%u, NULL, %uu, %uu},\n",
                function->parameter_count, (uint32_t) function->result, symbol_prefix, f, symbol_prefix, f,
