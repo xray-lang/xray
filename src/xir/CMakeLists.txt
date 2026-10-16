@@ -89,7 +89,7 @@ else()
 endif()
 
 add_library(xray_lsp_document_open STATIC ../app/lsp/xlsp_source_open.c ../app/lsp/xlsp_document_store.c
-    ../app/lsp/xlsp_document_position.c)
+    ../app/lsp/xlsp_document_position.c ../app/lsp/xlsp_token_update.c)
 target_link_libraries(xray_lsp_document_open PUBLIC xray_lsp_source_workspace xray_lsp_source_syntax)
 target_compile_features(xray_lsp_document_open PUBLIC c_std_11)
 add_library(xray_lsp_source_hierarchy STATIC ../app/lsp/xlsp_source_call_hierarchy.c ../app/lsp/xlsp_source_type_hierarchy.c ../app/lsp/xlsp_source_bindings.c)

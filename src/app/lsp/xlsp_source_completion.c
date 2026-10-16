@@ -9,6 +9,7 @@
 #include "xlsp_source_completion.h"
 #include "xlsp_pending_requests.h"
 #include "xlsp_protocol_output.h"
+#include "xlsp_token_update.h"
 #include <stdio.h>
 
 static XrXirStatus publish_result(XrLspServer *server, const XlspSourceCompletion *completion,
@@ -24,6 +25,8 @@ static XrXirStatus publish_result(XrLspServer *server, const XlspSourceCompletio
         snprintf(failure, sizeof(failure), "Source query failed (stage=%u status=%u)",
                  result->stage, (unsigned)result->status);
         description = failure;
+    } else if (result->token_update && !xlsp_token_update_matches(server, result->token_update)) {
+        code = -32803; description = "Semantic token cache changed during Source query";
     } else if (!*json) {
         code = -32603; description = "Source query returned no owned result";
     }
@@ -32,7 +35,10 @@ static XrXirStatus publish_result(XrLspServer *server, const XlspSourceCompletio
         xlsp_protocol_response(completion->id, json, &message);
     if (built != XLSP_PROTOCOL_OK)
         return built == XLSP_PROTOCOL_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
-    return xlsp_protocol_write_owned(server, message);
+    XrXirStatus status = xlsp_protocol_write_owned(server, message);
+    if (status == XR_XIR_OK && !code && result->token_update &&
+        !xlsp_token_update_commit(server, result->token_update)) return XR_XIR_BAD_STAGE;
+    return status;
 }
 
 XR_FUNC XrXirStatus xlsp_source_completion_publish(XrLspServer *server, const XlspSourceCompletion *completion,
@@ -50,5 +56,6 @@ XR_FUNC XrXirStatus xlsp_source_completion_publish(XrLspServer *server, const Xl
         server->exit_received = true; status = XR_XIR_BAD_STAGE;
     }
 done:
+    if (result) { xlsp_token_update_free(result->token_update); result->token_update = NULL; }
     xjson_free(json); return status;
 }

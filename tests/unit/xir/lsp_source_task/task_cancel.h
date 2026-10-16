@@ -5,12 +5,18 @@
 static _Atomic bool task_work_armed,task_work_entered,task_work_released;
 static size_t task_work_calls;
 static const size_t task_work_trigger=4096;
+static const XrCompileResourceLimits *task_axis_limits;
+static XrCompileResourceStats task_last_stats;
+XR_FUNC void xr_compile_resources_release(XrCompileResources *resources) {
+    if(resources)task_last_stats=sdk_stats(resources);
+    task_resource_release_impl(resources);
+}
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(const XrCompileResourceLimits *limits,XrCompileResources **out) {
     if(limits)fprintf(stderr,"Task capture limits allocated=%" PRIu64 " live=%" PRIu64 " work=%" PRIu64 "\n",
         limits->allocated_bytes,limits->live_bytes,limits->work);
     CHECK(limits&&limits->allocated_bytes==UINT64_C(64)*1024*1024&&
         limits->live_bytes==UINT64_C(8)*1024*1024&&limits->work==UINT64_C(128000000));
-    return task_resource_new_impl(limits,out);
+    return task_resource_new_impl(task_axis_limits?task_axis_limits:limits,out);
 }
 XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources,uint64_t units) {
     if(atomic_load_explicit(&task_work_armed,memory_order_acquire)&&++task_work_calls==task_work_trigger){

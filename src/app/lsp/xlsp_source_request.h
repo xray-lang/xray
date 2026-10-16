@@ -4,6 +4,7 @@
 #include "xlsp_source_workspace.h"
 #include <stdatomic.h>
 typedef struct XlspSourceRequest XlspSourceRequest;
+typedef struct XlspTokenUpdate XlspTokenUpdate;
 typedef struct XlspSourceRequestInput {
     const XrXirCompileContext *context;
     const XlspSourceDocument *documents;
@@ -17,6 +18,8 @@ typedef struct XlspSourceRequestResult {
     unsigned stage;
     bool cancelled;
     XrJsonValue *json;
+    /* Owned terminal cache proposal, consumed together with JSON publication. */
+    XlspTokenUpdate *token_update;
 } XlspSourceRequestResult;
 /* Capture owns every URI, text and version on the original ledger. Only capture
  * borrows editor state; the one-shot worker run never accesses the document table.

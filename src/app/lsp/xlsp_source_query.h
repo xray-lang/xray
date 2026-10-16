@@ -76,4 +76,6 @@ XR_FUNC XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *,const
 XR_FUNC XrXirStatus xlsp_source_semantic_range(const XlspSourceSnapshot *,const char *,size_t,XrLspRange);
 XR_FUNC const XlspSourceToken *xlsp_source_tokens_items(const XlspSourceTokens *,size_t *);
 XR_FUNC void xlsp_source_tokens_free(XlspSourceTokens *);
+/* Copy immutable cache data onto the current request's original ledger. */
+XR_FUNC XrXirStatus xlsp_source_tokens_clone(XrCompileResources *,const XlspSourceTokens *,XlspSourceTokens **);
 #endif

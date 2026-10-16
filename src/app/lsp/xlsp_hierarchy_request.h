@@ -14,10 +14,14 @@ typedef struct XlspHierarchyRequest XlspHierarchyRequest;
 typedef enum XlspSourceScopeQueryKind {
     XLSP_SOURCE_CALL_HIERARCHY,
     XLSP_SOURCE_TYPE_HIERARCHY,
-    XLSP_SOURCE_BINDING_LENSES
+    XLSP_SOURCE_BINDING_LENSES,
+    XLSP_SOURCE_SEMANTIC_FULL,
+    XLSP_SOURCE_SEMANTIC_DELTA,
+    XLSP_SOURCE_SEMANTIC_RANGE
 } XlspSourceScopeQueryKind;
 /* Capture borrows editor state only on the dispatch thread. The one-shot run
- * scans captured roots and uses canonical Source without accessing the server.
+ * uses canonical Source without accessing the server; hierarchy and CodeLens
+ * also scan captured roots. Semantic deltas own a copy of the previous cache.
  * Params, configuration, open texts and roots survive every producer's death.
  * Cancellation borrows the stable task token only until run returns. */
 XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *, const XrJsonValue *,

@@ -63,7 +63,7 @@ static bool request_cancel_poll(const void *context) {
     return request_cancelled((const _Atomic bool *)context);
 }
 XR_FUNC XrXirStatus xlsp_source_request_run(XlspSourceRequest *request,const _Atomic bool *cancel,XlspSourceRequestResult *out) {
-    if(!request||request->started||!out||out->json||out->stage||out->cancelled||out->status!=XR_XIR_OK)return XR_XIR_BAD_STRUCTURE;
+    if(!request||request->started||!out||out->json||out->token_update||out->stage||out->cancelled||out->status!=XR_XIR_OK)return XR_XIR_BAD_STRUCTURE;
     request->started=true;
     XlspSourceRequestResult result={0};XlspSourceWorkspace *workspace=NULL;bool bound=false;
     if(request_cancelled(cancel)){result.cancelled=true;goto done;}

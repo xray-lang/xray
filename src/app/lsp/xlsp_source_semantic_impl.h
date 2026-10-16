@@ -11,6 +11,21 @@ void xlsp_source_tokens_free(XlspSourceTokens *tokens) {
 const XlspSourceToken *xlsp_source_tokens_items(const XlspSourceTokens *tokens,size_t *count) {
     if(count)*count=tokens?tokens->count:0;return tokens?tokens->items:NULL;
 }
+XR_FUNC XrXirStatus xlsp_source_tokens_clone(XrCompileResources *resources,const XlspSourceTokens *input,XlspSourceTokens **out) {
+    if(!resources||!input||!out||*out||input->count>input->capacity||(input->count&&!input->items))return XR_XIR_BAD_STRUCTURE;
+    if(input->count>SIZE_MAX/sizeof(*input->items))return XR_XIR_BUDGET;
+    XlspSourceTokens *tokens=NULL;
+    XrXirStatus status=lsp_resource_status(xr_compile_resources_calloc(resources,1,sizeof(*tokens),(void **)&tokens));
+    if(status!=XR_XIR_OK)return status;
+    tokens->resources=resources;size_t bytes=input->count*sizeof(*input->items);
+    if(bytes){
+        status=lsp_resource_status(xr_compile_resources_alloc(resources,bytes,(void **)&tokens->items));
+        if(status==XR_XIR_OK)status=lsp_resource_status(xr_compile_resources_work(resources,bytes));
+        if(status!=XR_XIR_OK){xlsp_source_tokens_free(tokens);return status;}
+        memcpy(tokens->items,input->items,bytes);
+    }
+    tokens->count=tokens->capacity=input->count;*out=tokens;return XR_XIR_OK;
+}
 static XrXirStatus semantic_append(const XlspSourceSnapshot *s,XlspSourceTokens *out,XlspSourceToken token) {
     if(!token.length||token.column>INT32_MAX||token.line>INT32_MAX||token.length>INT32_MAX-token.column||token.type>=22)return XR_XIR_BAD_STRUCTURE;
     if(out->count==out->capacity) {
