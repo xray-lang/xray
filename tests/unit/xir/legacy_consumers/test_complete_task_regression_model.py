@@ -175,6 +175,9 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(traces['await_array']['original_compute_calls'],7)
         for row in rows:
             self.assertEqual(row['source'],row['original_source']);self.assertIn('required_semantic_trace',row)
+        polled=traces['1138_get_result'];self.assertTrue(polled['body_may_have_started_before_poll'])
+        self.assertEqual(polled['blocked_completed_receives'],1);self.assertEqual(polled['cancelled_completed_actions'],0)
+        self.assertTrue(polled['pending_poll_itself_evaluates_no_completion_action'])
         self.assertIn('1109_await_any',model._NAMES)
         for name in ('1116_task_status','task_result_failed_error_value','suspended_frame_release'):self.assertNotIn(name,model._NAMES)
 

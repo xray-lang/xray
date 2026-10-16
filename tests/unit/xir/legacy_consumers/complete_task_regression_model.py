@@ -199,7 +199,7 @@ def named_requirements():
 
 
 class EventTask(Task):
-    """Observe a checked arithmetic fault without inventing its public payload."""
+    """Count completed reviewed actions, not coroutine entry or suspend steps."""
     def finish(self):
         if self.state in {'Success','Failed','Cancelled'}:return
         if self.cancel_requested:self.state='Cancelled';return
@@ -315,14 +315,14 @@ def event_boundary_traces():
     cancelled=EventTask(lambda:99,lambda:False);cancelled.cancel();cancel_state,_=cancelled.await_result()
     completed=EventTask(lambda:21*2);complete_state,complete_value=completed.await_result()
     traces['1138_get_result']={'outputs':[line('before pending:',before),line('after:',value),line('again:',again),line('cancelled:',cancel_state=='Cancelled'),line('completed:',complete_value if complete_state=='Success' else -1)],
-        'blocked_body_executions':blocked.executions,'cancelled_body_executions':cancelled.executions,'completed_body_executions':completed.executions,
-        'pending_poll_does_not_run_or_complete_body':before,'unbuffered_completed_sends':data.completed_sends}
+        'blocked_completed_receives':blocked.executions,'cancelled_completed_actions':cancelled.executions,'completed_task_value_evaluations':completed.executions,
+        'pending_poll_itself_evaluates_no_completion_action':before,'body_may_have_started_before_poll':True,'unbuffered_completed_sends':data.completed_sends}
     for name in ('1139_error_isolation','1140_task_error'):
         fault=EventTask(lambda:1//0);fault_state,_=fault.await_result();good=EventTask(lambda:42);good_state,good_value=good.await_result()
         outputs=([ 'test1: error isolation',line('  done:',fault.done),line('  failed:',fault_state=='Failed'),
                    'test2: error does not affect other coroutines',line('  result:',good_value)] if name=='1139_error_isolation' else
                  [line('t1.done:',fault.done),line('t1.failed:',fault_state=='Failed'),line('t2.done:',good.done),line('t2.result:',good_value if good_state=='Success' else -1)])
-        traces[name]={'outputs':outputs,'observed_runtime_fault_code':420,'fault_body_executions':fault.executions,'good_body_executions':good.executions,
+        traces[name]={'outputs':outputs,'observed_runtime_fault_code':420,'fault_action_evaluations':fault.executions,'good_action_evaluations':good.executions,
             'failed_task_did_not_cancel_unlinked_good_task':good_state=='Success','Error_or_PanicInfo_payload_shape_not_invented':True}
     if set(traces)!=set(_EVENT_PROGRAMS):raise ValueError('Complete event program set changed')
     return traces
