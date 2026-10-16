@@ -209,7 +209,13 @@ static int run(int argc, char **argv) {
 #ifdef XLSP_LINKS_TASK
 #include "../lsp_links_task/task_cases.h"
 #endif
+#ifdef XLSP_NAVIGATION_ADMISSION
+#include "../lsp_navigation_admission/task_cases.h"
+#endif
 static int dispatch_run(int argc, char **argv) {
+#ifdef XLSP_NAVIGATION_ADMISSION
+    if(argc>=3&&!strcmp(argv[2],"--nav-admission"))return navigation_admission_main(argc,argv);
+#endif
 #ifdef XLSP_LINKS_TASK
     if(argc>=3&&!strcmp(argv[2],"--links"))return links_main(argc,argv);
 #endif
