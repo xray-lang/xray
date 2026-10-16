@@ -16,6 +16,9 @@ if(WIN32)
     add_test(NAME source_sdk_faults COMMAND test_source_sdk_faults)
     set_tests_properties(source_sdk_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 100
         LABELS "unit;api;source;sdk;ownership;compiler-faults;runtime-faults")
+    add_test(NAME source_sdk_repl_faults COMMAND test_source_sdk_faults --repl)
+    set_tests_properties(source_sdk_repl_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
+        LABELS "unit;api;source;sdk;ownership;repl;compiler-faults;runtime-faults")
 endif()
 if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_SANITIZERS AND NOT ENABLE_UBSAN
     AND NOT ENABLE_TSAN AND NOT ENABLE_MSAN)
