@@ -9,6 +9,7 @@
 #include "../xir/xxir_tuple.h"
 #include "../xir/xxir_nullable.h"
 #include "../xir/xxir_panic.h"
+#include "../xir/xxir_task.h"
 static XrSourceStatus api_value_require(const XrSourceValue *value,XrSourceValueKind expected) {
     if(!value)return XR_SOURCE_BAD_ARGUMENT;
     XrSourceValueKind kind;XrSourceStatus status=xray_source_value_kind(value,&kind);
@@ -58,4 +59,18 @@ XRAY_API XrSourceStatus xray_source_value_panic_message(const XrSourceValue *val
     XrXirValue projected={0};status=api_value_status(xr_xir_panic_info_message(&value->value,&projected));
     if(status==XR_SOURCE_OK)status=api_value_take(value->resources,&projected,output);
     xr_xir_value_drop(&projected);return status;
+}
+XRAY_API XrSourceStatus xray_source_value_task_result(const XrSourceValue *value,XrSourceResult **output) {
+    if(!value || !output || *output)return XR_SOURCE_BAD_ARGUMENT;
+    XrSourceStatus status=api_value_require(value,XR_SOURCE_VALUE_TASK);if(status!=XR_SOURCE_OK)return status;
+    XrXirCallResult outcome={0};
+    XrXirCallStatus copied=xr_xir_task_copy_outcome(&value->value,&outcome);
+    if(xr_xir_call_result_empty(&outcome))return api_call(copied);
+    XR_CHECK(outcome.status==copied,"a copied Task outcome preserves its actual terminal state");
+    XrSourceResult *result=NULL;
+    status=api_resource(xr_compile_resources_calloc(value->resources,1,sizeof(*result),(void **)&result));
+    if(status==XR_SOURCE_OK) {
+        result->resources=value->resources;result->value=outcome;outcome=(XrXirCallResult){0};*output=result;
+    }
+    xr_xir_call_result_drop(&outcome);return status;
 }

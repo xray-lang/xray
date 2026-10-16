@@ -62,6 +62,14 @@ XRAY_API XrSourceStatus xray_source_value_tuple_get(const XrSourceValue *, size_
 XRAY_API XrSourceStatus xray_source_value_nullable(const XrSourceValue *, int *, XrSourceValue **);
 XRAY_API XrSourceStatus xray_source_value_panic_code(const XrSourceValue *, int64_t *);
 XRAY_API XrSourceStatus xray_source_value_panic_message(const XrSourceValue *, XrSourceValue **);
+/* Copy an already terminal Task's actual outcome into an independently owned
+ * Result. OK means the copy succeeded; inspect result_event for RETURNED,
+ * THROWN, PANICKED, CANCELLED or another real terminal state. Pending returns
+ * BAD_STATE without driving, waiting, cancelling or acquiring an executor
+ * lease. Copies spend the original Task Domain and compiler ledgers; failure
+ * preserves *output, which must be NULL. Producers and the Task may die after
+ * success. Data ownership grants no Task execution or cross-Instance access. */
+XRAY_API XrSourceStatus xray_source_value_task_result(const XrSourceValue *, XrSourceResult **);
 #ifdef __cplusplus
 }
 #endif

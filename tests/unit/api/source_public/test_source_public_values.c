@@ -250,8 +250,10 @@ static void authority_values(void) {
     puts("public Class/callable/Task data survives producers; foreign Class/callable denied; foreign Task await BAD_STATE");
 }
 #include "source_public_projection_cases.h"
+#include "source_public_task_result_cases.h"
 int main(int argc,char **argv) {
-    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--projections")));
+    CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--projections") || !strcmp(argv[1],"--task-results"))));
+    if(argc==2 && !strcmp(argv[1],"--task-results")){task_result_cases();return 0;}
     if(argc==2){projection_cases();return 0;}
     scalars();refusals();aggregates();argument_lifetime();authority_values();return 0;
 }

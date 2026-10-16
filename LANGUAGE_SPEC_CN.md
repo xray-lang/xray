@@ -7628,6 +7628,13 @@ Class字段读取和即时贷款也保真实出生carrier：VM以当前已检查
 
 公开交互调用总是选择显式拥有者，不按线程中最后创建的VM选择会话；多个拥有者各保Compiler账本、Domain、执行器、回调上下文及终态寿命。普通Array分配的同步根使用执行器内联的真实根Call，不创建子Task；go才在同一拥有者中建立真实子Task及FIFO。子Task的yield由共同执行器调度，根的真实对外yield才按观察到的epoch/wake恢复。一个拥有者销毁不改变另一个仍待执行的子Task；拥有读值和结果在两者销毁后仍有效。这些入口检查不代替完整worker/ref/Task、资源与安全资格。
 
+
+### 17.51 公共 Task 的终态数据观察
+
+公共拥有型 Task 可将已经完成的真实终态复制为独立拥有的 Result。观察成功返回 OK；调用者再读取 Result 的 RETURNED、THROWN、PANICKED、CANCELLED 或其他真实终态。终态自身的 LIMIT/OOM 不能与复制失败混淆：只有内核实际复制出的完整结果才可发布；复制或最后外壳分配失败保持空输出。读取和拷贝继续消耗原 Task Domain 与原 Compiler 的累计账本，不重置资源或访问已经死亡的 Compiler。
+
+Pending 只返回 BAD_STATE，不分配结果外壳、不推进、等待、取消或取得 executor lease。重复观察与 alias 保同一真实终态；Task、Program、Compiler 和 Instance 可以在成功后释放，结果继续拥有准确类型、Error/Panic 与 UTF-8/NUL 字节。结果数据的拥有不授予 Task 执行、跨 Instance、Class 成员、借用或 callable 权限。Array 和名义成员的受信内核 getter 不能因存在而直接成为公共权限；完整访问与推进 lease 仍须实际 owner 的独立接收和验证。
+
 ---
 
 ## 18. 错误码 (Error Codes)
