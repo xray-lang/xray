@@ -81,6 +81,14 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     }
     SourceExpectedType receiver;
     if (!source_ground_type(ctx,member->as.member_access.object,depth+1,&receiver)) return false;
+    if (call && (!receiver.present || xr_xir_type_is_integer(receiver.type))) {
+        if (!source_integer_ground_result(ctx,node,receiver,output)) return false;
+        if (output->present) return true;
+    }
+    if (call && (!receiver.present || source_scalar_identity(receiver.type))) {
+        if (!source_scalar_ground_result(ctx,node,receiver,output)) return false;
+        if (output->present) return true;
+    }
     if (receiver.present && xr_xir_type_is_array(&ctx->types, receiver.type)) {
         const XrNativeMemberDeclaration *native = source_array_member(ctx, member, member->as.member_access.name);
         if (!native || native->is_method != call || native->is_static) return true;

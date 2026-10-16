@@ -1,0 +1,2 @@
+enum One { Only }
+export fn run()->One { return comptime One.Only }

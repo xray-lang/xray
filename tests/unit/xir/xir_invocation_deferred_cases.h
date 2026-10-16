@@ -63,7 +63,7 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
         .result=XR_XIR_I64,.blocks=&f->two,.block_count=1,.instructions=f->read,.instruction_count=2};
     f->functions[3]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .blocks=&f->init_block,.block_count=1,.instructions=f->init,.instruction_count=f->init_block.count};
-    f->source=(XrXirSourceModule){"deferred",8,NULL,0,3, 0};f->slot=(XrXirSlot){0,f->cell,1};
+    f->source=(XrXirSourceModule){"deferred",8,NULL,0,3, 0};f->slot=(XrXirSlot){0,f->cell,1,0,0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .entry_function=0,.slots=mode?&f->slot:NULL,.slot_count=mode?1:0};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=4,
@@ -76,15 +76,15 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
     CHECK(original->final.deferred_count==1 && original->final.deferred_capacity>=2);
     EffectInvocationDeferred *record=&original->final.deferred_calls[0];
     EffectInvocationBasis basis={0};
-    CHECK(effect_invocation_basis(original,original->final.nodes[record->node].root,&basis)==XR_XIR_OK);
+    CHECK(effect_invocation_basis(&original->read,original->final.nodes[record->node].root,&basis)==XR_XIR_OK);
     CHECK(record->parameter==0 && record->instruction==0 && record->count==1 && basis.parameters==2);
     CHECK(!record->arguments[0] && record->arguments[basis.fn_words]==UINT64_C(18));
     bool deferred_needed=false;
-    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
+    CHECK(effect_invocation_deferred_needed(&original->read,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
     uint32_t body_index=original->final.nodes[record->node].body;
     XrXirInstruction call_storage;const XrXirInstruction *call=NULL;
-    CHECK(effect_invocation_operation(original,body_index,record->instruction,&call_storage,&call)==XR_XIR_OK);
-    EffectBodyRequest body_read=effect_invocation_body(original);XrXirType callable_type=XR_XIR_UNIT;
+    CHECK(effect_invocation_operation(&original->read,body_index,record->instruction,&call_storage,&call)==XR_XIR_OK);
+    EffectBodyRequest body_read=effect_invocation_body(&original->read);XrXirType callable_type=XR_XIR_UNIT;
     CHECK(effect_body_request_type(&body_read,body_index,(uint32_t)call->immediate,&callable_type)==XR_XIR_OK);
     const XrXirTypeNode *deferred_signature=xr_xir_callable_signature(body_read.domain.types,callable_type);
     CHECK(deferred_signature && deferred_signature->parameter_count==1 &&
@@ -92,16 +92,16 @@ static void invocation_deferred_rejections(const XrXirCompileContext *context,
         xr_xir_type_is_cell(body_read.domain.types,deferred_signature->parameters[0].type));
     XrXirCallableParameter *deferred_parameters=(XrXirCallableParameter *)deferred_signature->parameters;
     XrXirType deferred_type=deferred_parameters[0].type;deferred_parameters[0].type=XR_XIR_I64;
-    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_BAD_TYPE &&
+    CHECK(effect_invocation_deferred_needed(&original->read,record->node,&deferred_needed)==XR_XIR_BAD_TYPE &&
         deferred_needed && *owner==original && *solution==staged);
     deferred_parameters[0].type=deferred_type;deferred_needed=false;
-    CHECK(effect_invocation_deferred_needed(original,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
+    CHECK(effect_invocation_deferred_needed(&original->read,record->node,&deferred_needed)==XR_XIR_OK && deferred_needed);
     EffectInvocationSealRequest request={owner,solution,NULL};EffectInvocationCertificate *out=NULL;
     uint64_t actual=record->arguments[basis.fn_words];
     record->arguments[basis.fn_words]|=UINT64_C(1)<<basis.parameters;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&
         *owner==original && *solution==staged && original->effects &&
-        effect_body_request_owned_matches(context,&original->body,original->final.material));
+        effect_body_request_owned_matches(context,&original->read.body,original->final.material));
     record->arguments[basis.fn_words]=actual;
     original->final.deferred_count=0;
     CHECK(effect_invocation_seal(context,&request,&out,NULL)==XR_XIR_BAD_STRUCTURE && !out &&

@@ -76,7 +76,7 @@ static void returned_capture_runtime_fixture(ReturnedCaptureRuntimeFixture *f,bo
     f->functions[4].operands=&f->actual;f->functions[4].operand_count=1;
     f->functions[3].parameters=&f->capture_type;f->functions[3].parameter_count=1;
     f->identities[1].exported=1;f->source=(XrXirSourceModule){"runtime-edge",12,NULL,0,0, 0};
-    f->slot=(XrXirSlot){0,f->cell,1};
+    f->slot=(XrXirSlot){0,f->cell,1,0,0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .slots=&f->slot,.slot_count=1,.entry_function=1};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=5,

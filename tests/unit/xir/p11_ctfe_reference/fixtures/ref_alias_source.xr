@@ -1,0 +1,2 @@
+fn collide(a:ref i64,b:ref i64) { a=a+1; b=b+1 }
+export fn run()->i64 { var x=40; collide(ref x,ref x); return 7 }

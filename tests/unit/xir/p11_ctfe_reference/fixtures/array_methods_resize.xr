@@ -1,0 +1,2 @@
+fn answer()->bool { var xs:Array<Array<i8>>=[[1,2]]; xs[0].resize(4,7); const full=xs; xs[0].resize(1,0); const a:Array<i8>=[1,2,7,7]; const b:Array<i8>=[1]; return full[0]==a && xs[0]==b }
+export fn run()->bool { return comptime answer() }

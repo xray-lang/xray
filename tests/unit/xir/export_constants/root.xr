@@ -1,0 +1,5 @@
+import "./constants" as c
+import {answer,left,right,done,enabled} from "./constants"
+export fn result()->i64{const u:()=c.done;const v:()=done;if(c.enabled && enabled){return c.answer+answer+c.left+left+c.right+right};return 0}
+export fn unit()->(){return c.done}
+export fn flag()->bool{return c.enabled}

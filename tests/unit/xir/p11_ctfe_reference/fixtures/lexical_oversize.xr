@@ -1,0 +1,2 @@
+struct Box {static answer()->string{return comptime "123456789"}}
+export fn run()->bool{return comptime Box.answer()=="123456789"}

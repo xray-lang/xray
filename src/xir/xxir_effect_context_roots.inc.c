@@ -140,8 +140,9 @@ static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContex
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t s=0;a && s<a->slot_count;++s) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
-        if (!b->slots || a->slots[s].module!=b->slots[s].module || a->slots[s].mutable!=b->slots[s].mutable)
+        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+        if (!b->slots || a->slots[s].module!=b->slots[s].module || a->slots[s].mutable!=b->slots[s].mutable ||
+            a->slots[s].exported!=b->slots[s].exported || a->slots[s].name!=b->slots[s].name)
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=effect_terms_domain_type(terms,source->types,a->slots[s].type,b->slots[s].type,0);
         if (status!=XR_XIR_OK) return status;
@@ -202,17 +203,17 @@ static XrXirStatus effect_ordinary_root_storage(EffectOrdinaryContexts *contexts
     const XrXirCompileContext *context) {
     XrXirEffects *effects=&contexts->uses;
     XrXirStatus status=XR_XIR_OK;
-    effects->functions=xir_compile_calloc(context,contexts->count,sizeof(*effects->functions),&status);
-    if (!effects->functions) return status;
-    effects->task_creation=xir_compile_calloc(context,contexts->count,sizeof(*effects->task_creation),&status);
-    if (!effects->task_creation) return status;
-    effects->root=xir_compile_calloc(context,contexts->count,sizeof(*effects->root),&status);
-    if (!effects->root) return status;
-    effects->root_witnesses=xir_compile_calloc(context,contexts->count,sizeof(*effects->root_witnesses),&status);
-    if (!effects->root_witnesses) return status;
-    effects->unresolved_witnesses=xir_compile_calloc(context,contexts->count,
-        sizeof(*effects->unresolved_witnesses),&status);
-    return effects->unresolved_witnesses ? XR_XIR_OK : status;
+    effects->outcomes_work.functions=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.functions),&status);
+    if (!effects->outcomes_work.functions) return status;
+    effects->outcomes_work.task_creation=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.task_creation),&status);
+    if (!effects->outcomes_work.task_creation) return status;
+    effects->outcomes_work.root=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.root),&status);
+    if (!effects->outcomes_work.root) return status;
+    effects->outcomes_work.root_witnesses=xir_compile_calloc(context,contexts->count,sizeof(*effects->outcomes_work.root_witnesses),&status);
+    if (!effects->outcomes_work.root_witnesses) return status;
+    effects->outcomes_work.unresolved_witnesses=xir_compile_calloc(context,contexts->count,
+        sizeof(*effects->outcomes_work.unresolved_witnesses),&status);
+    return effects->outcomes_work.unresolved_witnesses ? XR_XIR_OK : status;
 }
 
 /* Descriptor declarations, structural children, equations, facts and
@@ -225,7 +226,7 @@ static XrXirStatus effect_ordinary_roots_prepare(const XrXirCompileContext *cont
     const EffectInvocationDeclaredBounds *declared,EffectInvocationDeclaredBounds **temporary) {
     if (!xir_compile_context_valid(context) || !source || !source->declarations ||
         !source->declarations->functions || !source->declarations->modules || !contexts ||
-        contexts->uses.resources!=context->resources || contexts->uses.root ||
+        contexts->uses.resources!=context->resources || contexts->uses.outcomes_work.root ||
         contexts->base_count!=source->function_count || !temporary || *temporary) return XR_XIR_BAD_STRUCTURE;
     contexts->terms.remaining=context;
     XrXirStatus status=effect_terms_snapshot_match(&contexts->terms,source->types,contexts->source_type_count);

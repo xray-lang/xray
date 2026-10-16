@@ -47,7 +47,7 @@ static uint32_t invocation_parameter_actual(EffectInvocationWorkspace *owner) {
     for (uint32_t e=0;e<owner->final.edge_count;++e) {
         const EffectInvocationEdge *edge=&owner->final.edges[e];
         if (owner->final.nodes[edge->caller].body!=0 || owner->final.nodes[edge->target].body!=5) continue;
-        EffectInvocationFlow flow={.owner=owner,.node=edge->caller,.instruction=UINT32_MAX};
+        EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=edge->caller,.instruction=UINT32_MAX};
         XrXirStatus status=effect_invocation_origins(&flow);bool matched=false;
         if (status==XR_XIR_OK) status=effect_invocation_coverage_input(&flow,e,&matched);
         xr_compile_resources_free(flow.memory);CHECK(status==XR_XIR_OK);
@@ -62,10 +62,10 @@ static void invocation_parameter_expect_rejection(EffectInvocationWorkspace *own
     uint32_t mode,const char *mutation) {
     XrXirStatus actual=effect_invocation_coverage_verify(owner);
     if (actual!=XR_XIR_BAD_STRUCTURE) {
-        XrCompileResourceStats stats=rp_stats(owner->work);
+        XrCompileResourceStats stats=rp_stats(owner->read.work);
         fprintf(stderr,"PARAMETER_REJECTION mode=%u mutation=%s actual=%u expected=%u producer=%u nodes=%u pending=%u allocated=%llu live=%llu peak=%llu work=%llu\n",
             mode,mutation,(unsigned)actual,(unsigned)XR_XIR_BAD_STRUCTURE,
-            (unsigned)owner->producer_enabled,owner->final.count,owner->pending,
+            (unsigned)owner->read.producer_enabled,owner->final.count,owner->pending,
             (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes,
             (unsigned long long)stats.peak_bytes,(unsigned long long)stats.work);
         fflush(stderr);
@@ -75,7 +75,7 @@ static void invocation_parameter_expect_rejection(EffectInvocationWorkspace *own
 
 /* Disabled coverage still owns real zero facts and exact root storage. */
 static void invocation_parameter_disabled_rejections(EffectInvocationWorkspace *owner,uint32_t mode) {
-    if (owner->producer_enabled) return;
+    if (owner->read.producer_enabled) return;
     uint32_t formal=owner->final.roots[5];EffectInvocationNode *node=&owner->final.nodes[formal];
     CHECK(!node->return_coverage && node->parameter_count==1 && node->parameter_coverage);
     node->return_coverage=1;
@@ -115,10 +115,10 @@ static void invocation_parameter_rejections(EffectInvocationWorkspace *owner,uin
     invocation_parameter_expect_rejection(owner,mode,"rank-overflow");
     node->parameter_coverage[0]=original;
     if (mode<2) {
-        uint32_t head=owner->consumers[n];CHECK(head!=UINT32_MAX);
-        owner->consumers[n]=UINT32_MAX;
+        uint32_t head=owner->read.consumers[n];CHECK(head!=UINT32_MAX);
+        owner->read.consumers[n]=UINT32_MAX;
         invocation_parameter_expect_rejection(owner,mode,"missing-incoming");
-        owner->consumers[n]=head;
+        owner->read.consumers[n]=head;
         uint64_t input=node->input[0];node->input[0]^=UINT64_C(1);
         invocation_parameter_expect_rejection(owner,mode,"changed-key");
         node->input[0]=input;
@@ -167,7 +167,7 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) {
-        EffectInvocationWorkspace replay={0};
+        EffectInvocationRead replay={0};
         status=effect_invocation_read_open(context,published,certificate->declared,certificate->final,&replay);
         replay.work=context;replay.effects=published;
         replay.declared=certificate->declared;

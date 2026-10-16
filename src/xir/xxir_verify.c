@@ -121,10 +121,12 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     uint32_t caller = (uint32_t) (function - module->functions);
     uint32_t from=d->functions[caller].module;
     if (from!=slot->module) {
-        if (op->op==XR_XIR_SLOT_INIT || !xr_xir_module_same_scope(d,from,slot->module))
+        if (op->op==XR_XIR_SLOT_INIT ||
+            (op->op!=XR_XIR_SLOT_LOAD && !xr_xir_module_same_scope(d,from,slot->module)))
             return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(remaining,(uint64_t)d->modules[from].dependency_count+1)) return XR_XIR_BUDGET;
-        if (!xr_xir_module_imports(d,from,slot->module)) return XR_XIR_BAD_STRUCTURE;
+        if (op->op==XR_XIR_SLOT_LOAD ? !xr_xir_slot_readable(d,from,(uint32_t)op->immediate) :
+            !xr_xir_module_imports(d,from,slot->module)) return XR_XIR_BAD_STRUCTURE;
     }
     if ((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_SLOT_PLACE) && op->type != slot->type) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_SLOT_INIT && d->modules[slot->module].initializer != caller)
@@ -218,7 +220,9 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (op->op == XR_XIR_FUNCTION_REF) {
             signature = xr_xir_callable_signature(module->types, op->type);
             if (!module->declarations || !signature || op->args[1] > callee->parameter_count ||
-                signature->parameter_count != callee->parameter_count - op->args[1])
+                signature->parameter_count != callee->parameter_count - op->args[1] ||
+                !!(signature->flags & XR_XIR_CALLABLE_VARIADIC) !=
+                    (module->declarations->functions[op->immediate].variadic!=0))
                 return XR_XIR_BAD_TYPE;
             if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
                 !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
@@ -267,7 +271,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_NUMBER && !xr_xir_type_is_number(op->type)) ||
         (rule->result == RULE_FLOAT && !xr_xir_float_bits(op->type)) ||
         (rule->result == RULE_INTEGER && !xr_xir_type_is_integer(op->type)) ||
-        (rule->result == RULE_OWNED && (!xr_xir_type_is_owned(module->types, op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
+        (rule->result == RULE_OWNED && !(op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) && (!xr_xir_type_is_owned(module->types, op->type) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_STRING && op->type != XR_XIR_STRING) ||
         (rule->result == RULE_RUNE && op->type != XR_XIR_RUNE) ||
         (rule->result == RULE_PANIC && op->type != XR_XIR_UNIT && op->type != XR_XIR_PANIC_INFO) ||
@@ -277,7 +281,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
             !xr_xir_type_is_nominal(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
-        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ) && op->type == XR_XIR_UNIT) &&
+        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_TUPLE_NEW) && op->type == XR_XIR_UNIT) &&
             !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
@@ -364,6 +368,10 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         function->parameter_count > UINT32_MAX - function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t function_id = (uint32_t) (function - context->module->functions);
+    const XrXirDeclarations *declarations=context->module->declarations;
+    if (declarations && declarations->functions[function_id].variadic &&
+        (!function->parameter_count || !xr_xir_type_is_array(context->module->types,
+            function->parameters[function->parameter_count-1]))) return XR_XIR_BAD_TYPE;
     if (xr_xir_type_is_cell(context->module->types, function->result)) return XR_XIR_BAD_TYPE;
     if (function->result != XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->result))
         return XR_XIR_BAD_TYPE;
@@ -376,7 +384,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
     for (uint32_t p = 0; p < function->parameter_count; ++p) {
         if (!xir_compile_work(&context->remaining, 1))
             return XR_XIR_BUDGET;
-        if (!xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
+        if (function->parameters[p]!=XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->parameters[p]))
             return XR_XIR_BAD_TYPE;
         visibility = signature_type_use_context(context, function_id, function->parameters[p], signature_constraints_proved);
         if (visibility != XR_XIR_OK) return visibility;
@@ -401,7 +409,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             const XrXirInstruction *op = &function->instructions[i];
             visibility = type_use_context(context, function_id, op->type);
             if (visibility != XR_XIR_OK) return visibility;
-            if ((xr_xir_op_references_function(op->op)) && context->module->declarations) {
+            if ((xr_xir_op_references_function(op->op) || op->op==XR_XIR_SLOT_LOAD) && context->module->declarations) {
                 const XrXirDeclarations *d = context->module->declarations;
                 uint32_t caller = (uint32_t) (function - context->module->functions);
                 if (!xir_compile_work(&context->remaining, d->modules[d->functions[caller].module].dependency_count))
@@ -576,7 +584,7 @@ static XrXirStatus value_use(const XrXirFunction *function, const Graph *graph,
         return function->parameters[value] == expected ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     uint32_t definition = value - function->parameter_count;
     if (definition >= function->instruction_count ||
-        function->instructions[definition].type == XR_XIR_UNIT ||
+        (function->instructions[definition].type == XR_XIR_UNIT && function->instructions[definition].op != XR_XIR_TUPLE_NEW) ||
         op_rules[function->instructions[definition].op].terminal)
         return XR_XIR_BAD_VALUE;
     if (function->instructions[definition].type != expected)
@@ -727,16 +735,16 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
     bool construct = op->op == XR_XIR_STRUCT_NEW, write = op->op == XR_XIR_STRUCT_SET;
     XrXirType type = construct ? op->type : xr_xir_operand_type(function, op->args[0]);
     const XrXirTypes *types = context->module->types;
-    const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    if (!node || !xr_xir_type_is_struct(types, type)) return XR_XIR_BAD_TYPE;
-    const XrXirNominalType *instance = &node->nominal;
-    const XrXirNominalTable *table = types->nominals;
-    const XrXirNominalDeclaration *declaration = table->declarations ?
-        &table->declarations[instance->declaration] : NULL;
-    uint32_t fields = declaration ? declaration->field_count : table->identities[instance->declaration].field_count;
+    XrXirTypeDescription description = {0};
+    XrXirStatus status = xr_xir_compile_type_description(&context->remaining, types, type, &description);
+    if (status != XR_XIR_OK) return status;
+    if (description.kind != XR_XIR_TYPE_NOMINAL || description.nominal_kind != XR_XIR_NOMINAL_STRUCT) return XR_XIR_BAD_TYPE;
+    const XrXirNominalType *instance = description.instance;
+    const XrXirNominalDeclaration *declaration = description.definition;
+    uint32_t fields = description.field_count;
     if (construct ? op->args[1] != fields : op->immediate < 0 || (uint64_t) op->immediate >= fields)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
+    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;
     if (write) {
         status = role_operand(function, graph, context, instruction, 0, type);
@@ -748,8 +756,11 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
         uint32_t field = construct ? i : (uint32_t) op->immediate;
         uint32_t value = construct ? function->operands[op->args[0] + i] : op->args[write ? 1 : 0];
         XrXirType actual = construct || write ? xr_xir_operand_type(function, value) : op->type;
-        if (declaration) status = xr_xir_compile_type_substitution_matches(&context->remaining, types, instance->arguments, instance->argument_count, declaration->fields[field].type, actual);
-        else status = instance->field_count == fields && instance->fields[field] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        XrXirFieldDescription member = {0};
+        status = xr_xir_compile_description_field(&context->remaining, &description, field, &member);
+        if (status == XR_XIR_OK && declaration) status = xr_xir_compile_type_substitution_matches(
+            &context->remaining, types, instance->arguments, instance->argument_count, member.template_type, actual);
+        else if (status == XR_XIR_OK) status = member.type == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         if (status == XR_XIR_OK) status = local_operand(types, function, op, value, write ? 1 : i);
         if (status == XR_XIR_OK) status = value_use(function, graph, instruction, value, construct || write ? actual : type);
         if (status != XR_XIR_OK) return status;
@@ -763,16 +774,16 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
     bool construct = op->op == XR_XIR_CLASS_NEW, write = op->op == XR_XIR_CLASS_SET;
     XrXirType type = construct ? op->type : xr_xir_operand_type(function, op->args[0]);
     const XrXirTypes *types = context->module->types;
-    const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    if (!node || !xr_xir_type_is_class(types, type)) return XR_XIR_BAD_TYPE;
-    const XrXirNominalType *instance = &node->nominal;
-    const XrXirNominalTable *table = types->nominals;
-    const XrXirNominalDeclaration *declaration = table->declarations ?
-        &table->declarations[instance->declaration] : NULL;
-    uint32_t fields = declaration ? declaration->field_count : table->identities[instance->declaration].field_count;
+    XrXirTypeDescription description = {0};
+    XrXirStatus status = xr_xir_compile_type_description(&context->remaining, types, type, &description);
+    if (status != XR_XIR_OK) return status;
+    if (description.kind != XR_XIR_TYPE_NOMINAL || description.nominal_kind != XR_XIR_NOMINAL_CLASS) return XR_XIR_BAD_TYPE;
+    const XrXirNominalType *instance = description.instance;
+    const XrXirNominalDeclaration *declaration = description.definition;
+    uint32_t fields = description.field_count;
     if (construct ? op->args[1] != fields : op->immediate < 0 || (uint64_t) op->immediate >= fields)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
+    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;
     if (!construct) {
         status = local_operand(types, function, op, op->args[0], 0);
@@ -785,8 +796,11 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
         uint32_t field = construct ? i : (uint32_t) op->immediate;
         uint32_t value = construct ? function->operands[op->args[0] + i] : op->args[write ? 1 : 0];
         XrXirType actual = construct || write ? xr_xir_operand_type(function, value) : op->type;
-        if (declaration) status = xr_xir_compile_type_substitution_matches(&context->remaining, types, instance->arguments, instance->argument_count, declaration->fields[field].type, actual);
-        else status = instance->field_count == fields && instance->fields[field] == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        XrXirFieldDescription member = {0};
+        status = xr_xir_compile_description_field(&context->remaining, &description, field, &member);
+        if (status == XR_XIR_OK && declaration) status = xr_xir_compile_type_substitution_matches(
+            &context->remaining, types, instance->arguments, instance->argument_count, member.template_type, actual);
+        else if (status == XR_XIR_OK) status = member.type == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         if (status == XR_XIR_OK) {
             XrXirProofContext proof={context->module,{XR_XIR_CONTEXT_FUNCTION,context->location.function,0}};
             status=xr_xir_compile_type_storage_prove(&context->remaining, &proof, actual);
@@ -1122,7 +1136,6 @@ static XrXirStatus verify_signature_structure(const XrXirModule *module, XrXirCo
         uint32_t count = module->generics ? module->generics[f].parameter_count : 0;
         status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->result, count, &scratch);
         for (uint32_t p = 0; p < function->parameter_count && status == XR_XIR_OK; ++p) {
-            if (function->parameters[p] == XR_XIR_UNIT) { status = XR_XIR_BAD_TYPE; break; }
             status = xr_xir_compile_type_expression_shape_scratch(remaining, module->types, function->parameters[p], count, &scratch);
         }
         if (status != XR_XIR_OK) break;

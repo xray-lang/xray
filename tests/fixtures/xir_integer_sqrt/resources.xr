@@ -1,0 +1,1 @@
+export fn squareRoot(value:i64)->f64 { return value.sqrt() }

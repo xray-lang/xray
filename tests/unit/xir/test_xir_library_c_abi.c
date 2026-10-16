@@ -49,7 +49,7 @@ int main(void) {
     const XrXirFunction functions[]={
         {"init_a",6,NULL,0,XR_XIR_UNIT,&block,1,ops,1,NULL,0},
         {"init_b",6,NULL,0,XR_XIR_UNIT,&block,1,ops,1,NULL,0}};
-    const XrXirFunctionIdentity identities[]={{0,0,0,0,0,0,0,0,0},{1,0,0,0,0,0,0,0,0}};
+    const XrXirFunctionIdentity identities[]={{0,0,0,0,0,0,0,0,0,0},{1,0,0,0,0,0,0,0,0,0}};
     XrXirDeclarations declarations={modules,2,identities,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module={XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *checked=NULL;XrXirCheckedPacket packet={0};

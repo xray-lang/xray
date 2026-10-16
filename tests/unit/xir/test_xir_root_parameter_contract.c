@@ -29,7 +29,8 @@ static void rp_direct_use(void) {
     const XrXirFunctionEffectContract *contract = xir_effects_contract(effects,0);
     CHECK(contract && contract->parameter_count == 1);
     CHECK(contract->parameters[0].kind == 1 && contract->parameters[0].uses == 1);
-    const XrXirRootEffects *root = xr_xir_effects_root(effects,0);
+    XrXirEffectFacts root_read=xr_xir_effects_read(effects,0);
+    const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
     CHECK(root && !root->requires_root && root->unresolved);
     memset(&fixture,0x95,sizeof(fixture));
     CHECK(contract->parameters[0].kind == 1 && contract->parameters[0].uses == 1);
@@ -89,7 +90,8 @@ static void rp_capture_use(bool escape, bool copy) {
     CHECK(derived->parameters[0].uses == (escape ? (copy ? 85u : 81u) : (copy ? 21u : 17u)));
     CHECK(derived->formula.constant_mask==0 && derived->formula.term_count==(escape?0u:1u));
     if (!escape) CHECK(derived->formula.terms[0].kind==1 && derived->formula.terms[0].index==0);
-    const XrXirRootEffects *root = xr_xir_effects_root(effects,0);
+    XrXirEffectFacts root_read=xr_xir_effects_read(effects,0);
+    const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
     CHECK(root && !root->requires_root && root->unresolved == !escape);
     xr_xir_compile_effects_free(effects); xr_xir_compile_artifact_free(checked);
     rp_owner_free(&context,baseline); rp_balanced(physical);
@@ -222,8 +224,9 @@ static void rp_terminal_literals(void) {
         CHECK(xr_xir_compile_root_cause_trace_copy(&c,effects,0,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==trace);
         CHECK(rp_stats(&c).work==before.work && rp_stats(&c).allocation_count==before.allocation_count);
         for (unsigned unknown=0;unknown<2;++unknown) {
-            uint32_t bit=unknown?8u:4u;const XrXirRootEffectWitness *borrowed=unknown?
-                xr_xir_effects_unresolved_witness(effects,0):xr_xir_effects_root_witness(effects,0);
+            uint32_t bit=unknown?8u:4u;XrXirEffectFacts borrowed_read=xr_xir_effects_read(effects,0);
+    const XrXirRootEffectWitness *borrowed=unknown?
+                (borrowed_read.status==XR_XIR_OK && borrowed_read.unresolved_witness.cause!=0?&borrowed_read.unresolved_witness:NULL):(borrowed_read.status==XR_XIR_OK && borrowed_read.root_witness.cause!=0?&borrowed_read.root_witness:NULL);
             if (!(bounds[n]&bit)) { CHECK(!borrowed);continue; }
             CHECK(borrowed && borrowed->cause==8 && borrowed->instruction==0 &&
                 borrowed->callee==UINT32_MAX && borrowed->slot==0 && borrowed->distance==0);
@@ -269,7 +272,7 @@ static void rp_constant_competition(bool slot_first) {
         {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0},
         {.op=XR_XIR_SLOT_LOAD,.type=XR_XIR_I64}, {.op=XR_XIR_RETURN,.args={2,0}}};
     if (slot_first) { XrXirInstruction swap=apply[0];apply[0]=apply[1];apply[1]=swap; }
-    XrXirBlock block={.count=3};XrXirSlot slot={0,XR_XIR_I64,1};
+    XrXirBlock block={.count=3};XrXirSlot slot={0,XR_XIR_I64,1,0,0};
     f.functions[1].instructions=apply;f.functions[1].instruction_count=3;f.functions[1].blocks=&block;
     XrXirInstruction init[3]={
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=9},

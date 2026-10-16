@@ -301,13 +301,13 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         if (cell->allocation_bytes != sizeof(*cell)) return false;
         const XrXirValue *content = &cell->value;
         XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), object->type);
-        if (!cell->initialized || !value_header_valid(content) ||
-            (element==XR_XIR_UNIT ? !unit_value(content) :
-                !xr_xir_value_argument(content,object->arena,element))) return false;
-        if (owned_carrier_type(element) && !arena_free_carrier(element)) {
-            XirObject *child = object_pointer(content);
-            return child->kind != XIR_OBJECT_CELL;
-        }
+        if (!cell->initialized || !value_header_valid(content)) return false;
+        if (element==XR_XIR_UNIT) return unit_value(content);
+        /* A malformed Cell child must fail before recursive validation. */
+        if (owned_carrier_type((XrXirType)content->type) &&
+            !arena_free_carrier((XrXirType)content->type) && object_pointer(content)->kind==XIR_OBJECT_CELL)
+            return false;
+        return xr_xir_value_argument(content,object->arena,element);
     }
     return true;
 }
@@ -320,7 +320,7 @@ XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena
     if (type == XR_XIR_ERROR || (uint32_t) type >= XR_XIR_CONSTRUCTED_TYPE_BASE)
         return arena && owned_carrier_type((XrXirType)value->type) &&
             xir_type_arena_same_type(object_pointer(value)->arena,(XrXirType)value->type,arena,type);
-    return type != XR_XIR_UNIT && value->type==(uint32_t)type;
+    return value->type==(uint32_t)type;
 }
 XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType expected,
     int64_t payload,XrXirValue *output) {

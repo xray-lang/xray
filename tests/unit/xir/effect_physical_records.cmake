@@ -1,0 +1,11 @@
+add_executable(test_xir_effect_physical_records ${CMAKE_CURRENT_LIST_DIR}/test_xir_effect_physical_records.c)
+target_include_directories(test_xir_effect_physical_records PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_effect_physical_records PRIVATE xray_xir xray_xir_scalar xray_xir_source)
+if(MSVC)
+    target_compile_options(test_xir_effect_physical_records PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_effect_physical_records PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_effect_physical_records COMMAND test_xir_effect_physical_records)
+set_tests_properties(test_xir_effect_physical_records PROPERTIES
+    LABELS "unit;xir;metadata;ownership;budget;compiler-fault" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)

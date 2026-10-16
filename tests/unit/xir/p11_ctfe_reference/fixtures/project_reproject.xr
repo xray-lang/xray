@@ -1,0 +1,4 @@
+fn inc(x:ref i8){x=x+2}
+fn inner(xs:ref Array<i8>){inc(ref xs[0])}
+fn value()->i64{var xs:Array<Array<i8>>=[[40]];inner(ref xs[0]);return xs[0][0] as i64}
+export fn run()->i64{return comptime value()}

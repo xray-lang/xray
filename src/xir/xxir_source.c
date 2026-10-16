@@ -861,6 +861,9 @@ static SourceName *visible_name(SourceContext *ctx, const char *name) {
 static bool source_declaration_exported(const SourceContext *ctx, const SourceName *name) {
     if (!name) return false;
     switch (name->kind) {
+    case SOURCE_SLOT: case SOURCE_UNIT_SLOT:
+        return name->index < ctx->slot_count && ctx->slots &&
+            ctx->slots[name->index].exported == 1 && !ctx->slots[name->index].mutable;
     case SOURCE_FUNCTION:
         return name->index < ctx->function_count && ctx->identities &&
             ctx->identities[name->index].exported != 0 &&
@@ -1021,9 +1024,10 @@ static bool source_instantiation(SourceContext *ctx, AstNode *node, XrXirDeclara
 #include "xxir_source_inference_result.inc.c"
 #include "xxir_source_tuple.inc.c"
 #include "xxir_source_call_plan.inc.c"
+#include "xxir_source_rest.inc.c"
 #include "xxir_source_direct_arguments.inc.c"
 #include "xxir_source_indirect_call.inc.c"
-#include "xxir_source_native_arguments.inc.c"
+#include "xxir_source_native_read_arguments.inc.c"
 static bool source_value_place(SourceContext *ctx, AstNode *node, SourceValue *place);
 typedef enum SourceArrayRecipe {
     SOURCE_ARRAY_NONE, SOURCE_ARRAY_MAP, SOURCE_ARRAY_FILTER, SOURCE_ARRAY_REDUCE, SOURCE_ARRAY_FOR_EACH,
@@ -1036,7 +1040,13 @@ static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value);
 #include "xxir_source_array.inc.c"
+static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    const XrNativeMemberDeclaration *member,SourceValue *value);
 #include "xxir_source_string.inc.c"
+static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
+    size_t length, uint32_t *literal);
+#include "xxir_source_integer_methods.inc.c"
+#include "xxir_source_scalar_methods.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 static bool source_constructor_place(SourceContext *ctx, AstNode *member, SourceValue *place);
@@ -1071,6 +1081,7 @@ static bool source_literal_append(SourceContext *ctx, AstNode *node, const char 
     ++ctx->literal_count; *literal = id;
     return true;
 }
+#include "xxir_source_slot_declarations.inc.c"
 static bool source_string_literal(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, SourceValue *value) {
     uint32_t id;
@@ -1217,14 +1228,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_array_call(ctx, node, &receiver, value);
             if (xr_xir_type_is_atomic(&ctx->types,receiver.type))
                 return source_atomic_call(ctx,node,receiver,value);
-            if ((receiver.type == XR_XIR_BOOL || receiver.type == XR_XIR_RUNE || xr_xir_type_is_number(receiver.type)) &&
-                source_text_same(ctx, NULL, member->name, "toString")) {
-                if (call->arg_count || call->type_arg_count)
-                    return source_fail(ctx, node, XR_XIR_BAD_TYPE, "toString accepts no value or type arguments");
-                return source_text_conversion(ctx, node, receiver, value);
-            }
-            if (receiver.type == XR_XIR_RUNE && source_text_same(ctx,NULL,member->name,"toUInt32"))
-                return source_rune_codepoint(ctx,node,receiver,value);
+            if (xr_xir_type_is_integer(receiver.type)) return source_integer_call(ctx,node,receiver,value);
+            if (source_scalar_identity(receiver.type)) return source_scalar_call(ctx,node,receiver,value);
             if (receiver.type == XR_XIR_STRING) return source_string_call(ctx, node, receiver, value);
             if (xr_xir_type_is_enum(&ctx->types, receiver.type) && source_text_same(ctx, NULL, member->name, "toString")) {
                 if (call->arg_count || call->type_arg_count)
@@ -1548,6 +1553,16 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     if (!source_reference_promise(ctx, node, symbol->index, expected, &op.type)) return false;
     return source_type_arguments(ctx, node, arguments.substitution.types, arguments.count, &op) && source_recipe_record(ctx,op,value);
 }
+static bool source_import_value(SourceContext *ctx,AstNode *node,SourceName *binding,
+    SourceName *target,SourceExpectedType expected,SourceValue *value) {
+    if (target && (target->kind==SOURCE_SLOT || target->kind==SOURCE_UNIT_SLOT)) {
+        if (!source_name_ready(target))
+            return source_fail(ctx,node,XR_XIR_BAD_VALUE,"imported constant is not initialized");
+        return source_query_reference(ctx,node,binding,target,XR_XIR_SOURCE_READ) &&
+            source_binding_read(ctx,target,value);
+    }
+    return source_function_value(ctx,node,binding,target,expected,value);
+}
 static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     AstNode *callee = node->as.function_ref.callee;
     SourceName *symbol = NULL, *binding = NULL;
@@ -1630,7 +1645,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
         SourceTypeArguments arguments = {0};
         if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, &arguments, context, value);
-        return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), context, value);
+        return source_import_value(ctx, node, base, imported_declaration(ctx, base, member->name), context, value);
     }
     case AST_THIS_EXPR: case AST_VARIABLE: {
         SourceName *symbol = ctx->active_expression->binding;
@@ -1644,7 +1659,9 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
                 return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"declaration value is not ready in its lexical owner");
             symbol=live_binding;
         }
-        if (symbol && (symbol->kind == SOURCE_FUNCTION || symbol->kind == SOURCE_IMPORT))
+        if (symbol && symbol->kind==SOURCE_IMPORT)
+            return source_import_value(ctx,node,symbol,imported_declaration(ctx,symbol,symbol->imported),context,value);
+        if (symbol && symbol->kind == SOURCE_FUNCTION)
             return source_function_value(ctx, node, symbol, symbol, context, value);
         if (!source_name_ready(symbol))
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
@@ -2135,19 +2152,21 @@ static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) 
     for (int i = 0; i < decl->param_count; ++i) {
         XrParamNode *param = decl->params[i];
         bool by_reference = param->passing_mode == XR_PARAM_REF;
-        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern || param->is_rest ||
+        if (!param->type || (param->passing_mode != XR_PARAM_READ && !by_reference) || param->pattern ||
             (by_reference && param->default_value) ||
-            !source_type(ctx, param->type, &body->parameters[i]) || (body->parameters[i] == XR_XIR_UNIT && !by_reference))
+            !source_type(ctx, param->type, &body->parameters[i]))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "parameter contract is not implemented in XIR");
         /* A ref parameter is the caller's mutable cell: reads and writes in the body reach the
          * caller's binding through it, exactly as a captured mutable variable does. */
         if (by_reference && !source_cell_type(ctx, body->parameters[i], &body->parameters[i])) return false;
+        if (!source_rest_parameter(ctx,node,param,i+1==decl->param_count,&body->parameters[i])) return false;
         for (int j = 0; j < i; ++j) {
             if (!source_work(ctx, node)) return false;
             if (source_text_same(ctx, NULL, param->name, decl->params[j]->name))
                 return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate parameter name");
         }
     }
+    identity.variadic=decl->param_count && decl->params[decl->param_count-1]->is_rest;
     ctx->identities[index] = identity;
     return source_query_parameters(ctx, symbol->declaration);
 }
@@ -2309,24 +2328,20 @@ static bool collect_declarations(SourceContext *ctx) {
             AstNode *node = spec->ast->as.program.statements[i];
             if (node->type == AST_FUNCTION_DECL) { if (!declare_function(ctx, node, function++)) return false; }
             else if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
-                if (node->is_exported) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "exported state is not admitted");
                 SourceName *symbol = add_name(ctx, &ctx->names[m], node->as.var_decl.name, node);
                 if (!symbol) return false;
-                symbol->kind = SOURCE_SLOT; symbol->index = slot; symbol->mutable = !node->as.var_decl.is_const;
-                if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, 0, source_query_range(ctx, node, symbol->name))) return false;
-                ctx->slots[slot++] = (XrXirSlot) {m, XR_XIR_UNIT, symbol->mutable};
+                if (!source_slot_declare(ctx, symbol, node, !node->as.var_decl.is_const,
+                    source_query_range(ctx, node, symbol->name), slot++)) return false;
             } else if(node->type==AST_DESTRUCTURE_DECL) {
                 uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
                 for(uint32_t f=0;f<fields;++f) {
                     if(!source_work(ctx,node))return false;
                     XrDestructurePattern *field=node->as.destructure_decl.pattern->as.array.elements[f];
                     if(field->type==PATTERN_SKIP)continue;
-                    if(node->is_exported) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"exported state is not admitted");
                     SourceName *symbol=add_name(ctx,&ctx->names[m],field->as.identifier.name,node);
                     if(!symbol)return false;
-                    symbol->kind=SOURCE_SLOT;symbol->index=slot;symbol->mutable=!node->as.destructure_decl.is_const;
-                    if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,source_destructure_range(ctx,field)))return false;
-                    ctx->slots[slot++]=(XrXirSlot){m,XR_XIR_UNIT,symbol->mutable};
+                    if (!source_slot_declare(ctx,symbol,node,!node->as.destructure_decl.is_const,
+                        source_destructure_range(ctx,field),slot++)) return false;
                 }
             }
         }
@@ -2625,11 +2640,10 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
         if (param->type) {
             if (!source_type(ctx, param->type, &type)) return false;
         } else type = context->parameters[i].type;
-        if (type == XR_XIR_UNIT)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter cannot be unit");
         SourceName *symbol = add_name(ctx, &ctx->locals, param->name, node);
         if (!symbol) return false;
-        symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t) i; symbol->type = type;
+        symbol->kind = type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;
+        symbol->index = scan->count + (uint32_t)i; symbol->type = type;
         XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
         if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t) (INT_MAX - param->column))
             range.end_column = param->column + (int) source_text_size(ctx, param->name);
@@ -2784,6 +2798,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     return source_type_arguments(ctx, node, types, count, &op) && source_recipe_group(ctx, op, captures, scan.count, value);
 }
 #include "xxir_source_array_recipes.inc.c"
+#include "xxir_source_string_owned.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 static bool build_bodies(SourceContext *ctx) {
@@ -2821,7 +2836,9 @@ static bool build_bodies(SourceContext *ctx) {
         for (int i = 0; i < decl->param_count; ++i) {
             SourceName *symbol = add_name(ctx, &ctx->locals, decl->params[i]->name, ctx->bodies[f].node);
             if (!symbol) return false;
-            symbol->kind = SOURCE_LOCAL; symbol->index = (uint32_t) i; symbol->type = ctx->bodies[f].parameters[i];
+            symbol->type = ctx->bodies[f].parameters[i];
+            symbol->kind = symbol->type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;
+            symbol->index = (uint32_t)i;
             XrParamNode *param = decl->params[i];
             if (param->passing_mode == XR_PARAM_REF) {
                 symbol->type = xr_xir_cell_element(&ctx->types, symbol->type);

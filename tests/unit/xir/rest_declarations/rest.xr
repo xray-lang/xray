@@ -1,0 +1,27 @@
+export fn sum(seed:i64=10,...values:i64)->i64 {
+    var result=seed
+    for (item in values) { result+=item }
+    return result
+}
+export fn choose<T>(fallback:T,...values:T)->T {
+    if (len(values)>0) { return values[0] }
+    return fallback
+}
+export struct Collector {
+    base:i64
+    init(...values:i64) {
+        var result=0
+        for (item in values) { result+=item }
+        this.base=result
+    }
+    add(...values:i64)->i64 {
+        var result=this.base
+        for (item in values) { result+=item }
+        return result
+    }
+    static total(...values:i64)->i64 {
+        var result=0
+        for (item in values) { result+=item }
+        return result
+    }
+}

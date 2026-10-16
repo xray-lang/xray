@@ -1,0 +1,3 @@
+class Box{text:string;init(text:string){this.text=text}}
+fn answer()->string{const b=Box("ab");defer{b.text=b.text+"c"};return b.text}
+export fn run()->string{return comptime answer()}

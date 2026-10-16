@@ -126,6 +126,7 @@ static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack 
         if (!storage_leaf_value(cursor->left_arena,a_span->type,a_span->bytes,a_layout.size,left) ||
             !storage_leaf_value(cursor->right_arena,b_span->type,b_span->bytes,b_layout.size,right))
             return XR_XIR_VALUE_BAD_ARGUMENT;
+
     }
     if (!xr_xir_value_argument(left, admission->arena, type) ||
         !xr_xir_value_argument(right, admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;

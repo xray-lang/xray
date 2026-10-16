@@ -1,0 +1,3 @@
+struct Pair { x:i8; text:string }
+fn make()->Pair { return Pair{x:7,text:"ab"} }
+export fn run()->Pair { return comptime make() }

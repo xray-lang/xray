@@ -35,7 +35,8 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
         if (!source_work(ctx, NULL)) return false;
-        if (!node.parameters[p].type && node.kind != XR_XIR_TYPE_TUPLE)
+        if (node.parameters[p].type == XR_XIR_UNIT && node.kind != XR_XIR_TYPE_TUPLE &&
+            !(node.kind == XR_XIR_TYPE_CALLABLE && node.parameters[p].mode == XR_PARAM_READ))
             return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "callable parameter must be a value type");
         uint32_t component = xr_xir_type_span(&ctx->types, node.parameters[p].type);
         if (component > span) span = component;
@@ -90,13 +91,18 @@ static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *p
 }
 static bool source_reference_promise(SourceContext *ctx, AstNode *node,
     uint32_t function, SourceExpectedType expected, XrXirType *type) {
-    const XrXirTypeNode *context = expected.present ? xr_xir_callable_signature(&ctx->types, expected.type) : NULL;
-    if (!context || !(context->flags & XR_XIR_CALLABLE_NO_SUSPEND)) return true;
-    if (!(ctx->identities[function].promises & XR_XIR_FUNCTION_NO_SUSPEND))
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "qualified reference requires an explicit target promise");
     XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, *type);
-    signature.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
-    return source_intern_type(ctx, signature, type);
+    uint32_t original_flags=signature.flags;
+    if (ctx->identities[function].variadic) signature.flags |= XR_XIR_CALLABLE_VARIADIC;
+    const XrXirTypeNode *context = expected.present ? xr_xir_callable_signature(&ctx->types, expected.type) : NULL;
+    if (context && !!(context->flags & XR_XIR_CALLABLE_VARIADIC) != (ctx->identities[function].variadic!=0))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"function reference rest contract differs from its context");
+    if (context && (context->flags & XR_XIR_CALLABLE_NO_SUSPEND)) {
+        if (!(ctx->identities[function].promises & XR_XIR_FUNCTION_NO_SUSPEND))
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "qualified reference requires an explicit target promise");
+        signature.flags |= XR_XIR_CALLABLE_NO_SUSPEND;
+    }
+    return signature.flags==original_flags || source_intern_type(ctx, signature, type);
 }
 static bool source_cell_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
     return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CELL, element,

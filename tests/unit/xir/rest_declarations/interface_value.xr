@@ -1,0 +1,2 @@
+import {Rest} from "./iface"
+export fn call<T:Rest>(receiver:T)->i64 { const method=receiver.sum;return method([1,2]) }

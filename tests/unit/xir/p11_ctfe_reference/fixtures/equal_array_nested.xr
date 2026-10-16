@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<Array<f32>>=[[0.0,1.5],[]]; const b:Array<Array<f32>>=[[-0.0,1.5],[]]; const c:Array<Array<f32>>=[[0.0],[1.5]]; return a==b && a!=c }
+export fn run()->bool { return comptime answer() }

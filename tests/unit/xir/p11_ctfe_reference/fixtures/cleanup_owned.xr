@@ -1,0 +1,2 @@
+fn value()->i64 { var x=[1 as i8]; { defer { x.push(2 as i8) } }; return len(x) }
+export fn run()->i64 { return comptime value() }

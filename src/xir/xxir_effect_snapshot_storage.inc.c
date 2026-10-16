@@ -220,7 +220,7 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
     const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output) {
     if (!xir_compile_context_valid(work) || !source || !output || *output ||
         (!!source->function_count!=!!source->functions)) return XR_XIR_BAD_STRUCTURE;
-    if (source->function_count>work->limits.functions) return XR_XIR_BUDGET;
+    if (!ordinary && source->function_count>work->limits.functions) return XR_XIR_BUDGET;
     XrXirStatus status=ordinary ? effect_body_ordinary_input_verify(work,source,ordinary) :
         xir_effect_contract_shape_verify(work,source);
     if (status!=XR_XIR_OK) return status;
@@ -522,11 +522,18 @@ static XrXirStatus effect_body_physical_run(const XrXirCompileContext *work,
     const EffectBodyFunction *body=&material->functions[function];
     bool constant=!(run->mask&UINT32_C(3));
     if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+    if (run->count==2) {
+        if (run->mask!=EFFECT_BODY_MASK) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(work,8+sizeof(constant))) return XR_XIR_BUDGET;
+        constant=(uint32_t)run->base.op==run->delta[0] && (uint32_t)run->base.type==run->delta[1];
+    }
     uint32_t points=constant?1:run->count;
     for (uint32_t offset=0;offset<points;++offset) {
         if (!xir_compile_work(work,4+(constant?0:6))) return XR_XIR_BUDGET;
         uint32_t opcode=run->base.op,type=run->base.type,mask=0;
-        if (!constant) {
+        if (run->count==2 && offset) {
+            opcode=run->delta[0];type=run->delta[1];
+        } else if (!constant && run->count!=2) {
             if (run->mask&UINT32_C(1)) opcode+=run->delta[0]*offset;
             if (run->mask&UINT32_C(2)) type+=run->delta[1]*offset;
         }

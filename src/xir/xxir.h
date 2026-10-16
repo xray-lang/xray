@@ -154,6 +154,7 @@ typedef struct XrXirCallableParameter { XrXirType type; uint32_t mode; } XrXirCa
 #define XR_XIR_CALLABLE_ROOT_REQUIRED 4u
 #define XR_XIR_CALLABLE_ROOT_UNRESOLVED 8u
 #define XR_XIR_CALLABLE_ROOT_MASK 14u
+#define XR_XIR_CALLABLE_VARIADIC 16u
 typedef enum XrXirTypeKind {
     XR_XIR_TYPE_CALLABLE = 1,
     XR_XIR_TYPE_ARRAY = 2,
@@ -268,6 +269,7 @@ XR_FUNC XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext 
 XR_FUNC XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile_context, const XrXirDeclarations *source, uint32_t functions, XrXirDeclarations **output);
 XR_FUNC void xr_xir_compile_declarations_free(XrXirDeclarations *declarations);
 XR_FUNC bool xr_xir_module_imports(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);
+XR_FUNC bool xr_xir_slot_readable(const XrXirDeclarations *declarations, uint32_t from, uint32_t slot);
 XR_FUNC bool xr_xir_module_same_scope(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);
 
 #endif // XXIR_H

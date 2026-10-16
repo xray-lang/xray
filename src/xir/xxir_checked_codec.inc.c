@@ -229,7 +229,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         m.lexical_scope = checked_u32(c, m.lexical_scope);
         if (c->reading) modules[i] = m;
     }
-    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 36);
+    XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 40);
     d->functions = identities;
     for (uint32_t i = 0; i < functions && c->status == XR_XIR_OK; ++i) {
         XrXirFunctionIdentity id = identities[i];
@@ -241,15 +241,18 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         id.method_kind = checked_u32(c, id.method_kind);
         id.test_role = checked_u32(c, id.test_role);
         id.test_timeout_seconds = checked_u32(c, id.test_timeout_seconds);
+        id.variadic = checked_u32(c, id.variadic);
         if (c->reading) identities[i] = id;
     }
-    XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 12);
+    XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 20);
     d->slots = slots;
     for (uint32_t i = 0; i < d->slot_count && c->status == XR_XIR_OK; ++i) {
         XrXirSlot slot = slots[i];
         slot.module = checked_u32(c, slot.module);
         slot.type = (XrXirType) checked_u32(c, (uint32_t) slot.type);
         slot.mutable = checked_u32(c, slot.mutable);
+        slot.exported = checked_u32(c, slot.exported);
+        slot.name = checked_u32(c, slot.name);
         if (c->reading) slots[i] = slot;
     }
     XrXirLiteral *literals = checked_array(c, d->literals, d->literal_count, sizeof(*literals), 4);

@@ -163,7 +163,8 @@ static bool function_bound_admitted(const XrXirProgram *program, uint32_t entry,
         permissions->function_count != program->entry_count ||
         permissions->slot_count != program->declarations->slot_count) return false;
     const XrXirProgramPermission *permission = &permissions->entries[entry];
-    return xr_xir_callable_root_accepts(permission->requires_root, permission->unresolved, signature->flags) &&
+    return !!(signature->flags & XR_XIR_CALLABLE_VARIADIC) == (program->declarations->functions[entry].variadic!=0) &&
+        xr_xir_callable_root_accepts(permission->requires_root, permission->unresolved, signature->flags) &&
         (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) ||
          (program->declarations->functions[entry].promises & XR_XIR_FUNCTION_NO_SUSPEND));
 }
@@ -1216,8 +1217,11 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t module=d->slots[slot].module;
     if (view_is_child(instance, view) && !worker_slot_read(instance, slot)) return XR_XIR_CALL_BAD_STATE;
-    XrXirCallStatus scoped=instance_slot_scope(view,instance,module);
-    if (scoped!=XR_XIR_CALL_READY) return scoped;
+    uint32_t function=xr_xir_call_current_entry(view->activation);
+    uint32_t caller=d->functions[function].module;
+    if (caller!=module && !instance_cell_work(view,(uint64_t)d->modules[caller].dependency_count+1))
+        return XR_XIR_CALL_LIMIT;
+    if (!xr_xir_slot_readable(d,caller,slot)) return XR_XIR_CALL_BAD_STATE;
     if (instance->slot_origins && instance->slot_origins[slot].owner) {
         InstanceStorageRoute route=instance->slot_origins[slot];
         XrXirInstance *birth=route.owner;
@@ -1231,8 +1235,9 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
             !xr_xir_cell_unborrowed(&birth->slots[route.index]))) return XR_XIR_CALL_BAD_STATE;
         return value_call_status(xr_xir_value_copy(&birth->slots[route.index],output));
     }
-    if (!instance->published[slot] ||
-        (!instance->ready[module] && instance->current_module != module)) return XR_XIR_CALL_BAD_STATE;
+    if (!instance->published[slot] || !xr_xir_slot_readable(d,d->functions[function].module,slot) ||
+        (!instance->ready[module] && (d->functions[function].module!=module ||
+            instance->current_module!=module))) return XR_XIR_CALL_BAD_STATE;
     if (d->slots[slot].mutable &&
         (!instance_cell_published(instance, slot, &instance->slots[slot]) ||
          !xr_xir_cell_unborrowed(&instance->slots[slot]))) return XR_XIR_CALL_BAD_STATE;

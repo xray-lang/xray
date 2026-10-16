@@ -1,0 +1,4 @@
+enum E{Bad}
+fn fail<T:Error>(e:T)->i64{throw e}
+fn answer()->i64{try{return fail<E>(E.Bad)}catch(e:E){return 42}}
+export fn run()->i64{return comptime answer()}

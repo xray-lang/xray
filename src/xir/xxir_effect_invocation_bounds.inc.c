@@ -47,12 +47,13 @@ static XrXirStatus effect_invocation_bounds_new(const XrXirCompileContext *work,
 static XrXirStatus effect_invocation_bounds_capacity(const XrXirCompileContext *work,
     EffectInvocationDeclaredBounds *bounds,uint32_t needed) {
     if (needed<=bounds->capacity) return XR_XIR_OK;
-    if (needed>work->limits.functions) return XR_XIR_BUDGET;
+    uint32_t maximum=effect_body_entry_limit(work);
+    if (needed>maximum) return XR_XIR_BUDGET;
     uint32_t capacity=bounds->capacity ? bounds->capacity : 8;
-    if (capacity>work->limits.functions) capacity=work->limits.functions;
+    if (capacity>maximum) capacity=maximum;
     while (capacity<needed) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        capacity=capacity>work->limits.functions/2 ? work->limits.functions : capacity*2;
+        capacity=capacity>maximum/2 ? maximum : capacity*2;
     }
     if ((uint64_t)capacity>SIZE_MAX/sizeof(*bounds->functions)) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;

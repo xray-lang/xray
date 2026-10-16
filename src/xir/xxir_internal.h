@@ -66,6 +66,9 @@ XR_FUNC XrXirStatus xir_effect_callable_bound_matches_definition(const XrXirComp
 /* These values borrow only the current verified effects owner. */
 XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
     const XrXirEffects *effects, uint32_t function);
+/* Provisional ROOT copies belong only to genuine unpublished construction. */
+XR_FUNC XrXirStatus xir_effects_construction_root(const XrXirCompileContext *context,
+    const XrXirEffects *effects,uint32_t function,XrXirRootEffects *output);
 /* A ledger identity guard grants no source, type or execution proof. */
 XR_FUNC bool xir_effects_context_matches(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t functions);
@@ -112,9 +115,6 @@ XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts
 /* Only the private decoder calls this on its unpublished complete EOF owner. */
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
     XrXirDiagnostic *diagnostic);
-/* Unpublished fresh Source collector only; independent terminal follows. */
-XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileContext *context,
-    const XrXirModule *source,XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *context,
     const XrXirModule *source,const XrXirEffects *effects);
 

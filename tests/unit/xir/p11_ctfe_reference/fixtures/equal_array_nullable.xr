@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<i8?>=[null,7]; const b:Array<i8?>=[null,7]; const c:Array<i8?>=[7,null]; return a==b && a!=c }
+export fn run()->bool { return comptime answer() }

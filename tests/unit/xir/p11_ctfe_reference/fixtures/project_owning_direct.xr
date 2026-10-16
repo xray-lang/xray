@@ -1,0 +1,2 @@
+fn append(x:ref string){x=x+"b"}
+export fn run()->string{var xs=["a"];append(ref xs[0]);return xs[0]}

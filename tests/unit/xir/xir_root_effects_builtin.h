@@ -38,7 +38,7 @@ static XrXirArtifact *root_builtin(unsigned mode) {
         {"refTarget",9,NULL,0,XR_XIR_I64,&three,1,rooted,3,NULL,0}};
     XrXirFunctionIdentity identities[9]={{0}};
     identities[8].promises=XR_XIR_FUNCTION_NO_SUSPEND;
-    XrXirSourceModule source={"root",4,NULL,0,0, 0};XrXirSlot slot={0,cell,1};
+    XrXirSourceModule source={"root",4,NULL,0,0, 0};XrXirSlot slot={0,cell,1,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,
@@ -73,7 +73,7 @@ static XrXirArtifact *root_group(void) {
         {"other",5,NULL,0,XR_XIR_UNIT,&three,1,other,3,NULL,0}};
     XrXirSourceModule modules[]={{"root",4,&dependency,1,0, 0},{"other",5,NULL,0,2, 0}};
     XrXirFunctionIdentity ids[3]={{0},{0},{0}};ids[2].module=1;
-    XrXirSlot slots[]={{1,XR_XIR_I64,0},{0,XR_XIR_I64,0},{0,XR_XIR_I64,0}};
+    XrXirSlot slots[]={{1,XR_XIR_I64,0,0,0},{0,XR_XIR_I64,0,0,0},{0,XR_XIR_I64,0,0,0}};
     XrXirDeclarations d={.modules=modules,.module_count=2,.functions=ids,.slots=slots,.slot_count=3,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,3,&d,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};

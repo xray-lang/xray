@@ -1,0 +1,157 @@
+"""Exercise a published private library closure without source or a VM C provider."""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from xir_no_child_process import NoChildProcess
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--binary', type=Path, required=True)
+    parser.add_argument('--root', type=Path, required=True)
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    root, binary = args.root.resolve(), args.binary.resolve()
+    binary.relative_to(root)
+    temporary = None
+    if args.output:
+        output = args.output.resolve()
+        output.relative_to(root)
+        output.mkdir(parents=True, exist_ok=False)
+    else:
+        temporary = tempfile.TemporaryDirectory(prefix='checked-families-', dir=binary.parent)
+        output = Path(temporary.name).resolve()
+    records = []
+    try:
+        process_policy = NoChildProcess(root, output)
+        stdlib = output / 'stdlib'
+        (stdlib / 'io').mkdir(parents=True)
+        poison = stdlib / 'io/output.xr'
+        poison.write_text('invalid library source must not be parsed\n', encoding='utf-8')
+        (stdlib / 'time').mkdir()
+        time_poison = stdlib / 'time/time.xr'
+        time_poison.write_text('invalid clock source must not be parsed\n', encoding='utf-8')
+        (output / 'future-enum.xr').write_text(
+            'export enum UserBox<T>{Empty,Full{value:T}}\n'
+            'export enum Shade{Dark,Light}\n', encoding='utf-8')
+        (output / 'future-class.xr').write_text(
+            'export final class UserPacket<T> {\n'
+            ' value:T\n tail:Array<T>\n'
+            ' init(value,tail:Array<T>=[]) { this.value=value; this.tail=tail }\n}\n'
+            'export fn make<T>(value:T)->UserPacket<T> { return UserPacket<T>(value) }\n'
+            'export fn tagged<T>(value:T,tail:Array<T>)->UserPacket<T> { return UserPacket<T>(value,tail) }\n'
+            'export fn copied(packet:UserPacket<string>)->string { return packet.value.toString() }\n'
+            'export fn number(packet:UserPacket<i64>)->i64 { return packet.value }\n'
+            'export fn count<T>(packet:UserPacket<T>)->i64 { return len(packet.tail) }\n'
+            'export fn first<T>(packet:UserPacket<T>)->T { return packet.tail[0] }\n', encoding='utf-8')
+        poison_digest = hashlib.sha256(poison.read_bytes()).hexdigest()
+        env = dict(os.environ, XRAY_STDLIB_PATH=str(stdlib), NO_COLOR='1')
+        hidden = dict(env, PATH=str(output / 'no-C-provider'))
+        cases = [
+            ('generic-initializers', 'import "std/io/output" as Lib\n'
+             'import {make,tagged,copied,number,count,first} from "./future-class"\n'
+             'const text=make<string>("A\\0中😀")\nLib.writeStdout(copied(text))\nprint(count<string>(text))\n'
+             'var original=[11,22]\nconst value=tagged<i64>(7,original)\noriginal[0]=99\n'
+             'print(number(value),count<i64>(value),first<i64>(value),original[0])\n',
+             'A\0中😀0\n7 2 11 99\n'.encode('utf-8')),
+            ('nominal', 'import "std/io/output" as Lib\nenum User { Ready, Done }\n'
+             'fn emit<T>(value:T)->T { Lib.writeStdout("A\\0B"); return value }\n'
+             'print(match(emit(User.Ready)){User.Ready->73,User.Done->0})\n'
+             'print(emit(7))\n', b'A\0B73\nA\0B7\n'),
+            ('values', 'import "std/io/output" as Lib\n'
+             'fn emit<T>(value:T)->T { Lib.writeStdout("+"); return value }\n'
+             'print(emit(false),emit(1.5))\n'
+             'const values=emit([11,22])\nprint(values[0],values[1])\n'
+             'var original=[11,22]\nvar returned=emit(original)\nreturned[0]=99\n'
+             'print(original[0],returned[0])\n', b'++false 1.5\n+11 22\n+11 99\n'),
+            ('clocks', 'import time as Lib\n'
+             'const first=Lib.nanos()\nLib.sleep(-1)\nLib.sleep(0)\nLib.sleep(1)\n'
+             'const last=Lib.nanos()\nconst micro=Lib.micros()\nconst milli=Lib.monotonic()\n'
+             'const cpu=Lib.clock()\nconst nextCpu=Lib.clock()\n'
+             'const offset=Lib.localOffset()\nconst oldOffset=Lib.localOffsetAt(0)\n'
+             'print(last-first>=1000000,micro/1000<=milli,nextCpu>=cpu,Lib.now()>0,\n'
+             'offset>=-1440 && offset<=1440,oldOffset>=-1440 && oldOffset<=1440)\n',
+             b'true true true true true true\n'),
+            ('definition-descriptions', 'import "std/io/output" as Lib\n'
+             'import {UserBox,Shade} from "./future-enum"\n'
+             'fn emit<T>(value:UserBox<T>)->string { const label=value.toString(); Lib.writeStdout(label); return label }\n'
+             'print(emit<Shade>(UserBox<Shade>.Full{value:Shade.Light}))\n'
+             'print(emit<i64>(UserBox<i64>.Empty))\n'
+             'const value=UserBox<Shade>.Full{value:Shade.Dark}\n'
+             'print(value.name,value.ordinal)\n',
+             b'UserBox.FullUserBox.Full\nUserBox.EmptyUserBox.Empty\nFull 1\n'),
+        ]
+
+        def invoke(name: str, executable: Path, arguments: list[str], environment: dict) -> subprocess.CompletedProcess:
+            argv = [str(executable), *arguments]
+            result = (process_policy.run(name, argv, environment) if environment is hidden else
+                      subprocess.run(argv, cwd=root, env=environment, capture_output=True, timeout=60))
+            (output / (name + '.stdout')).write_bytes(result.stdout)
+            (output / (name + '.stderr')).write_bytes(result.stderr)
+            records.append(dict(name=name, argv=argv, exit_code=result.returncode,
+                                CLI_child_processes_denied=process_policy.supported and environment is hidden,
+                                stdout_sha256=hashlib.sha256(result.stdout).hexdigest(),
+                                stderr_sha256=hashlib.sha256(result.stderr).hexdigest()))
+            (output / 'commands.json').write_text(json.dumps(records, indent=2)+'\n', encoding='utf-8')
+            return result
+
+        for name, source, expected in cases:
+            entry = output / (name + '.xr')
+            entry.write_text(source, encoding='utf-8')
+            result = invoke(name + '-vm', binary, ['run', str(entry)], hidden)
+            assert (result.returncode, result.stdout, result.stderr) == (0, expected, b''), (name, result)
+            generated = output / (name + '.c')
+            result = invoke(name + '-c', binary, ['build', '--c-only', str(entry), '-o', str(generated)], env)
+            assert result.returncode == 0 and not result.stderr, result.stderr
+            assert b'({' not in generated.read_bytes()
+            native = output / (name + '.exe')
+            result = invoke(name + '-build', binary, ['build', str(entry), '-o', str(native)], env)
+            assert result.returncode == 0 and not result.stderr, result.stderr
+            result = invoke(name + '-native', native, [], hidden)
+            assert (result.returncode, result.stdout, result.stderr) == (0, expected, b''), (name, result)
+        for name, source in [
+            ('private', 'import "std/io/output" as Lib\nprint(Lib.write("private",false))\n'),
+            ('type', 'import "std/io/output" as Lib\nLib.writeStdout(7)\n'),
+            ('private-constant', 'import time as Lib\nprint(Lib.NANOS_PER_MILLI)\n'),
+        ]:
+            entry = output / (name + '.xr')
+            entry.write_text(source, encoding='utf-8')
+            result = invoke(name, binary, ['run', str(entry)], hidden)
+            assert result.returncode == 1 and not result.stdout and result.stderr, result
+        assert hashlib.sha256(poison.read_bytes()).hexdigest() == poison_digest
+        # Both absence and invalid source must consume the same Checked closure.
+        poison.unlink()
+        time_poison.unlink()
+        answers={name:answer for name,_,answer in cases}
+        result = invoke('absent-vm', binary, ['run', str(output / 'nominal.xr')], hidden)
+        assert (result.returncode, result.stdout, result.stderr) == (0, answers['nominal'], b'')
+        result = invoke('absent-clock-vm', binary, ['run', str(output / 'clocks.xr')], hidden)
+        assert (result.returncode, result.stdout, result.stderr) == (0, answers['clocks'], b'')
+        result = invoke('absent-description-vm', binary, ['run', str(output / 'definition-descriptions.xr')], hidden)
+        assert (result.returncode, result.stdout, result.stderr) == (0, answers['definition-descriptions'], b'')
+        result = invoke('absent-initializers-vm', binary, ['run', str(output / 'generic-initializers.xr')], hidden)
+        assert (result.returncode,result.stdout,result.stderr)==(0,answers['generic-initializers'],b'')
+        (output / 'summary.json').write_text(json.dumps(dict(
+            status='CHECKED_OUTPUT_TIME_PRIVATE_CLOSURE_VM_NATIVE_PASS', commands=len(records),
+            source_absent_and_poisoned=True, VM_C_provider_PATH_hidden=True,
+            Windows_absolute_child_denial=process_policy.control,
+            new_user_type='User enum, UserBox<T>/Shade and UserPacket<T> with field-inferred init and Array<T> defaults',
+            owned_user_generic_initializer=True,retained_array_field_COW=True,user_aggregate_CTFE=False,
+            canonical_type_description_consumer='Generic enum toString/name/ordinal with Checked output',
+            library_generic_templates=False,
+            complete_standard_library=False,
+            full_resource_and_safety_qualification='OPEN', production_release=False), indent=2)+'\n', encoding='utf-8')
+        print('Checked output/time: private closure, user generic values, all clock exports, no-source VM/native and rejection PASS')
+        return 0
+    finally:
+        if temporary:
+            temporary.cleanup()
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

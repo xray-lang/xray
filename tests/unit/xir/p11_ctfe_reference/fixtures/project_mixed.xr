@@ -1,0 +1,4 @@
+struct Box { xs:Array<Array<i8>> }
+fn inc(x:ref i8){x=x+2}
+fn value()->i64{var b=Box{xs:[[40]]};inc(ref b.xs[0][0]);return b.xs[0][0] as i64}
+export fn run()->i64{return comptime value()}

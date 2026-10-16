@@ -22,13 +22,11 @@ typedef struct StdlibResourceRun {
 
 static XrXirStatus resource_prepare(const XrXirCompileContext *context,
     const char *root, const char *entry, XrXirArtifact **output) {
-    XrXirLibraryInput input = {xir_stdlib_output_checked,xir_stdlib_output_checked_length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"}},1};
-    memcpy(input.sha256,xir_stdlib_output_checked_sha256,32);
     XrXirLibraryCatalog *catalog = NULL;
     XrCompilerSession *session = NULL;
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirCheckedPacket packet = {0}; XrXirArtifact *decoded = NULL, *closed = NULL;
-    XrXirStatus status = xr_xir_compile_library_catalog_new_v2(context,&input,1,&catalog);
+    XrXirStatus status = xir_stdlib_library_catalog_new(context,root,&catalog);
     if (status != XR_XIR_OK) goto finish;
     XrCompilerSessionStatus session_status = xr_compile_session_new(context->resources,&session);
     if (session_status != XR_COMPILER_SESSION_OK) {
@@ -106,8 +104,10 @@ finish:
 int main(int argc, char **argv) {
     CHECK(argc == 4);
     const XrCompileResourceLimits caps = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
-    bool full = !strcmp(argv[3],"faults"); CHECK(full || !strcmp(argv[3],"measure"));
-    if (!full) CHECK(stdlib_original_main(3,argv) == 0);
+    bool full = !strcmp(argv[3],"faults");
+    bool binding_only = !strcmp(argv[3],"binding-measure");
+    CHECK(full || binding_only || !strcmp(argv[3],"measure"));
+    if (!full && !binding_only) CHECK(stdlib_original_main(3,argv) == 0);
     StdlibResourceRun normal = resource_run(argv[1],argv[2],caps,SIZE_MAX);
     CHECK(normal.status == XR_XIR_OK && normal.phase == 1 && !normal.injected);
     CHECK(normal.attempts == normal.bind_sites && normal.attempts);

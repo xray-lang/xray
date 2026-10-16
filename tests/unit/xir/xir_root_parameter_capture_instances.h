@@ -119,7 +119,7 @@ static void rci_fixture(RootCaptureFixture *f, const RootCaptureCase *probe) {
         f->init[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=9};
         f->init[1]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={0,0}};
         f->init[2]=(XrXirInstruction){.op=XR_XIR_RETURN};f->init_block.count=3;
-        f->slot=(XrXirSlot){0,XR_XIR_I64,1};f->declarations.slots=&f->slot;f->declarations.slot_count=1;
+        f->slot=(XrXirSlot){0,XR_XIR_I64,1,0,0};f->declarations.slots=&f->slot;f->declarations.slot_count=1;
     }
     f->functions[4]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=f->init,.instruction_count=f->init_block.count,.blocks=&f->init_block,.block_count=1};
@@ -160,7 +160,8 @@ static void rci_shape(const XrXirArtifact *artifact, const RootCaptureCase *prob
     CHECK(proof);
     XrXirEffects *effects=NULL;
     CHECK(xr_xir_compile_effects_analyze(artifact,&effects)==XR_XIR_OK && effects);
-    const XrXirRootEffects *facts=xr_xir_effects_root(effects,factory);
+    XrXirEffectFacts facts_read=xr_xir_effects_read(effects,factory);
+    const XrXirRootEffects *facts=(facts_read.status==XR_XIR_OK?&facts_read.root:NULL);
     CHECK(facts && facts->requires_root==(probe->invoke && !!(probe->closure_flags&4)) &&
         facts->unresolved==(probe->invoke && !!(probe->closure_flags&8)));
     xr_xir_compile_effects_free(effects);

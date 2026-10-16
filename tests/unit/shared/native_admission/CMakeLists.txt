@@ -17,3 +17,7 @@ endif()
 enable_testing()
 add_test(NAME test_native_declaration_admission COMMAND test_native_declaration_admission)
 set_tests_properties(test_native_declaration_admission PROPERTIES LABELS "unit;compiler;budget" TIMEOUT 60)
+# Test environment properties belong to this directory, not its parent.
+if(COMMAND xray_prepend_windows_asan_runtime_to_directory_tests)
+    xray_prepend_windows_asan_runtime_to_directory_tests()
+endif()

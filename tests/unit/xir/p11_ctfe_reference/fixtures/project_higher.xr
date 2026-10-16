@@ -1,0 +1,4 @@
+fn inc(x:ref i64)->i64{x=x+2;return x}
+fn apply(f:fn(ref i64)->i64,x:ref i64)->i64{return f(ref x)}
+fn value()->i64{var xs=[40];return apply(inc,ref xs[0])}
+export fn run()->i64{return comptime value()}

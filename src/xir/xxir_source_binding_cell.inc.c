@@ -42,8 +42,11 @@ static bool source_binding_read(SourceContext *ctx, const SourceName *symbol, So
         *value = (SourceValue){symbol->index, symbol->type};
         return true;
     }
-    return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_SLOT_LOAD, symbol->type,
-        {0}, {0}, symbol->index, {0}}, value);
+    if (!source_recipe_record(ctx, (XrXirInstruction){XR_XIR_SLOT_LOAD, symbol->type,
+        {0}, {0}, symbol->index, {0}}, symbol->type == XR_XIR_UNIT ? NULL : value)) return false;
+    if (symbol->type == XR_XIR_UNIT)
+        return source_recipe_record(ctx, (XrXirInstruction){XR_XIR_TUPLE_NEW,XR_XIR_UNIT,{0},{0},0,{0}}, value);
+    return true;
 }
 static bool source_binding_write(SourceContext *ctx, const SourceName *symbol, SourceValue value) {
     if (symbol->kind == SOURCE_UNIT_LOCAL) return true;

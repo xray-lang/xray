@@ -8,7 +8,7 @@
  */
 static XrXirStatus library_state_task_i64_map_operation(const XrXirCompileContext *context,void *opaque) {
     (void)opaque;SourceContext ctx={0};ctx.compile=*context;ctx.slot_count=5;
-    XrXirSlot slots[3]={{0,XR_XIR_I64,1},{1,XR_XIR_I64,1},{1,XR_XIR_STRING,1}};
+    XrXirSlot slots[3]={{0,XR_XIR_I64,1,0,0},{1,XR_XIR_I64,1,0,0},{1,XR_XIR_STRING,1,0,0}};
     XrXirDeclarations declarations={.slots=slots,.slot_count=3};
     XrXirModule library={.declarations=&declarations};uint32_t modules[2]={UINT32_MAX,4};
     SourceLibraryMap map={.modules=modules,.module_count=2};

@@ -4433,6 +4433,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_return_copy.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_probe.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_performance.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_build.cmake")
 add_executable(test_xir_array_capacity_checked xir/test_xir_array_capacity_checked.c)
 target_link_libraries(test_xir_array_capacity_checked PRIVATE xray_xir)
 foreach(capacity_core_target test_xir_array_capacity_core test_xir_array_capacity_checked)
@@ -4578,8 +4579,18 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)
 
 add_subdirectory(xir/p10_reference)
 add_subdirectory(xir/p11_ctfe_reference)
+add_subdirectory(xir/p11_generic_prefix)
+add_subdirectory(xir/p11_source_receiving)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_graph_quiescence.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/effect_physical_records.cmake)
+add_subdirectory(xir/unit_values)
+add_subdirectory(xir/export_constants)
+
+add_subdirectory(xir/rest_declarations)

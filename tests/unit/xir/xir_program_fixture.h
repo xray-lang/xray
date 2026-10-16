@@ -96,9 +96,9 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
     const XrXirSourceModule modules[] = {
         {"root", 4, imports, 2, 0, 0}, {"beta", 4, NULL, 0, 1, 0}, {"alpha", 5, NULL, 0, 2, 0}
     };
-    const XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
-    const XrXirSlot slots[] = {{2, atomic, 0}, {1, atomic, 0},
-        {2, XR_XIR_STRING, 0}, {1, XR_XIR_STRING, 0}, {0, string_cell, 1}};
+    const XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {1, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
+    const XrXirSlot slots[] = {{2, atomic, 0,0,0}, {1, atomic, 0,0,0},
+        {2, XR_XIR_STRING, 0,0,0}, {1, XR_XIR_STRING, 0,0,0}, {0, string_cell, 1,0,0}};
     const XrXirLiteral literals[] = {{"A\0\xe4\xb8\xad", 5}, {"B\xf0\x9f\x98\x80", 5}, {"root", 4}, {"updated", 7}, {NULL, 0}};
     const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3, NULL};
     ErrorFixture error; error_fixture_init(&error,false);

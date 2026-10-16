@@ -69,15 +69,15 @@ static void ei_fixture(InvocationErrorFixture *fixture,unsigned mode) {
 
 static void ei_golden(const XrXirEffects *e,unsigned mode) {
     static const uint64_t errors[EI_CASES]={0,8,0,1,8,1};
-    CHECK(mode<EI_CASES && e && e->count==4 && e->words==1 && e->atom_count==2);
-    CHECK(!e->errors[0] && e->errors[1]==errors[mode] && e->errors[3]==8);
-    CHECK(e->errors[2]==(mode==1 || mode==2?8u:0u));
+    CHECK(mode<EI_CASES && e && e->count==4 && effect_final_outcomes(e)->words==1 && effect_final_outcomes(e)->atom_count==2);
+    CHECK(!effect_final_outcomes(e)->errors[0] && effect_final_outcomes(e)->errors[1]==errors[mode] && effect_final_outcomes(e)->errors[3]==8);
+    CHECK(effect_final_outcomes(e)->errors[2]==(mode==1 || mode==2?8u:0u));
     CHECK(xr_xir_effects_error_unknown(e,1)==(mode==3 || mode==5));
     CHECK(!xr_xir_effects_error_unidentified(e,1));
     CHECK(!xr_xir_effects_error(e,1,(XrXirType)EE_ENUM,0));
     CHECK(xr_xir_effects_error(e,1,(XrXirType)EE_ENUM,1)==(mode==1 || mode==4));
-    CHECK(e->task_errors[1]==(mode==3 || mode==5?XR_XIR_BAD_TYPE:XR_XIR_OK));
-    CHECK(e->functions[1].throws==(mode==3 || mode==5?XR_XIR_EFFECT_UNKNOWN:
+    CHECK(effect_final_outcomes(e)->task_errors[1]==(mode==3 || mode==5?XR_XIR_BAD_TYPE:XR_XIR_OK));
+    CHECK(effect_final_outcomes(e)->functions[1].throws==(mode==3 || mode==5?XR_XIR_EFFECT_UNKNOWN:
         mode==1 || mode==4?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
 }
 

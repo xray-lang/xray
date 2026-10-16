@@ -57,7 +57,7 @@ static XrXirStatus effect_scalar_returns(EffectScalarFlow *flow) {
 
 static uint32_t effect_scalar_flags_join(uint32_t left, uint32_t right) {
     uint32_t root=(left|right)&(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-    return (left&right&XR_XIR_CALLABLE_NO_SUSPEND) | (root ? root : XR_XIR_CALLABLE_ROOT_NONE);
+    return (left&right&(XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_VARIADIC)) | (root ? root : XR_XIR_CALLABLE_ROOT_NONE);
 }
 
 static XrXirStatus effect_scalar_bound(EffectTerms *terms,
@@ -67,7 +67,7 @@ static XrXirStatus effect_scalar_bound(EffectTerms *terms,
     const XrXirTypeNode *second=xr_xir_callable_signature(&terms->types,right);
     if (!first || !second) return XR_XIR_BAD_TYPE;
     XrXirTypeNode a=*first,b=*second;
-    if (a.parameter_count!=b.parameter_count) return XR_XIR_BAD_TYPE;
+    if (a.parameter_count!=b.parameter_count || ((a.flags^b.flags)&XR_XIR_CALLABLE_VARIADIC)) return XR_XIR_BAD_TYPE;
     XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
     XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,
         &terms->types,&terms->types,NULL,0,a.result,b.result,scratch);
@@ -161,13 +161,13 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
     XrXirTypeNode bound=*signature;
     const EffectOrdinaryContexts *contexts=flow->contexts;
     if (!contexts || contexts->uses.resources!=flow->terms->remaining->resources ||
-        !contexts->uses.root || !contexts->uses.constant_witnesses || !contexts->uses.formula_terminals ||
+        !contexts->uses.outcomes_work.root || !contexts->uses.constant_witnesses || !contexts->uses.formula_terminals ||
         contexts->terms.types.nodes!=flow->terms->types.nodes || op.immediate<0 ||
-        (uint64_t)op.immediate>=contexts->count || !contexts->uses.contracts)
+        (uint64_t)op.immediate>=contexts->count || !contexts->uses.outcomes_work.contracts)
         return XR_XIR_BAD_STRUCTURE;
     if (op.args[1] && (!flow->function->operands || op.args[0]>flow->function->operand_count ||
         op.args[1]>flow->function->operand_count-op.args[0])) return XR_XIR_BAD_STRUCTURE;
-    const XrXirFunctionEffectContract *callee=&contexts->uses.contracts[op.immediate];
+    const XrXirFunctionEffectContract *callee=&contexts->uses.outcomes_work.contracts[op.immediate];
     if (op.args[1]>callee->parameter_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=callee->formula.constant_mask;
     /* The dense owner has already authenticated this real capture edge and
@@ -178,7 +178,7 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
             &contexts->uses,(uint32_t)(flow->function-contexts->functions),instruction,
             (uint32_t)op.immediate,&mask);
         if (status!=XR_XIR_OK) return status;
-        bound.flags=(bound.flags&XR_XIR_CALLABLE_NO_SUSPEND)|(mask?mask:XR_XIR_CALLABLE_ROOT_NONE);
+        bound.flags=(bound.flags&(XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_VARIADIC))|(mask?mask:XR_XIR_CALLABLE_ROOT_NONE);
         XrXirType actual=effect_term_intern(flow->terms,bound);
         if (flow->terms->status!=XR_XIR_OK) return flow->terms->status;
         return effect_scalar_assign(flow,destination,actual);
@@ -198,7 +198,7 @@ static XrXirStatus effect_scalar_capture(EffectScalarFlow *flow, uint32_t instru
         if (!actual) return XR_XIR_BAD_TYPE;
         mask|=actual->flags&(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED);
     }
-    bound.flags=(bound.flags&XR_XIR_CALLABLE_NO_SUSPEND)|(mask ? mask : XR_XIR_CALLABLE_ROOT_NONE);
+    bound.flags=(bound.flags&(XR_XIR_CALLABLE_NO_SUSPEND|XR_XIR_CALLABLE_VARIADIC))|(mask ? mask : XR_XIR_CALLABLE_ROOT_NONE);
     XrXirType actual=effect_term_intern(flow->terms,bound);
     if (flow->terms->status!=XR_XIR_OK) return flow->terms->status;
     return effect_scalar_assign(flow,destination,actual);

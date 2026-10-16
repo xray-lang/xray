@@ -55,8 +55,8 @@ static XrXirStatus conditional_metadata_roots(const XrXirCompileContext *context
     if (module->function_count!=4) return XR_XIR_BAD_STRUCTURE;
     XrXirRootEffects ar[4]={0},br[4]={0};
     XrXirRootEffectWitness aw[4]={0},bw[4]={0},au[4]={0},bu[4]={0};
-    XrXirEffects raw={.count=4,.root=ar,.root_witnesses=aw,.unresolved_witnesses=au};
-    XrXirEffects metadata={.count=4,.root=br,.root_witnesses=bw,.unresolved_witnesses=bu};
+    XrXirEffects raw={.count=4,.outcomes_work={.root=ar,.root_witnesses=aw,.unresolved_witnesses=au}};
+    XrXirEffects metadata={.count=4,.outcomes_work={.root=br,.root_witnesses=bw,.unresolved_witnesses=bu}};
     XirMetadataDomain domain=xir_metadata_domain_from_module(module);
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t f=0;f<4 && status==XR_XIR_OK;++f) {

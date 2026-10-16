@@ -206,6 +206,18 @@ done:
     if (status!=XR_XIR_OK) { generation_record_free(record);return status; }
     owner->pending=record;*serial=reserved;return XR_XIR_OK;
 }
+static XrXirStatus generation_constant_name(const XrXirCompileContext *context,
+    const XrXirDeclarations *from,const XrXirSlot *a,const XrXirDeclarations *to,const XrXirSlot *b) {
+    if (a->exported!=b->exported) return XR_XIR_BAD_STRUCTURE;
+    if (!a->exported) return a->name || b->name ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+    if (a->name>=from->literal_count || b->name>=to->literal_count || !from->literals || !to->literals)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirLiteral *left=&from->literals[a->name],*right=&to->literals[b->name];
+    if (!left->length || left->length!=right->length || !left->bytes || !right->bytes)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,left->length)) return XR_XIR_BUDGET;
+    return memcmp(left->bytes,right->bytes,left->length) ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
+}
 /* Common specialization preserves module and slot ordinals. Complete code
  * matching above those tables binds the actual closed pools; no name search
  * or type-shape comparison creates this receiving correspondence. */
@@ -246,6 +258,8 @@ static XrXirStatus generation_program_correspondence(const XrXirCompileContext *
         const XrXirSlot *from=&before->declarations->slots[s],*to=&after->declarations->slots[target];
         if (from->module>=map->module_count || to->module!=map->modules[from->module] ||
             from->mutable!=to->mutable) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus name=generation_constant_name(context,before->declarations,from,after->declarations,to);
+        if (name!=XR_XIR_OK) return name;
         XrXirType type=from->type;
         if ((uint32_t)type>=XR_XIR_TYPE_PARAMETER_BASE) return XR_XIR_BAD_TYPE;
         if ((uint32_t)type>=XR_XIR_CONSTRUCTED_TYPE_BASE) {

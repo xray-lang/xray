@@ -69,7 +69,8 @@ static XrXirArtifact *effect_fixture(bool suspends) {
     return artifact;
 }
 static void effect_expect(const XrXirEffects *effects, uint32_t f, XrXirEffect suspend, XrXirEffect throws) {
-    const XrXirFunctionEffects *fact = xr_xir_effects_function(effects, f);
+    XrXirEffectFacts fact_read=xr_xir_effects_read(effects, f);
+    const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);
     CHECK(fact && fact->suspend == suspend && fact->throws == throws);
 }
 static size_t effect_failures(XrXirArtifact *artifact) {
@@ -103,8 +104,10 @@ static void effect_cases(bool suspends) {
         CHECK(effect_analyze(stage ? lowered : artifact, &effects) == XR_XIR_OK);
         effect_witness_paths(xr_xir_compile_artifact_module(stage ? lowered : artifact), effects);
         if (suspends) {
-            const XrXirEffectWitness *a = xr_xir_effects_suspend_witness(effects, 0);
-            const XrXirEffectWitness *b = xr_xir_effects_suspend_witness(effects, 1);
+            XrXirEffectFacts a_read=xr_xir_effects_read(effects, 0);
+            const XrXirEffectWitness *a=(a_read.status==XR_XIR_OK && a_read.suspend_witness.cause!=0?&a_read.suspend_witness:NULL);
+            XrXirEffectFacts b_read=xr_xir_effects_read(effects, 1);
+            const XrXirEffectWitness *b=(b_read.status==XR_XIR_OK && b_read.suspend_witness.cause!=0?&b_read.suspend_witness:NULL);
             CHECK(a && a->instruction == 0 && a->callee == 1 && a->distance == 1);
             CHECK(b && b->instruction == 1 && b->distance == 0);
         }
@@ -114,7 +117,7 @@ static void effect_cases(bool suspends) {
         effect_expect(effects, 3, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_NONE);
         effect_expect(effects, 4, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
         effect_expect(effects, 5, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_NONE);
-        CHECK(!xr_xir_effects_function(effects, 8)); effect_summary_free(effects); CHECK(effect_balanced());
+        CHECK(!(xr_xir_effects_read(effects, 8).status==XR_XIR_OK)); effect_summary_free(effects); CHECK(effect_balanced());
     }
     effect_artifact_free(lowered);
     size_t sites = effect_failures(artifact);
@@ -123,7 +126,8 @@ static void effect_cases(bool suspends) {
     CHECK(effect_analyze(artifact, &effects) == XR_XIR_OK);
     effect_artifact_free(artifact);
     effect_expect(effects, 4, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
-    const XrXirEffectWitness *owned = xr_xir_effects_suspend_witness(effects, 4);
+    XrXirEffectFacts owned_read=xr_xir_effects_read(effects, 4);
+    const XrXirEffectWitness *owned=(owned_read.status==XR_XIR_OK && owned_read.suspend_witness.cause!=0?&owned_read.suspend_witness:NULL);
     CHECK(owned && owned->cause == XR_XIR_EFFECT_CAUSE_INDIRECT && owned->instruction == 0);
     effect_summary_free(effects); CHECK(effect_balanced());
     printf("Control effects: cycle seed %u, %zu allocation failure sites released\n", suspends, sites);
@@ -154,7 +158,7 @@ static void effect_long_cycle(void) {
     for (uint32_t f = 0; f < COUNT; ++f) effect_expect(effects, f, XR_XIR_EFFECT_MAY, XR_XIR_EFFECT_NONE);
     effect_witness_paths(xr_xir_compile_artifact_module(artifact), effects);
     for (uint32_t f = 0; f < COUNT; ++f)
-        CHECK(xr_xir_effects_suspend_witness(effects, f)->distance == COUNT - 1 - f);
+        CHECK(xr_xir_effects_read(effects, f).suspend_witness.distance == COUNT - 1 - f);
     effect_summary_free(effects); effects = NULL; CHECK(effect_balanced());
     effect_analysis_work_cut(artifact,0,true);
     effect_budget_boundaries(artifact);
@@ -179,7 +183,7 @@ static void effect_enum_ownership(void) {
     printf("Error atoms: %zu allocation failure sites released across checked and lowered\n",sites);
 }
 static void effect_extreme_budgets(void) {
-    XrXirEffects effects={0}; effects.words=UINT32_MAX/64+1; effects.atom_count=UINT32_MAX-1;
+    XrXirEffects effects={0}; effects.outcomes_work.words=UINT32_MAX/64+1; effects.outcomes_work.atom_count=UINT32_MAX-1;
     XrXirFunction function={0}; function.parameter_count=UINT32_MAX-1; function.instruction_count=1;
     function.block_count=UINT32_MAX;
     XrXirModule module={0}; module.functions=&function; module.function_count=1;
@@ -187,7 +191,7 @@ static void effect_extreme_budgets(void) {
     flow.effects=&effects;flow.remaining=&effect_context;
     EffectMark mark=effect_mark(); attempts=0;
     CHECK(error_function(&flow,0)==XR_XIR_BUDGET && !attempts); effect_mark_check(mark);
-    flow.values=UINT32_MAX; flow.stride=(size_t)UINT32_MAX*effects.words;
+    flow.values=UINT32_MAX; flow.stride=(size_t)UINT32_MAX*effects.outcomes_work.words;
     CHECK(error_edge(&flow,0,0,NULL,true)==XR_XIR_BUDGET && !attempts); effect_mark_check(mark);
 
 }
@@ -251,12 +255,12 @@ static void effect_missing_errors(bool wide) {
     XrXirArtifact *artifact = effect_missing_fixture(wide);
     size_t sites = effect_failures(artifact); XrXirEffects *effects = NULL;
     CHECK(effect_analyze(artifact, &effects) == XR_XIR_OK);
-    CHECK(effects->words == (wide ? 2u : 1u));
-    CHECK(effects->atom_count == (wide ? 63u : 4u));
+    CHECK(effect_final_outcomes(effects)->words == (wide ? 2u : 1u));
+    CHECK(effect_final_outcomes(effects)->atom_count == (wide ? 63u : 4u));
     effect_expect(effects, 1, XR_XIR_EFFECT_NONE, XR_XIR_EFFECT_MAY);
     CHECK(!xr_xir_effects_error_unknown(effects, 1) && !xr_xir_effects_error_unidentified(effects, 1));
     CHECK(!xr_xir_effects_error(effects, 1, (XrXirType)257, 1));
-    CHECK(error_bit(effects->errors + effects->words, effects->atom_count + 1));
+    CHECK(error_bit(effect_final_outcomes(effects)->errors + effect_final_outcomes(effects)->words, effect_final_outcomes(effects)->atom_count + 1));
     effect_artifact_free(artifact);
     CHECK(xr_xir_effects_error(effects, 2, (XrXirType)256, 1));
     effect_summary_free(effects); CHECK(effect_balanced());
@@ -373,10 +377,11 @@ static void effect_witness_competition(void) {
     XrXirEffects *effects = NULL;
     CHECK(effect_analyze(artifact, &effects) == XR_XIR_OK);
     effect_witness_paths(xr_xir_compile_artifact_module(artifact), effects);
-    const XrXirEffectWitness *w = xr_xir_effects_suspend_witness(effects, 2);
+    XrXirEffectFacts w_read=xr_xir_effects_read(effects, 2);
+    const XrXirEffectWitness *w=(w_read.status==XR_XIR_OK && w_read.suspend_witness.cause!=0?&w_read.suspend_witness:NULL);
     CHECK(w && w->cause == XR_XIR_EFFECT_CAUSE_CALL && w->distance == 1);
     CHECK(w->callee == 1 && w->instruction == 3);
-    CHECK(xr_xir_effects_function(effects, 2)->suspend == XR_XIR_EFFECT_MAY);
+    CHECK(xr_xir_effects_read(effects, 2).control.suspend == XR_XIR_EFFECT_MAY);
     effect_summary_free(effects); CHECK(effect_balanced());
     CHECK(effect_failures(artifact) > 0);
     effect_artifact_free(artifact);
@@ -478,7 +483,8 @@ static void effect_mixed_callable_witness(void) {
     XrXirEffects *effects = NULL;
     CHECK(effect_analyze(checked, &effects) == XR_XIR_OK);
     effect_expect(effects, 2, XR_XIR_EFFECT_UNKNOWN, XR_XIR_EFFECT_UNKNOWN);
-    const XrXirEffectWitness *w = xr_xir_effects_suspend_witness(effects, 2);
+    XrXirEffectFacts w_read=xr_xir_effects_read(effects, 2);
+    const XrXirEffectWitness *w=(w_read.status==XR_XIR_OK && w_read.suspend_witness.cause!=0?&w_read.suspend_witness:NULL);
     CHECK(w && w->instruction == 1 && w->cause == XR_XIR_EFFECT_CAUSE_INDIRECT);
     effect_summary_free(effects); CHECK(effect_balanced());
     effect_artifact_free(checked); effect_artifact_free(base);
@@ -553,7 +559,7 @@ int main(void) {
     CHECK(xr_xir_compile_effects_analyze(NULL,&effects) == XR_XIR_BAD_STRUCTURE && !effects);
     XrXirEffects *sentinel=(XrXirEffects *)(uintptr_t)1;
     CHECK(xr_xir_compile_effects_analyze(NULL,&sentinel)==XR_XIR_BAD_STRUCTURE && sentinel==(XrXirEffects *)(uintptr_t)1);
-    CHECK(!xr_xir_effects_function(NULL,0));
+    CHECK(!(xr_xir_effects_read(NULL,0).status==XR_XIR_OK));
     CHECK(!live && !live_bytes);
     puts("Control effect fixed points, error edges and physical ownership passed");
     return 0;

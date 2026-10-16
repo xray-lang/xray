@@ -12,10 +12,19 @@
  */
 #include "xxir_metadata_domain_internal.h"
 
+/* Declaration IDs retain their public function admission. Private ordinary
+ * environments and invocation keys share the existing finite equation bound;
+ * every descriptor and expansion still consumes the original resource ledger. */
+static uint32_t effect_body_entry_limit(const XrXirCompileContext *work) {
+    uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
+    return maximum>UINT32_MAX?UINT32_MAX:(uint32_t)maximum;
+}
+
 enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023 };
-/* The sole owned representation is an actual affine record. Inactive delta
- * slots are neither initialized nor read. No summary, authority or pointer to
- * the generating Module is retained by a record. */
+/* One row stores only its base. Two rows store all ten literal second-row
+ * words under the full mask; longer runs store nonzero affine differences in
+ * selected slots. Other slots are never read. No record retains authority or
+ * a pointer to its generating Module. */
 typedef struct EffectBodyRun {
     uint32_t first,count,mask;
     XrXirInstruction base;

@@ -1,0 +1,4 @@
+fn index(x:ref i64)->i64{x=x+1;return 0}
+fn inc(x:ref i64){x=x+2}
+fn value()->i64{var count=0;var xs=[40];inc(ref xs[index(ref count)]);return count==1 && xs[0]==42 ? 42 : 0}
+export fn run()->i64{return comptime value()}

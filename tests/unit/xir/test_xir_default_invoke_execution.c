@@ -62,7 +62,8 @@ static XrXirStatus default_invoke_effects(XrXirArtifact *checked) {
         const XrXirFunction *function=&module->functions[f];
         bool escaping=function->name_length==8 && !memcmp(function->name,"escaping",8);
         bool yielding=function->name_length==10 && !memcmp(function->name,"yieldCatch",10);
-        const XrXirFunctionEffects *fact=xr_xir_effects_function(effects,f);CHECK(fact);
+        XrXirEffectFacts fact_read=xr_xir_effects_read(effects,f);
+        const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);CHECK(fact);
         CHECK(fact->throws==(escaping ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
         CHECK(fact->suspend==(yielding ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
     }

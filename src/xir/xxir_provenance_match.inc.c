@@ -402,7 +402,8 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
             if (identity->module != actual->module || ((!c->effects || is_default) ? identity->exported : 0) != actual->exported ||
                 identity->nominal_owner != actual->nominal_owner || identity->member_access != actual->member_access ||
                 identity->promises != actual->promises || identity->method_kind != actual->method_kind ||
-                identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds)
+                identity->test_role != actual->test_role || identity->test_timeout_seconds != actual->test_timeout_seconds ||
+                identity->variadic != actual->variadic)
                 return XR_XIR_BAD_STRUCTURE;
             if (!!identity->cleanup_owner != !!actual->cleanup_owner) return XR_XIR_BAD_STRUCTURE;
             if (identity->cleanup_owner) {
@@ -647,7 +648,9 @@ static XrXirStatus provenance_declarations(ProvenanceMatch *c) {
         if (status != XR_XIR_OK) return status;
     }
     for (uint32_t s = 0; s < a->slot_count; ++s) {
-        if (a->slots[s].module != b->slots[s].module || a->slots[s].mutable != b->slots[s].mutable)
+        if (!xir_compile_work(c->remaining,4)) return XR_XIR_BUDGET;
+        if (a->slots[s].module != b->slots[s].module || a->slots[s].mutable != b->slots[s].mutable ||
+            a->slots[s].exported != b->slots[s].exported || a->slots[s].name != b->slots[s].name)
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, NULL, 0, a->slots[s].type, b->slots[s].type, &c->scratch);
         if (status != XR_XIR_OK) return status;

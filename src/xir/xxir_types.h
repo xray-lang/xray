@@ -13,12 +13,13 @@
 #define XXIR_TYPES_H
 #include "xxir.h"
 #include "xxir_nominal.h"
+#include "xxir_type_description.h"
 #include "../shared/xr_param_mode.h"
 /* Closed bounds and control promises are independent; omitted root bits never
  * become a no-effect proof, even for otherwise well-shaped old descriptors. */
 static inline bool xr_xir_callable_flags_valid(uint32_t flags) {
     uint32_t root = flags & XR_XIR_CALLABLE_ROOT_MASK;
-    return !(flags & ~(XR_XIR_CALLABLE_ROOT_MASK | XR_XIR_CALLABLE_NO_SUSPEND)) &&
+    return !(flags & ~(XR_XIR_CALLABLE_ROOT_MASK | XR_XIR_CALLABLE_NO_SUSPEND | XR_XIR_CALLABLE_VARIADIC)) &&
         (root == XR_XIR_CALLABLE_ROOT_NONE || root == XR_XIR_CALLABLE_ROOT_REQUIRED ||
          root == XR_XIR_CALLABLE_ROOT_UNRESOLVED ||
          root == (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED));
@@ -27,6 +28,7 @@ static inline bool xr_xir_callable_flags_valid(uint32_t flags) {
  * can acquire the missing proof through a conversion. Nested types stay exact. */
 static inline bool xr_xir_callable_flags_compatible(uint32_t source, uint32_t target) {
     if (!xr_xir_callable_flags_valid(source) || !xr_xir_callable_flags_valid(target) ||
+        ((source^target)&XR_XIR_CALLABLE_VARIADIC) ||
         ((target & XR_XIR_CALLABLE_NO_SUSPEND) && !(source & XR_XIR_CALLABLE_NO_SUSPEND))) return false;
     return (target & XR_XIR_CALLABLE_ROOT_UNRESOLVED) ||
         (!(source & XR_XIR_CALLABLE_ROOT_UNRESOLVED) &&
@@ -37,13 +39,15 @@ static inline bool xr_xir_callable_root_accepts(bool requires_root, bool unresol
         (unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0);
     if (!source) source = XR_XIR_CALLABLE_ROOT_NONE;
     return xr_xir_callable_flags_valid(flags) &&
-        xr_xir_callable_flags_compatible(source, flags & ~XR_XIR_CALLABLE_NO_SUSPEND);
+        xr_xir_callable_flags_compatible(source | (flags & XR_XIR_CALLABLE_VARIADIC), flags & ~XR_XIR_CALLABLE_NO_SUSPEND);
 }
 /* NONE is neutral, rather than an extra fact to bitwise-OR into a join. */
 static inline bool xr_xir_callable_flags_join(uint32_t left, uint32_t right, uint32_t *output) {
-    if (!output || !xr_xir_callable_flags_valid(left) || !xr_xir_callable_flags_valid(right)) return false;
+    if (!output || !xr_xir_callable_flags_valid(left) || !xr_xir_callable_flags_valid(right) ||
+        ((left^right)&XR_XIR_CALLABLE_VARIADIC)) return false;
     uint32_t root = (left | right) & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-    *output = (root ? root : XR_XIR_CALLABLE_ROOT_NONE) | (left & right & XR_XIR_CALLABLE_NO_SUSPEND);
+    *output = (root ? root : XR_XIR_CALLABLE_ROOT_NONE) |
+        (left & right & XR_XIR_CALLABLE_NO_SUSPEND) | (left & XR_XIR_CALLABLE_VARIADIC);
     return true;
 }
 XR_FUNC const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type);
@@ -62,6 +66,15 @@ XR_FUNC XrXirType xr_xir_task_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_task_parameter_supported(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_atomic_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type);
+/* Raw callable conversion must reject a forged rest bit even for equal IDs.
+ * Full type admission separately checks the Array's owned element graph. */
+static inline bool xr_xir_callable_rest_shape(const XrXirTypes *types,const XrXirTypeNode *signature) {
+    if (!signature) return false;
+    if (!(signature->flags&XR_XIR_CALLABLE_VARIADIC)) return true;
+    if (!signature->parameter_count || signature->parameter_count>65536 || !signature->parameters) return false;
+    const XrXirCallableParameter *last=&signature->parameters[signature->parameter_count-1];
+    return last->mode==XR_PARAM_READ && xr_xir_type_is_array(types,last->type);
+}
 XR_FUNC bool xr_xir_type_is_nullable(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_nullable_element(const XrXirTypes *types, XrXirType type);
 /* Bounded closed class storage capability; grants no access or generic proof. */

@@ -100,7 +100,7 @@ static void cell_proof_rejections(void) {
     CHECK(xr_xir_cell_provenance_origin(proof,3,0) == XR_XIR_CELL_ORIGIN_OWNED);
     xr_xir_compile_cell_provenance_free(proof);
     cell_proof_fixture(&fixture);
-    XrXirSlot slot = {0,(XrXirType)256,1}; fixture.declarations.slots = &slot; fixture.declarations.slot_count = 1;
+    XrXirSlot slot = {0,(XrXirType)256,1,0,0}; fixture.declarations.slots = &slot; fixture.declarations.slot_count = 1;
     XrXirInstruction initializer[] = {
         {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},7,{0}},
         {XR_XIR_CELL_NEW,(XrXirType)256,{0},{0},0,{0}},

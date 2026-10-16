@@ -1,0 +1,3 @@
+class Node{value:i64;next:Node?;init(value:i64,next:Node?){this.value=value;this.next=next}}
+fn answer()->i64{const a=Node(40,null);a.next=a;return a.value}
+export fn run()->i64{return comptime answer()}

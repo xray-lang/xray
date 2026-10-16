@@ -37,7 +37,7 @@ def main():
     assert len(model['records']) == 10
     for value, file, macro in (
         (29,'xxir_checked.h','XR_XIR_CHECKED_SCHEMA'),
-        (75,'xxir_checked.h','XR_XIR_CHECKED_CONTRACT'),
+        (76,'xxir_checked.h','XR_XIR_CHECKED_CONTRACT'),
         (24,'xxir_value.h','XR_XIR_VALUE_ABI_VERSION'),
         (29,'xxir_call.h','XR_XIR_CALL_ABI_VERSION'),
         (31,'xxir_program.h','XR_XIR_PROGRAM_ABI_VERSION'),
@@ -79,7 +79,7 @@ def main():
         assert literal(header,role+'_policy73')==hashlib.sha256(frame).digest()
     for role in ('linked','original'):
         prefix=(role+'_source').encode('ascii')
-        frame=DOMAIN+struct.pack('<7I',1,29,75,24,29,31,len(prefix))+prefix
+        frame=DOMAIN+struct.pack('<7I',1,29,76,24,29,31,len(prefix))+prefix
         assert literal(header,role+'_policy_value24_preimage')==frame
         assert literal(header,role+'_policy_value24')==hashlib.sha256(frame).digest()
     print(json.dumps({'status':'INDEPENDENT_CURRENT28_74_FULL_FRAMES_PASS',

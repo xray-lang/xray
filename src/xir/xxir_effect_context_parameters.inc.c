@@ -35,11 +35,11 @@ static void effect_ordinary_free(EffectOrdinaryContexts *contexts) {
     xr_xir_compile_declarations_free(contexts->source_declarations);
     xr_xir_compile_generics_free(contexts->source_generics,contexts->base_count);
     effect_parameters_free(&contexts->uses);
-    xr_compile_resources_free(contexts->uses.root);
-    xr_compile_resources_free(contexts->uses.root_witnesses);
-    xr_compile_resources_free(contexts->uses.unresolved_witnesses);
-    xr_compile_resources_free(contexts->uses.functions);
-    xr_compile_resources_free(contexts->uses.task_creation);
+    xr_compile_resources_free(contexts->uses.outcomes_work.root);
+    xr_compile_resources_free(contexts->uses.outcomes_work.root_witnesses);
+    xr_compile_resources_free(contexts->uses.outcomes_work.unresolved_witnesses);
+    xr_compile_resources_free(contexts->uses.outcomes_work.functions);
+    xr_compile_resources_free(contexts->uses.outcomes_work.task_creation);
     xr_compile_resources_free(contexts->nodes);
     xr_compile_resources_free(contexts->functions);
     effect_terms_free(&contexts->terms);
@@ -63,7 +63,7 @@ static void *effect_ordinary_descriptor_alloc(EffectOrdinaryContexts *contexts,
 static XrXirStatus effect_ordinary_capacity(EffectOrdinaryContexts *contexts, uint32_t needed) {
     if (contexts->terms.status!=XR_XIR_OK) return contexts->terms.status;
     if (needed<=contexts->capacity) return XR_XIR_OK;
-    uint32_t maximum=contexts->terms.remaining->limits.functions;
+    uint32_t maximum=effect_body_entry_limit(contexts->terms.remaining);
     if (needed>maximum) { contexts->terms.status=XR_XIR_BUDGET;return contexts->terms.status; }
     uint32_t capacity=contexts->capacity<8 ? 8 : contexts->capacity;
     while (capacity<needed) {
@@ -276,6 +276,8 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
         !module->declarations->functions || !module->generics ||
         module->stage!=source->stage || module->linkage_kind!=source->linkage_kind)
         return XR_XIR_BAD_STRUCTURE;
+    if (source->function_count>work->limits.functions ||
+        contexts->count>effect_body_entry_limit(work)) return XR_XIR_BUDGET;
     if (!xir_compile_work(work,13)) return XR_XIR_BUDGET;
     const XrXirDeclarations *expected=source->declarations,*actual=module->declarations;
     if (actual->modules!=expected->modules || actual->module_count!=expected->module_count ||
@@ -453,6 +455,7 @@ static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
         !source->functions || !source->function_count || !seed || !seed->known ||
         seed->resources!=context->resources || !output || *output || !selected)
         return XR_XIR_BAD_STRUCTURE;
+    if (source->function_count>context->limits.functions) return XR_XIR_BUDGET;
     EffectContextResolved *fresh=NULL;
     XrXirStatus status=effect_ordinary_seed_rebuild(context,source,seed,&fresh);
     if (status!=XR_XIR_OK) return status;
@@ -493,6 +496,7 @@ static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
         !source->functions || !source->function_count || !output || *output ||
         (initial && (!effect_body_material_shape(initial) || initial->resources!=context->resources)))
         return XR_XIR_BAD_STRUCTURE;
+    if (source->function_count>context->limits.functions) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     EffectOrdinaryContexts *contexts=xir_compile_calloc(context,1,sizeof(*contexts),&status);
     if (!contexts) return status;

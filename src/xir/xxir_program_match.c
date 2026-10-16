@@ -109,11 +109,14 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
         MATCH(a->functions[i].method_kind, b->functions[i].method_kind);
         MATCH(a->functions[i].test_role, b->functions[i].test_role);
         MATCH(a->functions[i].test_timeout_seconds, b->functions[i].test_timeout_seconds);
+        MATCH(a->functions[i].variadic, b->functions[i].variadic);
     }
     for (uint32_t i = 0; i < a->slot_count; ++i) {
         MATCH(a->slots[i].module, b->slots[i].module);
         MATCH(a->slots[i].type, b->slots[i].type);
         MATCH(a->slots[i].mutable, b->slots[i].mutable);
+        MATCH(a->slots[i].exported, b->slots[i].exported);
+        MATCH(a->slots[i].name, b->slots[i].name);
     }
     for (uint32_t i = 0; i < a->literal_count; ++i)
         TRY(match_literal(a->literals[i], b->literals[i], context));
@@ -233,7 +236,8 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         uint64_t frame=layout->frame_bytes+(uint64_t)layout->outgoing_count*sizeof(XrXirValue)+
             (uint64_t)layout->path_count*sizeof(XrXirValuePathStep);
         if (frame>permissions->frame_bytes) permissions->frame_bytes=frame;
-        const XrXirRootEffects *root = xr_xir_effects_root(effects, f);
+        XrXirEffectFacts root_read=xr_xir_effects_read(effects, f);
+        const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
         if (!root) { status = XR_XIR_BAD_STRUCTURE; break; }
         permissions->entries[f].requires_root = root->requires_root;
         permissions->entries[f].unresolved = root->unresolved;

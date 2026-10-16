@@ -63,8 +63,8 @@ def main():
     words = lambda *values: struct.pack('<' + 'I' * len(values), *values)
     original = model()
     checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
-    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+29u', checked)
-    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+75u', checked)
+    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+30u', checked)
+    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+77u', checked)
     body, _ = encoder.encode_body(original, 0)
     old_body = body
     body, _ = receive_scopes(body)
@@ -93,7 +93,7 @@ def main():
     recursive_offset = 64 + len(prefix) + len(body) - 8
     origins = words(5) + b''.join(words(f, 0, 0) for f in range(5)) + words(0)
     instance_body = prefix + checked_body + origins
-    def frame(payload, schema=29, semantic=75):
+    def frame(payload, schema=29, semantic=76):
         header = b'XRCHK\0\0\0' + words(schema, semantic, 2, 0) + struct.pack('<Q', len(payload))
         return header + hashlib.sha256(header + payload).digest() + payload
     # Preserve the independent historical 26/71 malformed/previous input:

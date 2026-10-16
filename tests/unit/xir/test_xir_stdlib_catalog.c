@@ -7,6 +7,7 @@
  * test_xir_stdlib_catalog.c - Trusted Checked input ownership and real failures
  */
 #include "xir/xxir_stdlib_internal.h"
+#include "xir/xxir_checked.h"
 #include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,47 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL %d %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "xir_go_source_native_compile_owner.h"
 static uint64_t catalog_initial_live;
+static uint32_t catalog_wire_u32(const uint8_t *bytes, size_t length, size_t *position) {
+    CHECK(*position <= length && length-*position >= 4);
+    uint32_t value = 0;
+    for (unsigned i = 0; i < 4; ++i) value |= (uint32_t)bytes[(*position)++] << (8*i);
+    return value;
+}
+/* Keep all declarations and callers while deleting the private function body.
+ * Both packet and component digests are renewed; semantic admission must reject. */
+static uint32_t catalog_omit_private_body(uint8_t *bytes, size_t *length) {
+    size_t position = 68;
+    uint32_t functions = catalog_wire_u32(bytes,*length,&position);
+    CHECK(catalog_wire_u32(bytes,*length,&position) == 1);
+    for (uint32_t f = 0; f < functions; ++f) {
+        uint32_t name = catalog_wire_u32(bytes,*length,&position);
+        CHECK(position <= *length && name <= *length-position);
+        bool target = name == 5 && !memcmp(bytes+position,"write",5);
+        position += name;
+        uint32_t parameters = catalog_wire_u32(bytes,*length,&position);
+        CHECK(parameters <= (*length-position)/4); position += parameters*4;
+        (void)catalog_wire_u32(bytes,*length,&position);
+        size_t begin = position;
+        uint32_t blocks = catalog_wire_u32(bytes,*length,&position);
+        CHECK(blocks <= (*length-position)/16); position += blocks*16;
+        uint32_t instructions = catalog_wire_u32(bytes,*length,&position);
+        CHECK(instructions <= (*length-position)/40); position += instructions*40;
+        uint32_t operands = catalog_wire_u32(bytes,*length,&position);
+        CHECK(operands <= (*length-position)/4); position += operands*4;
+        if (!target) continue;
+        CHECK(blocks && instructions && position-begin > 12);
+        memmove(bytes+begin+12,bytes+position,*length-position);
+        *length -= position-begin-12;
+        memset(bytes+begin,0,12);
+        uint64_t payload = *length-64;
+        for (unsigned i = 0; i < 8; ++i) bytes[24+i] = (uint8_t)(payload>>(8*i));
+        XrSHA256Context sha; xr_sha256_init(&sha);
+        xr_sha256_update(&sha,bytes,32); xr_sha256_update(&sha,bytes+64,*length-64);
+        xr_sha256_final(&sha,bytes+32);
+        return f;
+    }
+    CHECK(false); return 0;
+}
 
 static XrXirCompileContext catalog_context(const XrCompileResourceLimits *limits) {
     XrXirCompileContext context = {0}; context.limits = xr_xir_compile_default_limits();
@@ -36,7 +78,7 @@ static void catalog_rejections(const char *root) {
     XrCompileResourceStats initial = catalog_stats(&context);
     uint8_t *bytes = NULL;
     CHECK(xr_compile_resources_alloc(context.resources,xir_stdlib_output_checked_length,(void **)&bytes) == XR_COMPILE_RESOURCE_OK);
-    for (unsigned mode = 0; mode < 4; ++mode) {
+    for (unsigned mode = 0; mode < 5; ++mode) {
         memcpy(bytes,xir_stdlib_output_checked,xir_stdlib_output_checked_length);
         XrXirLibraryModuleInput binding = {{XR_MODULE_IDENTITY_STDLIB,"io",root},"io/output.xr"};
         XrXirLibraryInput input = {bytes,xir_stdlib_output_checked_length,{0},&binding,1};
@@ -46,7 +88,16 @@ static void catalog_rejections(const char *root) {
             bytes[0] ^= 1;
             xr_sha256(bytes,input.length,input.sha256);
         } else if (mode == 2) binding.authority.namespace_id = "untrusted";
-        else input.module_count = 0;
+        else if (mode == 3) input.module_count = 0;
+        else {
+            uint32_t missing = catalog_omit_private_body(bytes,&input.length);
+            xr_sha256(bytes,input.length,input.sha256);
+            XrXirArtifact *artifact = NULL;
+            XrXirDiagnostic diagnostic = {0};
+            CHECK(xr_xir_compile_checked_read(&context,bytes,input.length,&artifact,&diagnostic) == XR_XIR_BAD_STRUCTURE);
+            CHECK(!artifact && diagnostic.function == missing);
+            printf("rehashed private body omission function%u rejected by common verifier\n",missing);
+        }
         XrXirLibraryCatalog *rejected = NULL;
         CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&rejected) == XR_XIR_BAD_STRUCTURE);
         CHECK(!rejected);
@@ -80,14 +131,19 @@ int main(int argc, char **argv) {
     size_t count = 0;
     const XrModuleResourceBinding *bindings = xr_xir_compile_library_catalog_resources_v2(catalog,&count);
     static const char identity[] = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
-    CHECK(count == 1 && bindings && !strcmp(bindings[0].canonical,identity));
+    CHECK(count == 2 && bindings && !strcmp(bindings[0].canonical,identity));
+    CHECK(!strcmp(bindings[1].canonical,"stdlib-module-v1:module=4:time:path=12:time/time.xr"));
+    CHECK(!strcmp(bindings[1].authority.namespace_id,"time") && !strcmp(bindings[1].logical_path,"time/time.xr"));
+    const XrXirModule *time = xr_xir_compile_artifact_module(bindings[1].checked);
+    CHECK(time && time->stage == XR_XIR_CHECKED && time->linkage_kind == XR_XIR_LIBRARY);
+    CHECK(time->function_count == 9 && time->declarations->module_count == 1);
     CHECK(!strcmp(bindings[0].logical_path,"io/output.xr") && !strcmp(bindings[0].authority.namespace_id,"io"));
     CHECK(bindings[0].authority.kind == XR_MODULE_IDENTITY_STDLIB);
     CHECK(!strcmp(bindings[0].authority.physical_root,argv[1]));
     root[0] = '!'; CHECK(!strcmp(bindings[0].authority.physical_root,argv[1]));
     const XrXirModule *module = xr_xir_compile_artifact_module(bindings[0].checked);
     CHECK(module && module->stage == XR_XIR_CHECKED && module->linkage_kind == XR_XIR_LIBRARY);
-    CHECK(module->function_count == 3 && module->declarations->module_count == 1);
+    CHECK(module->function_count == 4 && module->declarations->module_count == 1);
     unsigned exports = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *fn = &module->functions[f];

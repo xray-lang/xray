@@ -31,6 +31,7 @@ XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
     if (!from || !to || !xr_xir_callable_flags_compatible(from->flags, to->flags) ||
         !!from->parameter_count != !!from->parameters ||
         !!to->parameter_count != !!to->parameters ||
+        !xr_xir_callable_rest_shape(types,from) || !xr_xir_callable_rest_shape(types,to) ||
         from->parameter_count != to->parameter_count || from->result != to->result) return XR_XIR_BAD_TYPE;
     for (uint32_t p = 0; p < from->parameter_count; ++p) {
         if (!charge(work_owner, 1)) return XR_XIR_BUDGET;
@@ -209,6 +210,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
 
         remaining->limits.parameters -= node->parameter_count;
         if ((node->parameter_count != 0) != (node->parameters != NULL)) return XR_XIR_BAD_STRUCTURE;
+        if (!xr_xir_callable_rest_shape(types,node)) return XR_XIR_BAD_TYPE;
         span = xr_xir_type_span(types, node->result);
         for (uint32_t p = 0; p < node->parameter_count; ++p) {
             const XrXirCallableParameter *parameter = &node->parameters[p];
@@ -216,7 +218,7 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             if (parameter->mode == XR_PARAM_REF) {
                 if ((uint32_t)parameter->type - XR_XIR_CONSTRUCTED_TYPE_BASE >= index)
                     return XR_XIR_BAD_TYPE;
-            } else if (!callable_component(types, parameter->type, index)) return XR_XIR_BAD_TYPE;
+            } else if (parameter->type!=XR_XIR_UNIT && !callable_component(types, parameter->type, index)) return XR_XIR_BAD_TYPE;
             uint32_t component = xr_xir_type_span(types, node->parameters[p].type);
             if (component > span) span = component;
         }
@@ -440,6 +442,6 @@ XrXirType xr_xir_operand_type(const XrXirFunction *function, uint32_t value) {
 #include "xxir_type_context.inc.c"
 #include "xxir_nominal_native.inc.c"
 #include "xxir_nominal.inc.c"
-#include "xxir_nominal_description.inc.c"
+#include "xxir_type_description.inc.c"
 #include "xxir_nominal_identity.inc.c"
 #include "xxir_nominal_layout.inc.c"

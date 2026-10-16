@@ -84,6 +84,7 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     ctx->identities[index] = ctx->identities[outer];
     ctx->identities[index].test_role = XR_XIR_TEST_ROLE_NONE;
     ctx->identities[index].test_timeout_seconds = 0;
+    ctx->identities[index].variadic = 0;
     ctx->identities[index].exported = 0; ctx->identities[index].cleanup_owner = 0;
     ctx->identities[index].method_kind = ctx->identities[index].nominal_owner ? XR_XIR_MEMBER_HELPER : XR_XIR_NON_MEMBER;
     ctx->identities[index].promises = signature.flags & XR_XIR_CALLABLE_NO_SUSPEND ? XR_XIR_FUNCTION_NO_SUSPEND : 0;
@@ -121,6 +122,8 @@ static bool source_requirement_value(SourceContext *ctx, AstNode *node,
     helper.substitution = (SourceSubstitution){types,count};
     if (!source_requirement_prove(ctx,node,helper.selected.member,application,helper.substitution,&helper.signature)) return false;
     XrXirTypeNode callable = *xr_xir_callable_signature(&ctx->types,helper.signature);
+    if (callable.flags&XR_XIR_CALLABLE_VARIADIC)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"rest interface call shape is not admitted");
     const XrXirTypeNode *expected = request->expected.present ? xr_xir_callable_signature(&ctx->types,request->expected.type) : NULL;
     if (expected && expected->flags & XR_XIR_CALLABLE_NO_SUSPEND) {
         if (!(callable.flags & XR_XIR_CALLABLE_NO_SUSPEND))

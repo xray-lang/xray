@@ -112,8 +112,9 @@ static void default_binding_case(unsigned mode,bool generic) {
  CHECK(status==expected);CHECK((checked!=NULL)==(expected==XR_XIR_OK));
  if(!checked)return;
  if(mode>=19){XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked, &effects)==XR_XIR_OK);
- CHECK(xr_xir_effects_function(effects,1)->suspend==XR_XIR_EFFECT_MAY);
- const XrXirEffectWitness *w=xr_xir_effects_suspend_witness(effects,1);
+ CHECK(xr_xir_effects_read(effects,1).control.suspend==XR_XIR_EFFECT_MAY);
+ XrXirEffectFacts w_read=xr_xir_effects_read(effects,1);
+ const XrXirEffectWitness *w=(w_read.status==XR_XIR_OK && w_read.suspend_witness.cause!=0?&w_read.suspend_witness:NULL);
  CHECK(w && w->callee==3 && w->instruction==0);xr_xir_compile_effects_free(effects);}
 
  XrXirArtifact *special=NULL,*again=NULL,*lowered=NULL,*read=NULL;

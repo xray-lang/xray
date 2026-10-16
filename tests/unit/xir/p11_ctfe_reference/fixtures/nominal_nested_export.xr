@@ -1,0 +1,4 @@
+struct Pair { x:i8; text:string }
+enum Choice { Empty, Some { box:Pair } }
+fn make()->Choice { return Choice.Some{box:Pair{x:7,text:"ab"}} }
+export fn run()->Choice { return comptime make() }

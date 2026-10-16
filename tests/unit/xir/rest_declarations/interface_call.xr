@@ -1,0 +1,2 @@
+import {Rest} from "./iface"
+export fn call<T:Rest>(receiver:T)->i64 { return receiver.sum([1,2]) }

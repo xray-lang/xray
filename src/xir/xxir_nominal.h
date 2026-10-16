@@ -84,20 +84,6 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_clone(const XrXirCompileContext *comp
 /* Projection requires a verified declaration table and owns only identities. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrXirNominalTable **output);
 XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table);
-/* A synchronous compiler view borrows its canonical pool. The record must
- * already satisfy structural admission; this query grants no field, method,
- * construction or generic authority and does not certify the whole pool.
- * One ledger work unit is consumed per query, with no allocation or refund.
- * Failure preserves output. All references die with the original pool. */
-typedef struct XrXirEnumDescription {
-    XrXirLiteral module, name;
-    const XrXirNominalVariant *variants;
-    uint32_t variant_count, declaration;
-    const XrXirNominalType *instance;
-    const XrXirNominalDeclaration *definition;
-} XrXirEnumDescription;
-XR_FUNC XrXirStatus xr_xir_compile_enum_description(const XrXirCompileContext *context,
-    const XrXirTypes *types, XrXirType type, XrXirEnumDescription *output);
 typedef enum XrXirNominalAccess {
     XR_XIR_NOMINAL_CONSTRUCT, XR_XIR_NOMINAL_READ, XR_XIR_NOMINAL_WRITE, XR_XIR_NOMINAL_TYPE
 } XrXirNominalAccess;

@@ -1,0 +1,5 @@
+enum E{Bad{n:i64}}
+fn fail(x:ref i64)->i64{defer{x=x+2};throw E.Bad{n:7}}
+export fn run()->i64{var xs=[33];try{return fail(ref xs[0])}catch(e:E){return xs[0]+match(e){E.Bad{n}->n}}}
+fn accept_error(e:Error)->i64{return 42}
+fn make_error()->Error{return E.Bad{n:7}}

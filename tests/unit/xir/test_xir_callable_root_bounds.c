@@ -21,7 +21,7 @@
 _Static_assert(XR_XIR_CALLABLE_NO_SUSPEND==1 && XR_XIR_CALLABLE_ROOT_NONE==2 &&
     XR_XIR_CALLABLE_ROOT_REQUIRED==4 && XR_XIR_CALLABLE_ROOT_UNRESOLVED==8 &&
     XR_XIR_CALLABLE_ROOT_MASK==14,"The closed bound bit assignments are one contract");
-_Static_assert(XR_XIR_CHECKED_SCHEMA==29 && XR_XIR_CHECKED_CONTRACT==75,"The callable dependency contract has one wire identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==78,"The callable dependency contract has one wire identity");
 
 static void bound_matrix(void) {
     static const bool admitted[16]={false,false,true,true,true,true,false,false,true,true,false,false,true,true,false,false};
@@ -55,7 +55,8 @@ static void bound_matrix(void) {
     }
     CHECK(accepted==33 && rejected==31);
     uint32_t untouched=71;
-    CHECK(!xr_xir_callable_flags_valid(18));
+    CHECK(xr_xir_callable_flags_valid(18));
+    CHECK(!xr_xir_callable_flags_valid(34));
     CHECK(!xr_xir_callable_flags_join(0,2,&untouched) && untouched==71);
     CHECK(!xr_xir_callable_flags_join(2,1,&untouched) && untouched==71);
     CHECK(!xr_xir_callable_flags_join(2,2,NULL));
@@ -93,13 +94,19 @@ static void bound_facts(void) {
     CHECK(status==XR_XIR_OK && checked);
     XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK && effects);
     for(uint32_t f=0;f<13;++f) {
-        const XrXirRootEffects *actual=xr_xir_effects_root(effects,f);CHECK(actual);
+        XrXirEffectFacts actual_read=xr_xir_effects_read(effects,f);
+        const XrXirRootEffects *actual=(actual_read.status==XR_XIR_OK?&actual_read.root:NULL);CHECK(actual);
+        if(actual->requires_root!=expected[f][0] || actual->unresolved!=expected[f][1])
+            fprintf(stderr,"bound function%u actual root%u unresolved%u expected%u/%u\n",f,
+                actual->requires_root,actual->unresolved,expected[f][0],expected[f][1]);
         CHECK(actual->requires_root==expected[f][0] && actual->unresolved==expected[f][1]);
-        CHECK((xr_xir_effects_root_witness(effects,f)!=NULL)==expected[f][0]);
-        CHECK((xr_xir_effects_unresolved_witness(effects,f)!=NULL)==expected[f][1]);
+        CHECK(((xr_xir_effects_read(effects,f).status==XR_XIR_OK && xr_xir_effects_read(effects,f).root_witness.cause!=0))==expected[f][0]);
+        CHECK(((xr_xir_effects_read(effects,f).status==XR_XIR_OK && xr_xir_effects_read(effects,f).unresolved_witness.cause!=0))==expected[f][1]);
     }
-    CHECK(xr_xir_effects_function(effects,12)->suspend==XR_XIR_EFFECT_NONE);
-    const XrXirRootEffectWitness *known=xr_xir_effects_root_witness(effects,9),*unknown=xr_xir_effects_unresolved_witness(effects,9);
+    CHECK(xr_xir_effects_read(effects,12).control.suspend==XR_XIR_EFFECT_NONE);
+    XrXirEffectFacts known_read=xr_xir_effects_read(effects,9);
+    const XrXirRootEffectWitness *known=(known_read.status==XR_XIR_OK && known_read.root_witness.cause!=0?&known_read.root_witness:NULL);XrXirEffectFacts unknown_read=xr_xir_effects_read(effects,9);
+    const XrXirRootEffectWitness *unknown=(unknown_read.status==XR_XIR_OK && unknown_read.unresolved_witness.cause!=0?&unknown_read.unresolved_witness:NULL);
     CHECK(known && unknown && known->cause==XR_XIR_ROOT_CAUSE_INDIRECT && unknown->cause==XR_XIR_ROOT_CAUSE_INDIRECT);
     CHECK(known->instruction==0 && unknown->instruction==0 && known->distance==0 && unknown->distance==0);
     XrXirRootCauseTrace *trace=NULL;CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,10,&trace)==XR_XIR_OK && trace);

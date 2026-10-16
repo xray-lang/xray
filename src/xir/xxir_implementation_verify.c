@@ -71,7 +71,8 @@ static XrXirStatus implementation_function(const XrXirModule *module, const XrXi
     const XrXirFunction *f = &module->functions[function];
     const XrXirTypes *types = xr_xir_interface_closure_types(closure);
     const XrXirTypeNode *signature = xr_xir_callable_signature(types,requirement->signature);
-    if (!signature || f->parameter_count != signature->parameter_count+1 || !f->parameters) return XR_XIR_BAD_TYPE;
+    if (!signature || f->parameter_count != signature->parameter_count+1 || !f->parameters ||
+        !!(signature->flags & XR_XIR_CALLABLE_VARIADIC) != (identity->variadic!=0)) return XR_XIR_BAD_TYPE;
     if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) && !(identity->promises & XR_XIR_FUNCTION_NO_SUSPEND))
         return XR_XIR_BAD_TYPE;
     XrXirStatus receiver_status = xr_xir_compile_method_signature_verify(budget, module, function);

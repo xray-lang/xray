@@ -1,0 +1,2 @@
+fn answer()->i64 { var xs:Array<Array<i8>>=[[1,2],[3]]; xs[0][1]=7; return xs[0][0]==1 && xs[0][1]==7 && xs[1][0]==3 ? 42 : 0 }
+export fn run()->i64 { return comptime answer() }

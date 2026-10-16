@@ -20,7 +20,7 @@ static void bound_packets(void) {
     XrXirCompileContext context=bound_owner(bound_caps());XrXirArtifact *checked=NULL,*decoded=NULL;XrXirDiagnostic diagnostic={0};
     CHECK(bound_fixture(&context,0,3,&checked,&diagnostic)==XR_XIR_OK && checked);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,&diagnostic)==XR_XIR_OK);
-    CHECK(packet.length>=84 && packet.bytes[8]==26 && packet.bytes[12]==71);
+    CHECK(packet.length>=84 && packet.bytes[8]==31 && packet.bytes[12]==78);
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&decoded,&diagnostic)==XR_XIR_OK && decoded);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
     /* Locate one independently specified zero-parameter callable record; do
@@ -41,7 +41,7 @@ static void bound_packets(void) {
     before=bound_stats(&context);
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&decoded,&diagnostic)==XR_XIR_BAD_STRUCTURE && !decoded);
     CHECK(bound_stats(&context).allocation_count==before.allocation_count && bound_stats(&context).live_bytes==before.live_bytes);
-    bound_put32(packet.bytes+12,71);bound_packet_digest(&packet);
+    bound_put32(packet.bytes+12,78);bound_packet_digest(&packet);
     CHECK(xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&decoded,&diagnostic)==XR_XIR_OK && decoded);
     xr_xir_compile_artifact_free(decoded);xr_xir_compile_artifact_free(checked);
     xr_xir_compile_checked_packet_free(&packet);bound_owner_free(&context);

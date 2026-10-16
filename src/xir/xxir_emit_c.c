@@ -248,6 +248,12 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     EMIT_STATIC(buffer, es_6de4e65ad148911c, "    if (!xr_xir_scalar_step(context)) { status = XR_XIR_RUN_STEP_LIMIT; goto xr_done; }\n");
     switch (op->op) {
     case XR_XIR_PHI: break;
+    case XR_XIR_TUPLE_NEW:
+        if (op->type != XR_XIR_UNIT) { emit_reject(buffer, XR_XIR_BAD_STAGE); break; }
+        append(buffer, "    { XrXirValue unit = {0};\n"
+            "      if (xr_xir_tuple_new(XR_XIR_UNIT, NULL, 0, NULL, &unit) != XR_XIR_VALUE_OK) {\n"
+            "        status = XR_XIR_RUN_BAD_ARTIFACT; goto xr_done;\n      }\n    }\n");
+        break;
     case XR_XIR_CONST_RUNE:
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONST_FLOAT:
@@ -316,6 +322,7 @@ static void emit_function(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_FORMAT(buffer, et_77b4ecd218358990, "    status = xr_xir_scalar_frame_begin(context, %uu, &frame);\n"
            "    if (status != XR_XIR_RUN_OK) return status;\n", layout->frame_bytes);
     for (uint32_t p = 0; p < function->parameter_count && emit_work(buffer, 1); ++p)
+        if (function->parameters[p]!=XR_XIR_UNIT)
         EMIT_FORMAT(buffer, et_796426ff07bb30a1, "    xr_xir_scalar_store(frame, %uu, arguments[%u].payload);\n",
                layout->offsets[p], p);
     EMIT_LITERAL(buffer, "    goto xr_block_0;\n");
@@ -353,7 +360,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     if (module->declarations) for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f)
         if (module->declarations->functions[f].cleanup_owner) return XR_XIR_BAD_STAGE;
     emit_checked_identity(&buffer);
-    append(&buffer, "#include \"xir/xxir_float.h\"\n"
+    append(&buffer, "#include \"xir/xxir_float.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
@@ -431,8 +438,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_FUNCTION_REF:
         for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
             uint32_t id = function->operands[op->args[0] + p];
-            append(buffer, "state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
-                p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+            append(buffer,"state->arguments[%u] = ",p);emit_value(buffer,function,layout,id);append(buffer,";\n");
         }
         append(buffer, "status = xr_xir_instance_function_at(view, %uu, %s, %uu, &value);\n",
             (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);break;
@@ -506,8 +512,7 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
         destination, (uint32_t) op->type);
     for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
         uint32_t id = function->operands[op->args[0] + p];
-        append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
-            p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+        append(buffer," state->arguments[%u] = ",p);emit_value(buffer,function,layout,id);append(buffer,";\n");
     }
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT)
         append(buffer, " XrXirCallStatus status = xr_xir_instance_resolve_function_at(view, %uu, &target, %s, %uu, &callee);\n"
@@ -528,8 +533,7 @@ static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
     EMIT_STATIC(buffer, es_ff1a07ada386851d, " { XrXirValue output = {0};\n");
     for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
         uint32_t id = function->operands[op->args[0] + p];
-        append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
-            p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+        append(buffer," state->arguments[%u] = ",p);emit_value(buffer,function,layout,id);append(buffer,";\n");
     }
     EMIT_FORMAT(buffer, et_c8446c9331686535, " XrXirCallStatus status = xr_xir_task_go(view, (XrXirType) %uu, %uu, %s, %uu, &output);\n"
         " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
@@ -571,8 +575,10 @@ static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
 
 static void emit_value(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, uint32_t id) {
-    append(buffer, "xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu))",
-        (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
+    XrXirType type=xr_xir_operand_type(function,id);
+    if (type==XR_XIR_UNIT) append(buffer,"(XrXirValue){0}");
+    else append(buffer, "xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu))",
+        (uint32_t)type,layout->offsets[id]);
 }
 static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, uint32_t id) {
@@ -703,7 +709,9 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
 static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t destination) {
     EMIT_STATIC(buffer, es_74e4c9ff5e4a5422," { XrXirValue value = {0}; XrXirValueStatus status;\n");
-    if (op->op==XR_XIR_TUPLE_NEW) {
+    if (op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) {
+        append(buffer," status=xr_xir_tuple_new(XR_XIR_UNIT,NULL,0,xr_xir_call_admission(view),&value);\n");
+    } else if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(buffer->types,op->type);
         uint32_t payload=0;
         for (uint32_t i=0;i<tuple->parameter_count && emit_work(buffer,1);++i) {
@@ -1291,7 +1299,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
         if (xr_xir_type_is_owned(module->types, function->parameters[p]))
             EMIT_FORMAT(buffer, et_6743ad1a0cb6e9cf, " if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, view->arguments[%u].payload) "
                    "!= XR_XIR_VALUE_OK) goto limit;\n", layout->offsets[p], (uint32_t) function->parameters[p], p);
-        else
+        else if (function->parameters[p]!=XR_XIR_UNIT)
             EMIT_FORMAT(buffer, et_3fe2b2c150cac1bd, " xr_xir_scalar_store(state->frame, %uu, view->arguments[%u].payload);\n",
                    layout->offsets[p], p);
     }
@@ -1573,13 +1581,13 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     }
     EMIT_FORMAT(buffer, et_69a1907ec586c822, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)
-        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds);
+        append(buffer, "    {%uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu, %uu},\n", d->functions[f].module, d->functions[f].exported, d->functions[f].nominal_owner, d->functions[f].member_access, d->functions[f].cleanup_owner, d->functions[f].promises, d->functions[f].method_kind, d->functions[f].test_role, d->functions[f].test_timeout_seconds, d->functions[f].variadic);
     EMIT_LITERAL(buffer, "};\n");
     if (d->slot_count) {
         EMIT_FORMAT(buffer, et_f16c13d386d8e11f, "static const XrXirSlot %s_slots[] = {\n", prefix);
         for (uint32_t i = 0; i < d->slot_count && emit_work(buffer, 1); ++i)
-            append(buffer, "    {%uu, (XrXirType) %u, %uu},\n", d->slots[i].module,
-                (uint32_t) d->slots[i].type, d->slots[i].mutable);
+            append(buffer, "    {%uu, (XrXirType) %u, %uu, %uu, %uu},\n", d->slots[i].module,
+                (uint32_t) d->slots[i].type, d->slots[i].mutable, d->slots[i].exported, d->slots[i].name);
         EMIT_LITERAL(buffer, "};\n");
     }
     if (d->literal_count) {
@@ -1596,10 +1604,11 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", d->slot_count);
     if (d->literal_count) append(buffer, "%s_literals", prefix); else EMIT_LITERAL(buffer, "NULL");
     append(buffer, ", %uu, %uu, %uu, NULL};\n", d->literal_count, d->root_module, d->entry_function);
-    EMIT_FORMAT(buffer, et_8b67e06edccf604b, "_Static_assert(sizeof(XrXirFunctionIdentity) == 36, \"XIR function identity stride\");\n"
+    EMIT_FORMAT(buffer, et_1dbfb9381b5af4f9, "_Static_assert(sizeof(XrXirFunctionIdentity) == 40, \"XIR function identity stride\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, method_kind) == 24, \"XIR method role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_role) == 28, \"XIR test role offset\");\n"
         "_Static_assert(offsetof(XrXirFunctionIdentity, test_timeout_seconds) == 32, \"XIR test timeout offset\");\n"
+        "_Static_assert(offsetof(XrXirFunctionIdentity, variadic) == 36, \"XIR rest declaration offset\");\n"
         "_Static_assert(offsetof(XrXirDeclarations, implementations) == 64, \"XIR implementation table offset\");\n"
         "_Static_assert(sizeof(XrXirDeclarations) == 72, \"XIR declaration stride\");\n"
         "_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == %uu, \"XIR program ABI\");\n"

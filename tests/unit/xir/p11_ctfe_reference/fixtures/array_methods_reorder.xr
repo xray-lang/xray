@@ -1,0 +1,2 @@
+fn answer()->bool { var xs:Array<Array<i8>>=[[1,2,3]]; const old=xs; xs[0].reverse(); xs[0].unshift(7); const a:Array<i8>=[7,3,2,1]; const b:Array<i8>=[1,2,3]; return xs[0]==a && old[0]==b }
+export fn run()->bool { return comptime answer() }

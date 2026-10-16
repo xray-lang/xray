@@ -155,7 +155,7 @@ static XrXirStatus task_error_effects(const XrXirCompileContext *c) {
         for (uint32_t i = 0; i < 7; ++i) CHECK(xr_xir_effects_task_errors(effects, i) == expected[i]);
         CHECK(xr_xir_effects_error(effects, 0, (XrXirType)259, 0));
         CHECK(!xr_xir_effects_error(effects, 0, (XrXirType)259, 1));
-        CHECK(xr_xir_effects_function(effects, 2)->throws == XR_XIR_EFFECT_NONE);
+        CHECK(xr_xir_effects_read(effects, 2).control.throws == XR_XIR_EFFECT_NONE);
     }
     xr_xir_compile_effects_free(effects); xr_xir_compile_artifact_free(checked); return status;
 }

@@ -1,0 +1,3 @@
+fn change(x:ref i64){defer{try{const n=1/0}catch panic{x=x+2}}}
+fn answer()->i64{var x=40;change(ref x);return x}
+export fn run()->i64{return comptime answer()}

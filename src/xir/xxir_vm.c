@@ -141,10 +141,14 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
 }
 
 static XrXirValue vm_value_operand(const ScalarRun *run, uint32_t id) {
+    XrXirType type=xr_xir_operand_type(run->function,id);
+    if (type==XR_XIR_UNIT) return (XrXirValue){0};
+    int64_t payload=xr_xir_scalar_load(run->frame,run->layout->offsets[id]);
+    /* Closed leaf execution has no runtime receiving arena. */
+    if (!run->view) return (XrXirValue){(uint32_t)type,0,payload};
     XrXirValue value={0};
     XrXirValueAdmission *admission=xr_xir_call_admission(run->view);
-    if (admission) (void)xr_xir_value_from_payload(admission->arena,xr_xir_operand_type(run->function,id),
-        xr_xir_scalar_load(run->frame,run->layout->offsets[id]),&value);
+    if (admission) (void)xr_xir_value_from_payload(admission->arena,type,payload,&value);
     return value;
 }
 static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
@@ -263,7 +267,9 @@ static XrXirRunStatus vm_class_step(ScalarRun *run, VmState *state,
 static XrXirRunStatus vm_tuple_step(ScalarRun *run,VmState *state,
     const XrXirInstruction *op,uint32_t destination) {
     XrXirValue output={0};XrXirValueStatus status;
-    if (op->op==XR_XIR_TUPLE_NEW) {
+    if (op->op==XR_XIR_TUPLE_NEW && op->type==XR_XIR_UNIT) {
+        status=xr_xir_tuple_new(XR_XIR_UNIT,NULL,0,xr_xir_call_admission(run->view),&output);
+    } else if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,op->type);
         if (!tuple || tuple->parameter_count>run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
         uint32_t payload=0;
@@ -767,7 +773,8 @@ static XrXirAction vm_resume(XrXirCallView *view) {
             if (xr_xir_type_is_owned(module->types, function->parameters[i])) {
                 if (xr_xir_owned_slot_copy(run.frame, layout->offsets[i], view->arena, function->parameters[i], view->arguments[i].payload) != XR_XIR_VALUE_OK)
                     return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};
-            } else xr_xir_scalar_store(run.frame, layout->offsets[i], view->arguments[i].payload);
+            } else if (function->parameters[i]!=XR_XIR_UNIT)
+                xr_xir_scalar_store(run.frame, layout->offsets[i], view->arguments[i].payload);
         }
         state->initialized = true;
     }
@@ -989,7 +996,8 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
     if (status != XR_XIR_RUN_OK)
         return status;
     for (uint32_t i = 0; i < argument_count; ++i)
-        xr_xir_scalar_store(frame, layout->offsets[i], arguments[i].payload);
+        if (body->parameters[i]!=XR_XIR_UNIT)
+            xr_xir_scalar_store(frame, layout->offsets[i], arguments[i].payload);
     ScalarRun run = {module, body, layout, frame, NULL, NULL};
     VmState state = {0};
     for (;;) {

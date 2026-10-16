@@ -55,6 +55,36 @@ static void vm_oracle(XrXirProgram *program,uint32_t entry) {
     CHECK(!runtime_live && !runtime_bytes);
     puts("VM independent Tuple oracle order1323/i64=11/generic7/strings/Unit and Program/Instance first-drop physical0 PASS");
 }
+static void unit_parameter_oracle(XrXirSourceProduct *product,const XrXirCompileContext *context) {
+    XrXirSourceProductPacketView packet={0};XrXirArtifact *checked=NULL;uint32_t target=UINT32_MAX;
+    CHECK(xr_xir_compile_source_product_packet(product,XR_XIR_SOURCE_PRODUCT_CLOSED,&packet)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&checked,NULL)==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(checked);
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *function=&module->functions[f];
+        if (function->name_length==7 && !memcmp(function->name,"invalid",7)) {
+            CHECK(function->parameter_count==1 && function->parameters[0]==XR_XIR_UNIT);
+            CHECK(module->declarations && !module->declarations->functions[f].exported);
+            target=f;
+        }
+    }
+    CHECK(target!=UINT32_MAX && module->functions[module->declarations->entry_function].result==XR_XIR_I64);
+    xr_xir_compile_artifact_free(checked);
+    XrXirProgram *program=NULL;XrXirInstance *instance=NULL;XrXirInstanceConfig config;XrXirValue unit={0},result={0};
+    CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
+    xr_xir_compile_source_product_free(product);
+    CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    uint32_t entry=program->declarations->entry_function;
+    xr_xir_compile_program_drop(program);
+    CHECK(xr_xir_instance_start(instance,target,&unit,1)==XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,1000000).outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(result.type==XR_XIR_I64 && !result.reserved && !result.payload);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
+    puts("Original Unit formal accepted; private host call refused; entry executes after producer destruction PASS");
+}
 int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2 || (argc==3 && !strcmp(argv[1],"--reject")));
     const XrXirCompileContext *context=source_program_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
@@ -64,9 +94,10 @@ int main(int argc,char **argv) {
         XR_TUPLE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     char rejected_path[1024]={0};
     bool accept_destructure=argc==2 && !strcmp(argv[1],"--accept-destructure");
-    if (argc==3 || accept_destructure) {
+    bool accept_unit=argc==2 && !strcmp(argv[1],"--accept-unit-parameter");
+    if (argc==3 || accept_destructure || accept_unit) {
         int bytes=snprintf(rejected_path,sizeof(rejected_path),"%s/%s/root.xr",XR_TUPLE_CLOSED_ROOT,
-            accept_destructure ? "destructure" : argv[2]);
+            accept_destructure ? "destructure" : accept_unit ? "unit_parameter" : argv[2]);
         CHECK(bytes>0 && (size_t)bytes<sizeof(rejected_path));
         request.source.entry_path=rejected_path;authority.physical_root=XR_TUPLE_CLOSED_ROOT;
     }
@@ -82,6 +113,7 @@ int main(int argc,char **argv) {
     }
     CHECK(status==XR_XIR_OK && product);xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_session_free(session);memset(&request,0xcc,sizeof(request));memset(&authority,0xcc,sizeof(authority));
+    if (accept_unit) {unit_parameter_oracle(product,context);source_program_owners_free();return 0;}
     if(accept_destructure) {
         XrXirCSource generated={0};XrXirProgram *program=NULL;XrXirInstance *instance=NULL;XrXirInstanceConfig config;
         CHECK(xr_xir_compile_source_product_emit(product,"tuple_original_destructure",1048576,&generated)==XR_XIR_OK);

@@ -52,3 +52,85 @@ set_tests_properties(test_xir_source_comptime_nullable_resources PROPERTIES
 add_test(NAME test_xir_source_comptime_array_resources COMMAND test_xir_source_comptime --array-resources)
 set_tests_properties(test_xir_source_comptime_array_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;array" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_array_equal_resources COMMAND test_xir_source_comptime --array-equal-resources)
+set_tests_properties(test_xir_source_comptime_array_equal_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;array;equal" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_array_path_resources COMMAND test_xir_source_comptime --array-path-resources)
+set_tests_properties(test_xir_source_comptime_array_path_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;array;path" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_text_resources COMMAND test_xir_source_comptime --text-resources)
+set_tests_properties(test_xir_source_comptime_text_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;text" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_nominal COMMAND test_xir_source_comptime --nominal)
+set_tests_properties(test_xir_source_comptime_nominal PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;nominal" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_nominal_resources COMMAND test_xir_source_comptime --nominal-resources)
+set_tests_properties(test_xir_source_comptime_nominal_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;nominal" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_lexical COMMAND test_xir_source_comptime --lexical)
+set_tests_properties(test_xir_source_comptime_lexical PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;lexical" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_lexical_resources COMMAND test_xir_source_comptime --lexical-resources)
+set_tests_properties(test_xir_source_comptime_lexical_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;lexical" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_function COMMAND test_xir_source_comptime --function)
+set_tests_properties(test_xir_source_comptime_function PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;function" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_function_resources COMMAND test_xir_source_comptime --function-resources)
+set_tests_properties(test_xir_source_comptime_function_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;function" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_cleanup COMMAND test_xir_source_comptime --cleanup)
+set_tests_properties(test_xir_source_comptime_cleanup PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;cleanup" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_cleanup_resources COMMAND test_xir_source_comptime --cleanup-resources)
+set_tests_properties(test_xir_source_comptime_cleanup_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;cleanup" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_projection COMMAND test_xir_source_comptime --projection)
+set_tests_properties(test_xir_source_comptime_projection PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;projection" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_projection_resources COMMAND test_xir_source_comptime --projection-resources)
+set_tests_properties(test_xir_source_comptime_projection_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;projection" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_error COMMAND test_xir_source_comptime --error)
+set_tests_properties(test_xir_source_comptime_error PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;error" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_error_resources COMMAND test_xir_source_comptime --error-resources)
+set_tests_properties(test_xir_source_comptime_error_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;error" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_panic COMMAND test_xir_source_comptime --panic)
+set_tests_properties(test_xir_source_comptime_panic PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;panic" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_panic_resources COMMAND test_xir_source_comptime --panic-resources)
+set_tests_properties(test_xir_source_comptime_panic_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;panic" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_class COMMAND test_xir_source_comptime --class)
+set_tests_properties(test_xir_source_comptime_class PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;class" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_class_resources COMMAND test_xir_source_comptime --class-resources)
+set_tests_properties(test_xir_source_comptime_class_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;class" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_output COMMAND test_xir_source_comptime --output)
+set_tests_properties(test_xir_source_comptime_output PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;output" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_output_resources COMMAND test_xir_source_comptime --output-resources)
+set_tests_properties(test_xir_source_comptime_output_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;output" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_dynamic_loan COMMAND test_xir_source_comptime --dynamic-loan)
+set_tests_properties(test_xir_source_comptime_dynamic_loan PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;class" TIMEOUT 30)
+add_test(NAME test_xir_source_comptime_dynamic_loan_resources COMMAND test_xir_source_comptime --dynamic-loan-resources)
+set_tests_properties(test_xir_source_comptime_dynamic_loan_resources PROPERTIES
+    LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;class" TIMEOUT 600 RUN_SERIAL TRUE)

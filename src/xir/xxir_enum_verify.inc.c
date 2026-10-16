@@ -12,9 +12,11 @@ static XrXirStatus enum_uses(const Graph *graph, const XrXirFunction *function,
     bool construct = op->op == XR_XIR_ENUM_NEW, tag = op->op == XR_XIR_ENUM_TAG;
     XrXirType type = construct ? op->type : xr_xir_operand_type(function, op->args[0]);
     const XrXirTypes *types = context->module->types;
-    XrXirEnumDescription description = {0};
-    XrXirStatus status = xr_xir_compile_enum_description(&context->remaining, types, type, &description);
+    XrXirTypeDescription description = {0};
+    XrXirStatus status = xr_xir_compile_type_description(&context->remaining, types, type, &description);
     if (status != XR_XIR_OK) return status;
+    if (description.kind != XR_XIR_TYPE_NOMINAL || description.nominal_kind != XR_XIR_NOMINAL_ENUM)
+        return XR_XIR_BAD_TYPE;
     const XrXirNominalType *instance = description.instance;
     const XrXirNominalDeclaration *d = description.definition;
     const XrXirNominalVariant *variants = description.variants;
