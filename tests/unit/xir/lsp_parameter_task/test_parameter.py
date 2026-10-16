@@ -27,10 +27,13 @@ def unpack(data):
     return messages
 
 def check_parameter(value, variant=0):
-    expected = [] if variant in (9, 10) else [
+    parameters = [] if variant in (9, 10, 17, 18, 19) else [
         {"position": {"line": 3, "character": 8}, "label": "value:", "kind": 2,
          "paddingRight": True, "tooltip": "parameter mode: ref"},
         {"position": {"line": 3, "character": 17}, "label": "extra:", "kind": 2, "paddingRight": True}]
+    types = [{"position": {"line": 2, "character": 9}, "label": ": i64", "kind": 1, "paddingLeft": True}] if variant in (16, 17, 20) else []
+    later = [{"position": {"line": 3, "character": 31}, "label": ": i64", "kind": 1, "paddingLeft": True}] if types else []
+    expected = types + parameters + later
     assert value == expected, (variant, value, expected)
 
 with tempfile.TemporaryDirectory(prefix="parameter-😀-#-", dir=os.getcwd()) as folder:
@@ -50,10 +53,10 @@ with tempfile.TemporaryDirectory(prefix="parameter-😀-#-", dir=os.getcwd()) as
         sys.exit(0)
     rows = []
     if mode == "--normal":
-        for scenario in [*range(13), 14, 15]:
+        for scenario in [*range(13), *range(14, 21)]:
             result = invoke(scenario)
-            if scenario == 15:
-                check_parameter(json.loads(result.stdout))
+            if scenario in (15, 20):
+                check_parameter(json.loads(result.stdout), scenario)
                 assert b"PARAMETER_DEATH server_poisoned=1 one_shot=1" in result.stderr
             elif scenario == 14:
                 assert not result.stdout and b"capture_and_async=18" in result.stderr
@@ -73,7 +76,7 @@ with tempfile.TemporaryDirectory(prefix="parameter-😀-#-", dir=os.getcwd()) as
                     check_parameter(messages[0]["result"], scenario)
             rows.append({"scenario": scenario, "passed": True})
     measured = []
-    for variant in (0, 9, 10):
+    for variant in (0, 9, 10, 16, 17):
         result = invoke("--resource", maximum, maximum, variant)
         match = stats_re.search(result.stderr)
         assert match and all(int(match[n]) > 0 for n in (1, 2, 6, 7, 8)), result.stderr[-5000:]

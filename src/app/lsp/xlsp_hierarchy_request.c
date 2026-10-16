@@ -41,7 +41,7 @@ struct XlspHierarchyRequest {
     bool started, selected;
 };
 static unsigned hierarchy_stage(XlspSourceScopeQueryKind kind) {
-    if (kind == XLSP_SOURCE_PARAMETER_HINTS) return 16u;
+    if (kind == XLSP_SOURCE_INLAY_BINDINGS) return 16u;
     if (kind == XLSP_SOURCE_DOCUMENT_LINKS) return 15u;
     return kind >= XLSP_SOURCE_SEMANTIC_FULL ? 11u :
         kind == XLSP_SOURCE_BINDING_LENSES ? 12u : kind == XLSP_SOURCE_TYPE_HIERARCHY ? 25u : 24u;
@@ -203,7 +203,7 @@ static XrXirStatus hierarchy_semantic_params(XlspHierarchyRequest *request) {
         status=hierarchy_resource(xr_compile_resources_work(resources,id->string_len));
         if(status!=XR_XIR_OK)return status;
         if(memchr(id->as.string,0,id->string_len))return XR_XIR_BAD_STRUCTURE;
-    }else if(request->kind==XLSP_SOURCE_SEMANTIC_RANGE||request->kind==XLSP_SOURCE_PARAMETER_HINTS){
+    }else if(request->kind==XLSP_SOURCE_SEMANTIC_RANGE||request->kind==XLSP_SOURCE_INLAY_BINDINGS){
         status=hierarchy_member(resources,params,"range",true,&range);
         if(status==XR_XIR_OK)status=hierarchy_member(resources,range,"start",true,&start);
         if(status==XR_XIR_OK)status=hierarchy_member(resources,range,"end",true,&end);
@@ -224,7 +224,7 @@ static XrXirStatus hierarchy_semantic_document(XlspHierarchyRequest *request,con
     if(memcmp(doc->uri,request->uri,length))return XR_XIR_OK;
     if(request->selected)return XR_XIR_BAD_STRUCTURE;
     request->selected=true;request->version=doc->version;
-    if (request->kind == XLSP_SOURCE_DOCUMENT_LINKS||request->kind==XLSP_SOURCE_PARAMETER_HINTS) return XR_XIR_OK;
+    if (request->kind == XLSP_SOURCE_DOCUMENT_LINKS||request->kind==XLSP_SOURCE_INLAY_BINDINGS) return XR_XIR_OK;
     request->previous_result_id=doc->sem_token_result_id;
     if(request->kind!=XLSP_SOURCE_SEMANTIC_RANGE&&doc->sem_token_result_id==UINT32_MAX)return XR_XIR_BUDGET;
     if(request->kind==XLSP_SOURCE_SEMANTIC_DELTA&&doc->source_tokens){
@@ -256,8 +256,10 @@ static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspSe
     if (status != XR_XIR_OK) return status;
     request->uri = uri->as.string; request->uri_length = uri->string_len;
     if (request->kind >= XLSP_SOURCE_SEMANTIC_FULL) {
-        if(request->kind==XLSP_SOURCE_PARAMETER_HINTS)
+        if(request->kind==XLSP_SOURCE_INLAY_BINDINGS) {
             request->config.inlay_hints_parameter_names=server->config.inlay_hints_parameter_names;
+            request->config.inlay_hints_type_annotations=server->config.inlay_hints_type_annotations;
+        }
         status=hierarchy_semantic_params(request);
         if(status==XR_XIR_OK)status=hierarchy_documents(request,server);
         return status!=XR_XIR_OK?status:request->selected?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
@@ -276,7 +278,7 @@ static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspSe
 XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *server, const XrJsonValue *params,
     unsigned mode, XlspSourceScopeQueryKind kind, XlspHierarchyRequest **out) {
     if (!server || !out || *out || kind < XLSP_SOURCE_CALL_HIERARCHY ||
-        kind > XLSP_SOURCE_PARAMETER_HINTS || mode > 2 || (kind >= XLSP_SOURCE_BINDING_LENSES && mode))
+        kind > XLSP_SOURCE_INLAY_BINDINGS || mode > 2 || (kind >= XLSP_SOURCE_BINDING_LENSES && mode))
         return XR_XIR_BAD_STRUCTURE;
     server->source_failure.stage = hierarchy_stage(kind); server->source_failure.status = XR_XIR_BAD_STRUCTURE;
     if (!params || server->shutdown_received || server->workspace_folder_count < 0 ||
@@ -372,13 +374,14 @@ static XrXirStatus hierarchy_parameters(XlspHierarchyRequest *request,XrJsonValu
     XrXirStatus status=xlsp_source_cursor(request->context.resources,document->text,document->length,request->range.start,&first);
     if(status==XR_XIR_OK)status=xlsp_source_cursor(request->context.resources,document->text,document->length,request->range.end,&last);
     if(status!=XR_XIR_OK)return status;
-    if(!request->config.inlay_hints_parameter_names) {
+    if(!request->config.inlay_hints_parameter_names&&!request->config.inlay_hints_type_annotations) {
         status=hierarchy_resource(xr_compile_resources_work(request->context.resources,sizeof(XrJsonValue)));if(status!=XR_XIR_OK)return status;
         XrJsonValue *empty=xjson_new_array();if(!empty)return XR_XIR_OUT_OF_MEMORY;*out=empty;return XR_XIR_OK;
     }
     XlspSourceWorkspace *workspace=NULL;
     status=xlsp_source_workspace_build(&request->context,request->documents,request->count,&workspace,NULL,NULL);
-    if(status==XR_XIR_OK)status=xlsp_source_workspace_parameter_hints(workspace,request->uri,request->uri_length,request->range,out);
+    XlspSourceInlayOptions options={request->range,request->config.inlay_hints_type_annotations,request->config.inlay_hints_parameter_names};
+    if(status==XR_XIR_OK)status=xlsp_source_workspace_inlay_bindings(workspace,request->uri,request->uri_length,&options,out);
     xlsp_source_workspace_free(workspace);return status;
 }
 XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *request,
@@ -396,7 +399,7 @@ XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *request,
         bound = true;
     }
     if(request->kind>=XLSP_SOURCE_SEMANTIC_FULL){
-        result.status=request->kind==XLSP_SOURCE_PARAMETER_HINTS ? hierarchy_parameters(request,&result.json) :
+        result.status=request->kind==XLSP_SOURCE_INLAY_BINDINGS ? hierarchy_parameters(request,&result.json) :
             request->kind==XLSP_SOURCE_DOCUMENT_LINKS ? hierarchy_links(request,&result.json) :
             hierarchy_semantic(request,&result);
         if(result.status==XR_XIR_OK)result.stage=0;

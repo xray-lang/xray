@@ -7,6 +7,7 @@ typedef struct XlspSourceTypeHint {
     XrLspPosition position;
     char *label;
     size_t label_length;
+    XlspSourceHover identity;
 } XlspSourceTypeHint;
 typedef struct XlspSourceTypeHints {XlspSourceTypeHint *items;size_t count;} XlspSourceTypeHints;
 /* Checked inferred bindings only. Labels and positions use owned Source facts;
@@ -17,6 +18,16 @@ typedef struct XlspSourceTypeHints {XlspSourceTypeHint *items;size_t count;} Xls
 XR_FUNC XrXirStatus xlsp_source_type_hints(const XlspSourceSnapshot *,const char *,size_t,
     XrLspRange,XlspSourceTypeHints *);
 XR_FUNC void xlsp_source_type_hints_free(XlspSourceTypeHints *);
+typedef struct XlspSourceTypeHintRequest {
+    XrCompileResources *resources;
+    XlspSourceSnapshot *const *snapshots;
+    size_t count;
+    XlspSourceDocument document;
+    XrLspRange range;
+} XlspSourceTypeHintRequest;
+/* Compare complete observed type identities and document provenance before rendering.
+ * The binary identity is display-only, independent of local type/declaration ordinals. */
+XR_FUNC XrXirStatus xlsp_source_type_hints_many_json(const XlspSourceTypeHintRequest *,XrJsonValue **);
 typedef struct XlspSourceParameterHint {
     XrLspPosition position;
     XlspSourceHover label,target_identity,target_path,target_uri;
@@ -52,4 +63,5 @@ typedef struct XlspSourceParameterHintRequest {
  * No containing root is UNRESOLVED; a valid empty region produces [].
  * Failure preserves output and never publishes a partial JSON array. */
 XR_FUNC XrXirStatus xlsp_source_parameter_hints_many_json(const XlspSourceParameterHintRequest *,XrJsonValue **);
+typedef struct XlspSourceInlayOptions {XrLspRange range;bool types,parameters;} XlspSourceInlayOptions;
 #endif

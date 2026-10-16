@@ -26,9 +26,14 @@ static void hints_check(const XlspSourceTypeHints *hints) {
     const char *labels[]={": Actual",": i64",": Array<Actual>"};
     const unsigned rows[]={1,3,4},columns[]={15,12,13};
     for(size_t i=0;i<3;++i) {
+        CHECK(hints->items[i].identity.text&&hints->items[i].identity.length);
         CHECK(!strcmp(hints->items[i].label,labels[i]));CHECK(hints->items[i].label_length==strlen(labels[i]));
         CHECK(hints->items[i].position.line==rows[i]&&hints->items[i].position.character==columns[i]);
     }
+}
+static uint64_t hints_identity_hash(XlspSourceHover identity) {
+    CHECK(identity.text&&identity.length);uint64_t value=UINT64_C(14695981039346656037);
+    for(size_t i=0;i<identity.length;++i){value^=(unsigned char)identity.text[i];value*=UINT64_C(1099511628211);}return value;
 }
 static void hints_invalid(const XlspSourceSnapshot *snapshot,const char *uri) {
     const XrLspRange ranges[]={{{4,0},{1,0}},{{1,0},{1,99}},{{99,0},{99,0}}};
@@ -92,8 +97,11 @@ int main(int argc,char **argv) {
     CHECK(!strcmp(hover.text,"const inferred: Actual"));xlsp_source_hover_free(&hover);
     XlspSourceTypeHints hints={0};XrLspRange range={{0,0},{8,0}};
     CHECK(xlsp_source_type_hints(snapshot,argv[1],strlen(argv[1]),range,&hints)==XR_XIR_OK);hints_check(&hints);
+    uint64_t identities[3];for(size_t i=0;i<3;++i)identities[i]=hints_identity_hash(hints.items[i].identity);
     xlsp_source_snapshot_free(snapshot);hints_unicode(resources,argv[1]);hints_long(resources,argv[1]);
-    xr_compile_resources_release(resources);hints_check(&hints);xlsp_source_type_hints_free(&hints);
+    xr_compile_resources_release(resources);hints_check(&hints);
+    for(size_t i=0;i<3;++i)CHECK(hints_identity_hash(hints.items[i].identity)==identities[i]);
+    xlsp_source_type_hints_free(&hints);
     CHECK(!runtime_live&&!runtime_bytes);
     printf("Type hints sites=%zu full_FI=%u generic=1 unicode=1 long=1 producer_dead=1 physical0/0\n",sites,failures?1u:0u);return 0;
 }

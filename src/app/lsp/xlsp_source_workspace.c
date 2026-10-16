@@ -7,6 +7,7 @@
 #include "../../xir/xxir_stdlib_internal.h"
 #include "../../xir/xxir_library_catalog.h"
 #include <string.h>
+#include <limits.h>
 struct XlspSourceWorkspace {
     XrXirCompileContext context;
     XrCompilerSession *session;
@@ -21,27 +22,7 @@ static XrXirStatus workspace_resource(XrCompileResourceStatus status) {
         status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
         status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
 }
-XR_FUNC XrXirStatus xlsp_source_workspace_parameter_hints(XlspSourceWorkspace *workspace,const char *uri,size_t length,
-    XrLspRange range,XrJsonValue **out) {
-    if(!workspace||!uri||length==SIZE_MAX||!out||*out)return XR_XIR_BAD_STRUCTURE;
-    XlspSyntaxSnapshot *syntax=NULL;XlspSourceCallArguments *arguments=NULL;XrXirStatus status=XR_XIR_UNRESOLVED;
-    for(size_t i=0;i<workspace->count;++i) {
-        bool contains=false;status=xlsp_source_snapshot_contains(workspace->snapshots[i],uri,length,&contains);
-        if(status!=XR_XIR_OK)goto done;if(!contains)continue;
-        XlspSourceDocument document={0};status=xlsp_source_snapshot_document(workspace->snapshots[i],uri,length,&document);
-        if(status!=XR_XIR_OK)goto done;
-        XrParseStatus parsed=xlsp_source_syntax_build(workspace->session,&document,&syntax);
-        if(parsed!=XR_PARSE_OK&&parsed!=XR_PARSE_RECOVERED) {
-            status=parsed==XR_PARSE_BUDGET?XR_XIR_BUDGET:parsed==XR_PARSE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;goto done;
-        }
-        status=xlsp_source_syntax_arguments(syntax,&arguments);if(status!=XR_XIR_OK)goto done;
-        XlspSourceParameterHintRequest request={workspace->context.resources,workspace->snapshots,workspace->count,arguments,range};
-        status=xlsp_source_parameter_hints_many_json(&request,out);goto done;
-    }
-    status=XR_XIR_UNRESOLVED;
-done:
-    xlsp_source_call_arguments_free(arguments);xlsp_source_syntax_free(syntax);return status;
-}
+#include "xlsp_source_inlay_workspace.inc.c"
 void xlsp_source_workspace_free(XlspSourceWorkspace *w) {
     if(!w)return;
     for(size_t i=0;i<w->count;++i) {

@@ -13,3 +13,9 @@ XR_FUNC XrXirStatus xlsp_source_parameter_hints(const XlspSourceSnapshot *snapsh
 XR_FUNC void xlsp_source_parameter_hints_free(XlspSourceParameterHints *hints) {
     (void)hints;
 }
+
+XR_FUNC XrXirStatus xlsp_source_type_hints(const XlspSourceSnapshot *snapshot,const char *uri,size_t length,
+    XrLspRange range,XlspSourceTypeHints *out) {
+    (void)snapshot;(void)uri;(void)length;(void)range;(void)out;return XR_XIR_UNSUPPORTED;
+}
+XR_FUNC void xlsp_source_type_hints_free(XlspSourceTypeHints *hints) {(void)hints;}

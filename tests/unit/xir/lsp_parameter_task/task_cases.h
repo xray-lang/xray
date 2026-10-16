@@ -28,17 +28,24 @@ static void parameter_fixture(ParameterFixture *f,const ParameterOptions *option
     memset(f,0,sizeof(*f));f->server.initialized=true;f->server.source_revision=41;f->server.next_request_id=71;
     f->server.transport=f->transport=xlsp_transport_stdio();CHECK(f->transport);
     f->server.doc_table=xlsp_document_store_new(destroy_document);CHECK(f->server.doc_table);
-    f->server.config.inlay_hints_parameter_names=options->scenario!=9&&options->scenario!=12;
-    add_document(&f->server,options->uri,parameter_text,1);add_document(&f->server,options->library,parameter_library,7);
+    f->server.config.inlay_hints_parameter_names=options->scenario!=9&&options->scenario!=12&&options->scenario!=17&&options->scenario!=18;
+    f->server.config.inlay_hints_type_annotations=options->scenario>=16&&options->scenario!=18;
+    const char *text=parameter_text;
+    if(options->scenario==16||options->scenario==17||options->scenario==20)
+        text="import { mix as chosen } from \"./lib\"\nfn main(){\n var slot=1\n chosen(ref slot,2);const later=3\n}\n/* 😀 */\n";
+    add_document(&f->server,options->uri,text,1);add_document(&f->server,options->library,parameter_library,7);
     xlsp_document_store_get(f->server.doc_table,options->uri)->sem_token_result_id=UINT32_MAX;
     f->params=parameters(options->uri);
     XrJsonValue *range=xjson_new_object(),*start=xjson_new_object(),*end=xjson_new_object();CHECK(range&&start&&end);
-    CHECK(index_json_member(start,"line",parameter_integer(options->scenario==10?4:3)));
+    CHECK(index_json_member(start,"line",parameter_integer((options->scenario==10||options->scenario==19)?4:3)));
     CHECK(index_json_member(start,"character",parameter_integer(0)));
-    CHECK(index_json_member(end,"line",parameter_integer(options->scenario==10?4:3)));
-    CHECK(index_json_member(end,"character",parameter_integer(options->scenario==10?0:19)));
+    CHECK(index_json_member(end,"line",parameter_integer((options->scenario==10||options->scenario==19)?4:3)));
+    CHECK(index_json_member(end,"character",parameter_integer((options->scenario==10||options->scenario==19)?0:19)));
     CHECK(index_json_member(range,"start",start)&&index_json_member(range,"end",end));
     CHECK(index_json_member(f->params,"range",range));
+    if(options->scenario==16||options->scenario==17||options->scenario==20) {
+        xjson_get(start,"line")->as.integer=2;xjson_get(end,"line")->as.integer=4;xjson_get(end,"character")->as.integer=0;
+    }
     if(options->scenario==11||options->scenario==12) {
         xjson_get(start,"line")->as.integer=5;xjson_get(start,"character")->as.integer=4;
         xjson_get(end,"line")->as.integer=5;xjson_get(end,"character")->as.integer=4;
@@ -61,7 +68,7 @@ static void parameter_start(ParameterFixture *f) {
     while(!atomic_load(&f->gate.entered)){CHECK(xr_time_monotonic_ms()<deadline);xr_thread_sleep_ms(1);}
 }
 static void parameter_death(ParameterFixture *f) {
-    XlspHierarchyRequest *request=NULL;CHECK(xlsp_hierarchy_request_capture(&f->server,f->params,0,XLSP_SOURCE_PARAMETER_HINTS,&request)==XR_XIR_OK);
+    XlspHierarchyRequest *request=NULL;CHECK(xlsp_hierarchy_request_capture(&f->server,f->params,0,XLSP_SOURCE_INLAY_BINDINGS,&request)==XR_XIR_OK);
     CHECK(xlsp_pending_request_remove(&f->server.pending_requests,&f->id));
     xlsp_document_store_free(f->server.doc_table);xjson_free(f->params);f->params=NULL;
     memset(&f->server,0xa5,sizeof(f->server));_Atomic bool cancel=false;XlspSourceRequestResult result={0},again={0};
@@ -82,7 +89,7 @@ static void parameter_admission(ParameterFixture *f) {
             xjson_get_object(range,i<7?"start":"end");
         CHECK(index_json_member(object,keys[i],xjson_clone(xjson_get(object,keys[i]))));
         XlspPendingRequests pending=f->server.pending_requests;XlspHierarchyRequest *request=NULL;
-        CHECK(xlsp_hierarchy_request_capture(&f->server,params,0,XLSP_SOURCE_PARAMETER_HINTS,&request)==XR_XIR_BAD_STRUCTURE&&!request);
+        CHECK(xlsp_hierarchy_request_capture(&f->server,params,0,XLSP_SOURCE_INLAY_BINDINGS,&request)==XR_XIR_BAD_STRUCTURE&&!request);
         CHECK(xlsp_source_task_submit(&f->server,&f->id,params,16)==XR_XIR_BAD_STRUCTURE);
         CHECK(!memcmp(&pending,&f->server.pending_requests,sizeof(pending))&&!runtime_live&&!runtime_bytes);
         xjson_free(params);
@@ -90,7 +97,7 @@ static void parameter_admission(ParameterFixture *f) {
     const char *uri=xjson_get_string(xjson_get_object(f->params,"textDocument"),"uri");
     XrLspDocument *doc=xlsp_document_store_get(f->server.doc_table,uri);CHECK(doc);doc->server=NULL;
     XlspHierarchyRequest *request=NULL;
-    CHECK(xlsp_hierarchy_request_capture(&f->server,f->params,0,XLSP_SOURCE_PARAMETER_HINTS,&request)==XR_XIR_BAD_STRUCTURE&&!request);
+    CHECK(xlsp_hierarchy_request_capture(&f->server,f->params,0,XLSP_SOURCE_INLAY_BINDINGS,&request)==XR_XIR_BAD_STRUCTURE&&!request);
     CHECK(xlsp_source_task_submit(&f->server,&f->id,f->params,16)==XR_XIR_BAD_STRUCTURE);doc->server=&f->server;
     for(unsigned i=0;i<4;++i) {
         XrJsonValue *params=xjson_clone(f->params);CHECK(params);
@@ -99,7 +106,7 @@ static void parameter_admission(ParameterFixture *f) {
         if(i==1)line->as.integer=(int64_t)INT32_MAX+1;
         if(i==2){line->is_integer=false;line->as.number=3.5;}
         if(i==3)line->as.integer=4;
-        CHECK(xlsp_hierarchy_request_capture(&f->server,params,0,XLSP_SOURCE_PARAMETER_HINTS,&request)==XR_XIR_BAD_STRUCTURE&&!request);
+        CHECK(xlsp_hierarchy_request_capture(&f->server,params,0,XLSP_SOURCE_INLAY_BINDINGS,&request)==XR_XIR_BAD_STRUCTURE&&!request);
         CHECK(xlsp_source_task_submit(&f->server,&f->id,params,16)==XR_XIR_BAD_STRUCTURE);xjson_free(params);
     }
     CHECK(!runtime_live&&!runtime_bytes);
@@ -108,7 +115,7 @@ static void parameter_admission(ParameterFixture *f) {
 static int parameter_once(const ParameterOptions *options,ParameterMetrics *metrics) {
     ParameterFixture f;parameter_fixture(&f,options);
     if(options->scenario==14){parameter_start(&f);parameter_admission(&f);atomic_store(&f.gate.release,true);parameter_close(&f);return 0;}
-    if(options->scenario==15){parameter_death(&f);return 0;}
+    if(options->scenario==15||options->scenario==20){parameter_death(&f);return 0;}
     parameter_start(&f);size_t begin=runtime_attempts;task_resource_created_count=0;task_last_created_resources=NULL;
     task_axis_limits=options->limits;runtime_fail_at=options->source_fault==SIZE_MAX?SIZE_MAX:begin+options->source_fault;
     lsp_json_calls=0;lsp_json_fail=options->json_fault;lsp_json_injected=false;
@@ -121,6 +128,7 @@ static int parameter_once(const ParameterOptions *options,ParameterMetrics *metr
     XrCompileResources *ledger=task_last_created_resources;
     xjson_free(f.params);f.params=NULL;xlsp_document_store_free(f.server.doc_table);f.server.doc_table=NULL;
     f.server.config.inlay_hints_parameter_names=options->scenario==9;
+    f.server.config.inlay_hints_type_annotations=options->scenario<16;
     if(status==XR_XIR_OK) {
         XrLspTask *after=xlsp_task_new(block,block_complete,&f.after,XLSP_TASK_NORMAL);CHECK(after);
         CHECK(xlsp_async_submit(f.async,after));
@@ -159,7 +167,7 @@ static int parameter_once(const ParameterOptions *options,ParameterMetrics *metr
         (unsigned long long)metrics->stats.allocated_bytes,(unsigned long long)metrics->stats.peak_bytes,(unsigned long long)metrics->stats.work);
     return options->scenario==2?task_cancel_check(16):0;
 }
-static bool parameter_resource_scenario(unsigned scenario) {return scenario==0||scenario==9||scenario==10;}
+static bool parameter_resource_scenario(unsigned scenario) {return scenario==0||scenario==9||scenario==10||scenario==16||scenario==17;}
 static int parameter_main(int argc,char **argv) {
     CHECK(argc>=5);ParameterOptions options={.uri=argv[1],.library=argv[3],.source_fault=SIZE_MAX,.json_fault=SIZE_MAX,.report=true};
     ParameterMetrics metrics={0};
@@ -186,7 +194,7 @@ static int parameter_main(int argc,char **argv) {
             *bound=(uint64_t)((int64_t)*bound+delta);options.limits=&cut;options.budget=delta<0;CHECK(!parameter_once(&options,&metrics));}
         fprintf(stderr,"PARAMETER_AXES checked=9 producer_dead=1 physical0/0 JSON0/0 app0/0\n");return 0;
     }
-    CHECK(argc==5);options.scenario=(unsigned)strtoul(argv[4],NULL,10);CHECK(options.scenario<=15);
+    CHECK(argc==5);options.scenario=(unsigned)strtoul(argv[4],NULL,10);CHECK(options.scenario<=20);
     return parameter_once(&options,&metrics);
 }
 #endif // LSP_PARAMETER_TASK_CASES_H

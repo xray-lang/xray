@@ -62,7 +62,7 @@ XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *server, const XlspReque
     status = (mode < 4 || mode == 15) ?
         xlsp_navigation_capture(server, params, mode == 15 ? 4u : mode, &source->request) :
         xlsp_hierarchy_request_capture(server, params, mode >= 10 ? 0u : mode < 7 ? mode - 4 : mode - 7,
-            mode == 16 ? XLSP_SOURCE_PARAMETER_HINTS : mode == 14 ? XLSP_SOURCE_DOCUMENT_LINKS :
+            mode == 16 ? XLSP_SOURCE_INLAY_BINDINGS : mode == 14 ? XLSP_SOURCE_DOCUMENT_LINKS :
                 mode >= 11 ? (XlspSourceScopeQueryKind)(XLSP_SOURCE_SEMANTIC_FULL+mode-11) :
                 mode == 10 ? XLSP_SOURCE_BINDING_LENSES : mode >= 7 ? XLSP_SOURCE_TYPE_HIERARCHY :
                 XLSP_SOURCE_CALL_HIERARCHY, &source->hierarchy);

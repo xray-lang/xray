@@ -2,6 +2,7 @@
 #ifndef XLSP_SOURCE_WORKSPACE_H
 #define XLSP_SOURCE_WORKSPACE_H
 #include "xlsp_source_navigation.h"
+#include "xlsp_source_inlay.h"
 typedef struct XlspSourceWorkspace XlspSourceWorkspace;
 typedef struct XlspSourceWorkspaceFailure {
     bool present;
@@ -20,7 +21,7 @@ XR_FUNC XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *,
     const char *,size_t,XrLspPosition,unsigned,bool,XrJsonValue **);
 XR_FUNC XrXirStatus xlsp_source_workspace_tokens(XlspSourceWorkspace *,const char *,size_t,
     const XrLspRange *,XlspSourceTokens **);
-/* Prepared parameter-only projection; complete public inlay includes effects. */
-XR_FUNC XrXirStatus xlsp_source_workspace_parameter_hints(XlspSourceWorkspace *,const char *,size_t,
-    XrLspRange,XrJsonValue **);
+/* Prepared binding type/parameter projection; complete public inlay includes effects. */
+XR_FUNC XrXirStatus xlsp_source_workspace_inlay_bindings(XlspSourceWorkspace *,const char *,size_t,
+    const XlspSourceInlayOptions *,XrJsonValue **);
 #endif
