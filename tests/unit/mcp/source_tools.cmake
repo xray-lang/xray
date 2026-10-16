@@ -12,6 +12,10 @@ set_tests_properties(test_mcp_run_tools PROPERTIES LABELS "unit;mcp;execution" T
 add_test(NAME test_mcp_run_tools_resources COMMAND test_mcp_run_tools --resources)
 set_tests_properties(test_mcp_run_tools_resources PROPERTIES
     LABELS "unit;mcp;execution;faults;resources" TIMEOUT 120 COST 2 RUN_SERIAL TRUE)
+add_test(NAME test_mcp_channel_tools_resources COMMAND test_mcp_run_tools --channel-resources)
+set_tests_properties(test_mcp_channel_tools_resources PROPERTIES
+    LABELS "unit;mcp;execution;channel;faults;resources" TIMEOUT 120 COST 2 RUN_SERIAL TRUE
+    ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
 
 add_executable(test_mcp_service ${CMAKE_CURRENT_LIST_DIR}/test_mcp_service.c)
 target_link_libraries(test_mcp_service PRIVATE xray_mcp)
@@ -61,4 +65,13 @@ include("${CMAKE_CURRENT_LIST_DIR}/runtime_owner.cmake")
 add_test(NAME test_mcp_task_constructed COMMAND test_mcp_run_tools --constructed-tasks)
 set_tests_properties(test_mcp_task_constructed PROPERTIES
     LABELS "unit;mcp;execution;task" TIMEOUT 60
+    ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+
+add_test(NAME test_mcp_timed_channel COMMAND test_mcp_run_tools --timed-channel)
+set_tests_properties(test_mcp_timed_channel PROPERTIES
+    LABELS "unit;mcp;execution;channel;time" TIMEOUT 60
+    ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+add_test(NAME test_mcp_timed_channel_resources COMMAND test_mcp_run_tools --timed-channel-resources)
+set_tests_properties(test_mcp_timed_channel_resources PROPERTIES
+    LABELS "unit;mcp;execution;channel;time;faults;resources" TIMEOUT 120 COST 2 RUN_SERIAL TRUE
     ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")

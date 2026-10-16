@@ -25,6 +25,8 @@ typedef struct RuntimeBlock { void *pointer; size_t bytes; } RuntimeBlock;
 static RuntimeBlock blocks[8192];
 static size_t live, physical_bytes, attempts, selected=SIZE_MAX, fail_at=SIZE_MAX;
 static bool injected, entered, expire_before_owner;
+static size_t channel_requests, channel_pending_attempts, host_resumes;
+static bool observe_channel_pending;
 static size_t slot_of(const void *pointer) { return xr_hash_bytes(&pointer,sizeof(pointer)) & 8191; }
 static void record(void *pointer,size_t bytes) {
     if (!pointer) return;
@@ -83,6 +85,22 @@ XR_FUNC XrXirCallStatus mcp_runtime_instance_new(XrXirProgram *program,
     attempts=0; fail_at=selected;
     return xr_xir_instance_new(program,config,output);
 }
+XR_FUNC XrXirCallStatus mcp_runtime_instance_wait_request(XrXirInstance *instance,
+    uint64_t epoch,uint64_t wake,XrXirWaitRequest *output) {
+    XrXirCallStatus status=xr_xir_instance_wait_request(instance,epoch,wake,output);
+    if (status==XR_XIR_CALL_READY && output->kind==XR_XIR_WAIT_CHANNEL) {
+        if (observe_channel_pending) {
+            if (!channel_requests) channel_pending_attempts=attempts;
+            CHECK(attempts==channel_pending_attempts);
+        }
+        ++channel_requests;
+    }
+    return status;
+}
+XR_FUNC XrXirCallStatus mcp_runtime_instance_resume(XrXirInstance *instance,
+    uint64_t epoch,uint64_t wake) {
+    ++host_resumes;return xr_xir_instance_resume(instance,epoch,wake);
+}
 static void physical_zero(const char *name,size_t ordinal) {
     if (live || physical_bytes) fprintf(stderr,"%s ordinal=%zu residual blocks=%zu bytes=%zu\n",
         name,ordinal,live,physical_bytes);
@@ -92,6 +110,8 @@ typedef struct RunCase { const char *name,*code,*output; int timeout; XrXirCallS
 static void exercise(const RunCase *test,size_t ordinal) {
     physical_zero(test->name,ordinal); selected=ordinal; fail_at=SIZE_MAX;
     injected=false; entered=false; expire_before_owner=!strcmp(test->name,"pre-poll-cancel");
+    channel_requests=channel_pending_attempts=host_resumes=0;
+    observe_channel_pending=!strcmp(test->name,"channel-park-cancel");
     XmcpServer server={0}; XmcpCallContext context={0};
     XrJsonValue *arguments=xjson_new_object(); CHECK(arguments);
     XJSON_SET_STRING(arguments,"code",test->code);
@@ -106,6 +126,7 @@ static void exercise(const RunCase *test,size_t ordinal) {
         CHECK(!injected && status==test->status);
         CHECK(xjson_get_bool(value,"timedOut")==test->timed_out);
         CHECK(xjson_get_bool(value,"ok")== (status==XR_XIR_CALL_RETURNED));
+        if (observe_channel_pending) CHECK(channel_requests>1 && !host_resumes);
         XrJsonValue *output=xjson_get(value,"stdout"); CHECK(xjson_is_string(output));
         CHECK(output->string_len==strlen(test->output) && !memcmp(output->as.string,test->output,output->string_len));
         if (test->status==XR_XIR_CALL_ASSERTION)
@@ -118,6 +139,7 @@ static void exercise(const RunCase *test,size_t ordinal) {
     }
     xjson_free(result); fail_at=SIZE_MAX; physical_zero(test->name,ordinal);
 }
+#include "mcp_timed_channel_cases.h"
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--normal")));
     bool normal_only=argc==2; xr_test_suppress_dialogs();
@@ -126,7 +148,18 @@ int main(int argc,char **argv) {
         {"task-timer","import time\nfn worker()->i64 { time.sleep(5); return 42 }\nfn main()->i64 { return await go worker() }\nprint(main())\n","42\n",0,XR_XIR_CALL_RETURNED,false},
         {"pre-poll-cancel","import time\nfn worker()->i64 { time.sleep(2000); return 42 }\nfn main()->i64 { return await go worker() }\nprint(main())\n","",50,XR_XIR_CALL_CANCELLED,true},
         {"task-default-cancel","import time\nfn worker()->i64 { time.sleep(5000); return 42 }\nfn main()->i64 { return await go worker() }\nprint(main())\n","",0,XR_XIR_CALL_CANCELLED,true},
-        {"panic","assert(false, \"owned-panic\")\n","",0,XR_XIR_CALL_ASSERTION,false}
+        {"panic","assert(false, \"owned-panic\")\n","",0,XR_XIR_CALL_ASSERTION,false},
+        {"channel-buffered","const ch=Channel<i64>(1)\nch.send(42)\nprint(ch.recvOr(0))\n","42\n",0,XR_XIR_CALL_RETURNED,false},
+        {"channel-rendezvous","fn send(ch:Channel<i64>)->() { ch.send(42) }\n"
+            "fn main()->i64 { const ch=Channel<i64>(); const task=go send(ch); const n=ch.recvOr(0); await task; return n }\n"
+            "print(main())\n","42\n",0,XR_XIR_CALL_RETURNED,false},
+        {"channel-task-error","fn send(ch:Channel<i64>)->i64 { ch.send(42); return -1 }\n"
+            "fn main()->i64 { const ch=Channel<i64>(); ch.close(); const task=go send(ch); "
+            "try { return await task } catch(e:SendResult) { return match(e) { SendResult.Sent -> -1, "
+            "SendResult.Full -> -2, SendResult.Timeout -> -3, SendResult.Closed -> 64 } } }\n"
+            "print(main())\n","64\n",0,XR_XIR_CALL_RETURNED,false},
+        {"channel-park-cancel","const ch=Channel<i64>()\nvar value=ch.recv()\n","",1000,XR_XIR_CALL_CANCELLED,true},
+        {"channel-timed",mcp_timed_channel_code,"14177\n",0,XR_XIR_CALL_RETURNED,false}
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         exercise(&cases[i],SIZE_MAX); size_t sites=attempts; CHECK(sites);

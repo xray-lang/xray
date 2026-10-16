@@ -70,6 +70,15 @@ static XrXirCallStatus resume_wait(XrXirInstance *instance, XrXirInstanceResult 
     XrXirCallStatus status = xr_xir_instance_wait_request(instance, observed.epoch,
         observed.outcome.wake, &request);
     if (status != XR_XIR_CALL_READY) return status;
+    if (request.kind == XR_XIR_WAIT_CHANNEL) {
+        /* Channel completion belongs to the authenticated executor. A host
+         * wake cannot resume it; polling only observes a real queue event.
+         * Keep the original whole-request deadline while yielding the CPU. */
+        if (execution_stopped(server, start, duration, execution)) return XR_XIR_CALL_CANCEL_REQUESTED;
+        xr_time_sleep_ns(UINT64_C(1000000));
+        return execution_stopped(server, start, duration, execution) ?
+            XR_XIR_CALL_CANCEL_REQUESTED : XR_XIR_CALL_READY;
+    }
     XrXirHostWaitStatus waiting = xr_xir_host_wait_begin(&wait, &request);
     while (waiting == XR_XIR_HOST_WAIT_PENDING) {
         if (execution_stopped(server, start, duration, execution)) return XR_XIR_CALL_CANCEL_REQUESTED;

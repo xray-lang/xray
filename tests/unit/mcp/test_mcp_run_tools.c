@@ -18,6 +18,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "../xir/xir_source_compile_owner.h"
+#include "mcp_timed_channel_cases.h"
 static void physical_zero(void) { CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes); }
 static XrJsonValue *run(const char *code, size_t length, int timeout, int limit) {
     XmcpServer server = {0}; XmcpCallContext context = {0};
@@ -95,7 +96,7 @@ static void normal_cases(void) {
         CHECK(xjson_get_int_or(value, "sourceStatus", -1) == XR_XIR_BAD_STRUCTURE);
         xjson_free(result);
     }
-    const char *refused[] = {"import \"./private\"\n", "import \"owner/name\"\n",
+    const char *refused[] = {"import \"./private\"\n", "import \"owner/name\"\n", "import prelude\n",
         "import {read} from io\n", "export * from io\n", "var x:i64 = \"bad\"\n", "var x = ;\n"};
     for (size_t i = 0; i < sizeof(refused)/sizeof(refused[0]); ++i) {
         XrJsonValue *result = run(refused[i], strlen(refused[i]), 0, 0);
@@ -123,13 +124,13 @@ static void normal_cases(void) {
     expect_output("print(\"after-timeout\")\n", "after-timeout\n", 14, 0, false);
     puts("MCP owned run: normal, byte output, isolation, truncation, imports, panic, deadline and recovery PASS");
 }
-static void tool_faults(void) {
-    const char code[] = "print(42)\n"; size_t sites = 0;
+static void tool_faults(const char *code) {
+    size_t sites = 0;
     for (size_t probe = 0; probe <= sites; ++probe) {
         source_fixture_compile_attempts = 0;
         source_fixture_compile_fail_at = probe ? probe - 1 : SIZE_MAX;
         source_fixture_compile_injected = false;
-        XrJsonValue *result = run(code, sizeof(code)-1, 30000, 0);
+        XrJsonValue *result = run(code, strlen(code), 30000, 0);
         XrJsonValue *value = xjson_get_object(result, "structuredContent"); CHECK(value);
         if (!probe) { CHECK(!xjson_get_bool(result, "isError")); sites = source_fixture_compile_attempts; CHECK(sites); }
         else {
@@ -142,14 +143,13 @@ static void tool_faults(void) {
     source_fixture_compile_fail_at = SIZE_MAX;
     printf("MCP run: %zu complete compiler allocation failures, exact OOM and physical0\n", sites);
 }
-static XrXirStatus product_on(XrCompileResources *resources, XrXirSourceProduct **product,
+static XrXirStatus product_on(XrCompileResources *resources, const char *code, XrXirSourceProduct **product,
     XrXirSourceProductDiagnostic *diagnostic) {
     XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
-    const char code[] = "print(42)\n";
-    XmcpSourceRequest request = {code, sizeof(code)-1, "mcp-run-owner", &context};
+    XmcpSourceRequest request = {code, strlen(code), "mcp-run-owner", &context};
     return xmcp_run_source_product(&request, product, diagnostic);
 }
-static void same_ledger_faults(void) {
+static void same_ledger_faults(const char *code) {
     size_t sites = 0;
     for (size_t probe = 0; probe <= sites; ++probe) {
         XrCompileResourceLimits limits = xmcp_source_default_limits(); XrCompileResources *resources = NULL;
@@ -159,7 +159,7 @@ static void same_ledger_faults(void) {
         source_fixture_compile_attempts = 0; source_fixture_compile_injected = false;
         source_fixture_compile_fail_at = probe ? probe - 1 : SIZE_MAX;
         XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
-        XrXirStatus status = product_on(resources, &product, &diagnostic);
+        XrXirStatus status = product_on(resources, code, &product, &diagnostic);
         if (!probe) { CHECK(status == XR_XIR_OK); sites = source_fixture_compile_attempts; CHECK(sites); }
         else { CHECK(status == XR_XIR_OUT_OF_MEMORY && !product && source_fixture_compile_injected); }
         source_fixture_compile_fail_at = SIZE_MAX;
@@ -167,7 +167,7 @@ static void same_ledger_faults(void) {
         xr_xir_compile_source_product_diagnostic_free(&diagnostic);
         CHECK(xr_compile_resources_stats(resources, &failed) == XR_COMPILE_RESOURCE_OK);
         CHECK(failed.live_bytes == baseline.live_bytes && failed.work > baseline.work);
-        CHECK(product_on(resources, &product, &diagnostic) == XR_XIR_OK);
+        CHECK(product_on(resources, code, &product, &diagnostic) == XR_XIR_OK);
         xr_xir_compile_source_product_free(product); xr_xir_compile_source_product_diagnostic_free(&diagnostic);
         CHECK(xr_compile_resources_stats(resources, &retried) == XR_COMPILE_RESOURCE_OK);
         CHECK(retried.live_bytes == baseline.live_bytes && retried.work > failed.work);
@@ -176,11 +176,11 @@ static void same_ledger_faults(void) {
     }
     printf("MCP run helper: %zu complete failures and same-ledger retries, physical0\n", sites);
 }
-static void axes(void) {
+static void axes(const char *code) {
     XrCompileResourceLimits limits = xmcp_source_default_limits(); XrCompileResources *resources = NULL;
     CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
     XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
-    CHECK(product_on(resources, &product, &diagnostic) == XR_XIR_OK);
+    CHECK(product_on(resources, code, &product, &diagnostic) == XR_XIR_OK);
     XrCompileResourceStats observed; CHECK(xr_compile_resources_stats(resources, &observed) == XR_COMPILE_RESOURCE_OK);
     xr_xir_compile_source_product_free(product); xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources); physical_zero();
@@ -193,7 +193,7 @@ static void axes(void) {
         else limits.work = boundary;
         resources = NULL; product = NULL; memset(&diagnostic, 0, sizeof(diagnostic));
         CHECK(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
-        XrXirStatus status = product_on(resources, &product, &diagnostic);
+        XrXirStatus status = product_on(resources, code, &product, &diagnostic);
         CHECK(status == (delta < 0 ? XR_XIR_BUDGET : XR_XIR_OK));
         CHECK((status == XR_XIR_OK) == (product != NULL));
         xr_xir_compile_source_product_free(product); xr_xir_compile_source_product_diagnostic_free(&diagnostic);
@@ -207,6 +207,24 @@ int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
     if (argc == 2 && !strcmp(argv[1], "--task-wait")) { task_wait_cases(); return 0; }
     if (argc == 2 && !strcmp(argv[1], "--constructed-tasks")) { constructed_task_cases(); return 0; }
-    if (argc == 2 && !strcmp(argv[1], "--resources")) { tool_faults(); same_ledger_faults(); axes(); return 0; }
+    if (argc == 2 && !strcmp(argv[1], "--resources")) {
+        tool_faults("print(42)\n"); same_ledger_faults("print(42)\n"); axes("print(42)\n"); return 0;
+    }
+    if (argc == 2 && !strcmp(argv[1], "--channel-resources")) {
+        const char code[]="fn send(ch:Channel<i64>)->() { ch.send(42) }\n"
+            "fn main()->i64 { const ch=Channel<i64>(); const task=go send(ch); "
+            "const n=match(ch.recv()) { Recv.Value { value:item } -> item, Recv.Empty -> -1, "
+            "Recv.Timeout -> -2, Recv.Closed -> -3 }; await task; ch.close(); return n+ch.recvOr(0) }\nprint(main())\n";
+        expect_output(code,"42\n",3,0,false);
+        tool_faults(code); same_ledger_faults(code); axes(code); return 0;
+    }
+    if (argc == 2 && !strcmp(argv[1], "--timed-channel")) {
+        expect_output(mcp_timed_channel_code,"14177\n",6,0,false);
+        puts("MCP real timed buffered/empty/Task/Unit outputs, natural deadlines and once evaluation PASS");return 0;
+    }
+    if (argc == 2 && !strcmp(argv[1], "--timed-channel-resources")) {
+        tool_faults(mcp_timed_channel_code);same_ledger_faults(mcp_timed_channel_code);
+        axes(mcp_timed_channel_code);return 0;
+    }
     CHECK(argc == 1); normal_cases(); return 0;
 }

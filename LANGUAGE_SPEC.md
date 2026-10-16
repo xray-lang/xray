@@ -5539,6 +5539,8 @@ const cha = Channel(3)          // element type inferred from the first send
 | `close()` | `() -> ()` | Close the channel; idempotent |
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
+**Timeout semantics**: `ms` must be an `i64` in `0..86_400_000`; an out-of-range value raises `NumericRange` before the Channel operation. Zero milliseconds performs one queue attempt. A positive duration establishes one monotonic deadline at the first attempt; repeated waits or registration cannot extend it. The host must supply a valid clock; a failed, zero or backward reading raises `HostError` rather than becoming a timeout. A closed send returns `SendResult.Closed`; a closed and drained receive returns `Recv.Closed`. Evaluate the receiver, message and duration once in source order, including Unit message side effects, and retain those values across waits. The first atomic terminal transition arbitrates peer completion against timeout/cancellation; a committed delivery cannot be withdrawn. Both methods conservatively may suspend, including a statically zero duration.
+
 ```xray
 const ch = Channel<i64>(10)
 ch.send(42)                             // blocking send
@@ -5565,7 +5567,7 @@ for (msg in ch) {
 var value = ch.recvOr(-1)
 ```
 
-**send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
+**Payload ownership**: `Channel<T>` requires copyable, storable, Sendable `T`. Sending an ordinary value preserves a logical copy, including independent later Array mutations. Class and synchronization handles retain their shared identity; sending does not clone identity, and `const` never substitutes for Sendable evidence.
 
 In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
 
@@ -7680,7 +7682,7 @@ The sole XrXirOutputStatus is OK=0, OOM=1, LIMIT=2, OUTPUT_ERROR=3, BAD_ARGUMENT
 
 PRINT failure preserves the exact Call status. For a valid configured provider, WRITE_STREAM maps OK to true and OUTPUT_ERROR to false. An absent provider remains Call OUTPUT_ERROR; OOM/LIMIT/BAD_ARGUMENT/BAD_ABI never become false. Existing cancellation priority remains. Resource failure is not panic and cannot satisfy assertPanics.
 
-Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
+The current Call ABI is defined only by the implementation constant listed in §17.6. Provider/Sink first check that ABI and reserved=0; an absent callback requires canonical all-zero state. CallConfig/InstanceConfig check the current abi_version and exact struct_size before reading other fields. The sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus and preserve every output byte on failure. The host lends the CallConfig TimeProvider and keeps its context alive until all receiving Calls/Instances retire; Task child Calls inherit the same provider from their authentic parent or root. Actual SDK target probes check layout; one Windows layout does not qualify another target. Old entries reject before callbacks and retired embedding symbols remain link failures; rebuilding old objects does not recover historical binary evidence.
 
 Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
 

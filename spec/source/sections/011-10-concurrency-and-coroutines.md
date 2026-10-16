@@ -188,6 +188,8 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 | `close()` | `() -> ()` | 关闭 channel；幂等 |
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
+**超时语义**：`ms` 必须是 `0..86_400_000` 范围内的 `i64`；越界在 Channel 操作前产生 `NumericRange`。零毫秒只尝试一次队列操作。正毫秒从首次尝试记录单一单调截止时间，反复等待或重新登记不能延长期限；宿主必须提供有效时钟，读数失败、为零或倒退产生 `HostError`，不冒充超时。发送关闭返回 `SendResult.Closed`，接收关闭且排空返回 `Recv.Closed`。receiver、消息和毫秒表达式按源码顺序各求值一次，Unit 消息也保留求值副作用；等待期间复用原值。peer 完成与 timeout/cancel 的首个原子终态决定结果，已提交交付不可撤回。两方法保守视为可能挂起，零毫秒不改变这一静态效果。
+
 ```xray @id=channel-basic-ops
 const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
@@ -214,7 +216,7 @@ for (msg in ch) {
 var value = ch.recvOr(-1)
 ```
 
-**send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
+**载荷所有权**：`Channel<T>` 要求 copyable、storable、Sendable 的 `T`。发送普通值保持逻辑副本，Array 后续修改相互隔离；class 和同步句柄保持其共享身份，不复制对象身份，也不以 `const` 代替 Sendable 证明。
 
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
@@ -709,6 +711,8 @@ const cha = Channel(3)          // element type inferred from the first send
 | `close()` | `() -> ()` | Close the channel; idempotent |
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
+**Timeout semantics**: `ms` must be an `i64` in `0..86_400_000`; an out-of-range value raises `NumericRange` before the Channel operation. Zero milliseconds performs one queue attempt. A positive duration establishes one monotonic deadline at the first attempt; repeated waits or registration cannot extend it. The host must supply a valid clock; a failed, zero or backward reading raises `HostError` rather than becoming a timeout. A closed send returns `SendResult.Closed`; a closed and drained receive returns `Recv.Closed`. Evaluate the receiver, message and duration once in source order, including Unit message side effects, and retain those values across waits. The first atomic terminal transition arbitrates peer completion against timeout/cancellation; a committed delivery cannot be withdrawn. Both methods conservatively may suspend, including a statically zero duration.
+
 ```xray @id=channel-basic-ops
 const ch = Channel<i64>(10)
 ch.send(42)                             // blocking send
@@ -735,7 +739,7 @@ for (msg in ch) {
 var value = ch.recvOr(-1)
 ```
 
-**send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
+**Payload ownership**: `Channel<T>` requires copyable, storable, Sendable `T`. Sending an ordinary value preserves a logical copy, including independent later Array mutations. Class and synchronization handles retain their shared identity; sending does not clone identity, and `const` never substitutes for Sendable evidence.
 
 In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
 

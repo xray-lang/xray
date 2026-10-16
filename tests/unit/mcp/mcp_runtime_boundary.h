@@ -11,5 +11,11 @@
 #include "xir/xxir_program.h"
 XR_FUNC XrXirCallStatus mcp_runtime_instance_new(XrXirProgram *program,
     const XrXirInstanceConfig *config, XrXirInstance **output);
+XR_FUNC XrXirCallStatus mcp_runtime_instance_wait_request(XrXirInstance *instance,
+    uint64_t epoch, uint64_t wake, XrXirWaitRequest *output);
+XR_FUNC XrXirCallStatus mcp_runtime_instance_resume(XrXirInstance *instance,
+    uint64_t epoch, uint64_t wake);
 #define xr_xir_instance_new mcp_runtime_instance_new
+#define xr_xir_instance_wait_request mcp_runtime_instance_wait_request
+#define xr_xir_instance_resume mcp_runtime_instance_resume
 #endif // MCP_RUNTIME_BOUNDARY_H

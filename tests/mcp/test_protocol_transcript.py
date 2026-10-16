@@ -433,6 +433,94 @@ def test_tools_call_invalid_params_and_structured_content(xray: Path) -> None:
         session.close()
 
 
+def test_runner_channel_values_and_pending_cancel(xray: Path) -> None:
+    cases = [
+        ("const ch=Channel<i64>(1)\nch.send(42)\nprint(ch.recvOr(0))\n", "42\n"),
+        ("fn send(ch:Channel<i64>)->() { ch.send(42) }\n"
+         "fn main()->i64 { const ch=Channel<i64>(); const task=go send(ch); "
+         "const n=ch.recvOr(0); await task; return n }\nprint(main())\n", "42\n"),
+        ("fn send(ch:Channel<i64>)->i64 { ch.send(42); return -1 }\n"
+         "fn main()->i64 { const ch=Channel<i64>(); ch.close(); const task=go send(ch); "
+         "try { return await task } catch(e:SendResult) { return match(e) { "
+         "SendResult.Sent -> -1, SendResult.Full -> -2, SendResult.Timeout -> -3, "
+         "SendResult.Closed -> 64 } } }\nprint(main())\n", "64\n"),
+        ("fn tick(counter:Atomic<i64>) { counter.add(1) }\n"
+         "const counter=Atomic<i64>(0)\nconst ch=Channel<()>(1)\n"
+         "ch.send(tick(counter))\nch.recvOr(tick(counter))\nprint(counter.load())\n", "2\n"),
+    ]
+    session = McpSession(xray, enable_runner=True)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+        for req_id, (code, expected) in enumerate(cases, 2):
+            session.send(request("tools/call", req_id, {
+                "name": "xray_run", "arguments": {"code": code, "moduleId": "mcp-channel-transcript"},
+            }))
+            response = session.recv()
+            assert response.get("id") == req_id, response
+            result = response.get("result", {})
+            value = result.get("structuredContent", {})
+            assert result.get("isError") in (False, None), response
+            assert value.get("ok") is True and value.get("sourceStatus") == 0, response
+            assert value.get("runtimeStatus") == 1 and value.get("stdout") == expected, response
+            assert value.get("timedOut") is False and value.get("outputBytes") == len(expected), response
+        session.send(request("tools/call", 6, {
+            "name": "xray_run", "arguments": {"code": "const ch=Channel<i64>()\nvar value=ch.recv()\n",
+                "moduleId": "mcp-channel-transcript", "timeoutMs": 1000},
+        }))
+        response = session.recv()
+        result = response.get("result", {})
+        value = result.get("structuredContent", {})
+        assert response.get("id") == 6 and result.get("isError") is True, response
+        assert value.get("sourceStatus") == 0 and value.get("runtimeStatus") == 4, response
+        assert value.get("timedOut") is True and value.get("stdout") == "", response
+        session.send(request("tools/call", 7, {
+            "name": "xray_run", "arguments": {"code": "import prelude\n", "moduleId": "mcp-channel-transcript"},
+        }))
+        response = session.recv()
+        value = response.get("result", {}).get("structuredContent", {})
+        assert response.get("id") == 7 and response.get("result", {}).get("isError") is True, response
+        assert value.get("sourceStatus") == 1 and value.get("outputBytes") == 0, response
+        session.send(request("tools/call", 8, {
+            "name": "xray_run", "arguments": {"code": "print(42)\n", "moduleId": "mcp-channel-transcript"},
+        }))
+        response = session.recv()
+        value = response.get("result", {}).get("structuredContent", {})
+        assert response.get("id") == 8 and value.get("ok") is True and value.get("stdout") == "42\n", response
+    finally:
+        session.close()
+
+
+def test_runner_timed_channel_and_request_deadline(xray: Path) -> None:
+    code = 'fn sent(result:SendResult)->i64 { return match(result) { SendResult.Sent -> 1, SendResult.Full -> -1, SendResult.Timeout -> -2, SendResult.Closed -> -3 } }\nfn take(ch:Channel<i64>)->i64 { return match(ch.recvTimeout(5)) { Recv.Value { value:item } -> item, Recv.Empty -> -1, Recv.Timeout -> -2, Recv.Closed -> -3 } }\nfn tick(counter:Atomic<i64>) { counter.add(1) }\nfn main()->i64 {\n const buffered=Channel<i64>(1)\n const sentValue=sent(buffered.sendTimeout(42,0))\n const received=take(buffered)\n const expired=take(buffered)\n const child=await go take(Channel<i64>())\n const counter=Atomic<i64>(0)\n const unit=Channel<()>()\n const unitExpired=sent(unit.sendTimeout(tick(counter),5))\n return sentValue*10000+received*100+expired*10+child+unitExpired+counter.load()\n}\nprint(main())\n'
+    session = McpSession(xray, enable_runner=True)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+        cases = [(code, None, "14177\n"),
+                 ("const ch=Channel<i64>()\nvar value=ch.recvTimeout(5000)\n", 1000, ""),
+                 ("print(42)\n", None, "42\n")]
+        for req_id, (source, timeout, expected) in enumerate(cases, 2):
+            arguments = {"code": source, "moduleId": "mcp-timed-channel"}
+            if timeout is not None:
+                arguments["timeoutMs"] = timeout
+            session.send(request("tools/call", req_id, {"name": "xray_run", "arguments": arguments}))
+            response = session.recv()
+            assert response.get("id") == req_id, response
+            result = response.get("result", {})
+            value = result.get("structuredContent", {})
+            assert value.get("sourceStatus") == 0 and value.get("stdout") == expected, response
+            assert value.get("outputBytes") == len(expected), response
+            if timeout is None:
+                assert result.get("isError") in (False, None) and value.get("ok") is True, response
+                assert value.get("runtimeStatus") == 1 and value.get("timedOut") is False, response
+            else:
+                assert result.get("isError") is True and value.get("runtimeStatus") == 4, response
+                assert value.get("timedOut") is True, response
+    finally:
+        session.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xray", required=True, type=Path)
@@ -450,6 +538,8 @@ def main() -> int:
         test_prompts_get_error_protocol_paths,
         test_mixed_ndjson_request_notification_and_error,
         test_tools_call_invalid_params_and_structured_content,
+        test_runner_channel_values_and_pending_cancel,
+        test_runner_timed_channel_and_request_deadline,
     ]
     for test in tests:
         test(args.xray)

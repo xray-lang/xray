@@ -10,7447 +10,1571 @@
 // clang-format off
 
 static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
-    {
-        .name = "CoroDeadlock",
-        .signature = "{ members: Array<CoroInfo>, reason: string }",
-        .summary = "Typed description of a detected coroutine wait cycle",
-    },
-    {
-        .name = "CoroDeadlock.members",
-        .signature = "const Array<CoroInfo>",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroDeadlock.reason",
-        .signature = "const string",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroGroupKey",
-        .signature = "enum CoroGroupKey",
-        .summary = "Stable key used to group coroutine diagnostic snapshots",
-    },
-    {
-        .name = "CoroGroupKey.Name",
-        .signature = "CoroGroupKey.Name",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroGroupKey.State",
-        .signature = "CoroGroupKey.State",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroInfo",
-        .signature = "{ id: i64, name: string?, state: CoroState, reductions: i64, source: string? }",
-        .summary = "Typed diagnostic snapshot for one coroutine",
-    },
-    {
-        .name = "CoroInfo.id",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroInfo.name",
-        .signature = "const string?",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroInfo.reductions",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroInfo.source",
-        .signature = "const string?",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroInfo.state",
-        .signature = "const CoroState",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroMetric",
-        .signature = "enum CoroMetric",
-        .summary = "Metric used to rank coroutine diagnostic snapshots",
-    },
-    {
-        .name = "CoroMetric.Id",
-        .signature = "CoroMetric.Id",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroMetric.Reductions",
-        .signature = "CoroMetric.Reductions",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroState",
-        .signature = "enum CoroState",
-        .summary = "Lifecycle state captured in a coroutine diagnostic snapshot",
-    },
-    {
-        .name = "CoroState.Blocked",
-        .signature = "CoroState.Blocked",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroState.Done",
-        .signature = "CoroState.Done",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroState.Ready",
-        .signature = "CoroState.Ready",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroState.Running",
-        .signature = "CoroState.Running",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroState.Unknown",
-        .signature = "CoroState.Unknown",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "CoroStats",
-        .signature = "{ active: i64, blocked: i64, ready: i64, total: i64, created: i64 }",
-        .summary = "Typed aggregate counters for the coroutine scheduler",
-    },
-    {
-        .name = "CoroStats.active",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroStats.blocked",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroStats.created",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroStats.ready",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "CoroStats.total",
-        .signature = "const i64",
-        .summary = "Object field",
-    },
-    {
-        .name = "Local",
-        .signature = "<T>(): CoroLocal<T>",
-        .summary = "Create a typed coroutine-local slot",
-    },
-    {
-        .name = "deadlocks",
-        .signature = "(): Array<CoroDeadlock>",
-        .summary = "Detect deadlocked coroutines",
-    },
-    {
-        .name = "demonitor",
-        .signature = "(ch: Channel<string>): ()",
-        .summary = "Cancel coroutine monitor",
-    },
-    {
-        .name = "dump",
-        .signature = "(limit?: i64): ()",
-        .summary = "Dump coroutine state",
-    },
-    {
-        .name = "groupBy",
-        .signature = "(field: CoroGroupKey): Map<string, i64>",
-        .summary = "Group coroutines by field",
-    },
-    {
-        .name = "kill",
-        .signature = "(name: string, reason?: string): bool",
-        .summary = "Kill named coroutine",
-    },
-    {
-        .name = "list",
-        .signature = "(limit?: i64, state?: CoroState): Array<CoroInfo>",
-        .summary = "List coroutines",
-    },
-    {
-        .name = "lockThread",
-        .signature = "(): ()",
-        .summary = "Lock current thread",
-    },
-    {
-        .name = "monitor",
-        .signature = "(name: string): Channel<string>",
-        .summary = "Monitor named coroutine, returns Channel",
-    },
-    {
-        .name = "self",
-        .signature = "(): string?",
-        .summary = "Get current coroutine name",
-    },
-    {
-        .name = "stalled",
-        .signature = "(timeout_ms?: i64): Array<CoroInfo>",
-        .summary = "Detect stalled coroutines",
-    },
-    {
-        .name = "stats",
-        .signature = "(): CoroStats",
-        .summary = "Get coroutine statistics",
-    },
-    {
-        .name = "top",
-        .signature = "(n: i64, metric?: CoroMetric): Array<CoroInfo>",
-        .summary = "Top N coroutines by metric",
-    },
-    {
-        .name = "unlockThread",
-        .signature = "(): ()",
-        .summary = "Unlock current thread",
-    },
-    {
-        .name = "whereis",
-        .signature = "(name: string): bool",
-        .summary = "Check if named coroutine exists",
-    },
-    {
-        .name = "yield",
-        .signature = "(): ()",
-        .summary = "Cooperative CPU yield (Gosched)",
-    },
+    {.name = "CoroDeadlock", .signature = "{ members: Array<CoroInfo>, reason: string }", .summary = "Typed description of a detected coroutine wait cycle",},
+    {.name = "CoroDeadlock.members", .signature = "const Array<CoroInfo>", .summary = "Object field",},
+    {.name = "CoroDeadlock.reason", .signature = "const string", .summary = "Object field",},
+    {.name = "CoroGroupKey", .signature = "enum CoroGroupKey", .summary = "Stable key used to group coroutine diagnostic snapshots",},
+    {.name = "CoroGroupKey.Name", .signature = "CoroGroupKey.Name", .summary = "Enum variant",},
+    {.name = "CoroGroupKey.State", .signature = "CoroGroupKey.State", .summary = "Enum variant",},
+    {.name = "CoroInfo", .signature = "{ id: i64, name: string?, state: CoroState, reductions: i64, source: string? }", .summary = "Typed diagnostic snapshot for one coroutine",},
+    {.name = "CoroInfo.id", .signature = "const i64", .summary = "Object field",},
+    {.name = "CoroInfo.name", .signature = "const string?", .summary = "Object field",},
+    {.name = "CoroInfo.reductions", .signature = "const i64", .summary = "Object field",},
+    {.name = "CoroInfo.source", .signature = "const string?", .summary = "Object field",},
+    {.name = "CoroInfo.state", .signature = "const CoroState", .summary = "Object field",},
+    {.name = "CoroMetric", .signature = "enum CoroMetric", .summary = "Metric used to rank coroutine diagnostic snapshots",},
+    {.name = "CoroMetric.Id", .signature = "CoroMetric.Id", .summary = "Enum variant",},
+    {.name = "CoroMetric.Reductions", .signature = "CoroMetric.Reductions", .summary = "Enum variant",},
+    {.name = "CoroState", .signature = "enum CoroState", .summary = "Lifecycle state captured in a coroutine diagnostic snapshot",},
+    {.name = "CoroState.Blocked", .signature = "CoroState.Blocked", .summary = "Enum variant",},
+    {.name = "CoroState.Done", .signature = "CoroState.Done", .summary = "Enum variant",},
+    {.name = "CoroState.Ready", .signature = "CoroState.Ready", .summary = "Enum variant",},
+    {.name = "CoroState.Running", .signature = "CoroState.Running", .summary = "Enum variant",},
+    {.name = "CoroState.Unknown", .signature = "CoroState.Unknown", .summary = "Enum variant",},
+    {.name = "CoroStats", .signature = "{ active: i64, blocked: i64, ready: i64, total: i64, created: i64 }", .summary = "Typed aggregate counters for the coroutine scheduler",},
+    {.name = "CoroStats.active", .signature = "const i64", .summary = "Object field",},
+    {.name = "CoroStats.blocked", .signature = "const i64", .summary = "Object field",},
+    {.name = "CoroStats.created", .signature = "const i64", .summary = "Object field",},
+    {.name = "CoroStats.ready", .signature = "const i64", .summary = "Object field",},
+    {.name = "CoroStats.total", .signature = "const i64", .summary = "Object field",},
+    {.name = "Local", .signature = "<T>(): CoroLocal<T>", .summary = "Create a typed coroutine-local slot",},
+    {.name = "deadlocks", .signature = "(): Array<CoroDeadlock>", .summary = "Detect deadlocked coroutines",},
+    {.name = "demonitor", .signature = "(ch: Channel<string>): ()", .summary = "Cancel coroutine monitor",},
+    {.name = "dump", .signature = "(limit?: i64): ()", .summary = "Dump coroutine state",},
+    {.name = "groupBy", .signature = "(field: CoroGroupKey): Map<string, i64>", .summary = "Group coroutines by field",},
+    {.name = "kill", .signature = "(name: string, reason?: string): bool", .summary = "Kill named coroutine",},
+    {.name = "list", .signature = "(limit?: i64, state?: CoroState): Array<CoroInfo>", .summary = "List coroutines",},
+    {.name = "lockThread", .signature = "(): ()", .summary = "Lock current thread",},
+    {.name = "monitor", .signature = "(name: string): Channel<string>", .summary = "Monitor named coroutine, returns Channel",},
+    {.name = "self", .signature = "(): string?", .summary = "Get current coroutine name",},
+    {.name = "stalled", .signature = "(timeout_ms?: i64): Array<CoroInfo>", .summary = "Detect stalled coroutines",},
+    {.name = "stats", .signature = "(): CoroStats", .summary = "Get coroutine statistics",},
+    {.name = "top", .signature = "(n: i64, metric?: CoroMetric): Array<CoroInfo>", .summary = "Top N coroutines by metric",},
+    {.name = "unlockThread", .signature = "(): ()", .summary = "Unlock current thread",},
+    {.name = "whereis", .signature = "(name: string): bool", .summary = "Check if named coroutine exists",},
+    {.name = "yield", .signature = "(): ()", .summary = "Cooperative CPU yield (Gosched)",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_CoroPool[] = {
-    {
-        .name = "submit",
-        .signature = "(fn: fn(): T): Task<T>",
-        .summary = "Submit a typed task",
-    },
+    {.name = "submit", .signature = "(fn: fn(): T): Task<T>", .summary = "Submit a typed task",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
-    {
-        .name = "Base64DecodeOptions",
-        .signature = "Base64DecodeOptions",
-        .summary = "",
-    },
-    {
-        .name = "Base64DecodeOptions.alphabet",
-        .signature = ": Base64Alphabet",
-        .summary = "",
-    },
-    {
-        .name = "Base64DecodeOptions.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Base64DecodeOptions.padding",
-        .signature = ": Base64PaddingPolicy",
-        .summary = "",
-    },
-    {
-        .name = "Base64EncodeOptions",
-        .signature = "Base64EncodeOptions",
-        .summary = "",
-    },
-    {
-        .name = "Base64EncodeOptions.alphabet",
-        .signature = ": Base64Alphabet",
-        .summary = "",
-    },
-    {
-        .name = "Base64EncodeOptions.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Base64EncodeOptions.padding",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "decode",
-        .signature = "(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "encode",
-        .signature = "(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()): string",
-        .summary = "",
-    },
-    {
-        .name = "isValid",
-        .signature = "(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): bool",
-        .summary = "",
-    },
+    {.name = "Base64DecodeOptions", .signature = "Base64DecodeOptions", .summary = "",},
+    {.name = "Base64DecodeOptions.alphabet", .signature = ": Base64Alphabet", .summary = "",},
+    {.name = "Base64DecodeOptions.init", .signature = "(): ()", .summary = "",},
+    {.name = "Base64DecodeOptions.padding", .signature = ": Base64PaddingPolicy", .summary = "",},
+    {.name = "Base64EncodeOptions", .signature = "Base64EncodeOptions", .summary = "",},
+    {.name = "Base64EncodeOptions.alphabet", .signature = ": Base64Alphabet", .summary = "",},
+    {.name = "Base64EncodeOptions.init", .signature = "(): ()", .summary = "",},
+    {.name = "Base64EncodeOptions.padding", .signature = ": bool", .summary = "",},
+    {.name = "decode", .signature = "(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<u8>", .summary = "",},
+    {.name = "encode", .signature = "(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()): string", .summary = "",},
+    {.name = "isValid", .signature = "(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): bool", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
-    {
-        .name = "ADDRESS_HOST_MAX_BYTES",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "COROUTINE_MONITOR_CAPACITY",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "CORO_NAME_MAX",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ClusterConfig",
-        .signature = "{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterConfig.heartbeatIntervalMs",
-        .signature = "i64?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterConfig.heartbeatTimeoutMs",
-        .signature = "i64?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterConfig.maxMissedHeartbeats",
-        .signature = "i64?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterConfig.name",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterConfig.port",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterConfig.secret",
-        .signature = "string?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterConfig.tls",
-        .signature = "ClusterTlsOptions?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterCoroExit",
-        .signature = "{ name: string, reason: string, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterCoroExit.name",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterCoroExit.reason",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterDiscoveryAnnouncement",
-        .signature = "{ name: string, port: i64, clusterHash: u64, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterDiscoveryAnnouncement.clusterHash",
-        .signature = "u64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterDiscoveryAnnouncement.name",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterDiscoveryAnnouncement.port",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterFrame",
-        .signature = "{ kind: i64, payload: Array<u8>, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterFrame.kind",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterFrame.payload",
-        .signature = "Array<u8>",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterHandshakeAck",
-        .signature = "{ name: string, nonce: Array<u8>, proof: Array<u8>, flags: i64, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterHandshakeAck.flags",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterHandshakeAck.name",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterHandshakeAck.nonce",
-        .signature = "Array<u8>",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterHandshakeAck.proof",
-        .signature = "Array<u8>",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterHandshakeRequest",
-        .signature = "{ name: string, nonce: Array<u8>, flags: i64, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterHandshakeRequest.flags",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterHandshakeRequest.name",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterHandshakeRequest.nonce",
-        .signature = "Array<u8>",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo",
-        .signature = "{ self: string, port: i64, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tlsEnabled: bool, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterInfo.deadNodes",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.heartbeatIntervalMs",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.heartbeatTimeoutMs",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.listeners",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.maxMissedHeartbeats",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.nodes",
-        .signature = "Array<ClusterNodeInfo>",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.port",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.self",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterInfo.tlsEnabled",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo",
-        .signature = "{ name: string, endpoint: Endpoint?, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterNodeInfo.bytesReceived",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.bytesSent",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.endpoint",
-        .signature = "Endpoint?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.framesReceived",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.framesSent",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.missedHeartbeats",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.name",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.outQueueBytes",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.outQueueFrames",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.phi",
-        .signature = "f64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.rttMs",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.sendErrors",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.slow",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterNodeInfo.slowConsumerEvents",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTlsOptions",
-        .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterTlsOptions.caFile",
-        .signature = "string?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTlsOptions.certFile",
-        .signature = "string?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTlsOptions.enabled",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTlsOptions.insecure",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTlsOptions.keyFile",
-        .signature = "string?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTransportFrame",
-        .signature = "{ hopLimit: i64, topic: string, envelope: Array<u8>, }",
-        .summary = "",
-    },
-    {
-        .name = "ClusterTransportFrame.envelope",
-        .signature = "Array<u8>",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTransportFrame.hopLimit",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterTransportFrame.topic",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "DISCOVERY_INTERVAL_MS",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "DISCOVERY_MAGIC",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "DISCOVERY_MULTICAST_GROUP",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "DISCOVERY_MULTICAST_PORT",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "DISCOVERY_VERSION",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ENVELOPE_HEADER_SIZE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_CORO_EXIT",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_CORO_MONITOR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_HANDSHAKE_ACK",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_HANDSHAKE_DONE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_HANDSHAKE_ERR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_HANDSHAKE_REQ",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_HEADER_SIZE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_HEARTBEAT_PING",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_HEARTBEAT_PONG",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_MAX_PAYLOAD",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_TRANSPORT_ENVELOPE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HANDSHAKE_TIMEOUT_MS",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HANDSHAKE_VERSION",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HEARTBEAT_INTERVAL_MS",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HEARTBEAT_TICK_MIN_MS",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HEARTBEAT_TIMEOUT_MS",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "MAX_MISSED_HEARTBEATS",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "NODE_MONITOR_CAPACITY",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "NODE_NAME_MAX",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "NONCE_SIZE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "OUTPUT_QUEUE_HIGH_WATERMARK_BYTES",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PHI_MIN_SAMPLES",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PHI_THRESHOLD",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "PHI_WINDOW_SIZE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PROOF_SIZE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector",
-        .signature = "PhiDetector",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.init",
-        .signature = "(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.intervals",
-        .signature = ": Array<f64>",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.lastHeartbeatMs",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.mean",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.sampleCount",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.sum",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.sumSquares",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.value",
-        .signature = "(nowMs: i64): f64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.variance",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "PhiDetector.writeIndex",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "SHARED_SECRET_MAX_BYTES",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "SUBSCRIPTION_CAPACITY_MAX",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TOMBSTONE_RETENTION_MS",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TOPIC_DEFAULT_HOP_LIMIT",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TOPIC_DELIVERY_FANOUT_MAX",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TOPIC_MAX_HOP_LIMIT",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TOPIC_PATTERN_MAX",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "computeHandshakeProof",
-        .signature = "(secret: string, nonce: Array<u8>): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "decodeCoroExit",
-        .signature = "(payload: Array<u8>): ClusterCoroExit?",
-        .summary = "",
-    },
-    {
-        .name = "decodeCoroMonitor",
-        .signature = "(payload: Array<u8>): string?",
-        .summary = "",
-    },
-    {
-        .name = "decodeDiscoveryAnnouncement",
-        .signature = "(data: Array<u8>): ClusterDiscoveryAnnouncement?",
-        .summary = "",
-    },
-    {
-        .name = "decodeFrame",
-        .signature = "(data: Array<u8>): ClusterFrame?",
-        .summary = "",
-    },
-    {
-        .name = "decodeHandshakeAck",
-        .signature = "(payload: Array<u8>): ClusterHandshakeAck?",
-        .summary = "",
-    },
-    {
-        .name = "decodeHandshakeDone",
-        .signature = "(payload: Array<u8>): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "decodeHandshakeRequest",
-        .signature = "(payload: Array<u8>): ClusterHandshakeRequest?",
-        .summary = "",
-    },
-    {
-        .name = "decodeHeartbeat",
-        .signature = "(payload: Array<u8>): i64?",
-        .summary = "",
-    },
-    {
-        .name = "decodeTransportFrame",
-        .signature = "(data: Array<u8>): ClusterTransportFrame?",
-        .summary = "",
-    },
-    {
-        .name = "discover",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "discoveryClusterHash",
-        .signature = "(secret: string): u64",
-        .summary = "",
-    },
-    {
-        .name = "encodeCoroExit",
-        .signature = "(value: ClusterCoroExit): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeCoroMonitor",
-        .signature = "(name: string): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeDiscoveryAnnouncement",
-        .signature = "(value: ClusterDiscoveryAnnouncement): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeFrame",
-        .signature = "(kind: i64, payload: Array<u8>): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeHandshakeAck",
-        .signature = "(ack: ClusterHandshakeAck): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeHandshakeDone",
-        .signature = "(proof: Array<u8>): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeHandshakeRequest",
-        .signature = "(request: ClusterHandshakeRequest): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeHeartbeat",
-        .signature = "(kind: i64, timestampMs: i64): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "encodeTransportFrame",
-        .signature = "(hopLimit: i64, topic: string, envelope: Array<u8>): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "handshakeProofEqual",
-        .signature = "(left: Array<u8>, right: Array<u8>): bool",
-        .summary = "",
-    },
-    {
-        .name = "heartbeatIsDead",
-        .signature = "(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "heartbeatTickInterval",
-        .signature = "(intervalMs: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "info",
-        .signature = "(): ClusterInfo?",
-        .summary = "",
-    },
-    {
-        .name = "join",
-        .signature = "(addr: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "listen",
-        .signature = "(pattern: string, capacity: i64 = 1024): Channel<Buffer>?",
-        .summary = "",
-    },
-    {
-        .name = "monitor",
-        .signature = "(name: string, coroName: string? = null): Channel<string>?",
-        .summary = "",
-    },
-    {
-        .name = "nodes",
-        .signature = "(): Array<string>?",
-        .summary = "",
-    },
-    {
-        .name = "parseAddress",
-        .signature = "(addr: string): Endpoint",
-        .summary = "",
-    },
-    {
-        .name = "self",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "send",
-        .signature = "(topic: string, envelope: move Buffer, hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT): ClusterDelivery",
-        .summary = "",
-    },
-    {
-        .name = "shouldJoinDiscoveredNode",
-        .signature = "(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool",
-        .summary = "",
-    },
-    {
-        .name = "start",
-        .signature = "(config: ClusterConfig): bool",
-        .summary = "",
-    },
-    {
-        .name = "stop",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "tombstoneIsLive",
-        .signature = "(markedAtMs: i64, nowMs: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "topicMatches",
-        .signature = "(pattern: string, topic: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "validCoroutineName",
-        .signature = "(name: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "validNodeName",
-        .signature = "(name: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "validTopicName",
-        .signature = "(topic: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "validTopicPattern",
-        .signature = "(pattern: string): bool",
-        .summary = "",
-    },
+    {.name = "ADDRESS_HOST_MAX_BYTES", .signature = ": i64", .summary = "",},
+    {.name = "COROUTINE_MONITOR_CAPACITY", .signature = ": i64", .summary = "",},
+    {.name = "CORO_NAME_MAX", .signature = ": i64", .summary = "",},
+    {.name = "ClusterConfig", .signature = "{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }", .summary = "",},
+    {.name = "ClusterConfig.heartbeatIntervalMs", .signature = "i64?", .summary = "Type alias field",},
+    {.name = "ClusterConfig.heartbeatTimeoutMs", .signature = "i64?", .summary = "Type alias field",},
+    {.name = "ClusterConfig.maxMissedHeartbeats", .signature = "i64?", .summary = "Type alias field",},
+    {.name = "ClusterConfig.name", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterConfig.port", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterConfig.secret", .signature = "string?", .summary = "Type alias field",},
+    {.name = "ClusterConfig.tls", .signature = "ClusterTlsOptions?", .summary = "Type alias field",},
+    {.name = "ClusterCoroExit", .signature = "{ name: string, reason: string, }", .summary = "",},
+    {.name = "ClusterCoroExit.name", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterCoroExit.reason", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterDiscoveryAnnouncement", .signature = "{ name: string, port: i64, clusterHash: u64, }", .summary = "",},
+    {.name = "ClusterDiscoveryAnnouncement.clusterHash", .signature = "u64", .summary = "Type alias field",},
+    {.name = "ClusterDiscoveryAnnouncement.name", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterDiscoveryAnnouncement.port", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterFrame", .signature = "{ kind: i64, payload: Array<u8>, }", .summary = "",},
+    {.name = "ClusterFrame.kind", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterFrame.payload", .signature = "Array<u8>", .summary = "Type alias field",},
+    {.name = "ClusterHandshakeAck", .signature = "{ name: string, nonce: Array<u8>, proof: Array<u8>, flags: i64, }", .summary = "",},
+    {.name = "ClusterHandshakeAck.flags", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterHandshakeAck.name", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterHandshakeAck.nonce", .signature = "Array<u8>", .summary = "Type alias field",},
+    {.name = "ClusterHandshakeAck.proof", .signature = "Array<u8>", .summary = "Type alias field",},
+    {.name = "ClusterHandshakeRequest", .signature = "{ name: string, nonce: Array<u8>, flags: i64, }", .summary = "",},
+    {.name = "ClusterHandshakeRequest.flags", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterHandshakeRequest.name", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterHandshakeRequest.nonce", .signature = "Array<u8>", .summary = "Type alias field",},
+    {.name = "ClusterInfo", .signature = "{ self: string, port: i64, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tlsEnabled: bool, }", .summary = "",},
+    {.name = "ClusterInfo.deadNodes", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterInfo.heartbeatIntervalMs", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterInfo.heartbeatTimeoutMs", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterInfo.listeners", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterInfo.maxMissedHeartbeats", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterInfo.nodes", .signature = "Array<ClusterNodeInfo>", .summary = "Type alias field",},
+    {.name = "ClusterInfo.port", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterInfo.self", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterInfo.tlsEnabled", .signature = "bool", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo", .signature = "{ name: string, endpoint: Endpoint?, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64, }", .summary = "",},
+    {.name = "ClusterNodeInfo.bytesReceived", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.bytesSent", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.endpoint", .signature = "Endpoint?", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.framesReceived", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.framesSent", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.missedHeartbeats", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.name", .signature = "string", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.outQueueBytes", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.outQueueFrames", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.phi", .signature = "f64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.rttMs", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.sendErrors", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.slow", .signature = "bool", .summary = "Type alias field",},
+    {.name = "ClusterNodeInfo.slowConsumerEvents", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterTlsOptions", .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }", .summary = "",},
+    {.name = "ClusterTlsOptions.caFile", .signature = "string?", .summary = "Type alias field",},
+    {.name = "ClusterTlsOptions.certFile", .signature = "string?", .summary = "Type alias field",},
+    {.name = "ClusterTlsOptions.enabled", .signature = "bool", .summary = "Type alias field",},
+    {.name = "ClusterTlsOptions.insecure", .signature = "bool", .summary = "Type alias field",},
+    {.name = "ClusterTlsOptions.keyFile", .signature = "string?", .summary = "Type alias field",},
+    {.name = "ClusterTransportFrame", .signature = "{ hopLimit: i64, topic: string, envelope: Array<u8>, }", .summary = "",},
+    {.name = "ClusterTransportFrame.envelope", .signature = "Array<u8>", .summary = "Type alias field",},
+    {.name = "ClusterTransportFrame.hopLimit", .signature = "i64", .summary = "Type alias field",},
+    {.name = "ClusterTransportFrame.topic", .signature = "string", .summary = "Type alias field",},
+    {.name = "DISCOVERY_INTERVAL_MS", .signature = ": i64", .summary = "",},
+    {.name = "DISCOVERY_MAGIC", .signature = ": i64", .summary = "",},
+    {.name = "DISCOVERY_MULTICAST_GROUP", .signature = ": string", .summary = "",},
+    {.name = "DISCOVERY_MULTICAST_PORT", .signature = ": i64", .summary = "",},
+    {.name = "DISCOVERY_VERSION", .signature = ": i64", .summary = "",},
+    {.name = "ENVELOPE_HEADER_SIZE", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_CORO_EXIT", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_CORO_MONITOR", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_HANDSHAKE_ACK", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_HANDSHAKE_DONE", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_HANDSHAKE_ERR", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_HANDSHAKE_REQ", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_HEADER_SIZE", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_HEARTBEAT_PING", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_HEARTBEAT_PONG", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_MAX_PAYLOAD", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_TRANSPORT_ENVELOPE", .signature = ": i64", .summary = "",},
+    {.name = "HANDSHAKE_TIMEOUT_MS", .signature = ": i64", .summary = "",},
+    {.name = "HANDSHAKE_VERSION", .signature = ": i64", .summary = "",},
+    {.name = "HEARTBEAT_INTERVAL_MS", .signature = ": i64", .summary = "",},
+    {.name = "HEARTBEAT_TICK_MIN_MS", .signature = ": i64", .summary = "",},
+    {.name = "HEARTBEAT_TIMEOUT_MS", .signature = ": i64", .summary = "",},
+    {.name = "MAX_MISSED_HEARTBEATS", .signature = ": i64", .summary = "",},
+    {.name = "NODE_MONITOR_CAPACITY", .signature = ": i64", .summary = "",},
+    {.name = "NODE_NAME_MAX", .signature = ": i64", .summary = "",},
+    {.name = "NONCE_SIZE", .signature = ": i64", .summary = "",},
+    {.name = "OUTPUT_QUEUE_HIGH_WATERMARK_BYTES", .signature = ": i64", .summary = "",},
+    {.name = "PHI_MIN_SAMPLES", .signature = ": i64", .summary = "",},
+    {.name = "PHI_THRESHOLD", .signature = ": f64", .summary = "",},
+    {.name = "PHI_WINDOW_SIZE", .signature = ": i64", .summary = "",},
+    {.name = "PROOF_SIZE", .signature = ": i64", .summary = "",},
+    {.name = "PhiDetector", .signature = "PhiDetector", .summary = "",},
+    {.name = "PhiDetector.init", .signature = "(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()", .summary = "",},
+    {.name = "PhiDetector.intervals", .signature = ": Array<f64>", .summary = "",},
+    {.name = "PhiDetector.lastHeartbeatMs", .signature = ": i64", .summary = "",},
+    {.name = "PhiDetector.mean", .signature = ": f64", .summary = "",},
+    {.name = "PhiDetector.sampleCount", .signature = ": i64", .summary = "",},
+    {.name = "PhiDetector.sum", .signature = ": f64", .summary = "",},
+    {.name = "PhiDetector.sumSquares", .signature = ": f64", .summary = "",},
+    {.name = "PhiDetector.value", .signature = "(nowMs: i64): f64", .summary = "",},
+    {.name = "PhiDetector.variance", .signature = ": f64", .summary = "",},
+    {.name = "PhiDetector.writeIndex", .signature = ": i64", .summary = "",},
+    {.name = "SHARED_SECRET_MAX_BYTES", .signature = ": i64", .summary = "",},
+    {.name = "SUBSCRIPTION_CAPACITY_MAX", .signature = ": i64", .summary = "",},
+    {.name = "TOMBSTONE_RETENTION_MS", .signature = ": i64", .summary = "",},
+    {.name = "TOPIC_DEFAULT_HOP_LIMIT", .signature = ": i64", .summary = "",},
+    {.name = "TOPIC_DELIVERY_FANOUT_MAX", .signature = ": i64", .summary = "",},
+    {.name = "TOPIC_MAX_HOP_LIMIT", .signature = ": i64", .summary = "",},
+    {.name = "TOPIC_PATTERN_MAX", .signature = ": i64", .summary = "",},
+    {.name = "computeHandshakeProof", .signature = "(secret: string, nonce: Array<u8>): Array<u8>?", .summary = "",},
+    {.name = "decodeCoroExit", .signature = "(payload: Array<u8>): ClusterCoroExit?", .summary = "",},
+    {.name = "decodeCoroMonitor", .signature = "(payload: Array<u8>): string?", .summary = "",},
+    {.name = "decodeDiscoveryAnnouncement", .signature = "(data: Array<u8>): ClusterDiscoveryAnnouncement?", .summary = "",},
+    {.name = "decodeFrame", .signature = "(data: Array<u8>): ClusterFrame?", .summary = "",},
+    {.name = "decodeHandshakeAck", .signature = "(payload: Array<u8>): ClusterHandshakeAck?", .summary = "",},
+    {.name = "decodeHandshakeDone", .signature = "(payload: Array<u8>): Array<u8>?", .summary = "",},
+    {.name = "decodeHandshakeRequest", .signature = "(payload: Array<u8>): ClusterHandshakeRequest?", .summary = "",},
+    {.name = "decodeHeartbeat", .signature = "(payload: Array<u8>): i64?", .summary = "",},
+    {.name = "decodeTransportFrame", .signature = "(data: Array<u8>): ClusterTransportFrame?", .summary = "",},
+    {.name = "discover", .signature = "(): bool", .summary = "",},
+    {.name = "discoveryClusterHash", .signature = "(secret: string): u64", .summary = "",},
+    {.name = "encodeCoroExit", .signature = "(value: ClusterCoroExit): Array<u8>?", .summary = "",},
+    {.name = "encodeCoroMonitor", .signature = "(name: string): Array<u8>?", .summary = "",},
+    {.name = "encodeDiscoveryAnnouncement", .signature = "(value: ClusterDiscoveryAnnouncement): Array<u8>?", .summary = "",},
+    {.name = "encodeFrame", .signature = "(kind: i64, payload: Array<u8>): Array<u8>?", .summary = "",},
+    {.name = "encodeHandshakeAck", .signature = "(ack: ClusterHandshakeAck): Array<u8>?", .summary = "",},
+    {.name = "encodeHandshakeDone", .signature = "(proof: Array<u8>): Array<u8>?", .summary = "",},
+    {.name = "encodeHandshakeRequest", .signature = "(request: ClusterHandshakeRequest): Array<u8>?", .summary = "",},
+    {.name = "encodeHeartbeat", .signature = "(kind: i64, timestampMs: i64): Array<u8>?", .summary = "",},
+    {.name = "encodeTransportFrame", .signature = "(hopLimit: i64, topic: string, envelope: Array<u8>): Array<u8>?", .summary = "",},
+    {.name = "handshakeProofEqual", .signature = "(left: Array<u8>, right: Array<u8>): bool", .summary = "",},
+    {.name = "heartbeatIsDead", .signature = "(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool", .summary = "",},
+    {.name = "heartbeatTickInterval", .signature = "(intervalMs: i64): i64", .summary = "",},
+    {.name = "info", .signature = "(): ClusterInfo?", .summary = "",},
+    {.name = "join", .signature = "(addr: string): bool", .summary = "",},
+    {.name = "listen", .signature = "(pattern: string, capacity: i64 = 1024): Channel<Buffer>?", .summary = "",},
+    {.name = "monitor", .signature = "(name: string, coroName: string? = null): Channel<string>?", .summary = "",},
+    {.name = "nodes", .signature = "(): Array<string>?", .summary = "",},
+    {.name = "parseAddress", .signature = "(addr: string): Endpoint", .summary = "",},
+    {.name = "self", .signature = "(): string", .summary = "",},
+    {.name = "send", .signature = "(topic: string, envelope: move Buffer, hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT): ClusterDelivery", .summary = "",},
+    {.name = "shouldJoinDiscoveredNode", .signature = "(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool", .summary = "",},
+    {.name = "start", .signature = "(config: ClusterConfig): bool", .summary = "",},
+    {.name = "stop", .signature = "(): ()", .summary = "",},
+    {.name = "tombstoneIsLive", .signature = "(markedAtMs: i64, nowMs: i64): bool", .summary = "",},
+    {.name = "topicMatches", .signature = "(pattern: string, topic: string): bool", .summary = "",},
+    {.name = "validCoroutineName", .signature = "(name: string): bool", .summary = "",},
+    {.name = "validNodeName", .signature = "(name: string): bool", .summary = "",},
+    {.name = "validTopicName", .signature = "(topic: string): bool", .summary = "",},
+    {.name = "validTopicPattern", .signature = "(pattern: string): bool", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_codegen[] = {
-    {
-        .name = "compilerFence",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "opaque",
-        .signature = "(value: T): T",
-        .summary = "",
-    },
+    {.name = "compilerFence", .signature = "(): ()", .summary = "",},
+    {.name = "opaque", .signature = "(value: T): T", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
-    {
-        .name = "adler32",
-        .signature = "(data: Slice<u8>): i64",
-        .summary = "",
-    },
-    {
-        .name = "crc32",
-        .signature = "(data: Slice<u8>): i64",
-        .summary = "",
-    },
-    {
-        .name = "deflate",
-        .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "gunzip",
-        .signature = "(data: Slice<u8>): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "gzip",
-        .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "inflate",
-        .signature = "(data: Slice<u8>): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "isGzip",
-        .signature = "(data: Slice<u8>): bool",
-        .summary = "",
-    },
-    {
-        .name = "isZlib",
-        .signature = "(data: Slice<u8>): bool",
-        .summary = "",
-    },
-    {
-        .name = "zlibCompress",
-        .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "zlibDecompress",
-        .signature = "(data: Slice<u8>): Array<u8>",
-        .summary = "",
-    },
+    {.name = "adler32", .signature = "(data: Slice<u8>): i64", .summary = "",},
+    {.name = "crc32", .signature = "(data: Slice<u8>): i64", .summary = "",},
+    {.name = "deflate", .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>", .summary = "",},
+    {.name = "gunzip", .signature = "(data: Slice<u8>): Array<u8>", .summary = "",},
+    {.name = "gzip", .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>", .summary = "",},
+    {.name = "inflate", .signature = "(data: Slice<u8>): Array<u8>", .summary = "",},
+    {.name = "isGzip", .signature = "(data: Slice<u8>): bool", .summary = "",},
+    {.name = "isZlib", .signature = "(data: Slice<u8>): bool", .summary = "",},
+    {.name = "zlibCompress", .signature = "(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>", .summary = "",},
+    {.name = "zlibDecompress", .signature = "(data: Slice<u8>): Array<u8>", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
-    {
-        .name = "decrypt",
-        .signature = "(key: string, ciphertext: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "encrypt",
-        .signature = "(key: string, plaintext: string): string",
-        .summary = "",
-    },
-    {
-        .name = "hmac",
-        .signature = "(algo: string, key: string, data: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "hmacBytes",
-        .signature = "(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "md5",
-        .signature = "(data: string): string",
-        .summary = "",
-    },
-    {
-        .name = "randomBytes",
-        .signature = "(n: i64): string",
-        .summary = "",
-    },
-    {
-        .name = "sha1",
-        .signature = "(data: string): string",
-        .summary = "",
-    },
-    {
-        .name = "sha256",
-        .signature = "(data: string): string",
-        .summary = "",
-    },
-    {
-        .name = "sha512",
-        .signature = "(data: string): string",
-        .summary = "",
-    },
-    {
-        .name = "timingSafeEqual",
-        .signature = "(a: string, b: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "timingSafeEqualBytes",
-        .signature = "(a: Array<u8>, b: Array<u8>): bool",
-        .summary = "",
-    },
-    {
-        .name = "uuid",
-        .signature = "(): string",
-        .summary = "",
-    },
+    {.name = "decrypt", .signature = "(key: string, ciphertext: string): string?", .summary = "",},
+    {.name = "encrypt", .signature = "(key: string, plaintext: string): string", .summary = "",},
+    {.name = "hmac", .signature = "(algo: string, key: string, data: string): string?", .summary = "",},
+    {.name = "hmacBytes", .signature = "(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?", .summary = "",},
+    {.name = "md5", .signature = "(data: string): string", .summary = "",},
+    {.name = "randomBytes", .signature = "(n: i64): string", .summary = "",},
+    {.name = "sha1", .signature = "(data: string): string", .summary = "",},
+    {.name = "sha256", .signature = "(data: string): string", .summary = "",},
+    {.name = "sha512", .signature = "(data: string): string", .summary = "",},
+    {.name = "timingSafeEqual", .signature = "(a: string, b: string): bool", .summary = "",},
+    {.name = "timingSafeEqualBytes", .signature = "(a: Array<u8>, b: Array<u8>): bool", .summary = "",},
+    {.name = "uuid", .signature = "(): string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
-    {
-        .name = "CsvDiagnostic",
-        .signature = "CsvDiagnostic",
-        .summary = "",
-    },
-    {
-        .name = "CsvDiagnostic.byteOffset",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "CsvDiagnostic.column",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "CsvDiagnostic.init",
-        .signature = "(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "CsvDiagnostic.kind",
-        .signature = ": CsvErrorKind",
-        .summary = "",
-    },
-    {
-        .name = "CsvDiagnostic.line",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "CsvDiagnostic.message",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "CsvDiagnostic.record",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "CsvDocument",
-        .signature = "CsvDocument",
-        .summary = "",
-    },
-    {
-        .name = "CsvDocument.headers",
-        .signature = ": Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "CsvDocument.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "CsvDocument.rows",
-        .signature = ": Array<Array<string>>",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseOptions",
-        .signature = "{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: i64, maxRecords: i64, maxInputBytes: i64, maxFieldBytes: i64, maxColumns: i64 }",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseOptions.commentPrefix",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.delimiter",
-        .signature = "CsvDelimiter",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.escapeChar",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.header",
-        .signature = "CsvHeader",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxColumns",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxFieldBytes",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxInputBytes",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxRecords",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.quoteChar",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.skipEmptyLines",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.skipRecords",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.trimFields",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseReport",
-        .signature = "CsvParseReport",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseReport.delimiter",
-        .signature = ": rune",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseReport.diagnostics",
-        .signature = ": Array<CsvDiagnostic>",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseReport.document",
-        .signature = ": CsvDocument",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseReport.init",
-        .signature = "(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseReport.linebreak",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseReport.truncated",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "CsvWriteOptions",
-        .signature = "{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }",
-        .summary = "",
-    },
-    {
-        .name = "CsvWriteOptions.delimiter",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvWriteOptions.escapeChar",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvWriteOptions.linebreak",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvWriteOptions.quoteChar",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "defaultParseOptions",
-        .signature = "(): CsvParseOptions",
-        .summary = "",
-    },
-    {
-        .name = "defaultWriteOptions",
-        .signature = "(): CsvWriteOptions",
-        .summary = "",
-    },
-    {
-        .name = "parse",
-        .signature = "(data: string, options: CsvParseOptions? = null): CsvDocument",
-        .summary = "",
-    },
-    {
-        .name = "parseReport",
-        .signature = "(data: string, options: CsvParseOptions? = null): CsvParseReport",
-        .summary = "",
-    },
-    {
-        .name = "stringify",
-        .signature = "(document: CsvDocument, options: CsvWriteOptions? = null): string",
-        .summary = "",
-    },
+    {.name = "CsvDiagnostic", .signature = "CsvDiagnostic", .summary = "",},
+    {.name = "CsvDiagnostic.byteOffset", .signature = ": i64", .summary = "",},
+    {.name = "CsvDiagnostic.column", .signature = ": i64", .summary = "",},
+    {.name = "CsvDiagnostic.init", .signature = "(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()", .summary = "",},
+    {.name = "CsvDiagnostic.kind", .signature = ": CsvErrorKind", .summary = "",},
+    {.name = "CsvDiagnostic.line", .signature = ": i64", .summary = "",},
+    {.name = "CsvDiagnostic.message", .signature = ": string", .summary = "",},
+    {.name = "CsvDiagnostic.record", .signature = ": i64", .summary = "",},
+    {.name = "CsvDocument", .signature = "CsvDocument", .summary = "",},
+    {.name = "CsvDocument.headers", .signature = ": Array<string>", .summary = "",},
+    {.name = "CsvDocument.init", .signature = "(): ()", .summary = "",},
+    {.name = "CsvDocument.rows", .signature = ": Array<Array<string>>", .summary = "",},
+    {.name = "CsvParseOptions", .signature = "{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: i64, maxRecords: i64, maxInputBytes: i64, maxFieldBytes: i64, maxColumns: i64 }", .summary = "",},
+    {.name = "CsvParseOptions.commentPrefix", .signature = "string", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.delimiter", .signature = "CsvDelimiter", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.escapeChar", .signature = "rune", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.header", .signature = "CsvHeader", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.maxColumns", .signature = "i64", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.maxFieldBytes", .signature = "i64", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.maxInputBytes", .signature = "i64", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.maxRecords", .signature = "i64", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.quoteChar", .signature = "rune", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.skipEmptyLines", .signature = "bool", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.skipRecords", .signature = "i64", .summary = "Type alias field",},
+    {.name = "CsvParseOptions.trimFields", .signature = "bool", .summary = "Type alias field",},
+    {.name = "CsvParseReport", .signature = "CsvParseReport", .summary = "",},
+    {.name = "CsvParseReport.delimiter", .signature = ": rune", .summary = "",},
+    {.name = "CsvParseReport.diagnostics", .signature = ": Array<CsvDiagnostic>", .summary = "",},
+    {.name = "CsvParseReport.document", .signature = ": CsvDocument", .summary = "",},
+    {.name = "CsvParseReport.init", .signature = "(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()", .summary = "",},
+    {.name = "CsvParseReport.linebreak", .signature = ": string", .summary = "",},
+    {.name = "CsvParseReport.truncated", .signature = ": bool", .summary = "",},
+    {.name = "CsvWriteOptions", .signature = "{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }", .summary = "",},
+    {.name = "CsvWriteOptions.delimiter", .signature = "rune", .summary = "Type alias field",},
+    {.name = "CsvWriteOptions.escapeChar", .signature = "rune", .summary = "Type alias field",},
+    {.name = "CsvWriteOptions.linebreak", .signature = "string", .summary = "Type alias field",},
+    {.name = "CsvWriteOptions.quoteChar", .signature = "rune", .summary = "Type alias field",},
+    {.name = "defaultParseOptions", .signature = "(): CsvParseOptions", .summary = "",},
+    {.name = "defaultWriteOptions", .signature = "(): CsvWriteOptions", .summary = "",},
+    {.name = "parse", .signature = "(data: string, options: CsvParseOptions? = null): CsvDocument", .summary = "",},
+    {.name = "parseReport", .signature = "(data: string, options: CsvParseOptions? = null): CsvParseReport", .summary = "",},
+    {.name = "stringify", .signature = "(document: CsvDocument, options: CsvWriteOptions? = null): string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
-    {
-        .name = "DateTime",
-        .signature = "DateTime",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.add",
-        .signature = "(amount: i64, unit: string): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.day",
-        .signature = ": i64 { fn() { return this._day } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.daysInMonth",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.diff",
-        .signature = "(other: DateTime, unit: string = \"seconds\"): i64",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.equals",
-        .signature = "(other: DateTime): bool",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.format",
-        .signature = "(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.hour",
-        .signature = ": i64 { fn() { return this._hour } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.init",
-        .signature = "(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.isAfter",
-        .signature = "(other: DateTime): bool",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.isBefore",
-        .signature = "(other: DateTime): bool",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.isLeapYear",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.isUtc",
-        .signature = ": bool { fn() { return this._isUtc } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.millisecond",
-        .signature = ": i64 { fn() { return this._millisecond } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.minute",
-        .signature = ": i64 { fn() { return this._minute } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.month",
-        .signature = ": i64 { fn() { return this._month } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.second",
-        .signature = ": i64 { fn() { return this._second } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.timestamp",
-        .signature = ": i64 { fn() { return this._timestamp } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.toISOString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.toLocal",
-        .signature = "(): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.toUTC",
-        .signature = "(): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.tzOffset",
-        .signature = ": i64 { fn() { return this._tzOffset } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.weekday",
-        .signature = ": i64 { fn() { return this._weekday } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.year",
-        .signature = ": i64 { fn() { return this._year } }",
-        .summary = "",
-    },
-    {
-        .name = "DateTime.yearday",
-        .signature = ": i64 { fn() { return this._yearday } }",
-        .summary = "",
-    },
-    {
-        .name = "create",
-        .signature = "(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "createUTC",
-        .signature = "(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "fromTimestamp",
-        .signature = "(ts: i64): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "fromTimestampMs",
-        .signature = "(ts: i64): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "now",
-        .signature = "(): DateTime",
-        .summary = "",
-    },
-    {
-        .name = "offset",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "parse",
-        .signature = "(s: string, format: string = \"ISO8601\"): DateTime?",
-        .summary = "",
-    },
-    {
-        .name = "utc",
-        .signature = "(): DateTime",
-        .summary = "",
-    },
+    {.name = "DateTime", .signature = "DateTime", .summary = "",},
+    {.name = "DateTime.add", .signature = "(amount: i64, unit: string): DateTime", .summary = "",},
+    {.name = "DateTime.day", .signature = ": i64 { fn() { return this._day } }", .summary = "",},
+    {.name = "DateTime.daysInMonth", .signature = "(): i64", .summary = "",},
+    {.name = "DateTime.diff", .signature = "(other: DateTime, unit: string = \"seconds\"): i64", .summary = "",},
+    {.name = "DateTime.equals", .signature = "(other: DateTime): bool", .summary = "",},
+    {.name = "DateTime.format", .signature = "(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string", .summary = "",},
+    {.name = "DateTime.hour", .signature = ": i64 { fn() { return this._hour } }", .summary = "",},
+    {.name = "DateTime.init", .signature = "(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()", .summary = "",},
+    {.name = "DateTime.isAfter", .signature = "(other: DateTime): bool", .summary = "",},
+    {.name = "DateTime.isBefore", .signature = "(other: DateTime): bool", .summary = "",},
+    {.name = "DateTime.isLeapYear", .signature = "(): bool", .summary = "",},
+    {.name = "DateTime.isUtc", .signature = ": bool { fn() { return this._isUtc } }", .summary = "",},
+    {.name = "DateTime.millisecond", .signature = ": i64 { fn() { return this._millisecond } }", .summary = "",},
+    {.name = "DateTime.minute", .signature = ": i64 { fn() { return this._minute } }", .summary = "",},
+    {.name = "DateTime.month", .signature = ": i64 { fn() { return this._month } }", .summary = "",},
+    {.name = "DateTime.second", .signature = ": i64 { fn() { return this._second } }", .summary = "",},
+    {.name = "DateTime.timestamp", .signature = ": i64 { fn() { return this._timestamp } }", .summary = "",},
+    {.name = "DateTime.toISOString", .signature = "(): string", .summary = "",},
+    {.name = "DateTime.toLocal", .signature = "(): DateTime", .summary = "",},
+    {.name = "DateTime.toString", .signature = "(): string", .summary = "",},
+    {.name = "DateTime.toUTC", .signature = "(): DateTime", .summary = "",},
+    {.name = "DateTime.tzOffset", .signature = ": i64 { fn() { return this._tzOffset } }", .summary = "",},
+    {.name = "DateTime.weekday", .signature = ": i64 { fn() { return this._weekday } }", .summary = "",},
+    {.name = "DateTime.year", .signature = ": i64 { fn() { return this._year } }", .summary = "",},
+    {.name = "DateTime.yearday", .signature = ": i64 { fn() { return this._yearday } }", .summary = "",},
+    {.name = "create", .signature = "(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime", .summary = "",},
+    {.name = "createUTC", .signature = "(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime", .summary = "",},
+    {.name = "fromTimestamp", .signature = "(ts: i64): DateTime", .summary = "",},
+    {.name = "fromTimestampMs", .signature = "(ts: i64): DateTime", .summary = "",},
+    {.name = "now", .signature = "(): DateTime", .summary = "",},
+    {.name = "offset", .signature = "(): i64", .summary = "",},
+    {.name = "parse", .signature = "(s: string, format: string = \"ISO8601\"): DateTime?", .summary = "",},
+    {.name = "utc", .signature = "(): DateTime", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
-    {
-        .name = "Utf16DecodeOptions",
-        .signature = "Utf16DecodeOptions",
-        .summary = "",
-    },
-    {
-        .name = "Utf16DecodeOptions.consumeBom",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "Utf16DecodeOptions.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Utf16DecodeOptions.order",
-        .signature = ": Endian",
-        .summary = "",
-    },
-    {
-        .name = "Utf16EncodeOptions",
-        .signature = "Utf16EncodeOptions",
-        .summary = "",
-    },
-    {
-        .name = "Utf16EncodeOptions.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Utf16EncodeOptions.order",
-        .signature = ": Endian",
-        .summary = "",
-    },
-    {
-        .name = "hexDecode",
-        .signature = "(hex: string): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "hexEncode",
-        .signature = "(data: Slice<u8>): string",
-        .summary = "",
-    },
-    {
-        .name = "hexValid",
-        .signature = "(hex: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "utf16Decode",
-        .signature = "(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string",
-        .summary = "",
-    },
-    {
-        .name = "utf16Encode",
-        .signature = "(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "utf8Valid",
-        .signature = "(data: Slice<u8>): bool",
-        .summary = "",
-    },
+    {.name = "Utf16DecodeOptions", .signature = "Utf16DecodeOptions", .summary = "",},
+    {.name = "Utf16DecodeOptions.consumeBom", .signature = ": bool", .summary = "",},
+    {.name = "Utf16DecodeOptions.init", .signature = "(): ()", .summary = "",},
+    {.name = "Utf16DecodeOptions.order", .signature = ": Endian", .summary = "",},
+    {.name = "Utf16EncodeOptions", .signature = "Utf16EncodeOptions", .summary = "",},
+    {.name = "Utf16EncodeOptions.init", .signature = "(): ()", .summary = "",},
+    {.name = "Utf16EncodeOptions.order", .signature = ": Endian", .summary = "",},
+    {.name = "hexDecode", .signature = "(hex: string): Array<u8>", .summary = "",},
+    {.name = "hexEncode", .signature = "(data: Slice<u8>): string", .summary = "",},
+    {.name = "hexValid", .signature = "(hex: string): bool", .summary = "",},
+    {.name = "utf16Decode", .signature = "(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string", .summary = "",},
+    {.name = "utf16Encode", .signature = "(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<u8>", .summary = "",},
+    {.name = "utf8Valid", .signature = "(data: Slice<u8>): bool", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
-    {
-        .name = "ChunkedBody",
-        .signature = "ChunkedBody",
-        .summary = "",
-    },
-    {
-        .name = "ChunkedBody.body",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "ChunkedBody.consumedBytes",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ChunkedBody.getTrailer",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "ChunkedBody.getTrailers",
-        .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "ChunkedBody.init",
-        .signature = "(body: string, trailers: Headers, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "ChunkedBody.trailers",
-        .signature = ": Headers",
-        .summary = "",
-    },
-    {
-        .name = "Cookie",
-        .signature = "Cookie",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.domain",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.expires",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.hostOnly",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.httpOnly",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.init",
-        .signature = "(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.isExpired",
-        .signature = "(nowSeconds: i64 = 0): bool",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.matches",
-        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): bool",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.name",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.path",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.sameSite",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.secure",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.serialize",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.value",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar",
-        .signature = "CookieJar",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.cookies",
-        .signature = ": Array<Cookie>",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.count",
-        .signature = ": i64 { fn() { return len(this.cookies) } }",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.getHeader",
-        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.init",
-        .signature = "(maxCookies: i64 = 300): ()",
-        .summary = "",
-    },
-    {
-        .name = "CookieJar.maxCookies",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FormData",
-        .signature = "FormData",
-        .summary = "",
-    },
-    {
-        .name = "FormData.boundary",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "FormData.build",
-        .signature = "(): MultipartBody",
-        .summary = "",
-    },
-    {
-        .name = "FormData.fields",
-        .signature = ": Array<_FormField>",
-        .summary = "",
-    },
-    {
-        .name = "FormData.init",
-        .signature = "(maxTotalSize: i64, maxFileSize: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "FormData.maxFileSize",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FormData.maxTotalSize",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FormData.totalSize",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "Headers",
-        .signature = "Headers",
-        .summary = "",
-    },
-    {
-        .name = "Headers.contains",
-        .signature = "(name: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "Headers.entries",
-        .signature = "(): Array<(string, string)>",
-        .summary = "",
-    },
-    {
-        .name = "Headers.get",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "Headers.getAll",
-        .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "Headers.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod",
-        .signature = "HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.delete",
-        .signature = "(): HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.fromToken",
-        .signature = "(token: string): HttpMethod?",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.get",
-        .signature = "(): HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.head",
-        .signature = "(): HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.init",
-        .signature = "(token: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.options",
-        .signature = "(): HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.patch",
-        .signature = "(): HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.post",
-        .signature = "(): HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.put",
-        .signature = "(): HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "HttpMethod.token",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest",
-        .signature = "HttpRequest",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.body",
-        .signature = ": Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.contentLength",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.headers",
-        .signature = ": Headers",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.init",
-        .signature = "(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.json",
-        .signature = "(): T",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.jsonObject",
-        .signature = "(): JSON.Object",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.jsonValue",
-        .signature = "(): JSON.Value",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.jsonWithRest",
-        .signature = "(): JSON.WithRest<T>",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.method",
-        .signature = ": HttpMethod",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.params",
-        .signature = ": Map<string, string>",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.path",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.query",
-        .signature = ": QueryParams",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequest.text",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequestOptions",
-        .signature = "{ url: string, method: HttpMethod?, headers: Headers?, body: Array<u8>?, followRedirects: bool?, maxRedirects: i64?, timeoutMs: i64?, version: HttpVersion? }",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequestOptions.body",
-        .signature = "Array<u8>?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpRequestOptions.followRedirects",
-        .signature = "bool?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpRequestOptions.headers",
-        .signature = "Headers?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpRequestOptions.maxRedirects",
-        .signature = "i64?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpRequestOptions.method",
-        .signature = "HttpMethod?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpRequestOptions.timeoutMs",
-        .signature = "i64?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpRequestOptions.url",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpRequestOptions.version",
-        .signature = "HttpVersion?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "HttpResponse",
-        .signature = "HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.body",
-        .signature = ": Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.headers",
-        .signature = ": Headers",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.init",
-        .signature = "(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.isSuccess",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.json",
-        .signature = "(): T",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.jsonObject",
-        .signature = "(): JSON.Object",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.jsonValue",
-        .signature = "(): JSON.Value",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.jsonWithRest",
-        .signature = "(): JSON.WithRest<T>",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.reason",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.status",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.text",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "HttpResponse.version",
-        .signature = ": HttpVersion",
-        .summary = "",
-    },
-    {
-        .name = "MultipartBody",
-        .signature = "MultipartBody",
-        .summary = "",
-    },
-    {
-        .name = "MultipartBody.body",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "MultipartBody.contentType",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "MultipartBody.init",
-        .signature = "(body: string, contentType: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "RedirectDecision",
-        .signature = "RedirectDecision",
-        .summary = "",
-    },
-    {
-        .name = "RedirectDecision.dropBody",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "RedirectDecision.init",
-        .signature = "(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()",
-        .summary = "",
-    },
-    {
-        .name = "RedirectDecision.method",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "RedirectDecision.stripSensitiveHeaders",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "RedirectDecision.url",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead",
-        .signature = "RequestHead",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.chunked",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.contentLength",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.getHeader",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.getHeaders",
-        .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.headerBytes",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.headers",
-        .signature = ": Headers",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.init",
-        .signature = "(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.keepAlive",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.method",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.requestTarget",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "RequestHead.version",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage",
-        .signature = "RequestMessage",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.body",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.consumedBytes",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.getHeader",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.getTrailer",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.getTrailers",
-        .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.head",
-        .signature = ": RequestHead",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.init",
-        .signature = "(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "RequestMessage.trailers",
-        .signature = ": Headers",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead",
-        .signature = "ResponseHead",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.chunked",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.contentLength",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.getHeader",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.getHeaders",
-        .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.headerBytes",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.headers",
-        .signature = ": Headers",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.init",
-        .signature = "(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.keepAlive",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.reason",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.status",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.version",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage",
-        .signature = "ResponseMessage",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.body",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.consumedBytes",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.getHeader",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.getTrailer",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.getTrailers",
-        .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.head",
-        .signature = ": ResponseHead",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.init",
-        .signature = "(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "ResponseMessage.trailers",
-        .signature = ": Headers",
-        .summary = "",
-    },
-    {
-        .name = "RouteMatch",
-        .signature = "RouteMatch",
-        .summary = "",
-    },
-    {
-        .name = "RouteMatch.init",
-        .signature = "(value: T, params: Map<string, string>): ()",
-        .summary = "",
-    },
-    {
-        .name = "RouteMatch.params",
-        .signature = ": Map<string, string>",
-        .summary = "",
-    },
-    {
-        .name = "RouteMatch.value",
-        .signature = ": T",
-        .summary = "",
-    },
-    {
-        .name = "Router",
-        .signature = "Router",
-        .summary = "",
-    },
-    {
-        .name = "Router.find",
-        .signature = "(method: string, path: string): RouteMatch<T>?",
-        .summary = "",
-    },
-    {
-        .name = "Router.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Server",
-        .signature = "Server",
-        .summary = "",
-    },
-    {
-        .name = "Server.handler",
-        .signature = ": fn(HttpRequest) -> HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "Server.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Server.listen",
-        .signature = "(port: i64, running: Atomic<bool>): bool",
-        .summary = "",
-    },
-    {
-        .name = "Server.method",
-        .signature = ": string,",
-        .summary = "",
-    },
-    {
-        .name = "Server.path",
-        .signature = ": string,",
-        .summary = "",
-    },
-    {
-        .name = "cookieJar",
-        .signature = "(maxCookies: i64 = 300): CookieJar",
-        .summary = "",
-    },
-    {
-        .name = "decodeChunkedBody",
-        .signature = "(raw: string, maxBodyBytes: i64 = 67108864): string?",
-        .summary = "",
-    },
-    {
-        .name = "formData",
-        .signature = "(maxTotalSize: i64 = 67108864, maxFileSize: i64 = 33554432): FormData",
-        .summary = "",
-    },
-    {
-        .name = "get",
-        .signature = "(url: string): HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "isRedirectStatus",
-        .signature = "(status: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "json",
-        .signature = "(value: T, status: i64 = 200): HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "jsonResponse",
-        .signature = "(value: T, status: i64 = 200, headers: Headers? = null): HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "parseChunkedBody",
-        .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxTrailerHeaders: i64 = 50): ChunkedBody?",
-        .summary = "",
-    },
-    {
-        .name = "parseMethod",
-        .signature = "(token: string): HttpMethod?",
-        .summary = "",
-    },
-    {
-        .name = "parseRequestHead",
-        .signature = "(raw: string, maxHeaders: i64 = 100): RequestHead?",
-        .summary = "",
-    },
-    {
-        .name = "parseRequestText",
-        .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): RequestMessage?",
-        .summary = "",
-    },
-    {
-        .name = "parseResponseHead",
-        .signature = "(raw: string, maxHeaders: i64 = 100): ResponseHead?",
-        .summary = "",
-    },
-    {
-        .name = "parseResponseText",
-        .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): ResponseMessage?",
-        .summary = "",
-    },
-    {
-        .name = "parseSetCookie",
-        .signature = "(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: i64 = 0): Cookie?",
-        .summary = "",
-    },
-    {
-        .name = "post",
-        .signature = "(url: string, contentType: string, body: Array<u8>, authorization: string = \"\"): HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "redirectDecision",
-        .signature = "(status: i64, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?",
-        .summary = "",
-    },
-    {
-        .name = "redirectTarget",
-        .signature = "(currentUrl: string, location: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "request",
-        .signature = "(options: HttpRequestOptions): HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "requestText",
-        .signature = "(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?",
-        .summary = "",
-    },
-    {
-        .name = "responseText",
-        .signature = "(status: i64, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?",
-        .summary = "",
-    },
-    {
-        .name = "router",
-        .signature = "(): Router<T>",
-        .summary = "",
-    },
-    {
-        .name = "textResponse",
-        .signature = "(body: string, status: i64 = 200, headers: Headers? = null): HttpResponse",
-        .summary = "",
-    },
-    {
-        .name = "urlDecode",
-        .signature = "(s: string): string",
-        .summary = "",
-    },
-    {
-        .name = "urlEncode",
-        .signature = "(s: string): string",
-        .summary = "",
-    },
+    {.name = "ChunkedBody", .signature = "ChunkedBody", .summary = "",},
+    {.name = "ChunkedBody.body", .signature = ": string", .summary = "",},
+    {.name = "ChunkedBody.consumedBytes", .signature = ": i64", .summary = "",},
+    {.name = "ChunkedBody.getTrailer", .signature = "(name: string): string?", .summary = "",},
+    {.name = "ChunkedBody.getTrailers", .signature = "(name: string): Array<string>", .summary = "",},
+    {.name = "ChunkedBody.init", .signature = "(body: string, trailers: Headers, consumedBytes: i64): ()", .summary = "",},
+    {.name = "ChunkedBody.trailers", .signature = ": Headers", .summary = "",},
+    {.name = "Cookie", .signature = "Cookie", .summary = "",},
+    {.name = "Cookie.domain", .signature = ": string", .summary = "",},
+    {.name = "Cookie.expires", .signature = ": i64", .summary = "",},
+    {.name = "Cookie.hostOnly", .signature = ": bool", .summary = "",},
+    {.name = "Cookie.httpOnly", .signature = ": bool", .summary = "",},
+    {.name = "Cookie.init", .signature = "(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()", .summary = "",},
+    {.name = "Cookie.isExpired", .signature = "(nowSeconds: i64 = 0): bool", .summary = "",},
+    {.name = "Cookie.matches", .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): bool", .summary = "",},
+    {.name = "Cookie.name", .signature = ": string", .summary = "",},
+    {.name = "Cookie.path", .signature = ": string", .summary = "",},
+    {.name = "Cookie.sameSite", .signature = ": string", .summary = "",},
+    {.name = "Cookie.secure", .signature = ": bool", .summary = "",},
+    {.name = "Cookie.serialize", .signature = "(): string", .summary = "",},
+    {.name = "Cookie.value", .signature = ": string", .summary = "",},
+    {.name = "CookieJar", .signature = "CookieJar", .summary = "",},
+    {.name = "CookieJar.cookies", .signature = ": Array<Cookie>", .summary = "",},
+    {.name = "CookieJar.count", .signature = ": i64 { fn() { return len(this.cookies) } }", .summary = "",},
+    {.name = "CookieJar.getHeader", .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?", .summary = "",},
+    {.name = "CookieJar.init", .signature = "(maxCookies: i64 = 300): ()", .summary = "",},
+    {.name = "CookieJar.maxCookies", .signature = ": i64", .summary = "",},
+    {.name = "FormData", .signature = "FormData", .summary = "",},
+    {.name = "FormData.boundary", .signature = ": string", .summary = "",},
+    {.name = "FormData.build", .signature = "(): MultipartBody", .summary = "",},
+    {.name = "FormData.fields", .signature = ": Array<_FormField>", .summary = "",},
+    {.name = "FormData.init", .signature = "(maxTotalSize: i64, maxFileSize: i64): ()", .summary = "",},
+    {.name = "FormData.maxFileSize", .signature = ": i64", .summary = "",},
+    {.name = "FormData.maxTotalSize", .signature = ": i64", .summary = "",},
+    {.name = "FormData.totalSize", .signature = ": i64", .summary = "",},
+    {.name = "Headers", .signature = "Headers", .summary = "",},
+    {.name = "Headers.contains", .signature = "(name: string): bool", .summary = "",},
+    {.name = "Headers.entries", .signature = "(): Array<(string, string)>", .summary = "",},
+    {.name = "Headers.get", .signature = "(name: string): string?", .summary = "",},
+    {.name = "Headers.getAll", .signature = "(name: string): Array<string>", .summary = "",},
+    {.name = "Headers.init", .signature = "(): ()", .summary = "",},
+    {.name = "HttpMethod", .signature = "HttpMethod", .summary = "",},
+    {.name = "HttpMethod.delete", .signature = "(): HttpMethod", .summary = "",},
+    {.name = "HttpMethod.fromToken", .signature = "(token: string): HttpMethod?", .summary = "",},
+    {.name = "HttpMethod.get", .signature = "(): HttpMethod", .summary = "",},
+    {.name = "HttpMethod.head", .signature = "(): HttpMethod", .summary = "",},
+    {.name = "HttpMethod.init", .signature = "(token: string): ()", .summary = "",},
+    {.name = "HttpMethod.options", .signature = "(): HttpMethod", .summary = "",},
+    {.name = "HttpMethod.patch", .signature = "(): HttpMethod", .summary = "",},
+    {.name = "HttpMethod.post", .signature = "(): HttpMethod", .summary = "",},
+    {.name = "HttpMethod.put", .signature = "(): HttpMethod", .summary = "",},
+    {.name = "HttpMethod.toString", .signature = "(): string", .summary = "",},
+    {.name = "HttpMethod.token", .signature = ": string", .summary = "",},
+    {.name = "HttpRequest", .signature = "HttpRequest", .summary = "",},
+    {.name = "HttpRequest.body", .signature = ": Array<u8>", .summary = "",},
+    {.name = "HttpRequest.contentLength", .signature = ": i64", .summary = "",},
+    {.name = "HttpRequest.headers", .signature = ": Headers", .summary = "",},
+    {.name = "HttpRequest.init", .signature = "(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()", .summary = "",},
+    {.name = "HttpRequest.json", .signature = "(): T", .summary = "",},
+    {.name = "HttpRequest.jsonObject", .signature = "(): JSON.Object", .summary = "",},
+    {.name = "HttpRequest.jsonValue", .signature = "(): JSON.Value", .summary = "",},
+    {.name = "HttpRequest.jsonWithRest", .signature = "(): JSON.WithRest<T>", .summary = "",},
+    {.name = "HttpRequest.method", .signature = ": HttpMethod", .summary = "",},
+    {.name = "HttpRequest.params", .signature = ": Map<string, string>", .summary = "",},
+    {.name = "HttpRequest.path", .signature = ": string", .summary = "",},
+    {.name = "HttpRequest.query", .signature = ": QueryParams", .summary = "",},
+    {.name = "HttpRequest.text", .signature = "(): string", .summary = "",},
+    {.name = "HttpRequestOptions", .signature = "{ url: string, method: HttpMethod?, headers: Headers?, body: Array<u8>?, followRedirects: bool?, maxRedirects: i64?, timeoutMs: i64?, version: HttpVersion? }", .summary = "",},
+    {.name = "HttpRequestOptions.body", .signature = "Array<u8>?", .summary = "Type alias field",},
+    {.name = "HttpRequestOptions.followRedirects", .signature = "bool?", .summary = "Type alias field",},
+    {.name = "HttpRequestOptions.headers", .signature = "Headers?", .summary = "Type alias field",},
+    {.name = "HttpRequestOptions.maxRedirects", .signature = "i64?", .summary = "Type alias field",},
+    {.name = "HttpRequestOptions.method", .signature = "HttpMethod?", .summary = "Type alias field",},
+    {.name = "HttpRequestOptions.timeoutMs", .signature = "i64?", .summary = "Type alias field",},
+    {.name = "HttpRequestOptions.url", .signature = "string", .summary = "Type alias field",},
+    {.name = "HttpRequestOptions.version", .signature = "HttpVersion?", .summary = "Type alias field",},
+    {.name = "HttpResponse", .signature = "HttpResponse", .summary = "",},
+    {.name = "HttpResponse.body", .signature = ": Array<u8>", .summary = "",},
+    {.name = "HttpResponse.headers", .signature = ": Headers", .summary = "",},
+    {.name = "HttpResponse.init", .signature = "(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()", .summary = "",},
+    {.name = "HttpResponse.isSuccess", .signature = "(): bool", .summary = "",},
+    {.name = "HttpResponse.json", .signature = "(): T", .summary = "",},
+    {.name = "HttpResponse.jsonObject", .signature = "(): JSON.Object", .summary = "",},
+    {.name = "HttpResponse.jsonValue", .signature = "(): JSON.Value", .summary = "",},
+    {.name = "HttpResponse.jsonWithRest", .signature = "(): JSON.WithRest<T>", .summary = "",},
+    {.name = "HttpResponse.reason", .signature = ": string", .summary = "",},
+    {.name = "HttpResponse.status", .signature = ": i64", .summary = "",},
+    {.name = "HttpResponse.text", .signature = "(): string", .summary = "",},
+    {.name = "HttpResponse.version", .signature = ": HttpVersion", .summary = "",},
+    {.name = "MultipartBody", .signature = "MultipartBody", .summary = "",},
+    {.name = "MultipartBody.body", .signature = ": string", .summary = "",},
+    {.name = "MultipartBody.contentType", .signature = ": string", .summary = "",},
+    {.name = "MultipartBody.init", .signature = "(body: string, contentType: string): ()", .summary = "",},
+    {.name = "RedirectDecision", .signature = "RedirectDecision", .summary = "",},
+    {.name = "RedirectDecision.dropBody", .signature = ": bool", .summary = "",},
+    {.name = "RedirectDecision.init", .signature = "(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()", .summary = "",},
+    {.name = "RedirectDecision.method", .signature = ": string", .summary = "",},
+    {.name = "RedirectDecision.stripSensitiveHeaders", .signature = ": bool", .summary = "",},
+    {.name = "RedirectDecision.url", .signature = ": string", .summary = "",},
+    {.name = "RequestHead", .signature = "RequestHead", .summary = "",},
+    {.name = "RequestHead.chunked", .signature = ": bool", .summary = "",},
+    {.name = "RequestHead.contentLength", .signature = ": i64", .summary = "",},
+    {.name = "RequestHead.getHeader", .signature = "(name: string): string?", .summary = "",},
+    {.name = "RequestHead.getHeaders", .signature = "(name: string): Array<string>", .summary = "",},
+    {.name = "RequestHead.headerBytes", .signature = ": i64", .summary = "",},
+    {.name = "RequestHead.headers", .signature = ": Headers", .summary = "",},
+    {.name = "RequestHead.init", .signature = "(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()", .summary = "",},
+    {.name = "RequestHead.keepAlive", .signature = ": bool", .summary = "",},
+    {.name = "RequestHead.method", .signature = ": string", .summary = "",},
+    {.name = "RequestHead.requestTarget", .signature = ": string", .summary = "",},
+    {.name = "RequestHead.version", .signature = ": string", .summary = "",},
+    {.name = "RequestMessage", .signature = "RequestMessage", .summary = "",},
+    {.name = "RequestMessage.body", .signature = ": string", .summary = "",},
+    {.name = "RequestMessage.consumedBytes", .signature = ": i64", .summary = "",},
+    {.name = "RequestMessage.getHeader", .signature = "(name: string): string?", .summary = "",},
+    {.name = "RequestMessage.getTrailer", .signature = "(name: string): string?", .summary = "",},
+    {.name = "RequestMessage.getTrailers", .signature = "(name: string): Array<string>", .summary = "",},
+    {.name = "RequestMessage.head", .signature = ": RequestHead", .summary = "",},
+    {.name = "RequestMessage.init", .signature = "(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()", .summary = "",},
+    {.name = "RequestMessage.trailers", .signature = ": Headers", .summary = "",},
+    {.name = "ResponseHead", .signature = "ResponseHead", .summary = "",},
+    {.name = "ResponseHead.chunked", .signature = ": bool", .summary = "",},
+    {.name = "ResponseHead.contentLength", .signature = ": i64", .summary = "",},
+    {.name = "ResponseHead.getHeader", .signature = "(name: string): string?", .summary = "",},
+    {.name = "ResponseHead.getHeaders", .signature = "(name: string): Array<string>", .summary = "",},
+    {.name = "ResponseHead.headerBytes", .signature = ": i64", .summary = "",},
+    {.name = "ResponseHead.headers", .signature = ": Headers", .summary = "",},
+    {.name = "ResponseHead.init", .signature = "(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()", .summary = "",},
+    {.name = "ResponseHead.keepAlive", .signature = ": bool", .summary = "",},
+    {.name = "ResponseHead.reason", .signature = ": string", .summary = "",},
+    {.name = "ResponseHead.status", .signature = ": i64", .summary = "",},
+    {.name = "ResponseHead.version", .signature = ": string", .summary = "",},
+    {.name = "ResponseMessage", .signature = "ResponseMessage", .summary = "",},
+    {.name = "ResponseMessage.body", .signature = ": string", .summary = "",},
+    {.name = "ResponseMessage.consumedBytes", .signature = ": i64", .summary = "",},
+    {.name = "ResponseMessage.getHeader", .signature = "(name: string): string?", .summary = "",},
+    {.name = "ResponseMessage.getTrailer", .signature = "(name: string): string?", .summary = "",},
+    {.name = "ResponseMessage.getTrailers", .signature = "(name: string): Array<string>", .summary = "",},
+    {.name = "ResponseMessage.head", .signature = ": ResponseHead", .summary = "",},
+    {.name = "ResponseMessage.init", .signature = "(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()", .summary = "",},
+    {.name = "ResponseMessage.trailers", .signature = ": Headers", .summary = "",},
+    {.name = "RouteMatch", .signature = "RouteMatch", .summary = "",},
+    {.name = "RouteMatch.init", .signature = "(value: T, params: Map<string, string>): ()", .summary = "",},
+    {.name = "RouteMatch.params", .signature = ": Map<string, string>", .summary = "",},
+    {.name = "RouteMatch.value", .signature = ": T", .summary = "",},
+    {.name = "Router", .signature = "Router", .summary = "",},
+    {.name = "Router.find", .signature = "(method: string, path: string): RouteMatch<T>?", .summary = "",},
+    {.name = "Router.init", .signature = "(): ()", .summary = "",},
+    {.name = "Server", .signature = "Server", .summary = "",},
+    {.name = "Server.handler", .signature = ": fn(HttpRequest) -> HttpResponse", .summary = "",},
+    {.name = "Server.init", .signature = "(): ()", .summary = "",},
+    {.name = "Server.listen", .signature = "(port: i64, running: Atomic<bool>): bool", .summary = "",},
+    {.name = "Server.method", .signature = ": string,", .summary = "",},
+    {.name = "Server.path", .signature = ": string,", .summary = "",},
+    {.name = "cookieJar", .signature = "(maxCookies: i64 = 300): CookieJar", .summary = "",},
+    {.name = "decodeChunkedBody", .signature = "(raw: string, maxBodyBytes: i64 = 67108864): string?", .summary = "",},
+    {.name = "formData", .signature = "(maxTotalSize: i64 = 67108864, maxFileSize: i64 = 33554432): FormData", .summary = "",},
+    {.name = "get", .signature = "(url: string): HttpResponse", .summary = "",},
+    {.name = "isRedirectStatus", .signature = "(status: i64): bool", .summary = "",},
+    {.name = "json", .signature = "(value: T, status: i64 = 200): HttpResponse", .summary = "",},
+    {.name = "jsonResponse", .signature = "(value: T, status: i64 = 200, headers: Headers? = null): HttpResponse", .summary = "",},
+    {.name = "parseChunkedBody", .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxTrailerHeaders: i64 = 50): ChunkedBody?", .summary = "",},
+    {.name = "parseMethod", .signature = "(token: string): HttpMethod?", .summary = "",},
+    {.name = "parseRequestHead", .signature = "(raw: string, maxHeaders: i64 = 100): RequestHead?", .summary = "",},
+    {.name = "parseRequestText", .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): RequestMessage?", .summary = "",},
+    {.name = "parseResponseHead", .signature = "(raw: string, maxHeaders: i64 = 100): ResponseHead?", .summary = "",},
+    {.name = "parseResponseText", .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): ResponseMessage?", .summary = "",},
+    {.name = "parseSetCookie", .signature = "(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: i64 = 0): Cookie?", .summary = "",},
+    {.name = "post", .signature = "(url: string, contentType: string, body: Array<u8>, authorization: string = \"\"): HttpResponse", .summary = "",},
+    {.name = "redirectDecision", .signature = "(status: i64, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?", .summary = "",},
+    {.name = "redirectTarget", .signature = "(currentUrl: string, location: string): string?", .summary = "",},
+    {.name = "request", .signature = "(options: HttpRequestOptions): HttpResponse", .summary = "",},
+    {.name = "requestText", .signature = "(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?", .summary = "",},
+    {.name = "responseText", .signature = "(status: i64, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?", .summary = "",},
+    {.name = "router", .signature = "(): Router<T>", .summary = "",},
+    {.name = "textResponse", .signature = "(body: string, status: i64 = 200, headers: Headers? = null): HttpResponse", .summary = "",},
+    {.name = "urlDecode", .signature = "(s: string): string", .summary = "",},
+    {.name = "urlEncode", .signature = "(s: string): string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
-    {
-        .name = "CANCEL",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "COMPRESSION_ERROR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "CONNECT_ERROR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ENHANCE_YOUR_CALM",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FLOW_CONTROL_ERROR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FRAME_SIZE_ERROR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FrameHeader",
-        .signature = "FrameHeader",
-        .summary = "",
-    },
-    {
-        .name = "FrameHeader.flags",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FrameHeader.hasFlag",
-        .signature = "(flag: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "FrameHeader.init",
-        .signature = "(length: i64, kind: i64, flags: i64, streamId: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "FrameHeader.kind",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FrameHeader.length",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FrameHeader.streamId",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HTTP_1_1_REQUIRED",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "HeaderList",
-        .signature = "HeaderList",
-        .summary = "",
-    },
-    {
-        .name = "HeaderList.count",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "HeaderList.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "HeaderList.names",
-        .signature = ": Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "HeaderList.values",
-        .signature = ": Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "HpackDecoder",
-        .signature = "HpackDecoder",
-        .summary = "",
-    },
-    {
-        .name = "HpackDecoder.init",
-        .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()",
-        .summary = "",
-    },
-    {
-        .name = "HpackDecoder.lookupName",
-        .signature = "(index: i64): string?",
-        .summary = "",
-    },
-    {
-        .name = "HpackDecoder.lookupValue",
-        .signature = "(index: i64): string?",
-        .summary = "",
-    },
-    {
-        .name = "HpackDecoder.table",
-        .signature = ": HpackTable",
-        .summary = "",
-    },
-    {
-        .name = "HpackEncoder",
-        .signature = "HpackEncoder",
-        .summary = "",
-    },
-    {
-        .name = "HpackEncoder.init",
-        .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()",
-        .summary = "",
-    },
-    {
-        .name = "HpackEncoder.staticFull",
-        .signature = "(name: string, value: string): i64",
-        .summary = "",
-    },
-    {
-        .name = "HpackEncoder.staticName",
-        .signature = "(name: string): i64",
-        .summary = "",
-    },
-    {
-        .name = "HpackEncoder.table",
-        .signature = ": HpackTable",
-        .summary = "",
-    },
-    {
-        .name = "INADEQUATE_SECURITY",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "INTERNAL_ERROR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "NO_ERROR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PROTOCOL_ERROR",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "REFUSED_STREAM",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "SETTINGS_TIMEOUT",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "STREAM_CLOSED",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "Settings",
-        .signature = "Settings",
-        .summary = "",
-    },
-    {
-        .name = "Settings.get",
-        .signature = "(id: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "Settings.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Settings.values",
-        .signature = ": Array<i64>",
-        .summary = "",
-    },
-    {
-        .name = "applySettingsPayload",
-        .signature = "(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "encodeClientSettings",
-        .signature = "(settings: Settings): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "encodeGoaway",
-        .signature = "(lastStreamId: i64, errorCode: i64): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "encodePingAck",
-        .signature = "(payload: Array<u8>, start: i64): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "encodeRstStream",
-        .signature = "(streamId: i64, errorCode: i64): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "encodeSettingsAck",
-        .signature = "(): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "encodeWindowUpdate",
-        .signature = "(streamId: i64, increment: i64): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "readFrameHeader",
-        .signature = "(src: Array<u8>, pos: i64): FrameHeader?",
-        .summary = "",
-    },
-    {
-        .name = "request",
-        .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)",
-        .summary = "",
-    },
-    {
-        .name = "supported",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "validateFrameHeader",
-        .signature = "(header: FrameHeader): i64",
-        .summary = "",
-    },
-    {
-        .name = "writeFrameHeader",
-        .signature = "(out: ref Array<u8>, length: i64, kind: i64, flags: i64, streamId: i64): ()",
-        .summary = "",
-    },
+    {.name = "CANCEL", .signature = ": i64", .summary = "",},
+    {.name = "COMPRESSION_ERROR", .signature = ": i64", .summary = "",},
+    {.name = "CONNECT_ERROR", .signature = ": i64", .summary = "",},
+    {.name = "ENHANCE_YOUR_CALM", .signature = ": i64", .summary = "",},
+    {.name = "FLOW_CONTROL_ERROR", .signature = ": i64", .summary = "",},
+    {.name = "FRAME_SIZE_ERROR", .signature = ": i64", .summary = "",},
+    {.name = "FrameHeader", .signature = "FrameHeader", .summary = "",},
+    {.name = "FrameHeader.flags", .signature = ": i64", .summary = "",},
+    {.name = "FrameHeader.hasFlag", .signature = "(flag: i64): bool", .summary = "",},
+    {.name = "FrameHeader.init", .signature = "(length: i64, kind: i64, flags: i64, streamId: i64): ()", .summary = "",},
+    {.name = "FrameHeader.kind", .signature = ": i64", .summary = "",},
+    {.name = "FrameHeader.length", .signature = ": i64", .summary = "",},
+    {.name = "FrameHeader.streamId", .signature = ": i64", .summary = "",},
+    {.name = "HTTP_1_1_REQUIRED", .signature = ": i64", .summary = "",},
+    {.name = "HeaderList", .signature = "HeaderList", .summary = "",},
+    {.name = "HeaderList.count", .signature = "(): i64", .summary = "",},
+    {.name = "HeaderList.init", .signature = "(): ()", .summary = "",},
+    {.name = "HeaderList.names", .signature = ": Array<string>", .summary = "",},
+    {.name = "HeaderList.values", .signature = ": Array<string>", .summary = "",},
+    {.name = "HpackDecoder", .signature = "HpackDecoder", .summary = "",},
+    {.name = "HpackDecoder.init", .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()", .summary = "",},
+    {.name = "HpackDecoder.lookupName", .signature = "(index: i64): string?", .summary = "",},
+    {.name = "HpackDecoder.lookupValue", .signature = "(index: i64): string?", .summary = "",},
+    {.name = "HpackDecoder.table", .signature = ": HpackTable", .summary = "",},
+    {.name = "HpackEncoder", .signature = "HpackEncoder", .summary = "",},
+    {.name = "HpackEncoder.init", .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()", .summary = "",},
+    {.name = "HpackEncoder.staticFull", .signature = "(name: string, value: string): i64", .summary = "",},
+    {.name = "HpackEncoder.staticName", .signature = "(name: string): i64", .summary = "",},
+    {.name = "HpackEncoder.table", .signature = ": HpackTable", .summary = "",},
+    {.name = "INADEQUATE_SECURITY", .signature = ": i64", .summary = "",},
+    {.name = "INTERNAL_ERROR", .signature = ": i64", .summary = "",},
+    {.name = "NO_ERROR", .signature = ": i64", .summary = "",},
+    {.name = "PROTOCOL_ERROR", .signature = ": i64", .summary = "",},
+    {.name = "REFUSED_STREAM", .signature = ": i64", .summary = "",},
+    {.name = "SETTINGS_TIMEOUT", .signature = ": i64", .summary = "",},
+    {.name = "STREAM_CLOSED", .signature = ": i64", .summary = "",},
+    {.name = "Settings", .signature = "Settings", .summary = "",},
+    {.name = "Settings.get", .signature = "(id: i64): i64", .summary = "",},
+    {.name = "Settings.init", .signature = "(): ()", .summary = "",},
+    {.name = "Settings.values", .signature = ": Array<i64>", .summary = "",},
+    {.name = "applySettingsPayload", .signature = "(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64", .summary = "",},
+    {.name = "encodeClientSettings", .signature = "(settings: Settings): Array<u8>", .summary = "",},
+    {.name = "encodeGoaway", .signature = "(lastStreamId: i64, errorCode: i64): Array<u8>", .summary = "",},
+    {.name = "encodePingAck", .signature = "(payload: Array<u8>, start: i64): Array<u8>", .summary = "",},
+    {.name = "encodeRstStream", .signature = "(streamId: i64, errorCode: i64): Array<u8>", .summary = "",},
+    {.name = "encodeSettingsAck", .signature = "(): Array<u8>", .summary = "",},
+    {.name = "encodeWindowUpdate", .signature = "(streamId: i64, increment: i64): Array<u8>", .summary = "",},
+    {.name = "readFrameHeader", .signature = "(src: Array<u8>, pos: i64): FrameHeader?", .summary = "",},
+    {.name = "request", .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)", .summary = "",},
+    {.name = "supported", .signature = "(): bool", .summary = "",},
+    {.name = "validateFrameHeader", .signature = "(header: FrameHeader): i64", .summary = "",},
+    {.name = "writeFrameHeader", .signature = "(out: ref Array<u8>, length: i64, kind: i64, flags: i64, streamId: i64): ()", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
-    {
-        .name = "BufReader",
-        .signature = "BufReader",
-        .summary = "",
-    },
-    {
-        .name = "BufReader.open",
-        .signature = "(path: Path, chunkSize: i64 = 131072): BufReader?",
-        .summary = "",
-    },
-    {
-        .name = "BufWriter",
-        .signature = "BufWriter",
-        .summary = "",
-    },
-    {
-        .name = "BufWriter.bytes",
-        .signature = "(): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "BufWriter.init",
-        .signature = "(path: Path, capacity: i64 = 131072): ()",
-        .summary = "",
-    },
-    {
-        .name = "BufWriter.path",
-        .signature = "(): Path",
-        .summary = "",
-    },
-    {
-        .name = "BufWriter.size",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "File",
-        .signature = "File",
-        .summary = "",
-    },
-    {
-        .name = "File.flush",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "File.open",
-        .signature = "(path: Path): File?",
-        .summary = "",
-    },
-    {
-        .name = "File.openWrite",
-        .signature = "(path: Path, append: bool): File?",
-        .summary = "",
-    },
-    {
-        .name = "File.read",
-        .signature = "(maxBytes: i64 = 131072): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "File.stderr",
-        .signature = "(): File",
-        .summary = "",
-    },
-    {
-        .name = "File.stdin",
-        .signature = "(): File",
-        .summary = "",
-    },
-    {
-        .name = "File.stdout",
-        .signature = "(): File",
-        .summary = "",
-    },
-    {
-        .name = "File.write",
-        .signature = "(data: Array<u8>, offset: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "File.writeString",
-        .signature = "(data: string, offset: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "FileStat",
-        .signature = "FileStat",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.atime",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.ctime",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.gid",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.init",
-        .signature = "(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.isDir",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.isFile",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.isSymlink",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.mode",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.mtime",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.size",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "FileStat.uid",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "LineIterator",
-        .signature = "LineIterator",
-        .summary = "",
-    },
-    {
-        .name = "LineIterator.hasNext",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "LineIterator.init",
-        .signature = "(reader: BufReader): ()",
-        .summary = "",
-    },
-    {
-        .name = "appendFile",
-        .signature = "(path: Path, data: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "chdir",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "chmod",
-        .signature = "(path: Path, mode: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "copyFile",
-        .signature = "(src: Path, dst: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "cwd",
-        .signature = "(): Path",
-        .summary = "",
-    },
-    {
-        .name = "exists",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "fileSize",
-        .signature = "(path: Path): i64",
-        .summary = "",
-    },
-    {
-        .name = "flushWriter",
-        .signature = "(writer: BufWriter): bool",
-        .summary = "",
-    },
-    {
-        .name = "isDir",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "isFile",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "isSymlink",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "lines",
-        .signature = "(path: Path): LineIterator?",
-        .summary = "",
-    },
-    {
-        .name = "mkdir",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "mkdirp",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "readDir",
-        .signature = "(path: Path): Array<Path>?",
-        .summary = "",
-    },
-    {
-        .name = "readDirRecursive",
-        .signature = "(path: Path): Array<Path>?",
-        .summary = "",
-    },
-    {
-        .name = "readFile",
-        .signature = "(path: Path): string?",
-        .summary = "",
-    },
-    {
-        .name = "readFileBytes",
-        .signature = "(path: Path): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "readLines",
-        .signature = "(path: Path): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "readStdin",
-        .signature = "(): string?",
-        .summary = "",
-    },
-    {
-        .name = "readStdinBytes",
-        .signature = "(): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "readlink",
-        .signature = "(path: Path): Path?",
-        .summary = "",
-    },
-    {
-        .name = "realpath",
-        .signature = "(path: Path): Path?",
-        .summary = "",
-    },
-    {
-        .name = "remove",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "removeAll",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "rename",
-        .signature = "(old: Path, newPath: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "stat",
-        .signature = "(path: Path): FileStat?",
-        .summary = "",
-    },
-    {
-        .name = "symlink",
-        .signature = "(source: Path, link: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "tempDir",
-        .signature = "(): Path?",
-        .summary = "",
-    },
-    {
-        .name = "tempFile",
-        .signature = "(): Path?",
-        .summary = "",
-    },
-    {
-        .name = "touch",
-        .signature = "(path: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "writeFile",
-        .signature = "(path: Path, data: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "writeFileBytes",
-        .signature = "(path: Path, data: Array<u8>): bool",
-        .summary = "",
-    },
-    {
-        .name = "writeStderr",
-        .signature = "(data: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "writeStdout",
-        .signature = "(data: string): bool",
-        .summary = "",
-    },
+    {.name = "BufReader", .signature = "BufReader", .summary = "",},
+    {.name = "BufReader.open", .signature = "(path: Path, chunkSize: i64 = 131072): BufReader?", .summary = "",},
+    {.name = "BufWriter", .signature = "BufWriter", .summary = "",},
+    {.name = "BufWriter.bytes", .signature = "(): Array<u8>", .summary = "",},
+    {.name = "BufWriter.init", .signature = "(path: Path, capacity: i64 = 131072): ()", .summary = "",},
+    {.name = "BufWriter.path", .signature = "(): Path", .summary = "",},
+    {.name = "BufWriter.size", .signature = "(): i64", .summary = "",},
+    {.name = "File", .signature = "File", .summary = "",},
+    {.name = "File.flush", .signature = "(): bool", .summary = "",},
+    {.name = "File.open", .signature = "(path: Path): File?", .summary = "",},
+    {.name = "File.openWrite", .signature = "(path: Path, append: bool): File?", .summary = "",},
+    {.name = "File.read", .signature = "(maxBytes: i64 = 131072): Array<u8>?", .summary = "",},
+    {.name = "File.stderr", .signature = "(): File", .summary = "",},
+    {.name = "File.stdin", .signature = "(): File", .summary = "",},
+    {.name = "File.stdout", .signature = "(): File", .summary = "",},
+    {.name = "File.write", .signature = "(data: Array<u8>, offset: i64): i64", .summary = "",},
+    {.name = "File.writeString", .signature = "(data: string, offset: i64): i64", .summary = "",},
+    {.name = "FileStat", .signature = "FileStat", .summary = "",},
+    {.name = "FileStat.atime", .signature = ": i64", .summary = "",},
+    {.name = "FileStat.ctime", .signature = ": i64", .summary = "",},
+    {.name = "FileStat.gid", .signature = ": i64", .summary = "",},
+    {.name = "FileStat.init", .signature = "(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()", .summary = "",},
+    {.name = "FileStat.isDir", .signature = ": bool", .summary = "",},
+    {.name = "FileStat.isFile", .signature = ": bool", .summary = "",},
+    {.name = "FileStat.isSymlink", .signature = ": bool", .summary = "",},
+    {.name = "FileStat.mode", .signature = ": i64", .summary = "",},
+    {.name = "FileStat.mtime", .signature = ": i64", .summary = "",},
+    {.name = "FileStat.size", .signature = ": i64", .summary = "",},
+    {.name = "FileStat.uid", .signature = ": i64", .summary = "",},
+    {.name = "LineIterator", .signature = "LineIterator", .summary = "",},
+    {.name = "LineIterator.hasNext", .signature = "(): bool", .summary = "",},
+    {.name = "LineIterator.init", .signature = "(reader: BufReader): ()", .summary = "",},
+    {.name = "appendFile", .signature = "(path: Path, data: string): bool", .summary = "",},
+    {.name = "chdir", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "chmod", .signature = "(path: Path, mode: i64): bool", .summary = "",},
+    {.name = "copyFile", .signature = "(src: Path, dst: Path): bool", .summary = "",},
+    {.name = "cwd", .signature = "(): Path", .summary = "",},
+    {.name = "exists", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "fileSize", .signature = "(path: Path): i64", .summary = "",},
+    {.name = "flushWriter", .signature = "(writer: BufWriter): bool", .summary = "",},
+    {.name = "isDir", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "isFile", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "isSymlink", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "lines", .signature = "(path: Path): LineIterator?", .summary = "",},
+    {.name = "mkdir", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "mkdirp", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "readDir", .signature = "(path: Path): Array<Path>?", .summary = "",},
+    {.name = "readDirRecursive", .signature = "(path: Path): Array<Path>?", .summary = "",},
+    {.name = "readFile", .signature = "(path: Path): string?", .summary = "",},
+    {.name = "readFileBytes", .signature = "(path: Path): Array<u8>?", .summary = "",},
+    {.name = "readLines", .signature = "(path: Path): Array<string>", .summary = "",},
+    {.name = "readStdin", .signature = "(): string?", .summary = "",},
+    {.name = "readStdinBytes", .signature = "(): Array<u8>?", .summary = "",},
+    {.name = "readlink", .signature = "(path: Path): Path?", .summary = "",},
+    {.name = "realpath", .signature = "(path: Path): Path?", .summary = "",},
+    {.name = "remove", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "removeAll", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "rename", .signature = "(old: Path, newPath: Path): bool", .summary = "",},
+    {.name = "stat", .signature = "(path: Path): FileStat?", .summary = "",},
+    {.name = "symlink", .signature = "(source: Path, link: Path): bool", .summary = "",},
+    {.name = "tempDir", .signature = "(): Path?", .summary = "",},
+    {.name = "tempFile", .signature = "(): Path?", .summary = "",},
+    {.name = "touch", .signature = "(path: Path): bool", .summary = "",},
+    {.name = "writeFile", .signature = "(path: Path, data: string): bool", .summary = "",},
+    {.name = "writeFileBytes", .signature = "(path: Path, data: Array<u8>): bool", .summary = "",},
+    {.name = "writeStderr", .signature = "(data: string): bool", .summary = "",},
+    {.name = "writeStdout", .signature = "(data: string): bool", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
-    {
-        .name = "JSON",
-        .signature = "JSON",
-        .summary = "",
-    },
-    {
-        .name = "JSON.asArray",
-        .signature = "(value: JSON.Value): Array<JSON.Value>?",
-        .summary = "",
-    },
-    {
-        .name = "JSON.asObject",
-        .signature = "(value: JSON.Value): JSON.Object?",
-        .summary = "",
-    },
-    {
-        .name = "JSON.containsPath",
-        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.decode",
-        .signature = "(value: JSON.Value, unknown?: JSON.UnknownFields): T?",
-        .summary = "",
-    },
-    {
-        .name = "JSON.decodeObject",
-        .signature = "(value: JSON.Object, unknown?: JSON.UnknownFields): T?",
-        .summary = "",
-    },
-    {
-        .name = "JSON.get",
-        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T?",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isArray",
-        .signature = "(value: JSON.Value): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isBool",
-        .signature = "(value: JSON.Value): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isFloat",
-        .signature = "(value: JSON.Value): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isInt",
-        .signature = "(value: JSON.Value): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isNull",
-        .signature = "(value: JSON.Value): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isObject",
-        .signature = "(value: JSON.Value): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isString",
-        .signature = "(value: JSON.Value): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.isValid",
-        .signature = "(text: string, strict?: bool): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.kindOf",
-        .signature = "(value: JSON.Value): string",
-        .summary = "",
-    },
-    {
-        .name = "JSON.merge",
-        .signature = "(parts: JSON.WithRest<T>): JSON.Object",
-        .summary = "",
-    },
-    {
-        .name = "JSON.parse",
-        .signature = "(text: string, unknown?: JSON.UnknownFields): T",
-        .summary = "",
-    },
-    {
-        .name = "JSON.parseObject",
-        .signature = "(text: string): JSON.Object",
-        .summary = "",
-    },
-    {
-        .name = "JSON.parseValue",
-        .signature = "(text: string): JSON.Value",
-        .summary = "",
-    },
-    {
-        .name = "JSON.parseWithRest",
-        .signature = "(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>",
-        .summary = "",
-    },
-    {
-        .name = "JSON.remove",
-        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "JSON.require",
-        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T",
-        .summary = "",
-    },
-    {
-        .name = "JSON.set",
-        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()",
-        .summary = "",
-    },
-    {
-        .name = "JSON.stringify",
-        .signature = "(value: T, indent?: i64): string",
-        .summary = "",
-    },
-    {
-        .name = "JSON.value",
-        .signature = "(value: T): JSON.Value",
-        .summary = "",
-    },
+    {.name = "JSON", .signature = "JSON", .summary = "",},
+    {.name = "JSON.asArray", .signature = "(value: JSON.Value): Array<JSON.Value>?", .summary = "",},
+    {.name = "JSON.asObject", .signature = "(value: JSON.Value): JSON.Object?", .summary = "",},
+    {.name = "JSON.containsPath", .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool", .summary = "",},
+    {.name = "JSON.decode", .signature = "(value: JSON.Value, unknown?: JSON.UnknownFields): T?", .summary = "",},
+    {.name = "JSON.decodeObject", .signature = "(value: JSON.Object, unknown?: JSON.UnknownFields): T?", .summary = "",},
+    {.name = "JSON.get", .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T?", .summary = "",},
+    {.name = "JSON.isArray", .signature = "(value: JSON.Value): bool", .summary = "",},
+    {.name = "JSON.isBool", .signature = "(value: JSON.Value): bool", .summary = "",},
+    {.name = "JSON.isFloat", .signature = "(value: JSON.Value): bool", .summary = "",},
+    {.name = "JSON.isInt", .signature = "(value: JSON.Value): bool", .summary = "",},
+    {.name = "JSON.isNull", .signature = "(value: JSON.Value): bool", .summary = "",},
+    {.name = "JSON.isObject", .signature = "(value: JSON.Value): bool", .summary = "",},
+    {.name = "JSON.isString", .signature = "(value: JSON.Value): bool", .summary = "",},
+    {.name = "JSON.isValid", .signature = "(text: string, strict?: bool): bool", .summary = "",},
+    {.name = "JSON.kindOf", .signature = "(value: JSON.Value): string", .summary = "",},
+    {.name = "JSON.merge", .signature = "(parts: JSON.WithRest<T>): JSON.Object", .summary = "",},
+    {.name = "JSON.parse", .signature = "(text: string, unknown?: JSON.UnknownFields): T", .summary = "",},
+    {.name = "JSON.parseObject", .signature = "(text: string): JSON.Object", .summary = "",},
+    {.name = "JSON.parseValue", .signature = "(text: string): JSON.Value", .summary = "",},
+    {.name = "JSON.parseWithRest", .signature = "(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>", .summary = "",},
+    {.name = "JSON.remove", .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool", .summary = "",},
+    {.name = "JSON.require", .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T", .summary = "",},
+    {.name = "JSON.set", .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()", .summary = "",},
+    {.name = "JSON.stringify", .signature = "(value: T, indent?: i64): string", .summary = "",},
+    {.name = "JSON.value", .signature = "(value: T): JSON.Value", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
-    {
-        .name = "Logger",
-        .signature = "Logger",
-        .summary = "",
-    },
-    {
-        .name = "Logger.asyncMode",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "Logger.child",
-        .signature = "(...fields: JSON.Value): Logger",
-        .summary = "",
-    },
-    {
-        .name = "Logger.debug",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "Logger.error",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "Logger.fatal",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "Logger.format",
-        .signature = ": LogFormat",
-        .summary = "",
-    },
-    {
-        .name = "Logger.info",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "Logger.init",
-        .signature = "(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()",
-        .summary = "",
-    },
-    {
-        .name = "Logger.jsonContext",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Logger.level",
-        .signature = ": LogLevel",
-        .summary = "",
-    },
-    {
-        .name = "Logger.output",
-        .signature = ": Path?",
-        .summary = "",
-    },
-    {
-        .name = "Logger.source",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "Logger.textContext",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Logger.warn",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "child",
-        .signature = "(...fields: JSON.Value): Logger",
-        .summary = "",
-    },
-    {
-        .name = "debug",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "enableAsync",
-        .signature = "(enabled: bool = true): ()",
-        .summary = "",
-    },
-    {
-        .name = "enableSource",
-        .signature = "(enabled: bool = true): ()",
-        .summary = "",
-    },
-    {
-        .name = "error",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "fatal",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "flush",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "info",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
-    {
-        .name = "isEnabled",
-        .signature = "(level: LogLevel): bool",
-        .summary = "",
-    },
-    {
-        .name = "setFormat",
-        .signature = "(format: LogFormat): ()",
-        .summary = "",
-    },
-    {
-        .name = "setLevel",
-        .signature = "(level: LogLevel): ()",
-        .summary = "",
-    },
-    {
-        .name = "setOutput",
-        .signature = "(path: Path): ()",
-        .summary = "",
-    },
-    {
-        .name = "warn",
-        .signature = "(...args: JSON.Value): ()",
-        .summary = "",
-    },
+    {.name = "Logger", .signature = "Logger", .summary = "",},
+    {.name = "Logger.asyncMode", .signature = ": bool", .summary = "",},
+    {.name = "Logger.child", .signature = "(...fields: JSON.Value): Logger", .summary = "",},
+    {.name = "Logger.debug", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "Logger.error", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "Logger.fatal", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "Logger.format", .signature = ": LogFormat", .summary = "",},
+    {.name = "Logger.info", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "Logger.init", .signature = "(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()", .summary = "",},
+    {.name = "Logger.jsonContext", .signature = ": string", .summary = "",},
+    {.name = "Logger.level", .signature = ": LogLevel", .summary = "",},
+    {.name = "Logger.output", .signature = ": Path?", .summary = "",},
+    {.name = "Logger.source", .signature = ": bool", .summary = "",},
+    {.name = "Logger.textContext", .signature = ": string", .summary = "",},
+    {.name = "Logger.warn", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "child", .signature = "(...fields: JSON.Value): Logger", .summary = "",},
+    {.name = "debug", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "enableAsync", .signature = "(enabled: bool = true): ()", .summary = "",},
+    {.name = "enableSource", .signature = "(enabled: bool = true): ()", .summary = "",},
+    {.name = "error", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "fatal", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "flush", .signature = "(): ()", .summary = "",},
+    {.name = "info", .signature = "(...args: JSON.Value): ()", .summary = "",},
+    {.name = "isEnabled", .signature = "(level: LogLevel): bool", .summary = "",},
+    {.name = "setFormat", .signature = "(format: LogFormat): ()", .summary = "",},
+    {.name = "setLevel", .signature = "(level: LogLevel): ()", .summary = "",},
+    {.name = "setOutput", .signature = "(path: Path): ()", .summary = "",},
+    {.name = "warn", .signature = "(...args: JSON.Value): ()", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
-    {
-        .name = "E",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "EPSILON",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "INF",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "LN10",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "LN2",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "LOG10E",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "LOG2E",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "MAX_F64",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "MAX_I64",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "MIN_I64",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "NAN",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "PI",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "SQRT2",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "TAU",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "abs",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "acos",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "asin",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "atan",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "atan2",
-        .signature = "(y: f64, x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "cbrt",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "ceil",
-        .signature = "(x: f64): i64",
-        .summary = "",
-    },
-    {
-        .name = "clamp",
-        .signature = "(x: f64, min: f64, max: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "cos",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "cosh",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "degToRad",
-        .signature = "(deg: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "exp",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "expm1",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "floor",
-        .signature = "(x: f64): i64",
-        .summary = "",
-    },
-    {
-        .name = "fmod",
-        .signature = "(x: f64, y: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "hypot",
-        .signature = "(x: f64, y: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "isFinite",
-        .signature = "(x: f64): bool",
-        .summary = "",
-    },
-    {
-        .name = "isNaN",
-        .signature = "(x: f64): bool",
-        .summary = "",
-    },
-    {
-        .name = "lerp",
-        .signature = "(a: f64, b: f64, t: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "log",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "log10",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "log1p",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "log2",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "max",
-        .signature = "(...args: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "min",
-        .signature = "(...args: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "pow",
-        .signature = "(base: f64, exp: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "radToDeg",
-        .signature = "(rad: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "random",
-        .signature = "(): f64",
-        .summary = "",
-    },
-    {
-        .name = "randomInt",
-        .signature = "(min: i64, max: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "round",
-        .signature = "(x: f64): i64",
-        .summary = "",
-    },
-    {
-        .name = "sign",
-        .signature = "(x: f64): i64",
-        .summary = "",
-    },
-    {
-        .name = "sin",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "sinh",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "sqrt",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "tan",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "tanh",
-        .signature = "(x: f64): f64",
-        .summary = "",
-    },
-    {
-        .name = "trunc",
-        .signature = "(x: f64): i64",
-        .summary = "",
-    },
+    {.name = "E", .signature = ": f64", .summary = "",},
+    {.name = "EPSILON", .signature = ": f64", .summary = "",},
+    {.name = "INF", .signature = ": f64", .summary = "",},
+    {.name = "LN10", .signature = ": f64", .summary = "",},
+    {.name = "LN2", .signature = ": f64", .summary = "",},
+    {.name = "LOG10E", .signature = ": f64", .summary = "",},
+    {.name = "LOG2E", .signature = ": f64", .summary = "",},
+    {.name = "MAX_F64", .signature = ": f64", .summary = "",},
+    {.name = "MAX_I64", .signature = ": i64", .summary = "",},
+    {.name = "MIN_I64", .signature = ": i64", .summary = "",},
+    {.name = "NAN", .signature = ": f64", .summary = "",},
+    {.name = "PI", .signature = ": f64", .summary = "",},
+    {.name = "SQRT2", .signature = ": f64", .summary = "",},
+    {.name = "TAU", .signature = ": f64", .summary = "",},
+    {.name = "abs", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "acos", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "asin", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "atan", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "atan2", .signature = "(y: f64, x: f64): f64", .summary = "",},
+    {.name = "cbrt", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "ceil", .signature = "(x: f64): i64", .summary = "",},
+    {.name = "clamp", .signature = "(x: f64, min: f64, max: f64): f64", .summary = "",},
+    {.name = "cos", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "cosh", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "degToRad", .signature = "(deg: f64): f64", .summary = "",},
+    {.name = "exp", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "expm1", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "floor", .signature = "(x: f64): i64", .summary = "",},
+    {.name = "fmod", .signature = "(x: f64, y: f64): f64", .summary = "",},
+    {.name = "hypot", .signature = "(x: f64, y: f64): f64", .summary = "",},
+    {.name = "isFinite", .signature = "(x: f64): bool", .summary = "",},
+    {.name = "isNaN", .signature = "(x: f64): bool", .summary = "",},
+    {.name = "lerp", .signature = "(a: f64, b: f64, t: f64): f64", .summary = "",},
+    {.name = "log", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "log10", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "log1p", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "log2", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "max", .signature = "(...args: f64): f64", .summary = "",},
+    {.name = "min", .signature = "(...args: f64): f64", .summary = "",},
+    {.name = "pow", .signature = "(base: f64, exp: f64): f64", .summary = "",},
+    {.name = "radToDeg", .signature = "(rad: f64): f64", .summary = "",},
+    {.name = "random", .signature = "(): f64", .summary = "",},
+    {.name = "randomInt", .signature = "(min: i64, max: i64): i64", .summary = "",},
+    {.name = "round", .signature = "(x: f64): i64", .summary = "",},
+    {.name = "sign", .signature = "(x: f64): i64", .summary = "",},
+    {.name = "sin", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "sinh", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "sqrt", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "tan", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "tanh", .signature = "(x: f64): f64", .summary = "",},
+    {.name = "trunc", .signature = "(x: f64): i64", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
-    {
-        .name = "PROT_EXEC",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PROT_NONE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PROT_READ",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "PROT_WRITE",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "alloc",
-        .signature = "(n: i64): Buffer",
-        .summary = "",
-    },
-    {
-        .name = "allocAligned",
-        .signature = "(n: i64, align: i64): Buffer",
-        .summary = "",
-    },
-    {
-        .name = "allocZeroed",
-        .signature = "(n: i64): Buffer",
-        .summary = "",
-    },
-    {
-        .name = "cacheFlush",
-        .signature = "(ptr: Ptr<u8>, n: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "cacheInvalidate",
-        .signature = "(ptr: Ptr<u8>, n: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "cacheLineSize",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "compare",
-        .signature = "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "copy",
-        .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "fence",
-        .signature = "(ordering: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "move",
-        .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "nontemporalStore",
-        .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "pageAlloc",
-        .signature = "(bytes: i64, prot: i64 = PROT_READ | PROT_WRITE): MutPtr<u8>",
-        .summary = "",
-    },
-    {
-        .name = "pageFree",
-        .signature = "(ptr: MutPtr<u8>, bytes: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "pageProtect",
-        .signature = "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "prefetch",
-        .signature = "(ptr: Ptr<u8>, rw: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "set",
-        .signature = "(dst: MutPtr<u8>, byte: i64, n: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "volatileLoad",
-        .signature = "(ptr: Ptr<u8>, size: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "volatileStore",
-        .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
-        .summary = "",
-    },
+    {.name = "PROT_EXEC", .signature = ": i64", .summary = "",},
+    {.name = "PROT_NONE", .signature = ": i64", .summary = "",},
+    {.name = "PROT_READ", .signature = ": i64", .summary = "",},
+    {.name = "PROT_WRITE", .signature = ": i64", .summary = "",},
+    {.name = "alloc", .signature = "(n: i64): Buffer", .summary = "",},
+    {.name = "allocAligned", .signature = "(n: i64, align: i64): Buffer", .summary = "",},
+    {.name = "allocZeroed", .signature = "(n: i64): Buffer", .summary = "",},
+    {.name = "cacheFlush", .signature = "(ptr: Ptr<u8>, n: i64): ()", .summary = "",},
+    {.name = "cacheInvalidate", .signature = "(ptr: Ptr<u8>, n: i64): ()", .summary = "",},
+    {.name = "cacheLineSize", .signature = "(): i64", .summary = "",},
+    {.name = "compare", .signature = "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64", .summary = "",},
+    {.name = "copy", .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", .summary = "",},
+    {.name = "fence", .signature = "(ordering: i64): ()", .summary = "",},
+    {.name = "move", .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()", .summary = "",},
+    {.name = "nontemporalStore", .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()", .summary = "",},
+    {.name = "pageAlloc", .signature = "(bytes: i64, prot: i64 = PROT_READ | PROT_WRITE): MutPtr<u8>", .summary = "",},
+    {.name = "pageFree", .signature = "(ptr: MutPtr<u8>, bytes: i64): bool", .summary = "",},
+    {.name = "pageProtect", .signature = "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool", .summary = "",},
+    {.name = "prefetch", .signature = "(ptr: Ptr<u8>, rw: i64): ()", .summary = "",},
+    {.name = "set", .signature = "(dst: MutPtr<u8>, byte: i64, n: i64): ()", .summary = "",},
+    {.name = "volatileLoad", .signature = "(ptr: Ptr<u8>, size: i64): i64", .summary = "",},
+    {.name = "volatileStore", .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
-    {
-        .name = "CopyBidirectionalResult",
-        .signature = "CopyBidirectionalResult",
-        .summary = "",
-    },
-    {
-        .name = "CopyBidirectionalResult.aToB",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "CopyBidirectionalResult.bToA",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "DialOptions",
-        .signature = "DialOptions",
-        .summary = "",
-    },
-    {
-        .name = "DialOptions.alpnProtocols",
-        .signature = ": Array<string>?",
-        .summary = "",
-    },
-    {
-        .name = "DialOptions.init",
-        .signature = "(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()",
-        .summary = "",
-    },
-    {
-        .name = "DialOptions.timeoutMs",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "DialOptions.tls",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "Endpoint",
-        .signature = "Endpoint",
-        .summary = "",
-    },
-    {
-        .name = "Endpoint.host",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Endpoint.init",
-        .signature = "(host: string, port: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "Endpoint.port",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "IpAddress",
-        .signature = "IpAddress",
-        .summary = "",
-    },
-    {
-        .name = "IpAddress.init",
-        .signature = "(value: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "IpAddress.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "IpAddress.value",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "NetConn",
-        .signature = "NetConn",
-        .summary = "",
-    },
-    {
-        .name = "NetConn.init",
-        .signature = "(storage: __NetConnStorage): ()",
-        .summary = "",
-    },
-    {
-        .name = "NetListener",
-        .signature = "NetListener",
-        .summary = "",
-    },
-    {
-        .name = "NetListener.init",
-        .signature = "(storage: __NetListenerStorage): ()",
-        .summary = "",
-    },
-    {
-        .name = "TlsClientContext",
-        .signature = "TlsClientContext",
-        .summary = "",
-    },
-    {
-        .name = "TlsClientContext.create",
-        .signature = "(caFile: string = \"\", certFile: string = \"\", keyFile: string = \"\", verifyPeer: bool = true, alpnProtocols: Array<string>? = null): TlsClientContext",
-        .summary = "",
-    },
-    {
-        .name = "TlsClientContext.upgrade",
-        .signature = "(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()",
-        .summary = "",
-    },
-    {
-        .name = "TlsServerContext",
-        .signature = "TlsServerContext",
-        .summary = "",
-    },
-    {
-        .name = "TlsServerContext.accept",
-        .signature = "(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()",
-        .summary = "",
-    },
-    {
-        .name = "TlsServerContext.create",
-        .signature = "(certFile: string, keyFile: string, caFile: string = \"\", requireClientCertificate: bool = false, alpnProtocols: Array<string>? = null): TlsServerContext",
-        .summary = "",
-    },
-    {
-        .name = "UdpFrom",
-        .signature = "UdpFrom",
-        .summary = "",
-    },
-    {
-        .name = "UdpFrom.host",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "UdpFrom.init",
-        .signature = "(n: i64, host: string, port: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "UdpFrom.n",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "UdpFrom.port",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "accept",
-        .signature = "(listener: NetListener): NetConn?",
-        .summary = "",
-    },
-    {
-        .name = "close",
-        .signature = "(handle: NetConn | NetListener): ()",
-        .summary = "",
-    },
-    {
-        .name = "copy",
-        .signature = "(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER): i64",
-        .summary = "",
-    },
-    {
-        .name = "copyBidirectional",
-        .signature = "(a: NetConn, b: NetConn): CopyBidirectionalResult",
-        .summary = "",
-    },
-    {
-        .name = "dial",
-        .signature = "(host: string, port: i64, options: DialOptions? = null): NetConn",
-        .summary = "",
-    },
-    {
-        .name = "dialEndpoint",
-        .signature = "(endpoint: Endpoint, options: DialOptions? = null): NetConn",
-        .summary = "",
-    },
-    {
-        .name = "fd",
-        .signature = "(handle: NetConn | NetListener): i64",
-        .summary = "",
-    },
-    {
-        .name = "hasTLS",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "isClosed",
-        .signature = "(handle: NetConn | NetListener): bool",
-        .summary = "",
-    },
-    {
-        .name = "isTLS",
-        .signature = "(conn: NetConn): bool",
-        .summary = "",
-    },
-    {
-        .name = "lastErrno",
-        .signature = "(handle: NetConn | NetListener): i64",
-        .summary = "",
-    },
-    {
-        .name = "lastError",
-        .signature = "(handle: NetConn | NetListener): NetError?",
-        .summary = "",
-    },
-    {
-        .name = "listen",
-        .signature = "(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener",
-        .summary = "",
-    },
-    {
-        .name = "lookup",
-        .signature = "(hostname: string): Array<IpAddress>",
-        .summary = "",
-    },
-    {
-        .name = "negotiatedProtocol",
-        .signature = "(conn: NetConn): string?",
-        .summary = "",
-    },
-    {
-        .name = "port",
-        .signature = "(listener: NetListener): i64",
-        .summary = "",
-    },
-    {
-        .name = "readBytes",
-        .signature = "(conn: NetConn, maxBytes: i64 = 4096): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "readInto",
-        .signature = "(conn: NetConn, buffer: ref Array<u8>, maxlen: i64 = 1048576): i64",
-        .summary = "",
-    },
-    {
-        .name = "recvFrom",
-        .signature = "(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1): UdpFrom?",
-        .summary = "",
-    },
-    {
-        .name = "resolve",
-        .signature = "(hostname: string): IpAddress?",
-        .summary = "",
-    },
-    {
-        .name = "sendTo",
-        .signature = "(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): i64",
-        .summary = "",
-    },
-    {
-        .name = "setAcceptDeadline",
-        .signature = "(listener: NetListener, deadline: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "setDeadline",
-        .signature = "(conn: NetConn, deadline: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "setReadDeadline",
-        .signature = "(conn: NetConn, deadline: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "setWriteDeadline",
-        .signature = "(conn: NetConn, deadline: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "shutdown",
-        .signature = "(conn: NetConn): bool",
-        .summary = "",
-    },
-    {
-        .name = "shutdownRead",
-        .signature = "(conn: NetConn): bool",
-        .summary = "",
-    },
-    {
-        .name = "shutdownWrite",
-        .signature = "(conn: NetConn): bool",
-        .summary = "",
-    },
-    {
-        .name = "udpBind",
-        .signature = "(port: i64, address: string = \"\"): NetConn",
-        .summary = "",
-    },
-    {
-        .name = "udpMulticastBind",
-        .signature = "(group: string, port: i64, ttl: i64 = 1, loopback: bool = false): NetConn",
-        .summary = "",
-    },
-    {
-        .name = "upgradeTLS",
-        .signature = "(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()",
-        .summary = "",
-    },
-    {
-        .name = "writeBytes",
-        .signature = "(conn: NetConn, data: Array<u8>): i64",
-        .summary = "",
-    },
+    {.name = "CopyBidirectionalResult", .signature = "CopyBidirectionalResult", .summary = "",},
+    {.name = "CopyBidirectionalResult.aToB", .signature = ": i64", .summary = "",},
+    {.name = "CopyBidirectionalResult.bToA", .signature = ": i64", .summary = "",},
+    {.name = "DialOptions", .signature = "DialOptions", .summary = "",},
+    {.name = "DialOptions.alpnProtocols", .signature = ": Array<string>?", .summary = "",},
+    {.name = "DialOptions.init", .signature = "(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()", .summary = "",},
+    {.name = "DialOptions.timeoutMs", .signature = ": i64", .summary = "",},
+    {.name = "DialOptions.tls", .signature = ": bool", .summary = "",},
+    {.name = "Endpoint", .signature = "Endpoint", .summary = "",},
+    {.name = "Endpoint.host", .signature = ": string", .summary = "",},
+    {.name = "Endpoint.init", .signature = "(host: string, port: i64): ()", .summary = "",},
+    {.name = "Endpoint.port", .signature = ": i64", .summary = "",},
+    {.name = "IpAddress", .signature = "IpAddress", .summary = "",},
+    {.name = "IpAddress.init", .signature = "(value: string): ()", .summary = "",},
+    {.name = "IpAddress.toString", .signature = "(): string", .summary = "",},
+    {.name = "IpAddress.value", .signature = ": string", .summary = "",},
+    {.name = "NetConn", .signature = "NetConn", .summary = "",},
+    {.name = "NetConn.init", .signature = "(storage: __NetConnStorage): ()", .summary = "",},
+    {.name = "NetListener", .signature = "NetListener", .summary = "",},
+    {.name = "NetListener.init", .signature = "(storage: __NetListenerStorage): ()", .summary = "",},
+    {.name = "TlsClientContext", .signature = "TlsClientContext", .summary = "",},
+    {.name = "TlsClientContext.create", .signature = "(caFile: string = \"\", certFile: string = \"\", keyFile: string = \"\", verifyPeer: bool = true, alpnProtocols: Array<string>? = null): TlsClientContext", .summary = "",},
+    {.name = "TlsClientContext.upgrade", .signature = "(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()", .summary = "",},
+    {.name = "TlsServerContext", .signature = "TlsServerContext", .summary = "",},
+    {.name = "TlsServerContext.accept", .signature = "(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()", .summary = "",},
+    {.name = "TlsServerContext.create", .signature = "(certFile: string, keyFile: string, caFile: string = \"\", requireClientCertificate: bool = false, alpnProtocols: Array<string>? = null): TlsServerContext", .summary = "",},
+    {.name = "UdpFrom", .signature = "UdpFrom", .summary = "",},
+    {.name = "UdpFrom.host", .signature = ": string", .summary = "",},
+    {.name = "UdpFrom.init", .signature = "(n: i64, host: string, port: i64): ()", .summary = "",},
+    {.name = "UdpFrom.n", .signature = ": i64", .summary = "",},
+    {.name = "UdpFrom.port", .signature = ": i64", .summary = "",},
+    {.name = "accept", .signature = "(listener: NetListener): NetConn?", .summary = "",},
+    {.name = "close", .signature = "(handle: NetConn | NetListener): ()", .summary = "",},
+    {.name = "copy", .signature = "(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER): i64", .summary = "",},
+    {.name = "copyBidirectional", .signature = "(a: NetConn, b: NetConn): CopyBidirectionalResult", .summary = "",},
+    {.name = "dial", .signature = "(host: string, port: i64, options: DialOptions? = null): NetConn", .summary = "",},
+    {.name = "dialEndpoint", .signature = "(endpoint: Endpoint, options: DialOptions? = null): NetConn", .summary = "",},
+    {.name = "fd", .signature = "(handle: NetConn | NetListener): i64", .summary = "",},
+    {.name = "hasTLS", .signature = "(): bool", .summary = "",},
+    {.name = "isClosed", .signature = "(handle: NetConn | NetListener): bool", .summary = "",},
+    {.name = "isTLS", .signature = "(conn: NetConn): bool", .summary = "",},
+    {.name = "lastErrno", .signature = "(handle: NetConn | NetListener): i64", .summary = "",},
+    {.name = "lastError", .signature = "(handle: NetConn | NetListener): NetError?", .summary = "",},
+    {.name = "listen", .signature = "(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener", .summary = "",},
+    {.name = "lookup", .signature = "(hostname: string): Array<IpAddress>", .summary = "",},
+    {.name = "negotiatedProtocol", .signature = "(conn: NetConn): string?", .summary = "",},
+    {.name = "port", .signature = "(listener: NetListener): i64", .summary = "",},
+    {.name = "readBytes", .signature = "(conn: NetConn, maxBytes: i64 = 4096): Array<u8>?", .summary = "",},
+    {.name = "readInto", .signature = "(conn: NetConn, buffer: ref Array<u8>, maxlen: i64 = 1048576): i64", .summary = "",},
+    {.name = "recvFrom", .signature = "(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1): UdpFrom?", .summary = "",},
+    {.name = "resolve", .signature = "(hostname: string): IpAddress?", .summary = "",},
+    {.name = "sendTo", .signature = "(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): i64", .summary = "",},
+    {.name = "setAcceptDeadline", .signature = "(listener: NetListener, deadline: i64): bool", .summary = "",},
+    {.name = "setDeadline", .signature = "(conn: NetConn, deadline: i64): bool", .summary = "",},
+    {.name = "setReadDeadline", .signature = "(conn: NetConn, deadline: i64): bool", .summary = "",},
+    {.name = "setWriteDeadline", .signature = "(conn: NetConn, deadline: i64): bool", .summary = "",},
+    {.name = "shutdown", .signature = "(conn: NetConn): bool", .summary = "",},
+    {.name = "shutdownRead", .signature = "(conn: NetConn): bool", .summary = "",},
+    {.name = "shutdownWrite", .signature = "(conn: NetConn): bool", .summary = "",},
+    {.name = "udpBind", .signature = "(port: i64, address: string = \"\"): NetConn", .summary = "",},
+    {.name = "udpMulticastBind", .signature = "(group: string, port: i64, ttl: i64 = 1, loopback: bool = false): NetConn", .summary = "",},
+    {.name = "upgradeTLS", .signature = "(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()", .summary = "",},
+    {.name = "writeBytes", .signature = "(conn: NetConn, data: Array<u8>): i64", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
-    {
-        .name = "ExecResult",
-        .signature = "ExecResult",
-        .summary = "",
-    },
-    {
-        .name = "ExecResult.exitCode",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ExecResult.init",
-        .signature = "(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()",
-        .summary = "",
-    },
-    {
-        .name = "ExecResult.stderr",
-        .signature = ": Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "ExecResult.stderrTruncated",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ExecResult.stdout",
-        .signature = ": Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "ExecResult.stdoutTruncated",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "arch",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "cpuCount",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "environ",
-        .signature = "(): Map<string, string>",
-        .summary = "",
-    },
-    {
-        .name = "eol",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "exec",
-        .signature = "(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES, maxStderrBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES): ExecResult?",
-        .summary = "",
-    },
-    {
-        .name = "exit",
-        .signature = "(code: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "freeMemory",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "getcwd",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "getenv",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "getpid",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "gid",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "homedir",
-        .signature = "(): string?",
-        .summary = "",
-    },
-    {
-        .name = "hostname",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "kill",
-        .signature = "(pid: i64, signal: i64 = 15): bool",
-        .summary = "",
-    },
-    {
-        .name = "loadavg",
-        .signature = "(): Array<f64>",
-        .summary = "",
-    },
-    {
-        .name = "platform",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "ppid",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "sep",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "setenv",
-        .signature = "(name: string, value: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "tmpdir",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "totalMemory",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "uid",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "unsetenv",
-        .signature = "(name: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "uptime",
-        .signature = "(): f64",
-        .summary = "",
-    },
-    {
-        .name = "username",
-        .signature = "(): string?",
-        .summary = "",
-    },
+    {.name = "ExecResult", .signature = "ExecResult", .summary = "",},
+    {.name = "ExecResult.exitCode", .signature = ": i64", .summary = "",},
+    {.name = "ExecResult.init", .signature = "(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()", .summary = "",},
+    {.name = "ExecResult.stderr", .signature = ": Array<u8>", .summary = "",},
+    {.name = "ExecResult.stderrTruncated", .signature = ": bool", .summary = "",},
+    {.name = "ExecResult.stdout", .signature = ": Array<u8>", .summary = "",},
+    {.name = "ExecResult.stdoutTruncated", .signature = ": bool", .summary = "",},
+    {.name = "arch", .signature = "(): string", .summary = "",},
+    {.name = "cpuCount", .signature = "(): i64", .summary = "",},
+    {.name = "environ", .signature = "(): Map<string, string>", .summary = "",},
+    {.name = "eol", .signature = "(): string", .summary = "",},
+    {.name = "exec", .signature = "(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES, maxStderrBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES): ExecResult?", .summary = "",},
+    {.name = "exit", .signature = "(code: i64 = 0): ()", .summary = "",},
+    {.name = "freeMemory", .signature = "(): i64", .summary = "",},
+    {.name = "getcwd", .signature = "(): string", .summary = "",},
+    {.name = "getenv", .signature = "(name: string): string?", .summary = "",},
+    {.name = "getpid", .signature = "(): i64", .summary = "",},
+    {.name = "gid", .signature = "(): i64", .summary = "",},
+    {.name = "homedir", .signature = "(): string?", .summary = "",},
+    {.name = "hostname", .signature = "(): string", .summary = "",},
+    {.name = "kill", .signature = "(pid: i64, signal: i64 = 15): bool", .summary = "",},
+    {.name = "loadavg", .signature = "(): Array<f64>", .summary = "",},
+    {.name = "platform", .signature = "(): string", .summary = "",},
+    {.name = "ppid", .signature = "(): i64", .summary = "",},
+    {.name = "sep", .signature = "(): string", .summary = "",},
+    {.name = "setenv", .signature = "(name: string, value: string): bool", .summary = "",},
+    {.name = "tmpdir", .signature = "(): string", .summary = "",},
+    {.name = "totalMemory", .signature = "(): i64", .summary = "",},
+    {.name = "uid", .signature = "(): i64", .summary = "",},
+    {.name = "unsetenv", .signature = "(name: string): bool", .summary = "",},
+    {.name = "uptime", .signature = "(): f64", .summary = "",},
+    {.name = "username", .signature = "(): string?", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
-    {
-        .name = "Options",
-        .signature = "Options",
-        .summary = "",
-    },
-    {
-        .name = "Options.init",
-        .signature = "(workers: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "Options.workers",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "Plan",
-        .signature = "Plan",
-        .summary = "",
-    },
-    {
-        .name = "Plan.init",
-        .signature = "(options: Options, init: fn(i64) -> S): ()",
-        .summary = "",
-    },
-    {
-        .name = "Plan.options",
-        .signature = ": Options",
-        .summary = "",
-    },
-    {
-        .name = "forEach",
-        .signature = "(range: Range, body: fn(i64), options: Options = Options()): ()",
-        .summary = "",
-    },
-    {
-        .name = "map",
-        .signature = "(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>",
-        .summary = "",
-    },
-    {
-        .name = "mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()): ()",
-        .summary = "",
-    },
-    {
-        .name = "reduce",
-        .signature = "(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options: Options = Options()): A",
-        .summary = "",
-    },
+    {.name = "Options", .signature = "Options", .summary = "",},
+    {.name = "Options.init", .signature = "(workers: i64 = 0): ()", .summary = "",},
+    {.name = "Options.workers", .signature = ": i64", .summary = "",},
+    {.name = "Plan", .signature = "Plan", .summary = "",},
+    {.name = "Plan.init", .signature = "(options: Options, init: fn(i64) -> S): ()", .summary = "",},
+    {.name = "Plan.options", .signature = ": Options", .summary = "",},
+    {.name = "forEach", .signature = "(range: Range, body: fn(i64), options: Options = Options()): ()", .summary = "",},
+    {.name = "map", .signature = "(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>", .summary = "",},
+    {.name = "mapInto", .signature = "(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()): ()", .summary = "",},
+    {.name = "reduce", .signature = "(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options: Options = Options()): A", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
-    {
-        .name = "Path",
-        .signature = "Path",
-        .summary = "",
-    },
-    {
-        .name = "Path.init",
-        .signature = "(raw: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "Path.raw",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Path.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "PathInfo",
-        .signature = "PathInfo",
-        .summary = "",
-    },
-    {
-        .name = "PathInfo.base",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "PathInfo.dir",
-        .signature = ": Path",
-        .summary = "",
-    },
-    {
-        .name = "PathInfo.ext",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "PathInfo.init",
-        .signature = "(root: string, dir: Path, base: string, name: string, ext: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "PathInfo.name",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "PathInfo.root",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "basename",
-        .signature = "(p: Path): string",
-        .summary = "",
-    },
-    {
-        .name = "delimiter",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "dirname",
-        .signature = "(p: Path): Path",
-        .summary = "",
-    },
-    {
-        .name = "extname",
-        .signature = "(p: Path): string",
-        .summary = "",
-    },
-    {
-        .name = "format",
-        .signature = "(info: PathInfo): Path",
-        .summary = "",
-    },
-    {
-        .name = "from",
-        .signature = "(raw: string): Path",
-        .summary = "",
-    },
-    {
-        .name = "isAbsolute",
-        .signature = "(p: Path): bool",
-        .summary = "",
-    },
-    {
-        .name = "join",
-        .signature = "(...parts: Path): Path",
-        .summary = "",
-    },
-    {
-        .name = "joinAll",
-        .signature = "(parts: Array<Path>): Path",
-        .summary = "",
-    },
-    {
-        .name = "normalize",
-        .signature = "(p: Path): Path",
-        .summary = "",
-    },
-    {
-        .name = "parse",
-        .signature = "(p: Path): PathInfo",
-        .summary = "",
-    },
-    {
-        .name = "relative",
-        .signature = "(fromPath: Path, toPath: Path): Path",
-        .summary = "",
-    },
-    {
-        .name = "resolve",
-        .signature = "(...parts: Path): Path",
-        .summary = "",
-    },
-    {
-        .name = "sep",
-        .signature = ": string",
-        .summary = "",
-    },
+    {.name = "Path", .signature = "Path", .summary = "",},
+    {.name = "Path.init", .signature = "(raw: string): ()", .summary = "",},
+    {.name = "Path.raw", .signature = ": string", .summary = "",},
+    {.name = "Path.toString", .signature = "(): string", .summary = "",},
+    {.name = "PathInfo", .signature = "PathInfo", .summary = "",},
+    {.name = "PathInfo.base", .signature = ": string", .summary = "",},
+    {.name = "PathInfo.dir", .signature = ": Path", .summary = "",},
+    {.name = "PathInfo.ext", .signature = ": string", .summary = "",},
+    {.name = "PathInfo.init", .signature = "(root: string, dir: Path, base: string, name: string, ext: string): ()", .summary = "",},
+    {.name = "PathInfo.name", .signature = ": string", .summary = "",},
+    {.name = "PathInfo.root", .signature = ": string", .summary = "",},
+    {.name = "basename", .signature = "(p: Path): string", .summary = "",},
+    {.name = "delimiter", .signature = ": string", .summary = "",},
+    {.name = "dirname", .signature = "(p: Path): Path", .summary = "",},
+    {.name = "extname", .signature = "(p: Path): string", .summary = "",},
+    {.name = "format", .signature = "(info: PathInfo): Path", .summary = "",},
+    {.name = "from", .signature = "(raw: string): Path", .summary = "",},
+    {.name = "isAbsolute", .signature = "(p: Path): bool", .summary = "",},
+    {.name = "join", .signature = "(...parts: Path): Path", .summary = "",},
+    {.name = "joinAll", .signature = "(parts: Array<Path>): Path", .summary = "",},
+    {.name = "normalize", .signature = "(p: Path): Path", .summary = "",},
+    {.name = "parse", .signature = "(p: Path): PathInfo", .summary = "",},
+    {.name = "relative", .signature = "(fromPath: Path, toPath: Path): Path", .summary = "",},
+    {.name = "resolve", .signature = "(...parts: Path): Path", .summary = "",},
+    {.name = "sep", .signature = ": string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
-    {
-        .name = "Regex",
-        .signature = "Regex",
-        .summary = "",
-    },
-    {
-        .name = "Regex.flags",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "Regex.init",
-        .signature = "(pattern: string, flags: string = \"\"): ()",
-        .summary = "",
-    },
-    {
-        .name = "Regex.pattern",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "Regex.prog",
-        .signature = ": Array<i64>",
-        .summary = "",
-    },
-    {
-        .name = "RegexMatch",
-        .signature = "RegexMatch",
-        .summary = "",
-    },
-    {
-        .name = "RegexMatch.end",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RegexMatch.groups",
-        .signature = ": Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "RegexMatch.init",
-        .signature = "(start: i64, end: i64, text: string, groups: Array<string>): ()",
-        .summary = "",
-    },
-    {
-        .name = "RegexMatch.start",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RegexMatch.text",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "compile",
-        .signature = "(pattern: string, flags: string = \"\"): Regex",
-        .summary = "",
-    },
-    {
-        .name = "count",
-        .signature = "(pattern: Regex, s: string): i64",
-        .summary = "",
-    },
-    {
-        .name = "escape",
-        .signature = "(s: string): string",
-        .summary = "",
-    },
-    {
-        .name = "find",
-        .signature = "(pattern: Regex, s: string, offset: i64 = 0): RegexMatch?",
-        .summary = "",
-    },
-    {
-        .name = "findAll",
-        .signature = "(pattern: Regex, s: string, limit: i64 = -1): Array<RegexMatch>",
-        .summary = "",
-    },
-    {
-        .name = "findGroup",
-        .signature = "(pattern: Regex, s: string, index: i64): string?",
-        .summary = "",
-    },
-    {
-        .name = "findText",
-        .signature = "(pattern: Regex, s: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "fullFind",
-        .signature = "(pattern: Regex, s: string): RegexMatch?",
-        .summary = "",
-    },
-    {
-        .name = "isValid",
-        .signature = "(pattern: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "replace",
-        .signature = "(pattern: Regex, s: string, repl: string): string",
-        .summary = "",
-    },
-    {
-        .name = "replaceAll",
-        .signature = "(pattern: Regex, s: string, repl: string): string",
-        .summary = "",
-    },
-    {
-        .name = "split",
-        .signature = "(pattern: Regex, s: string, limit: i64 = -1): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "test",
-        .signature = "(pattern: Regex, s: string): bool",
-        .summary = "",
-    },
+    {.name = "Regex", .signature = "Regex", .summary = "",},
+    {.name = "Regex.flags", .signature = ": i64", .summary = "",},
+    {.name = "Regex.init", .signature = "(pattern: string, flags: string = \"\"): ()", .summary = "",},
+    {.name = "Regex.pattern", .signature = ": string", .summary = "",},
+    {.name = "Regex.prog", .signature = ": Array<i64>", .summary = "",},
+    {.name = "RegexMatch", .signature = "RegexMatch", .summary = "",},
+    {.name = "RegexMatch.end", .signature = ": i64", .summary = "",},
+    {.name = "RegexMatch.groups", .signature = ": Array<string>", .summary = "",},
+    {.name = "RegexMatch.init", .signature = "(start: i64, end: i64, text: string, groups: Array<string>): ()", .summary = "",},
+    {.name = "RegexMatch.start", .signature = ": i64", .summary = "",},
+    {.name = "RegexMatch.text", .signature = ": string", .summary = "",},
+    {.name = "compile", .signature = "(pattern: string, flags: string = \"\"): Regex", .summary = "",},
+    {.name = "count", .signature = "(pattern: Regex, s: string): i64", .summary = "",},
+    {.name = "escape", .signature = "(s: string): string", .summary = "",},
+    {.name = "find", .signature = "(pattern: Regex, s: string, offset: i64 = 0): RegexMatch?", .summary = "",},
+    {.name = "findAll", .signature = "(pattern: Regex, s: string, limit: i64 = -1): Array<RegexMatch>", .summary = "",},
+    {.name = "findGroup", .signature = "(pattern: Regex, s: string, index: i64): string?", .summary = "",},
+    {.name = "findText", .signature = "(pattern: Regex, s: string): string?", .summary = "",},
+    {.name = "fullFind", .signature = "(pattern: Regex, s: string): RegexMatch?", .summary = "",},
+    {.name = "isValid", .signature = "(pattern: string): bool", .summary = "",},
+    {.name = "replace", .signature = "(pattern: Regex, s: string, repl: string): string", .summary = "",},
+    {.name = "replaceAll", .signature = "(pattern: Regex, s: string, repl: string): string", .summary = "",},
+    {.name = "split", .signature = "(pattern: Regex, s: string, limit: i64 = -1): Array<string>", .summary = "",},
+    {.name = "test", .signature = "(pattern: Regex, s: string): bool", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
-    {
-        .name = "RuntimeInfo",
-        .signature = "RuntimeInfo",
-        .summary = "",
-    },
-    {
-        .name = "RuntimeInfo.finalizerCount",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RuntimeInfo.init",
-        .signature = "(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "RuntimeInfo.liveBytes",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "RuntimeInfo.liveKB",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "RuntimeInfo.liveObjects",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "finalizerCount",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "info",
-        .signature = "(): RuntimeInfo",
-        .summary = "",
-    },
-    {
-        .name = "liveBytes",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "liveObjects",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "sharedBytes",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "staticBytes",
-        .signature = "(): i64",
-        .summary = "",
-    },
+    {.name = "RuntimeInfo", .signature = "RuntimeInfo", .summary = "",},
+    {.name = "RuntimeInfo.finalizerCount", .signature = ": i64", .summary = "",},
+    {.name = "RuntimeInfo.init", .signature = "(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()", .summary = "",},
+    {.name = "RuntimeInfo.liveBytes", .signature = ": i64", .summary = "",},
+    {.name = "RuntimeInfo.liveKB", .signature = ": f64", .summary = "",},
+    {.name = "RuntimeInfo.liveObjects", .signature = ": i64", .summary = "",},
+    {.name = "finalizerCount", .signature = "(): i64", .summary = "",},
+    {.name = "info", .signature = "(): RuntimeInfo", .summary = "",},
+    {.name = "liveBytes", .signature = "(): i64", .summary = "",},
+    {.name = "liveObjects", .signature = "(): i64", .summary = "",},
+    {.name = "sharedBytes", .signature = "(): i64", .summary = "",},
+    {.name = "staticBytes", .signature = "(): i64", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
-    {
-        .name = "Capabilities",
-        .signature = "Capabilities",
-        .summary = "",
-    },
-    {
-        .name = "Capabilities.isAccelerated",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "Capabilities.isRuntimeSelected",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "Capabilities.isScalable",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "Capabilities.nativeBytes",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "U32x16",
-        .signature = "U32x16",
-        .summary = "",
-    },
-    {
-        .name = "U32x16.fromLanes",
-        .signature = "(lanes: [u32; 16]): U32x16",
-        .summary = "",
-    },
-    {
-        .name = "U32x16.splat",
-        .signature = "(value: u32): U32x16",
-        .summary = "",
-    },
-    {
-        .name = "U32x16.swapAdjacent",
-        .signature = "(): U32x16",
-        .summary = "",
-    },
-    {
-        .name = "U32x16.widenMulEven",
-        .signature = "(other: U32x16): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U32x16.widenMulOdd",
-        .signature = "(other: U32x16): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U32x4",
-        .signature = "U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.add",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.bitAnd",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.bitNot",
-        .signature = "(): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.bitOr",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.bitXor",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.extract",
-        .signature = "(lane: i64): u32",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.fromLanes",
-        .signature = "(lanes: [u32; 4]): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.load",
-        .signature = "(data: Slice<u32>, offset: i64 = 0): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.mul",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.reinterpretU64",
-        .signature = "(): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.reinterpretU8",
-        .signature = "(): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.replace",
-        .signature = "(lane: i64, value: u32): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.shiftLeft",
-        .signature = "(bits: i64): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.shiftRight",
-        .signature = "(bits: i64): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.shuffle",
-        .signature = "(i0: i64, i1: i64, i2: i64, i3: i64): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.splat",
-        .signature = "(value: u32): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.store",
-        .signature = "(output: ref Slice<u32>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.sub",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.swapAdjacent",
-        .signature = "(): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.unzipEven",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.unzipOdd",
-        .signature = "(other: U32x4): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.widenMulEven",
-        .signature = "(other: U32x4): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.widenMulHigh",
-        .signature = "(other: U32x4): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.widenMulLow",
-        .signature = "(other: U32x4): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U32x4.widenMulOdd",
-        .signature = "(other: U32x4): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U32x8",
-        .signature = "U32x8",
-        .summary = "",
-    },
-    {
-        .name = "U32x8.fromLanes",
-        .signature = "(lanes: [u32; 8]): U32x8",
-        .summary = "",
-    },
-    {
-        .name = "U32x8.splat",
-        .signature = "(value: u32): U32x8",
-        .summary = "",
-    },
-    {
-        .name = "U32x8.swapAdjacent",
-        .signature = "(): U32x8",
-        .summary = "",
-    },
-    {
-        .name = "U32x8.widenMulEven",
-        .signature = "(other: U32x8): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U32x8.widenMulOdd",
-        .signature = "(other: U32x8): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U32xNative",
-        .signature = "U32xNative",
-        .summary = "",
-    },
-    {
-        .name = "U32xNative.swapAdjacent",
-        .signature = "(): U32xNative",
-        .summary = "",
-    },
-    {
-        .name = "U32xNative.widenMulEven",
-        .signature = "(other: U32xNative): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64x2",
-        .signature = "U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.add",
-        .signature = "(other: U64x2): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.bitAnd",
-        .signature = "(other: U64x2): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.bitNot",
-        .signature = "(): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.bitOr",
-        .signature = "(other: U64x2): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.bitXor",
-        .signature = "(other: U64x2): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.extract",
-        .signature = "(lane: i64): u64",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.fromLanes",
-        .signature = "(lanes: [u64; 2]): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.load",
-        .signature = "(data: Slice<u64>, offset: i64 = 0): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.mul",
-        .signature = "(other: U64x2): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.reduceAdd",
-        .signature = "(): u64",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.reinterpretU32",
-        .signature = "(): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.reinterpretU8",
-        .signature = "(): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.replace",
-        .signature = "(lane: i64, value: u64): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.shiftLeft",
-        .signature = "(bits: i64): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.shiftRight",
-        .signature = "(bits: i64): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.shuffle",
-        .signature = "(i0: i64, i1: i64): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.splat",
-        .signature = "(value: u64): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.store",
-        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.sub",
-        .signature = "(other: U64x2): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x2.swapLanes",
-        .signature = "(): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U64x4",
-        .signature = "U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.add",
-        .signature = "(other: U64x4): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.bitXor",
-        .signature = "(other: U64x4): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.fromLanes",
-        .signature = "(lanes: [u64; 4]): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.load",
-        .signature = "(data: Slice<u64>, offset: i64 = 0): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.reduceAdd",
-        .signature = "(): u64",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.reinterpretU32",
-        .signature = "(): U32x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.reinterpretU8",
-        .signature = "(): U8x32",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.shiftLeft",
-        .signature = "(bits: i64): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.shiftRight",
-        .signature = "(bits: i64): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.store",
-        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U64x4.swapAdjacent",
-        .signature = "(): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U64x8",
-        .signature = "U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.add",
-        .signature = "(other: U64x8): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.bitXor",
-        .signature = "(other: U64x8): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.fromLanes",
-        .signature = "(lanes: [u64; 8]): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.load",
-        .signature = "(data: Slice<u64>, offset: i64 = 0): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.reinterpretU32",
-        .signature = "(): U32x16",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.shiftLeft",
-        .signature = "(bits: i64): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.shiftRight",
-        .signature = "(bits: i64): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.store",
-        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U64x8.swapAdjacent",
-        .signature = "(): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative",
-        .signature = "U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.add",
-        .signature = "(other: U64xNative): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.bitXor",
-        .signature = "(other: U64xNative): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.load",
-        .signature = "(data: Slice<u64>, offset: i64 = 0): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.mul",
-        .signature = "(other: U64xNative): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.shiftRight",
-        .signature = "(bits: i64): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.splat",
-        .signature = "(value: u64): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.store",
-        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U64xNative.swapAdjacent",
-        .signature = "(): U64xNative",
-        .summary = "",
-    },
-    {
-        .name = "U8x16",
-        .signature = "U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.bitAnd",
-        .signature = "(other: U8x16): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.bitNot",
-        .signature = "(): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.bitOr",
-        .signature = "(other: U8x16): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.bitXor",
-        .signature = "(other: U8x16): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.extract",
-        .signature = "(lane: i64): u8",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.fromLanes",
-        .signature = "(lanes: [u8; 16]): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.load",
-        .signature = "(data: Slice<u8>, offset: i64 = 0): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.reinterpretU32",
-        .signature = "(): U32x4",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.reinterpretU64",
-        .signature = "(): U64x2",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.replace",
-        .signature = "(lane: i64, value: u8): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.splat",
-        .signature = "(value: u8): U8x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x16.store",
-        .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U8x32",
-        .signature = "U8x32",
-        .summary = "",
-    },
-    {
-        .name = "U8x32.bitXor",
-        .signature = "(other: U8x32): U8x32",
-        .summary = "",
-    },
-    {
-        .name = "U8x32.fromLanes",
-        .signature = "(lanes: [u8; 32]): U8x32",
-        .summary = "",
-    },
-    {
-        .name = "U8x32.load",
-        .signature = "(data: Slice<u8>, offset: i64 = 0): U8x32",
-        .summary = "",
-    },
-    {
-        .name = "U8x32.reinterpretU32",
-        .signature = "(): U32x8",
-        .summary = "",
-    },
-    {
-        .name = "U8x32.reinterpretU64",
-        .signature = "(): U64x4",
-        .summary = "",
-    },
-    {
-        .name = "U8x32.store",
-        .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U8x64",
-        .signature = "U8x64",
-        .summary = "",
-    },
-    {
-        .name = "U8x64.bitXor",
-        .signature = "(other: U8x64): U8x64",
-        .summary = "",
-    },
-    {
-        .name = "U8x64.fromLanes",
-        .signature = "(lanes: [u8; 64]): U8x64",
-        .summary = "",
-    },
-    {
-        .name = "U8x64.load",
-        .signature = "(data: Slice<u8>, offset: i64 = 0): U8x64",
-        .summary = "",
-    },
-    {
-        .name = "U8x64.reinterpretU32",
-        .signature = "(): U32x16",
-        .summary = "",
-    },
-    {
-        .name = "U8x64.reinterpretU64",
-        .signature = "(): U64x8",
-        .summary = "",
-    },
-    {
-        .name = "U8x64.store",
-        .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()",
-        .summary = "",
-    },
-    {
-        .name = "U8xNative",
-        .signature = "U8xNative",
-        .summary = "",
-    },
-    {
-        .name = "U8xNative.bitXor",
-        .signature = "(other: U8xNative): U8xNative",
-        .summary = "",
-    },
-    {
-        .name = "U8xNative.load",
-        .signature = "(data: Slice<u8>, offset: i64 = 0): U8xNative",
-        .summary = "",
-    },
-    {
-        .name = "U8xNative.reinterpretU32",
-        .signature = "(): U32xNative",
-        .summary = "",
-    },
-    {
-        .name = "U8xNative.reinterpretU64",
-        .signature = "(): U64xNative",
-        .summary = "",
-    },
+    {.name = "Capabilities", .signature = "Capabilities", .summary = "",},
+    {.name = "Capabilities.isAccelerated", .signature = "(): bool", .summary = "",},
+    {.name = "Capabilities.isRuntimeSelected", .signature = "(): bool", .summary = "",},
+    {.name = "Capabilities.isScalable", .signature = "(): bool", .summary = "",},
+    {.name = "Capabilities.nativeBytes", .signature = "(): i64", .summary = "",},
+    {.name = "U32x16", .signature = "U32x16", .summary = "",},
+    {.name = "U32x16.fromLanes", .signature = "(lanes: [u32; 16]): U32x16", .summary = "",},
+    {.name = "U32x16.splat", .signature = "(value: u32): U32x16", .summary = "",},
+    {.name = "U32x16.swapAdjacent", .signature = "(): U32x16", .summary = "",},
+    {.name = "U32x16.widenMulEven", .signature = "(other: U32x16): U64x8", .summary = "",},
+    {.name = "U32x16.widenMulOdd", .signature = "(other: U32x16): U64x8", .summary = "",},
+    {.name = "U32x4", .signature = "U32x4", .summary = "",},
+    {.name = "U32x4.add", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.bitAnd", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.bitNot", .signature = "(): U32x4", .summary = "",},
+    {.name = "U32x4.bitOr", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.bitXor", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.extract", .signature = "(lane: i64): u32", .summary = "",},
+    {.name = "U32x4.fromLanes", .signature = "(lanes: [u32; 4]): U32x4", .summary = "",},
+    {.name = "U32x4.load", .signature = "(data: Slice<u32>, offset: i64 = 0): U32x4", .summary = "",},
+    {.name = "U32x4.mul", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.reinterpretU64", .signature = "(): U64x2", .summary = "",},
+    {.name = "U32x4.reinterpretU8", .signature = "(): U8x16", .summary = "",},
+    {.name = "U32x4.replace", .signature = "(lane: i64, value: u32): U32x4", .summary = "",},
+    {.name = "U32x4.shiftLeft", .signature = "(bits: i64): U32x4", .summary = "",},
+    {.name = "U32x4.shiftRight", .signature = "(bits: i64): U32x4", .summary = "",},
+    {.name = "U32x4.shuffle", .signature = "(i0: i64, i1: i64, i2: i64, i3: i64): U32x4", .summary = "",},
+    {.name = "U32x4.splat", .signature = "(value: u32): U32x4", .summary = "",},
+    {.name = "U32x4.store", .signature = "(output: ref Slice<u32>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U32x4.sub", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.swapAdjacent", .signature = "(): U32x4", .summary = "",},
+    {.name = "U32x4.unzipEven", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.unzipOdd", .signature = "(other: U32x4): U32x4", .summary = "",},
+    {.name = "U32x4.widenMulEven", .signature = "(other: U32x4): U64x2", .summary = "",},
+    {.name = "U32x4.widenMulHigh", .signature = "(other: U32x4): U64x2", .summary = "",},
+    {.name = "U32x4.widenMulLow", .signature = "(other: U32x4): U64x2", .summary = "",},
+    {.name = "U32x4.widenMulOdd", .signature = "(other: U32x4): U64x2", .summary = "",},
+    {.name = "U32x8", .signature = "U32x8", .summary = "",},
+    {.name = "U32x8.fromLanes", .signature = "(lanes: [u32; 8]): U32x8", .summary = "",},
+    {.name = "U32x8.splat", .signature = "(value: u32): U32x8", .summary = "",},
+    {.name = "U32x8.swapAdjacent", .signature = "(): U32x8", .summary = "",},
+    {.name = "U32x8.widenMulEven", .signature = "(other: U32x8): U64x4", .summary = "",},
+    {.name = "U32x8.widenMulOdd", .signature = "(other: U32x8): U64x4", .summary = "",},
+    {.name = "U32xNative", .signature = "U32xNative", .summary = "",},
+    {.name = "U32xNative.swapAdjacent", .signature = "(): U32xNative", .summary = "",},
+    {.name = "U32xNative.widenMulEven", .signature = "(other: U32xNative): U64xNative", .summary = "",},
+    {.name = "U64x2", .signature = "U64x2", .summary = "",},
+    {.name = "U64x2.add", .signature = "(other: U64x2): U64x2", .summary = "",},
+    {.name = "U64x2.bitAnd", .signature = "(other: U64x2): U64x2", .summary = "",},
+    {.name = "U64x2.bitNot", .signature = "(): U64x2", .summary = "",},
+    {.name = "U64x2.bitOr", .signature = "(other: U64x2): U64x2", .summary = "",},
+    {.name = "U64x2.bitXor", .signature = "(other: U64x2): U64x2", .summary = "",},
+    {.name = "U64x2.extract", .signature = "(lane: i64): u64", .summary = "",},
+    {.name = "U64x2.fromLanes", .signature = "(lanes: [u64; 2]): U64x2", .summary = "",},
+    {.name = "U64x2.load", .signature = "(data: Slice<u64>, offset: i64 = 0): U64x2", .summary = "",},
+    {.name = "U64x2.mul", .signature = "(other: U64x2): U64x2", .summary = "",},
+    {.name = "U64x2.reduceAdd", .signature = "(): u64", .summary = "",},
+    {.name = "U64x2.reinterpretU32", .signature = "(): U32x4", .summary = "",},
+    {.name = "U64x2.reinterpretU8", .signature = "(): U8x16", .summary = "",},
+    {.name = "U64x2.replace", .signature = "(lane: i64, value: u64): U64x2", .summary = "",},
+    {.name = "U64x2.shiftLeft", .signature = "(bits: i64): U64x2", .summary = "",},
+    {.name = "U64x2.shiftRight", .signature = "(bits: i64): U64x2", .summary = "",},
+    {.name = "U64x2.shuffle", .signature = "(i0: i64, i1: i64): U64x2", .summary = "",},
+    {.name = "U64x2.splat", .signature = "(value: u64): U64x2", .summary = "",},
+    {.name = "U64x2.store", .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U64x2.sub", .signature = "(other: U64x2): U64x2", .summary = "",},
+    {.name = "U64x2.swapLanes", .signature = "(): U64x2", .summary = "",},
+    {.name = "U64x4", .signature = "U64x4", .summary = "",},
+    {.name = "U64x4.add", .signature = "(other: U64x4): U64x4", .summary = "",},
+    {.name = "U64x4.bitXor", .signature = "(other: U64x4): U64x4", .summary = "",},
+    {.name = "U64x4.fromLanes", .signature = "(lanes: [u64; 4]): U64x4", .summary = "",},
+    {.name = "U64x4.load", .signature = "(data: Slice<u64>, offset: i64 = 0): U64x4", .summary = "",},
+    {.name = "U64x4.reduceAdd", .signature = "(): u64", .summary = "",},
+    {.name = "U64x4.reinterpretU32", .signature = "(): U32x8", .summary = "",},
+    {.name = "U64x4.reinterpretU8", .signature = "(): U8x32", .summary = "",},
+    {.name = "U64x4.shiftLeft", .signature = "(bits: i64): U64x4", .summary = "",},
+    {.name = "U64x4.shiftRight", .signature = "(bits: i64): U64x4", .summary = "",},
+    {.name = "U64x4.store", .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U64x4.swapAdjacent", .signature = "(): U64x4", .summary = "",},
+    {.name = "U64x8", .signature = "U64x8", .summary = "",},
+    {.name = "U64x8.add", .signature = "(other: U64x8): U64x8", .summary = "",},
+    {.name = "U64x8.bitXor", .signature = "(other: U64x8): U64x8", .summary = "",},
+    {.name = "U64x8.fromLanes", .signature = "(lanes: [u64; 8]): U64x8", .summary = "",},
+    {.name = "U64x8.load", .signature = "(data: Slice<u64>, offset: i64 = 0): U64x8", .summary = "",},
+    {.name = "U64x8.reinterpretU32", .signature = "(): U32x16", .summary = "",},
+    {.name = "U64x8.shiftLeft", .signature = "(bits: i64): U64x8", .summary = "",},
+    {.name = "U64x8.shiftRight", .signature = "(bits: i64): U64x8", .summary = "",},
+    {.name = "U64x8.store", .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U64x8.swapAdjacent", .signature = "(): U64x8", .summary = "",},
+    {.name = "U64xNative", .signature = "U64xNative", .summary = "",},
+    {.name = "U64xNative.add", .signature = "(other: U64xNative): U64xNative", .summary = "",},
+    {.name = "U64xNative.bitXor", .signature = "(other: U64xNative): U64xNative", .summary = "",},
+    {.name = "U64xNative.load", .signature = "(data: Slice<u64>, offset: i64 = 0): U64xNative", .summary = "",},
+    {.name = "U64xNative.mul", .signature = "(other: U64xNative): U64xNative", .summary = "",},
+    {.name = "U64xNative.shiftRight", .signature = "(bits: i64): U64xNative", .summary = "",},
+    {.name = "U64xNative.splat", .signature = "(value: u64): U64xNative", .summary = "",},
+    {.name = "U64xNative.store", .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U64xNative.swapAdjacent", .signature = "(): U64xNative", .summary = "",},
+    {.name = "U8x16", .signature = "U8x16", .summary = "",},
+    {.name = "U8x16.bitAnd", .signature = "(other: U8x16): U8x16", .summary = "",},
+    {.name = "U8x16.bitNot", .signature = "(): U8x16", .summary = "",},
+    {.name = "U8x16.bitOr", .signature = "(other: U8x16): U8x16", .summary = "",},
+    {.name = "U8x16.bitXor", .signature = "(other: U8x16): U8x16", .summary = "",},
+    {.name = "U8x16.extract", .signature = "(lane: i64): u8", .summary = "",},
+    {.name = "U8x16.fromLanes", .signature = "(lanes: [u8; 16]): U8x16", .summary = "",},
+    {.name = "U8x16.load", .signature = "(data: Slice<u8>, offset: i64 = 0): U8x16", .summary = "",},
+    {.name = "U8x16.reinterpretU32", .signature = "(): U32x4", .summary = "",},
+    {.name = "U8x16.reinterpretU64", .signature = "(): U64x2", .summary = "",},
+    {.name = "U8x16.replace", .signature = "(lane: i64, value: u8): U8x16", .summary = "",},
+    {.name = "U8x16.splat", .signature = "(value: u8): U8x16", .summary = "",},
+    {.name = "U8x16.store", .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U8x32", .signature = "U8x32", .summary = "",},
+    {.name = "U8x32.bitXor", .signature = "(other: U8x32): U8x32", .summary = "",},
+    {.name = "U8x32.fromLanes", .signature = "(lanes: [u8; 32]): U8x32", .summary = "",},
+    {.name = "U8x32.load", .signature = "(data: Slice<u8>, offset: i64 = 0): U8x32", .summary = "",},
+    {.name = "U8x32.reinterpretU32", .signature = "(): U32x8", .summary = "",},
+    {.name = "U8x32.reinterpretU64", .signature = "(): U64x4", .summary = "",},
+    {.name = "U8x32.store", .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U8x64", .signature = "U8x64", .summary = "",},
+    {.name = "U8x64.bitXor", .signature = "(other: U8x64): U8x64", .summary = "",},
+    {.name = "U8x64.fromLanes", .signature = "(lanes: [u8; 64]): U8x64", .summary = "",},
+    {.name = "U8x64.load", .signature = "(data: Slice<u8>, offset: i64 = 0): U8x64", .summary = "",},
+    {.name = "U8x64.reinterpretU32", .signature = "(): U32x16", .summary = "",},
+    {.name = "U8x64.reinterpretU64", .signature = "(): U64x8", .summary = "",},
+    {.name = "U8x64.store", .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()", .summary = "",},
+    {.name = "U8xNative", .signature = "U8xNative", .summary = "",},
+    {.name = "U8xNative.bitXor", .signature = "(other: U8xNative): U8xNative", .summary = "",},
+    {.name = "U8xNative.load", .signature = "(data: Slice<u8>, offset: i64 = 0): U8xNative", .summary = "",},
+    {.name = "U8xNative.reinterpretU32", .signature = "(): U32xNative", .summary = "",},
+    {.name = "U8xNative.reinterpretU64", .signature = "(): U64xNative", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
-    {
-        .name = "Barrier",
-        .signature = "Barrier",
-        .summary = "",
-    },
-    {
-        .name = "Barrier.init",
-        .signature = "(parties: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "Barrier.wait",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "CachePadded",
-        .signature = "CachePadded",
-        .summary = "",
-    },
-    {
-        .name = "CachePadded.value",
-        .signature = ": T",
-        .summary = "",
-    },
-    {
-        .name = "Condvar",
-        .signature = "Condvar",
-        .summary = "",
-    },
-    {
-        .name = "Condvar.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Condvar.lock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Condvar.unlock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch",
-        .signature = "CountdownLatch",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.close",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.done",
-        .signature = "(count: i64 = 1): i64",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.init",
-        .signature = "(count: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.isClosed",
-        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.remaining",
-        .signature = ": i64 { fn() { return this._remaining.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.reset",
-        .signature = "(count: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.tryWait",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "CountdownLatch.wait",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "EventCount",
-        .signature = "EventCount",
-        .summary = "",
-    },
-    {
-        .name = "EventCount.advance",
-        .signature = "(step: i64 = 1): i64",
-        .summary = "",
-    },
-    {
-        .name = "EventCount.close",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "EventCount.epoch",
-        .signature = ": i64 { fn() { return this._epoch.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "EventCount.init",
-        .signature = "(epoch: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "EventCount.isClosed",
-        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "EventCount.wait",
-        .signature = "(lastEpoch: i64, workerHint: i64 = -1): i64",
-        .summary = "",
-    },
-    {
-        .name = "Mutex",
-        .signature = "Mutex",
-        .summary = "",
-    },
-    {
-        .name = "Mutex.init",
-        .signature = "(v: T): ()",
-        .summary = "",
-    },
-    {
-        .name = "Mutex.lock",
-        .signature = "(body: fn(T) -> U): U",
-        .summary = "",
-    },
-    {
-        .name = "Mutex.tryLock",
-        .signature = "(body: fn(T) -> U): U?",
-        .summary = "",
-    },
-    {
-        .name = "Mutex.value",
-        .signature = ": T",
-        .summary = "",
-    },
-    {
-        .name = "Once",
-        .signature = "Once",
-        .summary = "",
-    },
-    {
-        .name = "Once.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "ResultGroup",
-        .signature = "ResultGroup",
-        .summary = "",
-    },
-    {
-        .name = "ResultGroup.batchSize",
-        .signature = ": i64 { fn() { return this._batchSize } }",
-        .summary = "",
-    },
-    {
-        .name = "ResultGroup.init",
-        .signature = "(batchSize: i64 = 1): ()",
-        .summary = "",
-    },
-    {
-        .name = "ResultGroup.isClosed",
-        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "ResultGroup.pendingCount",
-        .signature = ": i64 { fn() { return this._pending.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "ResultGroup.readyCount",
-        .signature = ": i64 { fn() { return len(this._ready) } }",
-        .summary = "",
-    },
-    {
-        .name = "RwLock",
-        .signature = "RwLock",
-        .summary = "",
-    },
-    {
-        .name = "RwLock.init",
-        .signature = "(v: T): ()",
-        .summary = "",
-    },
-    {
-        .name = "RwLock.value",
-        .signature = ": T",
-        .summary = "",
-    },
-    {
-        .name = "RwLock.write",
-        .signature = "(body: fn(T) -> U): U",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore",
-        .signature = "Semaphore",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore.acquire",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore.available",
-        .signature = ": i64 { fn() { return this._available.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore.close",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore.init",
-        .signature = "(permits: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore.isClosed",
-        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore.release",
-        .signature = "(count: i64 = 1): i64",
-        .summary = "",
-    },
-    {
-        .name = "Semaphore.tryAcquire",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "WorkQueue",
-        .signature = "WorkQueue",
-        .summary = "",
-    },
-    {
-        .name = "WorkQueue.close",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "WorkQueue.init",
-        .signature = "(shards: i64 = 1, capacity: i64 = 256): ()",
-        .summary = "",
-    },
-    {
-        .name = "WorkQueue.isClosed",
-        .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }",
-        .summary = "",
-    },
-    {
-        .name = "WorkQueue.length",
-        .signature = ": i64 { fn() { return len(this._items) } }",
-        .summary = "",
-    },
-    {
-        .name = "WorkQueue.shardCount",
-        .signature = ": i64 { fn() { return this._shards } }",
-        .summary = "",
-    },
-    {
-        .name = "fence",
-        .signature = "(order: Ordering): ()",
-        .summary = "",
-    },
+    {.name = "Barrier", .signature = "Barrier", .summary = "",},
+    {.name = "Barrier.init", .signature = "(parties: i64): ()", .summary = "",},
+    {.name = "Barrier.wait", .signature = "(): bool", .summary = "",},
+    {.name = "CachePadded", .signature = "CachePadded", .summary = "",},
+    {.name = "CachePadded.value", .signature = ": T", .summary = "",},
+    {.name = "Condvar", .signature = "Condvar", .summary = "",},
+    {.name = "Condvar.init", .signature = "(): ()", .summary = "",},
+    {.name = "Condvar.lock", .signature = "(): ()", .summary = "",},
+    {.name = "Condvar.unlock", .signature = "(): ()", .summary = "",},
+    {.name = "CountdownLatch", .signature = "CountdownLatch", .summary = "",},
+    {.name = "CountdownLatch.close", .signature = "(): ()", .summary = "",},
+    {.name = "CountdownLatch.done", .signature = "(count: i64 = 1): i64", .summary = "",},
+    {.name = "CountdownLatch.init", .signature = "(count: i64): ()", .summary = "",},
+    {.name = "CountdownLatch.isClosed", .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "CountdownLatch.remaining", .signature = ": i64 { fn() { return this._remaining.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "CountdownLatch.reset", .signature = "(count: i64): bool", .summary = "",},
+    {.name = "CountdownLatch.tryWait", .signature = "(): bool", .summary = "",},
+    {.name = "CountdownLatch.wait", .signature = "(): bool", .summary = "",},
+    {.name = "EventCount", .signature = "EventCount", .summary = "",},
+    {.name = "EventCount.advance", .signature = "(step: i64 = 1): i64", .summary = "",},
+    {.name = "EventCount.close", .signature = "(): ()", .summary = "",},
+    {.name = "EventCount.epoch", .signature = ": i64 { fn() { return this._epoch.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "EventCount.init", .signature = "(epoch: i64): ()", .summary = "",},
+    {.name = "EventCount.isClosed", .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "EventCount.wait", .signature = "(lastEpoch: i64, workerHint: i64 = -1): i64", .summary = "",},
+    {.name = "Mutex", .signature = "Mutex", .summary = "",},
+    {.name = "Mutex.init", .signature = "(v: T): ()", .summary = "",},
+    {.name = "Mutex.lock", .signature = "(body: fn(T) -> U): U", .summary = "",},
+    {.name = "Mutex.tryLock", .signature = "(body: fn(T) -> U): U?", .summary = "",},
+    {.name = "Mutex.value", .signature = ": T", .summary = "",},
+    {.name = "Once", .signature = "Once", .summary = "",},
+    {.name = "Once.init", .signature = "(): ()", .summary = "",},
+    {.name = "ResultGroup", .signature = "ResultGroup", .summary = "",},
+    {.name = "ResultGroup.batchSize", .signature = ": i64 { fn() { return this._batchSize } }", .summary = "",},
+    {.name = "ResultGroup.init", .signature = "(batchSize: i64 = 1): ()", .summary = "",},
+    {.name = "ResultGroup.isClosed", .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "ResultGroup.pendingCount", .signature = ": i64 { fn() { return this._pending.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "ResultGroup.readyCount", .signature = ": i64 { fn() { return len(this._ready) } }", .summary = "",},
+    {.name = "RwLock", .signature = "RwLock", .summary = "",},
+    {.name = "RwLock.init", .signature = "(v: T): ()", .summary = "",},
+    {.name = "RwLock.value", .signature = ": T", .summary = "",},
+    {.name = "RwLock.write", .signature = "(body: fn(T) -> U): U", .summary = "",},
+    {.name = "Semaphore", .signature = "Semaphore", .summary = "",},
+    {.name = "Semaphore.acquire", .signature = "(): bool", .summary = "",},
+    {.name = "Semaphore.available", .signature = ": i64 { fn() { return this._available.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "Semaphore.close", .signature = "(): ()", .summary = "",},
+    {.name = "Semaphore.init", .signature = "(permits: i64): ()", .summary = "",},
+    {.name = "Semaphore.isClosed", .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "Semaphore.release", .signature = "(count: i64 = 1): i64", .summary = "",},
+    {.name = "Semaphore.tryAcquire", .signature = "(): bool", .summary = "",},
+    {.name = "WorkQueue", .signature = "WorkQueue", .summary = "",},
+    {.name = "WorkQueue.close", .signature = "(): ()", .summary = "",},
+    {.name = "WorkQueue.init", .signature = "(shards: i64 = 1, capacity: i64 = 256): ()", .summary = "",},
+    {.name = "WorkQueue.isClosed", .signature = ": bool { fn() { return this._closed.load(Ordering.Acquire) } }", .summary = "",},
+    {.name = "WorkQueue.length", .signature = ": i64 { fn() { return len(this._items) } }", .summary = "",},
+    {.name = "WorkQueue.shardCount", .signature = ": i64 { fn() { return this._shards } }", .summary = "",},
+    {.name = "fence", .signature = "(order: Ordering): ()", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
-    {
-        .name = "Dylib",
-        .signature = "Dylib",
-        .summary = "",
-    },
-    {
-        .name = "Dylib.init",
-        .signature = "(handle: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "Dylib.lastError",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "Dylib.open",
-        .signature = "(path: Path): Dylib?",
-        .summary = "",
-    },
-    {
-        .name = "Dylib.symbol",
-        .signature = "(name: string): Ptr<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "OsBarrier",
-        .signature = "OsBarrier",
-        .summary = "",
-    },
-    {
-        .name = "OsBarrier.init",
-        .signature = "(parties: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsBarrier.wait",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "OsCondvar",
-        .signature = "OsCondvar",
-        .summary = "",
-    },
-    {
-        .name = "OsCondvar.broadcast",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsCondvar.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsCondvar.signal",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsCondvar.wait",
-        .signature = "(mutex: OsMutex): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsCondvar.waitFor",
-        .signature = "(mutex: OsMutex, timeoutNs: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "OsMutex",
-        .signature = "OsMutex",
-        .summary = "",
-    },
-    {
-        .name = "OsMutex.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsMutex.lock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsMutex.tryLock",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "OsMutex.unlock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsOnce",
-        .signature = "OsOnce",
-        .summary = "",
-    },
-    {
-        .name = "OsOnce.call",
-        .signature = "(body: fn()): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsOnce.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsRwLock",
-        .signature = "OsRwLock",
-        .summary = "",
-    },
-    {
-        .name = "OsRwLock.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsRwLock.rdlock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsRwLock.rdunlock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsRwLock.wrlock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "OsRwLock.wrunlock",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "Pipe",
-        .signature = "Pipe",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.init",
-        .signature = "(readHandle: i64, writeHandle: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.open",
-        .signature = "(): Pipe?",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.read",
-        .signature = "(maxBytes: i64 = 8192): Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.readEnd",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.write",
-        .signature = "(data: Array<u8>): i64",
-        .summary = "",
-    },
-    {
-        .name = "Pipe.writeEnd",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "Process",
-        .signature = "Process",
-        .summary = "",
-    },
-    {
-        .name = "Process.id",
-        .signature = ": i64 { fn() { return this._id } }",
-        .summary = "",
-    },
-    {
-        .name = "Process.init",
-        .signature = "(id: i64, detached: bool = false): ()",
-        .summary = "",
-    },
-    {
-        .name = "Process.kill",
-        .signature = "(signal: Signal = Signal.TERM): bool",
-        .summary = "",
-    },
-    {
-        .name = "Process.spawn",
-        .signature = "(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions",
-        .signature = "ProcessOptions",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions.cwd",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions.detached",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions.env",
-        .signature = ": Map<string, string>?",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions.init",
-        .signature = "(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions.stderr",
-        .signature = ": i64?",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions.stdin",
-        .signature = ": i64?",
-        .summary = "",
-    },
-    {
-        .name = "ProcessOptions.stdout",
-        .signature = ": i64?",
-        .summary = "",
-    },
-    {
-        .name = "ThreadLocal",
-        .signature = "ThreadLocal",
-        .summary = "",
-    },
-    {
-        .name = "ThreadLocal.init",
-        .signature = "(init: fn() -> T): ()",
-        .summary = "",
-    },
-    {
-        .name = "onSignal",
-        .signature = "(signal: Signal, handler: fn()): bool",
-        .summary = "",
-    },
-    {
-        .name = "pinToCpu",
-        .signature = "(cpu: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "threadYield",
-        .signature = "(): ()",
-        .summary = "",
-    },
+    {.name = "Dylib", .signature = "Dylib", .summary = "",},
+    {.name = "Dylib.init", .signature = "(handle: i64): ()", .summary = "",},
+    {.name = "Dylib.lastError", .signature = "(): string", .summary = "",},
+    {.name = "Dylib.open", .signature = "(path: Path): Dylib?", .summary = "",},
+    {.name = "Dylib.symbol", .signature = "(name: string): Ptr<u8>?", .summary = "",},
+    {.name = "OsBarrier", .signature = "OsBarrier", .summary = "",},
+    {.name = "OsBarrier.init", .signature = "(parties: i64): ()", .summary = "",},
+    {.name = "OsBarrier.wait", .signature = "(): bool", .summary = "",},
+    {.name = "OsCondvar", .signature = "OsCondvar", .summary = "",},
+    {.name = "OsCondvar.broadcast", .signature = "(): ()", .summary = "",},
+    {.name = "OsCondvar.init", .signature = "(): ()", .summary = "",},
+    {.name = "OsCondvar.signal", .signature = "(): ()", .summary = "",},
+    {.name = "OsCondvar.wait", .signature = "(mutex: OsMutex): ()", .summary = "",},
+    {.name = "OsCondvar.waitFor", .signature = "(mutex: OsMutex, timeoutNs: i64): bool", .summary = "",},
+    {.name = "OsMutex", .signature = "OsMutex", .summary = "",},
+    {.name = "OsMutex.init", .signature = "(): ()", .summary = "",},
+    {.name = "OsMutex.lock", .signature = "(): ()", .summary = "",},
+    {.name = "OsMutex.tryLock", .signature = "(): bool", .summary = "",},
+    {.name = "OsMutex.unlock", .signature = "(): ()", .summary = "",},
+    {.name = "OsOnce", .signature = "OsOnce", .summary = "",},
+    {.name = "OsOnce.call", .signature = "(body: fn()): ()", .summary = "",},
+    {.name = "OsOnce.init", .signature = "(): ()", .summary = "",},
+    {.name = "OsRwLock", .signature = "OsRwLock", .summary = "",},
+    {.name = "OsRwLock.init", .signature = "(): ()", .summary = "",},
+    {.name = "OsRwLock.rdlock", .signature = "(): ()", .summary = "",},
+    {.name = "OsRwLock.rdunlock", .signature = "(): ()", .summary = "",},
+    {.name = "OsRwLock.wrlock", .signature = "(): ()", .summary = "",},
+    {.name = "OsRwLock.wrunlock", .signature = "(): ()", .summary = "",},
+    {.name = "Pipe", .signature = "Pipe", .summary = "",},
+    {.name = "Pipe.init", .signature = "(readHandle: i64, writeHandle: i64): ()", .summary = "",},
+    {.name = "Pipe.open", .signature = "(): Pipe?", .summary = "",},
+    {.name = "Pipe.read", .signature = "(maxBytes: i64 = 8192): Array<u8>?", .summary = "",},
+    {.name = "Pipe.readEnd", .signature = "(): i64", .summary = "",},
+    {.name = "Pipe.write", .signature = "(data: Array<u8>): i64", .summary = "",},
+    {.name = "Pipe.writeEnd", .signature = "(): i64", .summary = "",},
+    {.name = "Process", .signature = "Process", .summary = "",},
+    {.name = "Process.id", .signature = ": i64 { fn() { return this._id } }", .summary = "",},
+    {.name = "Process.init", .signature = "(id: i64, detached: bool = false): ()", .summary = "",},
+    {.name = "Process.kill", .signature = "(signal: Signal = Signal.TERM): bool", .summary = "",},
+    {.name = "Process.spawn", .signature = "(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?", .summary = "",},
+    {.name = "ProcessOptions", .signature = "ProcessOptions", .summary = "",},
+    {.name = "ProcessOptions.cwd", .signature = ": string?", .summary = "",},
+    {.name = "ProcessOptions.detached", .signature = ": bool", .summary = "",},
+    {.name = "ProcessOptions.env", .signature = ": Map<string, string>?", .summary = "",},
+    {.name = "ProcessOptions.init", .signature = "(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()", .summary = "",},
+    {.name = "ProcessOptions.stderr", .signature = ": i64?", .summary = "",},
+    {.name = "ProcessOptions.stdin", .signature = ": i64?", .summary = "",},
+    {.name = "ProcessOptions.stdout", .signature = ": i64?", .summary = "",},
+    {.name = "ThreadLocal", .signature = "ThreadLocal", .summary = "",},
+    {.name = "ThreadLocal.init", .signature = "(init: fn() -> T): ()", .summary = "",},
+    {.name = "onSignal", .signature = "(signal: Signal, handler: fn()): bool", .summary = "",},
+    {.name = "pinToCpu", .signature = "(cpu: i64): bool", .summary = "",},
+    {.name = "threadYield", .signature = "(): ()", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_text[] = {
-    {
-        .name = "lower",
-        .signature = "(value: string): string",
-        .summary = "",
-    },
-    {
-        .name = "padEnd",
-        .signature = "(value: string, targetLength: i64, padding: string = \" \"): string",
-        .summary = "",
-    },
-    {
-        .name = "padStart",
-        .signature = "(value: string, targetLength: i64, padding: string = \" \"): string",
-        .summary = "",
-    },
-    {
-        .name = "reverseRunes",
-        .signature = "(value: string): string",
-        .summary = "",
-    },
-    {
-        .name = "translate",
-        .signature = "(value: string, table: Map<string, string>): string",
-        .summary = "",
-    },
-    {
-        .name = "trim",
-        .signature = "(value: string): string",
-        .summary = "",
-    },
-    {
-        .name = "trimEnd",
-        .signature = "(value: string): string",
-        .summary = "",
-    },
-    {
-        .name = "trimStart",
-        .signature = "(value: string): string",
-        .summary = "",
-    },
-    {
-        .name = "upper",
-        .signature = "(value: string): string",
-        .summary = "",
-    },
+    {.name = "lower", .signature = "(value: string): string", .summary = "",},
+    {.name = "padEnd", .signature = "(value: string, targetLength: i64, padding: string = \" \"): string", .summary = "",},
+    {.name = "padStart", .signature = "(value: string, targetLength: i64, padding: string = \" \"): string", .summary = "",},
+    {.name = "reverseRunes", .signature = "(value: string): string", .summary = "",},
+    {.name = "translate", .signature = "(value: string, table: Map<string, string>): string", .summary = "",},
+    {.name = "trim", .signature = "(value: string): string", .summary = "",},
+    {.name = "trimEnd", .signature = "(value: string): string", .summary = "",},
+    {.name = "trimStart", .signature = "(value: string): string", .summary = "",},
+    {.name = "upper", .signature = "(value: string): string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_time[] = {
-    {
-        .name = "clock",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "localOffset",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "localOffsetAt",
-        .signature = "(timestamp: i64): i64",
-        .summary = "",
-    },
-    {
-        .name = "micros",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "monotonic",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "nanos",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "now",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "sleep",
-        .signature = "(ms: i64): ()",
-        .summary = "",
-    },
+    {.name = "clock", .signature = "(): i64", .summary = "",},
+    {.name = "localOffset", .signature = "(): i64", .summary = "",},
+    {.name = "localOffsetAt", .signature = "(timestamp: i64): i64", .summary = "",},
+    {.name = "micros", .signature = "(): i64", .summary = "",},
+    {.name = "monotonic", .signature = "(): i64", .summary = "",},
+    {.name = "nanos", .signature = "(): i64", .summary = "",},
+    {.name = "now", .signature = "(): i64", .summary = "",},
+    {.name = "sleep", .signature = "(ms: i64): ()", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
-    {
-        .name = "TomlArray",
-        .signature = "TomlArray",
-        .summary = "",
-    },
-    {
-        .name = "TomlArray.at",
-        .signature = "(index: i64): TomlValue?",
-        .summary = "",
-    },
-    {
-        .name = "TomlArray.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "TomlArray.len",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlArray.values",
-        .signature = ": Array<TomlValue>",
-        .summary = "",
-    },
-    {
-        .name = "TomlDateTime",
-        .signature = "TomlDateTime",
-        .summary = "",
-    },
-    {
-        .name = "TomlDateTime.init",
-        .signature = "(raw: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "TomlDateTime.raw",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "TomlDateTime.toISOString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "TomlDateTime.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "TomlDiagnostic",
-        .signature = "TomlDiagnostic",
-        .summary = "",
-    },
-    {
-        .name = "TomlDiagnostic.column",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlDiagnostic.init",
-        .signature = "(kind: TomlErrorKind, line: i64, column: i64, message: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "TomlDiagnostic.kind",
-        .signature = ": TomlErrorKind",
-        .summary = "",
-    },
-    {
-        .name = "TomlDiagnostic.line",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlDiagnostic.message",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "TomlFloat",
-        .signature = "TomlFloat",
-        .summary = "",
-    },
-    {
-        .name = "TomlFloat.init",
-        .signature = "(value: f64, text: string = \"\"): ()",
-        .summary = "",
-    },
-    {
-        .name = "TomlFloat.text",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "TomlFloat.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "TomlFloat.value",
-        .signature = ": f64",
-        .summary = "",
-    },
-    {
-        .name = "TomlParseReport",
-        .signature = "TomlParseReport",
-        .summary = "",
-    },
-    {
-        .name = "TomlParseReport.data",
-        .signature = ": TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlParseReport.errors",
-        .signature = ": Array<TomlDiagnostic>",
-        .summary = "",
-    },
-    {
-        .name = "TomlParseReport.init",
-        .signature = "(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "TomlParseReport.keys",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlParseReport.lines",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlTable",
-        .signature = "TomlTable",
-        .summary = "",
-    },
-    {
-        .name = "TomlTable.containsKey",
-        .signature = "(key: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "TomlTable.get",
-        .signature = "(key: string): TomlValue?",
-        .summary = "",
-    },
-    {
-        .name = "TomlTable.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "TomlTable.keys",
-        .signature = "(): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "TomlTable.values",
-        .signature = ": Map<string, TomlValue>",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue",
-        .signature = "TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.Array",
-        .signature = "(value: TomlArray): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.Bool",
-        .signature = "(value: bool): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.DateTime",
-        .signature = "(value: TomlDateTime): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.Float",
-        .signature = "(value: TomlFloat): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.Int",
-        .signature = "(value: i64): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.String",
-        .signature = "(value: string): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.Table",
-        .signature = "(value: TomlTable): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.arrayValue",
-        .signature = ": TomlArray?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.asArray",
-        .signature = "(): TomlArray?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.asBool",
-        .signature = "(): bool?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.asDateTime",
-        .signature = "(): TomlDateTime?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.asFloat",
-        .signature = "(): f64?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.asInt",
-        .signature = "(): i64?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.asString",
-        .signature = "(): string?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.asTable",
-        .signature = "(): TomlTable?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.at",
-        .signature = "(index: i64): TomlValue?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.boolValue",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.dateTimeValue",
-        .signature = ": TomlDateTime?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.floatValue",
-        .signature = ": TomlFloat?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.get",
-        .signature = "(key: string): TomlValue?",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.init",
-        .signature = "(kind: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.intValue",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.keys",
-        .signature = "(): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.kind",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.len",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.stringValue",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "TomlValue.tableValue",
-        .signature = ": TomlTable?",
-        .summary = "",
-    },
-    {
-        .name = "arrayPush",
-        .signature = "(array: ref TomlArray, value: TomlValue): ()",
-        .summary = "",
-    },
-    {
-        .name = "arrayValue",
-        .signature = "(value: TomlArray): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "asBool",
-        .signature = "(value: TomlValue): bool?",
-        .summary = "",
-    },
-    {
-        .name = "asDateTime",
-        .signature = "(value: TomlValue): TomlDateTime?",
-        .summary = "",
-    },
-    {
-        .name = "asFloat",
-        .signature = "(value: TomlValue): f64?",
-        .summary = "",
-    },
-    {
-        .name = "asInt",
-        .signature = "(value: TomlValue): i64?",
-        .summary = "",
-    },
-    {
-        .name = "asString",
-        .signature = "(value: TomlValue): string?",
-        .summary = "",
-    },
-    {
-        .name = "at",
-        .signature = "(value: TomlValue, index: i64): TomlValue?",
-        .summary = "",
-    },
-    {
-        .name = "boolValue",
-        .signature = "(value: bool): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "dateTimeValue",
-        .signature = "(value: string): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "floatValue",
-        .signature = "(value: f64): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "get",
-        .signature = "(value: TomlValue, key: string): TomlValue?",
-        .summary = "",
-    },
-    {
-        .name = "intValue",
-        .signature = "(value: i64): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "isTable",
-        .signature = "(value: TomlValue): bool",
-        .summary = "",
-    },
-    {
-        .name = "length",
-        .signature = "(value: TomlValue): i64",
-        .summary = "",
-    },
-    {
-        .name = "newArray",
-        .signature = "(): TomlArray",
-        .summary = "",
-    },
-    {
-        .name = "newTable",
-        .signature = "(): TomlTable",
-        .summary = "",
-    },
-    {
-        .name = "parse",
-        .signature = "(data: string): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "parseFile",
-        .signature = "(path: Path): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "parseReport",
-        .signature = "(data: string): TomlParseReport",
-        .summary = "",
-    },
-    {
-        .name = "stringValue",
-        .signature = "(value: string): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "stringify",
-        .signature = "(value: TomlValue): string",
-        .summary = "",
-    },
-    {
-        .name = "tableSet",
-        .signature = "(table: ref TomlTable, key: string, value: TomlValue): ()",
-        .summary = "",
-    },
-    {
-        .name = "tableValue",
-        .signature = "(value: TomlTable): TomlValue",
-        .summary = "",
-    },
-    {
-        .name = "writeFile",
-        .signature = "(path: Path, value: TomlValue): bool",
-        .summary = "",
-    },
+    {.name = "TomlArray", .signature = "TomlArray", .summary = "",},
+    {.name = "TomlArray.at", .signature = "(index: i64): TomlValue?", .summary = "",},
+    {.name = "TomlArray.init", .signature = "(): ()", .summary = "",},
+    {.name = "TomlArray.len", .signature = "(): i64", .summary = "",},
+    {.name = "TomlArray.values", .signature = ": Array<TomlValue>", .summary = "",},
+    {.name = "TomlDateTime", .signature = "TomlDateTime", .summary = "",},
+    {.name = "TomlDateTime.init", .signature = "(raw: string): ()", .summary = "",},
+    {.name = "TomlDateTime.raw", .signature = ": string", .summary = "",},
+    {.name = "TomlDateTime.toISOString", .signature = "(): string", .summary = "",},
+    {.name = "TomlDateTime.toString", .signature = "(): string", .summary = "",},
+    {.name = "TomlDiagnostic", .signature = "TomlDiagnostic", .summary = "",},
+    {.name = "TomlDiagnostic.column", .signature = ": i64", .summary = "",},
+    {.name = "TomlDiagnostic.init", .signature = "(kind: TomlErrorKind, line: i64, column: i64, message: string): ()", .summary = "",},
+    {.name = "TomlDiagnostic.kind", .signature = ": TomlErrorKind", .summary = "",},
+    {.name = "TomlDiagnostic.line", .signature = ": i64", .summary = "",},
+    {.name = "TomlDiagnostic.message", .signature = ": string", .summary = "",},
+    {.name = "TomlFloat", .signature = "TomlFloat", .summary = "",},
+    {.name = "TomlFloat.init", .signature = "(value: f64, text: string = \"\"): ()", .summary = "",},
+    {.name = "TomlFloat.text", .signature = ": string", .summary = "",},
+    {.name = "TomlFloat.toString", .signature = "(): string", .summary = "",},
+    {.name = "TomlFloat.value", .signature = ": f64", .summary = "",},
+    {.name = "TomlParseReport", .signature = "TomlParseReport", .summary = "",},
+    {.name = "TomlParseReport.data", .signature = ": TomlValue", .summary = "",},
+    {.name = "TomlParseReport.errors", .signature = ": Array<TomlDiagnostic>", .summary = "",},
+    {.name = "TomlParseReport.init", .signature = "(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()", .summary = "",},
+    {.name = "TomlParseReport.keys", .signature = ": i64", .summary = "",},
+    {.name = "TomlParseReport.lines", .signature = ": i64", .summary = "",},
+    {.name = "TomlTable", .signature = "TomlTable", .summary = "",},
+    {.name = "TomlTable.containsKey", .signature = "(key: string): bool", .summary = "",},
+    {.name = "TomlTable.get", .signature = "(key: string): TomlValue?", .summary = "",},
+    {.name = "TomlTable.init", .signature = "(): ()", .summary = "",},
+    {.name = "TomlTable.keys", .signature = "(): Array<string>", .summary = "",},
+    {.name = "TomlTable.values", .signature = ": Map<string, TomlValue>", .summary = "",},
+    {.name = "TomlValue", .signature = "TomlValue", .summary = "",},
+    {.name = "TomlValue.Array", .signature = "(value: TomlArray): TomlValue", .summary = "",},
+    {.name = "TomlValue.Bool", .signature = "(value: bool): TomlValue", .summary = "",},
+    {.name = "TomlValue.DateTime", .signature = "(value: TomlDateTime): TomlValue", .summary = "",},
+    {.name = "TomlValue.Float", .signature = "(value: TomlFloat): TomlValue", .summary = "",},
+    {.name = "TomlValue.Int", .signature = "(value: i64): TomlValue", .summary = "",},
+    {.name = "TomlValue.String", .signature = "(value: string): TomlValue", .summary = "",},
+    {.name = "TomlValue.Table", .signature = "(value: TomlTable): TomlValue", .summary = "",},
+    {.name = "TomlValue.arrayValue", .signature = ": TomlArray?", .summary = "",},
+    {.name = "TomlValue.asArray", .signature = "(): TomlArray?", .summary = "",},
+    {.name = "TomlValue.asBool", .signature = "(): bool?", .summary = "",},
+    {.name = "TomlValue.asDateTime", .signature = "(): TomlDateTime?", .summary = "",},
+    {.name = "TomlValue.asFloat", .signature = "(): f64?", .summary = "",},
+    {.name = "TomlValue.asInt", .signature = "(): i64?", .summary = "",},
+    {.name = "TomlValue.asString", .signature = "(): string?", .summary = "",},
+    {.name = "TomlValue.asTable", .signature = "(): TomlTable?", .summary = "",},
+    {.name = "TomlValue.at", .signature = "(index: i64): TomlValue?", .summary = "",},
+    {.name = "TomlValue.boolValue", .signature = ": bool", .summary = "",},
+    {.name = "TomlValue.dateTimeValue", .signature = ": TomlDateTime?", .summary = "",},
+    {.name = "TomlValue.floatValue", .signature = ": TomlFloat?", .summary = "",},
+    {.name = "TomlValue.get", .signature = "(key: string): TomlValue?", .summary = "",},
+    {.name = "TomlValue.init", .signature = "(kind: string): ()", .summary = "",},
+    {.name = "TomlValue.intValue", .signature = ": i64", .summary = "",},
+    {.name = "TomlValue.keys", .signature = "(): Array<string>", .summary = "",},
+    {.name = "TomlValue.kind", .signature = ": string", .summary = "",},
+    {.name = "TomlValue.len", .signature = "(): i64", .summary = "",},
+    {.name = "TomlValue.stringValue", .signature = ": string", .summary = "",},
+    {.name = "TomlValue.tableValue", .signature = ": TomlTable?", .summary = "",},
+    {.name = "arrayPush", .signature = "(array: ref TomlArray, value: TomlValue): ()", .summary = "",},
+    {.name = "arrayValue", .signature = "(value: TomlArray): TomlValue", .summary = "",},
+    {.name = "asBool", .signature = "(value: TomlValue): bool?", .summary = "",},
+    {.name = "asDateTime", .signature = "(value: TomlValue): TomlDateTime?", .summary = "",},
+    {.name = "asFloat", .signature = "(value: TomlValue): f64?", .summary = "",},
+    {.name = "asInt", .signature = "(value: TomlValue): i64?", .summary = "",},
+    {.name = "asString", .signature = "(value: TomlValue): string?", .summary = "",},
+    {.name = "at", .signature = "(value: TomlValue, index: i64): TomlValue?", .summary = "",},
+    {.name = "boolValue", .signature = "(value: bool): TomlValue", .summary = "",},
+    {.name = "dateTimeValue", .signature = "(value: string): TomlValue", .summary = "",},
+    {.name = "floatValue", .signature = "(value: f64): TomlValue", .summary = "",},
+    {.name = "get", .signature = "(value: TomlValue, key: string): TomlValue?", .summary = "",},
+    {.name = "intValue", .signature = "(value: i64): TomlValue", .summary = "",},
+    {.name = "isTable", .signature = "(value: TomlValue): bool", .summary = "",},
+    {.name = "length", .signature = "(value: TomlValue): i64", .summary = "",},
+    {.name = "newArray", .signature = "(): TomlArray", .summary = "",},
+    {.name = "newTable", .signature = "(): TomlTable", .summary = "",},
+    {.name = "parse", .signature = "(data: string): TomlValue", .summary = "",},
+    {.name = "parseFile", .signature = "(path: Path): TomlValue", .summary = "",},
+    {.name = "parseReport", .signature = "(data: string): TomlParseReport", .summary = "",},
+    {.name = "stringValue", .signature = "(value: string): TomlValue", .summary = "",},
+    {.name = "stringify", .signature = "(value: TomlValue): string", .summary = "",},
+    {.name = "tableSet", .signature = "(table: ref TomlTable, key: string, value: TomlValue): ()", .summary = "",},
+    {.name = "tableValue", .signature = "(value: TomlTable): TomlValue", .summary = "",},
+    {.name = "writeFile", .signature = "(path: Path, value: TomlValue): bool", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
-    {
-        .name = "QueryParams",
-        .signature = "QueryParams",
-        .summary = "",
-    },
-    {
-        .name = "QueryParams.encode",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "QueryParams.entries",
-        .signature = "(): Array<(string, string)>",
-        .summary = "",
-    },
-    {
-        .name = "QueryParams.get",
-        .signature = "(name: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "QueryParams.getAll",
-        .signature = "(name: string): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "QueryParams.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "URL",
-        .signature = "URL",
-        .summary = "",
-    },
-    {
-        .name = "URL.hash",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.host",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.hostname",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.href",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.init",
-        .signature = "(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "URL.origin",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.password",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.pathname",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.port",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.protocol",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.search",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "URL.username",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "decode",
-        .signature = "(s: string): string",
-        .summary = "",
-    },
-    {
-        .name = "decodeForm",
-        .signature = "(s: string): string",
-        .summary = "",
-    },
-    {
-        .name = "encode",
-        .signature = "(s: string): string",
-        .summary = "",
-    },
-    {
-        .name = "encodeForm",
-        .signature = "(s: string): string",
-        .summary = "",
-    },
-    {
-        .name = "format",
-        .signature = "(obj: URL): string",
-        .summary = "",
-    },
-    {
-        .name = "join",
-        .signature = "(...parts: string): string",
-        .summary = "",
-    },
-    {
-        .name = "parse",
-        .signature = "(url: string): URL",
-        .summary = "",
-    },
-    {
-        .name = "parseQuery",
-        .signature = "(qs: string): QueryParams",
-        .summary = "",
-    },
-    {
-        .name = "resolve",
-        .signature = "(base: string, relative: string): string",
-        .summary = "",
-    },
+    {.name = "QueryParams", .signature = "QueryParams", .summary = "",},
+    {.name = "QueryParams.encode", .signature = "(): string", .summary = "",},
+    {.name = "QueryParams.entries", .signature = "(): Array<(string, string)>", .summary = "",},
+    {.name = "QueryParams.get", .signature = "(name: string): string?", .summary = "",},
+    {.name = "QueryParams.getAll", .signature = "(name: string): Array<string>", .summary = "",},
+    {.name = "QueryParams.init", .signature = "(): ()", .summary = "",},
+    {.name = "URL", .signature = "URL", .summary = "",},
+    {.name = "URL.hash", .signature = ": string", .summary = "",},
+    {.name = "URL.host", .signature = ": string", .summary = "",},
+    {.name = "URL.hostname", .signature = ": string", .summary = "",},
+    {.name = "URL.href", .signature = ": string", .summary = "",},
+    {.name = "URL.init", .signature = "(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()", .summary = "",},
+    {.name = "URL.origin", .signature = ": string", .summary = "",},
+    {.name = "URL.password", .signature = ": string", .summary = "",},
+    {.name = "URL.pathname", .signature = ": string", .summary = "",},
+    {.name = "URL.port", .signature = ": string", .summary = "",},
+    {.name = "URL.protocol", .signature = ": string", .summary = "",},
+    {.name = "URL.search", .signature = ": string", .summary = "",},
+    {.name = "URL.username", .signature = ": string", .summary = "",},
+    {.name = "decode", .signature = "(s: string): string", .summary = "",},
+    {.name = "decodeForm", .signature = "(s: string): string", .summary = "",},
+    {.name = "encode", .signature = "(s: string): string", .summary = "",},
+    {.name = "encodeForm", .signature = "(s: string): string", .summary = "",},
+    {.name = "format", .signature = "(obj: URL): string", .summary = "",},
+    {.name = "join", .signature = "(...parts: string): string", .summary = "",},
+    {.name = "parse", .signature = "(url: string): URL", .summary = "",},
+    {.name = "parseQuery", .signature = "(qs: string): QueryParams", .summary = "",},
+    {.name = "resolve", .signature = "(base: string, relative: string): string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
-    {
-        .name = "ClosePayload",
-        .signature = "ClosePayload",
-        .summary = "",
-    },
-    {
-        .name = "ClosePayload.code",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ClosePayload.init",
-        .signature = "(code: i64, reason: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "ClosePayload.reason",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame",
-        .signature = "ParsedFrame",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame.consumedBytes",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame.fin",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame.init",
-        .signature = "(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame.masked",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame.opcode",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame.payload",
-        .signature = ": Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "ParsedFrame.rsv1",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeRequest",
-        .signature = "ParsedUpgradeRequest",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeRequest.deflate",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeRequest.init",
-        .signature = "(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeRequest.origin",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeRequest.protocol",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeRequest.requestTarget",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeRequest.secKey",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeResponse",
-        .signature = "ParsedUpgradeResponse",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeResponse.deflate",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeResponse.init",
-        .signature = "(statusCode: i64, protocol: string? = null, deflate: bool = false): ()",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeResponse.protocol",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "ParsedUpgradeResponse.statusCode",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "WsConn",
-        .signature = "WsConn",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.error",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.init",
-        .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.isOpen",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.ping",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.sendBytes",
-        .signature = "(data: Array<u8>, binary: bool = false): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.sendText",
-        .signature = "(data: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.url",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "WsConnectOptions",
-        .signature = "WsConnectOptions",
-        .summary = "",
-    },
-    {
-        .name = "WsConnectOptions.init",
-        .signature = "(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()",
-        .summary = "",
-    },
-    {
-        .name = "WsConnectOptions.maxMessageSize",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "WsConnectOptions.pingIntervalMs",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "WsConnectOptions.pongTimeoutMs",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "WsConnectOptions.timeoutMs",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage",
-        .signature = "WsMessage",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage.binary",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage.data",
-        .signature = ": Array<u8>?",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage.error",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage.init",
-        .signature = "(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage.text",
-        .signature = "(): string?",
-        .summary = "",
-    },
-    {
-        .name = "WsUrl",
-        .signature = "WsUrl",
-        .summary = "",
-    },
-    {
-        .name = "WsUrl.host",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "WsUrl.init",
-        .signature = "(secure: bool, host: string, port: i64, path: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "WsUrl.path",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "WsUrl.port",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "WsUrl.secure",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "acceptKey",
-        .signature = "(secKey: string): string",
-        .summary = "",
-    },
-    {
-        .name = "binaryFrame",
-        .signature = "(data: Array<u8>, mask: bool = true): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "clientHandshakeRequest",
-        .signature = "(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?",
-        .summary = "",
-    },
-    {
-        .name = "close",
-        .signature = "(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
-        .summary = "",
-    },
-    {
-        .name = "closeFrame",
-        .signature = "(code: i64 = 1000, reason: string = \"\", mask: bool = true): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "connect",
-        .signature = "(url: string, options: WsConnectOptions? = null): WsConn",
-        .summary = "",
-    },
-    {
-        .name = "frame",
-        .signature = "(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "isValidCloseCode",
-        .signature = "(code: i64): bool",
-        .summary = "",
-    },
-    {
-        .name = "maskPayload",
-        .signature = "(payload: Array<u8>, key: Array<u8>): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "parseClosePayload",
-        .signature = "(payload: Array<u8>): ClosePayload?",
-        .summary = "",
-    },
-    {
-        .name = "parseFrame",
-        .signature = "(raw: Array<u8>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: i64 = 67108864): ParsedFrame?",
-        .summary = "",
-    },
-    {
-        .name = "parseUpgradeRequest",
-        .signature = "(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?",
-        .summary = "",
-    },
-    {
-        .name = "parseUpgradeResponse",
-        .signature = "(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?",
-        .summary = "",
-    },
-    {
-        .name = "parseUrl",
-        .signature = "(url: string): WsUrl?",
-        .summary = "",
-    },
-    {
-        .name = "ping",
-        .signature = "(conn: ref WsConn): bool",
-        .summary = "",
-    },
-    {
-        .name = "pingFrame",
-        .signature = "(data: Array<u8>? = null, mask: bool = true): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "pongFrame",
-        .signature = "(data: Array<u8>? = null, mask: bool = true): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "randomKey",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "recv",
-        .signature = "(conn: ref WsConn, timeout: i64 = -1): WsMessage?",
-        .summary = "",
-    },
-    {
-        .name = "sendBytes",
-        .signature = "(conn: ref WsConn, data: Array<u8>, binary: bool = false): bool",
-        .summary = "",
-    },
-    {
-        .name = "sendText",
-        .signature = "(conn: ref WsConn, data: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "serve",
-        .signature = "(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: i64 = _WS_MAX_MESSAGE_BYTES): bool",
-        .summary = "",
-    },
-    {
-        .name = "textFrame",
-        .signature = "(data: string, mask: bool = true): Array<u8>",
-        .summary = "",
-    },
-    {
-        .name = "upgradeResponse",
-        .signature = "(secKey: string, protocol: string? = null, deflate: bool = false): string",
-        .summary = "",
-    },
+    {.name = "ClosePayload", .signature = "ClosePayload", .summary = "",},
+    {.name = "ClosePayload.code", .signature = ": i64", .summary = "",},
+    {.name = "ClosePayload.init", .signature = "(code: i64, reason: string): ()", .summary = "",},
+    {.name = "ClosePayload.reason", .signature = ": string", .summary = "",},
+    {.name = "ParsedFrame", .signature = "ParsedFrame", .summary = "",},
+    {.name = "ParsedFrame.consumedBytes", .signature = ": i64", .summary = "",},
+    {.name = "ParsedFrame.fin", .signature = ": bool", .summary = "",},
+    {.name = "ParsedFrame.init", .signature = "(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()", .summary = "",},
+    {.name = "ParsedFrame.masked", .signature = ": bool", .summary = "",},
+    {.name = "ParsedFrame.opcode", .signature = ": i64", .summary = "",},
+    {.name = "ParsedFrame.payload", .signature = ": Array<u8>", .summary = "",},
+    {.name = "ParsedFrame.rsv1", .signature = ": bool", .summary = "",},
+    {.name = "ParsedUpgradeRequest", .signature = "ParsedUpgradeRequest", .summary = "",},
+    {.name = "ParsedUpgradeRequest.deflate", .signature = ": bool", .summary = "",},
+    {.name = "ParsedUpgradeRequest.init", .signature = "(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()", .summary = "",},
+    {.name = "ParsedUpgradeRequest.origin", .signature = ": string?", .summary = "",},
+    {.name = "ParsedUpgradeRequest.protocol", .signature = ": string?", .summary = "",},
+    {.name = "ParsedUpgradeRequest.requestTarget", .signature = ": string", .summary = "",},
+    {.name = "ParsedUpgradeRequest.secKey", .signature = ": string", .summary = "",},
+    {.name = "ParsedUpgradeResponse", .signature = "ParsedUpgradeResponse", .summary = "",},
+    {.name = "ParsedUpgradeResponse.deflate", .signature = ": bool", .summary = "",},
+    {.name = "ParsedUpgradeResponse.init", .signature = "(statusCode: i64, protocol: string? = null, deflate: bool = false): ()", .summary = "",},
+    {.name = "ParsedUpgradeResponse.protocol", .signature = ": string?", .summary = "",},
+    {.name = "ParsedUpgradeResponse.statusCode", .signature = ": i64", .summary = "",},
+    {.name = "WsConn", .signature = "WsConn", .summary = "",},
+    {.name = "WsConn.error", .signature = ": string?", .summary = "",},
+    {.name = "WsConn.init", .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()", .summary = "",},
+    {.name = "WsConn.isOpen", .signature = "(): bool", .summary = "",},
+    {.name = "WsConn.ping", .signature = "(): bool", .summary = "",},
+    {.name = "WsConn.sendBytes", .signature = "(data: Array<u8>, binary: bool = false): bool", .summary = "",},
+    {.name = "WsConn.sendText", .signature = "(data: string): bool", .summary = "",},
+    {.name = "WsConn.url", .signature = ": string", .summary = "",},
+    {.name = "WsConnectOptions", .signature = "WsConnectOptions", .summary = "",},
+    {.name = "WsConnectOptions.init", .signature = "(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()", .summary = "",},
+    {.name = "WsConnectOptions.maxMessageSize", .signature = ": i64", .summary = "",},
+    {.name = "WsConnectOptions.pingIntervalMs", .signature = ": i64", .summary = "",},
+    {.name = "WsConnectOptions.pongTimeoutMs", .signature = ": i64", .summary = "",},
+    {.name = "WsConnectOptions.timeoutMs", .signature = ": i64", .summary = "",},
+    {.name = "WsMessage", .signature = "WsMessage", .summary = "",},
+    {.name = "WsMessage.binary", .signature = ": bool", .summary = "",},
+    {.name = "WsMessage.data", .signature = ": Array<u8>?", .summary = "",},
+    {.name = "WsMessage.error", .signature = ": string?", .summary = "",},
+    {.name = "WsMessage.init", .signature = "(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()", .summary = "",},
+    {.name = "WsMessage.text", .signature = "(): string?", .summary = "",},
+    {.name = "WsUrl", .signature = "WsUrl", .summary = "",},
+    {.name = "WsUrl.host", .signature = ": string", .summary = "",},
+    {.name = "WsUrl.init", .signature = "(secure: bool, host: string, port: i64, path: string): ()", .summary = "",},
+    {.name = "WsUrl.path", .signature = ": string", .summary = "",},
+    {.name = "WsUrl.port", .signature = ": i64", .summary = "",},
+    {.name = "WsUrl.secure", .signature = ": bool", .summary = "",},
+    {.name = "acceptKey", .signature = "(secKey: string): string", .summary = "",},
+    {.name = "binaryFrame", .signature = "(data: Array<u8>, mask: bool = true): Array<u8>", .summary = "",},
+    {.name = "clientHandshakeRequest", .signature = "(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?", .summary = "",},
+    {.name = "close", .signature = "(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool", .summary = "",},
+    {.name = "closeFrame", .signature = "(code: i64 = 1000, reason: string = \"\", mask: bool = true): Array<u8>", .summary = "",},
+    {.name = "connect", .signature = "(url: string, options: WsConnectOptions? = null): WsConn", .summary = "",},
+    {.name = "frame", .signature = "(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true): Array<u8>", .summary = "",},
+    {.name = "isValidCloseCode", .signature = "(code: i64): bool", .summary = "",},
+    {.name = "maskPayload", .signature = "(payload: Array<u8>, key: Array<u8>): Array<u8>", .summary = "",},
+    {.name = "parseClosePayload", .signature = "(payload: Array<u8>): ClosePayload?", .summary = "",},
+    {.name = "parseFrame", .signature = "(raw: Array<u8>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: i64 = 67108864): ParsedFrame?", .summary = "",},
+    {.name = "parseUpgradeRequest", .signature = "(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?", .summary = "",},
+    {.name = "parseUpgradeResponse", .signature = "(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?", .summary = "",},
+    {.name = "parseUrl", .signature = "(url: string): WsUrl?", .summary = "",},
+    {.name = "ping", .signature = "(conn: ref WsConn): bool", .summary = "",},
+    {.name = "pingFrame", .signature = "(data: Array<u8>? = null, mask: bool = true): Array<u8>", .summary = "",},
+    {.name = "pongFrame", .signature = "(data: Array<u8>? = null, mask: bool = true): Array<u8>", .summary = "",},
+    {.name = "randomKey", .signature = "(): string", .summary = "",},
+    {.name = "recv", .signature = "(conn: ref WsConn, timeout: i64 = -1): WsMessage?", .summary = "",},
+    {.name = "sendBytes", .signature = "(conn: ref WsConn, data: Array<u8>, binary: bool = false): bool", .summary = "",},
+    {.name = "sendText", .signature = "(conn: ref WsConn, data: string): bool", .summary = "",},
+    {.name = "serve", .signature = "(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: i64 = _WS_MAX_MESSAGE_BYTES): bool", .summary = "",},
+    {.name = "textFrame", .signature = "(data: string, mask: bool = true): Array<u8>", .summary = "",},
+    {.name = "upgradeResponse", .signature = "(secKey: string, protocol: string? = null, deflate: bool = false): string", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
-    {
-        .name = "XML_DEFAULT_OPTIONS",
-        .signature = ": XmlOptions",
-        .summary = "",
-    },
-    {
-        .name = "XML_DEFAULT_WRITE_OPTIONS",
-        .signature = ": XmlWriteOptions",
-        .summary = "",
-    },
-    {
-        .name = "XmlAttribute",
-        .signature = "XmlAttribute",
-        .summary = "",
-    },
-    {
-        .name = "XmlAttribute.init",
-        .signature = "(name: XmlName, value: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "XmlAttribute.name",
-        .signature = ": XmlName",
-        .summary = "",
-    },
-    {
-        .name = "XmlAttribute.value",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "XmlDiagnostic",
-        .signature = "XmlDiagnostic",
-        .summary = "",
-    },
-    {
-        .name = "XmlDiagnostic.column",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "XmlDiagnostic.init",
-        .signature = "(kind: XmlErrorKind, line: i64, column: i64, message: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "XmlDiagnostic.kind",
-        .signature = ": XmlErrorKind",
-        .summary = "",
-    },
-    {
-        .name = "XmlDiagnostic.line",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "XmlDiagnostic.message",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "XmlName",
-        .signature = "XmlName",
-        .summary = "",
-    },
-    {
-        .name = "XmlName.init",
-        .signature = "(prefix: string, local: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "XmlName.local",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "XmlName.prefix",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "XmlName.qualified",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "XmlOptions",
-        .signature = "{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }",
-        .summary = "",
-    },
-    {
-        .name = "XmlOptions.preserveCData",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlOptions.preserveComments",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlOptions.preserveWhitespace",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlOptions.validateEntities",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlParseReport",
-        .signature = "XmlParseReport",
-        .summary = "",
-    },
-    {
-        .name = "XmlParseReport.diagnostics",
-        .signature = ": Array<XmlDiagnostic>",
-        .summary = "",
-    },
-    {
-        .name = "XmlParseReport.doc",
-        .signature = ": XmlNode?",
-        .summary = "",
-    },
-    {
-        .name = "XmlParseReport.init",
-        .signature = "(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()",
-        .summary = "",
-    },
-    {
-        .name = "XmlWriteOptions",
-        .signature = "{ indent: i64, declaration: bool, encoding: string }",
-        .summary = "",
-    },
-    {
-        .name = "XmlWriteOptions.declaration",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlWriteOptions.encoding",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlWriteOptions.indent",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "attr",
-        .signature = "(node: XmlNode, key: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "attributes",
-        .signature = "(node: XmlNode): Array<XmlAttribute>",
-        .summary = "",
-    },
-    {
-        .name = "cdata",
-        .signature = "(content: string): XmlNode",
-        .summary = "",
-    },
-    {
-        .name = "children",
-        .signature = "(node: XmlNode): Array<XmlNode>",
-        .summary = "",
-    },
-    {
-        .name = "comment",
-        .signature = "(content: string): XmlNode",
-        .summary = "",
-    },
-    {
-        .name = "document",
-        .signature = "(children: Array<XmlNode>? = null): XmlNode",
-        .summary = "",
-    },
-    {
-        .name = "element",
-        .signature = "(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode",
-        .summary = "",
-    },
-    {
-        .name = "namespace",
-        .signature = "(node: XmlNode, prefix: string): string?",
-        .summary = "",
-    },
-    {
-        .name = "nodeText",
-        .signature = "(node: XmlNode): string?",
-        .summary = "",
-    },
-    {
-        .name = "parse",
-        .signature = "(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode",
-        .summary = "",
-    },
-    {
-        .name = "parseFile",
-        .signature = "(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode",
-        .summary = "",
-    },
-    {
-        .name = "parseReport",
-        .signature = "(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlParseReport",
-        .summary = "",
-    },
-    {
-        .name = "qualifiedName",
-        .signature = "(node: XmlNode): XmlName?",
-        .summary = "",
-    },
-    {
-        .name = "stringify",
-        .signature = "(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): string",
-        .summary = "",
-    },
-    {
-        .name = "tag",
-        .signature = "(node: XmlNode): string?",
-        .summary = "",
-    },
-    {
-        .name = "text",
-        .signature = "(content: string): XmlNode",
-        .summary = "",
-    },
-    {
-        .name = "textContent",
-        .signature = "(node: XmlNode): string",
-        .summary = "",
-    },
-    {
-        .name = "writeFile",
-        .signature = "(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): bool",
-        .summary = "",
-    },
+    {.name = "XML_DEFAULT_OPTIONS", .signature = ": XmlOptions", .summary = "",},
+    {.name = "XML_DEFAULT_WRITE_OPTIONS", .signature = ": XmlWriteOptions", .summary = "",},
+    {.name = "XmlAttribute", .signature = "XmlAttribute", .summary = "",},
+    {.name = "XmlAttribute.init", .signature = "(name: XmlName, value: string): ()", .summary = "",},
+    {.name = "XmlAttribute.name", .signature = ": XmlName", .summary = "",},
+    {.name = "XmlAttribute.value", .signature = ": string", .summary = "",},
+    {.name = "XmlDiagnostic", .signature = "XmlDiagnostic", .summary = "",},
+    {.name = "XmlDiagnostic.column", .signature = ": i64", .summary = "",},
+    {.name = "XmlDiagnostic.init", .signature = "(kind: XmlErrorKind, line: i64, column: i64, message: string): ()", .summary = "",},
+    {.name = "XmlDiagnostic.kind", .signature = ": XmlErrorKind", .summary = "",},
+    {.name = "XmlDiagnostic.line", .signature = ": i64", .summary = "",},
+    {.name = "XmlDiagnostic.message", .signature = ": string", .summary = "",},
+    {.name = "XmlName", .signature = "XmlName", .summary = "",},
+    {.name = "XmlName.init", .signature = "(prefix: string, local: string): ()", .summary = "",},
+    {.name = "XmlName.local", .signature = ": string", .summary = "",},
+    {.name = "XmlName.prefix", .signature = ": string", .summary = "",},
+    {.name = "XmlName.qualified", .signature = "(): string", .summary = "",},
+    {.name = "XmlOptions", .signature = "{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }", .summary = "",},
+    {.name = "XmlOptions.preserveCData", .signature = "bool", .summary = "Type alias field",},
+    {.name = "XmlOptions.preserveComments", .signature = "bool", .summary = "Type alias field",},
+    {.name = "XmlOptions.preserveWhitespace", .signature = "bool", .summary = "Type alias field",},
+    {.name = "XmlOptions.validateEntities", .signature = "bool", .summary = "Type alias field",},
+    {.name = "XmlParseReport", .signature = "XmlParseReport", .summary = "",},
+    {.name = "XmlParseReport.diagnostics", .signature = ": Array<XmlDiagnostic>", .summary = "",},
+    {.name = "XmlParseReport.doc", .signature = ": XmlNode?", .summary = "",},
+    {.name = "XmlParseReport.init", .signature = "(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()", .summary = "",},
+    {.name = "XmlWriteOptions", .signature = "{ indent: i64, declaration: bool, encoding: string }", .summary = "",},
+    {.name = "XmlWriteOptions.declaration", .signature = "bool", .summary = "Type alias field",},
+    {.name = "XmlWriteOptions.encoding", .signature = "string", .summary = "Type alias field",},
+    {.name = "XmlWriteOptions.indent", .signature = "i64", .summary = "Type alias field",},
+    {.name = "attr", .signature = "(node: XmlNode, key: string): string?", .summary = "",},
+    {.name = "attributes", .signature = "(node: XmlNode): Array<XmlAttribute>", .summary = "",},
+    {.name = "cdata", .signature = "(content: string): XmlNode", .summary = "",},
+    {.name = "children", .signature = "(node: XmlNode): Array<XmlNode>", .summary = "",},
+    {.name = "comment", .signature = "(content: string): XmlNode", .summary = "",},
+    {.name = "document", .signature = "(children: Array<XmlNode>? = null): XmlNode", .summary = "",},
+    {.name = "element", .signature = "(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode", .summary = "",},
+    {.name = "namespace", .signature = "(node: XmlNode, prefix: string): string?", .summary = "",},
+    {.name = "nodeText", .signature = "(node: XmlNode): string?", .summary = "",},
+    {.name = "parse", .signature = "(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode", .summary = "",},
+    {.name = "parseFile", .signature = "(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode", .summary = "",},
+    {.name = "parseReport", .signature = "(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlParseReport", .summary = "",},
+    {.name = "qualifiedName", .signature = "(node: XmlNode): XmlName?", .summary = "",},
+    {.name = "stringify", .signature = "(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): string", .summary = "",},
+    {.name = "tag", .signature = "(node: XmlNode): string?", .summary = "",},
+    {.name = "text", .signature = "(content: string): XmlNode", .summary = "",},
+    {.name = "textContent", .signature = "(node: XmlNode): string", .summary = "",},
+    {.name = "writeFile", .signature = "(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): bool", .summary = "",},
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
-    {
-        .name = "YamlAnchor",
-        .signature = "YamlAnchor",
-        .summary = "",
-    },
-    {
-        .name = "YamlAnchor.init",
-        .signature = "(name: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "YamlAnchor.name",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "YamlDiagnostic",
-        .signature = "YamlDiagnostic",
-        .summary = "",
-    },
-    {
-        .name = "YamlDiagnostic.column",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "YamlDiagnostic.init",
-        .signature = "(kind: YamlErrorKind, line: i64, column: i64, message: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "YamlDiagnostic.kind",
-        .signature = ": YamlErrorKind",
-        .summary = "",
-    },
-    {
-        .name = "YamlDiagnostic.line",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "YamlDiagnostic.message",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping",
-        .signature = "YamlMapping",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping.containsKey",
-        .signature = "(key: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping.get",
-        .signature = "(key: string): YamlValue?",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping.init",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping.keys",
-        .signature = ": Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping.size",
-        .signature = "(): i64",
-        .summary = "",
-    },
-    {
-        .name = "YamlMapping.values",
-        .signature = ": Array<YamlValue>",
-        .summary = "",
-    },
-    {
-        .name = "YamlOptions",
-        .signature = "{ strict: bool }",
-        .summary = "",
-    },
-    {
-        .name = "YamlOptions.strict",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "YamlParseReport",
-        .signature = "YamlParseReport",
-        .summary = "",
-    },
-    {
-        .name = "YamlParseReport.anchors",
-        .signature = ": i64",
-        .summary = "",
-    },
-    {
-        .name = "YamlParseReport.data",
-        .signature = ": YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "YamlParseReport.diagnostics",
-        .signature = ": Array<YamlDiagnostic>",
-        .summary = "",
-    },
-    {
-        .name = "YamlParseReport.init",
-        .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()",
-        .summary = "",
-    },
-    {
-        .name = "YamlTag",
-        .signature = "YamlTag",
-        .summary = "",
-    },
-    {
-        .name = "YamlTag.handle",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "YamlTag.init",
-        .signature = "(handle: string, suffix: string): ()",
-        .summary = "",
-    },
-    {
-        .name = "YamlTag.suffix",
-        .signature = ": string",
-        .summary = "",
-    },
-    {
-        .name = "YamlTagged",
-        .signature = "YamlTagged",
-        .summary = "",
-    },
-    {
-        .name = "YamlTagged.init",
-        .signature = "(tag: YamlTag, value: YamlValue): ()",
-        .summary = "",
-    },
-    {
-        .name = "YamlTagged.tag",
-        .signature = ": YamlTag",
-        .summary = "",
-    },
-    {
-        .name = "YamlTagged.value",
-        .signature = ": YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "YamlWriteOptions",
-        .signature = "{ indent: i64 }",
-        .summary = "",
-    },
-    {
-        .name = "YamlWriteOptions.indent",
-        .signature = "i64",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "aliasValue",
-        .signature = "(name: string): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "asBool",
-        .signature = "(value: YamlValue): bool?",
-        .summary = "",
-    },
-    {
-        .name = "asFloat",
-        .signature = "(value: YamlValue): f64?",
-        .summary = "",
-    },
-    {
-        .name = "asInt",
-        .signature = "(value: YamlValue): i64?",
-        .summary = "",
-    },
-    {
-        .name = "asMapping",
-        .signature = "(value: YamlValue): YamlMapping?",
-        .summary = "",
-    },
-    {
-        .name = "asSequence",
-        .signature = "(value: YamlValue): Array<YamlValue>?",
-        .summary = "",
-    },
-    {
-        .name = "asString",
-        .signature = "(value: YamlValue): string?",
-        .summary = "",
-    },
-    {
-        .name = "at",
-        .signature = "(value: YamlValue, index: i64): YamlValue?",
-        .summary = "",
-    },
-    {
-        .name = "binaryValue",
-        .signature = "(value: Array<u8>): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "boolValue",
-        .signature = "(value: bool): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "floatValue",
-        .signature = "(value: f64): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "get",
-        .signature = "(value: YamlValue, key: string): YamlValue?",
-        .summary = "",
-    },
-    {
-        .name = "intValue",
-        .signature = "(value: i64): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "isNull",
-        .signature = "(value: YamlValue): bool",
-        .summary = "",
-    },
-    {
-        .name = "keys",
-        .signature = "(value: YamlValue): Array<string>",
-        .summary = "",
-    },
-    {
-        .name = "length",
-        .signature = "(value: YamlValue): i64",
-        .summary = "",
-    },
-    {
-        .name = "mappingSet",
-        .signature = "(mapping: ref YamlMapping, key: string, value: YamlValue): ()",
-        .summary = "",
-    },
-    {
-        .name = "mappingValue",
-        .signature = "(mapping: YamlMapping): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "newMapping",
-        .signature = "(): YamlMapping",
-        .summary = "",
-    },
-    {
-        .name = "nullValue",
-        .signature = "(): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "parse",
-        .signature = "(data: string, options: YamlOptions? = null): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "parseAll",
-        .signature = "(data: string): Array<YamlValue>",
-        .summary = "",
-    },
-    {
-        .name = "parseFile",
-        .signature = "(path: Path, options: YamlOptions? = null): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "parseReport",
-        .signature = "(data: string): YamlParseReport",
-        .summary = "",
-    },
-    {
-        .name = "parseStrict",
-        .signature = "(data: string): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "sequenceValue",
-        .signature = "(items: Array<YamlValue>): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "stringValue",
-        .signature = "(value: string): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "stringify",
-        .signature = "(value: YamlValue, options: YamlWriteOptions? = null): string",
-        .summary = "",
-    },
-    {
-        .name = "taggedValue",
-        .signature = "(tag: YamlTag, value: YamlValue): YamlValue",
-        .summary = "",
-    },
-    {
-        .name = "writeFile",
-        .signature = "(path: Path, value: YamlValue): bool",
-        .summary = "",
-    },
+    {.name = "YamlAnchor", .signature = "YamlAnchor", .summary = "",},
+    {.name = "YamlAnchor.init", .signature = "(name: string): ()", .summary = "",},
+    {.name = "YamlAnchor.name", .signature = ": string", .summary = "",},
+    {.name = "YamlDiagnostic", .signature = "YamlDiagnostic", .summary = "",},
+    {.name = "YamlDiagnostic.column", .signature = ": i64", .summary = "",},
+    {.name = "YamlDiagnostic.init", .signature = "(kind: YamlErrorKind, line: i64, column: i64, message: string): ()", .summary = "",},
+    {.name = "YamlDiagnostic.kind", .signature = ": YamlErrorKind", .summary = "",},
+    {.name = "YamlDiagnostic.line", .signature = ": i64", .summary = "",},
+    {.name = "YamlDiagnostic.message", .signature = ": string", .summary = "",},
+    {.name = "YamlMapping", .signature = "YamlMapping", .summary = "",},
+    {.name = "YamlMapping.containsKey", .signature = "(key: string): bool", .summary = "",},
+    {.name = "YamlMapping.get", .signature = "(key: string): YamlValue?", .summary = "",},
+    {.name = "YamlMapping.init", .signature = "(): ()", .summary = "",},
+    {.name = "YamlMapping.keys", .signature = ": Array<string>", .summary = "",},
+    {.name = "YamlMapping.size", .signature = "(): i64", .summary = "",},
+    {.name = "YamlMapping.values", .signature = ": Array<YamlValue>", .summary = "",},
+    {.name = "YamlOptions", .signature = "{ strict: bool }", .summary = "",},
+    {.name = "YamlOptions.strict", .signature = "bool", .summary = "Type alias field",},
+    {.name = "YamlParseReport", .signature = "YamlParseReport", .summary = "",},
+    {.name = "YamlParseReport.anchors", .signature = ": i64", .summary = "",},
+    {.name = "YamlParseReport.data", .signature = ": YamlValue", .summary = "",},
+    {.name = "YamlParseReport.diagnostics", .signature = ": Array<YamlDiagnostic>", .summary = "",},
+    {.name = "YamlParseReport.init", .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()", .summary = "",},
+    {.name = "YamlTag", .signature = "YamlTag", .summary = "",},
+    {.name = "YamlTag.handle", .signature = ": string", .summary = "",},
+    {.name = "YamlTag.init", .signature = "(handle: string, suffix: string): ()", .summary = "",},
+    {.name = "YamlTag.suffix", .signature = ": string", .summary = "",},
+    {.name = "YamlTagged", .signature = "YamlTagged", .summary = "",},
+    {.name = "YamlTagged.init", .signature = "(tag: YamlTag, value: YamlValue): ()", .summary = "",},
+    {.name = "YamlTagged.tag", .signature = ": YamlTag", .summary = "",},
+    {.name = "YamlTagged.value", .signature = ": YamlValue", .summary = "",},
+    {.name = "YamlWriteOptions", .signature = "{ indent: i64 }", .summary = "",},
+    {.name = "YamlWriteOptions.indent", .signature = "i64", .summary = "Type alias field",},
+    {.name = "aliasValue", .signature = "(name: string): YamlValue", .summary = "",},
+    {.name = "asBool", .signature = "(value: YamlValue): bool?", .summary = "",},
+    {.name = "asFloat", .signature = "(value: YamlValue): f64?", .summary = "",},
+    {.name = "asInt", .signature = "(value: YamlValue): i64?", .summary = "",},
+    {.name = "asMapping", .signature = "(value: YamlValue): YamlMapping?", .summary = "",},
+    {.name = "asSequence", .signature = "(value: YamlValue): Array<YamlValue>?", .summary = "",},
+    {.name = "asString", .signature = "(value: YamlValue): string?", .summary = "",},
+    {.name = "at", .signature = "(value: YamlValue, index: i64): YamlValue?", .summary = "",},
+    {.name = "binaryValue", .signature = "(value: Array<u8>): YamlValue", .summary = "",},
+    {.name = "boolValue", .signature = "(value: bool): YamlValue", .summary = "",},
+    {.name = "floatValue", .signature = "(value: f64): YamlValue", .summary = "",},
+    {.name = "get", .signature = "(value: YamlValue, key: string): YamlValue?", .summary = "",},
+    {.name = "intValue", .signature = "(value: i64): YamlValue", .summary = "",},
+    {.name = "isNull", .signature = "(value: YamlValue): bool", .summary = "",},
+    {.name = "keys", .signature = "(value: YamlValue): Array<string>", .summary = "",},
+    {.name = "length", .signature = "(value: YamlValue): i64", .summary = "",},
+    {.name = "mappingSet", .signature = "(mapping: ref YamlMapping, key: string, value: YamlValue): ()", .summary = "",},
+    {.name = "mappingValue", .signature = "(mapping: YamlMapping): YamlValue", .summary = "",},
+    {.name = "newMapping", .signature = "(): YamlMapping", .summary = "",},
+    {.name = "nullValue", .signature = "(): YamlValue", .summary = "",},
+    {.name = "parse", .signature = "(data: string, options: YamlOptions? = null): YamlValue", .summary = "",},
+    {.name = "parseAll", .signature = "(data: string): Array<YamlValue>", .summary = "",},
+    {.name = "parseFile", .signature = "(path: Path, options: YamlOptions? = null): YamlValue", .summary = "",},
+    {.name = "parseReport", .signature = "(data: string): YamlParseReport", .summary = "",},
+    {.name = "parseStrict", .signature = "(data: string): YamlValue", .summary = "",},
+    {.name = "sequenceValue", .signature = "(items: Array<YamlValue>): YamlValue", .summary = "",},
+    {.name = "stringValue", .signature = "(value: string): YamlValue", .summary = "",},
+    {.name = "stringify", .signature = "(value: YamlValue, options: YamlWriteOptions? = null): string", .summary = "",},
+    {.name = "taggedValue", .signature = "(tag: YamlTag, value: YamlValue): YamlValue", .summary = "",},
+    {.name = "writeFile", .signature = "(path: Path, value: YamlValue): bool", .summary = "",},
 };
 
 XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
@@ -7459,1617 +1583,194 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
         .title = "Built-in Functions",
         .aliases_csv = "builtin,print,dump,typeOf,builtins",
         .body =
-            "[Language reference](#13-\xe5\x86\x85\xe7\xbd\xae\xe5\x87\xbd\xe6\x95\xb0-built-in-functions)\n"
-            "\n"
-            "## Built-in Functions\n"
-            "\n"
-            "### Core built-ins\n"
-            "- `print(value)` \xe2\x80\x94 print with newline\n"
-            "- `dump(value)` \xe2\x80\x94 debug print with type info\n"
-            "- `typeOf(value)` \xe2\x80\x94 return a stable TypeId / `Type.xxx` value\n"
-            "- `typeName(value)` \xe2\x80\x94 return the debug/logging type name\n"
-            "- `x is T` \xe2\x80\x94 runtime type check with analyzer narrowing\n"
-            "- `i64(value)` / `f64(value)` / `string(value)` / `bool(value)` \xe2\x80\x94 explicit conversions\n"
-            "- `assert(cond, msg?)` / `assertEqual(a, b, msg?)` / `assertThrows(action, msg?)` / `assertPanics(action, msg?)` \xe2\x80\x94 testing assertions\n"
-            "- `len(array)` \xe2\x80\x94 the new-XIR Array subset returns i64 length without allocation or element traversal; lexical/imported functions named len retain ordinary binding, and other lengthable families require separate admission (spec \xc2\xa7""17.26).\n"
-            "\n"
-            "### Printing and debugging\n"
-            "```xray\n"
-            "print(\"hello\")                 // appends exactly one newline\n"
-            "print(\"a:\", a, \"b:\", b)        // arguments separated by exactly one space\n"
-            "print()                        // writes just that newline\n"
-            "dump(some_obj)                 // debug output, with type info and structure\n"
-            "```\n"
-            "\n"
-            "### Type inspection\n"
-            "```xray\n"
-            "var x = 42\n"
-            "print(typeOf(x) == Type.i64)    // true\n"
-            "print(typeName(x))              // \"i64\"\n"
-            "print(x is i64)                 // true\n"
-            "// typeOf(x) == \"i64\"           // compile error: use Type.i64 or typeName(x)\n"
-            "```\n"
-            "\n"
-            "### Admitted XIR floating semantics\n"
-            "New-XIR typed print accepts f32/f64 (spec section 17.27). Finite values use the shortest round-tripping decimal at their original precision, with an even final digit on equal-distance ties. Decimal exponents in [-4,16) use fixed notation (integral values end in .0); others use lowercase e and a signed exponent. Special spellings are nan, inf, -inf, 0.0 and -0.0. A complete output group is prepared before one sink call; insufficient budget, allocation failure and rejected output retain OUTPUT_ERROR cleanup semantics.\n"
-            "",
+            "[Language reference](#13-\xe5\x86\x85\xe7\xbd\xae\xe5\x87\xbd\xe6\x95\xb0-built-in-functions)\n" "\n" "## Built-in Functions\n" "\n" "### Core built-ins\n" "- `print(value)` \xe2\x80\x94 print with newline\n" "- `dump(value)` \xe2\x80\x94 debug print with type info\n" "- `typeOf(value)` \xe2\x80\x94 return a stable TypeId / `Type.xxx` value\n" "- `typeName(value)` \xe2\x80\x94 return the debug/logging type name\n" "- `x is T` \xe2\x80\x94 runtime type check with analyzer narrowing\n" "- `i64(value)` / `f64(value)` / `string(value)` / `bool(value)` \xe2\x80\x94 explicit conversions\n" "- `assert(cond, msg?)` / `assertEqual(a, b, msg?)` / `assertThrows(action, msg?)` / `assertPanics(action, msg?)` \xe2\x80\x94 testing assertions\n" "- `len(array)` \xe2\x80\x94 the new-XIR Array subset returns i64 length without allocation or element traversal; lexical/imported functions named len retain ordinary binding, and other lengthable families require separate admission (spec \xc2\xa7""17.26).\n" "\n"
+            "### Printing and debugging\n" "```xray\n" "print(\"hello\")                 // appends exactly one newline\n" "print(\"a:\", a, \"b:\", b)        // arguments separated by exactly one space\n" "print()                        // writes just that newline\n" "dump(some_obj)                 // debug output, with type info and structure\n" "```\n" "\n" "### Type inspection\n" "```xray\n" "var x = 42\n" "print(typeOf(x) == Type.i64)    // true\n" "print(typeName(x))              // \"i64\"\n" "print(x is i64)                 // true\n" "// typeOf(x) == \"i64\"           // compile error: use Type.i64 or typeName(x)\n" "```\n" "\n" "### Admitted XIR floating semantics\n"
+            "New-XIR typed print accepts f32/f64 (spec section 17.27). Finite values use the shortest round-tripping decimal at their original precision, with an even final digit on equal-distance ties. Decimal exponents in [-4,16) use fixed notation (integral values end in .0); others use lowercase e and a signed exponent. Special spellings are nan, inf, -inf, 0.0 and -0.0. A complete output group is prepared before one sink call; insufficient budget, allocation failure and rejected output retain OUTPUT_ERROR cleanup semantics.\n" "",
     },
     {
         .id = "channel",
         .title = "Channel",
         .aliases_csv = "channels,chan,Channel,send,recv,buffered",
         .body =
-            "[Language reference](#105-channel)\n"
-            "\n"
-            "## Channel\n"
-            "\n"
-            "Channels are the primary inter-coroutine communication mechanism.\n"
-            "\n"
-            "### Declaration\n"
-            "```xray\n"
-            "const ch  = Channel<i64>(10)    // buffered, capacity = 10\n"
-            "const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)\n"
-            "const cha = Channel(3)          // element type inferred from the first send\n"
-            "```\n"
-            "Name a channel with `const`. `Channel<T>` is an audited synchronization handle: its binding is stable while `send`/`recv` mutate protected runtime state.\n"
-            "\n"
-            "### Operations\n"
-            "```xray\n"
-            "const ch = Channel<i64>(10)\n"
-            "ch.send(42)                             // blocking send\n"
-            "var v = match (ch.recv()) {\n"
-            "    Recv.Value { value } -> value\n"
-            "    Recv.Closed -> -1\n"
-            "    _ -> -1\n"
-            "}\n"
-            "\n"
-            "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n"
-            "match (ch.tryRecv()) {\n"
-            "    Recv.Value { value: next } -> print(next)\n"
-            "    Recv.Empty -> print(\"empty\")\n"
-            "    Recv.Closed -> print(\"closed\")\n"
-            "    Recv.Timeout -> print(\"timeout\")\n"
-            "}\n"
-            "\n"
-            "ch.send(7)\n"
-            "ch.close()\n"
-            "for (msg in ch) {\n"
-            "    print(msg)\n"
-            "}\n"
-            "\n"
-            "var value = ch.recvOr(-1)\n"
-            "```\n"
-            "\n"
-            "### Function parameter type\n"
-            "```xray\n"
-            "fn producer(ch: Channel<i64>) {\n"
-            "    ch.send(42)\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Concurrency rules\n"
-            "- The target Channel<T> payload domain requires copyable, storable, Sendable T; complete channel/go qualification remains separate from this contract\n"
-            "- Qualified channel handles may be captured by go closures when the full type satisfies Sendable\n"
-            "- Array payloads preserve logical copies without a required copy/move marker; class and synchronized identities are not duplicated or frozen\n"
-            "- Noncopyable resources are outside the first Channel<T> payload domain; const or a synchronization wrapper cannot bypass Sendable checks\n"
-            "",
+            "[Language reference](#105-channel)\n" "\n" "## Channel\n" "\n" "Channels are the primary inter-coroutine communication mechanism.\n" "\n" "### Declaration\n" "```xray\n" "const ch  = Channel<i64>(10)    // buffered, capacity = 10\n" "const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)\n" "const cha = Channel(3)          // element type inferred from the first send\n" "```\n" "Name a channel with `const`. `Channel<T>` is an audited synchronization handle: its binding is stable while `send`/`recv` mutate protected runtime state.\n" "\n" "### Operations\n" "```xray\n" "const ch = Channel<i64>(10)\n" "ch.send(42)                             // blocking send\n" "var v = match (ch.recv()) {\n" "    Recv.Value { value } -> value\n" "    Recv.Closed -> -1\n" "    _ -> -1\n" "}\n" "\n" "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n" "match (ch.tryRecv()) {\n" "    Recv.Value { value: next } -> print(next)\n" "    Recv.Empty -> print(\"empty\")\n"
+            "    Recv.Closed -> print(\"closed\")\n" "    Recv.Timeout -> print(\"timeout\")\n" "}\n" "\n" "ch.send(7)\n" "ch.close()\n" "for (msg in ch) {\n" "    print(msg)\n" "}\n" "\n" "var value = ch.recvOr(-1)\n" "```\n" "\n" "### Timed operations\n" "- `sendTimeout(value, milliseconds)` returns SendResult; `recvTimeout(milliseconds)` returns Recv<T>. Closed results remain distinct from Timeout.\n" "- The duration is i64 in 0..86_400_000; out-of-range values raise NumericRange before the Channel operation. Zero performs one queue attempt.\n" "- A positive duration uses one monotonic deadline. The host supplies the clock; failed, zero or backward readings raise HostError rather than Timeout. Repeated waits never restart the deadline.\n" "- Evaluate receiver, message and duration once in source order, including Unit message side effects. Pending polls reuse those values; committed peer delivery wins over later withdrawal.\n"
+            "- Both methods conservatively may suspend. Type admission and Sendable evidence remain separate from root permission and value Error effects.\n" "\n" "### Function parameter type\n" "```xray\n" "fn producer(ch: Channel<i64>) {\n" "    ch.send(42)\n" "}\n" "```\n" "\n" "### Concurrency rules\n" "- The target Channel<T> payload domain requires copyable, storable, Sendable T; complete channel/go qualification remains separate from this contract\n" "- Qualified channel handles may be captured by go closures when the full type satisfies Sendable\n" "- Array payloads preserve logical copies without a required copy/move marker; class and synchronized identities are not duplicated or frozen\n" "- Noncopyable resources are outside the first Channel<T> payload domain; const or a synchronization wrapper cannot bypass Sendable checks\n" "",
     },
     {
         .id = "class",
         .title = "Class",
         .aliases_csv = "classes,oop,inheritance,extends,final class,constructor",
         .body =
-            "[Language reference](#53-class-\xe5\xa3\xb0\xe6\x98\x8e)\n"
-            "\n"
-            "## Class\n"
-            "\n"
-            "### Basic class\n"
-            "```xray\n"
-            "class Animal {\n"
-            "    name: string                       // field\n"
-            "    private _age: i64 = 0              // private field with default value\n"
-            "\n"
-            "    init(name: string) {\n"
-            "        this.name = name\n"
-            "    }\n"
-            "\n"
-            "    speak() -> string {\n"
-            "        return \"...\"\n"
-            "    }\n"
-            "\n"
-            "    static create(name: string) -> Animal {\n"
-            "        return Animal(name)\n"
-            "    }\n"
-            "}\n"
-            "\n"
-            "var a = Animal(\"Rex\")\n"
-            "print(a.speak())\n"
-            "print(Animal.create(\"Bob\").name)\n"
-            "```\n"
-            "\n"
-            "### Inheritance\n"
-            "```xray\n"
-            "class Dog extends Animal {\n"
-            "    init(name: string) {\n"
-            "        super(name)                    // **must** be the first statement (derived classes only)\n"
-            "    }\n"
-            "\n"
-            "    override speak() -> string {         // Explicit parent method override\n"
-            "        return \"woof\"\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Features\n"
-            "- `constructor()` is called through `ClassName(...)`\n"
-            "- `extends` enables single inheritance\n"
-            "- actual overrides require `override` and a matching inherited method signature and receiver contract\n"
-            "- `final class` prevents inheritance\n"
-            "- method overloads and member hiding are compile errors\n"
-            "- `static` declares class-level methods or fields\n"
-            "- `private` restricts access to the declaring class\n"
-            "- `this` is the current instance; `super` refers to the parent class\n"
-            "",
+            "[Language reference](#53-class-\xe5\xa3\xb0\xe6\x98\x8e)\n" "\n" "## Class\n" "\n" "### Basic class\n" "```xray\n" "class Animal {\n" "    name: string                       // field\n" "    private _age: i64 = 0              // private field with default value\n" "\n" "    init(name: string) {\n" "        this.name = name\n" "    }\n" "\n" "    speak() -> string {\n" "        return \"...\"\n" "    }\n" "\n" "    static create(name: string) -> Animal {\n" "        return Animal(name)\n" "    }\n" "}\n" "\n" "var a = Animal(\"Rex\")\n" "print(a.speak())\n" "print(Animal.create(\"Bob\").name)\n" "```\n" "\n" "### Inheritance\n" "```xray\n" "class Dog extends Animal {\n" "    init(name: string) {\n" "        super(name)                    // **must** be the first statement (derived classes only)\n" "    }\n" "\n" "    override speak() -> string {         // Explicit parent method override\n" "        return \"woof\"\n" "    }\n" "}\n" "```\n" "\n" "### Features\n"
+            "- `constructor()` is called through `ClassName(...)`\n" "- `extends` enables single inheritance\n" "- actual overrides require `override` and a matching inherited method signature and receiver contract\n" "- `final class` prevents inheritance\n" "- method overloads and member hiding are compile errors\n" "- `static` declares class-level methods or fields\n" "- `private` restricts access to the declaring class\n" "- `this` is the current instance; `super` refers to the parent class\n" "",
     },
     {
         .id = "collections",
         .title = "Collections",
         .aliases_csv = "array,map,set,list,dict,dictionary,json,bytes,slice,view,borrow",
         .body =
-            "[Language reference](#24-\xe5\xa4\x8d\xe5\x90\x88\xe7\xb1\xbb\xe5\x9e\x8b)\n"
-            "\n"
-            "## Collections\n"
-            "\n"
-            "### Array\n"
-            "The new-XIR source subset in spec \xc2\xa7""17.26 admits typed and homogeneous literals, contextual empty literals, ordinary logical copies, parameters/returns, index reads/writes, get/set/push and global len. Array is a value struct; COW preserves independent copies without explicit copy/move. Its source-derived inventory contains 32 members, but only get/set/push have admitted member operations; the other 29 remain inventory-only. Constructor calls, capacity, slices, pointers, iteration and higher-order methods require separate admission.\n"
-            "```xray\n"
-            "var a: Array<i64> = [1, 2, 3]\n"
-            "var b = a                        // b is a logical copy\n"
-            "b[0] = 9                         // a[0] is still 1\n"
-            "var c: Array<string> = []         // explicit empty array\n"
-            "```\n"
-            "\n"
-            "### Map\n"
-            "```xray\n"
-            "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n"
-            "var m2 = #{\"a\": 1, \"b\": 2}\n"
-            "var empty = #{}                                     // empty Map\n"
-            "\n"
-            "m[\"c\"] = 3                                          // insert / update\n"
-            "var v = m[\"a\"]                                      // lookup; a missing key panics with E0431\n"
-            "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n"
-            "```\n"
-            "```xray\n"
-            "var m = #{\"a\": 1, \"b\": 2}\n"
-            "var empty = #{}                           // empty Map\n"
-            "```\n"
-            "\n"
-            "### Set\n"
-            "```xray\n"
-            "var s: Set<i64> = #[1, 2, 3]\n"
-            "```\n"
-            "```xray\n"
-            "var s = #[1, 2, 3]\n"
-            "var empty = #[]\n"
-            "```\n"
-            "\n"
-            "### Slice (borrowed view)\n"
-            "```xray\n"
-            "fn main() {\n"
-            "    var arr: Array<i64> = [10, 20, 30, 40]\n"
-            "    var view: Slice<i64> = arr[1:3]\n"
-            "    print(view[0])                         // 20; last use of view\n"
-            "    var writable: MutSlice<i64> = arr[1:3]\n"
-            "    writable[1] = 31                       // last use of writable\n"
-            "    print(arr[2])                          // 31\n"
-            "    var owned: Array<i64> = copy(arr[1:3]) // materialize an owned copy\n"
-            "    arr.push(50)                           // no live borrow\n"
-            "    print(len(owned))                      // 2\n"
-            "}\n"
-            "\n"
-            "main()\n"
-            "```\n"
-            "```xray\n"
-            "arr[1:4]                // elements [1, 4)\n"
-            "arr[:3]                 // first 3\n"
-            "arr[2:]                 // from index 2 to the end\n"
-            "arr[:]                  // full-length view (not a copy)\n"
-            "var view: Slice<i64> = arr[1:4]\n"
-            "```\n"
-            "\n"
-            "### Exact structural object / dynamic JSON object\n"
-            "Structural objects have compile-time-known fields and exact shapes. Dynamic JSON objects use `JSON.Object`, a pure alias for `Map<string, JSON.Value>`.\n"
-            "```xray\n"
-            "// Structural-object literal: identifier or static string key + colon ':'\n"
-            "var user = { name: \"Bob\", age: 25 }       // exact object shape\n"
-            "typeName(user)                            // \"object\"\n"
-            "user.name              // type: string; direct ordinal\n"
-            "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
-            "\n"
-            "// Field shorthand: when a field name matches a variable name\n"
-            "var name = \"Alice\"\n"
-            "var age = 30\n"
-            "var user = { name, age }                  // equivalent to { name: name, age: age }\n"
-            "\n"
-            "// Map literal: `#{}` prefix + `:`\n"
-            "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, i64>\n"
-            "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
-            "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
-            "```\n"
-            "```xray\n"
-            "var p = { name: \"Alice\", age: 30 }\n"
-            "var users = \"Bob\"\n"
-            "var obj = { users }              // shorthand\n"
-            "```\n"
-            "\n"
-            "### Index access\n"
-            "For the new-XIR Array subset, get/index reads return independently owned elements and bounds are strict: 0 <= index < len. E0430 preserves the signed index and observed length. Index reads preserve the receiver selected before index evaluation; writes resolve the current root after argument/RHS evaluation. Set/push return unit, while index assignment returns the converted RHS. Len reads length without allocation or element traversal. See spec \xc2\xa7""17.26 for ownership and qualification limits.\n"
-            "```xray\n"
-            "arr[0]\n"
-            "arr[0] = 10\n"
-            "map[\"key\"]\n"
-            "var bytes: Slice<u8> = text.bytes()\n"
-            "bytes[i]                // explicit byte-view index\n"
-            "```\n"
-            "\n"
-            "### Other collection-like types\n"
-            "- `Array<u8>` is a typed byte buffer backed by contiguous memory\n"
-            "- `Channel<T>` is the coroutine communication container\n"
-            "",
+            "[Language reference](#24-\xe5\xa4\x8d\xe5\x90\x88\xe7\xb1\xbb\xe5\x9e\x8b)\n" "\n" "## Collections\n" "\n" "### Array\n" "The new-XIR source subset in spec \xc2\xa7""17.26 admits typed and homogeneous literals, contextual empty literals, ordinary logical copies, parameters/returns, index reads/writes, get/set/push and global len. Array is a value struct; COW preserves independent copies without explicit copy/move. Its source-derived inventory contains 32 members, but only get/set/push have admitted member operations; the other 29 remain inventory-only. Constructor calls, capacity, slices, pointers, iteration and higher-order methods require separate admission.\n" "```xray\n" "var a: Array<i64> = [1, 2, 3]\n" "var b = a                        // b is a logical copy\n" "b[0] = 9                         // a[0] is still 1\n" "var c: Array<string> = []         // explicit empty array\n" "```\n" "\n" "### Map\n" "```xray\n" "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n"
+            "var m2 = #{\"a\": 1, \"b\": 2}\n" "var empty = #{}                                     // empty Map\n" "\n" "m[\"c\"] = 3                                          // insert / update\n" "var v = m[\"a\"]                                      // lookup; a missing key panics with E0431\n" "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n" "```\n" "```xray\n" "var m = #{\"a\": 1, \"b\": 2}\n" "var empty = #{}                           // empty Map\n" "```\n" "\n" "### Set\n" "```xray\n" "var s: Set<i64> = #[1, 2, 3]\n" "```\n" "```xray\n" "var s = #[1, 2, 3]\n" "var empty = #[]\n" "```\n" "\n" "### Slice (borrowed view)\n" "```xray\n" "fn main() {\n" "    var arr: Array<i64> = [10, 20, 30, 40]\n" "    var view: Slice<i64> = arr[1:3]\n" "    print(view[0])                         // 20; last use of view\n" "    var writable: MutSlice<i64> = arr[1:3]\n" "    writable[1] = 31                       // last use of writable\n"
+            "    print(arr[2])                          // 31\n" "    var owned: Array<i64> = copy(arr[1:3]) // materialize an owned copy\n" "    arr.push(50)                           // no live borrow\n" "    print(len(owned))                      // 2\n" "}\n" "\n" "main()\n" "```\n" "```xray\n" "arr[1:4]                // elements [1, 4)\n" "arr[:3]                 // first 3\n" "arr[2:]                 // from index 2 to the end\n" "arr[:]                  // full-length view (not a copy)\n" "var view: Slice<i64> = arr[1:4]\n" "```\n" "\n" "### Exact structural object / dynamic JSON object\n" "Structural objects have compile-time-known fields and exact shapes. Dynamic JSON objects use `JSON.Object`, a pure alias for `Map<string, JSON.Value>`.\n" "```xray\n" "// Structural-object literal: identifier or static string key + colon ':'\n" "var user = { name: \"Bob\", age: 25 }       // exact object shape\n" "typeName(user)                            // \"object\"\n"
+            "user.name              // type: string; direct ordinal\n" "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n" "\n" "// Field shorthand: when a field name matches a variable name\n" "var name = \"Alice\"\n" "var age = 30\n" "var user = { name, age }                  // equivalent to { name: name, age: age }\n" "\n" "// Map literal: `#{}` prefix + `:`\n" "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, i64>\n" "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n" "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n" "```\n" "```xray\n" "var p = { name: \"Alice\", age: 30 }\n" "var users = \"Bob\"\n" "var obj = { users }              // shorthand\n" "```\n" "\n" "### Index access\n"
+            "For the new-XIR Array subset, get/index reads return independently owned elements and bounds are strict: 0 <= index < len. E0430 preserves the signed index and observed length. Index reads preserve the receiver selected before index evaluation; writes resolve the current root after argument/RHS evaluation. Set/push return unit, while index assignment returns the converted RHS. Len reads length without allocation or element traversal. See spec \xc2\xa7""17.26 for ownership and qualification limits.\n" "```xray\n" "arr[0]\n" "arr[0] = 10\n" "map[\"key\"]\n" "var bytes: Slice<u8> = text.bytes()\n" "bytes[i]                // explicit byte-view index\n" "```\n" "\n" "### Other collection-like types\n" "- `Array<u8>` is a typed byte buffer backed by contiguous memory\n" "- `Channel<T>` is the coroutine communication container\n" "",
     },
     {
         .id = "concurrency_rules",
         .title = "Concurrency Safety Rules",
         .aliases_csv = "shared_rules,sharing,move,safety,concurrent,atomic",
         .body =
-            "[Language reference](#1011-\xe5\xb9\xb6\xe5\x8f\x91\xe5\xae\x89\xe5\x85\xa8\xe6\xa8\xa1\xe5\x9e\x8b)\n"
-            "\n"
-            "## Concurrency Safety Rules\n"
-            "\n"
-            "### Sharing model\n"
-            "The following are settled target contracts; complete go, Task, resource, and synchronization families require separate implementation qualification under spec \xc2\xa7""17.\n"
-            "\n"
-            "- `const` fixes a binding and its value-semantic components, without freezing class objects or proving Sendable\n"
-            "- go arguments and captures must be Sendable, checked over the complete type; COW or atomic reference counts alone are insufficient\n"
-            "- a go closure may not capture any ordinary outer `var`, even for reads; pass copyable, Sendable local values explicitly and retain the caller's logical copy\n"
-            "- const values and copyable non-view READ values may be captured by value when Sendable; qualified synchronization handles retain their synchronized identity\n"
-            "- Array copying does not require `copy(array)` or unique backing; copying stops at class and synchronization identities\n"
-            "- ref and Slice/MutSlice loans cannot enter go; noncopyable Sendable resources transfer only through declared consuming parameters\n"
-            "- shared mutation requires qualified channels or synchronization objects; const, a short scope, or unsafe cannot waive the boundary requirements\n"
-            "\n"
-            "### await all\n"
-            "Waiting uses `await task`, without an `await (move task)` form. The target Task result domain is copyable and Sendable; backing uniqueness does not select result ownership. `await all` uses a homogeneous collection of `Task<T>` values and produces `Array<T>`. Complete waiting, repeated observation, failure, and cancellation behavior must be frozen and qualified with the Task declaration family; this card does not claim that family is implemented.\n"
-            "\n"
-            "### Value arguments\n"
-            "Passing a copyable, Sendable Array as an explicit go argument preserves the caller's logical copy. Noncopyable resources use the callee's consuming declaration; an explicit move marker does not make a non-Sendable value transferable. These target rules do not admit the complete go declaration family.\n"
-            "\n"
-            "### Const snapshots\n"
-            "```xray\n"
-            "const channel = Channel<i64>(16)\n"
-            "const counter = Atomic(0)\n"
-            "\n"
-            "var source = [1, 2, 3]\n"
-            "const snapshot = source\n"
-            "source[0] = 9\n"
-            "var current = snapshot\n"
-            "current.push(4)\n"
-            "print(snapshot[0])          // 1\n"
-            "print(len(snapshot))        // 3\n"
-            "```\n"
-            "\n"
-            "### Channels\n"
-            "```xray\n"
-            "const ch = Channel<i64>(10)\n"
-            "ch.send(42)                             // blocking send\n"
-            "var v = match (ch.recv()) {\n"
-            "    Recv.Value { value } -> value\n"
-            "    Recv.Closed -> -1\n"
-            "    _ -> -1\n"
-            "}\n"
-            "\n"
-            "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n"
-            "match (ch.tryRecv()) {\n"
-            "    Recv.Value { value: next } -> print(next)\n"
-            "    Recv.Empty -> print(\"empty\")\n"
-            "    Recv.Closed -> print(\"closed\")\n"
-            "    Recv.Timeout -> print(\"timeout\")\n"
-            "}\n"
-            "\n"
-            "ch.send(7)\n"
-            "ch.close()\n"
-            "for (msg in ch) {\n"
-            "    print(msg)\n"
-            "}\n"
-            "\n"
-            "var value = ch.recvOr(-1)\n"
-            "```\n"
-            "\n"
-            "### Atomic\n"
-            "`Atomic<T>` wraps `i64`/`f64`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`).\n"
-            "\n"
-            "Frozen next cutover: Ordering uses an owned governed nominal identity, with ordinary visibility/construction/dependency checks. compareExchange prepares a real owned Tuple before any cell access. Each f64 RMW resume attempts at most one cell CAS and continues in the same frame after failure. Complete Atomic execution remains pending implementation and qualification (spec 10.9).\n"
-            "\n"
-            "### Synchronization handles\n"
-            "Name `Channel`, `Atomic`, coroutine-domain `sync.*` handles, and OS-thread-domain `sys.Os*` handles with `const`. Use `sync.*` inside coroutine code; use `sys.Os*` inside `sys.Thread` or other blocking OS-thread contexts.\n"
-            "",
+            "[Language reference](#1011-\xe5\xb9\xb6\xe5\x8f\x91\xe5\xae\x89\xe5\x85\xa8\xe6\xa8\xa1\xe5\x9e\x8b)\n" "\n" "## Concurrency Safety Rules\n" "\n" "### Sharing model\n" "The following are settled target contracts; complete go, Task, resource, and synchronization families require separate implementation qualification under spec \xc2\xa7""17.\n" "\n" "- `const` fixes a binding and its value-semantic components, without freezing class objects or proving Sendable\n" "- go arguments and captures must be Sendable, checked over the complete type; COW or atomic reference counts alone are insufficient\n" "- a go closure may not capture any ordinary outer `var`, even for reads; pass copyable, Sendable local values explicitly and retain the caller's logical copy\n" "- const values and copyable non-view READ values may be captured by value when Sendable; qualified synchronization handles retain their synchronized identity\n"
+            "- Array copying does not require `copy(array)` or unique backing; copying stops at class and synchronization identities\n" "- ref and Slice/MutSlice loans cannot enter go; noncopyable Sendable resources transfer only through declared consuming parameters\n" "- shared mutation requires qualified channels or synchronization objects; const, a short scope, or unsafe cannot waive the boundary requirements\n" "\n" "### await all\n" "Waiting uses `await task`, without an `await (move task)` form. The target Task result domain is copyable and Sendable; backing uniqueness does not select result ownership. `await all` uses a homogeneous collection of `Task<T>` values and produces `Array<T>`. Complete waiting, repeated observation, failure, and cancellation behavior must be frozen and qualified with the Task declaration family; this card does not claim that family is implemented.\n" "\n" "### Value arguments\n"
+            "Passing a copyable, Sendable Array as an explicit go argument preserves the caller's logical copy. Noncopyable resources use the callee's consuming declaration; an explicit move marker does not make a non-Sendable value transferable. These target rules do not admit the complete go declaration family.\n" "\n" "### Const snapshots\n" "```xray\n" "const channel = Channel<i64>(16)\n" "const counter = Atomic(0)\n" "\n" "var source = [1, 2, 3]\n" "const snapshot = source\n" "source[0] = 9\n" "var current = snapshot\n" "current.push(4)\n" "print(snapshot[0])          // 1\n" "print(len(snapshot))        // 3\n" "```\n" "\n" "### Channels\n" "```xray\n" "const ch = Channel<i64>(10)\n" "ch.send(42)                             // blocking send\n" "var v = match (ch.recv()) {\n" "    Recv.Value { value } -> value\n" "    Recv.Closed -> -1\n" "    _ -> -1\n" "}\n" "\n" "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n" "match (ch.tryRecv()) {\n"
+            "    Recv.Value { value: next } -> print(next)\n" "    Recv.Empty -> print(\"empty\")\n" "    Recv.Closed -> print(\"closed\")\n" "    Recv.Timeout -> print(\"timeout\")\n" "}\n" "\n" "ch.send(7)\n" "ch.close()\n" "for (msg in ch) {\n" "    print(msg)\n" "}\n" "\n" "var value = ch.recvOr(-1)\n" "```\n" "\n" "### Atomic\n" "`Atomic<T>` wraps `i64`/`f64`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`).\n" "\n"
+            "Frozen next cutover: Ordering uses an owned governed nominal identity, with ordinary visibility/construction/dependency checks. compareExchange prepares a real owned Tuple before any cell access. Each f64 RMW resume attempts at most one cell CAS and continues in the same frame after failure. Complete Atomic execution remains pending implementation and qualification (spec 10.9).\n" "\n" "### Synchronization handles\n" "Name `Channel`, `Atomic`, coroutine-domain `sync.*` handles, and OS-thread-domain `sys.Os*` handles with `const`. Use `sync.*` inside coroutine code; use `sys.Os*` inside `sys.Thread` or other blocking OS-thread contexts.\n" "",
     },
     {
         .id = "control_flow",
         .title = "Control Flow",
         .aliases_csv = "if,else,while,for,loop,match,switch,try,catch,throw,error_handling",
         .body =
-            "[Language reference](#4-\xe8\xaf\xad\xe5\x8f\xa5-statements)\n"
-            "\n"
-            "## Control Flow\n"
-            "\n"
-            "### if / else\n"
-            "Every control-flow condition must have type `bool`. Nullable presence is written explicitly as `value != null`; integers, strings and objects have no implicit condition conversion.\n"
-            "```xray\n"
-            "if (x > 0) {\n"
-            "    print(\"positive\")\n"
-            "} else if (x == 0) {\n"
-            "    print(\"zero\")\n"
-            "} else {\n"
-            "    print(\"negative\")\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### while\n"
-            "```xray\n"
-            "var i = 0\n"
-            "while (i < 10) {\n"
-            "    print(i)\n"
-            "    i++\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### for / for-in\n"
-            "```xray\n"
-            "for (var i = 0; i < 10; i++) {\n"
-            "    print(i)\n"
-            "}\n"
-            "for (var j = 100; j > 90; j--) {\n"
-            "    print(j)\n"
-            "}\n"
-            "```\n"
-            "```xray\n"
-            "for (item in [1, 2, 3]) { print(item) }\n"
-            "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n"
-            "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
-            "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
-            "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n"
-            "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
-            "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
-            "    print(variant.name)\n"
-            "}\n"
-            "for (_ in 0..n) { count++ }                   // discard with placeholder\n"
-            "```\n"
-            "```xray\n"
-            "// Form A: two bare identifiers (more common)\n"
-            "for (k, v in someMap) { print(\"${k}=${v}\") }     // Map \xe2\x86\x92 (key, value)\n"
-            "for (i, e in someArray) { print(\"${i}: ${e}\") }  // Array \xe2\x86\x92 (index, element)\n"
-            "for (i, c in \"hello\") { print(\"${i}:${c}\") }     // string \xe2\x86\x92 (index, rune)\n"
-            "\n"
-            "// Form B: tuple-parenthesized (pairs well with .entries())\n"
-            "for ((i, e) in someArray.entries()) { print(\"${i}=${e}\") }\n"
-            "for ((i, c) in \"hi\".entries()) { print(\"${i}-${c}\") }\n"
-            "```\n"
-            "\n"
-            "### match\n"
-            "```xray\n"
-            "match (x) { 1 -> print(\"one\"), _ -> print(\"other\") }\n"
-            "\n"
-            "match (action) {\n"
-            "    \"start\" -> {\n"
-            "        log.info(\"starting\")\n"
-            "        start_engine()\n"
-            "    }\n"
-            "    \"stop\" -> stop_engine()\n"
-            "    _ -> log.warn(\"unknown\")\n"
-            "}\n"
-            "```\n"
-            "```xray\n"
-            "var result = match (x) {\n"
-            "    1 -> \"one\",\n"
-            "    2, 3, 4 -> \"few\",                 // multi-value\n"
-            "    10..20 -> \"teen\",                 // range\n"
-            "    n if (n > 100) -> \"big\",          // guard\n"
-            "    Color.Red -> \"red\",               // enum\n"
-            "    is User -> \"a user\",              // type pattern\n"
-            "    _ -> \"default\"                    // wildcard\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### try / catch / throw\n"
-            "```xray\n"
-            "enum AppError { NotFound, Timeout { milliseconds: i64 } }\n"
-            "\n"
-            "// Recoverable errors: enum values flow through the value-return channel,\n"
-            "// caught by catch (e)\n"
-            "try { throw AppError.NotFound } catch (e) {\n"
-            "    match (e) {\n"
-            "        AppError.NotFound -> log.error(\"not found\"),\n"
-            "        AppError.Timeout { milliseconds: ms } -> log.error(\"timeout after ${ms}ms\")\n"
-            "    }\n"
-            "}\n"
-            "\n"
-            "// catch panic (p) is a separate boundary for runtime faults\n"
-            "// (div-by-zero, out-of-bounds, expr!)\n"
-            "try { risky() } catch panic (p) {\n"
-            "    log.error(\"fault:\", p)\n"
-            "}\n"
-            "\n"
-            "throw AppError.NotFound                      // value-return error channel\n"
-            "// There is no finally; use defer for deterministic cleanup (see \xc2\xa7""4.9)\n"
-            "```\n"
-            "\n"
-            "### defer\n"
-            "```xray\n"
-            "fn read_file(path: string) -> string {\n"
-            "    var f = open(path)\n"
-            "    defer { f.close() }              // always runs before the function returns\n"
-            "    return f.readAll()\n"
-            "}\n"
-            "\n"
-            "fn process() {\n"
-            "    defer {\n"
-            "        log.info(\"done\")\n"
-            "        cleanup()\n"
-            "    }\n"
-            "    do_work()\n"
-            "}\n"
-            "\n"
-            "fn late_binding_and_copy() {\n"
-            "    var n = 1\n"
-            "    defer { print(\"late\", n) }        // reads 2 at exit\n"
-            "    const saved = copy(n)\n"
-            "    defer { print(\"saved\", saved) }   // explicit copy remains 1\n"
-            "    n = 2\n"
-            "}                                      // prints saved 1, then late 2\n"
-            "```\n"
-            "\n"
-            "### break / continue / return\n"
-            "```xray\n"
-            "break                  // exit the innermost loop\n"
-            "continue               // proceed to the innermost loop's next iteration\n"
-            "break outer            // exit the loop labeled outer\n"
-            "continue outer         // proceed to the next iteration of the loop labeled outer\n"
-            "\n"
-            "outer: for (i in 0..10) {\n"
-            "    for (j in 0..10) {\n"
-            "        if (j == 3) { continue outer }\n"
-            "        if (i * j > 20) { break outer }\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "```xray\n"
-            "fn done() {\n"
-            "    return                 // implicitly returns () (Unit)\n"
-            "}\n"
-            "\n"
-            "fn answer() -> i64 {\n"
-            "    return 42\n"
-            "}\n"
-            "\n"
-            "fn pair(a: i64, b: i64) -> (i64, i64) {\n"
-            "    return (a, b)          // multi-value return must wrap a tuple in parens\n"
-            "}\n"
-            "```\n"
-            "",
+            "[Language reference](#4-\xe8\xaf\xad\xe5\x8f\xa5-statements)\n" "\n" "## Control Flow\n" "\n" "### if / else\n" "Every control-flow condition must have type `bool`. Nullable presence is written explicitly as `value != null`; integers, strings and objects have no implicit condition conversion.\n" "```xray\n" "if (x > 0) {\n" "    print(\"positive\")\n" "} else if (x == 0) {\n" "    print(\"zero\")\n" "} else {\n" "    print(\"negative\")\n" "}\n" "```\n" "\n" "### while\n" "```xray\n" "var i = 0\n" "while (i < 10) {\n" "    print(i)\n" "    i++\n" "}\n" "```\n" "\n" "### for / for-in\n" "```xray\n" "for (var i = 0; i < 10; i++) {\n" "    print(i)\n" "}\n" "for (var j = 100; j > 90; j--) {\n" "    print(j)\n" "}\n" "```\n" "```xray\n" "for (item in [1, 2, 3]) { print(item) }\n" "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n" "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
+            "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n" "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n" "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n" "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n" "    print(variant.name)\n" "}\n" "for (_ in 0..n) { count++ }                   // discard with placeholder\n" "```\n" "```xray\n" "// Form A: two bare identifiers (more common)\n" "for (k, v in someMap) { print(\"${k}=${v}\") }     // Map \xe2\x86\x92 (key, value)\n" "for (i, e in someArray) { print(\"${i}: ${e}\") }  // Array \xe2\x86\x92 (index, element)\n" "for (i, c in \"hello\") { print(\"${i}:${c}\") }     // string \xe2\x86\x92 (index, rune)\n" "\n" "// Form B: tuple-parenthesized (pairs well with .entries())\n" "for ((i, e) in someArray.entries()) { print(\"${i}=${e}\") }\n"
+            "for ((i, c) in \"hi\".entries()) { print(\"${i}-${c}\") }\n" "```\n" "\n" "### match\n" "```xray\n" "match (x) { 1 -> print(\"one\"), _ -> print(\"other\") }\n" "\n" "match (action) {\n" "    \"start\" -> {\n" "        log.info(\"starting\")\n" "        start_engine()\n" "    }\n" "    \"stop\" -> stop_engine()\n" "    _ -> log.warn(\"unknown\")\n" "}\n" "```\n" "```xray\n" "var result = match (x) {\n" "    1 -> \"one\",\n" "    2, 3, 4 -> \"few\",                 // multi-value\n" "    10..20 -> \"teen\",                 // range\n" "    n if (n > 100) -> \"big\",          // guard\n" "    Color.Red -> \"red\",               // enum\n" "    is User -> \"a user\",              // type pattern\n" "    _ -> \"default\"                    // wildcard\n" "}\n" "```\n" "\n" "### try / catch / throw\n" "```xray\n" "enum AppError { NotFound, Timeout { milliseconds: i64 } }\n" "\n" "// Recoverable errors: enum values flow through the value-return channel,\n" "// caught by catch (e)\n"
+            "try { throw AppError.NotFound } catch (e) {\n" "    match (e) {\n" "        AppError.NotFound -> log.error(\"not found\"),\n" "        AppError.Timeout { milliseconds: ms } -> log.error(\"timeout after ${ms}ms\")\n" "    }\n" "}\n" "\n" "// catch panic (p) is a separate boundary for runtime faults\n" "// (div-by-zero, out-of-bounds, expr!)\n" "try { risky() } catch panic (p) {\n" "    log.error(\"fault:\", p)\n" "}\n" "\n" "throw AppError.NotFound                      // value-return error channel\n" "// There is no finally; use defer for deterministic cleanup (see \xc2\xa7""4.9)\n" "```\n" "\n" "### defer\n" "```xray\n" "fn read_file(path: string) -> string {\n" "    var f = open(path)\n" "    defer { f.close() }              // always runs before the function returns\n" "    return f.readAll()\n" "}\n" "\n" "fn process() {\n" "    defer {\n" "        log.info(\"done\")\n" "        cleanup()\n" "    }\n" "    do_work()\n" "}\n" "\n" "fn late_binding_and_copy() {\n" "    var n = 1\n"
+            "    defer { print(\"late\", n) }        // reads 2 at exit\n" "    const saved = copy(n)\n" "    defer { print(\"saved\", saved) }   // explicit copy remains 1\n" "    n = 2\n" "}                                      // prints saved 1, then late 2\n" "```\n" "\n" "### break / continue / return\n" "```xray\n" "break                  // exit the innermost loop\n" "continue               // proceed to the innermost loop's next iteration\n" "break outer            // exit the loop labeled outer\n" "continue outer         // proceed to the next iteration of the loop labeled outer\n" "\n" "outer: for (i in 0..10) {\n" "    for (j in 0..10) {\n" "        if (j == 3) { continue outer }\n" "        if (i * j > 20) { break outer }\n" "    }\n" "}\n" "```\n" "```xray\n" "fn done() {\n" "    return                 // implicitly returns () (Unit)\n" "}\n" "\n" "fn answer() -> i64 {\n" "    return 42\n" "}\n" "\n" "fn pair(a: i64, b: i64) -> (i64, i64) {\n"
+            "    return (a, b)          // multi-value return must wrap a tuple in parens\n" "}\n" "```\n" "",
     },
     {
         .id = "coroutine",
         .title = "Coroutines & Concurrency",
         .aliases_csv = "go,goroutine,goroutines,await,task,async,concurrency,scope,select,defer",
         .body =
-            "[Language reference](#10-\xe5\xb9\xb6\xe5\x8f\x91\xe4\xb8\x8e\xe5\x8d\x8f\xe7\xa8\x8b-concurrency)\n"
-            "\n"
-            "## Coroutines & Concurrency\n"
-            "\n"
-            "### go \xe2\x80\x94 spawn a coroutine\n"
-            "```xray\n"
-            "// Form 1: call an existing function\n"
-            "var t1 = go worker(0, channel)\n"
-            "\n"
-            "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-            "var t2 = go fn(d: JSON.Object) -> i64 {\n"
-            "    return d.value * 2\n"
-            "}(payload)\n"
-            "\n"
-            "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
-            "var t3 = go fn() -> i64 {\n"
-            "    return compute()\n"
-            "}()\n"
-            "\n"
-            "// Optional debugging name\n"
-            "var named = go(name: \"worker-1\") worker(1, channel)\n"
-            "```\n"
-            "\n"
-            "### await\n"
-            "```xray\n"
-            "// single task\n"
-            "var task = go fetch(\"https://example.com\")\n"
-            "var result = await task                    // yields the current coroutine until task completes\n"
-            "\n"
-            "// await all: wait for all, returns the result array (in input order)\n"
-            "var t1 = go compute(2)\n"
-            "var t2 = go compute(3)\n"
-            "var t3 = go compute(4)\n"
-            "var results: Array<i64> = await all [t1, t2, t3]\n"
-            "// also works on a variable directly, no brackets needed\n"
-            "var tasks = [t1, t2, t3]\n"
-            "var results2: Array<i64> = await all tasks\n"
-            "\n"
-            "// await any: wait for the first to complete, return its result; the others keep running\n"
-            "var first = await any [t1, t2, t3]\n"
-            "\n"
-            "// await anySuccess: skip failing tasks; wait for the first successful one\n"
-            "var firstOk = await anySuccess [t1, t2, t3]\n"
-            "```\n"
-            "\n"
-            "### Common constraints\n"
-            "`go` accepts only a call expression; inline logic uses an immediately invoked lambda. Under the settled target ownership contract, arguments and captures must be Sendable. A go lambda may capture const values, copyable non-view READ values, and qualified synchronization handles, but never an ordinary outer `var`, even for reads. Pass copyable, Sendable local data explicitly by value; Array arguments preserve logical copies without a required copy/move marker. Noncopyable resources transfer through declared consuming parameters. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting uses `await task`; Task results must be copyable and Sendable, and `await all` is homogeneous. Complete go/Task behavior, including repeated observation and cancellation, remains subject to declaration-family qualification under spec \xc2\xa7""17; these rules are not a claim of completed new-XIR concurrency support.\n"
-            "\n"
-            "### Task handle\n"
-            "```xray\n"
-            "var t = go fetch(url)\n"
-            "if (!t.done) { /* still running */ }\n"
-            "var r = await t\n"
-            "\n"
-            "match (t.poll()) {\n"
-            "    TaskResult.Pending -> print(\"running\")\n"
-            "    TaskResult.Success { value } -> print(value)\n"
-            "    TaskResult.Failed { error: err } -> print(err)\n"
-            "    TaskResult.Cancelled -> print(\"cancelled\")\n"
-            "    TaskResult.Timeout -> print(\"timeout\")\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### scope \xe2\x80\x94 structured concurrency\n"
-            "```xray\n"
-            "// lexical scope use\n"
-            "var x = 1\n"
-            "scope {\n"
-            "    var x = 10            // shadow the outer x; in effect inside the block\n"
-            "    print(x)              // 10\n"
-            "}\n"
-            "print(x)                  // 1\n"
-            "\n"
-            "// structured concurrency use (with go)\n"
-            "scope {\n"
-            "    go worker_a()\n"
-            "    go worker_b()\n"
-            "    // before the block exits, both a/b are awaited; an exception in either does not affect siblings\n"
-            "}\n"
-            "```\n"
-            "```xray\n"
-            "// linked scope: failure propagation\n"
-            "try {\n"
-            "    linked scope {\n"
-            "        go ok_worker()\n"
-            "        go failing_worker()         // throws\n"
-            "    }\n"
-            "} catch (e) {\n"
-            "    print(\"caught:\", e)              // hits this branch\n"
-            "}\n"
-            "\n"
-            "// scope: keep task handles and inspect each outcome after the block\n"
-            "var first: Task<i64>?\n"
-            "var second: Task<i64>?\n"
-            "var third: Task<i64>?\n"
-            "scope {\n"
-            "    first = go failing(\"error1\")\n"
-            "    second = go failing(\"error2\")\n"
-            "    third = go ok()\n"
-            "}\n"
-            "var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]\n"
-            "print(len(outcomes))                 // 3 (one outcome per child)\n"
-            "```\n"
-            "\n"
-            "### select \xe2\x80\x94 multiplex channels\n"
-            "```xray\n"
-            "const ch1 = Channel<i64>(2)\n"
-            "const ch2 = Channel<i64>(2)\n"
-            "\n"
-            "select {\n"
-            "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n"
-            "    msg from ch2 -> { print(\"got from ch2:\", msg) }      // receive arm\n"
-            "    100  to   ch1 -> { print(\"sent 100 to ch1\") }        // send arm\n"
-            "    _ -> { print(\"no channel ready\") }                   // default arm (non-blocking)\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Coro.yield() vs yield expr \xe2\x80\x94 two different suspensions\n"
-            "They share a word root and are never interchangeable. `Coro.yield()` is a **scheduler** suspension: the coroutine parks, may resume on another OS thread, is a cancellation point, and the effect propagates to callers along call edges. `yield expr` is a **generator** suspension: a symmetric transfer back to the iterator driving the generator, with no scheduler involvement, no thread migration, no cancellation point, and no propagation to the caller. In `xray verify` terms, a generator passes `no_reschedule` but not `no_suspend`, while a function that merely drives a generator passes both.\n"
-            "\n"
-            "Two rules the compiler enforces on generator bodies:\n"
-            "\n"
-            "- **A generator body must not reach the scheduler** (`E0385`): no `await`, `select`, `scope`, `Coro.yield()`, blocking channel method, `time.sleep()`, or call to a function that may suspend. This is an effect rule, so it also catches an indirect call to a function that awaits internally, and it fails closed on a call through a function-typed parameter. Generators are pull-driven iterators, not async streams.\n"
-            "- **A generator body must not use `defer`** (`E0386`): a generator abandoned before it is exhausted (a `break` out of `for-in`) is never resumed, so the deferred action would silently not run. Let the caller own the resource and pass it in.\n"
-            "```xray\n"
-            "for (i in 0..1000) {\n"
-            "    do_chunk(i)\n"
-            "    Coro.yield()                // explicit safepoint, lets other coroutines run\n"
-            "}\n"
-            "```\n"
-            "```xray\n"
-            "yield expr                  // produce one generator value and suspend\n"
-            "```\n"
-            "\n"
-            "### defer \xe2\x80\x94 LIFO cleanup\n"
-            "```xray\n"
-            "fn read_file(path: string) -> string {\n"
-            "    var f = open(path)\n"
-            "    defer { f.close() }              // always runs before the function returns\n"
-            "    return f.readAll()\n"
-            "}\n"
-            "\n"
-            "fn process() {\n"
-            "    defer {\n"
-            "        log.info(\"done\")\n"
-            "        cleanup()\n"
-            "    }\n"
-            "    do_work()\n"
-            "}\n"
-            "\n"
-            "fn late_binding_and_copy() {\n"
-            "    var n = 1\n"
-            "    defer { print(\"late\", n) }        // reads 2 at exit\n"
-            "    const saved = copy(n)\n"
-            "    defer { print(\"saved\", saved) }   // explicit copy remains 1\n"
-            "    n = 2\n"
-            "}                                      // prints saved 1, then late 2\n"
-            "```\n"
-            "",
+            "[Language reference](#10-\xe5\xb9\xb6\xe5\x8f\x91\xe4\xb8\x8e\xe5\x8d\x8f\xe7\xa8\x8b-concurrency)\n" "\n" "## Coroutines & Concurrency\n" "\n" "### go \xe2\x80\x94 spawn a coroutine\n" "```xray\n" "// Form 1: call an existing function\n" "var t1 = go worker(0, channel)\n" "\n" "// Inline logic: a lambda must still form a complete call with explicit arguments\n" "var t2 = go fn(d: JSON.Object) -> i64 {\n" "    return d.value * 2\n" "}(payload)\n" "\n" "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n" "var t3 = go fn() -> i64 {\n" "    return compute()\n" "}()\n" "\n" "// Optional debugging name\n" "var named = go(name: \"worker-1\") worker(1, channel)\n" "```\n" "\n" "### await\n" "```xray\n" "// single task\n" "var task = go fetch(\"https://example.com\")\n" "var result = await task                    // yields the current coroutine until task completes\n" "\n" "// await all: wait for all, returns the result array (in input order)\n"
+            "var t1 = go compute(2)\n" "var t2 = go compute(3)\n" "var t3 = go compute(4)\n" "var results: Array<i64> = await all [t1, t2, t3]\n" "// also works on a variable directly, no brackets needed\n" "var tasks = [t1, t2, t3]\n" "var results2: Array<i64> = await all tasks\n" "\n" "// await any: wait for the first to complete, return its result; the others keep running\n" "var first = await any [t1, t2, t3]\n" "\n" "// await anySuccess: skip failing tasks; wait for the first successful one\n" "var firstOk = await anySuccess [t1, t2, t3]\n" "```\n" "\n" "### Common constraints\n"
+            "`go` accepts only a call expression; inline logic uses an immediately invoked lambda. Under the settled target ownership contract, arguments and captures must be Sendable. A go lambda may capture const values, copyable non-view READ values, and qualified synchronization handles, but never an ordinary outer `var`, even for reads. Pass copyable, Sendable local data explicitly by value; Array arguments preserve logical copies without a required copy/move marker. Noncopyable resources transfer through declared consuming parameters. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting uses `await task`; Task results must be copyable and Sendable, and `await all` is homogeneous. Complete go/Task behavior, including repeated observation and cancellation, remains subject to declaration-family qualification under spec \xc2\xa7""17; these rules are not a claim of completed new-XIR concurrency support.\n" "\n" "### Task handle\n" "```xray\n" "var t = go fetch(url)\n"
+            "if (!t.done) { /* still running */ }\n" "var r = await t\n" "\n" "match (t.poll()) {\n" "    TaskResult.Pending -> print(\"running\")\n" "    TaskResult.Success { value } -> print(value)\n" "    TaskResult.Failed { error: err } -> print(err)\n" "    TaskResult.Cancelled -> print(\"cancelled\")\n" "    TaskResult.Timeout -> print(\"timeout\")\n" "}\n" "```\n" "\n" "### scope \xe2\x80\x94 structured concurrency\n" "```xray\n" "// lexical scope use\n" "var x = 1\n" "scope {\n" "    var x = 10            // shadow the outer x; in effect inside the block\n" "    print(x)              // 10\n" "}\n" "print(x)                  // 1\n" "\n" "// structured concurrency use (with go)\n" "scope {\n" "    go worker_a()\n" "    go worker_b()\n" "    // before the block exits, both a/b are awaited; an exception in either does not affect siblings\n" "}\n" "```\n" "```xray\n" "// linked scope: failure propagation\n" "try {\n" "    linked scope {\n" "        go ok_worker()\n"
+            "        go failing_worker()         // throws\n" "    }\n" "} catch (e) {\n" "    print(\"caught:\", e)              // hits this branch\n" "}\n" "\n" "// scope: keep task handles and inspect each outcome after the block\n" "var first: Task<i64>?\n" "var second: Task<i64>?\n" "var third: Task<i64>?\n" "scope {\n" "    first = go failing(\"error1\")\n" "    second = go failing(\"error2\")\n" "    third = go ok()\n" "}\n" "var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]\n" "print(len(outcomes))                 // 3 (one outcome per child)\n" "```\n" "\n" "### select \xe2\x80\x94 multiplex channels\n" "```xray\n" "const ch1 = Channel<i64>(2)\n" "const ch2 = Channel<i64>(2)\n" "\n" "select {\n" "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n" "    msg from ch2 -> { print(\"got from ch2:\", msg) }      // receive arm\n" "    100  to   ch1 -> { print(\"sent 100 to ch1\") }        // send arm\n"
+            "    _ -> { print(\"no channel ready\") }                   // default arm (non-blocking)\n" "}\n" "```\n" "\n" "### Coro.yield() vs yield expr \xe2\x80\x94 two different suspensions\n" "They share a word root and are never interchangeable. `Coro.yield()` is a **scheduler** suspension: the coroutine parks, may resume on another OS thread, is a cancellation point, and the effect propagates to callers along call edges. `yield expr` is a **generator** suspension: a symmetric transfer back to the iterator driving the generator, with no scheduler involvement, no thread migration, no cancellation point, and no propagation to the caller. In `xray verify` terms, a generator passes `no_reschedule` but not `no_suspend`, while a function that merely drives a generator passes both.\n" "\n" "Two rules the compiler enforces on generator bodies:\n" "\n"
+            "- **A generator body must not reach the scheduler** (`E0385`): no `await`, `select`, `scope`, `Coro.yield()`, blocking channel method, `time.sleep()`, or call to a function that may suspend. This is an effect rule, so it also catches an indirect call to a function that awaits internally, and it fails closed on a call through a function-typed parameter. Generators are pull-driven iterators, not async streams.\n" "- **A generator body must not use `defer`** (`E0386`): a generator abandoned before it is exhausted (a `break` out of `for-in`) is never resumed, so the deferred action would silently not run. Let the caller own the resource and pass it in.\n" "```xray\n" "for (i in 0..1000) {\n" "    do_chunk(i)\n" "    Coro.yield()                // explicit safepoint, lets other coroutines run\n" "}\n" "```\n" "```xray\n" "yield expr                  // produce one generator value and suspend\n" "```\n" "\n" "### defer \xe2\x80\x94 LIFO cleanup\n" "```xray\n" "fn read_file(path: string) -> string {\n"
+            "    var f = open(path)\n" "    defer { f.close() }              // always runs before the function returns\n" "    return f.readAll()\n" "}\n" "\n" "fn process() {\n" "    defer {\n" "        log.info(\"done\")\n" "        cleanup()\n" "    }\n" "    do_work()\n" "}\n" "\n" "fn late_binding_and_copy() {\n" "    var n = 1\n" "    defer { print(\"late\", n) }        // reads 2 at exit\n" "    const saved = copy(n)\n" "    defer { print(\"saved\", saved) }   // explicit copy remains 1\n" "    n = 2\n" "}                                      // prints saved 1, then late 2\n" "```\n" "",
     },
     {
         .id = "enum",
         .title = "Enum",
         .aliases_csv = "enums,enumeration,adt,payload,variant,variants,EnumVariants,EnumVariant,EnumPayloads,EnumPayloadField,iteration,declaration order,TypeId,Option,Some,None",
         .body =
-            "[Language reference](#56-enum-\xe5\xa3\xb0\xe6\x98\x8e)\n"
-            "\n"
-            "## Enum\n"
-            "\n"
-            "### Simple enum\n"
-            "```xray\n"
-            "enum Color { Red, Green, Blue }\n"
-            "\n"
-            "Color.Red.ordinal     // 0\n"
-            "Color.Blue.ordinal    // 2\n"
-            "Color.Red.name        // \"Red\"\n"
-            "Color.Red.toString()  // \"Color.Red\"\n"
-            "\n"
-            "enum HttpStatus {\n"
-            "    OK,\n"
-            "    NotFound,\n"
-            "    InternalError\n"
-            "\n"
-            "    code() -> i64 {\n"
-            "        return match (this) {\n"
-            "            HttpStatus.OK -> 200,\n"
-            "            HttpStatus.NotFound -> 404,\n"
-            "            HttpStatus.InternalError -> 500\n"
-            "        }\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Properties\n"
-            "```xray\n"
-            "Color.Red.name        // \"Red\"          variant name (string)\n"
-            "Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)\n"
-            "Color.Red.toString()  // \"Color.Red\"    \"<EnumName>.<VariantName>\" format\n"
-            "```\n"
-            "\n"
-            "### Iteration\n"
-            "```xray\n"
-            "for (color in Color) {\n"
-            "    print(color.name)                     // color: Color; Red, Green, Blue\n"
-            "}\n"
-            "\n"
-            "for (variant in NetEvent.variants) {\n"
-            "    print(variant.ordinal)                // variant: EnumVariant<NetEvent>\n"
-            "    print(variant.name)\n"
-            "    for (field in variant.payloads) {\n"
-            "        print(field.name)                 // field: EnumPayloadField<NetEvent>\n"
-            "        print(field.type)                 // i64: canonical TypeId for the concrete field type\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Pattern matching\n"
-            "```xray\n"
-            "match (event) {\n"
-            "    NetEvent.Connected                         -> print(\"connected\"),\n"
-            "    NetEvent.Disconnected { reason }           -> print(\"by:\", reason),\n"
-            "    NetEvent.DataReceived { bytes }            -> process(bytes),\n"
-            "    NetEvent.Error { code, message: msg }      -> log.error(code, msg),\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### ADT-style payload enum\n"
-            "```xray\n"
-            "enum Option<T> {\n"
-            "    Some { value: T },\n"
-            "    None,\n"
-            "}\n"
-            "\n"
-            "enum NetEvent {\n"
-            "    Connected,\n"
-            "    Disconnected { reason: string },\n"
-            "    DataReceived { bytes: Array<u8> },\n"
-            "    Error { code: i64, message: string },\n"
-            "}\n"
-            "\n"
-            "// A recursive enum payload must be indirected through a class node\n"
-            "class ExprNode {\n"
-            "    expr: Expr\n"
-            "    init(expr: Expr) { this.expr = expr }\n"
-            "    get() -> Expr { return this.expr }\n"
-            "}\n"
-            "\n"
-            "enum Expr {\n"
-            "    Number { value: i64 },\n"
-            "    Binary { op: string, left: ExprNode, right: ExprNode },\n"
-            "    Call { name: string, args: Array<Expr> },\n"
-            "}\n"
-            "```\n"
-            "",
+            "[Language reference](#56-enum-\xe5\xa3\xb0\xe6\x98\x8e)\n" "\n" "## Enum\n" "\n" "### Simple enum\n" "```xray\n" "enum Color { Red, Green, Blue }\n" "\n" "Color.Red.ordinal     // 0\n" "Color.Blue.ordinal    // 2\n" "Color.Red.name        // \"Red\"\n" "Color.Red.toString()  // \"Color.Red\"\n" "\n" "enum HttpStatus {\n" "    OK,\n" "    NotFound,\n" "    InternalError\n" "\n" "    code() -> i64 {\n" "        return match (this) {\n" "            HttpStatus.OK -> 200,\n" "            HttpStatus.NotFound -> 404,\n" "            HttpStatus.InternalError -> 500\n" "        }\n" "    }\n" "}\n" "```\n" "\n" "### Properties\n" "```xray\n" "Color.Red.name        // \"Red\"          variant name (string)\n" "Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)\n" "Color.Red.toString()  // \"Color.Red\"    \"<EnumName>.<VariantName>\" format\n" "```\n" "\n" "### Iteration\n" "```xray\n" "for (color in Color) {\n"
+            "    print(color.name)                     // color: Color; Red, Green, Blue\n" "}\n" "\n" "for (variant in NetEvent.variants) {\n" "    print(variant.ordinal)                // variant: EnumVariant<NetEvent>\n" "    print(variant.name)\n" "    for (field in variant.payloads) {\n" "        print(field.name)                 // field: EnumPayloadField<NetEvent>\n" "        print(field.type)                 // i64: canonical TypeId for the concrete field type\n" "    }\n" "}\n" "```\n" "\n" "### Pattern matching\n" "```xray\n" "match (event) {\n" "    NetEvent.Connected                         -> print(\"connected\"),\n" "    NetEvent.Disconnected { reason }           -> print(\"by:\", reason),\n" "    NetEvent.DataReceived { bytes }            -> process(bytes),\n" "    NetEvent.Error { code, message: msg }      -> log.error(code, msg),\n" "}\n" "```\n" "\n" "### ADT-style payload enum\n" "```xray\n" "enum Option<T> {\n" "    Some { value: T },\n" "    None,\n" "}\n" "\n" "enum NetEvent {\n"
+            "    Connected,\n" "    Disconnected { reason: string },\n" "    DataReceived { bytes: Array<u8> },\n" "    Error { code: i64, message: string },\n" "}\n" "\n" "// A recursive enum payload must be indirected through a class node\n" "class ExprNode {\n" "    expr: Expr\n" "    init(expr: Expr) { this.expr = expr }\n" "    get() -> Expr { return this.expr }\n" "}\n" "\n" "enum Expr {\n" "    Number { value: i64 },\n" "    Binary { op: string, left: ExprNode, right: ExprNode },\n" "    Call { name: string, args: Array<Expr> },\n" "}\n" "```\n" "",
     },
     {
         .id = "functions",
         .title = "Functions",
         .aliases_csv = "fn,function,arrow,closure,lambda,params,effect inference,verify contract",
         .body =
-            "[Language reference](#52-fn-\xe5\x87\xbd\xe6\x95\xb0\xe5\xa3\xb0\xe6\x98\x8e)\n"
-            "\n"
-            "## Functions\n"
-            "\n"
-            "### Named functions\n"
-            "```xray\n"
-            "fn add(a: i64, b: i64) -> i64 {\n"
-            "    return a + b\n"
-            "}\n"
-            "\n"
-            "fn greet(name: string) -> () {         // explicit Unit\n"
-            "    print(\"Hi ${name}\")\n"
-            "}\n"
-            "\n"
-            "fn echo(x: i64) {                       // omitted return type = ()\n"
-            "    print(x)\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Default parameters\n"
-            "```xray\n"
-            "fn connect(host: string, port: i64 = 8080, tls: bool = false) {\n"
-            "    print(host, port, tls)\n"
-            "}\n"
-            "\n"
-            "connect(\"localhost\")              // port=8080, tls=false\n"
-            "connect(\"localhost\", 443)         // tls=false\n"
-            "connect(\"localhost\", 443, true)\n"
-            "```\n"
-            "\n"
-            "### Multiple return values\n"
-            "```xray\n"
-            "fn divmod(a: i64, b: i64) -> (i64, i64) {\n"
-            "    return (a / b, a % b)\n"
-            "}\n"
-            "\n"
-            "var (q, r) = divmod(17, 5)\n"
-            "var result = divmod(10, 3)        // result has type (i64, i64)\n"
-            "```\n"
-            "\n"
-            "### Parameter modes\n"
-            "- `name: T` is the default READ contract: the parameter cannot be rebound or directly mutate its value-semantic components, but copyable, storable values may be saved or returned as logical copies\n"
-            "- Copying stops at class and synchronized identity boundaries; a READ class parameter does not freeze the referenced object\n"
-            "- `name: ref T` is an exclusive writable place loan; calls must write `ref place`\n"
-            "- `name: move T` consumes a noncopyable resource according to the declaration; `move value` may explicitly mark that transfer. Copyable types, including Array, cannot declare move parameters or receivers\n"
-            "- Ordinary Array copying does not require `copy(array)` or unique backing. Type-position `const T`, the public `copy(array)` spelling, and standalone move expressions for copyable values remain outside the frozen subset\n"
-            "- Ordinary outputs use returns, tuples, or structs; business errors use typed throw/catch, without a global Result type\n"
-            "\n"
-            "The new-XIR Array subset in spec \xc2\xa7""17.26 admits ordinary READ parameters, logical copies and returned values; a copied local var may mutate independently. Source ref parameters, move, and complete resource/view families still require separate admission.\n"
-            "```xray\n"
-            "fn length_sq(v: Vec2) -> f64 {\n"
-            "    return v.x * v.x + v.y * v.y\n"
-            "}\n"
-            "\n"
-            "fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {\n"
-            "    v.x += dx\n"
-            "    v.y += dy\n"
-            "}\n"
-            "\n"
-            "fn appended(xs: Array<string>, value: string) -> Array<string> {\n"
-            "    var result = xs\n"
-            "    result.push(value)\n"
-            "    return result\n"
-            "}\n"
-            "\n"
-            "translate(ref point, 1.0, 2.0)\n"
-            "```\n"
-            "\n"
-            "### Rest parameters\n"
-            "```xray\n"
-            "fn sum(...nums: i64) -> i64 {\n"
-            "    var total = 0\n"
-            "    for (n in nums) { total += n }\n"
-            "    return total\n"
-            "}\n"
-            "\n"
-            "sum(1, 2, 3)        // total = 6\n"
-            "```\n"
-            "\n"
-            "### Lambda forms\n"
-            "```xray\n"
-            "// \xe2\x94\x80\xe2\x94\x80 Arrow lambda: each parameter may be annotated or inferred independently \xe2\x94\x80\xe2\x94\x80\n"
-            "arr.map(x -> x * 2)\n"
-            "var add = (x: i64, y) -> x + y\n"
-            "\n"
-            "// Expression bodies return implicitly; ref only grants a writable loan\n"
-            "var calculate = (x: ref i64) -> x * 2\n"
-            "var doubleInPlace = (x: ref i64) -> { x = x * 2 }\n"
-            "\n"
-            "// \xe2\x94\x80\xe2\x94\x80 fn lambda: explicit return type, generics, or a full parameter contract \xe2\x94\x80\xe2\x94\x80\n"
-            "var inc = fn(x: i64) -> i64 {\n"
-            "    var y = x + 1\n"
-            "    return y\n"
-            "}\n"
-            "var identity = fn<T>(x: T) -> T { return x }     // generic\n"
-            "```\n"
-            "\n"
-            "### Inferred effects and external verification\n"
-            "- allocation, throw, suspend, blocking, panic, IO, foreign, and synchronization effects are always inferred\n"
-            "- source annotations cannot promise effects or unlock optimizations\n"
-            "- release and performance guarantees belong in versioned `xray verify --contract FILE` assets, which fail closed and report a witness\n"
-            "\n"
-            "### Higher-order functions\n"
-            "- Function types use `(T1, T2) -> R` in type position\n"
-            "- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n"
-            "- Higher-order effects are inferred as expressions over callback effects; dynamic targets remain fail-closed when a strong external contract is requested\n"
-            "- Closure capture rules are described in the scoping and concurrency sections\n"
-            "\n"
-            "These language facilities do not admit Array.map/filter/reduce in the new-XIR subset. Array function elements retain the existing live execution-gate requirements; their presence does not qualify higher-order member methods (spec \xc2\xa7""17.26).\n"
-            "",
+            "[Language reference](#52-fn-\xe5\x87\xbd\xe6\x95\xb0\xe5\xa3\xb0\xe6\x98\x8e)\n" "\n" "## Functions\n" "\n" "### Named functions\n" "```xray\n" "fn add(a: i64, b: i64) -> i64 {\n" "    return a + b\n" "}\n" "\n" "fn greet(name: string) -> () {         // explicit Unit\n" "    print(\"Hi ${name}\")\n" "}\n" "\n" "fn echo(x: i64) {                       // omitted return type = ()\n" "    print(x)\n" "}\n" "```\n" "\n" "### Default parameters\n" "```xray\n" "fn connect(host: string, port: i64 = 8080, tls: bool = false) {\n" "    print(host, port, tls)\n" "}\n" "\n" "connect(\"localhost\")              // port=8080, tls=false\n" "connect(\"localhost\", 443)         // tls=false\n" "connect(\"localhost\", 443, true)\n" "```\n" "\n" "### Multiple return values\n" "```xray\n" "fn divmod(a: i64, b: i64) -> (i64, i64) {\n" "    return (a / b, a % b)\n" "}\n" "\n" "var (q, r) = divmod(17, 5)\n" "var result = divmod(10, 3)        // result has type (i64, i64)\n" "```\n" "\n" "### Parameter modes\n"
+            "- `name: T` is the default READ contract: the parameter cannot be rebound or directly mutate its value-semantic components, but copyable, storable values may be saved or returned as logical copies\n" "- Copying stops at class and synchronized identity boundaries; a READ class parameter does not freeze the referenced object\n" "- `name: ref T` is an exclusive writable place loan; calls must write `ref place`\n" "- `name: move T` consumes a noncopyable resource according to the declaration; `move value` may explicitly mark that transfer. Copyable types, including Array, cannot declare move parameters or receivers\n" "- Ordinary Array copying does not require `copy(array)` or unique backing. Type-position `const T`, the public `copy(array)` spelling, and standalone move expressions for copyable values remain outside the frozen subset\n" "- Ordinary outputs use returns, tuples, or structs; business errors use typed throw/catch, without a global Result type\n" "\n"
+            "The new-XIR Array subset in spec \xc2\xa7""17.26 admits ordinary READ parameters, logical copies and returned values; a copied local var may mutate independently. Source ref parameters, move, and complete resource/view families still require separate admission.\n" "```xray\n" "fn length_sq(v: Vec2) -> f64 {\n" "    return v.x * v.x + v.y * v.y\n" "}\n" "\n" "fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {\n" "    v.x += dx\n" "    v.y += dy\n" "}\n" "\n" "fn appended(xs: Array<string>, value: string) -> Array<string> {\n" "    var result = xs\n" "    result.push(value)\n" "    return result\n" "}\n" "\n" "translate(ref point, 1.0, 2.0)\n" "```\n" "\n" "### Rest parameters\n" "```xray\n" "fn sum(...nums: i64) -> i64 {\n" "    var total = 0\n" "    for (n in nums) { total += n }\n" "    return total\n" "}\n" "\n" "sum(1, 2, 3)        // total = 6\n" "```\n" "\n" "### Lambda forms\n" "```xray\n"
+            "// \xe2\x94\x80\xe2\x94\x80 Arrow lambda: each parameter may be annotated or inferred independently \xe2\x94\x80\xe2\x94\x80\n" "arr.map(x -> x * 2)\n" "var add = (x: i64, y) -> x + y\n" "\n" "// Expression bodies return implicitly; ref only grants a writable loan\n" "var calculate = (x: ref i64) -> x * 2\n" "var doubleInPlace = (x: ref i64) -> { x = x * 2 }\n" "\n" "// \xe2\x94\x80\xe2\x94\x80 fn lambda: explicit return type, generics, or a full parameter contract \xe2\x94\x80\xe2\x94\x80\n" "var inc = fn(x: i64) -> i64 {\n" "    var y = x + 1\n" "    return y\n" "}\n" "var identity = fn<T>(x: T) -> T { return x }     // generic\n" "```\n" "\n" "### Inferred effects and external verification\n" "- allocation, throw, suspend, blocking, panic, IO, foreign, and synchronization effects are always inferred\n" "- source annotations cannot promise effects or unlock optimizations\n"
+            "- release and performance guarantees belong in versioned `xray verify --contract FILE` assets, which fail closed and report a witness\n" "\n" "### Higher-order functions\n" "- Function types use `(T1, T2) -> R` in type position\n" "- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n" "- Higher-order effects are inferred as expressions over callback effects; dynamic targets remain fail-closed when a strong external contract is requested\n" "- Closure capture rules are described in the scoping and concurrency sections\n" "\n" "These language facilities do not admit Array.map/filter/reduce in the new-XIR subset. Array function elements retain the existing live execution-gate requirements; their presence does not qualify higher-order member methods (spec \xc2\xa7""17.26).\n" "",
     },
     {
         .id = "generics",
         .title = "Generics",
         .aliases_csv = "generic,type_parameter,template",
         .body =
-            "[Language reference](#9-\xe6\xb3\x9b\xe5\x9e\x8b-generics)\n"
-            "\n"
-            "## Generics\n"
-            "\n"
-            "### Generic declarations\n"
-            "```xray\n"
-            "// Generic function\n"
-            "fn identity<T>(x: T) -> T {\n"
-            "    return x\n"
-            "}\n"
-            "\n"
-            "var a = identity<i64>(42)\n"
-            "var b = identity(\"hello\")               // T inferred as string\n"
-            "\n"
-            "// Generic class\n"
-            "class Box<T> {\n"
-            "    value: T\n"
-            "    init(v: T) { this.value = v }\n"
-            "    get() -> T { return this.value }\n"
-            "}\n"
-            "\n"
-            "var b1 = Box<i64>(42)\n"
-            "var b2 = Box<string>(\"hi\")\n"
-            "\n"
-            "// Multi-parameter generic\n"
-            "class Pair<K, V> {\n"
-            "    key: K\n"
-            "    value: V\n"
-            "    init(k: K, v: V) {\n"
-            "        this.key = k; this.value = v\n"
-            "    }\n"
-            "}\n"
-            "\n"
-            "// Generic interface\n"
-            "interface Comparable<T> {\n"
-            "    compareTo(other: T) -> i64\n"
-            "}\n"
-            "\n"
-            "// Generic type alias: transparent syntax substitution, not a new type\n"
-            "type PairAlias<T> = { first: T, second: T }\n"
-            "```\n"
-            "\n"
-            "### Constraints\n"
-            "```xray\n"
-            "// Single constraint\n"
-            "fn first<T: Comparable>(a: T, b: T) -> T {\n"
-            "    return a\n"
-            "}\n"
-            "\n"
-            "// Multiple constraints (intersection) \xe2\x80\x94 T must satisfy Comparable, Hashable, and Stringable\n"
-            "fn passThrough<T: Comparable & Hashable & Stringable>(x: T) -> T {\n"
-            "    return x\n"
-            "}\n"
-            "\n"
-            "// Multiple type parameters, each independently constrained\n"
-            "fn pickValue<K: Hashable, V>(k: K, v: V) -> V {\n"
-            "    return v\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Type inference\n"
-            "```xray\n"
-            "identity(42)                    // T inferred as i64\n"
-            "Box(\"hello\")                // T inferred as string\n"
-            "Pair(\"key\", 100)            // K=string, V=i64\n"
-            "```\n"
-            "\n"
-            "### Explicit instantiation\n"
-            "```xray\n"
-            "var empty = Array<i64>()              // no element to infer from\n"
-            "var m = Map<string, i64>()\n"
-            "var result = identity<f64>(0)            // the type argument supplies a unique context; 0 is directly typed as f64\n"
-            "```\n"
-            "\n"
-            "### Type identity\n"
-            "```xray\n"
-            "class Container<T> {\n"
-            "    items: Array<T>\n"
-            "}\n"
-            "var c = Container<i64>()\n"
-            "print(c is Container<i64>)     // true\n"
-            "print(typeName(c))             // \"Container<i64>\" when type names are enabled\n"
-            "```\n"
-            "",
+            "[Language reference](#9-\xe6\xb3\x9b\xe5\x9e\x8b-generics)\n" "\n" "## Generics\n" "\n" "### Generic declarations\n" "```xray\n" "// Generic function\n" "fn identity<T>(x: T) -> T {\n" "    return x\n" "}\n" "\n" "var a = identity<i64>(42)\n" "var b = identity(\"hello\")               // T inferred as string\n" "\n" "// Generic class\n" "class Box<T> {\n" "    value: T\n" "    init(v: T) { this.value = v }\n" "    get() -> T { return this.value }\n" "}\n" "\n" "var b1 = Box<i64>(42)\n" "var b2 = Box<string>(\"hi\")\n" "\n" "// Multi-parameter generic\n" "class Pair<K, V> {\n" "    key: K\n" "    value: V\n" "    init(k: K, v: V) {\n" "        this.key = k; this.value = v\n" "    }\n" "}\n" "\n" "// Generic interface\n" "interface Comparable<T> {\n" "    compareTo(other: T) -> i64\n" "}\n" "\n" "// Generic type alias: transparent syntax substitution, not a new type\n" "type PairAlias<T> = { first: T, second: T }\n" "```\n" "\n" "### Constraints\n" "```xray\n" "// Single constraint\n"
+            "fn first<T: Comparable>(a: T, b: T) -> T {\n" "    return a\n" "}\n" "\n" "// Multiple constraints (intersection) \xe2\x80\x94 T must satisfy Comparable, Hashable, and Stringable\n" "fn passThrough<T: Comparable & Hashable & Stringable>(x: T) -> T {\n" "    return x\n" "}\n" "\n" "// Multiple type parameters, each independently constrained\n" "fn pickValue<K: Hashable, V>(k: K, v: V) -> V {\n" "    return v\n" "}\n" "```\n" "\n" "### Type inference\n" "```xray\n" "identity(42)                    // T inferred as i64\n" "Box(\"hello\")                // T inferred as string\n" "Pair(\"key\", 100)            // K=string, V=i64\n" "```\n" "\n" "### Explicit instantiation\n" "```xray\n" "var empty = Array<i64>()              // no element to infer from\n" "var m = Map<string, i64>()\n" "var result = identity<f64>(0)            // the type argument supplies a unique context; 0 is directly typed as f64\n" "```\n" "\n" "### Type identity\n" "```xray\n" "class Container<T> {\n" "    items: Array<T>\n"
+            "}\n" "var c = Container<i64>()\n" "print(c is Container<i64>)     // true\n" "print(typeName(c))             // \"Container<i64>\" when type names are enabled\n" "```\n" "",
     },
     {
         .id = "interface",
         .title = "Interface",
         .aliases_csv = "interfaces,implements",
         .body =
-            "[Language reference](#55-interface-\xe4\xb8\x8e-implements)\n"
-            "\n"
-            "## Interface\n"
-            "\n"
-            "### Interface declarations and implementations\n"
-            "```xray\n"
-            "interface Shape {\n"
-            "    area() -> f64\n"
-            "    perimeter() -> f64\n"
-            "}\n"
-            "\n"
-            "// Interface method return types may be omitted (default ())\n"
-            "interface Greeter {\n"
-            "    greet(name: string)             // same as greet(name: string) -> ()\n"
-            "    log()                           // no parameters, no return value\n"
-            "}\n"
-            "\n"
-            "class Circle implements Shape {\n"
-            "    radius: f64\n"
-            "    init(r: f64) { this.radius = r }\n"
-            "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
-            "    perimeter() -> f64 { return 6.28 * this.radius }\n"
-            "}\n"
-            "\n"
-            "// Implement multiple interfaces\n"
-            "class Logger implements Shape, Greeter {\n"
-            "    radius: f64\n"
-            "    init(r: f64) { this.radius = r }\n"
-            "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
-            "    perimeter() -> f64 { return 6.28 * this.radius }\n"
-            "    greet(name: string) { print(\"hello,\", name) }\n"
-            "    log() { print(\"logging\") }\n"
-            "}\n"
-            "\n"
-            "fn describe(s: Shape) -> string {\n"
-            "    return \"area=${s.area()}, perimeter=${s.perimeter()}\"\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Nominal typing\n"
-            "```xray\n"
-            "interface Drawable { draw() -> () }\n"
-            "\n"
-            "class Square implements Drawable {        // explicit implements required\n"
-            "    draw() { print(\"square\") }\n"
-            "}\n"
-            "\n"
-            "class Wrong {\n"
-            "    draw() { print(\"wrong\") }\n"
-            "}\n"
-            "\n"
-            "fn render(d: Drawable) { d.draw() }\n"
-            "render(Square())     // OK\n"
-            "// render(Wrong())   // compile error: Wrong is not Drawable\n"
-            "```\n"
-            "",
+            "[Language reference](#55-interface-\xe4\xb8\x8e-implements)\n" "\n" "## Interface\n" "\n" "### Interface declarations and implementations\n" "```xray\n" "interface Shape {\n" "    area() -> f64\n" "    perimeter() -> f64\n" "}\n" "\n" "// Interface method return types may be omitted (default ())\n" "interface Greeter {\n" "    greet(name: string)             // same as greet(name: string) -> ()\n" "    log()                           // no parameters, no return value\n" "}\n" "\n" "class Circle implements Shape {\n" "    radius: f64\n" "    init(r: f64) { this.radius = r }\n" "    area() -> f64 { return 3.14 * this.radius * this.radius }\n" "    perimeter() -> f64 { return 6.28 * this.radius }\n" "}\n" "\n" "// Implement multiple interfaces\n" "class Logger implements Shape, Greeter {\n" "    radius: f64\n" "    init(r: f64) { this.radius = r }\n" "    area() -> f64 { return 3.14 * this.radius * this.radius }\n" "    perimeter() -> f64 { return 6.28 * this.radius }\n"
+            "    greet(name: string) { print(\"hello,\", name) }\n" "    log() { print(\"logging\") }\n" "}\n" "\n" "fn describe(s: Shape) -> string {\n" "    return \"area=${s.area()}, perimeter=${s.perimeter()}\"\n" "}\n" "```\n" "\n" "### Nominal typing\n" "```xray\n" "interface Drawable { draw() -> () }\n" "\n" "class Square implements Drawable {        // explicit implements required\n" "    draw() { print(\"square\") }\n" "}\n" "\n" "class Wrong {\n" "    draw() { print(\"wrong\") }\n" "}\n" "\n" "fn render(d: Drawable) { d.draw() }\n" "render(Square())     // OK\n" "// render(Wrong())   // compile error: Wrong is not Drawable\n" "```\n" "",
     },
     {
         .id = "modules",
         .title = "Modules & Imports",
         .aliases_csv = "import,export,module,require,package,re-export,circular dependency,module graph",
         .body =
-            "[Language reference](#11-\xe6\xa8\xa1\xe5\x9d\x97\xe7\xb3\xbb\xe7\xbb\x9f-modules)\n"
-            "\n"
-            "## Modules & Imports\n"
-            "\n"
-            "Each .xr file is a module. import/export must be top-level. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.\n"
-            "\n"
-            "### Imports\n"
-            "```xray\n"
-            "// 1. stdlib: bare identifier; without `as`, the alias equals the module name\n"
-            "import time\n"
-            "import datetime\n"
-            "import http as httpClient\n"
-            "\n"
-            "// 2. third-party packages: quoted owner/name form\n"
-            "import \"alice/utils\"\n"
-            "import \"bob/http_client\" as httpClient\n"
-            "\n"
-            "// 3. path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)\n"
-            "import \"./modules/mod_a\" as a\n"
-            "import \"../utils/string_utils\" as utils\n"
-            "\n"
-            "// 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name\n"
-            "import { readFile, writeFile as write } from io\n"
-            "import { publicFn } from \"./modules/mod_a\"\n"
-            "```\n"
-            "\n"
-            "### Use module symbols\n"
-            "```xray\n"
-            "import time\n"
-            "var t = time.now()\n"
-            "time.sleep(100)\n"
-            "```\n"
-            "\n"
-            "### Exports\n"
-            "```xray\n"
-            "// 1. visibility belongs to the declaration\n"
-            "export fn helper() { return }\n"
-            "export final class MyClass {\n"
-            "    value: i64\n"
-            "    init() { this.value = 1 }\n"
-            "}\n"
-            "export const VERSION = \"1.0\"\n"
-            "\n"
-            "// 2. re-export (with optional renaming)\n"
-            "export { getUser, getUserAge as getAge } from \"./user\"\n"
-            "\n"
-            "// 3. wildcard re-export (forward all exports of another module)\n"
-            "export * from \"./product\"\n"
-            "```\n"
-            "\n"
-            "### Module graph & circular dependencies\n"
-            "",
+            "[Language reference](#11-\xe6\xa8\xa1\xe5\x9d\x97\xe7\xb3\xbb\xe7\xbb\x9f-modules)\n" "\n" "## Modules & Imports\n" "\n" "Each .xr file is a module. import/export must be top-level. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.\n" "\n" "### Imports\n" "```xray\n" "// 1. stdlib: bare identifier; without `as`, the alias equals the module name\n" "import time\n" "import datetime\n" "import http as httpClient\n" "\n" "// 2. third-party packages: quoted owner/name form\n" "import \"alice/utils\"\n" "import \"bob/http_client\" as httpClient\n" "\n" "// 3. path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)\n" "import \"./modules/mod_a\" as a\n" "import \"../utils/string_utils\" as utils\n" "\n" "// 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name\n" "import { readFile, writeFile as write } from io\n"
+            "import { publicFn } from \"./modules/mod_a\"\n" "```\n" "\n" "### Use module symbols\n" "```xray\n" "import time\n" "var t = time.now()\n" "time.sleep(100)\n" "```\n" "\n" "### Exports\n" "```xray\n" "// 1. visibility belongs to the declaration\n" "export fn helper() { return }\n" "export final class MyClass {\n" "    value: i64\n" "    init() { this.value = 1 }\n" "}\n" "export const VERSION = \"1.0\"\n" "\n" "// 2. re-export (with optional renaming)\n" "export { getUser, getUserAge as getAge } from \"./user\"\n" "\n" "// 3. wildcard re-export (forward all exports of another module)\n" "export * from \"./product\"\n" "```\n" "\n" "### Module graph & circular dependencies\n" "",
     },
     {
         .id = "narrowing",
         .title = "Type Narrowing",
         .aliases_csv = "narrowing,narrow,smart_cast,type_guard,null_check,possibly_null,E0379,flow_analysis,nullable_unwrap",
         .body =
-            "[Language reference](#213-\xe6\xb5\x81\xe6\x95\x8f\xe6\x84\x9f\xe7\xb1\xbb\xe5\x9e\x8b\xe6\x94\xb6\xe7\xaa\x84)\n"
-            "\n"
-            "## Type Narrowing\n"
-            "\n"
-            "Narrowing tightens the static type of a binding at a control-flow position. It is semantics, not a diagnostic optimization: narrowed types drive member lookup, overload resolution, match exhaustiveness, and code generation, and the VM and AOT backends must agree. Normative rules N-1..N-13 live in spec section 2.13.\n"
-            "\n"
-            "### What can be narrowed (N-1, N-2)\n"
-            "Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.\n"
-            "\n"
-            "Never narrowed, even after a null check: `p.f`, `this.f`, `a[i]`, `t.0`, `f()`, and any other non-identifier expression. Extract a local binding first (N-3).\n"
-            "```xray\n"
-            "class Address { city: string\n"
-            "    init(city: string) { this.city = city } }\n"
-            "class User { address: Address?\n"
-            "    init(address: Address?) { this.address = address } }\n"
-            "\n"
-            "fn show(u: User) {\n"
-            "    var addr = u.address          // extract into a simple binding\n"
-            "    if (addr != null) {\n"
-            "        print(addr.city)          // OK: addr is narrowed to Address\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Fact table (N-4)\n"
-            "| Condition | True branch | False branch |\n"
-            "|--|--|--|\n"
-            "| `x` | remove `null` | no fact |\n"
-            "| `!e` | false fact of `e` | true fact of `e` |\n"
-            "| `(e)` | true fact of `e` | false fact of `e` |\n"
-            "| `x == null` | keep only `null` | remove `null` |\n"
-            "| `x != null` | remove `null` | keep only `null` |\n"
-            "| `x is T` | intersect with `T` | remove intersection with `T` |\n"
-            "| `typeOf(x) == Type.K` | keep kind `K` | remove kind `K` |\n"
-            "| `e1 && e2` | true facts of both | no fact |\n"
-            "| `e1 \\|\\| e2` | no fact | false facts of both |\n"
-            "\n"
-            "Forms not in the table produce no facts.\n"
-            "\n"
-            "For nested Optionals, a null test observes the outer layer of the current read type R. Repeated tests of the same binding prove successive layers. Evidence identifies the binding, declared type, layer and mutation generation; joins retain only a common consecutive prefix. Earlier evidence cannot revive after a write, including in a short-circuit true branch.\n"
-            "\n"
-            "### Short-circuit inheritance (N-5)\n"
-            "`T?` cannot be used directly as a condition, so `&&` / `||` inheritance is the standard way to work with nullable values: the right operand of `&&` is analyzed under the left operand's true fact, and the right operand of `||` under its false fact.\n"
-            "```xray\n"
-            "fn check(a: string?) -> bool {\n"
-            "    if (a != null && len(a) > 0) { return true }     // e2 analyzed with a: string\n"
-            "    if (a == null || len(a) == 0) { return false }   // e2 analyzed with a: string\n"
-            "    return true\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Where facts apply (N-7, N-8, N-9, N-10)\n"
-            "`if` then/else bodies, both arms of `c ? a : b`, loop-body entry and the code after `while` / `for`, the right operand of `&&` / `||`, and the code after `assert(c)`. A branch that necessarily terminates gives the following code the opposite fact.\n"
-            "```xray\n"
-            "fn nameLen(s: string?) -> i64 {\n"
-            "    if (s == null) { return 0 }\n"
-            "    return len(s)                 // s is narrowed to string here\n"
-            "}\n"
-            "```\n"
-            "```xray\n"
-            "fn drain(first: string?) {\n"
-            "    var cur = first\n"
-            "    while (cur != null) {         // cur is string at loop-body entry\n"
-            "        print(cur)\n"
-            "        cur = null                // back edge contributes null; header re-joins\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Invalidation (N-11)\n"
-            "Narrowing is invalidated by assignment / compound assignment / `++` / `--`, by passing the binding as a `ref` argument, and by `move`. A binding captured by a closure **and** assigned anywhere never narrows in that function. An ordinary call does not invalidate narrowing, because a narrowable subject cannot be written by a callee.\n"
-            "\n"
-            "Resolving a direct ref place does not execute the callee. All value arguments finish before the callee can write; an earlier nested ref call invalidates later reads, while an already evaluated owned SSA value remains valid. An unreachable lazy default has no runtime mutation effect.\n"
-            "```xray\n"
-            "fn f(a: string?) {\n"
-            "    if (a != null) {\n"
-            "        print(len(a))             // OK\n"
-            "        a = null                  // assignment invalidates the narrowing\n"
-            "        print(a ?? \"\")            // must be unwrapped again\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Unwrapping and E0379 (N-12, N-13)\n"
-            "`E0379` fires when a receiver's static type can still be `null` (including a type that is always `null`) and the program does member access, indexing, a call, arithmetic, or iteration on it.\n"
-            "\n"
-            "Nested Optional consumption follows spec section 2.5. A normal read of a simple binding unwraps its proven consecutive Some prefix p, yielding exact read type R and q=p explicit claims. `!` and `??` first consume one available claim without unwrapping or rewrapping R. With no claim, `!` unwraps one current Optional layer and panics on its absence; `??` tests only that layer and evaluates its default only when absent. Groups preserve claims; calls, returns, conversions and new bindings do not inherit old read claims. An unreachable default still undergoes complete type, visibility, construction-authority, generic-constraint and effect checks. Optional chaining follows its separate whole-chain short-circuit contract; its Source admission remains separate.\n"
-            "",
+            "[Language reference](#213-\xe6\xb5\x81\xe6\x95\x8f\xe6\x84\x9f\xe7\xb1\xbb\xe5\x9e\x8b\xe6\x94\xb6\xe7\xaa\x84)\n" "\n" "## Type Narrowing\n" "\n" "Narrowing tightens the static type of a binding at a control-flow position. It is semantics, not a diagnostic optimization: narrowed types drive member lookup, overload resolution, match exhaustiveness, and code generation, and the VM and AOT backends must agree. Normative rules N-1..N-13 live in spec section 2.13.\n" "\n" "### What can be narrowed (N-1, N-2)\n" "Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.\n" "\n" "Never narrowed, even after a null check: `p.f`, `this.f`, `a[i]`, `t.0`, `f()`, and any other non-identifier expression. Extract a local binding first (N-3).\n" "```xray\n" "class Address { city: string\n" "    init(city: string) { this.city = city } }\n" "class User { address: Address?\n" "    init(address: Address?) { this.address = address } }\n" "\n" "fn show(u: User) {\n"
+            "    var addr = u.address          // extract into a simple binding\n" "    if (addr != null) {\n" "        print(addr.city)          // OK: addr is narrowed to Address\n" "    }\n" "}\n" "```\n" "\n" "### Fact table (N-4)\n" "| Condition | True branch | False branch |\n" "|--|--|--|\n" "| `x` | remove `null` | no fact |\n" "| `!e` | false fact of `e` | true fact of `e` |\n" "| `(e)` | true fact of `e` | false fact of `e` |\n" "| `x == null` | keep only `null` | remove `null` |\n" "| `x != null` | remove `null` | keep only `null` |\n" "| `x is T` | intersect with `T` | remove intersection with `T` |\n" "| `typeOf(x) == Type.K` | keep kind `K` | remove kind `K` |\n" "| `e1 && e2` | true facts of both | no fact |\n" "| `e1 \\|\\| e2` | no fact | false facts of both |\n" "\n" "Forms not in the table produce no facts.\n" "\n"
+            "For nested Optionals, a null test observes the outer layer of the current read type R. Repeated tests of the same binding prove successive layers. Evidence identifies the binding, declared type, layer and mutation generation; joins retain only a common consecutive prefix. Earlier evidence cannot revive after a write, including in a short-circuit true branch.\n" "\n" "### Short-circuit inheritance (N-5)\n" "`T?` cannot be used directly as a condition, so `&&` / `||` inheritance is the standard way to work with nullable values: the right operand of `&&` is analyzed under the left operand's true fact, and the right operand of `||` under its false fact.\n" "```xray\n" "fn check(a: string?) -> bool {\n" "    if (a != null && len(a) > 0) { return true }     // e2 analyzed with a: string\n" "    if (a == null || len(a) == 0) { return false }   // e2 analyzed with a: string\n" "    return true\n" "}\n" "```\n" "\n" "### Where facts apply (N-7, N-8, N-9, N-10)\n"
+            "`if` then/else bodies, both arms of `c ? a : b`, loop-body entry and the code after `while` / `for`, the right operand of `&&` / `||`, and the code after `assert(c)`. A branch that necessarily terminates gives the following code the opposite fact.\n" "```xray\n" "fn nameLen(s: string?) -> i64 {\n" "    if (s == null) { return 0 }\n" "    return len(s)                 // s is narrowed to string here\n" "}\n" "```\n" "```xray\n" "fn drain(first: string?) {\n" "    var cur = first\n" "    while (cur != null) {         // cur is string at loop-body entry\n" "        print(cur)\n" "        cur = null                // back edge contributes null; header re-joins\n" "    }\n" "}\n" "```\n" "\n" "### Invalidation (N-11)\n"
+            "Narrowing is invalidated by assignment / compound assignment / `++` / `--`, by passing the binding as a `ref` argument, and by `move`. A binding captured by a closure **and** assigned anywhere never narrows in that function. An ordinary call does not invalidate narrowing, because a narrowable subject cannot be written by a callee.\n" "\n" "Resolving a direct ref place does not execute the callee. All value arguments finish before the callee can write; an earlier nested ref call invalidates later reads, while an already evaluated owned SSA value remains valid. An unreachable lazy default has no runtime mutation effect.\n" "```xray\n" "fn f(a: string?) {\n" "    if (a != null) {\n" "        print(len(a))             // OK\n" "        a = null                  // assignment invalidates the narrowing\n" "        print(a ?? \"\")            // must be unwrapped again\n" "    }\n" "}\n" "```\n" "\n" "### Unwrapping and E0379 (N-12, N-13)\n"
+            "`E0379` fires when a receiver's static type can still be `null` (including a type that is always `null`) and the program does member access, indexing, a call, arithmetic, or iteration on it.\n" "\n" "Nested Optional consumption follows spec section 2.5. A normal read of a simple binding unwraps its proven consecutive Some prefix p, yielding exact read type R and q=p explicit claims. `!` and `??` first consume one available claim without unwrapping or rewrapping R. With no claim, `!` unwraps one current Optional layer and panics on its absence; `??` tests only that layer and evaluates its default only when absent. Groups preserve claims; calls, returns, conversions and new bindings do not inherit old read claims. An unreachable default still undergoes complete type, visibility, construction-authority, generic-constraint and effect checks. Optional chaining follows its separate whole-chain short-circuit contract; its Source admission remains separate.\n" "",
     },
     {
         .id = "operators",
         .title = "Operators",
         .aliases_csv = "operator,arithmetic,comparison,logical,bitwise",
         .body =
-            "[Language reference](#17-\xe6\x93\x8d\xe4\xbd\x9c\xe7\xac\xa6\xe4\xb8\x8e-token)\n"
-            "\n"
-            "## Operators\n"
-            "\n"
-            "### Operator groups\n"
-            "### Arithmetic: `+`, `-`, `*`, `/`, `%`, `**` (power)\n"
-            "### Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`\n"
-            "### Logical: `&&`, `||`, `!`\n"
-            "### Bitwise: `&`, `|`, `^`, `~`, `<<`, `>>`\n"
-            "### Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`\n"
-            "### Increment/Decrement: `i++`, `i--` (variables only, not fields)\n"
-            "### Range: `a..b` (half-open), `a..=b` (inclusive)\n"
-            "### Null coalescing: `x ?? default`\n"
-            "### Optional chaining: `obj?.field`\n"
-            "### Spread: `...arr`\n"
-            "### Type: `typeOf(x)`, `x is Type`\n"
-            "\n"
-            "### Range and null-safe operators\n"
-            "```xray\n"
-            "var halfOpen = 0..10   // left-closed right-open (includes 0, excludes 10)\n"
-            "var closed = 0..=10    // closed interval (includes both 0 and 10)\n"
-            "var r = 1..100\n"
-            "var n = 10\n"
-            "for (i in 0..n) { print(i) }\n"
-            "for (i in 0..=n) { print(i) }\n"
-            "for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)\n"
-            "```\n"
-            "```xray\n"
-            "var v = nullable_expr ?? default_value\n"
-            "```\n"
-            "```xray\n"
-            "var city = user?.address        // optional property access\n"
-            "var item = arr?[0]              // optional index\n"
-            "var value = callback?.(input)   // optional function call\n"
-            "var road = user?.address.street // whole-chain short-circuit: null when user is null\n"
-            "```\n"
-            "\n"
-            "### Admitted XIR floating semantics\n"
-            "The admitted new-XIR floating subset supports +, -, *, / and their compound assignments for f32/f64 (spec section 17.27). Each operation rounds once at its operand width, nearest with ties to even, including gradual underflow. Mixed f32/f64 widens before the operation; typed integer/float mixing, floating remainder and bitwise operations reject. Compound assignment reads the left value before evaluating the right, including suspension, and cannot narrow implicitly.\n"
-            "",
+            "[Language reference](#17-\xe6\x93\x8d\xe4\xbd\x9c\xe7\xac\xa6\xe4\xb8\x8e-token)\n" "\n" "## Operators\n" "\n" "### Operator groups\n" "### Arithmetic: `+`, `-`, `*`, `/`, `%`, `**` (power)\n" "### Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`\n" "### Logical: `&&`, `||`, `!`\n" "### Bitwise: `&`, `|`, `^`, `~`, `<<`, `>>`\n" "### Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`\n" "### Increment/Decrement: `i++`, `i--` (variables only, not fields)\n" "### Range: `a..b` (half-open), `a..=b` (inclusive)\n" "### Null coalescing: `x ?? default`\n" "### Optional chaining: `obj?.field`\n" "### Spread: `...arr`\n" "### Type: `typeOf(x)`, `x is Type`\n" "\n" "### Range and null-safe operators\n" "```xray\n" "var halfOpen = 0..10   // left-closed right-open (includes 0, excludes 10)\n" "var closed = 0..=10    // closed interval (includes both 0 and 10)\n" "var r = 1..100\n" "var n = 10\n" "for (i in 0..n) { print(i) }\n" "for (i in 0..=n) { print(i) }\n"
+            "for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)\n" "```\n" "```xray\n" "var v = nullable_expr ?? default_value\n" "```\n" "```xray\n" "var city = user?.address        // optional property access\n" "var item = arr?[0]              // optional index\n" "var value = callback?.(input)   // optional function call\n" "var road = user?.address.street // whole-chain short-circuit: null when user is null\n" "```\n" "\n" "### Admitted XIR floating semantics\n" "The admitted new-XIR floating subset supports +, -, *, / and their compound assignments for f32/f64 (spec section 17.27). Each operation rounds once at its operand width, nearest with ties to even, including gradual underflow. Mixed f32/f64 widens before the operation; typed integer/float mixing, floating remainder and bitwise operations reject. Compound assignment reads the left value before evaluating the right, including suspension, and cannot narrow implicitly.\n" "",
     },
     {
         .id = "result",
         .title = "Error Handling (throw / catch)",
         .aliases_csv = "error_handling,throw,catch,try,error,value_return_error,defer,cleanup,E0387,E0443,panic,PanicInfo",
         .body =
-            "[Language reference](#8-\xe9\x94\x99\xe8\xaf\xaf\xe5\xa4\x84\xe7\x90\x86-error-handling)\n"
-            "\n"
-            "## Error Handling (throw / catch)\n"
-            "\n"
-            "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without PanicInfo allocation or stack unwinding.\n"
-            "\n"
-            "### throw\n"
-            "`throw expr` writes an enum variant into the error channel and returns. The operand must be an enum variant value. No stack unwinding occurs.\n"
-            "\n"
-            "### try / catch\n"
-            "`try { ... } catch (e: ErrType) { ... }` catches errors thrown within the try block. Typed catches filter by enum type; untyped `catch (e)` catches any error.\n"
-            "\n"
-            "### catch panic\n"
-            "The panic channel is separate from ordinary enum errors. Each try has at most one panic handler: `catch panic { ... }`, `catch panic (p) { ... }`, or `catch panic (p: PanicInfo) { ... }`. An annotation must be exactly PanicInfo. The binding is read-only and scoped to its handler; copies preserve class identity and do not imply Sendable. A handler protects only its try body, so a panic raised in a handler seeks an outer handler. The language PanicInfo class includes message, code, stack, cause and data.\n"
-            "\n"
-            "### Error propagation\n"
-            "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation.\n"
-            "\n"
-            "### defer must not let errors escape\n"
-            "A `defer` is a cleanup edge, not an error-propagation edge (spec 8.3.1). The compiler rejects a deferred callable whose inferred error set is non-empty with `E0387`; absorb the error inside the body instead: `defer { try { close(c) } catch (e) { log.warn(\"close failed\") } }`. An error or panic the body catches itself has not escaped. What static analysis cannot decide is backstopped at runtime: an error escaping a defer body terminates the process with `E0443`, exit status 70, uncatchable \xe2\x80\x94 it neither replaces nor suppresses an in-flight error. Go's \"the defer's error wins\" semantics were rejected because xray marks neither signatures nor call sites, so the substitution would be invisible in the source.\n"
-            "\n"
-            "### Design principles\n"
-            "- Errors are values (enum variants), not exceptions\n"
-            "- No PanicInfo allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors\n"
-            "- No `throws` in function signatures \xe2\x80\x94 errors are inferred, and `xray verify` freezes checked guarantees\n"
-            "- Concrete error sets stay in the analyzer database; only a three-state throw-effect bit enters internal function types\n"
-            "- Use ADT enums for structured error causes with exhaustive `match`\n"
-            "",
+            "[Language reference](#8-\xe9\x94\x99\xe8\xaf\xaf\xe5\xa4\x84\xe7\x90\x86-error-handling)\n" "\n" "## Error Handling (throw / catch)\n" "\n" "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without PanicInfo allocation or stack unwinding.\n" "\n" "### throw\n" "`throw expr` writes an enum variant into the error channel and returns. The operand must be an enum variant value. No stack unwinding occurs.\n" "\n" "### try / catch\n" "`try { ... } catch (e: ErrType) { ... }` catches errors thrown within the try block. Typed catches filter by enum type; untyped `catch (e)` catches any error.\n" "\n" "### catch panic\n"
+            "The panic channel is separate from ordinary enum errors. Each try has at most one panic handler: `catch panic { ... }`, `catch panic (p) { ... }`, or `catch panic (p: PanicInfo) { ... }`. An annotation must be exactly PanicInfo. The binding is read-only and scoped to its handler; copies preserve class identity and do not imply Sendable. A handler protects only its try body, so a panic raised in a handler seeks an outer handler. The language PanicInfo class includes message, code, stack, cause and data.\n" "\n" "### Error propagation\n" "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation.\n" "\n" "### defer must not let errors escape\n"
+            "A `defer` is a cleanup edge, not an error-propagation edge (spec 8.3.1). The compiler rejects a deferred callable whose inferred error set is non-empty with `E0387`; absorb the error inside the body instead: `defer { try { close(c) } catch (e) { log.warn(\"close failed\") } }`. An error or panic the body catches itself has not escaped. What static analysis cannot decide is backstopped at runtime: an error escaping a defer body terminates the process with `E0443`, exit status 70, uncatchable \xe2\x80\x94 it neither replaces nor suppresses an in-flight error. Go's \"the defer's error wins\" semantics were rejected because xray marks neither signatures nor call sites, so the substitution would be invisible in the source.\n" "\n" "### Design principles\n" "- Errors are values (enum variants), not exceptions\n" "- No PanicInfo allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors\n"
+            "- No `throws` in function signatures \xe2\x80\x94 errors are inferred, and `xray verify` freezes checked guarantees\n" "- Concrete error sets stay in the analyzer database; only a three-state throw-effect bit enters internal function types\n" "- Use ADT enums for structured error causes with exhaustive `match`\n" "",
     },
     {
         .id = "string",
         .title = "String",
         .aliases_csv = "strings,string_methods,interpolation,template",
         .body =
-            "[Language reference](#165-\xe5\xad\x97\xe7\xac\xa6\xe4\xb8\xb2\xe5\xad\x97\xe9\x9d\xa2\xe9\x87\x8f)\n"
-            "\n"
-            "## String\n"
-            "\n"
-            "### Quoted literals\n"
-            "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[u8; L]`, and `c/cr` for `[u8; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.\n"
-            "```xray\n"
-            "var card = r\"\"\"\n"
-            "<div class=\"card\">\n"
-            "  ${title}\n"
-            "</div>\n"
-            "\"\"\"\n"
-            "```\n"
-            "```xray\n"
-            "var path = br\"C:\\\\raw\\\\path\"\n"
-            "var asset = cr\"asset-name\"\n"
-            "```\n"
-            "One quote is single-line inline form, two quotes encode an empty payload, and three or more quotes form a block. A block opener is followed immediately by a newline; its exact-count closer occupies its own line. Increase the quote count when a quote-only payload line would collide.\n"
-            "\n"
-            "### String interpolation\n"
-            "```xray\n"
-            "var greeting = \"Hello, ${name}! Age: ${user.age + 1}\"\n"
-            "```\n"
-            "Note: `${...}` is scanned as an expression, so nested strings may use the same quote as the outer template.\n"
-            "\n"
-            "### Slicing\n"
-            "```xray\n"
-            "arr[1:4]                // elements [1, 4)\n"
-            "arr[:3]                 // first 3\n"
-            "arr[2:]                 // from index 2 to the end\n"
-            "arr[:]                  // full-length view (not a copy)\n"
-            "var view: Slice<i64> = arr[1:4]\n"
-            "```\n"
-            "\n"
-            "### Common methods\n"
-            "- `len(s)` counts Unicode scalars; `len(s.bytes())` counts UTF-8 bytes\n"
-            "- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n"
-            "- `s.indexOf(sub)` / `s.contains(sub)`\n"
-            "- `s.slice(start, end)` / `s.split(sep)` / `s.replace(old, new)`\n"
-            "",
+            "[Language reference](#165-\xe5\xad\x97\xe7\xac\xa6\xe4\xb8\xb2\xe5\xad\x97\xe9\x9d\xa2\xe9\x87\x8f)\n" "\n" "## String\n" "\n" "### Quoted literals\n" "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[u8; L]`, and `c/cr` for `[u8; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.\n" "```xray\n" "var card = r\"\"\"\n" "<div class=\"card\">\n" "  ${title}\n" "</div>\n" "\"\"\"\n" "```\n" "```xray\n" "var path = br\"C:\\\\raw\\\\path\"\n" "var asset = cr\"asset-name\"\n" "```\n" "One quote is single-line inline form, two quotes encode an empty payload, and three or more quotes form a block. A block opener is followed immediately by a newline; its exact-count closer occupies its own line. Increase the quote count when a quote-only payload line would collide.\n" "\n" "### String interpolation\n" "```xray\n" "var greeting = \"Hello, ${name}! Age: ${user.age + 1}\"\n" "```\n"
+            "Note: `${...}` is scanned as an expression, so nested strings may use the same quote as the outer template.\n" "\n" "### Slicing\n" "```xray\n" "arr[1:4]                // elements [1, 4)\n" "arr[:3]                 // first 3\n" "arr[2:]                 // from index 2 to the end\n" "arr[:]                  // full-length view (not a copy)\n" "var view: Slice<i64> = arr[1:4]\n" "```\n" "\n" "### Common methods\n" "- `len(s)` counts Unicode scalars; `len(s.bytes())` counts UTF-8 bytes\n" "- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n" "- `s.indexOf(sub)` / `s.contains(sub)`\n" "- `s.slice(start, end)` / `s.split(sep)` / `s.replace(old, new)`\n" "",
     },
     {
         .id = "struct",
         .title = "Struct",
         .aliases_csv = "structs,value_type",
         .body =
-            "[Language reference](#54-struct-\xe5\xa3\xb0\xe6\x98\x8e)\n"
-            "\n"
-            "## Struct\n"
-            "\n"
-            "Value types with no inheritance. Struct literals use `StructName{field: value}` syntax.\n"
-            "\n"
-            "### Struct declaration and literals\n"
-            "```xray\n"
-            "struct Point {\n"
-            "    x: f64\n"
-            "    y: f64\n"
-            "\n"
-            "    magnitude_sq() -> f64 {\n"
-            "        return this.x * this.x + this.y * this.y\n"
-            "    }\n"
-            "}\n"
-            "\n"
-            "// Two creation styles\n"
-            "var p = Point()                  // default-construct (zero-valued fields), then assign\n"
-            "p.x = 3.0\n"
-            "p.y = 4.0\n"
-            "\n"
-            "var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }\n"
-            "var pt = Point{x: 1.0, y: 2.0}\n"
-            "\n"
-            "// Value semantics: assignment and parameter passing copy\n"
-            "var b = q                            // b is an independent copy of q\n"
-            "b.x = 99.0\n"
-            "// q.x is still 3.0\n"
-            "```\n"
-            "",
+            "[Language reference](#54-struct-\xe5\xa3\xb0\xe6\x98\x8e)\n" "\n" "## Struct\n" "\n" "Value types with no inheritance. Struct literals use `StructName{field: value}` syntax.\n" "\n" "### Struct declaration and literals\n" "```xray\n" "struct Point {\n" "    x: f64\n" "    y: f64\n" "\n" "    magnitude_sq() -> f64 {\n" "        return this.x * this.x + this.y * this.y\n" "    }\n" "}\n" "\n" "// Two creation styles\n" "var p = Point()                  // default-construct (zero-valued fields), then assign\n" "p.x = 3.0\n" "p.y = 4.0\n" "\n" "var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }\n" "var pt = Point{x: 1.0, y: 2.0}\n" "\n" "// Value semantics: assignment and parameter passing copy\n" "var b = q                            // b is an independent copy of q\n" "b.x = 99.0\n" "// q.x is still 3.0\n" "```\n" "",
     },
     {
         .id = "testing",
         .title = "Testing",
         .aliases_csv = "test,assert,assertEqual,assertThrows,assertPanics,unit_test",
         .body =
-            "[Language reference](#12-\xe6\xb5\x8b\xe8\xaf\x95\xe7\xb3\xbb\xe7\xbb\x9f-testing)\n"
-            "\n"
-            "## Testing\n"
-            "\n"
-            "### Basic test\n"
-            "```xray\n"
-            "@test\n"
-            "fn test_addition() {\n"
-            "    assertEqual(1 + 1, 2)\n"
-            "}\n"
-            "\n"
-            "@test\n"
-            "fn test_with_assertions() {\n"
-            "    var result = compute()\n"
-            "    assertEqual(result, 42)\n"
-            "    assert(result > 0)\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Async test\n"
-            "```xray\n"
-            "@test\n"
-            "fn test_async_fetch() {\n"
-            "    var task = go fetch_data(\"http://...\")\n"
-            "    var result = await task\n"
-            "    assertEqual(result.status, 200)\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Attributes\n"
-            "```xray\n"
-            "import codegen\n"
-            "\n"
-            "@test                                 // mark as a test\n"
-            "fn test_basic() { return }\n"
-            "\n"
-            "@test(skip)                           // skip this test\n"
-            "fn test_wip() { return }\n"
-            "\n"
-            "@before_each\n"
-            "fn reset_fixture() { resetState() }\n"
-            "\n"
-            "@deprecated(\"use newAPI() instead\")\n"
-            "fn oldAPI() { return }\n"
-            "\n"
-            "@inline\n"
-            "fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }\n"
-            "\n"
-            "@noinline\n"
-            "fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }\n"
-            "\n"
-            "fn measuredKernel(value: u64) -> u64 {\n"
-            "    var hidden = codegen.opaque(value)\n"
-            "    codegen.compilerFence()\n"
-            "    return measuredDispatchBoundary(hidden)\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Run tests\n"
-            "Run with `xray test <file_or_dir>`.\n"
-            "",
+            "[Language reference](#12-\xe6\xb5\x8b\xe8\xaf\x95\xe7\xb3\xbb\xe7\xbb\x9f-testing)\n" "\n" "## Testing\n" "\n" "### Basic test\n" "```xray\n" "@test\n" "fn test_addition() {\n" "    assertEqual(1 + 1, 2)\n" "}\n" "\n" "@test\n" "fn test_with_assertions() {\n" "    var result = compute()\n" "    assertEqual(result, 42)\n" "    assert(result > 0)\n" "}\n" "```\n" "\n" "### Async test\n" "```xray\n" "@test\n" "fn test_async_fetch() {\n" "    var task = go fetch_data(\"http://...\")\n" "    var result = await task\n" "    assertEqual(result.status, 200)\n" "}\n" "```\n" "\n" "### Attributes\n" "```xray\n" "import codegen\n" "\n" "@test                                 // mark as a test\n" "fn test_basic() { return }\n" "\n" "@test(skip)                           // skip this test\n" "fn test_wip() { return }\n" "\n" "@before_each\n" "fn reset_fixture() { resetState() }\n" "\n" "@deprecated(\"use newAPI() instead\")\n" "fn oldAPI() { return }\n" "\n" "@inline\n"
+            "fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }\n" "\n" "@noinline\n" "fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }\n" "\n" "fn measuredKernel(value: u64) -> u64 {\n" "    var hidden = codegen.opaque(value)\n" "    codegen.compilerFence()\n" "    return measuredDispatchBoundary(hidden)\n" "}\n" "```\n" "\n" "### Run tests\n" "Run with `xray test <file_or_dir>`.\n" "",
     },
     {
         .id = "types",
         .title = "Types",
         .aliases_csv = "i64,f64,string,bool,nullable,type,tuple,unit,union,Option",
         .body =
-            "[Language reference](#2-\xe7\xb1\xbb\xe5\x9e\x8b\xe7\xb3\xbb\xe7\xbb\x9f-type-system)\n"
-            "\n"
-            "## Types\n"
-            "\n"
-            "### Primitive and built-in categories\n"
-            "- `i64` \xe2\x80\x94 default signed integer\n"
-            "- `f64` \xe2\x80\x94 default floating-point number\n"
-            "- `string` \xe2\x80\x94 UTF-8 string\n"
-            "- `bool` \xe2\x80\x94 `true` / `false`\n"
-            "- `()` \xe2\x80\x94 Unit, no return value\n"
-            "- exact structural objects `{ field: T }`\n"
-            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`\n"
-            "\n"
-            "### Explicit conditions\n"
-            "Conditions accept only non-nullable `bool`. Use `value != null` for presence, or `flag == true` / `flag ?? false` for nullable booleans. Explicit comparisons preserve branch narrowing.\n"
-            "```xray\n"
-            "var ok = true\n"
-            "if (ok) { }\n"
-            "\n"
-            "var user: User? = findUser()\n"
-            "if (user != null) {      // explicit presence check\n"
-            "    print(user.name)     // user is narrowed to User here\n"
-            "}\n"
-            "\n"
-            "var flag: bool? = maybeFlag()\n"
-            "if (flag == true) { }    // OK\n"
-            "if (flag != null) { }    // OK\n"
-            "// if (flag) { }         // compile error: bare bool? cannot be a condition\n"
-            "\n"
-            "var s = \"\"\n"
-            "if (len(s) != 0) { }     // OK\n"
-            "// if (s) { }            // compile error\n"
-            "```\n"
-            "\n"
-            "### Nullable\n"
-            "Each T? adds an independent outer Optional layer. i64?? distinguishes outer None, Some(None), and Some(Some(7)); layers never flatten. Implicit widening wraps an exact element once, so typed i64 cannot directly fill i64??. JSON.Value? is a legal independent outer Optional even though JSON.Value itself includes JSON null. Some/None describe tags, not newly introduced source constructors. These are language contracts; complete Source admission and execution qualification are tracked separately in Task 319.\n"
-            "```xray\n"
-            "var x: i64? = null      // OK\n"
-            "var y: i64? = 42        // OK\n"
-            "var z: i64 = null       // compile error: null is not i64\n"
-            "```\n"
-            "\n"
-            "### Collections\n"
-            "The new-XIR implementation subset is Array<T> as described in spec \xc2\xa7""17.26, including nested admitted arrays and function elements through the unified constructed-type pool. Elements must be copyable and storable; unit, internal cells, views and unadmitted noncopyable resources reject. Inventory presence does not qualify other container or user struct/class families.\n"
-            "```xray\n"
-            "var a: Array<i64> = [1, 2, 3]\n"
-            "var b = a                        // b is a logical copy\n"
-            "b[0] = 9                         // a[0] is still 1\n"
-            "var c: Array<string> = []         // explicit empty array\n"
-            "```\n"
-            "```xray\n"
-            "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n"
-            "var m2 = #{\"a\": 1, \"b\": 2}\n"
-            "var empty = #{}                                     // empty Map\n"
-            "\n"
-            "m[\"c\"] = 3                                          // insert / update\n"
-            "var v = m[\"a\"]                                      // lookup; a missing key panics with E0431\n"
-            "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n"
-            "```\n"
-            "```xray\n"
-            "var s: Set<i64> = #[1, 2, 3]\n"
-            "```\n"
-            "```xray\n"
-            "const ch: Channel<i64> = Channel<i64>(10)\n"
-            "```\n"
-            "\n"
-            "### Union types\n"
-            "```xray\n"
-            "var v: i64 | string = 42\n"
-            "v = \"hello\"             // OK\n"
-            "```\n"
-            "\n"
-            "### Tuple types\n"
-            "Tuples preserve ordered field types and independently owned immutable values. Flat destructuring uses exact arity and evaluates its RHS once; module bindings publish as one prepared group (spec \xc2\xa7""17.35). Unit fields carry no payload and do not admit ordinary Unit generic arguments or formals. Nested tuple values do not imply admitted nested patterns; Sendable remains the conjunction of fields and wrapping grants no execution permission.\n"
-            "```xray\n"
-            "// Literals\n"
-            "var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)\n"
-            "var h = (10, \"hi\", true)          // heterogeneous tuple\n"
-            "var single = (99,)                // single-element tuple: note trailing comma\n"
-            "\n"
-            "// Type annotation\n"
-            "var p: (i64, string) = (7, \"ok\")\n"
-            "\n"
-            "// Field access: .N (N is a compile-time constant integer index)\n"
-            "var first = t.0                   // 1\n"
-            "var mid   = t.1                   // 2\n"
-            "var nest  = ((1, 2), (3, 4))\n"
-            "var a     = nest.0.0              // 1\n"
-            "var b     = nest.1.1              // 4\n"
-            "\n"
-            "// Function return and destructuring\n"
-            "fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }\n"
-            "var (q, r) = divmod(17, 5)        // tuple destructure\n"
-            "\n"
-            "// Generic\n"
-            "fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }\n"
-            "var p2 = pair(1, \"x\")             // (i64, string)\n"
-            "```\n"
-            "\n"
-            "### Type aliases\n"
-            "```xray\n"
-            "type Result = i64 | string\n"
-            "type Mapper = fn(i64) -> i64\n"
-            "type Point = { x: f64, y: f64 }\n"
-            "type Pair<T> = { first: T, second: T }\n"
-            "type Mapper2<T, U> = fn(T) -> U\n"
-            "```\n"
-            "\n"
-            "### Type inference\n"
-            "```xray\n"
-            "var x = 1               // x: i64\n"
-            "var y = 1.5             // y: f64\n"
-            "var z = \"hello\"         // z: string\n"
-            "var a = [1, 2, 3]       // a: Array<i64>\n"
-            "var m = #{\"a\": 1}    // m: Map<string, i64>\n"
-            "var p = { name: \"A\" }   // p: { name: string } \xe2\x80\x94 structured object type\n"
-            "var f = (x: i64) -> x   // f: fn(i64) -> i64 \xe2\x80\x94 explicit parameter, inferred return\n"
-            "```\n"
-            "\n"
-            "### Explicit casts\n"
-            "```xray\n"
-            "var n = x as i64        // throws TypeError on failure\n"
-            "var n = x as i64?       // returns null on failure (safe cast)\n"
-            "```\n"
-            "\n"
-            "### Construction expressions\n"
-            "```xray\n"
-            "var p = Point(1.0, 2.0)\n"
-            "var arr = Array<i64>()\n"
-            "const ch = Channel<i64>(10)\n"
-            "var m = Map<string, i64>()\n"
-            "```\n"
-            "```xray\n"
-            "var a = [1, 2, 3]              // equivalent to Array<i64>() + push\n"
-            "var m = #{}                    // equivalent to Map<...>()\n"
-            "var p = Point{x: 1, y: 2}      // struct literal\n"
-            "```\n"
-            "\n"
-            "### Admitted XIR floating semantics\n"
-            "In the new-XIR subset, f32 and f64 preserve their original IEEE precision across arithmetic and output (spec section 17.27). Zero signs and gradual subnormal values are preserved; invalid floating operations produce canonical NaN, and finite nonzero division by zero produces signed infinity. VM and native AOT use the same integer-only arithmetic implementation with independent exact-result tests; this does not imply the entire language or standard library is migrated.\n"
-            "\n"
-            "Frozen next Atomic cutover: runtime f64 admits every binary64 payload and preserves bits in transport; runtime f32 and CONST_FLOAT retain canonical-NaN restrictions. Arithmetic, conversions including same-width conversion, and negation canonicalize NaN results. This expanded carrier domain remains pending implementation and qualification (spec 2.3.2/17.24/17.27).\n"
-            "",
+            "[Language reference](#2-\xe7\xb1\xbb\xe5\x9e\x8b\xe7\xb3\xbb\xe7\xbb\x9f-type-system)\n" "\n" "## Types\n" "\n" "### Primitive and built-in categories\n" "- `i64` \xe2\x80\x94 default signed integer\n" "- `f64` \xe2\x80\x94 default floating-point number\n" "- `string` \xe2\x80\x94 UTF-8 string\n" "- `bool` \xe2\x80\x94 `true` / `false`\n" "- `()` \xe2\x80\x94 Unit, no return value\n" "- exact structural objects `{ field: T }`\n" "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`\n" "\n" "### Explicit conditions\n" "Conditions accept only non-nullable `bool`. Use `value != null` for presence, or `flag == true` / `flag ?? false` for nullable booleans. Explicit comparisons preserve branch narrowing.\n" "```xray\n" "var ok = true\n" "if (ok) { }\n" "\n" "var user: User? = findUser()\n" "if (user != null) {      // explicit presence check\n" "    print(user.name)     // user is narrowed to User here\n" "}\n" "\n" "var flag: bool? = maybeFlag()\n"
+            "if (flag == true) { }    // OK\n" "if (flag != null) { }    // OK\n" "// if (flag) { }         // compile error: bare bool? cannot be a condition\n" "\n" "var s = \"\"\n" "if (len(s) != 0) { }     // OK\n" "// if (s) { }            // compile error\n" "```\n" "\n" "### Nullable\n" "Each T? adds an independent outer Optional layer. i64?? distinguishes outer None, Some(None), and Some(Some(7)); layers never flatten. Implicit widening wraps an exact element once, so typed i64 cannot directly fill i64??. JSON.Value? is a legal independent outer Optional even though JSON.Value itself includes JSON null. Some/None describe tags, not newly introduced source constructors. These are language contracts; complete Source admission and execution qualification are tracked separately in Task 319.\n" "```xray\n" "var x: i64? = null      // OK\n" "var y: i64? = 42        // OK\n" "var z: i64 = null       // compile error: null is not i64\n" "```\n" "\n" "### Collections\n"
+            "The new-XIR implementation subset is Array<T> as described in spec \xc2\xa7""17.26, including nested admitted arrays and function elements through the unified constructed-type pool. Elements must be copyable and storable; unit, internal cells, views and unadmitted noncopyable resources reject. Inventory presence does not qualify other container or user struct/class families.\n" "```xray\n" "var a: Array<i64> = [1, 2, 3]\n" "var b = a                        // b is a logical copy\n" "b[0] = 9                         // a[0] is still 1\n" "var c: Array<string> = []         // explicit empty array\n" "```\n" "```xray\n" "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n" "var m2 = #{\"a\": 1, \"b\": 2}\n" "var empty = #{}                                     // empty Map\n" "\n" "m[\"c\"] = 3                                          // insert / update\n" "var v = m[\"a\"]                                      // lookup; a missing key panics with E0431\n"
+            "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n" "```\n" "```xray\n" "var s: Set<i64> = #[1, 2, 3]\n" "```\n" "```xray\n" "const ch: Channel<i64> = Channel<i64>(10)\n" "```\n" "\n" "### Union types\n" "```xray\n" "var v: i64 | string = 42\n" "v = \"hello\"             // OK\n" "```\n" "\n" "### Tuple types\n" "Tuples preserve ordered field types and independently owned immutable values. Flat destructuring uses exact arity and evaluates its RHS once; module bindings publish as one prepared group (spec \xc2\xa7""17.35). Unit fields carry no payload and do not admit ordinary Unit generic arguments or formals. Nested tuple values do not imply admitted nested patterns; Sendable remains the conjunction of fields and wrapping grants no execution permission.\n" "```xray\n" "// Literals\n" "var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)\n" "var h = (10, \"hi\", true)          // heterogeneous tuple\n"
+            "var single = (99,)                // single-element tuple: note trailing comma\n" "\n" "// Type annotation\n" "var p: (i64, string) = (7, \"ok\")\n" "\n" "// Field access: .N (N is a compile-time constant integer index)\n" "var first = t.0                   // 1\n" "var mid   = t.1                   // 2\n" "var nest  = ((1, 2), (3, 4))\n" "var a     = nest.0.0              // 1\n" "var b     = nest.1.1              // 4\n" "\n" "// Function return and destructuring\n" "fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }\n" "var (q, r) = divmod(17, 5)        // tuple destructure\n" "\n" "// Generic\n" "fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }\n" "var p2 = pair(1, \"x\")             // (i64, string)\n" "```\n" "\n" "### Type aliases\n" "```xray\n" "type Result = i64 | string\n" "type Mapper = fn(i64) -> i64\n" "type Point = { x: f64, y: f64 }\n" "type Pair<T> = { first: T, second: T }\n" "type Mapper2<T, U> = fn(T) -> U\n" "```\n" "\n" "### Type inference\n" "```xray\n"
+            "var x = 1               // x: i64\n" "var y = 1.5             // y: f64\n" "var z = \"hello\"         // z: string\n" "var a = [1, 2, 3]       // a: Array<i64>\n" "var m = #{\"a\": 1}    // m: Map<string, i64>\n" "var p = { name: \"A\" }   // p: { name: string } \xe2\x80\x94 structured object type\n" "var f = (x: i64) -> x   // f: fn(i64) -> i64 \xe2\x80\x94 explicit parameter, inferred return\n" "```\n" "\n" "### Explicit casts\n" "```xray\n" "var n = x as i64        // throws TypeError on failure\n" "var n = x as i64?       // returns null on failure (safe cast)\n" "```\n" "\n" "### Construction expressions\n" "```xray\n" "var p = Point(1.0, 2.0)\n" "var arr = Array<i64>()\n" "const ch = Channel<i64>(10)\n" "var m = Map<string, i64>()\n" "```\n" "```xray\n" "var a = [1, 2, 3]              // equivalent to Array<i64>() + push\n" "var m = #{}                    // equivalent to Map<...>()\n" "var p = Point{x: 1, y: 2}      // struct literal\n" "```\n" "\n" "### Admitted XIR floating semantics\n"
+            "In the new-XIR subset, f32 and f64 preserve their original IEEE precision across arithmetic and output (spec section 17.27). Zero signs and gradual subnormal values are preserved; invalid floating operations produce canonical NaN, and finite nonzero division by zero produces signed infinity. VM and native AOT use the same integer-only arithmetic implementation with independent exact-result tests; this does not imply the entire language or standard library is migrated.\n" "\n" "Frozen next Atomic cutover: runtime f64 admits every binary64 payload and preserves bits in transport; runtime f32 and CONST_FLOAT retain canonical-NaN restrictions. Arithmetic, conversions including same-width conversion, and negation canonicalize NaN results. This expanded carrier domain remains pending implementation and qualification (spec 2.3.2/17.24/17.27).\n" "",
     },
     {
         .id = "variables",
         .title = "Variables",
         .aliases_csv = "var,const,binding,capability,move,copy,declaration",
         .body =
-            "[Language reference](#51-var-const)\n"
-            "\n"
-            "## Variables\n"
-            "\n"
-            "### var\n"
-            "```xray\n"
-            "var x = 1                         // type inferred as i64\n"
-            "var name: string = \"Alice\"        // explicit type\n"
-            "var count: i64                    // no initializer: zero value used\n"
-            "var maybeName: string?            // OK: defaults to null\n"
-            "var empty: string = \"\"            // string requires an explicit initializer\n"
-            "```\n"
-            "\n"
-            "### const\n"
-            "```xray\n"
-            "const PI = 3.14159\n"
-            "const MAX_LEN: i64 = 1024\n"
-            "```\n"
-            "\n"
-            "### Value copies and identity boundaries\n"
-            "`const` fixes the binding and its value-semantic components. Saving a copyable Array into another binding preserves a logical copy; it does not require explicit copy/move or unique backing. Class and synchronized fields retain identity, so const does not freeze their referenced objects or prove Sendable. Type-position `const T` is outside this frozen subset. Spec \xc2\xa7""17.26 admits ordinary Array copies and independent mutation of a writable local copy. The broader identity/resource cases in the example remain language contracts and do not imply complete new-XIR qualification.\n"
-            "```xray\n"
-            "const channel = Channel<i64>(16)\n"
-            "const counter = Atomic(0)\n"
-            "\n"
-            "var source = [1, 2, 3]\n"
-            "const snapshot = source\n"
-            "source[0] = 9\n"
-            "var current = snapshot\n"
-            "current.push(4)\n"
-            "print(snapshot[0])          // 1\n"
-            "print(len(snapshot))        // 3\n"
-            "```\n"
-            "\n"
-            "### Destructuring\n"
-            "The new-XIR flat Tuple subset accepts var/const identifier or discard bindings, Unit and comma-marked singletons in local, module and closure scopes. Evaluate the RHS once and prepare all owned field/Cell results before publishing. Module groups use SLOT_GROUP_INIT: the first trace observes all committed slots. Nested/rest, array/object patterns, spread, match and leaf annotations remain unadmitted; this subset does not complete all language destructuring. See spec \xc2\xa7""5.1.3/\xc2\xa7""17.35.\n"
-            "```xray\n"
-            "// array destructuring\n"
-            "var [a, b, c] = [1, 2, 3]\n"
-            "var [first, , third] = [10, 20, 30]         // skip elements\n"
-            "\n"
-            "// tuple destructuring (multi-return)\n"
-            "var (q, r) = divmod(17, 5)\n"
-            "\n"
-            "// object destructuring (extract by field name; local binding may be renamed)\n"
-            "var { name, age } = { name: \"Alice\", age: 30 }\n"
-            "var { name: localName, age } = { name: \"Alice\", age: 30 }\n"
-            "```\n"
-            "",
+            "[Language reference](#51-var-const)\n" "\n" "## Variables\n" "\n" "### var\n" "```xray\n" "var x = 1                         // type inferred as i64\n" "var name: string = \"Alice\"        // explicit type\n" "var count: i64                    // no initializer: zero value used\n" "var maybeName: string?            // OK: defaults to null\n" "var empty: string = \"\"            // string requires an explicit initializer\n" "```\n" "\n" "### const\n" "```xray\n" "const PI = 3.14159\n" "const MAX_LEN: i64 = 1024\n" "```\n" "\n" "### Value copies and identity boundaries\n"
+            "`const` fixes the binding and its value-semantic components. Saving a copyable Array into another binding preserves a logical copy; it does not require explicit copy/move or unique backing. Class and synchronized fields retain identity, so const does not freeze their referenced objects or prove Sendable. Type-position `const T` is outside this frozen subset. Spec \xc2\xa7""17.26 admits ordinary Array copies and independent mutation of a writable local copy. The broader identity/resource cases in the example remain language contracts and do not imply complete new-XIR qualification.\n" "```xray\n" "const channel = Channel<i64>(16)\n" "const counter = Atomic(0)\n" "\n" "var source = [1, 2, 3]\n" "const snapshot = source\n" "source[0] = 9\n" "var current = snapshot\n" "current.push(4)\n" "print(snapshot[0])          // 1\n" "print(len(snapshot))        // 3\n" "```\n" "\n" "### Destructuring\n"
+            "The new-XIR flat Tuple subset accepts var/const identifier or discard bindings, Unit and comma-marked singletons in local, module and closure scopes. Evaluate the RHS once and prepare all owned field/Cell results before publishing. Module groups use SLOT_GROUP_INIT: the first trace observes all committed slots. Nested/rest, array/object patterns, spread, match and leaf annotations remain unadmitted; this subset does not complete all language destructuring. See spec \xc2\xa7""5.1.3/\xc2\xa7""17.35.\n" "```xray\n" "// array destructuring\n" "var [a, b, c] = [1, 2, 3]\n" "var [first, , third] = [10, 20, 30]         // skip elements\n" "\n" "// tuple destructuring (multi-return)\n" "var (q, r) = divmod(17, 5)\n" "\n" "// object destructuring (extract by field name; local binding may be renamed)\n" "var { name, age } = { name: \"Alice\", age: 30 }\n" "var { name: localName, age } = { name: \"Alice\", age: 30 }\n" "```\n" "",
     },
 };
 XR_DATADEF const int xmcp_generated_topic_count = 20;
@@ -9079,60 +1780,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "Coro",
         .summary = "Coroutine diagnostics and coroutine-local helpers",
         .body =
-            "# Coro module\n"
-            "\n"
-            "Coroutine diagnostics, cooperative yielding, thread pinning, named coroutine lookup, and coroutine-local storage helpers.\n"
-            "\n"
-            "Usage: `import Coro` then call `Coro.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Coro.CoroDeadlock` | `{ members: Array<CoroInfo>, reason: string }` | Typed description of a detected coroutine wait cycle |\n"
-            "| `Coro.CoroDeadlock.members` | `const Array<CoroInfo>` | Object field |\n"
-            "| `Coro.CoroDeadlock.reason` | `const string` | Object field |\n"
-            "| `Coro.CoroGroupKey` | `enum CoroGroupKey` | Stable key used to group coroutine diagnostic snapshots |\n"
-            "| `Coro.CoroGroupKey.Name` | `CoroGroupKey.Name` | Enum variant |\n"
-            "| `Coro.CoroGroupKey.State` | `CoroGroupKey.State` | Enum variant |\n"
-            "| `Coro.CoroInfo` | `{ id: i64, name: string?, state: CoroState, reductions: i64, source: string? }` | Typed diagnostic snapshot for one coroutine |\n"
-            "| `Coro.CoroInfo.id` | `const i64` | Object field |\n"
-            "| `Coro.CoroInfo.name` | `const string?` | Object field |\n"
-            "| `Coro.CoroInfo.reductions` | `const i64` | Object field |\n"
-            "| `Coro.CoroInfo.source` | `const string?` | Object field |\n"
-            "| `Coro.CoroInfo.state` | `const CoroState` | Object field |\n"
-            "| `Coro.CoroMetric` | `enum CoroMetric` | Metric used to rank coroutine diagnostic snapshots |\n"
-            "| `Coro.CoroMetric.Id` | `CoroMetric.Id` | Enum variant |\n"
-            "| `Coro.CoroMetric.Reductions` | `CoroMetric.Reductions` | Enum variant |\n"
-            "| `Coro.CoroState` | `enum CoroState` | Lifecycle state captured in a coroutine diagnostic snapshot |\n"
-            "| `Coro.CoroState.Blocked` | `CoroState.Blocked` | Enum variant |\n"
-            "| `Coro.CoroState.Done` | `CoroState.Done` | Enum variant |\n"
-            "| `Coro.CoroState.Ready` | `CoroState.Ready` | Enum variant |\n"
-            "| `Coro.CoroState.Running` | `CoroState.Running` | Enum variant |\n"
-            "| `Coro.CoroState.Unknown` | `CoroState.Unknown` | Enum variant |\n"
-            "| `Coro.CoroStats` | `{ active: i64, blocked: i64, ready: i64, total: i64, created: i64 }` | Typed aggregate counters for the coroutine scheduler |\n"
-            "| `Coro.CoroStats.active` | `const i64` | Object field |\n"
-            "| `Coro.CoroStats.blocked` | `const i64` | Object field |\n"
-            "| `Coro.CoroStats.created` | `const i64` | Object field |\n"
-            "| `Coro.CoroStats.ready` | `const i64` | Object field |\n"
-            "| `Coro.CoroStats.total` | `const i64` | Object field |\n"
-            "| `Coro.Local` | `<T>(): CoroLocal<T>` | Create a typed coroutine-local slot |\n"
-            "| `Coro.deadlocks` | `(): Array<CoroDeadlock>` | Detect deadlocked coroutines |\n"
-            "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n"
-            "| `Coro.dump` | `(limit?: i64): ()` | Dump coroutine state |\n"
-            "| `Coro.groupBy` | `(field: CoroGroupKey): Map<string, i64>` | Group coroutines by field |\n"
-            "| `Coro.kill` | `(name: string, reason?: string): bool` | Kill named coroutine |\n"
-            "| `Coro.list` | `(limit?: i64, state?: CoroState): Array<CoroInfo>` | List coroutines |\n"
-            "| `Coro.lockThread` | `(): ()` | Lock current thread |\n"
-            "| `Coro.monitor` | `(name: string): Channel<string>` | Monitor named coroutine, returns Channel |\n"
-            "| `Coro.self` | `(): string?` | Get current coroutine name |\n"
-            "| `Coro.stalled` | `(timeout_ms?: i64): Array<CoroInfo>` | Detect stalled coroutines |\n"
-            "| `Coro.stats` | `(): CoroStats` | Get coroutine statistics |\n"
-            "| `Coro.top` | `(n: i64, metric?: CoroMetric): Array<CoroInfo>` | Top N coroutines by metric |\n"
-            "| `Coro.unlockThread` | `(): ()` | Unlock current thread |\n"
-            "| `Coro.whereis` | `(name: string): bool` | Check if named coroutine exists |\n"
-            "| `Coro.yield` | `(): ()` | Cooperative CPU yield (Gosched) |\n"
-            "",
+            "# Coro module\n" "\n" "Coroutine diagnostics, cooperative yielding, thread pinning, named coroutine lookup, and coroutine-local storage helpers.\n" "\n" "Usage: `import Coro` then call `Coro.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Coro.CoroDeadlock` | `{ members: Array<CoroInfo>, reason: string }` | Typed description of a detected coroutine wait cycle |\n" "| `Coro.CoroDeadlock.members` | `const Array<CoroInfo>` | Object field |\n" "| `Coro.CoroDeadlock.reason` | `const string` | Object field |\n" "| `Coro.CoroGroupKey` | `enum CoroGroupKey` | Stable key used to group coroutine diagnostic snapshots |\n" "| `Coro.CoroGroupKey.Name` | `CoroGroupKey.Name` | Enum variant |\n" "| `Coro.CoroGroupKey.State` | `CoroGroupKey.State` | Enum variant |\n" "| `Coro.CoroInfo` | `{ id: i64, name: string?, state: CoroState, reductions: i64, source: string? }` | Typed diagnostic snapshot for one coroutine |\n"
+            "| `Coro.CoroInfo.id` | `const i64` | Object field |\n" "| `Coro.CoroInfo.name` | `const string?` | Object field |\n" "| `Coro.CoroInfo.reductions` | `const i64` | Object field |\n" "| `Coro.CoroInfo.source` | `const string?` | Object field |\n" "| `Coro.CoroInfo.state` | `const CoroState` | Object field |\n" "| `Coro.CoroMetric` | `enum CoroMetric` | Metric used to rank coroutine diagnostic snapshots |\n" "| `Coro.CoroMetric.Id` | `CoroMetric.Id` | Enum variant |\n" "| `Coro.CoroMetric.Reductions` | `CoroMetric.Reductions` | Enum variant |\n" "| `Coro.CoroState` | `enum CoroState` | Lifecycle state captured in a coroutine diagnostic snapshot |\n" "| `Coro.CoroState.Blocked` | `CoroState.Blocked` | Enum variant |\n" "| `Coro.CoroState.Done` | `CoroState.Done` | Enum variant |\n" "| `Coro.CoroState.Ready` | `CoroState.Ready` | Enum variant |\n" "| `Coro.CoroState.Running` | `CoroState.Running` | Enum variant |\n" "| `Coro.CoroState.Unknown` | `CoroState.Unknown` | Enum variant |\n"
+            "| `Coro.CoroStats` | `{ active: i64, blocked: i64, ready: i64, total: i64, created: i64 }` | Typed aggregate counters for the coroutine scheduler |\n" "| `Coro.CoroStats.active` | `const i64` | Object field |\n" "| `Coro.CoroStats.blocked` | `const i64` | Object field |\n" "| `Coro.CoroStats.created` | `const i64` | Object field |\n" "| `Coro.CoroStats.ready` | `const i64` | Object field |\n" "| `Coro.CoroStats.total` | `const i64` | Object field |\n" "| `Coro.Local` | `<T>(): CoroLocal<T>` | Create a typed coroutine-local slot |\n" "| `Coro.deadlocks` | `(): Array<CoroDeadlock>` | Detect deadlocked coroutines |\n" "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n" "| `Coro.dump` | `(limit?: i64): ()` | Dump coroutine state |\n" "| `Coro.groupBy` | `(field: CoroGroupKey): Map<string, i64>` | Group coroutines by field |\n" "| `Coro.kill` | `(name: string, reason?: string): bool` | Kill named coroutine |\n"
+            "| `Coro.list` | `(limit?: i64, state?: CoroState): Array<CoroInfo>` | List coroutines |\n" "| `Coro.lockThread` | `(): ()` | Lock current thread |\n" "| `Coro.monitor` | `(name: string): Channel<string>` | Monitor named coroutine, returns Channel |\n" "| `Coro.self` | `(): string?` | Get current coroutine name |\n" "| `Coro.stalled` | `(timeout_ms?: i64): Array<CoroInfo>` | Detect stalled coroutines |\n" "| `Coro.stats` | `(): CoroStats` | Get coroutine statistics |\n" "| `Coro.top` | `(n: i64, metric?: CoroMetric): Array<CoroInfo>` | Top N coroutines by metric |\n" "| `Coro.unlockThread` | `(): ()` | Unlock current thread |\n" "| `Coro.whereis` | `(name: string): bool` | Check if named coroutine exists |\n" "| `Coro.yield` | `(): ()` | Cooperative CPU yield (Gosched) |\n" "",
         .symbols = _symbols_Coro,
         .symbol_count = (int)(sizeof(_symbols_Coro) / sizeof(_symbols_Coro[0])),
     },
@@ -9140,18 +1791,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "CoroPool",
         .summary = "Runtime coroutine pool helper namespace",
         .body =
-            "# CoroPool module\n"
-            "\n"
-            "Runtime coroutine pool helper namespace for submitting function work and closing the pool.\n"
-            "\n"
-            "Usage: `import CoroPool` then call `CoroPool.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `CoroPool.submit` | `(fn: fn(): T): Task<T>` | Submit a typed task |\n"
-            "",
+            "# CoroPool module\n" "\n" "Runtime coroutine pool helper namespace for submitting function work and closing the pool.\n" "\n" "Usage: `import CoroPool` then call `CoroPool.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `CoroPool.submit` | `(fn: fn(): T): Task<T>` | Submit a typed task |\n" "",
         .symbols = _symbols_CoroPool,
         .symbol_count = (int)(sizeof(_symbols_CoroPool) / sizeof(_symbols_CoroPool[0])),
     },
@@ -9159,28 +1799,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "base64",
         .summary = "Base64 encoding/decoding",
         .body =
-            "# base64 module\n"
-            "\n"
-            "Base64 encoding/decoding.\n"
-            "\n"
-            "Usage: `import base64` then call `base64.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Base64DecodeOptions` | `Base64DecodeOptions` |  |\n"
-            "| `Base64DecodeOptions.alphabet` | `: Base64Alphabet` |  |\n"
-            "| `Base64DecodeOptions.init` | `(): ()` |  |\n"
-            "| `Base64DecodeOptions.padding` | `: Base64PaddingPolicy` |  |\n"
-            "| `Base64EncodeOptions` | `Base64EncodeOptions` |  |\n"
-            "| `Base64EncodeOptions.alphabet` | `: Base64Alphabet` |  |\n"
-            "| `Base64EncodeOptions.init` | `(): ()` |  |\n"
-            "| `Base64EncodeOptions.padding` | `: bool` |  |\n"
-            "| `base64.decode` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<u8>` |  |\n"
-            "| `base64.encode` | `(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()): string` |  |\n"
-            "| `base64.isValid` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): bool` |  |\n"
-            "",
+            "# base64 module\n" "\n" "Base64 encoding/decoding.\n" "\n" "Usage: `import base64` then call `base64.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Base64DecodeOptions` | `Base64DecodeOptions` |  |\n" "| `Base64DecodeOptions.alphabet` | `: Base64Alphabet` |  |\n" "| `Base64DecodeOptions.init` | `(): ()` |  |\n" "| `Base64DecodeOptions.padding` | `: Base64PaddingPolicy` |  |\n" "| `Base64EncodeOptions` | `Base64EncodeOptions` |  |\n" "| `Base64EncodeOptions.alphabet` | `: Base64Alphabet` |  |\n" "| `Base64EncodeOptions.init` | `(): ()` |  |\n" "| `Base64EncodeOptions.padding` | `: bool` |  |\n" "| `base64.decode` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<u8>` |  |\n" "| `base64.encode` | `(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()): string` |  |\n" "| `base64.isValid` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): bool` |  |\n" "",
         .symbols = _symbols_base64,
         .symbol_count = (int)(sizeof(_symbols_base64) / sizeof(_symbols_base64[0])),
     },
@@ -9188,181 +1807,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "cluster",
         .summary = "Authenticated cluster membership, monitoring, discovery, and bounded topic messaging",
         .body =
-            "# cluster module\n"
-            "\n"
-            "Authenticated peer membership and node/coroutine monitoring with LAN discovery and bounded topic delivery. The public messaging surface is `listen` and `send`; the module defines no request/response or RPC primitive.\n"
-            "\n"
-            "Usage: `import cluster`, start a node with a typed `ClusterConfig`, join authenticated peers, and exchange `Buffer` values through `listen` and `send`.\n"
-            "\n"
-            "### Control plane\n"
-            "`start`, `stop`, `join`, `self`, `nodes`, `info`, `discover`, and `monitor` own node lifecycle, membership observation, authenticated discovery, and node/coroutine exit monitoring.\n"
-            "\n"
-            "### Topic delivery\n"
-            "`listen(pattern, capacity)` creates a bounded `Channel<Buffer>` subscription. `send(topic, envelope, hopLimit)` moves an opaque `Buffer` into local and peer topic delivery and reports a `ClusterDelivery` admission result.\n"
-            "\n"
-            "### Protocol surface\n"
-            "The exported frame, handshake, heartbeat, coroutine-monitor, and discovery codecs define the byte-exact peer protocol. Request correlation and response routing are not part of the cluster API.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `cluster.ADDRESS_HOST_MAX_BYTES` | `: i64` |  |\n"
-            "| `cluster.COROUTINE_MONITOR_CAPACITY` | `: i64` |  |\n"
-            "| `cluster.CORO_NAME_MAX` | `: i64` |  |\n"
-            "| `cluster.ClusterConfig` | `{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }` |  |\n"
-            "| `cluster.ClusterConfig.heartbeatIntervalMs` | `i64?` | Type alias field |\n"
-            "| `cluster.ClusterConfig.heartbeatTimeoutMs` | `i64?` | Type alias field |\n"
-            "| `cluster.ClusterConfig.maxMissedHeartbeats` | `i64?` | Type alias field |\n"
-            "| `cluster.ClusterConfig.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterConfig.port` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterConfig.secret` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterConfig.tls` | `ClusterTlsOptions?` | Type alias field |\n"
-            "| `cluster.ClusterCoroExit` | `{ name: string, reason: string, }` |  |\n"
-            "| `cluster.ClusterCoroExit.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterCoroExit.reason` | `string` | Type alias field |\n"
-            "| `cluster.ClusterDiscoveryAnnouncement` | `{ name: string, port: i64, clusterHash: u64, }` |  |\n"
-            "| `cluster.ClusterDiscoveryAnnouncement.clusterHash` | `u64` | Type alias field |\n"
-            "| `cluster.ClusterDiscoveryAnnouncement.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterDiscoveryAnnouncement.port` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterFrame` | `{ kind: i64, payload: Array<u8>, }` |  |\n"
-            "| `cluster.ClusterFrame.kind` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterFrame.payload` | `Array<u8>` | Type alias field |\n"
-            "| `cluster.ClusterHandshakeAck` | `{ name: string, nonce: Array<u8>, proof: Array<u8>, flags: i64, }` |  |\n"
-            "| `cluster.ClusterHandshakeAck.flags` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterHandshakeAck.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterHandshakeAck.nonce` | `Array<u8>` | Type alias field |\n"
-            "| `cluster.ClusterHandshakeAck.proof` | `Array<u8>` | Type alias field |\n"
-            "| `cluster.ClusterHandshakeRequest` | `{ name: string, nonce: Array<u8>, flags: i64, }` |  |\n"
-            "| `cluster.ClusterHandshakeRequest.flags` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterHandshakeRequest.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterHandshakeRequest.nonce` | `Array<u8>` | Type alias field |\n"
-            "| `cluster.ClusterInfo` | `{ self: string, port: i64, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tlsEnabled: bool, }` |  |\n"
-            "| `cluster.ClusterInfo.deadNodes` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterInfo.listeners` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterInfo.nodes` | `Array<ClusterNodeInfo>` | Type alias field |\n"
-            "| `cluster.ClusterInfo.port` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterInfo.self` | `string` | Type alias field |\n"
-            "| `cluster.ClusterInfo.tlsEnabled` | `bool` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo` | `{ name: string, endpoint: Endpoint?, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64, }` |  |\n"
-            "| `cluster.ClusterNodeInfo.bytesReceived` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.bytesSent` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.endpoint` | `Endpoint?` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.framesReceived` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.framesSent` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueBytes` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueFrames` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.phi` | `f64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.rttMs` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.sendErrors` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.slow` | `bool` | Type alias field |\n"
-            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }` |  |\n"
-            "| `cluster.ClusterTlsOptions.caFile` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.certFile` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.enabled` | `bool` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.insecure` | `bool` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.keyFile` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterTransportFrame` | `{ hopLimit: i64, topic: string, envelope: Array<u8>, }` |  |\n"
-            "| `cluster.ClusterTransportFrame.envelope` | `Array<u8>` | Type alias field |\n"
-            "| `cluster.ClusterTransportFrame.hopLimit` | `i64` | Type alias field |\n"
-            "| `cluster.ClusterTransportFrame.topic` | `string` | Type alias field |\n"
-            "| `cluster.DISCOVERY_INTERVAL_MS` | `: i64` |  |\n"
-            "| `cluster.DISCOVERY_MAGIC` | `: i64` |  |\n"
-            "| `cluster.DISCOVERY_MULTICAST_GROUP` | `: string` |  |\n"
-            "| `cluster.DISCOVERY_MULTICAST_PORT` | `: i64` |  |\n"
-            "| `cluster.DISCOVERY_VERSION` | `: i64` |  |\n"
-            "| `cluster.ENVELOPE_HEADER_SIZE` | `: i64` |  |\n"
-            "| `cluster.FRAME_CORO_EXIT` | `: i64` |  |\n"
-            "| `cluster.FRAME_CORO_MONITOR` | `: i64` |  |\n"
-            "| `cluster.FRAME_HANDSHAKE_ACK` | `: i64` |  |\n"
-            "| `cluster.FRAME_HANDSHAKE_DONE` | `: i64` |  |\n"
-            "| `cluster.FRAME_HANDSHAKE_ERR` | `: i64` |  |\n"
-            "| `cluster.FRAME_HANDSHAKE_REQ` | `: i64` |  |\n"
-            "| `cluster.FRAME_HEADER_SIZE` | `: i64` |  |\n"
-            "| `cluster.FRAME_HEARTBEAT_PING` | `: i64` |  |\n"
-            "| `cluster.FRAME_HEARTBEAT_PONG` | `: i64` |  |\n"
-            "| `cluster.FRAME_MAX_PAYLOAD` | `: i64` |  |\n"
-            "| `cluster.FRAME_TRANSPORT_ENVELOPE` | `: i64` |  |\n"
-            "| `cluster.HANDSHAKE_TIMEOUT_MS` | `: i64` |  |\n"
-            "| `cluster.HANDSHAKE_VERSION` | `: i64` |  |\n"
-            "| `cluster.HEARTBEAT_INTERVAL_MS` | `: i64` |  |\n"
-            "| `cluster.HEARTBEAT_TICK_MIN_MS` | `: i64` |  |\n"
-            "| `cluster.HEARTBEAT_TIMEOUT_MS` | `: i64` |  |\n"
-            "| `cluster.MAX_MISSED_HEARTBEATS` | `: i64` |  |\n"
-            "| `cluster.NODE_MONITOR_CAPACITY` | `: i64` |  |\n"
-            "| `cluster.NODE_NAME_MAX` | `: i64` |  |\n"
-            "| `cluster.NONCE_SIZE` | `: i64` |  |\n"
-            "| `cluster.OUTPUT_QUEUE_HIGH_WATERMARK_BYTES` | `: i64` |  |\n"
-            "| `cluster.PHI_MIN_SAMPLES` | `: i64` |  |\n"
-            "| `cluster.PHI_THRESHOLD` | `: f64` |  |\n"
-            "| `cluster.PHI_WINDOW_SIZE` | `: i64` |  |\n"
-            "| `cluster.PROOF_SIZE` | `: i64` |  |\n"
-            "| `PhiDetector` | `PhiDetector` |  |\n"
-            "| `PhiDetector.init` | `(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()` |  |\n"
-            "| `PhiDetector.intervals` | `: Array<f64>` |  |\n"
-            "| `PhiDetector.lastHeartbeatMs` | `: i64` |  |\n"
-            "| `PhiDetector.mean` | `: f64` |  |\n"
-            "| `PhiDetector.sampleCount` | `: i64` |  |\n"
-            "| `PhiDetector.sum` | `: f64` |  |\n"
-            "| `PhiDetector.sumSquares` | `: f64` |  |\n"
-            "| `PhiDetector.value` | `(nowMs: i64): f64` |  |\n"
-            "| `PhiDetector.variance` | `: f64` |  |\n"
-            "| `PhiDetector.writeIndex` | `: i64` |  |\n"
-            "| `cluster.SHARED_SECRET_MAX_BYTES` | `: i64` |  |\n"
-            "| `cluster.SUBSCRIPTION_CAPACITY_MAX` | `: i64` |  |\n"
-            "| `cluster.TOMBSTONE_RETENTION_MS` | `: i64` |  |\n"
-            "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: i64` |  |\n"
-            "| `cluster.TOPIC_DELIVERY_FANOUT_MAX` | `: i64` |  |\n"
-            "| `cluster.TOPIC_MAX_HOP_LIMIT` | `: i64` |  |\n"
-            "| `cluster.TOPIC_PATTERN_MAX` | `: i64` |  |\n"
-            "| `cluster.computeHandshakeProof` | `(secret: string, nonce: Array<u8>): Array<u8>?` |  |\n"
-            "| `cluster.decodeCoroExit` | `(payload: Array<u8>): ClusterCoroExit?` |  |\n"
-            "| `cluster.decodeCoroMonitor` | `(payload: Array<u8>): string?` |  |\n"
-            "| `cluster.decodeDiscoveryAnnouncement` | `(data: Array<u8>): ClusterDiscoveryAnnouncement?` |  |\n"
-            "| `cluster.decodeFrame` | `(data: Array<u8>): ClusterFrame?` |  |\n"
-            "| `cluster.decodeHandshakeAck` | `(payload: Array<u8>): ClusterHandshakeAck?` |  |\n"
-            "| `cluster.decodeHandshakeDone` | `(payload: Array<u8>): Array<u8>?` |  |\n"
-            "| `cluster.decodeHandshakeRequest` | `(payload: Array<u8>): ClusterHandshakeRequest?` |  |\n"
-            "| `cluster.decodeHeartbeat` | `(payload: Array<u8>): i64?` |  |\n"
-            "| `cluster.decodeTransportFrame` | `(data: Array<u8>): ClusterTransportFrame?` |  |\n"
-            "| `cluster.discover` | `(): bool` |  |\n"
-            "| `cluster.discoveryClusterHash` | `(secret: string): u64` |  |\n"
-            "| `cluster.encodeCoroExit` | `(value: ClusterCoroExit): Array<u8>?` |  |\n"
-            "| `cluster.encodeCoroMonitor` | `(name: string): Array<u8>?` |  |\n"
-            "| `cluster.encodeDiscoveryAnnouncement` | `(value: ClusterDiscoveryAnnouncement): Array<u8>?` |  |\n"
-            "| `cluster.encodeFrame` | `(kind: i64, payload: Array<u8>): Array<u8>?` |  |\n"
-            "| `cluster.encodeHandshakeAck` | `(ack: ClusterHandshakeAck): Array<u8>?` |  |\n"
-            "| `cluster.encodeHandshakeDone` | `(proof: Array<u8>): Array<u8>?` |  |\n"
-            "| `cluster.encodeHandshakeRequest` | `(request: ClusterHandshakeRequest): Array<u8>?` |  |\n"
-            "| `cluster.encodeHeartbeat` | `(kind: i64, timestampMs: i64): Array<u8>?` |  |\n"
-            "| `cluster.encodeTransportFrame` | `(hopLimit: i64, topic: string, envelope: Array<u8>): Array<u8>?` |  |\n"
-            "| `cluster.handshakeProofEqual` | `(left: Array<u8>, right: Array<u8>): bool` |  |\n"
-            "| `cluster.heartbeatIsDead` | `(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool` |  |\n"
-            "| `cluster.heartbeatTickInterval` | `(intervalMs: i64): i64` |  |\n"
-            "| `cluster.info` | `(): ClusterInfo?` |  |\n"
-            "| `cluster.join` | `(addr: string): bool` |  |\n"
-            "| `cluster.listen` | `(pattern: string, capacity: i64 = 1024): Channel<Buffer>?` |  |\n"
-            "| `cluster.monitor` | `(name: string, coroName: string? = null): Channel<string>?` |  |\n"
-            "| `cluster.nodes` | `(): Array<string>?` |  |\n"
-            "| `cluster.parseAddress` | `(addr: string): Endpoint` |  |\n"
-            "| `cluster.self` | `(): string` |  |\n"
-            "| `cluster.send` | `(topic: string, envelope: move Buffer, hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT): ClusterDelivery` |  |\n"
-            "| `cluster.shouldJoinDiscoveredNode` | `(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool` |  |\n"
-            "| `cluster.start` | `(config: ClusterConfig): bool` |  |\n"
-            "| `cluster.stop` | `(): ()` |  |\n"
-            "| `cluster.tombstoneIsLive` | `(markedAtMs: i64, nowMs: i64): bool` |  |\n"
-            "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
-            "| `cluster.validCoroutineName` | `(name: string): bool` |  |\n"
-            "| `cluster.validNodeName` | `(name: string): bool` |  |\n"
-            "| `cluster.validTopicName` | `(topic: string): bool` |  |\n"
-            "| `cluster.validTopicPattern` | `(pattern: string): bool` |  |\n"
-            "",
+            "# cluster module\n" "\n" "Authenticated peer membership and node/coroutine monitoring with LAN discovery and bounded topic delivery. The public messaging surface is `listen` and `send`; the module defines no request/response or RPC primitive.\n" "\n" "Usage: `import cluster`, start a node with a typed `ClusterConfig`, join authenticated peers, and exchange `Buffer` values through `listen` and `send`.\n" "\n" "### Control plane\n" "`start`, `stop`, `join`, `self`, `nodes`, `info`, `discover`, and `monitor` own node lifecycle, membership observation, authenticated discovery, and node/coroutine exit monitoring.\n" "\n" "### Topic delivery\n" "`listen(pattern, capacity)` creates a bounded `Channel<Buffer>` subscription. `send(topic, envelope, hopLimit)` moves an opaque `Buffer` into local and peer topic delivery and reports a `ClusterDelivery` admission result.\n" "\n" "### Protocol surface\n"
+            "The exported frame, handshake, heartbeat, coroutine-monitor, and discovery codecs define the byte-exact peer protocol. Request correlation and response routing are not part of the cluster API.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `cluster.ADDRESS_HOST_MAX_BYTES` | `: i64` |  |\n" "| `cluster.COROUTINE_MONITOR_CAPACITY` | `: i64` |  |\n" "| `cluster.CORO_NAME_MAX` | `: i64` |  |\n" "| `cluster.ClusterConfig` | `{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, heartbeatIntervalMs: i64?, heartbeatTimeoutMs: i64?, maxMissedHeartbeats: i64?, }` |  |\n" "| `cluster.ClusterConfig.heartbeatIntervalMs` | `i64?` | Type alias field |\n" "| `cluster.ClusterConfig.heartbeatTimeoutMs` | `i64?` | Type alias field |\n" "| `cluster.ClusterConfig.maxMissedHeartbeats` | `i64?` | Type alias field |\n" "| `cluster.ClusterConfig.name` | `string` | Type alias field |\n" "| `cluster.ClusterConfig.port` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterConfig.secret` | `string?` | Type alias field |\n" "| `cluster.ClusterConfig.tls` | `ClusterTlsOptions?` | Type alias field |\n" "| `cluster.ClusterCoroExit` | `{ name: string, reason: string, }` |  |\n" "| `cluster.ClusterCoroExit.name` | `string` | Type alias field |\n" "| `cluster.ClusterCoroExit.reason` | `string` | Type alias field |\n" "| `cluster.ClusterDiscoveryAnnouncement` | `{ name: string, port: i64, clusterHash: u64, }` |  |\n" "| `cluster.ClusterDiscoveryAnnouncement.clusterHash` | `u64` | Type alias field |\n" "| `cluster.ClusterDiscoveryAnnouncement.name` | `string` | Type alias field |\n" "| `cluster.ClusterDiscoveryAnnouncement.port` | `i64` | Type alias field |\n" "| `cluster.ClusterFrame` | `{ kind: i64, payload: Array<u8>, }` |  |\n" "| `cluster.ClusterFrame.kind` | `i64` | Type alias field |\n" "| `cluster.ClusterFrame.payload` | `Array<u8>` | Type alias field |\n"
+            "| `cluster.ClusterHandshakeAck` | `{ name: string, nonce: Array<u8>, proof: Array<u8>, flags: i64, }` |  |\n" "| `cluster.ClusterHandshakeAck.flags` | `i64` | Type alias field |\n" "| `cluster.ClusterHandshakeAck.name` | `string` | Type alias field |\n" "| `cluster.ClusterHandshakeAck.nonce` | `Array<u8>` | Type alias field |\n" "| `cluster.ClusterHandshakeAck.proof` | `Array<u8>` | Type alias field |\n" "| `cluster.ClusterHandshakeRequest` | `{ name: string, nonce: Array<u8>, flags: i64, }` |  |\n" "| `cluster.ClusterHandshakeRequest.flags` | `i64` | Type alias field |\n" "| `cluster.ClusterHandshakeRequest.name` | `string` | Type alias field |\n" "| `cluster.ClusterHandshakeRequest.nonce` | `Array<u8>` | Type alias field |\n" "| `cluster.ClusterInfo` | `{ self: string, port: i64, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tlsEnabled: bool, }` |  |\n"
+            "| `cluster.ClusterInfo.deadNodes` | `i64` | Type alias field |\n" "| `cluster.ClusterInfo.heartbeatIntervalMs` | `i64` | Type alias field |\n" "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `i64` | Type alias field |\n" "| `cluster.ClusterInfo.listeners` | `i64` | Type alias field |\n" "| `cluster.ClusterInfo.maxMissedHeartbeats` | `i64` | Type alias field |\n" "| `cluster.ClusterInfo.nodes` | `Array<ClusterNodeInfo>` | Type alias field |\n" "| `cluster.ClusterInfo.port` | `i64` | Type alias field |\n" "| `cluster.ClusterInfo.self` | `string` | Type alias field |\n" "| `cluster.ClusterInfo.tlsEnabled` | `bool` | Type alias field |\n" "| `cluster.ClusterNodeInfo` | `{ name: string, endpoint: Endpoint?, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64, }` |  |\n" "| `cluster.ClusterNodeInfo.bytesReceived` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterNodeInfo.bytesSent` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.endpoint` | `Endpoint?` | Type alias field |\n" "| `cluster.ClusterNodeInfo.framesReceived` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.framesSent` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.missedHeartbeats` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.name` | `string` | Type alias field |\n" "| `cluster.ClusterNodeInfo.outQueueBytes` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.outQueueFrames` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.phi` | `f64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.rttMs` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.sendErrors` | `i64` | Type alias field |\n" "| `cluster.ClusterNodeInfo.slow` | `bool` | Type alias field |\n" "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `i64` | Type alias field |\n"
+            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }` |  |\n" "| `cluster.ClusterTlsOptions.caFile` | `string?` | Type alias field |\n" "| `cluster.ClusterTlsOptions.certFile` | `string?` | Type alias field |\n" "| `cluster.ClusterTlsOptions.enabled` | `bool` | Type alias field |\n" "| `cluster.ClusterTlsOptions.insecure` | `bool` | Type alias field |\n" "| `cluster.ClusterTlsOptions.keyFile` | `string?` | Type alias field |\n" "| `cluster.ClusterTransportFrame` | `{ hopLimit: i64, topic: string, envelope: Array<u8>, }` |  |\n" "| `cluster.ClusterTransportFrame.envelope` | `Array<u8>` | Type alias field |\n" "| `cluster.ClusterTransportFrame.hopLimit` | `i64` | Type alias field |\n" "| `cluster.ClusterTransportFrame.topic` | `string` | Type alias field |\n" "| `cluster.DISCOVERY_INTERVAL_MS` | `: i64` |  |\n" "| `cluster.DISCOVERY_MAGIC` | `: i64` |  |\n" "| `cluster.DISCOVERY_MULTICAST_GROUP` | `: string` |  |\n"
+            "| `cluster.DISCOVERY_MULTICAST_PORT` | `: i64` |  |\n" "| `cluster.DISCOVERY_VERSION` | `: i64` |  |\n" "| `cluster.ENVELOPE_HEADER_SIZE` | `: i64` |  |\n" "| `cluster.FRAME_CORO_EXIT` | `: i64` |  |\n" "| `cluster.FRAME_CORO_MONITOR` | `: i64` |  |\n" "| `cluster.FRAME_HANDSHAKE_ACK` | `: i64` |  |\n" "| `cluster.FRAME_HANDSHAKE_DONE` | `: i64` |  |\n" "| `cluster.FRAME_HANDSHAKE_ERR` | `: i64` |  |\n" "| `cluster.FRAME_HANDSHAKE_REQ` | `: i64` |  |\n" "| `cluster.FRAME_HEADER_SIZE` | `: i64` |  |\n" "| `cluster.FRAME_HEARTBEAT_PING` | `: i64` |  |\n" "| `cluster.FRAME_HEARTBEAT_PONG` | `: i64` |  |\n" "| `cluster.FRAME_MAX_PAYLOAD` | `: i64` |  |\n" "| `cluster.FRAME_TRANSPORT_ENVELOPE` | `: i64` |  |\n" "| `cluster.HANDSHAKE_TIMEOUT_MS` | `: i64` |  |\n" "| `cluster.HANDSHAKE_VERSION` | `: i64` |  |\n" "| `cluster.HEARTBEAT_INTERVAL_MS` | `: i64` |  |\n" "| `cluster.HEARTBEAT_TICK_MIN_MS` | `: i64` |  |\n" "| `cluster.HEARTBEAT_TIMEOUT_MS` | `: i64` |  |\n"
+            "| `cluster.MAX_MISSED_HEARTBEATS` | `: i64` |  |\n" "| `cluster.NODE_MONITOR_CAPACITY` | `: i64` |  |\n" "| `cluster.NODE_NAME_MAX` | `: i64` |  |\n" "| `cluster.NONCE_SIZE` | `: i64` |  |\n" "| `cluster.OUTPUT_QUEUE_HIGH_WATERMARK_BYTES` | `: i64` |  |\n" "| `cluster.PHI_MIN_SAMPLES` | `: i64` |  |\n" "| `cluster.PHI_THRESHOLD` | `: f64` |  |\n" "| `cluster.PHI_WINDOW_SIZE` | `: i64` |  |\n" "| `cluster.PROOF_SIZE` | `: i64` |  |\n" "| `PhiDetector` | `PhiDetector` |  |\n" "| `PhiDetector.init` | `(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()` |  |\n" "| `PhiDetector.intervals` | `: Array<f64>` |  |\n" "| `PhiDetector.lastHeartbeatMs` | `: i64` |  |\n" "| `PhiDetector.mean` | `: f64` |  |\n" "| `PhiDetector.sampleCount` | `: i64` |  |\n" "| `PhiDetector.sum` | `: f64` |  |\n" "| `PhiDetector.sumSquares` | `: f64` |  |\n" "| `PhiDetector.value` | `(nowMs: i64): f64` |  |\n" "| `PhiDetector.variance` | `: f64` |  |\n" "| `PhiDetector.writeIndex` | `: i64` |  |\n"
+            "| `cluster.SHARED_SECRET_MAX_BYTES` | `: i64` |  |\n" "| `cluster.SUBSCRIPTION_CAPACITY_MAX` | `: i64` |  |\n" "| `cluster.TOMBSTONE_RETENTION_MS` | `: i64` |  |\n" "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: i64` |  |\n" "| `cluster.TOPIC_DELIVERY_FANOUT_MAX` | `: i64` |  |\n" "| `cluster.TOPIC_MAX_HOP_LIMIT` | `: i64` |  |\n" "| `cluster.TOPIC_PATTERN_MAX` | `: i64` |  |\n" "| `cluster.computeHandshakeProof` | `(secret: string, nonce: Array<u8>): Array<u8>?` |  |\n" "| `cluster.decodeCoroExit` | `(payload: Array<u8>): ClusterCoroExit?` |  |\n" "| `cluster.decodeCoroMonitor` | `(payload: Array<u8>): string?` |  |\n" "| `cluster.decodeDiscoveryAnnouncement` | `(data: Array<u8>): ClusterDiscoveryAnnouncement?` |  |\n" "| `cluster.decodeFrame` | `(data: Array<u8>): ClusterFrame?` |  |\n" "| `cluster.decodeHandshakeAck` | `(payload: Array<u8>): ClusterHandshakeAck?` |  |\n" "| `cluster.decodeHandshakeDone` | `(payload: Array<u8>): Array<u8>?` |  |\n"
+            "| `cluster.decodeHandshakeRequest` | `(payload: Array<u8>): ClusterHandshakeRequest?` |  |\n" "| `cluster.decodeHeartbeat` | `(payload: Array<u8>): i64?` |  |\n" "| `cluster.decodeTransportFrame` | `(data: Array<u8>): ClusterTransportFrame?` |  |\n" "| `cluster.discover` | `(): bool` |  |\n" "| `cluster.discoveryClusterHash` | `(secret: string): u64` |  |\n" "| `cluster.encodeCoroExit` | `(value: ClusterCoroExit): Array<u8>?` |  |\n" "| `cluster.encodeCoroMonitor` | `(name: string): Array<u8>?` |  |\n" "| `cluster.encodeDiscoveryAnnouncement` | `(value: ClusterDiscoveryAnnouncement): Array<u8>?` |  |\n" "| `cluster.encodeFrame` | `(kind: i64, payload: Array<u8>): Array<u8>?` |  |\n" "| `cluster.encodeHandshakeAck` | `(ack: ClusterHandshakeAck): Array<u8>?` |  |\n" "| `cluster.encodeHandshakeDone` | `(proof: Array<u8>): Array<u8>?` |  |\n" "| `cluster.encodeHandshakeRequest` | `(request: ClusterHandshakeRequest): Array<u8>?` |  |\n"
+            "| `cluster.encodeHeartbeat` | `(kind: i64, timestampMs: i64): Array<u8>?` |  |\n" "| `cluster.encodeTransportFrame` | `(hopLimit: i64, topic: string, envelope: Array<u8>): Array<u8>?` |  |\n" "| `cluster.handshakeProofEqual` | `(left: Array<u8>, right: Array<u8>): bool` |  |\n" "| `cluster.heartbeatIsDead` | `(phi: f64, samples: i64, elapsedMs: i64, missedHeartbeats: i64, timeoutMs: i64, maxMissedHeartbeats: i64): bool` |  |\n" "| `cluster.heartbeatTickInterval` | `(intervalMs: i64): i64` |  |\n" "| `cluster.info` | `(): ClusterInfo?` |  |\n" "| `cluster.join` | `(addr: string): bool` |  |\n" "| `cluster.listen` | `(pattern: string, capacity: i64 = 1024): Channel<Buffer>?` |  |\n" "| `cluster.monitor` | `(name: string, coroName: string? = null): Channel<string>?` |  |\n" "| `cluster.nodes` | `(): Array<string>?` |  |\n" "| `cluster.parseAddress` | `(addr: string): Endpoint` |  |\n" "| `cluster.self` | `(): string` |  |\n"
+            "| `cluster.send` | `(topic: string, envelope: move Buffer, hopLimit: i64 = TOPIC_DEFAULT_HOP_LIMIT): ClusterDelivery` |  |\n" "| `cluster.shouldJoinDiscoveredNode` | `(selfName: string, connectedNames: Array<string>, tombstones: Array<string>, announcement: ClusterDiscoveryAnnouncement, expectedClusterHash: u64): bool` |  |\n" "| `cluster.start` | `(config: ClusterConfig): bool` |  |\n" "| `cluster.stop` | `(): ()` |  |\n" "| `cluster.tombstoneIsLive` | `(markedAtMs: i64, nowMs: i64): bool` |  |\n" "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n" "| `cluster.validCoroutineName` | `(name: string): bool` |  |\n" "| `cluster.validNodeName` | `(name: string): bool` |  |\n" "| `cluster.validTopicName` | `(topic: string): bool` |  |\n" "| `cluster.validTopicPattern` | `(pattern: string): bool` |  |\n" "",
         .symbols = _symbols_cluster,
         .symbol_count = (int)(sizeof(_symbols_cluster) / sizeof(_symbols_cluster[0])),
     },
@@ -9370,24 +1827,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "codegen",
         .summary = "Semantic-neutral native code-shape controls for measured low-level paths",
         .body =
-            "# codegen module\n"
-            "\n"
-            "Compiler-owned controls for the rare low-level path whose native shape is part of a verified performance contract. `opaque<T>(value)` preserves the exact integer or pointer type and value while hiding it from native constant propagation; `compilerFence()` blocks compiler reordering across the point but is not a CPU memory fence.\n"
-            "\n"
-            "Usage: `import codegen` then call `codegen.function()`.\n"
-            "\n"
-            "### Scope and verification\n"
-            "- `opaque` accepts integer scalars and `Ptr<T>`/`MutPtr<T>` only; it allocates nothing and does not change ownership, provenance, effects, or ABI.\n"
-            "- `compilerFence` affects compiler scheduling only. Use synchronization or atomic APIs for inter-thread ordering.\n"
-            "- These controls must be justified by benchmark and generated-code evidence. They are not a mechanism for enabling ordinary language optimizations.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `codegen.compilerFence` | `(): ()` |  |\n"
-            "| `codegen.opaque` | `(value: T): T` |  |\n"
-            "",
+            "# codegen module\n" "\n" "Compiler-owned controls for the rare low-level path whose native shape is part of a verified performance contract. `opaque<T>(value)` preserves the exact integer or pointer type and value while hiding it from native constant propagation; `compilerFence()` blocks compiler reordering across the point but is not a CPU memory fence.\n" "\n" "Usage: `import codegen` then call `codegen.function()`.\n" "\n" "### Scope and verification\n" "- `opaque` accepts integer scalars and `Ptr<T>`/`MutPtr<T>` only; it allocates nothing and does not change ownership, provenance, effects, or ABI.\n" "- `compilerFence` affects compiler scheduling only. Use synchronization or atomic APIs for inter-thread ordering.\n" "- These controls must be justified by benchmark and generated-code evidence. They are not a mechanism for enabling ordinary language optimizations.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `codegen.compilerFence` | `(): ()` |  |\n"
+            "| `codegen.opaque` | `(value: T): T` |  |\n" "",
         .symbols = _symbols_codegen,
         .symbol_count = (int)(sizeof(_symbols_codegen) / sizeof(_symbols_codegen[0])),
     },
@@ -9395,27 +1836,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "compress",
         .summary = "Compression/decompression (zlib)",
         .body =
-            "# compress module\n"
-            "\n"
-            "Compression/decompression (zlib).\n"
-            "\n"
-            "Usage: `import compress` then call `compress.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `compress.adler32` | `(data: Slice<u8>): i64` |  |\n"
-            "| `compress.crc32` | `(data: Slice<u8>): i64` |  |\n"
-            "| `compress.deflate` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n"
-            "| `compress.gunzip` | `(data: Slice<u8>): Array<u8>` |  |\n"
-            "| `compress.gzip` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n"
-            "| `compress.inflate` | `(data: Slice<u8>): Array<u8>` |  |\n"
-            "| `compress.isGzip` | `(data: Slice<u8>): bool` |  |\n"
-            "| `compress.isZlib` | `(data: Slice<u8>): bool` |  |\n"
-            "| `compress.zlibCompress` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n"
-            "| `compress.zlibDecompress` | `(data: Slice<u8>): Array<u8>` |  |\n"
-            "",
+            "# compress module\n" "\n" "Compression/decompression (zlib).\n" "\n" "Usage: `import compress` then call `compress.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `compress.adler32` | `(data: Slice<u8>): i64` |  |\n" "| `compress.crc32` | `(data: Slice<u8>): i64` |  |\n" "| `compress.deflate` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.gunzip` | `(data: Slice<u8>): Array<u8>` |  |\n" "| `compress.gzip` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.inflate` | `(data: Slice<u8>): Array<u8>` |  |\n" "| `compress.isGzip` | `(data: Slice<u8>): bool` |  |\n" "| `compress.isZlib` | `(data: Slice<u8>): bool` |  |\n" "| `compress.zlibCompress` | `(data: Slice<u8>, level: i64 = DEFAULT_COMPRESSION): Array<u8>` |  |\n" "| `compress.zlibDecompress` | `(data: Slice<u8>): Array<u8>` |  |\n" "",
         .symbols = _symbols_compress,
         .symbol_count = (int)(sizeof(_symbols_compress) / sizeof(_symbols_compress[0])),
     },
@@ -9423,29 +1844,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "crypto",
         .summary = "Cryptographic hashing and encryption",
         .body =
-            "# crypto module\n"
-            "\n"
-            "Cryptographic hashing and encryption.\n"
-            "\n"
-            "Usage: `import crypto` then call `crypto.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `crypto.decrypt` | `(key: string, ciphertext: string): string?` |  |\n"
-            "| `crypto.encrypt` | `(key: string, plaintext: string): string` |  |\n"
-            "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` |  |\n"
-            "| `crypto.hmacBytes` | `(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?` |  |\n"
-            "| `crypto.md5` | `(data: string): string` |  |\n"
-            "| `crypto.randomBytes` | `(n: i64): string` |  |\n"
-            "| `crypto.sha1` | `(data: string): string` |  |\n"
-            "| `crypto.sha256` | `(data: string): string` |  |\n"
-            "| `crypto.sha512` | `(data: string): string` |  |\n"
-            "| `crypto.timingSafeEqual` | `(a: string, b: string): bool` |  |\n"
-            "| `crypto.timingSafeEqualBytes` | `(a: Array<u8>, b: Array<u8>): bool` |  |\n"
-            "| `crypto.uuid` | `(): string` |  |\n"
-            "",
+            "# crypto module\n" "\n" "Cryptographic hashing and encryption.\n" "\n" "Usage: `import crypto` then call `crypto.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `crypto.decrypt` | `(key: string, ciphertext: string): string?` |  |\n" "| `crypto.encrypt` | `(key: string, plaintext: string): string` |  |\n" "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` |  |\n" "| `crypto.hmacBytes` | `(algo: string, key: Array<u8>, msg: Array<u8>): Array<u8>?` |  |\n" "| `crypto.md5` | `(data: string): string` |  |\n" "| `crypto.randomBytes` | `(n: i64): string` |  |\n" "| `crypto.sha1` | `(data: string): string` |  |\n" "| `crypto.sha256` | `(data: string): string` |  |\n" "| `crypto.sha512` | `(data: string): string` |  |\n" "| `crypto.timingSafeEqual` | `(a: string, b: string): bool` |  |\n" "| `crypto.timingSafeEqualBytes` | `(a: Array<u8>, b: Array<u8>): bool` |  |\n" "| `crypto.uuid` | `(): string` |  |\n" "",
         .symbols = _symbols_crypto,
         .symbol_count = (int)(sizeof(_symbols_crypto) / sizeof(_symbols_crypto[0])),
     },
@@ -9453,59 +1852,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "csv",
         .summary = "CSV parsing and generation",
         .body =
-            "# csv module\n"
-            "\n"
-            "CSV parsing and generation.\n"
-            "\n"
-            "Usage: `import csv` then call `csv.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `CsvDiagnostic` | `CsvDiagnostic` |  |\n"
-            "| `CsvDiagnostic.byteOffset` | `: i64` |  |\n"
-            "| `CsvDiagnostic.column` | `: i64` |  |\n"
-            "| `CsvDiagnostic.init` | `(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()` |  |\n"
-            "| `CsvDiagnostic.kind` | `: CsvErrorKind` |  |\n"
-            "| `CsvDiagnostic.line` | `: i64` |  |\n"
-            "| `CsvDiagnostic.message` | `: string` |  |\n"
-            "| `CsvDiagnostic.record` | `: i64` |  |\n"
-            "| `CsvDocument` | `CsvDocument` |  |\n"
-            "| `CsvDocument.headers` | `: Array<string>` |  |\n"
-            "| `CsvDocument.init` | `(): ()` |  |\n"
-            "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
-            "| `csv.CsvParseOptions` | `{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: i64, maxRecords: i64, maxInputBytes: i64, maxFieldBytes: i64, maxColumns: i64 }` |  |\n"
-            "| `csv.CsvParseOptions.commentPrefix` | `string` | Type alias field |\n"
-            "| `csv.CsvParseOptions.delimiter` | `CsvDelimiter` | Type alias field |\n"
-            "| `csv.CsvParseOptions.escapeChar` | `rune` | Type alias field |\n"
-            "| `csv.CsvParseOptions.header` | `CsvHeader` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxColumns` | `i64` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxFieldBytes` | `i64` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxInputBytes` | `i64` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxRecords` | `i64` | Type alias field |\n"
-            "| `csv.CsvParseOptions.quoteChar` | `rune` | Type alias field |\n"
-            "| `csv.CsvParseOptions.skipEmptyLines` | `bool` | Type alias field |\n"
-            "| `csv.CsvParseOptions.skipRecords` | `i64` | Type alias field |\n"
-            "| `csv.CsvParseOptions.trimFields` | `bool` | Type alias field |\n"
-            "| `CsvParseReport` | `CsvParseReport` |  |\n"
-            "| `CsvParseReport.delimiter` | `: rune` |  |\n"
-            "| `CsvParseReport.diagnostics` | `: Array<CsvDiagnostic>` |  |\n"
-            "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
-            "| `CsvParseReport.init` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n"
-            "| `CsvParseReport.linebreak` | `: string` |  |\n"
-            "| `CsvParseReport.truncated` | `: bool` |  |\n"
-            "| `csv.CsvWriteOptions` | `{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }` |  |\n"
-            "| `csv.CsvWriteOptions.delimiter` | `rune` | Type alias field |\n"
-            "| `csv.CsvWriteOptions.escapeChar` | `rune` | Type alias field |\n"
-            "| `csv.CsvWriteOptions.linebreak` | `string` | Type alias field |\n"
-            "| `csv.CsvWriteOptions.quoteChar` | `rune` | Type alias field |\n"
-            "| `csv.defaultParseOptions` | `(): CsvParseOptions` |  |\n"
-            "| `csv.defaultWriteOptions` | `(): CsvWriteOptions` |  |\n"
-            "| `csv.parse` | `(data: string, options: CsvParseOptions? = null): CsvDocument` |  |\n"
-            "| `csv.parseReport` | `(data: string, options: CsvParseOptions? = null): CsvParseReport` |  |\n"
-            "| `csv.stringify` | `(document: CsvDocument, options: CsvWriteOptions? = null): string` |  |\n"
-            "",
+            "# csv module\n" "\n" "CSV parsing and generation.\n" "\n" "Usage: `import csv` then call `csv.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `CsvDiagnostic` | `CsvDiagnostic` |  |\n" "| `CsvDiagnostic.byteOffset` | `: i64` |  |\n" "| `CsvDiagnostic.column` | `: i64` |  |\n" "| `CsvDiagnostic.init` | `(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()` |  |\n" "| `CsvDiagnostic.kind` | `: CsvErrorKind` |  |\n" "| `CsvDiagnostic.line` | `: i64` |  |\n" "| `CsvDiagnostic.message` | `: string` |  |\n" "| `CsvDiagnostic.record` | `: i64` |  |\n" "| `CsvDocument` | `CsvDocument` |  |\n" "| `CsvDocument.headers` | `: Array<string>` |  |\n" "| `CsvDocument.init` | `(): ()` |  |\n" "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
+            "| `csv.CsvParseOptions` | `{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: i64, maxRecords: i64, maxInputBytes: i64, maxFieldBytes: i64, maxColumns: i64 }` |  |\n" "| `csv.CsvParseOptions.commentPrefix` | `string` | Type alias field |\n" "| `csv.CsvParseOptions.delimiter` | `CsvDelimiter` | Type alias field |\n" "| `csv.CsvParseOptions.escapeChar` | `rune` | Type alias field |\n" "| `csv.CsvParseOptions.header` | `CsvHeader` | Type alias field |\n" "| `csv.CsvParseOptions.maxColumns` | `i64` | Type alias field |\n" "| `csv.CsvParseOptions.maxFieldBytes` | `i64` | Type alias field |\n" "| `csv.CsvParseOptions.maxInputBytes` | `i64` | Type alias field |\n" "| `csv.CsvParseOptions.maxRecords` | `i64` | Type alias field |\n" "| `csv.CsvParseOptions.quoteChar` | `rune` | Type alias field |\n" "| `csv.CsvParseOptions.skipEmptyLines` | `bool` | Type alias field |\n"
+            "| `csv.CsvParseOptions.skipRecords` | `i64` | Type alias field |\n" "| `csv.CsvParseOptions.trimFields` | `bool` | Type alias field |\n" "| `CsvParseReport` | `CsvParseReport` |  |\n" "| `CsvParseReport.delimiter` | `: rune` |  |\n" "| `CsvParseReport.diagnostics` | `: Array<CsvDiagnostic>` |  |\n" "| `CsvParseReport.document` | `: CsvDocument` |  |\n" "| `CsvParseReport.init` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n" "| `CsvParseReport.linebreak` | `: string` |  |\n" "| `CsvParseReport.truncated` | `: bool` |  |\n" "| `csv.CsvWriteOptions` | `{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }` |  |\n" "| `csv.CsvWriteOptions.delimiter` | `rune` | Type alias field |\n" "| `csv.CsvWriteOptions.escapeChar` | `rune` | Type alias field |\n" "| `csv.CsvWriteOptions.linebreak` | `string` | Type alias field |\n" "| `csv.CsvWriteOptions.quoteChar` | `rune` | Type alias field |\n"
+            "| `csv.defaultParseOptions` | `(): CsvParseOptions` |  |\n" "| `csv.defaultWriteOptions` | `(): CsvWriteOptions` |  |\n" "| `csv.parse` | `(data: string, options: CsvParseOptions? = null): CsvDocument` |  |\n" "| `csv.parseReport` | `(data: string, options: CsvParseOptions? = null): CsvParseReport` |  |\n" "| `csv.stringify` | `(document: CsvDocument, options: CsvWriteOptions? = null): string` |  |\n" "",
         .symbols = _symbols_csv,
         .symbol_count = (int)(sizeof(_symbols_csv) / sizeof(_symbols_csv[0])),
     },
@@ -9513,51 +1863,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "datetime",
         .summary = "Date and time manipulation",
         .body =
-            "# datetime module\n"
-            "\n"
-            "Date and time manipulation.\n"
-            "\n"
-            "Usage: `import datetime` then call `datetime.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `DateTime` | `DateTime` |  |\n"
-            "| `DateTime.add` | `(amount: i64, unit: string): DateTime` |  |\n"
-            "| `DateTime.day` | `: i64 { fn() { return this._day } }` |  |\n"
-            "| `DateTime.daysInMonth` | `(): i64` |  |\n"
-            "| `DateTime.diff` | `(other: DateTime, unit: string = \"seconds\"): i64` |  |\n"
-            "| `DateTime.equals` | `(other: DateTime): bool` |  |\n"
-            "| `DateTime.format` | `(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string` |  |\n"
-            "| `DateTime.hour` | `: i64 { fn() { return this._hour } }` |  |\n"
-            "| `DateTime.init` | `(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()` |  |\n"
-            "| `DateTime.isAfter` | `(other: DateTime): bool` |  |\n"
-            "| `DateTime.isBefore` | `(other: DateTime): bool` |  |\n"
-            "| `DateTime.isLeapYear` | `(): bool` |  |\n"
-            "| `DateTime.isUtc` | `: bool { fn() { return this._isUtc } }` |  |\n"
-            "| `DateTime.millisecond` | `: i64 { fn() { return this._millisecond } }` |  |\n"
-            "| `DateTime.minute` | `: i64 { fn() { return this._minute } }` |  |\n"
-            "| `DateTime.month` | `: i64 { fn() { return this._month } }` |  |\n"
-            "| `DateTime.second` | `: i64 { fn() { return this._second } }` |  |\n"
-            "| `DateTime.timestamp` | `: i64 { fn() { return this._timestamp } }` |  |\n"
-            "| `DateTime.toISOString` | `(): string` |  |\n"
-            "| `DateTime.toLocal` | `(): DateTime` |  |\n"
-            "| `DateTime.toString` | `(): string` |  |\n"
-            "| `DateTime.toUTC` | `(): DateTime` |  |\n"
-            "| `DateTime.tzOffset` | `: i64 { fn() { return this._tzOffset } }` |  |\n"
-            "| `DateTime.weekday` | `: i64 { fn() { return this._weekday } }` |  |\n"
-            "| `DateTime.year` | `: i64 { fn() { return this._year } }` |  |\n"
-            "| `DateTime.yearday` | `: i64 { fn() { return this._yearday } }` |  |\n"
-            "| `datetime.create` | `(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime` |  |\n"
-            "| `datetime.createUTC` | `(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime` |  |\n"
-            "| `datetime.fromTimestamp` | `(ts: i64): DateTime` |  |\n"
-            "| `datetime.fromTimestampMs` | `(ts: i64): DateTime` |  |\n"
-            "| `datetime.now` | `(): DateTime` |  |\n"
-            "| `datetime.offset` | `(): i64` |  |\n"
-            "| `datetime.parse` | `(s: string, format: string = \"ISO8601\"): DateTime?` |  |\n"
-            "| `datetime.utc` | `(): DateTime` |  |\n"
-            "",
+            "# datetime module\n" "\n" "Date and time manipulation.\n" "\n" "Usage: `import datetime` then call `datetime.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `DateTime` | `DateTime` |  |\n" "| `DateTime.add` | `(amount: i64, unit: string): DateTime` |  |\n" "| `DateTime.day` | `: i64 { fn() { return this._day } }` |  |\n" "| `DateTime.daysInMonth` | `(): i64` |  |\n" "| `DateTime.diff` | `(other: DateTime, unit: string = \"seconds\"): i64` |  |\n" "| `DateTime.equals` | `(other: DateTime): bool` |  |\n" "| `DateTime.format` | `(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string` |  |\n" "| `DateTime.hour` | `: i64 { fn() { return this._hour } }` |  |\n" "| `DateTime.init` | `(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()` |  |\n" "| `DateTime.isAfter` | `(other: DateTime): bool` |  |\n" "| `DateTime.isBefore` | `(other: DateTime): bool` |  |\n" "| `DateTime.isLeapYear` | `(): bool` |  |\n"
+            "| `DateTime.isUtc` | `: bool { fn() { return this._isUtc } }` |  |\n" "| `DateTime.millisecond` | `: i64 { fn() { return this._millisecond } }` |  |\n" "| `DateTime.minute` | `: i64 { fn() { return this._minute } }` |  |\n" "| `DateTime.month` | `: i64 { fn() { return this._month } }` |  |\n" "| `DateTime.second` | `: i64 { fn() { return this._second } }` |  |\n" "| `DateTime.timestamp` | `: i64 { fn() { return this._timestamp } }` |  |\n" "| `DateTime.toISOString` | `(): string` |  |\n" "| `DateTime.toLocal` | `(): DateTime` |  |\n" "| `DateTime.toString` | `(): string` |  |\n" "| `DateTime.toUTC` | `(): DateTime` |  |\n" "| `DateTime.tzOffset` | `: i64 { fn() { return this._tzOffset } }` |  |\n" "| `DateTime.weekday` | `: i64 { fn() { return this._weekday } }` |  |\n" "| `DateTime.year` | `: i64 { fn() { return this._year } }` |  |\n" "| `DateTime.yearday` | `: i64 { fn() { return this._yearday } }` |  |\n"
+            "| `datetime.create` | `(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime` |  |\n" "| `datetime.createUTC` | `(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime` |  |\n" "| `datetime.fromTimestamp` | `(ts: i64): DateTime` |  |\n" "| `datetime.fromTimestampMs` | `(ts: i64): DateTime` |  |\n" "| `datetime.now` | `(): DateTime` |  |\n" "| `datetime.offset` | `(): i64` |  |\n" "| `datetime.parse` | `(s: string, format: string = \"ISO8601\"): DateTime?` |  |\n" "| `datetime.utc` | `(): DateTime` |  |\n" "",
         .symbols = _symbols_datetime,
         .symbol_count = (int)(sizeof(_symbols_datetime) / sizeof(_symbols_datetime[0])),
     },
@@ -9565,30 +1873,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "encoding",
         .summary = "Character encoding conversion",
         .body =
-            "# encoding module\n"
-            "\n"
-            "Character encoding conversion.\n"
-            "\n"
-            "Usage: `import encoding` then call `encoding.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Utf16DecodeOptions` | `Utf16DecodeOptions` |  |\n"
-            "| `Utf16DecodeOptions.consumeBom` | `: bool` |  |\n"
-            "| `Utf16DecodeOptions.init` | `(): ()` |  |\n"
-            "| `Utf16DecodeOptions.order` | `: Endian` |  |\n"
-            "| `Utf16EncodeOptions` | `Utf16EncodeOptions` |  |\n"
-            "| `Utf16EncodeOptions.init` | `(): ()` |  |\n"
-            "| `Utf16EncodeOptions.order` | `: Endian` |  |\n"
-            "| `encoding.hexDecode` | `(hex: string): Array<u8>` |  |\n"
-            "| `encoding.hexEncode` | `(data: Slice<u8>): string` |  |\n"
-            "| `encoding.hexValid` | `(hex: string): bool` |  |\n"
-            "| `encoding.utf16Decode` | `(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string` |  |\n"
-            "| `encoding.utf16Encode` | `(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<u8>` |  |\n"
-            "| `encoding.utf8Valid` | `(data: Slice<u8>): bool` |  |\n"
-            "",
+            "# encoding module\n" "\n" "Character encoding conversion.\n" "\n" "Usage: `import encoding` then call `encoding.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Utf16DecodeOptions` | `Utf16DecodeOptions` |  |\n" "| `Utf16DecodeOptions.consumeBom` | `: bool` |  |\n" "| `Utf16DecodeOptions.init` | `(): ()` |  |\n" "| `Utf16DecodeOptions.order` | `: Endian` |  |\n" "| `Utf16EncodeOptions` | `Utf16EncodeOptions` |  |\n" "| `Utf16EncodeOptions.init` | `(): ()` |  |\n" "| `Utf16EncodeOptions.order` | `: Endian` |  |\n" "| `encoding.hexDecode` | `(hex: string): Array<u8>` |  |\n" "| `encoding.hexEncode` | `(data: Slice<u8>): string` |  |\n" "| `encoding.hexValid` | `(hex: string): bool` |  |\n" "| `encoding.utf16Decode` | `(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string` |  |\n" "| `encoding.utf16Encode` | `(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<u8>` |  |\n"
+            "| `encoding.utf8Valid` | `(data: Slice<u8>): bool` |  |\n" "",
         .symbols = _symbols_encoding,
         .symbol_count = (int)(sizeof(_symbols_encoding) / sizeof(_symbols_encoding[0])),
     },
@@ -9596,195 +1882,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "http",
         .summary = "HTTP client and server (REST API, routing, middleware)",
         .body =
-            "# http module\n"
-            "\n"
-            "HTTP client and server (REST API, routing, middleware).\n"
-            "\n"
-            "Usage: `import http` then call `http.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `ChunkedBody` | `ChunkedBody` |  |\n"
-            "| `ChunkedBody.body` | `: string` |  |\n"
-            "| `ChunkedBody.consumedBytes` | `: i64` |  |\n"
-            "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n"
-            "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n"
-            "| `ChunkedBody.init` | `(body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
-            "| `ChunkedBody.trailers` | `: Headers` |  |\n"
-            "| `Cookie` | `Cookie` |  |\n"
-            "| `Cookie.domain` | `: string` |  |\n"
-            "| `Cookie.expires` | `: i64` |  |\n"
-            "| `Cookie.hostOnly` | `: bool` |  |\n"
-            "| `Cookie.httpOnly` | `: bool` |  |\n"
-            "| `Cookie.init` | `(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()` |  |\n"
-            "| `Cookie.isExpired` | `(nowSeconds: i64 = 0): bool` |  |\n"
-            "| `Cookie.matches` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): bool` |  |\n"
-            "| `Cookie.name` | `: string` |  |\n"
-            "| `Cookie.path` | `: string` |  |\n"
-            "| `Cookie.sameSite` | `: string` |  |\n"
-            "| `Cookie.secure` | `: bool` |  |\n"
-            "| `Cookie.serialize` | `(): string` |  |\n"
-            "| `Cookie.value` | `: string` |  |\n"
-            "| `CookieJar` | `CookieJar` |  |\n"
-            "| `CookieJar.cookies` | `: Array<Cookie>` |  |\n"
-            "| `CookieJar.count` | `: i64 { fn() { return len(this.cookies) } }` |  |\n"
-            "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?` |  |\n"
-            "| `CookieJar.init` | `(maxCookies: i64 = 300): ()` |  |\n"
-            "| `CookieJar.maxCookies` | `: i64` |  |\n"
-            "| `FormData` | `FormData` |  |\n"
-            "| `FormData.boundary` | `: string` |  |\n"
-            "| `FormData.build` | `(): MultipartBody` |  |\n"
-            "| `FormData.fields` | `: Array<_FormField>` |  |\n"
-            "| `FormData.init` | `(maxTotalSize: i64, maxFileSize: i64): ()` |  |\n"
-            "| `FormData.maxFileSize` | `: i64` |  |\n"
-            "| `FormData.maxTotalSize` | `: i64` |  |\n"
-            "| `FormData.totalSize` | `: i64` |  |\n"
-            "| `Headers` | `Headers` |  |\n"
-            "| `Headers.contains` | `(name: string): bool` |  |\n"
-            "| `Headers.entries` | `(): Array<(string, string)>` |  |\n"
-            "| `Headers.get` | `(name: string): string?` |  |\n"
-            "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
-            "| `Headers.init` | `(): ()` |  |\n"
-            "| `HttpMethod` | `HttpMethod` |  |\n"
-            "| `HttpMethod.delete` | `(): HttpMethod` |  |\n"
-            "| `HttpMethod.fromToken` | `(token: string): HttpMethod?` |  |\n"
-            "| `HttpMethod.get` | `(): HttpMethod` |  |\n"
-            "| `HttpMethod.head` | `(): HttpMethod` |  |\n"
-            "| `HttpMethod.init` | `(token: string): ()` |  |\n"
-            "| `HttpMethod.options` | `(): HttpMethod` |  |\n"
-            "| `HttpMethod.patch` | `(): HttpMethod` |  |\n"
-            "| `HttpMethod.post` | `(): HttpMethod` |  |\n"
-            "| `HttpMethod.put` | `(): HttpMethod` |  |\n"
-            "| `HttpMethod.toString` | `(): string` |  |\n"
-            "| `HttpMethod.token` | `: string` |  |\n"
-            "| `HttpRequest` | `HttpRequest` |  |\n"
-            "| `HttpRequest.body` | `: Array<u8>` |  |\n"
-            "| `HttpRequest.contentLength` | `: i64` |  |\n"
-            "| `HttpRequest.headers` | `: Headers` |  |\n"
-            "| `HttpRequest.init` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()` |  |\n"
-            "| `HttpRequest.json` | `(): T` |  |\n"
-            "| `HttpRequest.jsonObject` | `(): JSON.Object` |  |\n"
-            "| `HttpRequest.jsonValue` | `(): JSON.Value` |  |\n"
-            "| `HttpRequest.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n"
-            "| `HttpRequest.method` | `: HttpMethod` |  |\n"
-            "| `HttpRequest.params` | `: Map<string, string>` |  |\n"
-            "| `HttpRequest.path` | `: string` |  |\n"
-            "| `HttpRequest.query` | `: QueryParams` |  |\n"
-            "| `HttpRequest.text` | `(): string` |  |\n"
-            "| `http.HttpRequestOptions` | `{ url: string, method: HttpMethod?, headers: Headers?, body: Array<u8>?, followRedirects: bool?, maxRedirects: i64?, timeoutMs: i64?, version: HttpVersion? }` |  |\n"
-            "| `http.HttpRequestOptions.body` | `Array<u8>?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.followRedirects` | `bool?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.headers` | `Headers?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.maxRedirects` | `i64?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.method` | `HttpMethod?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.timeoutMs` | `i64?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.url` | `string` | Type alias field |\n"
-            "| `http.HttpRequestOptions.version` | `HttpVersion?` | Type alias field |\n"
-            "| `HttpResponse` | `HttpResponse` |  |\n"
-            "| `HttpResponse.body` | `: Array<u8>` |  |\n"
-            "| `HttpResponse.headers` | `: Headers` |  |\n"
-            "| `HttpResponse.init` | `(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()` |  |\n"
-            "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
-            "| `HttpResponse.json` | `(): T` |  |\n"
-            "| `HttpResponse.jsonObject` | `(): JSON.Object` |  |\n"
-            "| `HttpResponse.jsonValue` | `(): JSON.Value` |  |\n"
-            "| `HttpResponse.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n"
-            "| `HttpResponse.reason` | `: string` |  |\n"
-            "| `HttpResponse.status` | `: i64` |  |\n"
-            "| `HttpResponse.text` | `(): string` |  |\n"
-            "| `HttpResponse.version` | `: HttpVersion` |  |\n"
-            "| `MultipartBody` | `MultipartBody` |  |\n"
-            "| `MultipartBody.body` | `: string` |  |\n"
-            "| `MultipartBody.contentType` | `: string` |  |\n"
-            "| `MultipartBody.init` | `(body: string, contentType: string): ()` |  |\n"
-            "| `RedirectDecision` | `RedirectDecision` |  |\n"
-            "| `RedirectDecision.dropBody` | `: bool` |  |\n"
-            "| `RedirectDecision.init` | `(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()` |  |\n"
-            "| `RedirectDecision.method` | `: string` |  |\n"
-            "| `RedirectDecision.stripSensitiveHeaders` | `: bool` |  |\n"
-            "| `RedirectDecision.url` | `: string` |  |\n"
-            "| `RequestHead` | `RequestHead` |  |\n"
-            "| `RequestHead.chunked` | `: bool` |  |\n"
-            "| `RequestHead.contentLength` | `: i64` |  |\n"
-            "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
-            "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
-            "| `RequestHead.headerBytes` | `: i64` |  |\n"
-            "| `RequestHead.headers` | `: Headers` |  |\n"
-            "| `RequestHead.init` | `(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
-            "| `RequestHead.keepAlive` | `: bool` |  |\n"
-            "| `RequestHead.method` | `: string` |  |\n"
-            "| `RequestHead.requestTarget` | `: string` |  |\n"
-            "| `RequestHead.version` | `: string` |  |\n"
-            "| `RequestMessage` | `RequestMessage` |  |\n"
-            "| `RequestMessage.body` | `: string` |  |\n"
-            "| `RequestMessage.consumedBytes` | `: i64` |  |\n"
-            "| `RequestMessage.getHeader` | `(name: string): string?` |  |\n"
-            "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n"
-            "| `RequestMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
-            "| `RequestMessage.head` | `: RequestHead` |  |\n"
-            "| `RequestMessage.init` | `(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
-            "| `RequestMessage.trailers` | `: Headers` |  |\n"
-            "| `ResponseHead` | `ResponseHead` |  |\n"
-            "| `ResponseHead.chunked` | `: bool` |  |\n"
-            "| `ResponseHead.contentLength` | `: i64` |  |\n"
-            "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n"
-            "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n"
-            "| `ResponseHead.headerBytes` | `: i64` |  |\n"
-            "| `ResponseHead.headers` | `: Headers` |  |\n"
-            "| `ResponseHead.init` | `(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
-            "| `ResponseHead.keepAlive` | `: bool` |  |\n"
-            "| `ResponseHead.reason` | `: string` |  |\n"
-            "| `ResponseHead.status` | `: i64` |  |\n"
-            "| `ResponseHead.version` | `: string` |  |\n"
-            "| `ResponseMessage` | `ResponseMessage` |  |\n"
-            "| `ResponseMessage.body` | `: string` |  |\n"
-            "| `ResponseMessage.consumedBytes` | `: i64` |  |\n"
-            "| `ResponseMessage.getHeader` | `(name: string): string?` |  |\n"
-            "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n"
-            "| `ResponseMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
-            "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
-            "| `ResponseMessage.init` | `(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
-            "| `ResponseMessage.trailers` | `: Headers` |  |\n"
-            "| `RouteMatch` | `RouteMatch` |  |\n"
-            "| `RouteMatch.init` | `(value: T, params: Map<string, string>): ()` |  |\n"
-            "| `RouteMatch.params` | `: Map<string, string>` |  |\n"
-            "| `RouteMatch.value` | `: T` |  |\n"
-            "| `Router` | `Router` |  |\n"
-            "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n"
-            "| `Router.init` | `(): ()` |  |\n"
-            "| `Server` | `Server` |  |\n"
-            "| `Server.handler` | `: fn(HttpRequest) -> HttpResponse` |  |\n"
-            "| `Server.init` | `(): ()` |  |\n"
-            "| `Server.listen` | `(port: i64, running: Atomic<bool>): bool` |  |\n"
-            "| `Server.method` | `: string,` |  |\n"
-            "| `Server.path` | `: string,` |  |\n"
-            "| `http.cookieJar` | `(maxCookies: i64 = 300): CookieJar` |  |\n"
-            "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: i64 = 67108864): string?` |  |\n"
-            "| `http.formData` | `(maxTotalSize: i64 = 67108864, maxFileSize: i64 = 33554432): FormData` |  |\n"
-            "| `http.get` | `(url: string): HttpResponse` |  |\n"
-            "| `http.isRedirectStatus` | `(status: i64): bool` |  |\n"
-            "| `http.json` | `(value: T, status: i64 = 200): HttpResponse` |  |\n"
-            "| `http.jsonResponse` | `(value: T, status: i64 = 200, headers: Headers? = null): HttpResponse` |  |\n"
-            "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: i64 = 67108864, maxTrailerHeaders: i64 = 50): ChunkedBody?` |  |\n"
-            "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
-            "| `http.parseRequestHead` | `(raw: string, maxHeaders: i64 = 100): RequestHead?` |  |\n"
-            "| `http.parseRequestText` | `(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): RequestMessage?` |  |\n"
-            "| `http.parseResponseHead` | `(raw: string, maxHeaders: i64 = 100): ResponseHead?` |  |\n"
-            "| `http.parseResponseText` | `(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): ResponseMessage?` |  |\n"
-            "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: i64 = 0): Cookie?` |  |\n"
-            "| `http.post` | `(url: string, contentType: string, body: Array<u8>, authorization: string = \"\"): HttpResponse` |  |\n"
-            "| `http.redirectDecision` | `(status: i64, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
-            "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
-            "| `http.request` | `(options: HttpRequestOptions): HttpResponse` |  |\n"
-            "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
-            "| `http.responseText` | `(status: i64, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
-            "| `http.router` | `(): Router<T>` |  |\n"
-            "| `http.textResponse` | `(body: string, status: i64 = 200, headers: Headers? = null): HttpResponse` |  |\n"
-            "| `http.urlDecode` | `(s: string): string` |  |\n"
-            "| `http.urlEncode` | `(s: string): string` |  |\n"
-            "",
+            "# http module\n" "\n" "HTTP client and server (REST API, routing, middleware).\n" "\n" "Usage: `import http` then call `http.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `ChunkedBody` | `ChunkedBody` |  |\n" "| `ChunkedBody.body` | `: string` |  |\n" "| `ChunkedBody.consumedBytes` | `: i64` |  |\n" "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n" "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n" "| `ChunkedBody.init` | `(body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n" "| `ChunkedBody.trailers` | `: Headers` |  |\n" "| `Cookie` | `Cookie` |  |\n" "| `Cookie.domain` | `: string` |  |\n" "| `Cookie.expires` | `: i64` |  |\n" "| `Cookie.hostOnly` | `: bool` |  |\n" "| `Cookie.httpOnly` | `: bool` |  |\n"
+            "| `Cookie.init` | `(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()` |  |\n" "| `Cookie.isExpired` | `(nowSeconds: i64 = 0): bool` |  |\n" "| `Cookie.matches` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): bool` |  |\n" "| `Cookie.name` | `: string` |  |\n" "| `Cookie.path` | `: string` |  |\n" "| `Cookie.sameSite` | `: string` |  |\n" "| `Cookie.secure` | `: bool` |  |\n" "| `Cookie.serialize` | `(): string` |  |\n" "| `Cookie.value` | `: string` |  |\n" "| `CookieJar` | `CookieJar` |  |\n" "| `CookieJar.cookies` | `: Array<Cookie>` |  |\n" "| `CookieJar.count` | `: i64 { fn() { return len(this.cookies) } }` |  |\n" "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?` |  |\n" "| `CookieJar.init` | `(maxCookies: i64 = 300): ()` |  |\n" "| `CookieJar.maxCookies` | `: i64` |  |\n"
+            "| `FormData` | `FormData` |  |\n" "| `FormData.boundary` | `: string` |  |\n" "| `FormData.build` | `(): MultipartBody` |  |\n" "| `FormData.fields` | `: Array<_FormField>` |  |\n" "| `FormData.init` | `(maxTotalSize: i64, maxFileSize: i64): ()` |  |\n" "| `FormData.maxFileSize` | `: i64` |  |\n" "| `FormData.maxTotalSize` | `: i64` |  |\n" "| `FormData.totalSize` | `: i64` |  |\n" "| `Headers` | `Headers` |  |\n" "| `Headers.contains` | `(name: string): bool` |  |\n" "| `Headers.entries` | `(): Array<(string, string)>` |  |\n" "| `Headers.get` | `(name: string): string?` |  |\n" "| `Headers.getAll` | `(name: string): Array<string>` |  |\n" "| `Headers.init` | `(): ()` |  |\n" "| `HttpMethod` | `HttpMethod` |  |\n" "| `HttpMethod.delete` | `(): HttpMethod` |  |\n" "| `HttpMethod.fromToken` | `(token: string): HttpMethod?` |  |\n" "| `HttpMethod.get` | `(): HttpMethod` |  |\n" "| `HttpMethod.head` | `(): HttpMethod` |  |\n" "| `HttpMethod.init` | `(token: string): ()` |  |\n"
+            "| `HttpMethod.options` | `(): HttpMethod` |  |\n" "| `HttpMethod.patch` | `(): HttpMethod` |  |\n" "| `HttpMethod.post` | `(): HttpMethod` |  |\n" "| `HttpMethod.put` | `(): HttpMethod` |  |\n" "| `HttpMethod.toString` | `(): string` |  |\n" "| `HttpMethod.token` | `: string` |  |\n" "| `HttpRequest` | `HttpRequest` |  |\n" "| `HttpRequest.body` | `: Array<u8>` |  |\n" "| `HttpRequest.contentLength` | `: i64` |  |\n" "| `HttpRequest.headers` | `: Headers` |  |\n" "| `HttpRequest.init` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()` |  |\n" "| `HttpRequest.json` | `(): T` |  |\n" "| `HttpRequest.jsonObject` | `(): JSON.Object` |  |\n" "| `HttpRequest.jsonValue` | `(): JSON.Value` |  |\n" "| `HttpRequest.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n" "| `HttpRequest.method` | `: HttpMethod` |  |\n" "| `HttpRequest.params` | `: Map<string, string>` |  |\n" "| `HttpRequest.path` | `: string` |  |\n"
+            "| `HttpRequest.query` | `: QueryParams` |  |\n" "| `HttpRequest.text` | `(): string` |  |\n" "| `http.HttpRequestOptions` | `{ url: string, method: HttpMethod?, headers: Headers?, body: Array<u8>?, followRedirects: bool?, maxRedirects: i64?, timeoutMs: i64?, version: HttpVersion? }` |  |\n" "| `http.HttpRequestOptions.body` | `Array<u8>?` | Type alias field |\n" "| `http.HttpRequestOptions.followRedirects` | `bool?` | Type alias field |\n" "| `http.HttpRequestOptions.headers` | `Headers?` | Type alias field |\n" "| `http.HttpRequestOptions.maxRedirects` | `i64?` | Type alias field |\n" "| `http.HttpRequestOptions.method` | `HttpMethod?` | Type alias field |\n" "| `http.HttpRequestOptions.timeoutMs` | `i64?` | Type alias field |\n" "| `http.HttpRequestOptions.url` | `string` | Type alias field |\n" "| `http.HttpRequestOptions.version` | `HttpVersion?` | Type alias field |\n" "| `HttpResponse` | `HttpResponse` |  |\n" "| `HttpResponse.body` | `: Array<u8>` |  |\n"
+            "| `HttpResponse.headers` | `: Headers` |  |\n" "| `HttpResponse.init` | `(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()` |  |\n" "| `HttpResponse.isSuccess` | `(): bool` |  |\n" "| `HttpResponse.json` | `(): T` |  |\n" "| `HttpResponse.jsonObject` | `(): JSON.Object` |  |\n" "| `HttpResponse.jsonValue` | `(): JSON.Value` |  |\n" "| `HttpResponse.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n" "| `HttpResponse.reason` | `: string` |  |\n" "| `HttpResponse.status` | `: i64` |  |\n" "| `HttpResponse.text` | `(): string` |  |\n" "| `HttpResponse.version` | `: HttpVersion` |  |\n" "| `MultipartBody` | `MultipartBody` |  |\n" "| `MultipartBody.body` | `: string` |  |\n" "| `MultipartBody.contentType` | `: string` |  |\n" "| `MultipartBody.init` | `(body: string, contentType: string): ()` |  |\n" "| `RedirectDecision` | `RedirectDecision` |  |\n" "| `RedirectDecision.dropBody` | `: bool` |  |\n"
+            "| `RedirectDecision.init` | `(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()` |  |\n" "| `RedirectDecision.method` | `: string` |  |\n" "| `RedirectDecision.stripSensitiveHeaders` | `: bool` |  |\n" "| `RedirectDecision.url` | `: string` |  |\n" "| `RequestHead` | `RequestHead` |  |\n" "| `RequestHead.chunked` | `: bool` |  |\n" "| `RequestHead.contentLength` | `: i64` |  |\n" "| `RequestHead.getHeader` | `(name: string): string?` |  |\n" "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n" "| `RequestHead.headerBytes` | `: i64` |  |\n" "| `RequestHead.headers` | `: Headers` |  |\n" "| `RequestHead.init` | `(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n" "| `RequestHead.keepAlive` | `: bool` |  |\n" "| `RequestHead.method` | `: string` |  |\n" "| `RequestHead.requestTarget` | `: string` |  |\n" "| `RequestHead.version` | `: string` |  |\n"
+            "| `RequestMessage` | `RequestMessage` |  |\n" "| `RequestMessage.body` | `: string` |  |\n" "| `RequestMessage.consumedBytes` | `: i64` |  |\n" "| `RequestMessage.getHeader` | `(name: string): string?` |  |\n" "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n" "| `RequestMessage.getTrailers` | `(name: string): Array<string>` |  |\n" "| `RequestMessage.head` | `: RequestHead` |  |\n" "| `RequestMessage.init` | `(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n" "| `RequestMessage.trailers` | `: Headers` |  |\n" "| `ResponseHead` | `ResponseHead` |  |\n" "| `ResponseHead.chunked` | `: bool` |  |\n" "| `ResponseHead.contentLength` | `: i64` |  |\n" "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n" "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n" "| `ResponseHead.headerBytes` | `: i64` |  |\n" "| `ResponseHead.headers` | `: Headers` |  |\n"
+            "| `ResponseHead.init` | `(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n" "| `ResponseHead.keepAlive` | `: bool` |  |\n" "| `ResponseHead.reason` | `: string` |  |\n" "| `ResponseHead.status` | `: i64` |  |\n" "| `ResponseHead.version` | `: string` |  |\n" "| `ResponseMessage` | `ResponseMessage` |  |\n" "| `ResponseMessage.body` | `: string` |  |\n" "| `ResponseMessage.consumedBytes` | `: i64` |  |\n" "| `ResponseMessage.getHeader` | `(name: string): string?` |  |\n" "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n" "| `ResponseMessage.getTrailers` | `(name: string): Array<string>` |  |\n" "| `ResponseMessage.head` | `: ResponseHead` |  |\n" "| `ResponseMessage.init` | `(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n" "| `ResponseMessage.trailers` | `: Headers` |  |\n" "| `RouteMatch` | `RouteMatch` |  |\n"
+            "| `RouteMatch.init` | `(value: T, params: Map<string, string>): ()` |  |\n" "| `RouteMatch.params` | `: Map<string, string>` |  |\n" "| `RouteMatch.value` | `: T` |  |\n" "| `Router` | `Router` |  |\n" "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n" "| `Router.init` | `(): ()` |  |\n" "| `Server` | `Server` |  |\n" "| `Server.handler` | `: fn(HttpRequest) -> HttpResponse` |  |\n" "| `Server.init` | `(): ()` |  |\n" "| `Server.listen` | `(port: i64, running: Atomic<bool>): bool` |  |\n" "| `Server.method` | `: string,` |  |\n" "| `Server.path` | `: string,` |  |\n" "| `http.cookieJar` | `(maxCookies: i64 = 300): CookieJar` |  |\n" "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: i64 = 67108864): string?` |  |\n" "| `http.formData` | `(maxTotalSize: i64 = 67108864, maxFileSize: i64 = 33554432): FormData` |  |\n" "| `http.get` | `(url: string): HttpResponse` |  |\n" "| `http.isRedirectStatus` | `(status: i64): bool` |  |\n"
+            "| `http.json` | `(value: T, status: i64 = 200): HttpResponse` |  |\n" "| `http.jsonResponse` | `(value: T, status: i64 = 200, headers: Headers? = null): HttpResponse` |  |\n" "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: i64 = 67108864, maxTrailerHeaders: i64 = 50): ChunkedBody?` |  |\n" "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n" "| `http.parseRequestHead` | `(raw: string, maxHeaders: i64 = 100): RequestHead?` |  |\n" "| `http.parseRequestText` | `(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): RequestMessage?` |  |\n" "| `http.parseResponseHead` | `(raw: string, maxHeaders: i64 = 100): ResponseHead?` |  |\n" "| `http.parseResponseText` | `(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): ResponseMessage?` |  |\n" "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: i64 = 0): Cookie?` |  |\n"
+            "| `http.post` | `(url: string, contentType: string, body: Array<u8>, authorization: string = \"\"): HttpResponse` |  |\n" "| `http.redirectDecision` | `(status: i64, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n" "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n" "| `http.request` | `(options: HttpRequestOptions): HttpResponse` |  |\n" "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n" "| `http.responseText` | `(status: i64, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n" "| `http.router` | `(): Router<T>` |  |\n" "| `http.textResponse` | `(body: string, status: i64 = 200, headers: Headers? = null): HttpResponse` |  |\n" "| `http.urlDecode` | `(s: string): string` |  |\n"
+            "| `http.urlEncode` | `(s: string): string` |  |\n" "",
         .symbols = _symbols_http,
         .symbol_count = (int)(sizeof(_symbols_http) / sizeof(_symbols_http[0])),
     },
@@ -9792,69 +1902,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "http2",
         .summary = "HTTP/2 capability and typed request transport",
         .body =
-            "# http2 module\n"
-            "\n"
-            "HTTP/2 capability and typed request transport.\n"
-            "\n"
-            "Usage: `import http2` then call `http2.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `http2.CANCEL` | `: i64` |  |\n"
-            "| `http2.COMPRESSION_ERROR` | `: i64` |  |\n"
-            "| `http2.CONNECT_ERROR` | `: i64` |  |\n"
-            "| `http2.ENHANCE_YOUR_CALM` | `: i64` |  |\n"
-            "| `http2.FLOW_CONTROL_ERROR` | `: i64` |  |\n"
-            "| `http2.FRAME_SIZE_ERROR` | `: i64` |  |\n"
-            "| `FrameHeader` | `FrameHeader` |  |\n"
-            "| `FrameHeader.flags` | `: i64` |  |\n"
-            "| `FrameHeader.hasFlag` | `(flag: i64): bool` |  |\n"
-            "| `FrameHeader.init` | `(length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n"
-            "| `FrameHeader.kind` | `: i64` |  |\n"
-            "| `FrameHeader.length` | `: i64` |  |\n"
-            "| `FrameHeader.streamId` | `: i64` |  |\n"
-            "| `http2.HTTP_1_1_REQUIRED` | `: i64` |  |\n"
-            "| `HeaderList` | `HeaderList` |  |\n"
-            "| `HeaderList.count` | `(): i64` |  |\n"
-            "| `HeaderList.init` | `(): ()` |  |\n"
-            "| `HeaderList.names` | `: Array<string>` |  |\n"
-            "| `HeaderList.values` | `: Array<string>` |  |\n"
-            "| `HpackDecoder` | `HpackDecoder` |  |\n"
-            "| `HpackDecoder.init` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
-            "| `HpackDecoder.lookupName` | `(index: i64): string?` |  |\n"
-            "| `HpackDecoder.lookupValue` | `(index: i64): string?` |  |\n"
-            "| `HpackDecoder.table` | `: HpackTable` |  |\n"
-            "| `HpackEncoder` | `HpackEncoder` |  |\n"
-            "| `HpackEncoder.init` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
-            "| `HpackEncoder.staticFull` | `(name: string, value: string): i64` |  |\n"
-            "| `HpackEncoder.staticName` | `(name: string): i64` |  |\n"
-            "| `HpackEncoder.table` | `: HpackTable` |  |\n"
-            "| `http2.INADEQUATE_SECURITY` | `: i64` |  |\n"
-            "| `http2.INTERNAL_ERROR` | `: i64` |  |\n"
-            "| `http2.NO_ERROR` | `: i64` |  |\n"
-            "| `http2.PROTOCOL_ERROR` | `: i64` |  |\n"
-            "| `http2.REFUSED_STREAM` | `: i64` |  |\n"
-            "| `http2.SETTINGS_TIMEOUT` | `: i64` |  |\n"
-            "| `http2.STREAM_CLOSED` | `: i64` |  |\n"
-            "| `Settings` | `Settings` |  |\n"
-            "| `Settings.get` | `(id: i64): i64` |  |\n"
-            "| `Settings.init` | `(): ()` |  |\n"
-            "| `Settings.values` | `: Array<i64>` |  |\n"
-            "| `http2.applySettingsPayload` | `(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64` |  |\n"
-            "| `http2.encodeClientSettings` | `(settings: Settings): Array<u8>` |  |\n"
-            "| `http2.encodeGoaway` | `(lastStreamId: i64, errorCode: i64): Array<u8>` |  |\n"
-            "| `http2.encodePingAck` | `(payload: Array<u8>, start: i64): Array<u8>` |  |\n"
-            "| `http2.encodeRstStream` | `(streamId: i64, errorCode: i64): Array<u8>` |  |\n"
-            "| `http2.encodeSettingsAck` | `(): Array<u8>` |  |\n"
-            "| `http2.encodeWindowUpdate` | `(streamId: i64, increment: i64): Array<u8>` |  |\n"
-            "| `http2.readFrameHeader` | `(src: Array<u8>, pos: i64): FrameHeader?` |  |\n"
-            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)` |  |\n"
-            "| `http2.supported` | `(): bool` |  |\n"
-            "| `http2.validateFrameHeader` | `(header: FrameHeader): i64` |  |\n"
-            "| `http2.writeFrameHeader` | `(out: ref Array<u8>, length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n"
-            "",
+            "# http2 module\n" "\n" "HTTP/2 capability and typed request transport.\n" "\n" "Usage: `import http2` then call `http2.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `http2.CANCEL` | `: i64` |  |\n" "| `http2.COMPRESSION_ERROR` | `: i64` |  |\n" "| `http2.CONNECT_ERROR` | `: i64` |  |\n" "| `http2.ENHANCE_YOUR_CALM` | `: i64` |  |\n" "| `http2.FLOW_CONTROL_ERROR` | `: i64` |  |\n" "| `http2.FRAME_SIZE_ERROR` | `: i64` |  |\n" "| `FrameHeader` | `FrameHeader` |  |\n" "| `FrameHeader.flags` | `: i64` |  |\n" "| `FrameHeader.hasFlag` | `(flag: i64): bool` |  |\n" "| `FrameHeader.init` | `(length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n" "| `FrameHeader.kind` | `: i64` |  |\n" "| `FrameHeader.length` | `: i64` |  |\n" "| `FrameHeader.streamId` | `: i64` |  |\n" "| `http2.HTTP_1_1_REQUIRED` | `: i64` |  |\n" "| `HeaderList` | `HeaderList` |  |\n" "| `HeaderList.count` | `(): i64` |  |\n" "| `HeaderList.init` | `(): ()` |  |\n"
+            "| `HeaderList.names` | `: Array<string>` |  |\n" "| `HeaderList.values` | `: Array<string>` |  |\n" "| `HpackDecoder` | `HpackDecoder` |  |\n" "| `HpackDecoder.init` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n" "| `HpackDecoder.lookupName` | `(index: i64): string?` |  |\n" "| `HpackDecoder.lookupValue` | `(index: i64): string?` |  |\n" "| `HpackDecoder.table` | `: HpackTable` |  |\n" "| `HpackEncoder` | `HpackEncoder` |  |\n" "| `HpackEncoder.init` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n" "| `HpackEncoder.staticFull` | `(name: string, value: string): i64` |  |\n" "| `HpackEncoder.staticName` | `(name: string): i64` |  |\n" "| `HpackEncoder.table` | `: HpackTable` |  |\n" "| `http2.INADEQUATE_SECURITY` | `: i64` |  |\n" "| `http2.INTERNAL_ERROR` | `: i64` |  |\n" "| `http2.NO_ERROR` | `: i64` |  |\n" "| `http2.PROTOCOL_ERROR` | `: i64` |  |\n" "| `http2.REFUSED_STREAM` | `: i64` |  |\n" "| `http2.SETTINGS_TIMEOUT` | `: i64` |  |\n"
+            "| `http2.STREAM_CLOSED` | `: i64` |  |\n" "| `Settings` | `Settings` |  |\n" "| `Settings.get` | `(id: i64): i64` |  |\n" "| `Settings.init` | `(): ()` |  |\n" "| `Settings.values` | `: Array<i64>` |  |\n" "| `http2.applySettingsPayload` | `(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64` |  |\n" "| `http2.encodeClientSettings` | `(settings: Settings): Array<u8>` |  |\n" "| `http2.encodeGoaway` | `(lastStreamId: i64, errorCode: i64): Array<u8>` |  |\n" "| `http2.encodePingAck` | `(payload: Array<u8>, start: i64): Array<u8>` |  |\n" "| `http2.encodeRstStream` | `(streamId: i64, errorCode: i64): Array<u8>` |  |\n" "| `http2.encodeSettingsAck` | `(): Array<u8>` |  |\n" "| `http2.encodeWindowUpdate` | `(streamId: i64, increment: i64): Array<u8>` |  |\n" "| `http2.readFrameHeader` | `(src: Array<u8>, pos: i64): FrameHeader?` |  |\n"
+            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)` |  |\n" "| `http2.supported` | `(): bool` |  |\n" "| `http2.validateFrameHeader` | `(header: FrameHeader): i64` |  |\n" "| `http2.writeFrameHeader` | `(out: ref Array<u8>, length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n" "",
         .symbols = _symbols_http2,
         .symbol_count = (int)(sizeof(_symbols_http2) / sizeof(_symbols_http2[0])),
     },
@@ -9862,84 +1913,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "io",
         .summary = "File I/O operations",
         .body =
-            "# io module\n"
-            "\n"
-            "File I/O operations.\n"
-            "\n"
-            "Usage: `import io` then call `io.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `BufReader` | `BufReader` |  |\n"
-            "| `BufReader.open` | `(path: Path, chunkSize: i64 = 131072): BufReader?` |  |\n"
-            "| `BufWriter` | `BufWriter` |  |\n"
-            "| `BufWriter.bytes` | `(): Array<u8>` |  |\n"
-            "| `BufWriter.init` | `(path: Path, capacity: i64 = 131072): ()` |  |\n"
-            "| `BufWriter.path` | `(): Path` |  |\n"
-            "| `BufWriter.size` | `(): i64` |  |\n"
-            "| `File` | `File` |  |\n"
-            "| `File.flush` | `(): bool` |  |\n"
-            "| `File.open` | `(path: Path): File?` |  |\n"
-            "| `File.openWrite` | `(path: Path, append: bool): File?` |  |\n"
-            "| `File.read` | `(maxBytes: i64 = 131072): Array<u8>?` |  |\n"
-            "| `File.stderr` | `(): File` |  |\n"
-            "| `File.stdin` | `(): File` |  |\n"
-            "| `File.stdout` | `(): File` |  |\n"
-            "| `File.write` | `(data: Array<u8>, offset: i64): i64` |  |\n"
-            "| `File.writeString` | `(data: string, offset: i64): i64` |  |\n"
-            "| `FileStat` | `FileStat` |  |\n"
-            "| `FileStat.atime` | `: i64` |  |\n"
-            "| `FileStat.ctime` | `: i64` |  |\n"
-            "| `FileStat.gid` | `: i64` |  |\n"
-            "| `FileStat.init` | `(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n"
-            "| `FileStat.isDir` | `: bool` |  |\n"
-            "| `FileStat.isFile` | `: bool` |  |\n"
-            "| `FileStat.isSymlink` | `: bool` |  |\n"
-            "| `FileStat.mode` | `: i64` |  |\n"
-            "| `FileStat.mtime` | `: i64` |  |\n"
-            "| `FileStat.size` | `: i64` |  |\n"
-            "| `FileStat.uid` | `: i64` |  |\n"
-            "| `LineIterator` | `LineIterator` |  |\n"
-            "| `LineIterator.hasNext` | `(): bool` |  |\n"
-            "| `LineIterator.init` | `(reader: BufReader): ()` |  |\n"
-            "| `io.appendFile` | `(path: Path, data: string): bool` |  |\n"
-            "| `io.chdir` | `(path: Path): bool` |  |\n"
-            "| `io.chmod` | `(path: Path, mode: i64): bool` |  |\n"
-            "| `io.copyFile` | `(src: Path, dst: Path): bool` |  |\n"
-            "| `io.cwd` | `(): Path` |  |\n"
-            "| `io.exists` | `(path: Path): bool` |  |\n"
-            "| `io.fileSize` | `(path: Path): i64` |  |\n"
-            "| `io.flushWriter` | `(writer: BufWriter): bool` |  |\n"
-            "| `io.isDir` | `(path: Path): bool` |  |\n"
-            "| `io.isFile` | `(path: Path): bool` |  |\n"
-            "| `io.isSymlink` | `(path: Path): bool` |  |\n"
-            "| `io.lines` | `(path: Path): LineIterator?` |  |\n"
-            "| `io.mkdir` | `(path: Path): bool` |  |\n"
-            "| `io.mkdirp` | `(path: Path): bool` |  |\n"
-            "| `io.readDir` | `(path: Path): Array<Path>?` |  |\n"
-            "| `io.readDirRecursive` | `(path: Path): Array<Path>?` |  |\n"
-            "| `io.readFile` | `(path: Path): string?` |  |\n"
-            "| `io.readFileBytes` | `(path: Path): Array<u8>?` |  |\n"
-            "| `io.readLines` | `(path: Path): Array<string>` |  |\n"
-            "| `io.readStdin` | `(): string?` |  |\n"
-            "| `io.readStdinBytes` | `(): Array<u8>?` |  |\n"
-            "| `io.readlink` | `(path: Path): Path?` |  |\n"
-            "| `io.realpath` | `(path: Path): Path?` |  |\n"
-            "| `io.remove` | `(path: Path): bool` |  |\n"
-            "| `io.removeAll` | `(path: Path): bool` |  |\n"
-            "| `io.rename` | `(old: Path, newPath: Path): bool` |  |\n"
-            "| `io.stat` | `(path: Path): FileStat?` |  |\n"
-            "| `io.symlink` | `(source: Path, link: Path): bool` |  |\n"
-            "| `io.tempDir` | `(): Path?` |  |\n"
-            "| `io.tempFile` | `(): Path?` |  |\n"
-            "| `io.touch` | `(path: Path): bool` |  |\n"
-            "| `io.writeFile` | `(path: Path, data: string): bool` |  |\n"
-            "| `io.writeFileBytes` | `(path: Path, data: Array<u8>): bool` |  |\n"
-            "| `io.writeStderr` | `(data: string): bool` |  |\n"
-            "| `io.writeStdout` | `(data: string): bool` |  |\n"
-            "",
+            "# io module\n" "\n" "File I/O operations.\n" "\n" "Usage: `import io` then call `io.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `BufReader` | `BufReader` |  |\n" "| `BufReader.open` | `(path: Path, chunkSize: i64 = 131072): BufReader?` |  |\n" "| `BufWriter` | `BufWriter` |  |\n" "| `BufWriter.bytes` | `(): Array<u8>` |  |\n" "| `BufWriter.init` | `(path: Path, capacity: i64 = 131072): ()` |  |\n" "| `BufWriter.path` | `(): Path` |  |\n" "| `BufWriter.size` | `(): i64` |  |\n" "| `File` | `File` |  |\n" "| `File.flush` | `(): bool` |  |\n" "| `File.open` | `(path: Path): File?` |  |\n" "| `File.openWrite` | `(path: Path, append: bool): File?` |  |\n" "| `File.read` | `(maxBytes: i64 = 131072): Array<u8>?` |  |\n" "| `File.stderr` | `(): File` |  |\n" "| `File.stdin` | `(): File` |  |\n" "| `File.stdout` | `(): File` |  |\n" "| `File.write` | `(data: Array<u8>, offset: i64): i64` |  |\n"
+            "| `File.writeString` | `(data: string, offset: i64): i64` |  |\n" "| `FileStat` | `FileStat` |  |\n" "| `FileStat.atime` | `: i64` |  |\n" "| `FileStat.ctime` | `: i64` |  |\n" "| `FileStat.gid` | `: i64` |  |\n" "| `FileStat.init` | `(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n" "| `FileStat.isDir` | `: bool` |  |\n" "| `FileStat.isFile` | `: bool` |  |\n" "| `FileStat.isSymlink` | `: bool` |  |\n" "| `FileStat.mode` | `: i64` |  |\n" "| `FileStat.mtime` | `: i64` |  |\n" "| `FileStat.size` | `: i64` |  |\n" "| `FileStat.uid` | `: i64` |  |\n" "| `LineIterator` | `LineIterator` |  |\n" "| `LineIterator.hasNext` | `(): bool` |  |\n" "| `LineIterator.init` | `(reader: BufReader): ()` |  |\n" "| `io.appendFile` | `(path: Path, data: string): bool` |  |\n" "| `io.chdir` | `(path: Path): bool` |  |\n" "| `io.chmod` | `(path: Path, mode: i64): bool` |  |\n"
+            "| `io.copyFile` | `(src: Path, dst: Path): bool` |  |\n" "| `io.cwd` | `(): Path` |  |\n" "| `io.exists` | `(path: Path): bool` |  |\n" "| `io.fileSize` | `(path: Path): i64` |  |\n" "| `io.flushWriter` | `(writer: BufWriter): bool` |  |\n" "| `io.isDir` | `(path: Path): bool` |  |\n" "| `io.isFile` | `(path: Path): bool` |  |\n" "| `io.isSymlink` | `(path: Path): bool` |  |\n" "| `io.lines` | `(path: Path): LineIterator?` |  |\n" "| `io.mkdir` | `(path: Path): bool` |  |\n" "| `io.mkdirp` | `(path: Path): bool` |  |\n" "| `io.readDir` | `(path: Path): Array<Path>?` |  |\n" "| `io.readDirRecursive` | `(path: Path): Array<Path>?` |  |\n" "| `io.readFile` | `(path: Path): string?` |  |\n" "| `io.readFileBytes` | `(path: Path): Array<u8>?` |  |\n" "| `io.readLines` | `(path: Path): Array<string>` |  |\n" "| `io.readStdin` | `(): string?` |  |\n" "| `io.readStdinBytes` | `(): Array<u8>?` |  |\n" "| `io.readlink` | `(path: Path): Path?` |  |\n" "| `io.realpath` | `(path: Path): Path?` |  |\n"
+            "| `io.remove` | `(path: Path): bool` |  |\n" "| `io.removeAll` | `(path: Path): bool` |  |\n" "| `io.rename` | `(old: Path, newPath: Path): bool` |  |\n" "| `io.stat` | `(path: Path): FileStat?` |  |\n" "| `io.symlink` | `(source: Path, link: Path): bool` |  |\n" "| `io.tempDir` | `(): Path?` |  |\n" "| `io.tempFile` | `(): Path?` |  |\n" "| `io.touch` | `(path: Path): bool` |  |\n" "| `io.writeFile` | `(path: Path, data: string): bool` |  |\n" "| `io.writeFileBytes` | `(path: Path, data: Array<u8>): bool` |  |\n" "| `io.writeStderr` | `(data: string): bool` |  |\n" "| `io.writeStdout` | `(data: string): bool` |  |\n" "",
         .symbols = _symbols_io,
         .symbol_count = (int)(sizeof(_symbols_io) / sizeof(_symbols_io[0])),
     },
@@ -9947,56 +1924,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "json",
         .summary = "Typed and schema-less JSON boundaries, path operations, and serialization",
         .body =
-            "# JSON prelude namespace\n"
-            "\n"
-            "JSON is a prelude namespace, not a value type or importable module. Use JSON.Value for any JSON root and JSON.Object, an alias for Map<string, JSON.Value>, for dynamic object keys.\n"
-            "\n"
-            "Use `JSON.*` directly without `import`; choose typed parsing whenever the schema is known.\n"
-            "\n"
-            "### Parse and encode\n"
-            "- `JSON.parse<T>(text)` rejects unknown fields by default; pass `JSON.UnknownFields.Ignore` explicitly when required\n"
-            "- `JSON.parseObject(text)` returns `JSON.Object`; `JSON.parseValue(text)` accepts any JSON root\n"
-            "- `JSON.value(value)` explicitly encodes a composite value; JSON scalars widen implicitly\n"
-            "- `JSON.stringify(value, indent?)` serializes any value satisfying `JSON.Encodable`\n"
-            "- `JSON.parseWithRest<T>(text)` keeps unknown top-level fields in `rest: JSON.Object`\n"
-            "\n"
-            "### Dynamic access\n"
-            "- Use `JSON.Object` Map methods and subscripts for one-level dynamic keys\n"
-            "- Use `JSON.get<T>()`, `JSON.require<T>()`, `JSON.containsPath()`, `JSON.set()`, and `JSON.remove()` with `JSON.Path` for deep access\n"
-            "- Use `JSON.asObject()` / `JSON.asArray()` to unwrap a `JSON.Value` without copying\n"
-            "- `JSON.Value` itself has no dot access, subscript, iteration, or `len`\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `JSON` | `JSON` |  |\n"
-            "| `JSON.asArray` | `(value: JSON.Value): Array<JSON.Value>?` |  |\n"
-            "| `JSON.asObject` | `(value: JSON.Value): JSON.Object?` |  |\n"
-            "| `JSON.containsPath` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n"
-            "| `JSON.decode` | `(value: JSON.Value, unknown?: JSON.UnknownFields): T?` |  |\n"
-            "| `JSON.decodeObject` | `(value: JSON.Object, unknown?: JSON.UnknownFields): T?` |  |\n"
-            "| `JSON.get` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T?` |  |\n"
-            "| `JSON.isArray` | `(value: JSON.Value): bool` |  |\n"
-            "| `JSON.isBool` | `(value: JSON.Value): bool` |  |\n"
-            "| `JSON.isFloat` | `(value: JSON.Value): bool` |  |\n"
-            "| `JSON.isInt` | `(value: JSON.Value): bool` |  |\n"
-            "| `JSON.isNull` | `(value: JSON.Value): bool` |  |\n"
-            "| `JSON.isObject` | `(value: JSON.Value): bool` |  |\n"
-            "| `JSON.isString` | `(value: JSON.Value): bool` |  |\n"
-            "| `JSON.isValid` | `(text: string, strict?: bool): bool` |  |\n"
-            "| `JSON.kindOf` | `(value: JSON.Value): string` |  |\n"
-            "| `JSON.merge` | `(parts: JSON.WithRest<T>): JSON.Object` |  |\n"
-            "| `JSON.parse` | `(text: string, unknown?: JSON.UnknownFields): T` |  |\n"
-            "| `JSON.parseObject` | `(text: string): JSON.Object` |  |\n"
-            "| `JSON.parseValue` | `(text: string): JSON.Value` |  |\n"
-            "| `JSON.parseWithRest` | `(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>` |  |\n"
-            "| `JSON.remove` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n"
-            "| `JSON.require` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T` |  |\n"
-            "| `JSON.set` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()` |  |\n"
-            "| `JSON.stringify` | `(value: T, indent?: i64): string` |  |\n"
-            "| `JSON.value` | `(value: T): JSON.Value` |  |\n"
-            "",
+            "# JSON prelude namespace\n" "\n" "JSON is a prelude namespace, not a value type or importable module. Use JSON.Value for any JSON root and JSON.Object, an alias for Map<string, JSON.Value>, for dynamic object keys.\n" "\n" "Use `JSON.*` directly without `import`; choose typed parsing whenever the schema is known.\n" "\n" "### Parse and encode\n" "- `JSON.parse<T>(text)` rejects unknown fields by default; pass `JSON.UnknownFields.Ignore` explicitly when required\n" "- `JSON.parseObject(text)` returns `JSON.Object`; `JSON.parseValue(text)` accepts any JSON root\n" "- `JSON.value(value)` explicitly encodes a composite value; JSON scalars widen implicitly\n" "- `JSON.stringify(value, indent?)` serializes any value satisfying `JSON.Encodable`\n" "- `JSON.parseWithRest<T>(text)` keeps unknown top-level fields in `rest: JSON.Object`\n" "\n" "### Dynamic access\n" "- Use `JSON.Object` Map methods and subscripts for one-level dynamic keys\n"
+            "- Use `JSON.get<T>()`, `JSON.require<T>()`, `JSON.containsPath()`, `JSON.set()`, and `JSON.remove()` with `JSON.Path` for deep access\n" "- Use `JSON.asObject()` / `JSON.asArray()` to unwrap a `JSON.Value` without copying\n" "- `JSON.Value` itself has no dot access, subscript, iteration, or `len`\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `JSON` | `JSON` |  |\n" "| `JSON.asArray` | `(value: JSON.Value): Array<JSON.Value>?` |  |\n" "| `JSON.asObject` | `(value: JSON.Value): JSON.Object?` |  |\n" "| `JSON.containsPath` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n" "| `JSON.decode` | `(value: JSON.Value, unknown?: JSON.UnknownFields): T?` |  |\n" "| `JSON.decodeObject` | `(value: JSON.Object, unknown?: JSON.UnknownFields): T?` |  |\n" "| `JSON.get` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T?` |  |\n" "| `JSON.isArray` | `(value: JSON.Value): bool` |  |\n" "| `JSON.isBool` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isFloat` | `(value: JSON.Value): bool` |  |\n" "| `JSON.isInt` | `(value: JSON.Value): bool` |  |\n" "| `JSON.isNull` | `(value: JSON.Value): bool` |  |\n" "| `JSON.isObject` | `(value: JSON.Value): bool` |  |\n" "| `JSON.isString` | `(value: JSON.Value): bool` |  |\n" "| `JSON.isValid` | `(text: string, strict?: bool): bool` |  |\n" "| `JSON.kindOf` | `(value: JSON.Value): string` |  |\n" "| `JSON.merge` | `(parts: JSON.WithRest<T>): JSON.Object` |  |\n" "| `JSON.parse` | `(text: string, unknown?: JSON.UnknownFields): T` |  |\n" "| `JSON.parseObject` | `(text: string): JSON.Object` |  |\n" "| `JSON.parseValue` | `(text: string): JSON.Value` |  |\n" "| `JSON.parseWithRest` | `(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>` |  |\n" "| `JSON.remove` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n" "| `JSON.require` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T` |  |\n"
+            "| `JSON.set` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()` |  |\n" "| `JSON.stringify` | `(value: T, indent?: i64): string` |  |\n" "| `JSON.value` | `(value: T): JSON.Value` |  |\n" "",
         .symbols = _symbols_json,
         .symbol_count = (int)(sizeof(_symbols_json) / sizeof(_symbols_json[0])),
     },
@@ -10004,45 +1935,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "log",
         .summary = "Structured logging system",
         .body =
-            "# log module\n"
-            "\n"
-            "Structured logging system.\n"
-            "\n"
-            "Usage: `import log` then call `log.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Logger` | `Logger` |  |\n"
-            "| `Logger.asyncMode` | `: bool` |  |\n"
-            "| `Logger.child` | `(...fields: JSON.Value): Logger` |  |\n"
-            "| `Logger.debug` | `(...args: JSON.Value): ()` |  |\n"
-            "| `Logger.error` | `(...args: JSON.Value): ()` |  |\n"
-            "| `Logger.fatal` | `(...args: JSON.Value): ()` |  |\n"
-            "| `Logger.format` | `: LogFormat` |  |\n"
-            "| `Logger.info` | `(...args: JSON.Value): ()` |  |\n"
-            "| `Logger.init` | `(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()` |  |\n"
-            "| `Logger.jsonContext` | `: string` |  |\n"
-            "| `Logger.level` | `: LogLevel` |  |\n"
-            "| `Logger.output` | `: Path?` |  |\n"
-            "| `Logger.source` | `: bool` |  |\n"
-            "| `Logger.textContext` | `: string` |  |\n"
-            "| `Logger.warn` | `(...args: JSON.Value): ()` |  |\n"
-            "| `log.child` | `(...fields: JSON.Value): Logger` |  |\n"
-            "| `log.debug` | `(...args: JSON.Value): ()` |  |\n"
-            "| `log.enableAsync` | `(enabled: bool = true): ()` |  |\n"
-            "| `log.enableSource` | `(enabled: bool = true): ()` |  |\n"
-            "| `log.error` | `(...args: JSON.Value): ()` |  |\n"
-            "| `log.fatal` | `(...args: JSON.Value): ()` |  |\n"
-            "| `log.flush` | `(): ()` |  |\n"
-            "| `log.info` | `(...args: JSON.Value): ()` |  |\n"
-            "| `log.isEnabled` | `(level: LogLevel): bool` |  |\n"
-            "| `log.setFormat` | `(format: LogFormat): ()` |  |\n"
-            "| `log.setLevel` | `(level: LogLevel): ()` |  |\n"
-            "| `log.setOutput` | `(path: Path): ()` |  |\n"
-            "| `log.warn` | `(...args: JSON.Value): ()` |  |\n"
-            "",
+            "# log module\n" "\n" "Structured logging system.\n" "\n" "Usage: `import log` then call `log.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Logger` | `Logger` |  |\n" "| `Logger.asyncMode` | `: bool` |  |\n" "| `Logger.child` | `(...fields: JSON.Value): Logger` |  |\n" "| `Logger.debug` | `(...args: JSON.Value): ()` |  |\n" "| `Logger.error` | `(...args: JSON.Value): ()` |  |\n" "| `Logger.fatal` | `(...args: JSON.Value): ()` |  |\n" "| `Logger.format` | `: LogFormat` |  |\n" "| `Logger.info` | `(...args: JSON.Value): ()` |  |\n" "| `Logger.init` | `(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()` |  |\n" "| `Logger.jsonContext` | `: string` |  |\n" "| `Logger.level` | `: LogLevel` |  |\n" "| `Logger.output` | `: Path?` |  |\n" "| `Logger.source` | `: bool` |  |\n"
+            "| `Logger.textContext` | `: string` |  |\n" "| `Logger.warn` | `(...args: JSON.Value): ()` |  |\n" "| `log.child` | `(...fields: JSON.Value): Logger` |  |\n" "| `log.debug` | `(...args: JSON.Value): ()` |  |\n" "| `log.enableAsync` | `(enabled: bool = true): ()` |  |\n" "| `log.enableSource` | `(enabled: bool = true): ()` |  |\n" "| `log.error` | `(...args: JSON.Value): ()` |  |\n" "| `log.fatal` | `(...args: JSON.Value): ()` |  |\n" "| `log.flush` | `(): ()` |  |\n" "| `log.info` | `(...args: JSON.Value): ()` |  |\n" "| `log.isEnabled` | `(level: LogLevel): bool` |  |\n" "| `log.setFormat` | `(format: LogFormat): ()` |  |\n" "| `log.setLevel` | `(level: LogLevel): ()` |  |\n" "| `log.setOutput` | `(path: Path): ()` |  |\n" "| `log.warn` | `(...args: JSON.Value): ()` |  |\n" "",
         .symbols = _symbols_log,
         .symbol_count = (int)(sizeof(_symbols_log) / sizeof(_symbols_log[0])),
     },
@@ -10050,68 +1944,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "math",
         .summary = "Mathematical functions (sin, cos, sqrt, etc.)",
         .body =
-            "# math module\n"
-            "\n"
-            "Mathematical functions (sin, cos, sqrt, etc.).\n"
-            "\n"
-            "Usage: `import math` then call `math.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `math.E` | `: f64` |  |\n"
-            "| `math.EPSILON` | `: f64` |  |\n"
-            "| `math.INF` | `: f64` |  |\n"
-            "| `math.LN10` | `: f64` |  |\n"
-            "| `math.LN2` | `: f64` |  |\n"
-            "| `math.LOG10E` | `: f64` |  |\n"
-            "| `math.LOG2E` | `: f64` |  |\n"
-            "| `math.MAX_F64` | `: f64` |  |\n"
-            "| `math.MAX_I64` | `: i64` |  |\n"
-            "| `math.MIN_I64` | `: i64` |  |\n"
-            "| `math.NAN` | `: f64` |  |\n"
-            "| `math.PI` | `: f64` |  |\n"
-            "| `math.SQRT2` | `: f64` |  |\n"
-            "| `math.TAU` | `: f64` |  |\n"
-            "| `math.abs` | `(x: f64): f64` |  |\n"
-            "| `math.acos` | `(x: f64): f64` |  |\n"
-            "| `math.asin` | `(x: f64): f64` |  |\n"
-            "| `math.atan` | `(x: f64): f64` |  |\n"
-            "| `math.atan2` | `(y: f64, x: f64): f64` |  |\n"
-            "| `math.cbrt` | `(x: f64): f64` |  |\n"
-            "| `math.ceil` | `(x: f64): i64` |  |\n"
-            "| `math.clamp` | `(x: f64, min: f64, max: f64): f64` |  |\n"
-            "| `math.cos` | `(x: f64): f64` |  |\n"
-            "| `math.cosh` | `(x: f64): f64` |  |\n"
-            "| `math.degToRad` | `(deg: f64): f64` |  |\n"
-            "| `math.exp` | `(x: f64): f64` |  |\n"
-            "| `math.expm1` | `(x: f64): f64` |  |\n"
-            "| `math.floor` | `(x: f64): i64` |  |\n"
-            "| `math.fmod` | `(x: f64, y: f64): f64` |  |\n"
-            "| `math.hypot` | `(x: f64, y: f64): f64` |  |\n"
-            "| `math.isFinite` | `(x: f64): bool` |  |\n"
-            "| `math.isNaN` | `(x: f64): bool` |  |\n"
-            "| `math.lerp` | `(a: f64, b: f64, t: f64): f64` |  |\n"
-            "| `math.log` | `(x: f64): f64` |  |\n"
-            "| `math.log10` | `(x: f64): f64` |  |\n"
-            "| `math.log1p` | `(x: f64): f64` |  |\n"
-            "| `math.log2` | `(x: f64): f64` |  |\n"
-            "| `math.max` | `(...args: f64): f64` |  |\n"
-            "| `math.min` | `(...args: f64): f64` |  |\n"
-            "| `math.pow` | `(base: f64, exp: f64): f64` |  |\n"
-            "| `math.radToDeg` | `(rad: f64): f64` |  |\n"
-            "| `math.random` | `(): f64` |  |\n"
-            "| `math.randomInt` | `(min: i64, max: i64): i64` |  |\n"
-            "| `math.round` | `(x: f64): i64` |  |\n"
-            "| `math.sign` | `(x: f64): i64` |  |\n"
-            "| `math.sin` | `(x: f64): f64` |  |\n"
-            "| `math.sinh` | `(x: f64): f64` |  |\n"
-            "| `math.sqrt` | `(x: f64): f64` |  |\n"
-            "| `math.tan` | `(x: f64): f64` |  |\n"
-            "| `math.tanh` | `(x: f64): f64` |  |\n"
-            "| `math.trunc` | `(x: f64): i64` |  |\n"
-            "",
+            "# math module\n" "\n" "Mathematical functions (sin, cos, sqrt, etc.).\n" "\n" "Usage: `import math` then call `math.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `math.E` | `: f64` |  |\n" "| `math.EPSILON` | `: f64` |  |\n" "| `math.INF` | `: f64` |  |\n" "| `math.LN10` | `: f64` |  |\n" "| `math.LN2` | `: f64` |  |\n" "| `math.LOG10E` | `: f64` |  |\n" "| `math.LOG2E` | `: f64` |  |\n" "| `math.MAX_F64` | `: f64` |  |\n" "| `math.MAX_I64` | `: i64` |  |\n" "| `math.MIN_I64` | `: i64` |  |\n" "| `math.NAN` | `: f64` |  |\n" "| `math.PI` | `: f64` |  |\n" "| `math.SQRT2` | `: f64` |  |\n" "| `math.TAU` | `: f64` |  |\n" "| `math.abs` | `(x: f64): f64` |  |\n" "| `math.acos` | `(x: f64): f64` |  |\n" "| `math.asin` | `(x: f64): f64` |  |\n" "| `math.atan` | `(x: f64): f64` |  |\n" "| `math.atan2` | `(y: f64, x: f64): f64` |  |\n" "| `math.cbrt` | `(x: f64): f64` |  |\n" "| `math.ceil` | `(x: f64): i64` |  |\n"
+            "| `math.clamp` | `(x: f64, min: f64, max: f64): f64` |  |\n" "| `math.cos` | `(x: f64): f64` |  |\n" "| `math.cosh` | `(x: f64): f64` |  |\n" "| `math.degToRad` | `(deg: f64): f64` |  |\n" "| `math.exp` | `(x: f64): f64` |  |\n" "| `math.expm1` | `(x: f64): f64` |  |\n" "| `math.floor` | `(x: f64): i64` |  |\n" "| `math.fmod` | `(x: f64, y: f64): f64` |  |\n" "| `math.hypot` | `(x: f64, y: f64): f64` |  |\n" "| `math.isFinite` | `(x: f64): bool` |  |\n" "| `math.isNaN` | `(x: f64): bool` |  |\n" "| `math.lerp` | `(a: f64, b: f64, t: f64): f64` |  |\n" "| `math.log` | `(x: f64): f64` |  |\n" "| `math.log10` | `(x: f64): f64` |  |\n" "| `math.log1p` | `(x: f64): f64` |  |\n" "| `math.log2` | `(x: f64): f64` |  |\n" "| `math.max` | `(...args: f64): f64` |  |\n" "| `math.min` | `(...args: f64): f64` |  |\n" "| `math.pow` | `(base: f64, exp: f64): f64` |  |\n" "| `math.radToDeg` | `(rad: f64): f64` |  |\n" "| `math.random` | `(): f64` |  |\n" "| `math.randomInt` | `(min: i64, max: i64): i64` |  |\n"
+            "| `math.round` | `(x: f64): i64` |  |\n" "| `math.sign` | `(x: f64): i64` |  |\n" "| `math.sin` | `(x: f64): f64` |  |\n" "| `math.sinh` | `(x: f64): f64` |  |\n" "| `math.sqrt` | `(x: f64): f64` |  |\n" "| `math.tan` | `(x: f64): f64` |  |\n" "| `math.tanh` | `(x: f64): f64` |  |\n" "| `math.trunc` | `(x: f64): i64` |  |\n" "",
         .symbols = _symbols_math,
         .symbol_count = (int)(sizeof(_symbols_math) / sizeof(_symbols_math[0])),
     },
@@ -10119,39 +1954,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "mem",
         .summary = "Raw memory, Buffer allocation, page allocation, volatile access, and memory primitives",
         .body =
-            "# mem module\n"
-            "\n"
-            "Raw-memory capabilities for explicit low-level work. `mem.slice<T>(ptr, count, owner)` creates a readonly zero-copy Slice over a canonical target layout, while `mem.withSliceMut<T>` scopes writable access to a callback; `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`.\n"
-            "\n"
-            "Usage: `import mem` then call `mem.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `mem.PROT_EXEC` | `: i64` |  |\n"
-            "| `mem.PROT_NONE` | `: i64` |  |\n"
-            "| `mem.PROT_READ` | `: i64` |  |\n"
-            "| `mem.PROT_WRITE` | `: i64` |  |\n"
-            "| `mem.alloc` | `(n: i64): Buffer` |  |\n"
-            "| `mem.allocAligned` | `(n: i64, align: i64): Buffer` |  |\n"
-            "| `mem.allocZeroed` | `(n: i64): Buffer` |  |\n"
-            "| `mem.cacheFlush` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n"
-            "| `mem.cacheInvalidate` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n"
-            "| `mem.cacheLineSize` | `(): i64` |  |\n"
-            "| `mem.compare` | `(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64` |  |\n"
-            "| `mem.copy` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n"
-            "| `mem.fence` | `(ordering: i64): ()` |  |\n"
-            "| `mem.move` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n"
-            "| `mem.nontemporalStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n"
-            "| `mem.pageAlloc` | `(bytes: i64, prot: i64 = PROT_READ \\| PROT_WRITE): MutPtr<u8>` |  |\n"
-            "| `mem.pageFree` | `(ptr: MutPtr<u8>, bytes: i64): bool` |  |\n"
-            "| `mem.pageProtect` | `(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool` |  |\n"
-            "| `mem.prefetch` | `(ptr: Ptr<u8>, rw: i64): ()` |  |\n"
-            "| `mem.set` | `(dst: MutPtr<u8>, byte: i64, n: i64): ()` |  |\n"
-            "| `mem.volatileLoad` | `(ptr: Ptr<u8>, size: i64): i64` |  |\n"
-            "| `mem.volatileStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n"
-            "",
+            "# mem module\n" "\n" "Raw-memory capabilities for explicit low-level work. `mem.slice<T>(ptr, count, owner)` creates a readonly zero-copy Slice over a canonical target layout, while `mem.withSliceMut<T>` scopes writable access to a callback; `mem.load/store<T>` use target-sized scalar descriptors, and `mem.alloc*` returns managed `Buffer`.\n" "\n" "Usage: `import mem` then call `mem.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `mem.PROT_EXEC` | `: i64` |  |\n" "| `mem.PROT_NONE` | `: i64` |  |\n" "| `mem.PROT_READ` | `: i64` |  |\n" "| `mem.PROT_WRITE` | `: i64` |  |\n" "| `mem.alloc` | `(n: i64): Buffer` |  |\n" "| `mem.allocAligned` | `(n: i64, align: i64): Buffer` |  |\n" "| `mem.allocZeroed` | `(n: i64): Buffer` |  |\n" "| `mem.cacheFlush` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n" "| `mem.cacheInvalidate` | `(ptr: Ptr<u8>, n: i64): ()` |  |\n" "| `mem.cacheLineSize` | `(): i64` |  |\n"
+            "| `mem.compare` | `(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64` |  |\n" "| `mem.copy` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n" "| `mem.fence` | `(ordering: i64): ()` |  |\n" "| `mem.move` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` |  |\n" "| `mem.nontemporalStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n" "| `mem.pageAlloc` | `(bytes: i64, prot: i64 = PROT_READ \\| PROT_WRITE): MutPtr<u8>` |  |\n" "| `mem.pageFree` | `(ptr: MutPtr<u8>, bytes: i64): bool` |  |\n" "| `mem.pageProtect` | `(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool` |  |\n" "| `mem.prefetch` | `(ptr: Ptr<u8>, rw: i64): ()` |  |\n" "| `mem.set` | `(dst: MutPtr<u8>, byte: i64, n: i64): ()` |  |\n" "| `mem.volatileLoad` | `(ptr: Ptr<u8>, size: i64): i64` |  |\n" "| `mem.volatileStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` |  |\n" "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
     },
@@ -10159,116 +1963,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "net",
         .summary = "TCP/UDP/TLS networking with typed handles and source-owned stream policy",
         .body =
-            "# net module\n"
-            "\n"
-            "TCP/UDP/TLS networking. Binary I/O uses reusable `Array<u8>` buffers through `readInto` and `writeBytes`; source-owned `copy` and `copyBidirectional` pumps compose those operations for relays.\n"
-            "\n"
-            "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.\n"
-            "\n"
-            "### TCP data paths\n"
-            "`net.read(conn)` and `net.write(conn, data)` are for message-oriented code that needs to inspect or transform data in Xray. `net.readInto(conn, bytes, maxlen?)` and `net.writeBytes(conn, bytes)` are the reusable-buffer binary path. `net.copy(src, dst)` and `net.copyBidirectional(a, b)` are raw TCP/TLS stream pumps; payload stays in reusable native buffers. Echo is just the self-copy case: `net.copy(conn, conn)`.\n"
-            "\n"
-            "### Deadlines and errors\n"
-            "Use `setReadDeadline`, `setWriteDeadline`, `setDeadline`, and `setAcceptDeadline` with `time.monotonic()` deadlines. Operations return the normal null or `-1` failure shape, and `lastError(handle)` / `lastErrno(handle)` expose diagnostic causes such as `timeout`, `closed`, `reset`, `refused`, `dns`, `tls`, and `io`.\n"
-            "\n"
-            "### TLS and ALPN\n"
-            "Use `dial(host, port, DialOptions(timeoutMs, true, protocols))` for ordinary TLS clients with an optional ALPN offer. `TlsClientContext` adds custom trust, client identity, and STARTTLS policy. `TlsServerContext` takes protocols in server-preference order. After either handshake, `negotiatedProtocol(conn)` returns the selected protocol or `null`; the application protocol owns acceptance.\n"
-            "\n"
-            "### Lifecycle\n"
-            "`shutdownRead`, `shutdownWrite`, and `shutdown` expose TCP half-close semantics. `copyBidirectional(a, b)` runs two stream pumps and half-closes the opposite write side on EOF, which is the preferred primitive for generic TCP proxy and relay code.\n"
-            "\n"
-            "### Echo server\n"
-            "```xray\n"
-            "import net\n"
-            "\n"
-            "fn serve(conn: NetConn) {\n"
-            "    defer net.close(conn)\n"
-            "    net.copy(conn, conn)\n"
-            "}\n"
-            "\n"
-            "var listener = net.listen(9001, 1024)!\n"
-            "while (true) {\n"
-            "    var conn = net.accept(listener)\n"
-            "    if (conn != null) {\n"
-            "        go serve(conn!)\n"
-            "    }\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Design rule\n"
-            "- Use typed handles (`NetConn`, `NetListener`) instead of ad-hoc JSON handles.\n"
-            "- Use stream pumps for proxy, relay, echo, and other byte-preserving workloads.\n"
-            "- Use `Array<u8>` buffers for binary protocol hot paths that must inspect payload.\n"
-            "- Use string reads only when the program actually needs to parse or mutate text.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `CopyBidirectionalResult` | `CopyBidirectionalResult` |  |\n"
-            "| `CopyBidirectionalResult.aToB` | `: i64` |  |\n"
-            "| `CopyBidirectionalResult.bToA` | `: i64` |  |\n"
-            "| `DialOptions` | `DialOptions` |  |\n"
-            "| `DialOptions.alpnProtocols` | `: Array<string>?` |  |\n"
-            "| `DialOptions.init` | `(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()` |  |\n"
-            "| `DialOptions.timeoutMs` | `: i64` |  |\n"
-            "| `DialOptions.tls` | `: bool` |  |\n"
-            "| `Endpoint` | `Endpoint` |  |\n"
-            "| `Endpoint.host` | `: string` |  |\n"
-            "| `Endpoint.init` | `(host: string, port: i64): ()` |  |\n"
-            "| `Endpoint.port` | `: i64` |  |\n"
-            "| `IpAddress` | `IpAddress` |  |\n"
-            "| `IpAddress.init` | `(value: string): ()` |  |\n"
-            "| `IpAddress.toString` | `(): string` |  |\n"
-            "| `IpAddress.value` | `: string` |  |\n"
-            "| `NetConn` | `NetConn` |  |\n"
-            "| `NetConn.init` | `(storage: __NetConnStorage): ()` |  |\n"
-            "| `NetListener` | `NetListener` |  |\n"
-            "| `NetListener.init` | `(storage: __NetListenerStorage): ()` |  |\n"
-            "| `TlsClientContext` | `TlsClientContext` |  |\n"
-            "| `TlsClientContext.create` | `(caFile: string = \"\", certFile: string = \"\", keyFile: string = \"\", verifyPeer: bool = true, alpnProtocols: Array<string>? = null): TlsClientContext` |  |\n"
-            "| `TlsClientContext.upgrade` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
-            "| `TlsServerContext` | `TlsServerContext` |  |\n"
-            "| `TlsServerContext.accept` | `(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
-            "| `TlsServerContext.create` | `(certFile: string, keyFile: string, caFile: string = \"\", requireClientCertificate: bool = false, alpnProtocols: Array<string>? = null): TlsServerContext` |  |\n"
-            "| `UdpFrom` | `UdpFrom` |  |\n"
-            "| `UdpFrom.host` | `: string` |  |\n"
-            "| `UdpFrom.init` | `(n: i64, host: string, port: i64): ()` |  |\n"
-            "| `UdpFrom.n` | `: i64` |  |\n"
-            "| `UdpFrom.port` | `: i64` |  |\n"
-            "| `net.accept` | `(listener: NetListener): NetConn?` |  |\n"
-            "| `net.close` | `(handle: NetConn \\| NetListener): ()` |  |\n"
-            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER): i64` |  |\n"
-            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` |  |\n"
-            "| `net.dial` | `(host: string, port: i64, options: DialOptions? = null): NetConn` |  |\n"
-            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions? = null): NetConn` |  |\n"
-            "| `net.fd` | `(handle: NetConn \\| NetListener): i64` |  |\n"
-            "| `net.hasTLS` | `(): bool` |  |\n"
-            "| `net.isClosed` | `(handle: NetConn \\| NetListener): bool` |  |\n"
-            "| `net.isTLS` | `(conn: NetConn): bool` |  |\n"
-            "| `net.lastErrno` | `(handle: NetConn \\| NetListener): i64` |  |\n"
-            "| `net.lastError` | `(handle: NetConn \\| NetListener): NetError?` |  |\n"
-            "| `net.listen` | `(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener` |  |\n"
-            "| `net.lookup` | `(hostname: string): Array<IpAddress>` |  |\n"
-            "| `net.negotiatedProtocol` | `(conn: NetConn): string?` |  |\n"
-            "| `net.port` | `(listener: NetListener): i64` |  |\n"
-            "| `net.readBytes` | `(conn: NetConn, maxBytes: i64 = 4096): Array<u8>?` |  |\n"
-            "| `net.readInto` | `(conn: NetConn, buffer: ref Array<u8>, maxlen: i64 = 1048576): i64` |  |\n"
-            "| `net.recvFrom` | `(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1): UdpFrom?` |  |\n"
-            "| `net.resolve` | `(hostname: string): IpAddress?` |  |\n"
-            "| `net.sendTo` | `(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): i64` |  |\n"
-            "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: i64): bool` |  |\n"
-            "| `net.setDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n"
-            "| `net.setReadDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n"
-            "| `net.setWriteDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n"
-            "| `net.shutdown` | `(conn: NetConn): bool` |  |\n"
-            "| `net.shutdownRead` | `(conn: NetConn): bool` |  |\n"
-            "| `net.shutdownWrite` | `(conn: NetConn): bool` |  |\n"
-            "| `net.udpBind` | `(port: i64, address: string = \"\"): NetConn` |  |\n"
-            "| `net.udpMulticastBind` | `(group: string, port: i64, ttl: i64 = 1, loopback: bool = false): NetConn` |  |\n"
-            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
-            "| `net.writeBytes` | `(conn: NetConn, data: Array<u8>): i64` |  |\n"
-            "",
+            "# net module\n" "\n" "TCP/UDP/TLS networking. Binary I/O uses reusable `Array<u8>` buffers through `readInto` and `writeBytes`; source-owned `copy` and `copyBidirectional` pumps compose those operations for relays.\n" "\n" "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.\n" "\n" "### TCP data paths\n" "`net.read(conn)` and `net.write(conn, data)` are for message-oriented code that needs to inspect or transform data in Xray. `net.readInto(conn, bytes, maxlen?)` and `net.writeBytes(conn, bytes)` are the reusable-buffer binary path. `net.copy(src, dst)` and `net.copyBidirectional(a, b)` are raw TCP/TLS stream pumps; payload stays in reusable native buffers. Echo is just the self-copy case: `net.copy(conn, conn)`.\n" "\n" "### Deadlines and errors\n"
+            "Use `setReadDeadline`, `setWriteDeadline`, `setDeadline`, and `setAcceptDeadline` with `time.monotonic()` deadlines. Operations return the normal null or `-1` failure shape, and `lastError(handle)` / `lastErrno(handle)` expose diagnostic causes such as `timeout`, `closed`, `reset`, `refused`, `dns`, `tls`, and `io`.\n" "\n" "### TLS and ALPN\n" "Use `dial(host, port, DialOptions(timeoutMs, true, protocols))` for ordinary TLS clients with an optional ALPN offer. `TlsClientContext` adds custom trust, client identity, and STARTTLS policy. `TlsServerContext` takes protocols in server-preference order. After either handshake, `negotiatedProtocol(conn)` returns the selected protocol or `null`; the application protocol owns acceptance.\n" "\n" "### Lifecycle\n"
+            "`shutdownRead`, `shutdownWrite`, and `shutdown` expose TCP half-close semantics. `copyBidirectional(a, b)` runs two stream pumps and half-closes the opposite write side on EOF, which is the preferred primitive for generic TCP proxy and relay code.\n" "\n" "### Echo server\n" "```xray\n" "import net\n" "\n" "fn serve(conn: NetConn) {\n" "    defer net.close(conn)\n" "    net.copy(conn, conn)\n" "}\n" "\n" "var listener = net.listen(9001, 1024)!\n" "while (true) {\n" "    var conn = net.accept(listener)\n" "    if (conn != null) {\n" "        go serve(conn!)\n" "    }\n" "}\n" "```\n" "\n" "### Design rule\n" "- Use typed handles (`NetConn`, `NetListener`) instead of ad-hoc JSON handles.\n" "- Use stream pumps for proxy, relay, echo, and other byte-preserving workloads.\n" "- Use `Array<u8>` buffers for binary protocol hot paths that must inspect payload.\n" "- Use string reads only when the program actually needs to parse or mutate text.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n" "| `CopyBidirectionalResult` | `CopyBidirectionalResult` |  |\n" "| `CopyBidirectionalResult.aToB` | `: i64` |  |\n" "| `CopyBidirectionalResult.bToA` | `: i64` |  |\n" "| `DialOptions` | `DialOptions` |  |\n" "| `DialOptions.alpnProtocols` | `: Array<string>?` |  |\n" "| `DialOptions.init` | `(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()` |  |\n" "| `DialOptions.timeoutMs` | `: i64` |  |\n" "| `DialOptions.tls` | `: bool` |  |\n" "| `Endpoint` | `Endpoint` |  |\n" "| `Endpoint.host` | `: string` |  |\n" "| `Endpoint.init` | `(host: string, port: i64): ()` |  |\n" "| `Endpoint.port` | `: i64` |  |\n" "| `IpAddress` | `IpAddress` |  |\n" "| `IpAddress.init` | `(value: string): ()` |  |\n" "| `IpAddress.toString` | `(): string` |  |\n" "| `IpAddress.value` | `: string` |  |\n" "| `NetConn` | `NetConn` |  |\n" "| `NetConn.init` | `(storage: __NetConnStorage): ()` |  |\n" "| `NetListener` | `NetListener` |  |\n"
+            "| `NetListener.init` | `(storage: __NetListenerStorage): ()` |  |\n" "| `TlsClientContext` | `TlsClientContext` |  |\n" "| `TlsClientContext.create` | `(caFile: string = \"\", certFile: string = \"\", keyFile: string = \"\", verifyPeer: bool = true, alpnProtocols: Array<string>? = null): TlsClientContext` |  |\n" "| `TlsClientContext.upgrade` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n" "| `TlsServerContext` | `TlsServerContext` |  |\n" "| `TlsServerContext.accept` | `(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n" "| `TlsServerContext.create` | `(certFile: string, keyFile: string, caFile: string = \"\", requireClientCertificate: bool = false, alpnProtocols: Array<string>? = null): TlsServerContext` |  |\n" "| `UdpFrom` | `UdpFrom` |  |\n" "| `UdpFrom.host` | `: string` |  |\n" "| `UdpFrom.init` | `(n: i64, host: string, port: i64): ()` |  |\n" "| `UdpFrom.n` | `: i64` |  |\n" "| `UdpFrom.port` | `: i64` |  |\n"
+            "| `net.accept` | `(listener: NetListener): NetConn?` |  |\n" "| `net.close` | `(handle: NetConn \\| NetListener): ()` |  |\n" "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER): i64` |  |\n" "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` |  |\n" "| `net.dial` | `(host: string, port: i64, options: DialOptions? = null): NetConn` |  |\n" "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions? = null): NetConn` |  |\n" "| `net.fd` | `(handle: NetConn \\| NetListener): i64` |  |\n" "| `net.hasTLS` | `(): bool` |  |\n" "| `net.isClosed` | `(handle: NetConn \\| NetListener): bool` |  |\n" "| `net.isTLS` | `(conn: NetConn): bool` |  |\n" "| `net.lastErrno` | `(handle: NetConn \\| NetListener): i64` |  |\n" "| `net.lastError` | `(handle: NetConn \\| NetListener): NetError?` |  |\n" "| `net.listen` | `(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener` |  |\n"
+            "| `net.lookup` | `(hostname: string): Array<IpAddress>` |  |\n" "| `net.negotiatedProtocol` | `(conn: NetConn): string?` |  |\n" "| `net.port` | `(listener: NetListener): i64` |  |\n" "| `net.readBytes` | `(conn: NetConn, maxBytes: i64 = 4096): Array<u8>?` |  |\n" "| `net.readInto` | `(conn: NetConn, buffer: ref Array<u8>, maxlen: i64 = 1048576): i64` |  |\n" "| `net.recvFrom` | `(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1): UdpFrom?` |  |\n" "| `net.resolve` | `(hostname: string): IpAddress?` |  |\n" "| `net.sendTo` | `(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): i64` |  |\n" "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: i64): bool` |  |\n" "| `net.setDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n" "| `net.setReadDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n" "| `net.setWriteDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n" "| `net.shutdown` | `(conn: NetConn): bool` |  |\n"
+            "| `net.shutdownRead` | `(conn: NetConn): bool` |  |\n" "| `net.shutdownWrite` | `(conn: NetConn): bool` |  |\n" "| `net.udpBind` | `(port: i64, address: string = \"\"): NetConn` |  |\n" "| `net.udpMulticastBind` | `(group: string, port: i64, ttl: i64 = 1, loopback: bool = false): NetConn` |  |\n" "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n" "| `net.writeBytes` | `(conn: NetConn, data: Array<u8>): i64` |  |\n" "",
         .symbols = _symbols_net,
         .symbol_count = (int)(sizeof(_symbols_net) / sizeof(_symbols_net[0])),
     },
@@ -10276,49 +1978,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "os",
         .summary = "Operating system interface (environment, bounded process-byte capture, signals)",
         .body =
-            "# os module\n"
-            "\n"
-            "Operating system interface with byte-preserving, independently bounded stdout and stderr capture.\n"
-            "\n"
-            "Usage: `import os` then call `os.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `ExecResult` | `ExecResult` |  |\n"
-            "| `ExecResult.exitCode` | `: i64` |  |\n"
-            "| `ExecResult.init` | `(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()` |  |\n"
-            "| `ExecResult.stderr` | `: Array<u8>` |  |\n"
-            "| `ExecResult.stderrTruncated` | `: bool` |  |\n"
-            "| `ExecResult.stdout` | `: Array<u8>` |  |\n"
-            "| `ExecResult.stdoutTruncated` | `: bool` |  |\n"
-            "| `os.arch` | `(): string` |  |\n"
-            "| `os.cpuCount` | `(): i64` |  |\n"
-            "| `os.environ` | `(): Map<string, string>` |  |\n"
-            "| `os.eol` | `(): string` |  |\n"
-            "| `os.exec` | `(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES, maxStderrBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES): ExecResult?` |  |\n"
-            "| `os.exit` | `(code: i64 = 0): ()` |  |\n"
-            "| `os.freeMemory` | `(): i64` |  |\n"
-            "| `os.getcwd` | `(): string` |  |\n"
-            "| `os.getenv` | `(name: string): string?` |  |\n"
-            "| `os.getpid` | `(): i64` |  |\n"
-            "| `os.gid` | `(): i64` |  |\n"
-            "| `os.homedir` | `(): string?` |  |\n"
-            "| `os.hostname` | `(): string` |  |\n"
-            "| `os.kill` | `(pid: i64, signal: i64 = 15): bool` |  |\n"
-            "| `os.loadavg` | `(): Array<f64>` |  |\n"
-            "| `os.platform` | `(): string` |  |\n"
-            "| `os.ppid` | `(): i64` |  |\n"
-            "| `os.sep` | `(): string` |  |\n"
-            "| `os.setenv` | `(name: string, value: string): bool` |  |\n"
-            "| `os.tmpdir` | `(): string` |  |\n"
-            "| `os.totalMemory` | `(): i64` |  |\n"
-            "| `os.uid` | `(): i64` |  |\n"
-            "| `os.unsetenv` | `(name: string): bool` |  |\n"
-            "| `os.uptime` | `(): f64` |  |\n"
-            "| `os.username` | `(): string?` |  |\n"
-            "",
+            "# os module\n" "\n" "Operating system interface with byte-preserving, independently bounded stdout and stderr capture.\n" "\n" "Usage: `import os` then call `os.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `ExecResult` | `ExecResult` |  |\n" "| `ExecResult.exitCode` | `: i64` |  |\n" "| `ExecResult.init` | `(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()` |  |\n" "| `ExecResult.stderr` | `: Array<u8>` |  |\n" "| `ExecResult.stderrTruncated` | `: bool` |  |\n" "| `ExecResult.stdout` | `: Array<u8>` |  |\n" "| `ExecResult.stdoutTruncated` | `: bool` |  |\n" "| `os.arch` | `(): string` |  |\n" "| `os.cpuCount` | `(): i64` |  |\n" "| `os.environ` | `(): Map<string, string>` |  |\n" "| `os.eol` | `(): string` |  |\n" "| `os.exec` | `(command: string, maxStdoutBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES, maxStderrBytes: i64 = DEFAULT_EXEC_CAPTURE_BYTES): ExecResult?` |  |\n"
+            "| `os.exit` | `(code: i64 = 0): ()` |  |\n" "| `os.freeMemory` | `(): i64` |  |\n" "| `os.getcwd` | `(): string` |  |\n" "| `os.getenv` | `(name: string): string?` |  |\n" "| `os.getpid` | `(): i64` |  |\n" "| `os.gid` | `(): i64` |  |\n" "| `os.homedir` | `(): string?` |  |\n" "| `os.hostname` | `(): string` |  |\n" "| `os.kill` | `(pid: i64, signal: i64 = 15): bool` |  |\n" "| `os.loadavg` | `(): Array<f64>` |  |\n" "| `os.platform` | `(): string` |  |\n" "| `os.ppid` | `(): i64` |  |\n" "| `os.sep` | `(): string` |  |\n" "| `os.setenv` | `(name: string, value: string): bool` |  |\n" "| `os.tmpdir` | `(): string` |  |\n" "| `os.totalMemory` | `(): i64` |  |\n" "| `os.uid` | `(): i64` |  |\n" "| `os.unsetenv` | `(name: string): bool` |  |\n" "| `os.uptime` | `(): f64` |  |\n" "| `os.username` | `(): string?` |  |\n" "",
         .symbols = _symbols_os,
         .symbol_count = (int)(sizeof(_symbols_os) / sizeof(_symbols_os[0])),
     },
@@ -10326,49 +1987,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "parallel",
         .summary = "Structured CPU data-parallel operations",
         .body =
-            "# parallel module\n"
-            "\n"
-            "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns. The `.xr` module is the canonical semantic source; hosted VM and native AOT may lower eligible operations to verified batch execution without changing the public contract.\n"
-            "\n"
-            "Usage: `import parallel` then call `parallel.function()`.\n"
-            "\n"
-            "### Execution model\n"
-            "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies define bootstrap and tooling semantics.\n"
-            "\n"
-            "### Safety contract\n"
-            "- Lane callbacks must not suspend, await, spawn tasks, or throw.\n"
-            "- Writable captured state is rejected unless it is protected by an explicit synchronization primitive such as `Atomic<T>`.\n"
-            "- `Options(workers)` requests lane parallelism; small ranges and deterministic execution may still choose a sequential fast path.\n"
-            "\n"
-            "### Persistent lane state\n"
-            "`Plan<S>` owns one state value per logical lane and reuses it across `forEach`, `map`, `mapInto`, and `reduce` calls. Call `close()` when the plan is no longer needed.\n"
-            "\n"
-            "### Example\n"
-            "```xray\n"
-            "import parallel\n"
-            "\n"
-            "var options = parallel.Options(4)\n"
-            "var squares = parallel.map(0..8, (i) -> i * i, options)\n"
-            "var total = parallel.reduce(0..8, 0, (i) -> i, (a, b) -> a + b, options)\n"
-            "print(squares[3])\n"
-            "print(total)\n"
-            "```\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Options` | `Options` |  |\n"
-            "| `Options.init` | `(workers: i64 = 0): ()` |  |\n"
-            "| `Options.workers` | `: i64` |  |\n"
-            "| `Plan` | `Plan` |  |\n"
-            "| `Plan.init` | `(options: Options, init: fn(i64) -> S): ()` |  |\n"
-            "| `Plan.options` | `: Options` |  |\n"
-            "| `parallel.forEach` | `(range: Range, body: fn(i64), options: Options = Options()): ()` |  |\n"
-            "| `parallel.map` | `(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>` |  |\n"
-            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()): ()` |  |\n"
-            "| `parallel.reduce` | `(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options: Options = Options()): A` |  |\n"
-            "",
+            "# parallel module\n" "\n" "Structured CPU data-parallel operations over integer ranges. Use `parallel.forEach`, `parallel.map`, `parallel.mapInto`, `parallel.reduce`, and `parallel.Plan<S>` for bounded CPU work that must complete before the call returns. The `.xr` module is the canonical semantic source; hosted VM and native AOT may lower eligible operations to verified batch execution without changing the public contract.\n" "\n" "Usage: `import parallel` then call `parallel.function()`.\n" "\n" "### Execution model\n" "`parallel` is a standard library module, not a language keyword. Eligible calls are recognized by the compiler and lowered to VM/AOT batch execution; the pure-Xray bodies define bootstrap and tooling semantics.\n" "\n" "### Safety contract\n" "- Lane callbacks must not suspend, await, spawn tasks, or throw.\n" "- Writable captured state is rejected unless it is protected by an explicit synchronization primitive such as `Atomic<T>`.\n"
+            "- `Options(workers)` requests lane parallelism; small ranges and deterministic execution may still choose a sequential fast path.\n" "\n" "### Persistent lane state\n" "`Plan<S>` owns one state value per logical lane and reuses it across `forEach`, `map`, `mapInto`, and `reduce` calls. Call `close()` when the plan is no longer needed.\n" "\n" "### Example\n" "```xray\n" "import parallel\n" "\n" "var options = parallel.Options(4)\n" "var squares = parallel.map(0..8, (i) -> i * i, options)\n" "var total = parallel.reduce(0..8, 0, (i) -> i, (a, b) -> a + b, options)\n" "print(squares[3])\n" "print(total)\n" "```\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Options` | `Options` |  |\n" "| `Options.init` | `(workers: i64 = 0): ()` |  |\n" "| `Options.workers` | `: i64` |  |\n" "| `Plan` | `Plan` |  |\n" "| `Plan.init` | `(options: Options, init: fn(i64) -> S): ()` |  |\n" "| `Plan.options` | `: Options` |  |\n"
+            "| `parallel.forEach` | `(range: Range, body: fn(i64), options: Options = Options()): ()` |  |\n" "| `parallel.map` | `(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>` |  |\n" "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()): ()` |  |\n" "| `parallel.reduce` | `(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options: Options = Options()): A` |  |\n" "",
         .symbols = _symbols_parallel,
         .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
     },
@@ -10376,42 +1997,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "path",
         .summary = "File path manipulation",
         .body =
-            "# path module\n"
-            "\n"
-            "File path manipulation.\n"
-            "\n"
-            "Usage: `import path` then call `path.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Path` | `Path` |  |\n"
-            "| `Path.init` | `(raw: string): ()` |  |\n"
-            "| `Path.raw` | `: string` |  |\n"
-            "| `Path.toString` | `(): string` |  |\n"
-            "| `PathInfo` | `PathInfo` |  |\n"
-            "| `PathInfo.base` | `: string` |  |\n"
-            "| `PathInfo.dir` | `: Path` |  |\n"
-            "| `PathInfo.ext` | `: string` |  |\n"
-            "| `PathInfo.init` | `(root: string, dir: Path, base: string, name: string, ext: string): ()` |  |\n"
-            "| `PathInfo.name` | `: string` |  |\n"
-            "| `PathInfo.root` | `: string` |  |\n"
-            "| `path.basename` | `(p: Path): string` |  |\n"
-            "| `path.delimiter` | `: string` |  |\n"
-            "| `path.dirname` | `(p: Path): Path` |  |\n"
-            "| `path.extname` | `(p: Path): string` |  |\n"
-            "| `path.format` | `(info: PathInfo): Path` |  |\n"
-            "| `path.from` | `(raw: string): Path` |  |\n"
-            "| `path.isAbsolute` | `(p: Path): bool` |  |\n"
-            "| `path.join` | `(...parts: Path): Path` |  |\n"
-            "| `path.joinAll` | `(parts: Array<Path>): Path` |  |\n"
-            "| `path.normalize` | `(p: Path): Path` |  |\n"
-            "| `path.parse` | `(p: Path): PathInfo` |  |\n"
-            "| `path.relative` | `(fromPath: Path, toPath: Path): Path` |  |\n"
-            "| `path.resolve` | `(...parts: Path): Path` |  |\n"
-            "| `path.sep` | `: string` |  |\n"
-            "",
+            "# path module\n" "\n" "File path manipulation.\n" "\n" "Usage: `import path` then call `path.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Path` | `Path` |  |\n" "| `Path.init` | `(raw: string): ()` |  |\n" "| `Path.raw` | `: string` |  |\n" "| `Path.toString` | `(): string` |  |\n" "| `PathInfo` | `PathInfo` |  |\n" "| `PathInfo.base` | `: string` |  |\n" "| `PathInfo.dir` | `: Path` |  |\n" "| `PathInfo.ext` | `: string` |  |\n" "| `PathInfo.init` | `(root: string, dir: Path, base: string, name: string, ext: string): ()` |  |\n" "| `PathInfo.name` | `: string` |  |\n" "| `PathInfo.root` | `: string` |  |\n" "| `path.basename` | `(p: Path): string` |  |\n" "| `path.delimiter` | `: string` |  |\n" "| `path.dirname` | `(p: Path): Path` |  |\n" "| `path.extname` | `(p: Path): string` |  |\n" "| `path.format` | `(info: PathInfo): Path` |  |\n" "| `path.from` | `(raw: string): Path` |  |\n" "| `path.isAbsolute` | `(p: Path): bool` |  |\n"
+            "| `path.join` | `(...parts: Path): Path` |  |\n" "| `path.joinAll` | `(parts: Array<Path>): Path` |  |\n" "| `path.normalize` | `(p: Path): Path` |  |\n" "| `path.parse` | `(p: Path): PathInfo` |  |\n" "| `path.relative` | `(fromPath: Path, toPath: Path): Path` |  |\n" "| `path.resolve` | `(...parts: Path): Path` |  |\n" "| `path.sep` | `: string` |  |\n" "",
         .symbols = _symbols_path,
         .symbol_count = (int)(sizeof(_symbols_path) / sizeof(_symbols_path[0])),
     },
@@ -10419,41 +2006,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "regex",
         .summary = "Regular expressions",
         .body =
-            "# regex module\n"
-            "\n"
-            "Regular expressions.\n"
-            "\n"
-            "Usage: `import regex` then call `regex.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Regex` | `Regex` |  |\n"
-            "| `Regex.flags` | `: i64` |  |\n"
-            "| `Regex.init` | `(pattern: string, flags: string = \"\"): ()` |  |\n"
-            "| `Regex.pattern` | `: string` |  |\n"
-            "| `Regex.prog` | `: Array<i64>` |  |\n"
-            "| `RegexMatch` | `RegexMatch` |  |\n"
-            "| `RegexMatch.end` | `: i64` |  |\n"
-            "| `RegexMatch.groups` | `: Array<string>` |  |\n"
-            "| `RegexMatch.init` | `(start: i64, end: i64, text: string, groups: Array<string>): ()` |  |\n"
-            "| `RegexMatch.start` | `: i64` |  |\n"
-            "| `RegexMatch.text` | `: string` |  |\n"
-            "| `regex.compile` | `(pattern: string, flags: string = \"\"): Regex` |  |\n"
-            "| `regex.count` | `(pattern: Regex, s: string): i64` |  |\n"
-            "| `regex.escape` | `(s: string): string` |  |\n"
-            "| `regex.find` | `(pattern: Regex, s: string, offset: i64 = 0): RegexMatch?` |  |\n"
-            "| `regex.findAll` | `(pattern: Regex, s: string, limit: i64 = -1): Array<RegexMatch>` |  |\n"
-            "| `regex.findGroup` | `(pattern: Regex, s: string, index: i64): string?` |  |\n"
-            "| `regex.findText` | `(pattern: Regex, s: string): string?` |  |\n"
-            "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` |  |\n"
-            "| `regex.isValid` | `(pattern: string): bool` |  |\n"
-            "| `regex.replace` | `(pattern: Regex, s: string, repl: string): string` |  |\n"
-            "| `regex.replaceAll` | `(pattern: Regex, s: string, repl: string): string` |  |\n"
-            "| `regex.split` | `(pattern: Regex, s: string, limit: i64 = -1): Array<string>` |  |\n"
-            "| `regex.test` | `(pattern: Regex, s: string): bool` |  |\n"
-            "",
+            "# regex module\n" "\n" "Regular expressions.\n" "\n" "Usage: `import regex` then call `regex.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Regex` | `Regex` |  |\n" "| `Regex.flags` | `: i64` |  |\n" "| `Regex.init` | `(pattern: string, flags: string = \"\"): ()` |  |\n" "| `Regex.pattern` | `: string` |  |\n" "| `Regex.prog` | `: Array<i64>` |  |\n" "| `RegexMatch` | `RegexMatch` |  |\n" "| `RegexMatch.end` | `: i64` |  |\n" "| `RegexMatch.groups` | `: Array<string>` |  |\n" "| `RegexMatch.init` | `(start: i64, end: i64, text: string, groups: Array<string>): ()` |  |\n" "| `RegexMatch.start` | `: i64` |  |\n" "| `RegexMatch.text` | `: string` |  |\n" "| `regex.compile` | `(pattern: string, flags: string = \"\"): Regex` |  |\n" "| `regex.count` | `(pattern: Regex, s: string): i64` |  |\n" "| `regex.escape` | `(s: string): string` |  |\n" "| `regex.find` | `(pattern: Regex, s: string, offset: i64 = 0): RegexMatch?` |  |\n"
+            "| `regex.findAll` | `(pattern: Regex, s: string, limit: i64 = -1): Array<RegexMatch>` |  |\n" "| `regex.findGroup` | `(pattern: Regex, s: string, index: i64): string?` |  |\n" "| `regex.findText` | `(pattern: Regex, s: string): string?` |  |\n" "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` |  |\n" "| `regex.isValid` | `(pattern: string): bool` |  |\n" "| `regex.replace` | `(pattern: Regex, s: string, repl: string): string` |  |\n" "| `regex.replaceAll` | `(pattern: Regex, s: string, repl: string): string` |  |\n" "| `regex.split` | `(pattern: Regex, s: string, limit: i64 = -1): Array<string>` |  |\n" "| `regex.test` | `(pattern: Regex, s: string): bool` |  |\n" "",
         .symbols = _symbols_regex,
         .symbol_count = (int)(sizeof(_symbols_regex) / sizeof(_symbols_regex[0])),
     },
@@ -10461,29 +2015,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "runtime",
         .summary = "Runtime and heap introspection",
         .body =
-            "# runtime module\n"
-            "\n"
-            "Runtime diagnostics and current execution-local reclamation-domain introspection (VM coroutine heap or AOT execution arena). Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes; cycles are not collected and are bounded by the physical coroutine domain (spec 16.8).\n"
-            "\n"
-            "Usage: `import runtime` then call `runtime.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `RuntimeInfo` | `RuntimeInfo` |  |\n"
-            "| `RuntimeInfo.finalizerCount` | `: i64` |  |\n"
-            "| `RuntimeInfo.init` | `(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()` |  |\n"
-            "| `RuntimeInfo.liveBytes` | `: i64` |  |\n"
-            "| `RuntimeInfo.liveKB` | `: f64` |  |\n"
-            "| `RuntimeInfo.liveObjects` | `: i64` |  |\n"
-            "| `runtime.finalizerCount` | `(): i64` |  |\n"
-            "| `runtime.info` | `(): RuntimeInfo` |  |\n"
-            "| `runtime.liveBytes` | `(): i64` |  |\n"
-            "| `runtime.liveObjects` | `(): i64` |  |\n"
-            "| `runtime.sharedBytes` | `(): i64` |  |\n"
-            "| `runtime.staticBytes` | `(): i64` |  |\n"
-            "",
+            "# runtime module\n" "\n" "Runtime diagnostics and current execution-local reclamation-domain introspection (VM coroutine heap or AOT execution arena). Use `runtime.liveBytes()`, `runtime.liveObjects()`, or `runtime.info()` to inspect live memory. Reclamation is pure reference counting: an object dies when its last strong reference goes; cycles are not collected and are bounded by the physical coroutine domain (spec 16.8).\n" "\n" "Usage: `import runtime` then call `runtime.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `RuntimeInfo` | `RuntimeInfo` |  |\n" "| `RuntimeInfo.finalizerCount` | `: i64` |  |\n" "| `RuntimeInfo.init` | `(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()` |  |\n" "| `RuntimeInfo.liveBytes` | `: i64` |  |\n" "| `RuntimeInfo.liveKB` | `: f64` |  |\n" "| `RuntimeInfo.liveObjects` | `: i64` |  |\n" "| `runtime.finalizerCount` | `(): i64` |  |\n" "| `runtime.info` | `(): RuntimeInfo` |  |\n"
+            "| `runtime.liveBytes` | `(): i64` |  |\n" "| `runtime.liveObjects` | `(): i64` |  |\n" "| `runtime.sharedBytes` | `(): i64` |  |\n" "| `runtime.staticBytes` | `(): i64` |  |\n" "",
         .symbols = _symbols_runtime,
         .symbol_count = (int)(sizeof(_symbols_runtime) / sizeof(_symbols_runtime[0])),
     },
@@ -10491,179 +2024,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "simd",
         .summary = "Portable fixed-width and runtime-native integer vectors",
         .body =
-            "# simd module\n"
-            "\n"
-            "Portable 128-bit, 256-bit, and 512-bit integer-vector operations plus a bounded runtime-native family for scalable targets. The APIs have matching scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.\n"
-            "\n"
-            "Usage: `import simd` then call `simd.function()`.\n"
-            "\n"
-            "### Vector types\n"
-            "- `U8x16`, `U32x4`, and `U64x2` are the portable 128-bit baseline.\n"
-            "- `U8x32`, `U32x8`, and `U64x4` provide 256-bit operations for algorithms that select a wide path.\n"
-            "- `U8x64`, `U32x16`, and `U64x8` provide the AVX-512F-width operations used by 64-byte stripe algorithms.\n"
-            "- `U8xNative`, `U32xNative`, and `U64xNative` carry only the active runtime-selected prefix, with a 64-byte storage ceiling and a portable 16-byte fallback.\n"
-            "- `Capabilities.nativeBytes()` returns the selected active width; it is at least 16 bytes. `Capabilities.isScalable()` distinguishes a runtime-scalable plan from a fixed-width or x86-dispatch plan.\n"
-            "\n"
-            "### Loading and storing\n"
-            "Use `load` and `store` with a typed `Slice<T>`. The optional offset is measured in elements. `fromLanes` constructs a vector from a fixed array, while `splat` fills every lane with one value where that operation is available.\n"
-            "\n"
-            "### Target lowering\n"
-            "Native lowering is available for AArch64 NEON and SVE, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--target aarch64-linux-musl --simd sve` for a scalable plan: hardware VLs select a bounded 16-, 32-, or 64-byte active prefix, while fixed-width vector types retain their exact public width. The SVE plan disables unsafe implicit LLVM auto-vectorization and uses explicit predicated intrinsics for runtime-native operations. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple.\n"
-            "\n"
-            "### Operations\n"
-            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range. Reinterpretation is endian-neutral: u8 zero is the least-significant byte of numeric lane zero, so VM, scalar AOT, and native SIMD produce identical lane values on little- and big-endian targets.\n"
-            "\n"
-            "### Example\n"
-            "```xray\n"
-            "import { Capabilities, U32x4 } from simd\n"
-            "\n"
-            "fn main() {\n"
-            "    var words = Array<u32>([1, 2, 3, 4])\n"
-            "    var view: Slice<u32> = words[:]\n"
-            "    var result = U32x4.load(view).add(U32x4.splat(10))\n"
-            "\n"
-            "    print(result.extract(2))\n"
-            "    print(Capabilities.nativeBytes() >= 16)\n"
-            "}\n"
-            "\n"
-            "main()\n"
-            "```\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Capabilities` | `Capabilities` |  |\n"
-            "| `Capabilities.isAccelerated` | `(): bool` |  |\n"
-            "| `Capabilities.isRuntimeSelected` | `(): bool` |  |\n"
-            "| `Capabilities.isScalable` | `(): bool` |  |\n"
-            "| `Capabilities.nativeBytes` | `(): i64` |  |\n"
-            "| `U32x16` | `U32x16` |  |\n"
-            "| `U32x16.fromLanes` | `(lanes: [u32; 16]): U32x16` |  |\n"
-            "| `U32x16.splat` | `(value: u32): U32x16` |  |\n"
-            "| `U32x16.swapAdjacent` | `(): U32x16` |  |\n"
-            "| `U32x16.widenMulEven` | `(other: U32x16): U64x8` |  |\n"
-            "| `U32x16.widenMulOdd` | `(other: U32x16): U64x8` |  |\n"
-            "| `U32x4` | `U32x4` |  |\n"
-            "| `U32x4.add` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.bitAnd` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.bitNot` | `(): U32x4` |  |\n"
-            "| `U32x4.bitOr` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.bitXor` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.extract` | `(lane: i64): u32` |  |\n"
-            "| `U32x4.fromLanes` | `(lanes: [u32; 4]): U32x4` |  |\n"
-            "| `U32x4.load` | `(data: Slice<u32>, offset: i64 = 0): U32x4` |  |\n"
-            "| `U32x4.mul` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.reinterpretU64` | `(): U64x2` |  |\n"
-            "| `U32x4.reinterpretU8` | `(): U8x16` |  |\n"
-            "| `U32x4.replace` | `(lane: i64, value: u32): U32x4` |  |\n"
-            "| `U32x4.shiftLeft` | `(bits: i64): U32x4` |  |\n"
-            "| `U32x4.shiftRight` | `(bits: i64): U32x4` |  |\n"
-            "| `U32x4.shuffle` | `(i0: i64, i1: i64, i2: i64, i3: i64): U32x4` |  |\n"
-            "| `U32x4.splat` | `(value: u32): U32x4` |  |\n"
-            "| `U32x4.store` | `(output: ref Slice<u32>, offset: i64 = 0): ()` |  |\n"
-            "| `U32x4.sub` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n"
-            "| `U32x4.unzipEven` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.unzipOdd` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.widenMulEven` | `(other: U32x4): U64x2` |  |\n"
-            "| `U32x4.widenMulHigh` | `(other: U32x4): U64x2` |  |\n"
-            "| `U32x4.widenMulLow` | `(other: U32x4): U64x2` |  |\n"
-            "| `U32x4.widenMulOdd` | `(other: U32x4): U64x2` |  |\n"
-            "| `U32x8` | `U32x8` |  |\n"
-            "| `U32x8.fromLanes` | `(lanes: [u32; 8]): U32x8` |  |\n"
-            "| `U32x8.splat` | `(value: u32): U32x8` |  |\n"
-            "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n"
-            "| `U32x8.widenMulEven` | `(other: U32x8): U64x4` |  |\n"
-            "| `U32x8.widenMulOdd` | `(other: U32x8): U64x4` |  |\n"
-            "| `U32xNative` | `U32xNative` |  |\n"
-            "| `U32xNative.swapAdjacent` | `(): U32xNative` |  |\n"
-            "| `U32xNative.widenMulEven` | `(other: U32xNative): U64xNative` |  |\n"
-            "| `U64x2` | `U64x2` |  |\n"
-            "| `U64x2.add` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.bitAnd` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.bitNot` | `(): U64x2` |  |\n"
-            "| `U64x2.bitOr` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.bitXor` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.extract` | `(lane: i64): u64` |  |\n"
-            "| `U64x2.fromLanes` | `(lanes: [u64; 2]): U64x2` |  |\n"
-            "| `U64x2.load` | `(data: Slice<u64>, offset: i64 = 0): U64x2` |  |\n"
-            "| `U64x2.mul` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.reduceAdd` | `(): u64` |  |\n"
-            "| `U64x2.reinterpretU32` | `(): U32x4` |  |\n"
-            "| `U64x2.reinterpretU8` | `(): U8x16` |  |\n"
-            "| `U64x2.replace` | `(lane: i64, value: u64): U64x2` |  |\n"
-            "| `U64x2.shiftLeft` | `(bits: i64): U64x2` |  |\n"
-            "| `U64x2.shiftRight` | `(bits: i64): U64x2` |  |\n"
-            "| `U64x2.shuffle` | `(i0: i64, i1: i64): U64x2` |  |\n"
-            "| `U64x2.splat` | `(value: u64): U64x2` |  |\n"
-            "| `U64x2.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
-            "| `U64x2.sub` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.swapLanes` | `(): U64x2` |  |\n"
-            "| `U64x4` | `U64x4` |  |\n"
-            "| `U64x4.add` | `(other: U64x4): U64x4` |  |\n"
-            "| `U64x4.bitXor` | `(other: U64x4): U64x4` |  |\n"
-            "| `U64x4.fromLanes` | `(lanes: [u64; 4]): U64x4` |  |\n"
-            "| `U64x4.load` | `(data: Slice<u64>, offset: i64 = 0): U64x4` |  |\n"
-            "| `U64x4.reduceAdd` | `(): u64` |  |\n"
-            "| `U64x4.reinterpretU32` | `(): U32x8` |  |\n"
-            "| `U64x4.reinterpretU8` | `(): U8x32` |  |\n"
-            "| `U64x4.shiftLeft` | `(bits: i64): U64x4` |  |\n"
-            "| `U64x4.shiftRight` | `(bits: i64): U64x4` |  |\n"
-            "| `U64x4.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
-            "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n"
-            "| `U64x8` | `U64x8` |  |\n"
-            "| `U64x8.add` | `(other: U64x8): U64x8` |  |\n"
-            "| `U64x8.bitXor` | `(other: U64x8): U64x8` |  |\n"
-            "| `U64x8.fromLanes` | `(lanes: [u64; 8]): U64x8` |  |\n"
-            "| `U64x8.load` | `(data: Slice<u64>, offset: i64 = 0): U64x8` |  |\n"
-            "| `U64x8.reinterpretU32` | `(): U32x16` |  |\n"
-            "| `U64x8.shiftLeft` | `(bits: i64): U64x8` |  |\n"
-            "| `U64x8.shiftRight` | `(bits: i64): U64x8` |  |\n"
-            "| `U64x8.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
-            "| `U64x8.swapAdjacent` | `(): U64x8` |  |\n"
-            "| `U64xNative` | `U64xNative` |  |\n"
-            "| `U64xNative.add` | `(other: U64xNative): U64xNative` |  |\n"
-            "| `U64xNative.bitXor` | `(other: U64xNative): U64xNative` |  |\n"
-            "| `U64xNative.load` | `(data: Slice<u64>, offset: i64 = 0): U64xNative` |  |\n"
-            "| `U64xNative.mul` | `(other: U64xNative): U64xNative` |  |\n"
-            "| `U64xNative.shiftRight` | `(bits: i64): U64xNative` |  |\n"
-            "| `U64xNative.splat` | `(value: u64): U64xNative` |  |\n"
-            "| `U64xNative.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
-            "| `U64xNative.swapAdjacent` | `(): U64xNative` |  |\n"
-            "| `U8x16` | `U8x16` |  |\n"
-            "| `U8x16.bitAnd` | `(other: U8x16): U8x16` |  |\n"
-            "| `U8x16.bitNot` | `(): U8x16` |  |\n"
-            "| `U8x16.bitOr` | `(other: U8x16): U8x16` |  |\n"
-            "| `U8x16.bitXor` | `(other: U8x16): U8x16` |  |\n"
-            "| `U8x16.extract` | `(lane: i64): u8` |  |\n"
-            "| `U8x16.fromLanes` | `(lanes: [u8; 16]): U8x16` |  |\n"
-            "| `U8x16.load` | `(data: Slice<u8>, offset: i64 = 0): U8x16` |  |\n"
-            "| `U8x16.reinterpretU32` | `(): U32x4` |  |\n"
-            "| `U8x16.reinterpretU64` | `(): U64x2` |  |\n"
-            "| `U8x16.replace` | `(lane: i64, value: u8): U8x16` |  |\n"
-            "| `U8x16.splat` | `(value: u8): U8x16` |  |\n"
-            "| `U8x16.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n"
-            "| `U8x32` | `U8x32` |  |\n"
-            "| `U8x32.bitXor` | `(other: U8x32): U8x32` |  |\n"
-            "| `U8x32.fromLanes` | `(lanes: [u8; 32]): U8x32` |  |\n"
-            "| `U8x32.load` | `(data: Slice<u8>, offset: i64 = 0): U8x32` |  |\n"
-            "| `U8x32.reinterpretU32` | `(): U32x8` |  |\n"
-            "| `U8x32.reinterpretU64` | `(): U64x4` |  |\n"
-            "| `U8x32.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n"
-            "| `U8x64` | `U8x64` |  |\n"
-            "| `U8x64.bitXor` | `(other: U8x64): U8x64` |  |\n"
-            "| `U8x64.fromLanes` | `(lanes: [u8; 64]): U8x64` |  |\n"
-            "| `U8x64.load` | `(data: Slice<u8>, offset: i64 = 0): U8x64` |  |\n"
-            "| `U8x64.reinterpretU32` | `(): U32x16` |  |\n"
-            "| `U8x64.reinterpretU64` | `(): U64x8` |  |\n"
-            "| `U8x64.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n"
-            "| `U8xNative` | `U8xNative` |  |\n"
-            "| `U8xNative.bitXor` | `(other: U8xNative): U8xNative` |  |\n"
-            "| `U8xNative.load` | `(data: Slice<u8>, offset: i64 = 0): U8xNative` |  |\n"
-            "| `U8xNative.reinterpretU32` | `(): U32xNative` |  |\n"
-            "| `U8xNative.reinterpretU64` | `(): U64xNative` |  |\n"
-            "",
+            "# simd module\n" "\n" "Portable 128-bit, 256-bit, and 512-bit integer-vector operations plus a bounded runtime-native family for scalable targets. The APIs have matching scalar semantics in the VM and on targets without matching vector instructions; native AOT lowers supported operations according to the selected target.\n" "\n" "Usage: `import simd` then call `simd.function()`.\n" "\n" "### Vector types\n" "- `U8x16`, `U32x4`, and `U64x2` are the portable 128-bit baseline.\n" "- `U8x32`, `U32x8`, and `U64x4` provide 256-bit operations for algorithms that select a wide path.\n" "- `U8x64`, `U32x16`, and `U64x8` provide the AVX-512F-width operations used by 64-byte stripe algorithms.\n" "- `U8xNative`, `U32xNative`, and `U64xNative` carry only the active runtime-selected prefix, with a 64-byte storage ceiling and a portable 16-byte fallback.\n"
+            "- `Capabilities.nativeBytes()` returns the selected active width; it is at least 16 bytes. `Capabilities.isScalable()` distinguishes a runtime-scalable plan from a fixed-width or x86-dispatch plan.\n" "\n" "### Loading and storing\n" "Use `load` and `store` with a typed `Slice<T>`. The optional offset is measured in elements. `fromLanes` constructs a vector from a fixed array, while `splat` fills every lane with one value where that operation is available.\n" "\n" "### Target lowering\n"
+            "Native lowering is available for AArch64 NEON and SVE, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--target aarch64-linux-musl --simd sve` for a scalable plan: hardware VLs select a bounded 16-, 32-, or 64-byte active prefix, while fixed-width vector types retain their exact public width. The SVE plan disables unsafe implicit LLVM auto-vectorization and uses explicit predicated intrinsics for runtime-native operations. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple.\n" "\n" "### Operations\n"
+            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range. Reinterpretation is endian-neutral: u8 zero is the least-significant byte of numeric lane zero, so VM, scalar AOT, and native SIMD produce identical lane values on little- and big-endian targets.\n" "\n" "### Example\n" "```xray\n" "import { Capabilities, U32x4 } from simd\n" "\n" "fn main() {\n" "    var words = Array<u32>([1, 2, 3, 4])\n" "    var view: Slice<u32> = words[:]\n" "    var result = U32x4.load(view).add(U32x4.splat(10))\n" "\n" "    print(result.extract(2))\n" "    print(Capabilities.nativeBytes() >= 16)\n" "}\n" "\n" "main()\n" "```\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Capabilities` | `Capabilities` |  |\n"
+            "| `Capabilities.isAccelerated` | `(): bool` |  |\n" "| `Capabilities.isRuntimeSelected` | `(): bool` |  |\n" "| `Capabilities.isScalable` | `(): bool` |  |\n" "| `Capabilities.nativeBytes` | `(): i64` |  |\n" "| `U32x16` | `U32x16` |  |\n" "| `U32x16.fromLanes` | `(lanes: [u32; 16]): U32x16` |  |\n" "| `U32x16.splat` | `(value: u32): U32x16` |  |\n" "| `U32x16.swapAdjacent` | `(): U32x16` |  |\n" "| `U32x16.widenMulEven` | `(other: U32x16): U64x8` |  |\n" "| `U32x16.widenMulOdd` | `(other: U32x16): U64x8` |  |\n" "| `U32x4` | `U32x4` |  |\n" "| `U32x4.add` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.bitAnd` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.bitNot` | `(): U32x4` |  |\n" "| `U32x4.bitOr` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.bitXor` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.extract` | `(lane: i64): u32` |  |\n" "| `U32x4.fromLanes` | `(lanes: [u32; 4]): U32x4` |  |\n" "| `U32x4.load` | `(data: Slice<u32>, offset: i64 = 0): U32x4` |  |\n"
+            "| `U32x4.mul` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.reinterpretU64` | `(): U64x2` |  |\n" "| `U32x4.reinterpretU8` | `(): U8x16` |  |\n" "| `U32x4.replace` | `(lane: i64, value: u32): U32x4` |  |\n" "| `U32x4.shiftLeft` | `(bits: i64): U32x4` |  |\n" "| `U32x4.shiftRight` | `(bits: i64): U32x4` |  |\n" "| `U32x4.shuffle` | `(i0: i64, i1: i64, i2: i64, i3: i64): U32x4` |  |\n" "| `U32x4.splat` | `(value: u32): U32x4` |  |\n" "| `U32x4.store` | `(output: ref Slice<u32>, offset: i64 = 0): ()` |  |\n" "| `U32x4.sub` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n" "| `U32x4.unzipEven` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.unzipOdd` | `(other: U32x4): U32x4` |  |\n" "| `U32x4.widenMulEven` | `(other: U32x4): U64x2` |  |\n" "| `U32x4.widenMulHigh` | `(other: U32x4): U64x2` |  |\n" "| `U32x4.widenMulLow` | `(other: U32x4): U64x2` |  |\n" "| `U32x4.widenMulOdd` | `(other: U32x4): U64x2` |  |\n" "| `U32x8` | `U32x8` |  |\n"
+            "| `U32x8.fromLanes` | `(lanes: [u32; 8]): U32x8` |  |\n" "| `U32x8.splat` | `(value: u32): U32x8` |  |\n" "| `U32x8.swapAdjacent` | `(): U32x8` |  |\n" "| `U32x8.widenMulEven` | `(other: U32x8): U64x4` |  |\n" "| `U32x8.widenMulOdd` | `(other: U32x8): U64x4` |  |\n" "| `U32xNative` | `U32xNative` |  |\n" "| `U32xNative.swapAdjacent` | `(): U32xNative` |  |\n" "| `U32xNative.widenMulEven` | `(other: U32xNative): U64xNative` |  |\n" "| `U64x2` | `U64x2` |  |\n" "| `U64x2.add` | `(other: U64x2): U64x2` |  |\n" "| `U64x2.bitAnd` | `(other: U64x2): U64x2` |  |\n" "| `U64x2.bitNot` | `(): U64x2` |  |\n" "| `U64x2.bitOr` | `(other: U64x2): U64x2` |  |\n" "| `U64x2.bitXor` | `(other: U64x2): U64x2` |  |\n" "| `U64x2.extract` | `(lane: i64): u64` |  |\n" "| `U64x2.fromLanes` | `(lanes: [u64; 2]): U64x2` |  |\n" "| `U64x2.load` | `(data: Slice<u64>, offset: i64 = 0): U64x2` |  |\n" "| `U64x2.mul` | `(other: U64x2): U64x2` |  |\n" "| `U64x2.reduceAdd` | `(): u64` |  |\n"
+            "| `U64x2.reinterpretU32` | `(): U32x4` |  |\n" "| `U64x2.reinterpretU8` | `(): U8x16` |  |\n" "| `U64x2.replace` | `(lane: i64, value: u64): U64x2` |  |\n" "| `U64x2.shiftLeft` | `(bits: i64): U64x2` |  |\n" "| `U64x2.shiftRight` | `(bits: i64): U64x2` |  |\n" "| `U64x2.shuffle` | `(i0: i64, i1: i64): U64x2` |  |\n" "| `U64x2.splat` | `(value: u64): U64x2` |  |\n" "| `U64x2.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n" "| `U64x2.sub` | `(other: U64x2): U64x2` |  |\n" "| `U64x2.swapLanes` | `(): U64x2` |  |\n" "| `U64x4` | `U64x4` |  |\n" "| `U64x4.add` | `(other: U64x4): U64x4` |  |\n" "| `U64x4.bitXor` | `(other: U64x4): U64x4` |  |\n" "| `U64x4.fromLanes` | `(lanes: [u64; 4]): U64x4` |  |\n" "| `U64x4.load` | `(data: Slice<u64>, offset: i64 = 0): U64x4` |  |\n" "| `U64x4.reduceAdd` | `(): u64` |  |\n" "| `U64x4.reinterpretU32` | `(): U32x8` |  |\n" "| `U64x4.reinterpretU8` | `(): U8x32` |  |\n" "| `U64x4.shiftLeft` | `(bits: i64): U64x4` |  |\n"
+            "| `U64x4.shiftRight` | `(bits: i64): U64x4` |  |\n" "| `U64x4.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n" "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n" "| `U64x8` | `U64x8` |  |\n" "| `U64x8.add` | `(other: U64x8): U64x8` |  |\n" "| `U64x8.bitXor` | `(other: U64x8): U64x8` |  |\n" "| `U64x8.fromLanes` | `(lanes: [u64; 8]): U64x8` |  |\n" "| `U64x8.load` | `(data: Slice<u64>, offset: i64 = 0): U64x8` |  |\n" "| `U64x8.reinterpretU32` | `(): U32x16` |  |\n" "| `U64x8.shiftLeft` | `(bits: i64): U64x8` |  |\n" "| `U64x8.shiftRight` | `(bits: i64): U64x8` |  |\n" "| `U64x8.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n" "| `U64x8.swapAdjacent` | `(): U64x8` |  |\n" "| `U64xNative` | `U64xNative` |  |\n" "| `U64xNative.add` | `(other: U64xNative): U64xNative` |  |\n" "| `U64xNative.bitXor` | `(other: U64xNative): U64xNative` |  |\n" "| `U64xNative.load` | `(data: Slice<u64>, offset: i64 = 0): U64xNative` |  |\n"
+            "| `U64xNative.mul` | `(other: U64xNative): U64xNative` |  |\n" "| `U64xNative.shiftRight` | `(bits: i64): U64xNative` |  |\n" "| `U64xNative.splat` | `(value: u64): U64xNative` |  |\n" "| `U64xNative.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n" "| `U64xNative.swapAdjacent` | `(): U64xNative` |  |\n" "| `U8x16` | `U8x16` |  |\n" "| `U8x16.bitAnd` | `(other: U8x16): U8x16` |  |\n" "| `U8x16.bitNot` | `(): U8x16` |  |\n" "| `U8x16.bitOr` | `(other: U8x16): U8x16` |  |\n" "| `U8x16.bitXor` | `(other: U8x16): U8x16` |  |\n" "| `U8x16.extract` | `(lane: i64): u8` |  |\n" "| `U8x16.fromLanes` | `(lanes: [u8; 16]): U8x16` |  |\n" "| `U8x16.load` | `(data: Slice<u8>, offset: i64 = 0): U8x16` |  |\n" "| `U8x16.reinterpretU32` | `(): U32x4` |  |\n" "| `U8x16.reinterpretU64` | `(): U64x2` |  |\n" "| `U8x16.replace` | `(lane: i64, value: u8): U8x16` |  |\n" "| `U8x16.splat` | `(value: u8): U8x16` |  |\n" "| `U8x16.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n"
+            "| `U8x32` | `U8x32` |  |\n" "| `U8x32.bitXor` | `(other: U8x32): U8x32` |  |\n" "| `U8x32.fromLanes` | `(lanes: [u8; 32]): U8x32` |  |\n" "| `U8x32.load` | `(data: Slice<u8>, offset: i64 = 0): U8x32` |  |\n" "| `U8x32.reinterpretU32` | `(): U32x8` |  |\n" "| `U8x32.reinterpretU64` | `(): U64x4` |  |\n" "| `U8x32.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n" "| `U8x64` | `U8x64` |  |\n" "| `U8x64.bitXor` | `(other: U8x64): U8x64` |  |\n" "| `U8x64.fromLanes` | `(lanes: [u8; 64]): U8x64` |  |\n" "| `U8x64.load` | `(data: Slice<u8>, offset: i64 = 0): U8x64` |  |\n" "| `U8x64.reinterpretU32` | `(): U32x16` |  |\n" "| `U8x64.reinterpretU64` | `(): U64x8` |  |\n" "| `U8x64.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n" "| `U8xNative` | `U8xNative` |  |\n" "| `U8xNative.bitXor` | `(other: U8xNative): U8xNative` |  |\n" "| `U8xNative.load` | `(data: Slice<u8>, offset: i64 = 0): U8xNative` |  |\n" "| `U8xNative.reinterpretU32` | `(): U32xNative` |  |\n"
+            "| `U8xNative.reinterpretU64` | `(): U64xNative` |  |\n" "",
         .symbols = _symbols_simd,
         .symbol_count = (int)(sizeof(_symbols_simd) / sizeof(_symbols_simd[0])),
     },
@@ -10671,74 +2043,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "sync",
         .summary = "Coroutine-domain synchronization primitives",
         .body =
-            "# sync module\n"
-            "\n"
-            "Coroutine-domain synchronization primitives: `Mutex<T>`, `RwLock<T>`, `Once`, `Barrier`, `Condvar`, `CachePadded<T>`, and `fence(order)`. These primitives may suspend the current coroutine instead of blocking an OS thread, and must be imported explicitly.\n"
-            "\n"
-            "Usage: `import sync` then call `sync.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Barrier` | `Barrier` |  |\n"
-            "| `Barrier.init` | `(parties: i64): ()` |  |\n"
-            "| `Barrier.wait` | `(): bool` |  |\n"
-            "| `CachePadded` | `CachePadded` |  |\n"
-            "| `CachePadded.value` | `: T` |  |\n"
-            "| `Condvar` | `Condvar` |  |\n"
-            "| `Condvar.init` | `(): ()` |  |\n"
-            "| `Condvar.lock` | `(): ()` |  |\n"
-            "| `Condvar.unlock` | `(): ()` |  |\n"
-            "| `CountdownLatch` | `CountdownLatch` |  |\n"
-            "| `CountdownLatch.close` | `(): ()` |  |\n"
-            "| `CountdownLatch.done` | `(count: i64 = 1): i64` |  |\n"
-            "| `CountdownLatch.init` | `(count: i64): ()` |  |\n"
-            "| `CountdownLatch.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
-            "| `CountdownLatch.remaining` | `: i64 { fn() { return this._remaining.load(Ordering.Acquire) } }` |  |\n"
-            "| `CountdownLatch.reset` | `(count: i64): bool` |  |\n"
-            "| `CountdownLatch.tryWait` | `(): bool` |  |\n"
-            "| `CountdownLatch.wait` | `(): bool` |  |\n"
-            "| `EventCount` | `EventCount` |  |\n"
-            "| `EventCount.advance` | `(step: i64 = 1): i64` |  |\n"
-            "| `EventCount.close` | `(): ()` |  |\n"
-            "| `EventCount.epoch` | `: i64 { fn() { return this._epoch.load(Ordering.Acquire) } }` |  |\n"
-            "| `EventCount.init` | `(epoch: i64): ()` |  |\n"
-            "| `EventCount.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
-            "| `EventCount.wait` | `(lastEpoch: i64, workerHint: i64 = -1): i64` |  |\n"
-            "| `Mutex` | `Mutex` |  |\n"
-            "| `Mutex.init` | `(v: T): ()` |  |\n"
-            "| `Mutex.lock` | `(body: fn(T) -> U): U` |  |\n"
-            "| `Mutex.tryLock` | `(body: fn(T) -> U): U?` |  |\n"
-            "| `Mutex.value` | `: T` |  |\n"
-            "| `Once` | `Once` |  |\n"
-            "| `Once.init` | `(): ()` |  |\n"
-            "| `ResultGroup` | `ResultGroup` |  |\n"
-            "| `ResultGroup.batchSize` | `: i64 { fn() { return this._batchSize } }` |  |\n"
-            "| `ResultGroup.init` | `(batchSize: i64 = 1): ()` |  |\n"
-            "| `ResultGroup.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
-            "| `ResultGroup.pendingCount` | `: i64 { fn() { return this._pending.load(Ordering.Acquire) } }` |  |\n"
-            "| `ResultGroup.readyCount` | `: i64 { fn() { return len(this._ready) } }` |  |\n"
-            "| `RwLock` | `RwLock` |  |\n"
-            "| `RwLock.init` | `(v: T): ()` |  |\n"
-            "| `RwLock.value` | `: T` |  |\n"
-            "| `RwLock.write` | `(body: fn(T) -> U): U` |  |\n"
-            "| `Semaphore` | `Semaphore` |  |\n"
-            "| `Semaphore.acquire` | `(): bool` |  |\n"
-            "| `Semaphore.available` | `: i64 { fn() { return this._available.load(Ordering.Acquire) } }` |  |\n"
-            "| `Semaphore.close` | `(): ()` |  |\n"
-            "| `Semaphore.init` | `(permits: i64): ()` |  |\n"
-            "| `Semaphore.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
-            "| `Semaphore.release` | `(count: i64 = 1): i64` |  |\n"
-            "| `Semaphore.tryAcquire` | `(): bool` |  |\n"
-            "| `WorkQueue` | `WorkQueue` |  |\n"
-            "| `WorkQueue.close` | `(): ()` |  |\n"
-            "| `WorkQueue.init` | `(shards: i64 = 1, capacity: i64 = 256): ()` |  |\n"
-            "| `WorkQueue.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
-            "| `WorkQueue.length` | `: i64 { fn() { return len(this._items) } }` |  |\n"
-            "| `WorkQueue.shardCount` | `: i64 { fn() { return this._shards } }` |  |\n"
-            "| `sync.fence` | `(order: Ordering): ()` |  |\n"
-            "",
+            "# sync module\n" "\n" "Coroutine-domain synchronization primitives: `Mutex<T>`, `RwLock<T>`, `Once`, `Barrier`, `Condvar`, `CachePadded<T>`, and `fence(order)`. These primitives may suspend the current coroutine instead of blocking an OS thread, and must be imported explicitly.\n" "\n" "Usage: `import sync` then call `sync.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Barrier` | `Barrier` |  |\n" "| `Barrier.init` | `(parties: i64): ()` |  |\n" "| `Barrier.wait` | `(): bool` |  |\n" "| `CachePadded` | `CachePadded` |  |\n" "| `CachePadded.value` | `: T` |  |\n" "| `Condvar` | `Condvar` |  |\n" "| `Condvar.init` | `(): ()` |  |\n" "| `Condvar.lock` | `(): ()` |  |\n" "| `Condvar.unlock` | `(): ()` |  |\n" "| `CountdownLatch` | `CountdownLatch` |  |\n" "| `CountdownLatch.close` | `(): ()` |  |\n" "| `CountdownLatch.done` | `(count: i64 = 1): i64` |  |\n" "| `CountdownLatch.init` | `(count: i64): ()` |  |\n"
+            "| `CountdownLatch.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n" "| `CountdownLatch.remaining` | `: i64 { fn() { return this._remaining.load(Ordering.Acquire) } }` |  |\n" "| `CountdownLatch.reset` | `(count: i64): bool` |  |\n" "| `CountdownLatch.tryWait` | `(): bool` |  |\n" "| `CountdownLatch.wait` | `(): bool` |  |\n" "| `EventCount` | `EventCount` |  |\n" "| `EventCount.advance` | `(step: i64 = 1): i64` |  |\n" "| `EventCount.close` | `(): ()` |  |\n" "| `EventCount.epoch` | `: i64 { fn() { return this._epoch.load(Ordering.Acquire) } }` |  |\n" "| `EventCount.init` | `(epoch: i64): ()` |  |\n" "| `EventCount.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n" "| `EventCount.wait` | `(lastEpoch: i64, workerHint: i64 = -1): i64` |  |\n" "| `Mutex` | `Mutex` |  |\n" "| `Mutex.init` | `(v: T): ()` |  |\n" "| `Mutex.lock` | `(body: fn(T) -> U): U` |  |\n" "| `Mutex.tryLock` | `(body: fn(T) -> U): U?` |  |\n"
+            "| `Mutex.value` | `: T` |  |\n" "| `Once` | `Once` |  |\n" "| `Once.init` | `(): ()` |  |\n" "| `ResultGroup` | `ResultGroup` |  |\n" "| `ResultGroup.batchSize` | `: i64 { fn() { return this._batchSize } }` |  |\n" "| `ResultGroup.init` | `(batchSize: i64 = 1): ()` |  |\n" "| `ResultGroup.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n" "| `ResultGroup.pendingCount` | `: i64 { fn() { return this._pending.load(Ordering.Acquire) } }` |  |\n" "| `ResultGroup.readyCount` | `: i64 { fn() { return len(this._ready) } }` |  |\n" "| `RwLock` | `RwLock` |  |\n" "| `RwLock.init` | `(v: T): ()` |  |\n" "| `RwLock.value` | `: T` |  |\n" "| `RwLock.write` | `(body: fn(T) -> U): U` |  |\n" "| `Semaphore` | `Semaphore` |  |\n" "| `Semaphore.acquire` | `(): bool` |  |\n" "| `Semaphore.available` | `: i64 { fn() { return this._available.load(Ordering.Acquire) } }` |  |\n" "| `Semaphore.close` | `(): ()` |  |\n" "| `Semaphore.init` | `(permits: i64): ()` |  |\n"
+            "| `Semaphore.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n" "| `Semaphore.release` | `(count: i64 = 1): i64` |  |\n" "| `Semaphore.tryAcquire` | `(): bool` |  |\n" "| `WorkQueue` | `WorkQueue` |  |\n" "| `WorkQueue.close` | `(): ()` |  |\n" "| `WorkQueue.init` | `(shards: i64 = 1, capacity: i64 = 256): ()` |  |\n" "| `WorkQueue.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n" "| `WorkQueue.length` | `: i64 { fn() { return len(this._items) } }` |  |\n" "| `WorkQueue.shardCount` | `: i64 { fn() { return this._shards } }` |  |\n" "| `sync.fence` | `(order: Ordering): ()` |  |\n" "",
         .symbols = _symbols_sync,
         .symbol_count = (int)(sizeof(_symbols_sync) / sizeof(_symbols_sync[0])),
     },
@@ -10746,70 +2054,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "sys",
         .summary = "OS-thread-domain system primitives",
         .body =
-            "# sys module\n"
-            "\n"
-            "Low-level OS-thread primitives: `sys.Thread.spawn(...)`, `ThreadOptions`, `ThreadLocal<T>`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, thread yield/affinity helpers, and signal hooks. `sys.Thread.spawn` is compiler-defined; it returns the prelude `Thread<T>` handle with `join`, `detach`, and `done`. Host CPU topology belongs to `os.cpuCount()` and coroutine-friendly delays belong to `time.sleep(ms)`.\n"
-            "\n"
-            "Usage: `import sys` then call `sys.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `Dylib` | `Dylib` |  |\n"
-            "| `Dylib.init` | `(handle: i64): ()` |  |\n"
-            "| `Dylib.lastError` | `(): string` |  |\n"
-            "| `Dylib.open` | `(path: Path): Dylib?` |  |\n"
-            "| `Dylib.symbol` | `(name: string): Ptr<u8>?` |  |\n"
-            "| `OsBarrier` | `OsBarrier` |  |\n"
-            "| `OsBarrier.init` | `(parties: i64): ()` |  |\n"
-            "| `OsBarrier.wait` | `(): bool` |  |\n"
-            "| `OsCondvar` | `OsCondvar` |  |\n"
-            "| `OsCondvar.broadcast` | `(): ()` |  |\n"
-            "| `OsCondvar.init` | `(): ()` |  |\n"
-            "| `OsCondvar.signal` | `(): ()` |  |\n"
-            "| `OsCondvar.wait` | `(mutex: OsMutex): ()` |  |\n"
-            "| `OsCondvar.waitFor` | `(mutex: OsMutex, timeoutNs: i64): bool` |  |\n"
-            "| `OsMutex` | `OsMutex` |  |\n"
-            "| `OsMutex.init` | `(): ()` |  |\n"
-            "| `OsMutex.lock` | `(): ()` |  |\n"
-            "| `OsMutex.tryLock` | `(): bool` |  |\n"
-            "| `OsMutex.unlock` | `(): ()` |  |\n"
-            "| `OsOnce` | `OsOnce` |  |\n"
-            "| `OsOnce.call` | `(body: fn()): ()` |  |\n"
-            "| `OsOnce.init` | `(): ()` |  |\n"
-            "| `OsRwLock` | `OsRwLock` |  |\n"
-            "| `OsRwLock.init` | `(): ()` |  |\n"
-            "| `OsRwLock.rdlock` | `(): ()` |  |\n"
-            "| `OsRwLock.rdunlock` | `(): ()` |  |\n"
-            "| `OsRwLock.wrlock` | `(): ()` |  |\n"
-            "| `OsRwLock.wrunlock` | `(): ()` |  |\n"
-            "| `Pipe` | `Pipe` |  |\n"
-            "| `Pipe.init` | `(readHandle: i64, writeHandle: i64): ()` |  |\n"
-            "| `Pipe.open` | `(): Pipe?` |  |\n"
-            "| `Pipe.read` | `(maxBytes: i64 = 8192): Array<u8>?` |  |\n"
-            "| `Pipe.readEnd` | `(): i64` |  |\n"
-            "| `Pipe.write` | `(data: Array<u8>): i64` |  |\n"
-            "| `Pipe.writeEnd` | `(): i64` |  |\n"
-            "| `Process` | `Process` |  |\n"
-            "| `Process.id` | `: i64 { fn() { return this._id } }` |  |\n"
-            "| `Process.init` | `(id: i64, detached: bool = false): ()` |  |\n"
-            "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
-            "| `Process.spawn` | `(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?` |  |\n"
-            "| `ProcessOptions` | `ProcessOptions` |  |\n"
-            "| `ProcessOptions.cwd` | `: string?` |  |\n"
-            "| `ProcessOptions.detached` | `: bool` |  |\n"
-            "| `ProcessOptions.env` | `: Map<string, string>?` |  |\n"
-            "| `ProcessOptions.init` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()` |  |\n"
-            "| `ProcessOptions.stderr` | `: i64?` |  |\n"
-            "| `ProcessOptions.stdin` | `: i64?` |  |\n"
-            "| `ProcessOptions.stdout` | `: i64?` |  |\n"
-            "| `ThreadLocal` | `ThreadLocal` |  |\n"
-            "| `ThreadLocal.init` | `(init: fn() -> T): ()` |  |\n"
-            "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n"
-            "| `sys.pinToCpu` | `(cpu: i64): bool` |  |\n"
-            "| `sys.threadYield` | `(): ()` |  |\n"
-            "",
+            "# sys module\n" "\n" "Low-level OS-thread primitives: `sys.Thread.spawn(...)`, `ThreadOptions`, `ThreadLocal<T>`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, thread yield/affinity helpers, and signal hooks. `sys.Thread.spawn` is compiler-defined; it returns the prelude `Thread<T>` handle with `join`, `detach`, and `done`. Host CPU topology belongs to `os.cpuCount()` and coroutine-friendly delays belong to `time.sleep(ms)`.\n" "\n" "Usage: `import sys` then call `sys.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `Dylib` | `Dylib` |  |\n" "| `Dylib.init` | `(handle: i64): ()` |  |\n" "| `Dylib.lastError` | `(): string` |  |\n" "| `Dylib.open` | `(path: Path): Dylib?` |  |\n" "| `Dylib.symbol` | `(name: string): Ptr<u8>?` |  |\n" "| `OsBarrier` | `OsBarrier` |  |\n" "| `OsBarrier.init` | `(parties: i64): ()` |  |\n" "| `OsBarrier.wait` | `(): bool` |  |\n" "| `OsCondvar` | `OsCondvar` |  |\n"
+            "| `OsCondvar.broadcast` | `(): ()` |  |\n" "| `OsCondvar.init` | `(): ()` |  |\n" "| `OsCondvar.signal` | `(): ()` |  |\n" "| `OsCondvar.wait` | `(mutex: OsMutex): ()` |  |\n" "| `OsCondvar.waitFor` | `(mutex: OsMutex, timeoutNs: i64): bool` |  |\n" "| `OsMutex` | `OsMutex` |  |\n" "| `OsMutex.init` | `(): ()` |  |\n" "| `OsMutex.lock` | `(): ()` |  |\n" "| `OsMutex.tryLock` | `(): bool` |  |\n" "| `OsMutex.unlock` | `(): ()` |  |\n" "| `OsOnce` | `OsOnce` |  |\n" "| `OsOnce.call` | `(body: fn()): ()` |  |\n" "| `OsOnce.init` | `(): ()` |  |\n" "| `OsRwLock` | `OsRwLock` |  |\n" "| `OsRwLock.init` | `(): ()` |  |\n" "| `OsRwLock.rdlock` | `(): ()` |  |\n" "| `OsRwLock.rdunlock` | `(): ()` |  |\n" "| `OsRwLock.wrlock` | `(): ()` |  |\n" "| `OsRwLock.wrunlock` | `(): ()` |  |\n" "| `Pipe` | `Pipe` |  |\n" "| `Pipe.init` | `(readHandle: i64, writeHandle: i64): ()` |  |\n" "| `Pipe.open` | `(): Pipe?` |  |\n" "| `Pipe.read` | `(maxBytes: i64 = 8192): Array<u8>?` |  |\n"
+            "| `Pipe.readEnd` | `(): i64` |  |\n" "| `Pipe.write` | `(data: Array<u8>): i64` |  |\n" "| `Pipe.writeEnd` | `(): i64` |  |\n" "| `Process` | `Process` |  |\n" "| `Process.id` | `: i64 { fn() { return this._id } }` |  |\n" "| `Process.init` | `(id: i64, detached: bool = false): ()` |  |\n" "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n" "| `Process.spawn` | `(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?` |  |\n" "| `ProcessOptions` | `ProcessOptions` |  |\n" "| `ProcessOptions.cwd` | `: string?` |  |\n" "| `ProcessOptions.detached` | `: bool` |  |\n" "| `ProcessOptions.env` | `: Map<string, string>?` |  |\n" "| `ProcessOptions.init` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()` |  |\n" "| `ProcessOptions.stderr` | `: i64?` |  |\n" "| `ProcessOptions.stdin` | `: i64?` |  |\n" "| `ProcessOptions.stdout` | `: i64?` |  |\n"
+            "| `ThreadLocal` | `ThreadLocal` |  |\n" "| `ThreadLocal.init` | `(init: fn() -> T): ()` |  |\n" "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n" "| `sys.pinToCpu` | `(cpu: i64): bool` |  |\n" "| `sys.threadYield` | `(): ()` |  |\n" "",
         .symbols = _symbols_sys,
         .symbol_count = (int)(sizeof(_symbols_sys) / sizeof(_symbols_sys[0])),
     },
@@ -10817,33 +2065,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "text",
         .summary = "Explicit Unicode text transformations",
         .body =
-            "# text module\n"
-            "\n"
-            "Explicit Unicode text transformations for Xray strings.\n"
-            "\n"
-            "Usage: `import text` then call `text.function()`.\n"
-            "\n"
-            "### Functions\n"
-            "- `text.lower(value)` / `text.upper(value)`\n"
-            "- `text.trim(value)` / `text.trimStart(value)` / `text.trimEnd(value)`\n"
-            "- `text.reverseRunes(value)`\n"
-            "- `text.padStart(value, targetLength, padding?)` / `text.padEnd(value, targetLength, padding?)`\n"
-            "- `text.translate(value, table)`\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `text.lower` | `(value: string): string` |  |\n"
-            "| `text.padEnd` | `(value: string, targetLength: i64, padding: string = \" \"): string` |  |\n"
-            "| `text.padStart` | `(value: string, targetLength: i64, padding: string = \" \"): string` |  |\n"
-            "| `text.reverseRunes` | `(value: string): string` |  |\n"
-            "| `text.translate` | `(value: string, table: Map<string, string>): string` |  |\n"
-            "| `text.trim` | `(value: string): string` |  |\n"
-            "| `text.trimEnd` | `(value: string): string` |  |\n"
-            "| `text.trimStart` | `(value: string): string` |  |\n"
-            "| `text.upper` | `(value: string): string` |  |\n"
-            "",
+            "# text module\n" "\n" "Explicit Unicode text transformations for Xray strings.\n" "\n" "Usage: `import text` then call `text.function()`.\n" "\n" "### Functions\n" "- `text.lower(value)` / `text.upper(value)`\n" "- `text.trim(value)` / `text.trimStart(value)` / `text.trimEnd(value)`\n" "- `text.reverseRunes(value)`\n" "- `text.padStart(value, targetLength, padding?)` / `text.padEnd(value, targetLength, padding?)`\n" "- `text.translate(value, table)`\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `text.lower` | `(value: string): string` |  |\n" "| `text.padEnd` | `(value: string, targetLength: i64, padding: string = \" \"): string` |  |\n" "| `text.padStart` | `(value: string, targetLength: i64, padding: string = \" \"): string` |  |\n" "| `text.reverseRunes` | `(value: string): string` |  |\n" "| `text.translate` | `(value: string, table: Map<string, string>): string` |  |\n" "| `text.trim` | `(value: string): string` |  |\n"
+            "| `text.trimEnd` | `(value: string): string` |  |\n" "| `text.trimStart` | `(value: string): string` |  |\n" "| `text.upper` | `(value: string): string` |  |\n" "",
         .symbols = _symbols_text,
         .symbol_count = (int)(sizeof(_symbols_text) / sizeof(_symbols_text[0])),
     },
@@ -10851,25 +2074,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "time",
         .summary = "Time, timers, sleep",
         .body =
-            "# time module\n"
-            "\n"
-            "Time, timers, sleep.\n"
-            "\n"
-            "Usage: `import time` then call `time.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `time.clock` | `(): i64` |  |\n"
-            "| `time.localOffset` | `(): i64` |  |\n"
-            "| `time.localOffsetAt` | `(timestamp: i64): i64` |  |\n"
-            "| `time.micros` | `(): i64` |  |\n"
-            "| `time.monotonic` | `(): i64` |  |\n"
-            "| `time.nanos` | `(): i64` |  |\n"
-            "| `time.now` | `(): i64` |  |\n"
-            "| `time.sleep` | `(ms: i64): ()` |  |\n"
-            "",
+            "# time module\n" "\n" "Time, timers, sleep.\n" "\n" "Usage: `import time` then call `time.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `time.clock` | `(): i64` |  |\n" "| `time.localOffset` | `(): i64` |  |\n" "| `time.localOffsetAt` | `(timestamp: i64): i64` |  |\n" "| `time.micros` | `(): i64` |  |\n" "| `time.monotonic` | `(): i64` |  |\n" "| `time.nanos` | `(): i64` |  |\n" "| `time.now` | `(): i64` |  |\n" "| `time.sleep` | `(ms: i64): ()` |  |\n" "",
         .symbols = _symbols_time,
         .symbol_count = (int)(sizeof(_symbols_time) / sizeof(_symbols_time[0])),
     },
@@ -10877,103 +2082,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "toml",
         .summary = "TOML configuration file parsing",
         .body =
-            "# toml module\n"
-            "\n"
-            "TOML configuration file parsing.\n"
-            "\n"
-            "Usage: `import toml` then call `toml.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `TomlArray` | `TomlArray` |  |\n"
-            "| `TomlArray.at` | `(index: i64): TomlValue?` |  |\n"
-            "| `TomlArray.init` | `(): ()` |  |\n"
-            "| `TomlArray.len` | `(): i64` |  |\n"
-            "| `TomlArray.values` | `: Array<TomlValue>` |  |\n"
-            "| `TomlDateTime` | `TomlDateTime` |  |\n"
-            "| `TomlDateTime.init` | `(raw: string): ()` |  |\n"
-            "| `TomlDateTime.raw` | `: string` |  |\n"
-            "| `TomlDateTime.toISOString` | `(): string` |  |\n"
-            "| `TomlDateTime.toString` | `(): string` |  |\n"
-            "| `TomlDiagnostic` | `TomlDiagnostic` |  |\n"
-            "| `TomlDiagnostic.column` | `: i64` |  |\n"
-            "| `TomlDiagnostic.init` | `(kind: TomlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
-            "| `TomlDiagnostic.kind` | `: TomlErrorKind` |  |\n"
-            "| `TomlDiagnostic.line` | `: i64` |  |\n"
-            "| `TomlDiagnostic.message` | `: string` |  |\n"
-            "| `TomlFloat` | `TomlFloat` |  |\n"
-            "| `TomlFloat.init` | `(value: f64, text: string = \"\"): ()` |  |\n"
-            "| `TomlFloat.text` | `: string` |  |\n"
-            "| `TomlFloat.toString` | `(): string` |  |\n"
-            "| `TomlFloat.value` | `: f64` |  |\n"
-            "| `TomlParseReport` | `TomlParseReport` |  |\n"
-            "| `TomlParseReport.data` | `: TomlValue` |  |\n"
-            "| `TomlParseReport.errors` | `: Array<TomlDiagnostic>` |  |\n"
-            "| `TomlParseReport.init` | `(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()` |  |\n"
-            "| `TomlParseReport.keys` | `: i64` |  |\n"
-            "| `TomlParseReport.lines` | `: i64` |  |\n"
-            "| `TomlTable` | `TomlTable` |  |\n"
-            "| `TomlTable.containsKey` | `(key: string): bool` |  |\n"
-            "| `TomlTable.get` | `(key: string): TomlValue?` |  |\n"
-            "| `TomlTable.init` | `(): ()` |  |\n"
-            "| `TomlTable.keys` | `(): Array<string>` |  |\n"
-            "| `TomlTable.values` | `: Map<string, TomlValue>` |  |\n"
-            "| `TomlValue` | `TomlValue` |  |\n"
-            "| `TomlValue.Array` | `(value: TomlArray): TomlValue` |  |\n"
-            "| `TomlValue.Bool` | `(value: bool): TomlValue` |  |\n"
-            "| `TomlValue.DateTime` | `(value: TomlDateTime): TomlValue` |  |\n"
-            "| `TomlValue.Float` | `(value: TomlFloat): TomlValue` |  |\n"
-            "| `TomlValue.Int` | `(value: i64): TomlValue` |  |\n"
-            "| `TomlValue.String` | `(value: string): TomlValue` |  |\n"
-            "| `TomlValue.Table` | `(value: TomlTable): TomlValue` |  |\n"
-            "| `TomlValue.arrayValue` | `: TomlArray?` |  |\n"
-            "| `TomlValue.asArray` | `(): TomlArray?` |  |\n"
-            "| `TomlValue.asBool` | `(): bool?` |  |\n"
-            "| `TomlValue.asDateTime` | `(): TomlDateTime?` |  |\n"
-            "| `TomlValue.asFloat` | `(): f64?` |  |\n"
-            "| `TomlValue.asInt` | `(): i64?` |  |\n"
-            "| `TomlValue.asString` | `(): string?` |  |\n"
-            "| `TomlValue.asTable` | `(): TomlTable?` |  |\n"
-            "| `TomlValue.at` | `(index: i64): TomlValue?` |  |\n"
-            "| `TomlValue.boolValue` | `: bool` |  |\n"
-            "| `TomlValue.dateTimeValue` | `: TomlDateTime?` |  |\n"
-            "| `TomlValue.floatValue` | `: TomlFloat?` |  |\n"
-            "| `TomlValue.get` | `(key: string): TomlValue?` |  |\n"
-            "| `TomlValue.init` | `(kind: string): ()` |  |\n"
-            "| `TomlValue.intValue` | `: i64` |  |\n"
-            "| `TomlValue.keys` | `(): Array<string>` |  |\n"
-            "| `TomlValue.kind` | `: string` |  |\n"
-            "| `TomlValue.len` | `(): i64` |  |\n"
-            "| `TomlValue.stringValue` | `: string` |  |\n"
-            "| `TomlValue.tableValue` | `: TomlTable?` |  |\n"
-            "| `toml.arrayPush` | `(array: ref TomlArray, value: TomlValue): ()` |  |\n"
-            "| `toml.arrayValue` | `(value: TomlArray): TomlValue` |  |\n"
-            "| `toml.asBool` | `(value: TomlValue): bool?` |  |\n"
-            "| `toml.asDateTime` | `(value: TomlValue): TomlDateTime?` |  |\n"
-            "| `toml.asFloat` | `(value: TomlValue): f64?` |  |\n"
-            "| `toml.asInt` | `(value: TomlValue): i64?` |  |\n"
-            "| `toml.asString` | `(value: TomlValue): string?` |  |\n"
-            "| `toml.at` | `(value: TomlValue, index: i64): TomlValue?` |  |\n"
-            "| `toml.boolValue` | `(value: bool): TomlValue` |  |\n"
-            "| `toml.dateTimeValue` | `(value: string): TomlValue` |  |\n"
-            "| `toml.floatValue` | `(value: f64): TomlValue` |  |\n"
-            "| `toml.get` | `(value: TomlValue, key: string): TomlValue?` |  |\n"
-            "| `toml.intValue` | `(value: i64): TomlValue` |  |\n"
-            "| `toml.isTable` | `(value: TomlValue): bool` |  |\n"
-            "| `toml.length` | `(value: TomlValue): i64` |  |\n"
-            "| `toml.newArray` | `(): TomlArray` |  |\n"
-            "| `toml.newTable` | `(): TomlTable` |  |\n"
-            "| `toml.parse` | `(data: string): TomlValue` |  |\n"
-            "| `toml.parseFile` | `(path: Path): TomlValue` |  |\n"
-            "| `toml.parseReport` | `(data: string): TomlParseReport` |  |\n"
-            "| `toml.stringValue` | `(value: string): TomlValue` |  |\n"
-            "| `toml.stringify` | `(value: TomlValue): string` |  |\n"
-            "| `toml.tableSet` | `(table: ref TomlTable, key: string, value: TomlValue): ()` |  |\n"
-            "| `toml.tableValue` | `(value: TomlTable): TomlValue` |  |\n"
-            "| `toml.writeFile` | `(path: Path, value: TomlValue): bool` |  |\n"
-            "",
+            "# toml module\n" "\n" "TOML configuration file parsing.\n" "\n" "Usage: `import toml` then call `toml.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `TomlArray` | `TomlArray` |  |\n" "| `TomlArray.at` | `(index: i64): TomlValue?` |  |\n" "| `TomlArray.init` | `(): ()` |  |\n" "| `TomlArray.len` | `(): i64` |  |\n" "| `TomlArray.values` | `: Array<TomlValue>` |  |\n" "| `TomlDateTime` | `TomlDateTime` |  |\n" "| `TomlDateTime.init` | `(raw: string): ()` |  |\n" "| `TomlDateTime.raw` | `: string` |  |\n" "| `TomlDateTime.toISOString` | `(): string` |  |\n" "| `TomlDateTime.toString` | `(): string` |  |\n" "| `TomlDiagnostic` | `TomlDiagnostic` |  |\n" "| `TomlDiagnostic.column` | `: i64` |  |\n" "| `TomlDiagnostic.init` | `(kind: TomlErrorKind, line: i64, column: i64, message: string): ()` |  |\n" "| `TomlDiagnostic.kind` | `: TomlErrorKind` |  |\n" "| `TomlDiagnostic.line` | `: i64` |  |\n" "| `TomlDiagnostic.message` | `: string` |  |\n"
+            "| `TomlFloat` | `TomlFloat` |  |\n" "| `TomlFloat.init` | `(value: f64, text: string = \"\"): ()` |  |\n" "| `TomlFloat.text` | `: string` |  |\n" "| `TomlFloat.toString` | `(): string` |  |\n" "| `TomlFloat.value` | `: f64` |  |\n" "| `TomlParseReport` | `TomlParseReport` |  |\n" "| `TomlParseReport.data` | `: TomlValue` |  |\n" "| `TomlParseReport.errors` | `: Array<TomlDiagnostic>` |  |\n" "| `TomlParseReport.init` | `(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()` |  |\n" "| `TomlParseReport.keys` | `: i64` |  |\n" "| `TomlParseReport.lines` | `: i64` |  |\n" "| `TomlTable` | `TomlTable` |  |\n" "| `TomlTable.containsKey` | `(key: string): bool` |  |\n" "| `TomlTable.get` | `(key: string): TomlValue?` |  |\n" "| `TomlTable.init` | `(): ()` |  |\n" "| `TomlTable.keys` | `(): Array<string>` |  |\n" "| `TomlTable.values` | `: Map<string, TomlValue>` |  |\n" "| `TomlValue` | `TomlValue` |  |\n" "| `TomlValue.Array` | `(value: TomlArray): TomlValue` |  |\n"
+            "| `TomlValue.Bool` | `(value: bool): TomlValue` |  |\n" "| `TomlValue.DateTime` | `(value: TomlDateTime): TomlValue` |  |\n" "| `TomlValue.Float` | `(value: TomlFloat): TomlValue` |  |\n" "| `TomlValue.Int` | `(value: i64): TomlValue` |  |\n" "| `TomlValue.String` | `(value: string): TomlValue` |  |\n" "| `TomlValue.Table` | `(value: TomlTable): TomlValue` |  |\n" "| `TomlValue.arrayValue` | `: TomlArray?` |  |\n" "| `TomlValue.asArray` | `(): TomlArray?` |  |\n" "| `TomlValue.asBool` | `(): bool?` |  |\n" "| `TomlValue.asDateTime` | `(): TomlDateTime?` |  |\n" "| `TomlValue.asFloat` | `(): f64?` |  |\n" "| `TomlValue.asInt` | `(): i64?` |  |\n" "| `TomlValue.asString` | `(): string?` |  |\n" "| `TomlValue.asTable` | `(): TomlTable?` |  |\n" "| `TomlValue.at` | `(index: i64): TomlValue?` |  |\n" "| `TomlValue.boolValue` | `: bool` |  |\n" "| `TomlValue.dateTimeValue` | `: TomlDateTime?` |  |\n" "| `TomlValue.floatValue` | `: TomlFloat?` |  |\n"
+            "| `TomlValue.get` | `(key: string): TomlValue?` |  |\n" "| `TomlValue.init` | `(kind: string): ()` |  |\n" "| `TomlValue.intValue` | `: i64` |  |\n" "| `TomlValue.keys` | `(): Array<string>` |  |\n" "| `TomlValue.kind` | `: string` |  |\n" "| `TomlValue.len` | `(): i64` |  |\n" "| `TomlValue.stringValue` | `: string` |  |\n" "| `TomlValue.tableValue` | `: TomlTable?` |  |\n" "| `toml.arrayPush` | `(array: ref TomlArray, value: TomlValue): ()` |  |\n" "| `toml.arrayValue` | `(value: TomlArray): TomlValue` |  |\n" "| `toml.asBool` | `(value: TomlValue): bool?` |  |\n" "| `toml.asDateTime` | `(value: TomlValue): TomlDateTime?` |  |\n" "| `toml.asFloat` | `(value: TomlValue): f64?` |  |\n" "| `toml.asInt` | `(value: TomlValue): i64?` |  |\n" "| `toml.asString` | `(value: TomlValue): string?` |  |\n" "| `toml.at` | `(value: TomlValue, index: i64): TomlValue?` |  |\n" "| `toml.boolValue` | `(value: bool): TomlValue` |  |\n" "| `toml.dateTimeValue` | `(value: string): TomlValue` |  |\n"
+            "| `toml.floatValue` | `(value: f64): TomlValue` |  |\n" "| `toml.get` | `(value: TomlValue, key: string): TomlValue?` |  |\n" "| `toml.intValue` | `(value: i64): TomlValue` |  |\n" "| `toml.isTable` | `(value: TomlValue): bool` |  |\n" "| `toml.length` | `(value: TomlValue): i64` |  |\n" "| `toml.newArray` | `(): TomlArray` |  |\n" "| `toml.newTable` | `(): TomlTable` |  |\n" "| `toml.parse` | `(data: string): TomlValue` |  |\n" "| `toml.parseFile` | `(path: Path): TomlValue` |  |\n" "| `toml.parseReport` | `(data: string): TomlParseReport` |  |\n" "| `toml.stringValue` | `(value: string): TomlValue` |  |\n" "| `toml.stringify` | `(value: TomlValue): string` |  |\n" "| `toml.tableSet` | `(table: ref TomlTable, key: string, value: TomlValue): ()` |  |\n" "| `toml.tableValue` | `(value: TomlTable): TomlValue` |  |\n" "| `toml.writeFile` | `(path: Path, value: TomlValue): bool` |  |\n" "",
         .symbols = _symbols_toml,
         .symbol_count = (int)(sizeof(_symbols_toml) / sizeof(_symbols_toml[0])),
     },
@@ -10981,45 +2094,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "url",
         .summary = "URL parsing and construction",
         .body =
-            "# url module\n"
-            "\n"
-            "URL parsing and construction.\n"
-            "\n"
-            "Usage: `import url` then call `url.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `QueryParams` | `QueryParams` |  |\n"
-            "| `QueryParams.encode` | `(): string` |  |\n"
-            "| `QueryParams.entries` | `(): Array<(string, string)>` |  |\n"
-            "| `QueryParams.get` | `(name: string): string?` |  |\n"
-            "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n"
-            "| `QueryParams.init` | `(): ()` |  |\n"
-            "| `URL` | `URL` |  |\n"
-            "| `URL.hash` | `: string` |  |\n"
-            "| `URL.host` | `: string` |  |\n"
-            "| `URL.hostname` | `: string` |  |\n"
-            "| `URL.href` | `: string` |  |\n"
-            "| `URL.init` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n"
-            "| `URL.origin` | `: string` |  |\n"
-            "| `URL.password` | `: string` |  |\n"
-            "| `URL.pathname` | `: string` |  |\n"
-            "| `URL.port` | `: string` |  |\n"
-            "| `URL.protocol` | `: string` |  |\n"
-            "| `URL.search` | `: string` |  |\n"
-            "| `URL.username` | `: string` |  |\n"
-            "| `url.decode` | `(s: string): string` |  |\n"
-            "| `url.decodeForm` | `(s: string): string` |  |\n"
-            "| `url.encode` | `(s: string): string` |  |\n"
-            "| `url.encodeForm` | `(s: string): string` |  |\n"
-            "| `url.format` | `(obj: URL): string` |  |\n"
-            "| `url.join` | `(...parts: string): string` |  |\n"
-            "| `url.parse` | `(url: string): URL` |  |\n"
-            "| `url.parseQuery` | `(qs: string): QueryParams` |  |\n"
-            "| `url.resolve` | `(base: string, relative: string): string` |  |\n"
-            "",
+            "# url module\n" "\n" "URL parsing and construction.\n" "\n" "Usage: `import url` then call `url.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `QueryParams` | `QueryParams` |  |\n" "| `QueryParams.encode` | `(): string` |  |\n" "| `QueryParams.entries` | `(): Array<(string, string)>` |  |\n" "| `QueryParams.get` | `(name: string): string?` |  |\n" "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n" "| `QueryParams.init` | `(): ()` |  |\n" "| `URL` | `URL` |  |\n" "| `URL.hash` | `: string` |  |\n" "| `URL.host` | `: string` |  |\n" "| `URL.hostname` | `: string` |  |\n" "| `URL.href` | `: string` |  |\n" "| `URL.init` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n" "| `URL.origin` | `: string` |  |\n" "| `URL.password` | `: string` |  |\n" "| `URL.pathname` | `: string` |  |\n"
+            "| `URL.port` | `: string` |  |\n" "| `URL.protocol` | `: string` |  |\n" "| `URL.search` | `: string` |  |\n" "| `URL.username` | `: string` |  |\n" "| `url.decode` | `(s: string): string` |  |\n" "| `url.decodeForm` | `(s: string): string` |  |\n" "| `url.encode` | `(s: string): string` |  |\n" "| `url.encodeForm` | `(s: string): string` |  |\n" "| `url.format` | `(obj: URL): string` |  |\n" "| `url.join` | `(...parts: string): string` |  |\n" "| `url.parse` | `(url: string): URL` |  |\n" "| `url.parseQuery` | `(qs: string): QueryParams` |  |\n" "| `url.resolve` | `(base: string, relative: string): string` |  |\n" "",
         .symbols = _symbols_url,
         .symbol_count = (int)(sizeof(_symbols_url) / sizeof(_symbols_url[0])),
     },
@@ -11027,91 +2103,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "ws",
         .summary = "WebSocket client and server",
         .body =
-            "# ws module\n"
-            "\n"
-            "WebSocket client and server.\n"
-            "\n"
-            "Usage: `import ws` then call `ws.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `ClosePayload` | `ClosePayload` |  |\n"
-            "| `ClosePayload.code` | `: i64` |  |\n"
-            "| `ClosePayload.init` | `(code: i64, reason: string): ()` |  |\n"
-            "| `ClosePayload.reason` | `: string` |  |\n"
-            "| `ParsedFrame` | `ParsedFrame` |  |\n"
-            "| `ParsedFrame.consumedBytes` | `: i64` |  |\n"
-            "| `ParsedFrame.fin` | `: bool` |  |\n"
-            "| `ParsedFrame.init` | `(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()` |  |\n"
-            "| `ParsedFrame.masked` | `: bool` |  |\n"
-            "| `ParsedFrame.opcode` | `: i64` |  |\n"
-            "| `ParsedFrame.payload` | `: Array<u8>` |  |\n"
-            "| `ParsedFrame.rsv1` | `: bool` |  |\n"
-            "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n"
-            "| `ParsedUpgradeRequest.deflate` | `: bool` |  |\n"
-            "| `ParsedUpgradeRequest.init` | `(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n"
-            "| `ParsedUpgradeRequest.origin` | `: string?` |  |\n"
-            "| `ParsedUpgradeRequest.protocol` | `: string?` |  |\n"
-            "| `ParsedUpgradeRequest.requestTarget` | `: string` |  |\n"
-            "| `ParsedUpgradeRequest.secKey` | `: string` |  |\n"
-            "| `ParsedUpgradeResponse` | `ParsedUpgradeResponse` |  |\n"
-            "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
-            "| `ParsedUpgradeResponse.init` | `(statusCode: i64, protocol: string? = null, deflate: bool = false): ()` |  |\n"
-            "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
-            "| `ParsedUpgradeResponse.statusCode` | `: i64` |  |\n"
-            "| `WsConn` | `WsConn` |  |\n"
-            "| `WsConn.error` | `: string?` |  |\n"
-            "| `WsConn.init` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()` |  |\n"
-            "| `WsConn.isOpen` | `(): bool` |  |\n"
-            "| `WsConn.ping` | `(): bool` |  |\n"
-            "| `WsConn.sendBytes` | `(data: Array<u8>, binary: bool = false): bool` |  |\n"
-            "| `WsConn.sendText` | `(data: string): bool` |  |\n"
-            "| `WsConn.url` | `: string` |  |\n"
-            "| `WsConnectOptions` | `WsConnectOptions` |  |\n"
-            "| `WsConnectOptions.init` | `(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()` |  |\n"
-            "| `WsConnectOptions.maxMessageSize` | `: i64` |  |\n"
-            "| `WsConnectOptions.pingIntervalMs` | `: i64` |  |\n"
-            "| `WsConnectOptions.pongTimeoutMs` | `: i64` |  |\n"
-            "| `WsConnectOptions.timeoutMs` | `: i64` |  |\n"
-            "| `WsMessage` | `WsMessage` |  |\n"
-            "| `WsMessage.binary` | `: bool` |  |\n"
-            "| `WsMessage.data` | `: Array<u8>?` |  |\n"
-            "| `WsMessage.error` | `: string?` |  |\n"
-            "| `WsMessage.init` | `(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()` |  |\n"
-            "| `WsMessage.text` | `(): string?` |  |\n"
-            "| `WsUrl` | `WsUrl` |  |\n"
-            "| `WsUrl.host` | `: string` |  |\n"
-            "| `WsUrl.init` | `(secure: bool, host: string, port: i64, path: string): ()` |  |\n"
-            "| `WsUrl.path` | `: string` |  |\n"
-            "| `WsUrl.port` | `: i64` |  |\n"
-            "| `WsUrl.secure` | `: bool` |  |\n"
-            "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
-            "| `ws.binaryFrame` | `(data: Array<u8>, mask: bool = true): Array<u8>` |  |\n"
-            "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
-            "| `ws.close` | `(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
-            "| `ws.closeFrame` | `(code: i64 = 1000, reason: string = \"\", mask: bool = true): Array<u8>` |  |\n"
-            "| `ws.connect` | `(url: string, options: WsConnectOptions? = null): WsConn` |  |\n"
-            "| `ws.frame` | `(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true): Array<u8>` |  |\n"
-            "| `ws.isValidCloseCode` | `(code: i64): bool` |  |\n"
-            "| `ws.maskPayload` | `(payload: Array<u8>, key: Array<u8>): Array<u8>` |  |\n"
-            "| `ws.parseClosePayload` | `(payload: Array<u8>): ClosePayload?` |  |\n"
-            "| `ws.parseFrame` | `(raw: Array<u8>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: i64 = 67108864): ParsedFrame?` |  |\n"
-            "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n"
-            "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n"
-            "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n"
-            "| `ws.ping` | `(conn: ref WsConn): bool` |  |\n"
-            "| `ws.pingFrame` | `(data: Array<u8>? = null, mask: bool = true): Array<u8>` |  |\n"
-            "| `ws.pongFrame` | `(data: Array<u8>? = null, mask: bool = true): Array<u8>` |  |\n"
-            "| `ws.randomKey` | `(): string` |  |\n"
-            "| `ws.recv` | `(conn: ref WsConn, timeout: i64 = -1): WsMessage?` |  |\n"
-            "| `ws.sendBytes` | `(conn: ref WsConn, data: Array<u8>, binary: bool = false): bool` |  |\n"
-            "| `ws.sendText` | `(conn: ref WsConn, data: string): bool` |  |\n"
-            "| `ws.serve` | `(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: i64 = _WS_MAX_MESSAGE_BYTES): bool` |  |\n"
-            "| `ws.textFrame` | `(data: string, mask: bool = true): Array<u8>` |  |\n"
-            "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n"
-            "",
+            "# ws module\n" "\n" "WebSocket client and server.\n" "\n" "Usage: `import ws` then call `ws.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `ClosePayload` | `ClosePayload` |  |\n" "| `ClosePayload.code` | `: i64` |  |\n" "| `ClosePayload.init` | `(code: i64, reason: string): ()` |  |\n" "| `ClosePayload.reason` | `: string` |  |\n" "| `ParsedFrame` | `ParsedFrame` |  |\n" "| `ParsedFrame.consumedBytes` | `: i64` |  |\n" "| `ParsedFrame.fin` | `: bool` |  |\n" "| `ParsedFrame.init` | `(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()` |  |\n" "| `ParsedFrame.masked` | `: bool` |  |\n" "| `ParsedFrame.opcode` | `: i64` |  |\n" "| `ParsedFrame.payload` | `: Array<u8>` |  |\n" "| `ParsedFrame.rsv1` | `: bool` |  |\n" "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n" "| `ParsedUpgradeRequest.deflate` | `: bool` |  |\n"
+            "| `ParsedUpgradeRequest.init` | `(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n" "| `ParsedUpgradeRequest.origin` | `: string?` |  |\n" "| `ParsedUpgradeRequest.protocol` | `: string?` |  |\n" "| `ParsedUpgradeRequest.requestTarget` | `: string` |  |\n" "| `ParsedUpgradeRequest.secKey` | `: string` |  |\n" "| `ParsedUpgradeResponse` | `ParsedUpgradeResponse` |  |\n" "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n" "| `ParsedUpgradeResponse.init` | `(statusCode: i64, protocol: string? = null, deflate: bool = false): ()` |  |\n" "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n" "| `ParsedUpgradeResponse.statusCode` | `: i64` |  |\n" "| `WsConn` | `WsConn` |  |\n" "| `WsConn.error` | `: string?` |  |\n" "| `WsConn.init` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()` |  |\n" "| `WsConn.isOpen` | `(): bool` |  |\n" "| `WsConn.ping` | `(): bool` |  |\n"
+            "| `WsConn.sendBytes` | `(data: Array<u8>, binary: bool = false): bool` |  |\n" "| `WsConn.sendText` | `(data: string): bool` |  |\n" "| `WsConn.url` | `: string` |  |\n" "| `WsConnectOptions` | `WsConnectOptions` |  |\n" "| `WsConnectOptions.init` | `(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()` |  |\n" "| `WsConnectOptions.maxMessageSize` | `: i64` |  |\n" "| `WsConnectOptions.pingIntervalMs` | `: i64` |  |\n" "| `WsConnectOptions.pongTimeoutMs` | `: i64` |  |\n" "| `WsConnectOptions.timeoutMs` | `: i64` |  |\n" "| `WsMessage` | `WsMessage` |  |\n" "| `WsMessage.binary` | `: bool` |  |\n" "| `WsMessage.data` | `: Array<u8>?` |  |\n" "| `WsMessage.error` | `: string?` |  |\n" "| `WsMessage.init` | `(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()` |  |\n" "| `WsMessage.text` | `(): string?` |  |\n" "| `WsUrl` | `WsUrl` |  |\n" "| `WsUrl.host` | `: string` |  |\n"
+            "| `WsUrl.init` | `(secure: bool, host: string, port: i64, path: string): ()` |  |\n" "| `WsUrl.path` | `: string` |  |\n" "| `WsUrl.port` | `: i64` |  |\n" "| `WsUrl.secure` | `: bool` |  |\n" "| `ws.acceptKey` | `(secKey: string): string` |  |\n" "| `ws.binaryFrame` | `(data: Array<u8>, mask: bool = true): Array<u8>` |  |\n" "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n" "| `ws.close` | `(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n" "| `ws.closeFrame` | `(code: i64 = 1000, reason: string = \"\", mask: bool = true): Array<u8>` |  |\n" "| `ws.connect` | `(url: string, options: WsConnectOptions? = null): WsConn` |  |\n" "| `ws.frame` | `(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true): Array<u8>` |  |\n" "| `ws.isValidCloseCode` | `(code: i64): bool` |  |\n" "| `ws.maskPayload` | `(payload: Array<u8>, key: Array<u8>): Array<u8>` |  |\n"
+            "| `ws.parseClosePayload` | `(payload: Array<u8>): ClosePayload?` |  |\n" "| `ws.parseFrame` | `(raw: Array<u8>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: i64 = 67108864): ParsedFrame?` |  |\n" "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n" "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n" "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n" "| `ws.ping` | `(conn: ref WsConn): bool` |  |\n" "| `ws.pingFrame` | `(data: Array<u8>? = null, mask: bool = true): Array<u8>` |  |\n" "| `ws.pongFrame` | `(data: Array<u8>? = null, mask: bool = true): Array<u8>` |  |\n" "| `ws.randomKey` | `(): string` |  |\n" "| `ws.recv` | `(conn: ref WsConn, timeout: i64 = -1): WsMessage?` |  |\n"
+            "| `ws.sendBytes` | `(conn: ref WsConn, data: Array<u8>, binary: bool = false): bool` |  |\n" "| `ws.sendText` | `(conn: ref WsConn, data: string): bool` |  |\n" "| `ws.serve` | `(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: i64 = _WS_MAX_MESSAGE_BYTES): bool` |  |\n" "| `ws.textFrame` | `(data: string, mask: bool = true): Array<u8>` |  |\n" "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n" "",
         .symbols = _symbols_ws,
         .symbol_count = (int)(sizeof(_symbols_ws) / sizeof(_symbols_ws[0])),
     },
@@ -11119,65 +2116,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "xml",
         .summary = "XML parsing",
         .body =
-            "# xml module\n"
-            "\n"
-            "XML parsing.\n"
-            "\n"
-            "Usage: `import xml` then call `xml.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `xml.XML_DEFAULT_OPTIONS` | `: XmlOptions` |  |\n"
-            "| `xml.XML_DEFAULT_WRITE_OPTIONS` | `: XmlWriteOptions` |  |\n"
-            "| `XmlAttribute` | `XmlAttribute` |  |\n"
-            "| `XmlAttribute.init` | `(name: XmlName, value: string): ()` |  |\n"
-            "| `XmlAttribute.name` | `: XmlName` |  |\n"
-            "| `XmlAttribute.value` | `: string` |  |\n"
-            "| `XmlDiagnostic` | `XmlDiagnostic` |  |\n"
-            "| `XmlDiagnostic.column` | `: i64` |  |\n"
-            "| `XmlDiagnostic.init` | `(kind: XmlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
-            "| `XmlDiagnostic.kind` | `: XmlErrorKind` |  |\n"
-            "| `XmlDiagnostic.line` | `: i64` |  |\n"
-            "| `XmlDiagnostic.message` | `: string` |  |\n"
-            "| `XmlName` | `XmlName` |  |\n"
-            "| `XmlName.init` | `(prefix: string, local: string): ()` |  |\n"
-            "| `XmlName.local` | `: string` |  |\n"
-            "| `XmlName.prefix` | `: string` |  |\n"
-            "| `XmlName.qualified` | `(): string` |  |\n"
-            "| `xml.XmlOptions` | `{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }` |  |\n"
-            "| `xml.XmlOptions.preserveCData` | `bool` | Type alias field |\n"
-            "| `xml.XmlOptions.preserveComments` | `bool` | Type alias field |\n"
-            "| `xml.XmlOptions.preserveWhitespace` | `bool` | Type alias field |\n"
-            "| `xml.XmlOptions.validateEntities` | `bool` | Type alias field |\n"
-            "| `XmlParseReport` | `XmlParseReport` |  |\n"
-            "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n"
-            "| `XmlParseReport.doc` | `: XmlNode?` |  |\n"
-            "| `XmlParseReport.init` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
-            "| `xml.XmlWriteOptions` | `{ indent: i64, declaration: bool, encoding: string }` |  |\n"
-            "| `xml.XmlWriteOptions.declaration` | `bool` | Type alias field |\n"
-            "| `xml.XmlWriteOptions.encoding` | `string` | Type alias field |\n"
-            "| `xml.XmlWriteOptions.indent` | `i64` | Type alias field |\n"
-            "| `xml.attr` | `(node: XmlNode, key: string): string?` |  |\n"
-            "| `xml.attributes` | `(node: XmlNode): Array<XmlAttribute>` |  |\n"
-            "| `xml.cdata` | `(content: string): XmlNode` |  |\n"
-            "| `xml.children` | `(node: XmlNode): Array<XmlNode>` |  |\n"
-            "| `xml.comment` | `(content: string): XmlNode` |  |\n"
-            "| `xml.document` | `(children: Array<XmlNode>? = null): XmlNode` |  |\n"
-            "| `xml.element` | `(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode` |  |\n"
-            "| `xml.namespace` | `(node: XmlNode, prefix: string): string?` |  |\n"
-            "| `xml.nodeText` | `(node: XmlNode): string?` |  |\n"
-            "| `xml.parse` | `(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode` |  |\n"
-            "| `xml.parseFile` | `(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode` |  |\n"
-            "| `xml.parseReport` | `(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlParseReport` |  |\n"
-            "| `xml.qualifiedName` | `(node: XmlNode): XmlName?` |  |\n"
-            "| `xml.stringify` | `(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): string` |  |\n"
-            "| `xml.tag` | `(node: XmlNode): string?` |  |\n"
-            "| `xml.text` | `(content: string): XmlNode` |  |\n"
-            "| `xml.textContent` | `(node: XmlNode): string` |  |\n"
-            "| `xml.writeFile` | `(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): bool` |  |\n"
-            "",
+            "# xml module\n" "\n" "XML parsing.\n" "\n" "Usage: `import xml` then call `xml.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `xml.XML_DEFAULT_OPTIONS` | `: XmlOptions` |  |\n" "| `xml.XML_DEFAULT_WRITE_OPTIONS` | `: XmlWriteOptions` |  |\n" "| `XmlAttribute` | `XmlAttribute` |  |\n" "| `XmlAttribute.init` | `(name: XmlName, value: string): ()` |  |\n" "| `XmlAttribute.name` | `: XmlName` |  |\n" "| `XmlAttribute.value` | `: string` |  |\n" "| `XmlDiagnostic` | `XmlDiagnostic` |  |\n" "| `XmlDiagnostic.column` | `: i64` |  |\n" "| `XmlDiagnostic.init` | `(kind: XmlErrorKind, line: i64, column: i64, message: string): ()` |  |\n" "| `XmlDiagnostic.kind` | `: XmlErrorKind` |  |\n" "| `XmlDiagnostic.line` | `: i64` |  |\n" "| `XmlDiagnostic.message` | `: string` |  |\n" "| `XmlName` | `XmlName` |  |\n" "| `XmlName.init` | `(prefix: string, local: string): ()` |  |\n" "| `XmlName.local` | `: string` |  |\n" "| `XmlName.prefix` | `: string` |  |\n"
+            "| `XmlName.qualified` | `(): string` |  |\n" "| `xml.XmlOptions` | `{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }` |  |\n" "| `xml.XmlOptions.preserveCData` | `bool` | Type alias field |\n" "| `xml.XmlOptions.preserveComments` | `bool` | Type alias field |\n" "| `xml.XmlOptions.preserveWhitespace` | `bool` | Type alias field |\n" "| `xml.XmlOptions.validateEntities` | `bool` | Type alias field |\n" "| `XmlParseReport` | `XmlParseReport` |  |\n" "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n" "| `XmlParseReport.doc` | `: XmlNode?` |  |\n" "| `XmlParseReport.init` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n" "| `xml.XmlWriteOptions` | `{ indent: i64, declaration: bool, encoding: string }` |  |\n" "| `xml.XmlWriteOptions.declaration` | `bool` | Type alias field |\n" "| `xml.XmlWriteOptions.encoding` | `string` | Type alias field |\n" "| `xml.XmlWriteOptions.indent` | `i64` | Type alias field |\n"
+            "| `xml.attr` | `(node: XmlNode, key: string): string?` |  |\n" "| `xml.attributes` | `(node: XmlNode): Array<XmlAttribute>` |  |\n" "| `xml.cdata` | `(content: string): XmlNode` |  |\n" "| `xml.children` | `(node: XmlNode): Array<XmlNode>` |  |\n" "| `xml.comment` | `(content: string): XmlNode` |  |\n" "| `xml.document` | `(children: Array<XmlNode>? = null): XmlNode` |  |\n" "| `xml.element` | `(tag: string, attrs: Array<XmlAttribute>? = null, children: Array<XmlNode>? = null): XmlNode` |  |\n" "| `xml.namespace` | `(node: XmlNode, prefix: string): string?` |  |\n" "| `xml.nodeText` | `(node: XmlNode): string?` |  |\n" "| `xml.parse` | `(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode` |  |\n" "| `xml.parseFile` | `(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlNode` |  |\n" "| `xml.parseReport` | `(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS): XmlParseReport` |  |\n" "| `xml.qualifiedName` | `(node: XmlNode): XmlName?` |  |\n"
+            "| `xml.stringify` | `(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): string` |  |\n" "| `xml.tag` | `(node: XmlNode): string?` |  |\n" "| `xml.text` | `(content: string): XmlNode` |  |\n" "| `xml.textContent` | `(node: XmlNode): string` |  |\n" "| `xml.writeFile` | `(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS): bool` |  |\n" "",
         .symbols = _symbols_xml,
         .symbol_count = (int)(sizeof(_symbols_xml) / sizeof(_symbols_xml[0])),
     },
@@ -11185,80 +2127,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .module = "yaml",
         .summary = "YAML parsing",
         .body =
-            "# yaml module\n"
-            "\n"
-            "YAML parsing.\n"
-            "\n"
-            "Usage: `import yaml` then call `yaml.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `YamlAnchor` | `YamlAnchor` |  |\n"
-            "| `YamlAnchor.init` | `(name: string): ()` |  |\n"
-            "| `YamlAnchor.name` | `: string` |  |\n"
-            "| `YamlDiagnostic` | `YamlDiagnostic` |  |\n"
-            "| `YamlDiagnostic.column` | `: i64` |  |\n"
-            "| `YamlDiagnostic.init` | `(kind: YamlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
-            "| `YamlDiagnostic.kind` | `: YamlErrorKind` |  |\n"
-            "| `YamlDiagnostic.line` | `: i64` |  |\n"
-            "| `YamlDiagnostic.message` | `: string` |  |\n"
-            "| `YamlMapping` | `YamlMapping` |  |\n"
-            "| `YamlMapping.containsKey` | `(key: string): bool` |  |\n"
-            "| `YamlMapping.get` | `(key: string): YamlValue?` |  |\n"
-            "| `YamlMapping.init` | `(): ()` |  |\n"
-            "| `YamlMapping.keys` | `: Array<string>` |  |\n"
-            "| `YamlMapping.size` | `(): i64` |  |\n"
-            "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
-            "| `yaml.YamlOptions` | `{ strict: bool }` |  |\n"
-            "| `yaml.YamlOptions.strict` | `bool` | Type alias field |\n"
-            "| `YamlParseReport` | `YamlParseReport` |  |\n"
-            "| `YamlParseReport.anchors` | `: i64` |  |\n"
-            "| `YamlParseReport.data` | `: YamlValue` |  |\n"
-            "| `YamlParseReport.diagnostics` | `: Array<YamlDiagnostic>` |  |\n"
-            "| `YamlParseReport.init` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()` |  |\n"
-            "| `YamlTag` | `YamlTag` |  |\n"
-            "| `YamlTag.handle` | `: string` |  |\n"
-            "| `YamlTag.init` | `(handle: string, suffix: string): ()` |  |\n"
-            "| `YamlTag.suffix` | `: string` |  |\n"
-            "| `YamlTagged` | `YamlTagged` |  |\n"
-            "| `YamlTagged.init` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
-            "| `YamlTagged.tag` | `: YamlTag` |  |\n"
-            "| `YamlTagged.value` | `: YamlValue` |  |\n"
-            "| `yaml.YamlWriteOptions` | `{ indent: i64 }` |  |\n"
-            "| `yaml.YamlWriteOptions.indent` | `i64` | Type alias field |\n"
-            "| `yaml.aliasValue` | `(name: string): YamlValue` |  |\n"
-            "| `yaml.asBool` | `(value: YamlValue): bool?` |  |\n"
-            "| `yaml.asFloat` | `(value: YamlValue): f64?` |  |\n"
-            "| `yaml.asInt` | `(value: YamlValue): i64?` |  |\n"
-            "| `yaml.asMapping` | `(value: YamlValue): YamlMapping?` |  |\n"
-            "| `yaml.asSequence` | `(value: YamlValue): Array<YamlValue>?` |  |\n"
-            "| `yaml.asString` | `(value: YamlValue): string?` |  |\n"
-            "| `yaml.at` | `(value: YamlValue, index: i64): YamlValue?` |  |\n"
-            "| `yaml.binaryValue` | `(value: Array<u8>): YamlValue` |  |\n"
-            "| `yaml.boolValue` | `(value: bool): YamlValue` |  |\n"
-            "| `yaml.floatValue` | `(value: f64): YamlValue` |  |\n"
-            "| `yaml.get` | `(value: YamlValue, key: string): YamlValue?` |  |\n"
-            "| `yaml.intValue` | `(value: i64): YamlValue` |  |\n"
-            "| `yaml.isNull` | `(value: YamlValue): bool` |  |\n"
-            "| `yaml.keys` | `(value: YamlValue): Array<string>` |  |\n"
-            "| `yaml.length` | `(value: YamlValue): i64` |  |\n"
-            "| `yaml.mappingSet` | `(mapping: ref YamlMapping, key: string, value: YamlValue): ()` |  |\n"
-            "| `yaml.mappingValue` | `(mapping: YamlMapping): YamlValue` |  |\n"
-            "| `yaml.newMapping` | `(): YamlMapping` |  |\n"
-            "| `yaml.nullValue` | `(): YamlValue` |  |\n"
-            "| `yaml.parse` | `(data: string, options: YamlOptions? = null): YamlValue` |  |\n"
-            "| `yaml.parseAll` | `(data: string): Array<YamlValue>` |  |\n"
-            "| `yaml.parseFile` | `(path: Path, options: YamlOptions? = null): YamlValue` |  |\n"
-            "| `yaml.parseReport` | `(data: string): YamlParseReport` |  |\n"
-            "| `yaml.parseStrict` | `(data: string): YamlValue` |  |\n"
-            "| `yaml.sequenceValue` | `(items: Array<YamlValue>): YamlValue` |  |\n"
-            "| `yaml.stringValue` | `(value: string): YamlValue` |  |\n"
-            "| `yaml.stringify` | `(value: YamlValue, options: YamlWriteOptions? = null): string` |  |\n"
-            "| `yaml.taggedValue` | `(tag: YamlTag, value: YamlValue): YamlValue` |  |\n"
-            "| `yaml.writeFile` | `(path: Path, value: YamlValue): bool` |  |\n"
-            "",
+            "# yaml module\n" "\n" "YAML parsing.\n" "\n" "Usage: `import yaml` then call `yaml.function()`.\n" "\n" "## API\n" "\n" "| Symbol | Signature | Summary |\n" "|--|--|--|\n" "| `YamlAnchor` | `YamlAnchor` |  |\n" "| `YamlAnchor.init` | `(name: string): ()` |  |\n" "| `YamlAnchor.name` | `: string` |  |\n" "| `YamlDiagnostic` | `YamlDiagnostic` |  |\n" "| `YamlDiagnostic.column` | `: i64` |  |\n" "| `YamlDiagnostic.init` | `(kind: YamlErrorKind, line: i64, column: i64, message: string): ()` |  |\n" "| `YamlDiagnostic.kind` | `: YamlErrorKind` |  |\n" "| `YamlDiagnostic.line` | `: i64` |  |\n" "| `YamlDiagnostic.message` | `: string` |  |\n" "| `YamlMapping` | `YamlMapping` |  |\n" "| `YamlMapping.containsKey` | `(key: string): bool` |  |\n" "| `YamlMapping.get` | `(key: string): YamlValue?` |  |\n" "| `YamlMapping.init` | `(): ()` |  |\n" "| `YamlMapping.keys` | `: Array<string>` |  |\n" "| `YamlMapping.size` | `(): i64` |  |\n" "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
+            "| `yaml.YamlOptions` | `{ strict: bool }` |  |\n" "| `yaml.YamlOptions.strict` | `bool` | Type alias field |\n" "| `YamlParseReport` | `YamlParseReport` |  |\n" "| `YamlParseReport.anchors` | `: i64` |  |\n" "| `YamlParseReport.data` | `: YamlValue` |  |\n" "| `YamlParseReport.diagnostics` | `: Array<YamlDiagnostic>` |  |\n" "| `YamlParseReport.init` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()` |  |\n" "| `YamlTag` | `YamlTag` |  |\n" "| `YamlTag.handle` | `: string` |  |\n" "| `YamlTag.init` | `(handle: string, suffix: string): ()` |  |\n" "| `YamlTag.suffix` | `: string` |  |\n" "| `YamlTagged` | `YamlTagged` |  |\n" "| `YamlTagged.init` | `(tag: YamlTag, value: YamlValue): ()` |  |\n" "| `YamlTagged.tag` | `: YamlTag` |  |\n" "| `YamlTagged.value` | `: YamlValue` |  |\n" "| `yaml.YamlWriteOptions` | `{ indent: i64 }` |  |\n" "| `yaml.YamlWriteOptions.indent` | `i64` | Type alias field |\n" "| `yaml.aliasValue` | `(name: string): YamlValue` |  |\n"
+            "| `yaml.asBool` | `(value: YamlValue): bool?` |  |\n" "| `yaml.asFloat` | `(value: YamlValue): f64?` |  |\n" "| `yaml.asInt` | `(value: YamlValue): i64?` |  |\n" "| `yaml.asMapping` | `(value: YamlValue): YamlMapping?` |  |\n" "| `yaml.asSequence` | `(value: YamlValue): Array<YamlValue>?` |  |\n" "| `yaml.asString` | `(value: YamlValue): string?` |  |\n" "| `yaml.at` | `(value: YamlValue, index: i64): YamlValue?` |  |\n" "| `yaml.binaryValue` | `(value: Array<u8>): YamlValue` |  |\n" "| `yaml.boolValue` | `(value: bool): YamlValue` |  |\n" "| `yaml.floatValue` | `(value: f64): YamlValue` |  |\n" "| `yaml.get` | `(value: YamlValue, key: string): YamlValue?` |  |\n" "| `yaml.intValue` | `(value: i64): YamlValue` |  |\n" "| `yaml.isNull` | `(value: YamlValue): bool` |  |\n" "| `yaml.keys` | `(value: YamlValue): Array<string>` |  |\n" "| `yaml.length` | `(value: YamlValue): i64` |  |\n" "| `yaml.mappingSet` | `(mapping: ref YamlMapping, key: string, value: YamlValue): ()` |  |\n"
+            "| `yaml.mappingValue` | `(mapping: YamlMapping): YamlValue` |  |\n" "| `yaml.newMapping` | `(): YamlMapping` |  |\n" "| `yaml.nullValue` | `(): YamlValue` |  |\n" "| `yaml.parse` | `(data: string, options: YamlOptions? = null): YamlValue` |  |\n" "| `yaml.parseAll` | `(data: string): Array<YamlValue>` |  |\n" "| `yaml.parseFile` | `(path: Path, options: YamlOptions? = null): YamlValue` |  |\n" "| `yaml.parseReport` | `(data: string): YamlParseReport` |  |\n" "| `yaml.parseStrict` | `(data: string): YamlValue` |  |\n" "| `yaml.sequenceValue` | `(items: Array<YamlValue>): YamlValue` |  |\n" "| `yaml.stringValue` | `(value: string): YamlValue` |  |\n" "| `yaml.stringify` | `(value: YamlValue, options: YamlWriteOptions? = null): string` |  |\n" "| `yaml.taggedValue` | `(tag: YamlTag, value: YamlValue): YamlValue` |  |\n" "| `yaml.writeFile` | `(path: Path, value: YamlValue): bool` |  |\n" "",
         .symbols = _symbols_yaml,
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
@@ -11266,560 +2138,31 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
 XR_DATADEF const int xmcp_generated_stdlib_count = 33;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
-    "# Xray Language Cheatsheet\n"
-    "\n"
-    "## Basics\n"
-    "```xray\n"
-    "var x = 1                         // type inferred as i64\n"
-    "var name: string = \"Alice\"        // explicit type\n"
-    "var count: i64                    // no initializer: zero value used\n"
-    "var maybeName: string?            // OK: defaults to null\n"
-    "var empty: string = \"\"            // string requires an explicit initializer\n"
-    "```\n"
-    "```xray\n"
-    "const PI = 3.14159\n"
-    "const MAX_LEN: i64 = 1024\n"
-    "```\n"
-    "```xray\n"
-    "fn add(a: i64, b: i64) -> i64 {\n"
-    "    return a + b\n"
-    "}\n"
-    "\n"
-    "fn greet(name: string) -> () {         // explicit Unit\n"
-    "    print(\"Hi ${name}\")\n"
-    "}\n"
-    "\n"
-    "fn echo(x: i64) {                       // omitted return type = ()\n"
-    "    print(x)\n"
-    "}\n"
-    "```\n"
-    "```xray\n"
-    "// \xe2\x94\x80\xe2\x94\x80 Arrow lambda: each parameter may be annotated or inferred independently \xe2\x94\x80\xe2\x94\x80\n"
-    "arr.map(x -> x * 2)\n"
-    "var add = (x: i64, y) -> x + y\n"
-    "\n"
-    "// Expression bodies return implicitly; ref only grants a writable loan\n"
-    "var calculate = (x: ref i64) -> x * 2\n"
-    "var doubleInPlace = (x: ref i64) -> { x = x * 2 }\n"
-    "\n"
-    "// \xe2\x94\x80\xe2\x94\x80 fn lambda: explicit return type, generics, or a full parameter contract \xe2\x94\x80\xe2\x94\x80\n"
-    "var inc = fn(x: i64) -> i64 {\n"
-    "    var y = x + 1\n"
-    "    return y\n"
-    "}\n"
-    "var identity = fn<T>(x: T) -> T { return x }     // generic\n"
-    "```\n"
-    "\n"
-    "## Types\n"
-    "`i64`, `f64`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
-    "\n"
-    "`T?` for nullable values | `A | B` for unions | exact `{ field: T }` objects | `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
-    "\n"
-    "## Quoted literals\n"
-    "`\"...\"` / `r\"...\"`: escaped / raw strings (both interpolate `${...}`)\n"
-    "\n"
-    "`b\"...\"` / `br\"...\"`: escaped / raw `[u8; L]`\n"
-    "\n"
-    "`c\"...\"` / `cr\"...\"`: escaped / raw `[u8; L+1]` with appended NUL\n"
-    "\n"
-    "One quote is inline, two quotes are empty, and `Q >= 3` is block form. A block opener is followed immediately by a newline and its exact-count closer is alone on a line.\n"
-    "\n"
-    "## Control flow\n"
-    "```xray\n"
-    "if (x > 0) {\n"
-    "    print(\"positive\")\n"
-    "} else if (x == 0) {\n"
-    "    print(\"zero\")\n"
-    "} else {\n"
-    "    print(\"negative\")\n"
-    "}\n"
-    "```\n"
-    "```xray\n"
-    "for (item in [1, 2, 3]) { print(item) }\n"
-    "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n"
-    "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
-    "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
-    "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n"
-    "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
-    "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
-    "    print(variant.name)\n"
-    "}\n"
-    "for (_ in 0..n) { count++ }                   // discard with placeholder\n"
-    "```\n"
-    "```xray\n"
-    "match (x) { 1 -> print(\"one\"), _ -> print(\"other\") }\n"
-    "\n"
-    "match (action) {\n"
-    "    \"start\" -> {\n"
-    "        log.info(\"starting\")\n"
-    "        start_engine()\n"
-    "    }\n"
-    "    \"stop\" -> stop_engine()\n"
-    "    _ -> log.warn(\"unknown\")\n"
-    "}\n"
-    "```\n"
-    "\n"
-    "## OOP and data declarations\n"
-    "```xray\n"
-    "class Dog extends Animal {\n"
-    "    init(name: string) {\n"
-    "        super(name)                    // **must** be the first statement (derived classes only)\n"
-    "    }\n"
-    "\n"
-    "    override speak() -> string {         // Explicit parent method override\n"
-    "        return \"woof\"\n"
-    "    }\n"
-    "}\n"
-    "```\n"
-    "```xray\n"
-    "struct Point {\n"
-    "    x: f64\n"
-    "    y: f64\n"
-    "\n"
-    "    magnitude_sq() -> f64 {\n"
-    "        return this.x * this.x + this.y * this.y\n"
-    "    }\n"
-    "}\n"
-    "\n"
-    "// Two creation styles\n"
-    "var p = Point()                  // default-construct (zero-valued fields), then assign\n"
-    "p.x = 3.0\n"
-    "p.y = 4.0\n"
-    "\n"
-    "var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }\n"
-    "var pt = Point{x: 1.0, y: 2.0}\n"
-    "\n"
-    "// Value semantics: assignment and parameter passing copy\n"
-    "var b = q                            // b is an independent copy of q\n"
-    "b.x = 99.0\n"
-    "// q.x is still 3.0\n"
-    "```\n"
-    "```xray\n"
-    "interface Shape {\n"
-    "    area() -> f64\n"
-    "    perimeter() -> f64\n"
-    "}\n"
-    "\n"
-    "// Interface method return types may be omitted (default ())\n"
-    "interface Greeter {\n"
-    "    greet(name: string)             // same as greet(name: string) -> ()\n"
-    "    log()                           // no parameters, no return value\n"
-    "}\n"
-    "\n"
-    "class Circle implements Shape {\n"
-    "    radius: f64\n"
-    "    init(r: f64) { this.radius = r }\n"
-    "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
-    "    perimeter() -> f64 { return 6.28 * this.radius }\n"
-    "}\n"
-    "\n"
-    "// Implement multiple interfaces\n"
-    "class Logger implements Shape, Greeter {\n"
-    "    radius: f64\n"
-    "    init(r: f64) { this.radius = r }\n"
-    "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
-    "    perimeter() -> f64 { return 6.28 * this.radius }\n"
-    "    greet(name: string) { print(\"hello,\", name) }\n"
-    "    log() { print(\"logging\") }\n"
-    "}\n"
-    "\n"
-    "fn describe(s: Shape) -> string {\n"
-    "    return \"area=${s.area()}, perimeter=${s.perimeter()}\"\n"
-    "}\n"
-    "```\n"
-    "```xray\n"
-    "enum Color { Red, Green, Blue }\n"
-    "\n"
-    "Color.Red.ordinal     // 0\n"
-    "Color.Blue.ordinal    // 2\n"
-    "Color.Red.name        // \"Red\"\n"
-    "Color.Red.toString()  // \"Color.Red\"\n"
-    "\n"
-    "enum HttpStatus {\n"
-    "    OK,\n"
-    "    NotFound,\n"
-    "    InternalError\n"
-    "\n"
-    "    code() -> i64 {\n"
-    "        return match (this) {\n"
-    "            HttpStatus.OK -> 200,\n"
-    "            HttpStatus.NotFound -> 404,\n"
-    "            HttpStatus.InternalError -> 500\n"
-    "        }\n"
-    "    }\n"
-    "}\n"
-    "```\n"
-    "\n"
-    "## Collections\n"
-    "```xray\n"
-    "var a: Array<i64> = [1, 2, 3]\n"
-    "var b = a                        // b is a logical copy\n"
-    "b[0] = 9                         // a[0] is still 1\n"
-    "var c: Array<string> = []         // explicit empty array\n"
-    "```\n"
-    "```xray\n"
-    "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n"
-    "var m2 = #{\"a\": 1, \"b\": 2}\n"
-    "var empty = #{}                                     // empty Map\n"
-    "\n"
-    "m[\"c\"] = 3                                          // insert / update\n"
-    "var v = m[\"a\"]                                      // lookup; a missing key panics with E0431\n"
-    "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n"
-    "```\n"
-    "```xray\n"
-    "var s: Set<i64> = #[1, 2, 3]\n"
-    "```\n"
-    "```xray\n"
-    "// Structural-object literal: identifier or static string key + colon ':'\n"
-    "var user = { name: \"Bob\", age: 25 }       // exact object shape\n"
-    "typeName(user)                            // \"object\"\n"
-    "user.name              // type: string; direct ordinal\n"
-    "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
-    "\n"
-    "// Field shorthand: when a field name matches a variable name\n"
-    "var name = \"Alice\"\n"
-    "var age = 30\n"
-    "var user = { name, age }                  // equivalent to { name: name, age: age }\n"
-    "\n"
-    "// Map literal: `#{}` prefix + `:`\n"
-    "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, i64>\n"
-    "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
-    "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
-    "```\n"
-    "\n"
-    "## Concurrency\n"
-    "```xray\n"
-    "// Form 1: call an existing function\n"
-    "var t1 = go worker(0, channel)\n"
-    "\n"
-    "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: JSON.Object) -> i64 {\n"
-    "    return d.value * 2\n"
-    "}(payload)\n"
-    "\n"
-    "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
-    "var t3 = go fn() -> i64 {\n"
-    "    return compute()\n"
-    "}()\n"
-    "\n"
-    "// Optional debugging name\n"
-    "var named = go(name: \"worker-1\") worker(1, channel)\n"
-    "```\n"
-    "```xray\n"
-    "// single task\n"
-    "var task = go fetch(\"https://example.com\")\n"
-    "var result = await task                    // yields the current coroutine until task completes\n"
-    "\n"
-    "// await all: wait for all, returns the result array (in input order)\n"
-    "var t1 = go compute(2)\n"
-    "var t2 = go compute(3)\n"
-    "var t3 = go compute(4)\n"
-    "var results: Array<i64> = await all [t1, t2, t3]\n"
-    "// also works on a variable directly, no brackets needed\n"
-    "var tasks = [t1, t2, t3]\n"
-    "var results2: Array<i64> = await all tasks\n"
-    "\n"
-    "// await any: wait for the first to complete, return its result; the others keep running\n"
-    "var first = await any [t1, t2, t3]\n"
-    "\n"
-    "// await anySuccess: skip failing tasks; wait for the first successful one\n"
-    "var firstOk = await anySuccess [t1, t2, t3]\n"
-    "```\n"
-    "```xray\n"
-    "const ch = Channel<i64>(10)\n"
-    "ch.send(42)                             // blocking send\n"
-    "var v = match (ch.recv()) {\n"
-    "    Recv.Value { value } -> value\n"
-    "    Recv.Closed -> -1\n"
-    "    _ -> -1\n"
-    "}\n"
-    "\n"
-    "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n"
-    "match (ch.tryRecv()) {\n"
-    "    Recv.Value { value: next } -> print(next)\n"
-    "    Recv.Empty -> print(\"empty\")\n"
-    "    Recv.Closed -> print(\"closed\")\n"
-    "    Recv.Timeout -> print(\"timeout\")\n"
-    "}\n"
-    "\n"
-    "ch.send(7)\n"
-    "ch.close()\n"
-    "for (msg in ch) {\n"
-    "    print(msg)\n"
-    "}\n"
-    "\n"
-    "var value = ch.recvOr(-1)\n"
-    "```\n"
-    "```xray\n"
-    "const ch1 = Channel<i64>(2)\n"
-    "const ch2 = Channel<i64>(2)\n"
-    "\n"
-    "select {\n"
-    "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n"
-    "    msg from ch2 -> { print(\"got from ch2:\", msg) }      // receive arm\n"
-    "    100  to   ch1 -> { print(\"sent 100 to ch1\") }        // send arm\n"
-    "    _ -> { print(\"no channel ready\") }                   // default arm (non-blocking)\n"
-    "}\n"
-    "```\n"
-    "\n"
-    "## Value and concurrency boundary contracts\n"
-    "- `const` fixes a binding and its value-semantic components; class and synchronized objects retain identity and are not deeply frozen\n"
-    "- Array assignment, saved READ parameters, and returns preserve logical copies without explicit copy/move or unique backing\n"
-    "- go arguments and captures must be Sendable; ordinary outer var captures are forbidden even for reads\n"
-    "- `Channel<T>` requires copyable, storable, Sendable payloads; ref and Slice/MutSlice loans cannot cross go boundaries\n"
-    "- `Atomic<T>`: lock-free atomic ops for `i64`/`f64`/`bool` (name with `const`)\n"
-    "- Consuming parameters and receivers are for noncopyable resources; the declaration decides transfer and an explicit move marker is optional\n"
-    "- Type-position const T, the public copy(array) spelling, and standalone move for copyable values are outside the frozen subset\n"
-    "- These target contracts do not certify complete new-XIR go, Task, resource, or synchronization support; declaration-family qualification remains required\n"
-    "\n"
-    "## Modules\n"
-    "```xray\n"
-    "// 1. stdlib: bare identifier; without `as`, the alias equals the module name\n"
-    "import time\n"
-    "import datetime\n"
-    "import http as httpClient\n"
-    "\n"
-    "// 2. third-party packages: quoted owner/name form\n"
-    "import \"alice/utils\"\n"
-    "import \"bob/http_client\" as httpClient\n"
-    "\n"
-    "// 3. path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)\n"
-    "import \"./modules/mod_a\" as a\n"
-    "import \"../utils/string_utils\" as utils\n"
-    "\n"
-    "// 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name\n"
-    "import { readFile, writeFile as write } from io\n"
-    "import { publicFn } from \"./modules/mod_a\"\n"
-    "```\n"
-    "```xray\n"
-    "// 1. visibility belongs to the declaration\n"
-    "export fn helper() { return }\n"
-    "export final class MyClass {\n"
-    "    value: i64\n"
-    "    init() { this.value = 1 }\n"
-    "}\n"
-    "export const VERSION = \"1.0\"\n"
-    "\n"
-    "// 2. re-export (with optional renaming)\n"
-    "export { getUser, getUserAge as getAge } from \"./user\"\n"
-    "\n"
-    "// 3. wildcard re-export (forward all exports of another module)\n"
-    "export * from \"./product\"\n"
-    "```\n"
-    "\n"
-    "## Testing\n"
-    "```xray\n"
-    "@test\n"
-    "fn test_addition() {\n"
-    "    assertEqual(1 + 1, 2)\n"
-    "}\n"
-    "\n"
-    "@test\n"
-    "fn test_with_assertions() {\n"
-    "    var result = compute()\n"
-    "    assertEqual(result, 42)\n"
-    "    assert(result > 0)\n"
-    "}\n"
-    "```\n"
-    "\n"
-    "## Important notes\n"
-    "- `print()` outputs with newline; there is no `println`\n"
-    "- arrow function parameter types may be inferred only when the context is known\n"
-    "- `const ch = Channel<T>(n)` creates a stable named channel handle; `Channel<T>` is used in type position\n"
-    "- field increment such as `this.x++` is not supported; assign explicitly\n"
-    "- same-quote strings are allowed inside `${...}` interpolation\n"
-    "";
+    "# Xray Language Cheatsheet\n" "\n" "## Basics\n" "```xray\n" "var x = 1                         // type inferred as i64\n" "var name: string = \"Alice\"        // explicit type\n" "var count: i64                    // no initializer: zero value used\n" "var maybeName: string?            // OK: defaults to null\n" "var empty: string = \"\"            // string requires an explicit initializer\n" "```\n" "```xray\n" "const PI = 3.14159\n" "const MAX_LEN: i64 = 1024\n" "```\n" "```xray\n" "fn add(a: i64, b: i64) -> i64 {\n" "    return a + b\n" "}\n" "\n" "fn greet(name: string) -> () {         // explicit Unit\n" "    print(\"Hi ${name}\")\n" "}\n" "\n" "fn echo(x: i64) {                       // omitted return type = ()\n" "    print(x)\n" "}\n" "```\n" "```xray\n" "// \xe2\x94\x80\xe2\x94\x80 Arrow lambda: each parameter may be annotated or inferred independently \xe2\x94\x80\xe2\x94\x80\n" "arr.map(x -> x * 2)\n" "var add = (x: i64, y) -> x + y\n" "\n"
+    "// Expression bodies return implicitly; ref only grants a writable loan\n" "var calculate = (x: ref i64) -> x * 2\n" "var doubleInPlace = (x: ref i64) -> { x = x * 2 }\n" "\n" "// \xe2\x94\x80\xe2\x94\x80 fn lambda: explicit return type, generics, or a full parameter contract \xe2\x94\x80\xe2\x94\x80\n" "var inc = fn(x: i64) -> i64 {\n" "    var y = x + 1\n" "    return y\n" "}\n" "var identity = fn<T>(x: T) -> T { return x }     // generic\n" "```\n" "\n" "## Types\n" "`i64`, `f64`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n" "\n" "`T?` for nullable values | `A | B` for unions | exact `{ field: T }` objects | `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n" "\n" "## Quoted literals\n" "`\"...\"` / `r\"...\"`: escaped / raw strings (both interpolate `${...}`)\n" "\n" "`b\"...\"` / `br\"...\"`: escaped / raw `[u8; L]`\n" "\n" "`c\"...\"` / `cr\"...\"`: escaped / raw `[u8; L+1]` with appended NUL\n" "\n"
+    "One quote is inline, two quotes are empty, and `Q >= 3` is block form. A block opener is followed immediately by a newline and its exact-count closer is alone on a line.\n" "\n" "## Control flow\n" "```xray\n" "if (x > 0) {\n" "    print(\"positive\")\n" "} else if (x == 0) {\n" "    print(\"zero\")\n" "} else {\n" "    print(\"negative\")\n" "}\n" "```\n" "```xray\n" "for (item in [1, 2, 3]) { print(item) }\n" "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n" "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n" "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n" "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n" "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n" "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n" "    print(variant.name)\n" "}\n"
+    "for (_ in 0..n) { count++ }                   // discard with placeholder\n" "```\n" "```xray\n" "match (x) { 1 -> print(\"one\"), _ -> print(\"other\") }\n" "\n" "match (action) {\n" "    \"start\" -> {\n" "        log.info(\"starting\")\n" "        start_engine()\n" "    }\n" "    \"stop\" -> stop_engine()\n" "    _ -> log.warn(\"unknown\")\n" "}\n" "```\n" "\n" "## OOP and data declarations\n" "```xray\n" "class Dog extends Animal {\n" "    init(name: string) {\n" "        super(name)                    // **must** be the first statement (derived classes only)\n" "    }\n" "\n" "    override speak() -> string {         // Explicit parent method override\n" "        return \"woof\"\n" "    }\n" "}\n" "```\n" "```xray\n" "struct Point {\n" "    x: f64\n" "    y: f64\n" "\n" "    magnitude_sq() -> f64 {\n" "        return this.x * this.x + this.y * this.y\n" "    }\n" "}\n" "\n" "// Two creation styles\n" "var p = Point()                  // default-construct (zero-valued fields), then assign\n"
+    "p.x = 3.0\n" "p.y = 4.0\n" "\n" "var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }\n" "var pt = Point{x: 1.0, y: 2.0}\n" "\n" "// Value semantics: assignment and parameter passing copy\n" "var b = q                            // b is an independent copy of q\n" "b.x = 99.0\n" "// q.x is still 3.0\n" "```\n" "```xray\n" "interface Shape {\n" "    area() -> f64\n" "    perimeter() -> f64\n" "}\n" "\n" "// Interface method return types may be omitted (default ())\n" "interface Greeter {\n" "    greet(name: string)             // same as greet(name: string) -> ()\n" "    log()                           // no parameters, no return value\n" "}\n" "\n" "class Circle implements Shape {\n" "    radius: f64\n" "    init(r: f64) { this.radius = r }\n" "    area() -> f64 { return 3.14 * this.radius * this.radius }\n" "    perimeter() -> f64 { return 6.28 * this.radius }\n" "}\n" "\n" "// Implement multiple interfaces\n" "class Logger implements Shape, Greeter {\n"
+    "    radius: f64\n" "    init(r: f64) { this.radius = r }\n" "    area() -> f64 { return 3.14 * this.radius * this.radius }\n" "    perimeter() -> f64 { return 6.28 * this.radius }\n" "    greet(name: string) { print(\"hello,\", name) }\n" "    log() { print(\"logging\") }\n" "}\n" "\n" "fn describe(s: Shape) -> string {\n" "    return \"area=${s.area()}, perimeter=${s.perimeter()}\"\n" "}\n" "```\n" "```xray\n" "enum Color { Red, Green, Blue }\n" "\n" "Color.Red.ordinal     // 0\n" "Color.Blue.ordinal    // 2\n" "Color.Red.name        // \"Red\"\n" "Color.Red.toString()  // \"Color.Red\"\n" "\n" "enum HttpStatus {\n" "    OK,\n" "    NotFound,\n" "    InternalError\n" "\n" "    code() -> i64 {\n" "        return match (this) {\n" "            HttpStatus.OK -> 200,\n" "            HttpStatus.NotFound -> 404,\n" "            HttpStatus.InternalError -> 500\n" "        }\n" "    }\n" "}\n" "```\n" "\n" "## Collections\n" "```xray\n" "var a: Array<i64> = [1, 2, 3]\n"
+    "var b = a                        // b is a logical copy\n" "b[0] = 9                         // a[0] is still 1\n" "var c: Array<string> = []         // explicit empty array\n" "```\n" "```xray\n" "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n" "var m2 = #{\"a\": 1, \"b\": 2}\n" "var empty = #{}                                     // empty Map\n" "\n" "m[\"c\"] = 3                                          // insert / update\n" "var v = m[\"a\"]                                      // lookup; a missing key panics with E0431\n" "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n" "```\n" "```xray\n" "var s: Set<i64> = #[1, 2, 3]\n" "```\n" "```xray\n" "// Structural-object literal: identifier or static string key + colon ':'\n" "var user = { name: \"Bob\", age: 25 }       // exact object shape\n" "typeName(user)                            // \"object\"\n" "user.name              // type: string; direct ordinal\n"
+    "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n" "\n" "// Field shorthand: when a field name matches a variable name\n" "var name = \"Alice\"\n" "var age = 30\n" "var user = { name, age }                  // equivalent to { name: name, age: age }\n" "\n" "// Map literal: `#{}` prefix + `:`\n" "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, i64>\n" "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n" "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n" "```\n" "\n" "## Concurrency\n" "```xray\n" "// Form 1: call an existing function\n" "var t1 = go worker(0, channel)\n" "\n" "// Inline logic: a lambda must still form a complete call with explicit arguments\n" "var t2 = go fn(d: JSON.Object) -> i64 {\n" "    return d.value * 2\n" "}(payload)\n" "\n" "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n" "var t3 = go fn() -> i64 {\n" "    return compute()\n" "}()\n" "\n"
+    "// Optional debugging name\n" "var named = go(name: \"worker-1\") worker(1, channel)\n" "```\n" "```xray\n" "// single task\n" "var task = go fetch(\"https://example.com\")\n" "var result = await task                    // yields the current coroutine until task completes\n" "\n" "// await all: wait for all, returns the result array (in input order)\n" "var t1 = go compute(2)\n" "var t2 = go compute(3)\n" "var t3 = go compute(4)\n" "var results: Array<i64> = await all [t1, t2, t3]\n" "// also works on a variable directly, no brackets needed\n" "var tasks = [t1, t2, t3]\n" "var results2: Array<i64> = await all tasks\n" "\n" "// await any: wait for the first to complete, return its result; the others keep running\n" "var first = await any [t1, t2, t3]\n" "\n" "// await anySuccess: skip failing tasks; wait for the first successful one\n" "var firstOk = await anySuccess [t1, t2, t3]\n" "```\n" "```xray\n" "const ch = Channel<i64>(10)\n" "ch.send(42)                             // blocking send\n"
+    "var v = match (ch.recv()) {\n" "    Recv.Value { value } -> value\n" "    Recv.Closed -> -1\n" "    _ -> -1\n" "}\n" "\n" "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n" "match (ch.tryRecv()) {\n" "    Recv.Value { value: next } -> print(next)\n" "    Recv.Empty -> print(\"empty\")\n" "    Recv.Closed -> print(\"closed\")\n" "    Recv.Timeout -> print(\"timeout\")\n" "}\n" "\n" "ch.send(7)\n" "ch.close()\n" "for (msg in ch) {\n" "    print(msg)\n" "}\n" "\n" "var value = ch.recvOr(-1)\n" "```\n" "```xray\n" "const ch1 = Channel<i64>(2)\n" "const ch2 = Channel<i64>(2)\n" "\n" "select {\n" "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n" "    msg from ch2 -> { print(\"got from ch2:\", msg) }      // receive arm\n" "    100  to   ch1 -> { print(\"sent 100 to ch1\") }        // send arm\n" "    _ -> { print(\"no channel ready\") }                   // default arm (non-blocking)\n" "}\n" "```\n" "\n" "## Value and concurrency boundary contracts\n"
+    "- `const` fixes a binding and its value-semantic components; class and synchronized objects retain identity and are not deeply frozen\n" "- Array assignment, saved READ parameters, and returns preserve logical copies without explicit copy/move or unique backing\n" "- go arguments and captures must be Sendable; ordinary outer var captures are forbidden even for reads\n" "- `Channel<T>` requires copyable, storable, Sendable payloads; ref and Slice/MutSlice loans cannot cross go boundaries\n" "- `Atomic<T>`: lock-free atomic ops for `i64`/`f64`/`bool` (name with `const`)\n" "- Consuming parameters and receivers are for noncopyable resources; the declaration decides transfer and an explicit move marker is optional\n" "- Type-position const T, the public copy(array) spelling, and standalone move for copyable values are outside the frozen subset\n" "- These target contracts do not certify complete new-XIR go, Task, resource, or synchronization support; declaration-family qualification remains required\n" "\n"
+    "## Modules\n" "```xray\n" "// 1. stdlib: bare identifier; without `as`, the alias equals the module name\n" "import time\n" "import datetime\n" "import http as httpClient\n" "\n" "// 2. third-party packages: quoted owner/name form\n" "import \"alice/utils\"\n" "import \"bob/http_client\" as httpClient\n" "\n" "// 3. path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)\n" "import \"./modules/mod_a\" as a\n" "import \"../utils/string_utils\" as utils\n" "\n" "// 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name\n" "import { readFile, writeFile as write } from io\n" "import { publicFn } from \"./modules/mod_a\"\n" "```\n" "```xray\n" "// 1. visibility belongs to the declaration\n" "export fn helper() { return }\n" "export final class MyClass {\n" "    value: i64\n" "    init() { this.value = 1 }\n" "}\n" "export const VERSION = \"1.0\"\n" "\n" "// 2. re-export (with optional renaming)\n"
+    "export { getUser, getUserAge as getAge } from \"./user\"\n" "\n" "// 3. wildcard re-export (forward all exports of another module)\n" "export * from \"./product\"\n" "```\n" "\n" "## Testing\n" "```xray\n" "@test\n" "fn test_addition() {\n" "    assertEqual(1 + 1, 2)\n" "}\n" "\n" "@test\n" "fn test_with_assertions() {\n" "    var result = compute()\n" "    assertEqual(result, 42)\n" "    assert(result > 0)\n" "}\n" "```\n" "\n" "## Important notes\n" "- `print()` outputs with newline; there is no `println`\n" "- arrow function parameter types may be inferred only when the context is known\n" "- `const ch = Channel<T>(n)` creates a stable named channel handle; `Channel<T>` is used in type position\n" "- field increment such as `this.x++` is not supported; assign explicitly\n" "- same-quote strings are allowed inside `${...}` interpolation\n" "";
 
 XR_DATADEF const char xmcp_generated_concurrency[] =
-    "# Xray Concurrency Model\n"
-    "\n"
-    "## Sharing contract and qualification\n"
-    "The settled target contract requires Sendable arguments and captures at go boundaries and forbids every ordinary outer var capture, including reads. Const, COW, and atomic reference counts alone do not prove Sendable. These are language contracts, not evidence that the complete go, Task, resource, or synchronization families are implemented in new XIR; qualification follows spec \xc2\xa7""17.\n"
-    "\n"
-    "## Channels: communication\n"
-    "```xray\n"
-    "const ch  = Channel<i64>(10)    // buffered, capacity = 10\n"
-    "const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)\n"
-    "const cha = Channel(3)          // element type inferred from the first send\n"
-    "```\n"
-    "```xray\n"
-    "const ch = Channel<i64>(10)\n"
-    "ch.send(42)                             // blocking send\n"
-    "var v = match (ch.recv()) {\n"
-    "    Recv.Value { value } -> value\n"
-    "    Recv.Closed -> -1\n"
-    "    _ -> -1\n"
-    "}\n"
-    "\n"
-    "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n"
-    "match (ch.tryRecv()) {\n"
-    "    Recv.Value { value: next } -> print(next)\n"
-    "    Recv.Empty -> print(\"empty\")\n"
-    "    Recv.Closed -> print(\"closed\")\n"
-    "    Recv.Timeout -> print(\"timeout\")\n"
-    "}\n"
-    "\n"
-    "ch.send(7)\n"
-    "ch.close()\n"
-    "for (msg in ch) {\n"
-    "    print(msg)\n"
-    "}\n"
-    "\n"
-    "var value = ch.recvOr(-1)\n"
-    "```\n"
-    "\n"
-    "## Const and synchronized capabilities\n"
-    "```xray\n"
-    "const channel = Channel<i64>(16)\n"
-    "const counter = Atomic(0)\n"
-    "\n"
-    "var source = [1, 2, 3]\n"
-    "const snapshot = source\n"
-    "source[0] = 9\n"
-    "var current = snapshot\n"
-    "current.push(4)\n"
-    "print(snapshot[0])          // 1\n"
-    "print(len(snapshot))        // 3\n"
-    "```\n"
-    "\n"
-    "## Value arguments and declared consumption\n"
-    "Copyable, Sendable values pass as logical copies; ordinary Array arguments do not require copy(array), explicit move, or unique backing. Copying stops at class and synchronization identities. Only noncopyable resources use consuming parameter declarations; an explicit move marker may identify that transfer. Complete go admission remains a separate obligation.\n"
-    "```xray\n"
-    "// Form 1: call an existing function\n"
-    "var t1 = go worker(0, channel)\n"
-    "\n"
-    "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: JSON.Object) -> i64 {\n"
-    "    return d.value * 2\n"
-    "}(payload)\n"
-    "\n"
-    "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
-    "var t3 = go fn() -> i64 {\n"
-    "    return compute()\n"
-    "}()\n"
-    "\n"
-    "// Optional debugging name\n"
-    "var named = go(name: \"worker-1\") worker(1, channel)\n"
-    "```\n"
-    "\n"
-    "## Structured concurrency\n"
-    "```xray\n"
-    "// lexical scope use\n"
-    "var x = 1\n"
-    "scope {\n"
-    "    var x = 10            // shadow the outer x; in effect inside the block\n"
-    "    print(x)              // 10\n"
-    "}\n"
-    "print(x)                  // 1\n"
-    "\n"
-    "// structured concurrency use (with go)\n"
-    "scope {\n"
-    "    go worker_a()\n"
-    "    go worker_b()\n"
-    "    // before the block exits, both a/b are awaited; an exception in either does not affect siblings\n"
-    "}\n"
-    "```\n"
-    "```xray\n"
-    "// linked scope: failure propagation\n"
-    "try {\n"
-    "    linked scope {\n"
-    "        go ok_worker()\n"
-    "        go failing_worker()         // throws\n"
-    "    }\n"
-    "} catch (e) {\n"
-    "    print(\"caught:\", e)              // hits this branch\n"
-    "}\n"
-    "\n"
-    "// scope: keep task handles and inspect each outcome after the block\n"
-    "var first: Task<i64>?\n"
-    "var second: Task<i64>?\n"
-    "var third: Task<i64>?\n"
-    "scope {\n"
-    "    first = go failing(\"error1\")\n"
-    "    second = go failing(\"error2\")\n"
-    "    third = go ok()\n"
-    "}\n"
-    "var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]\n"
-    "print(len(outcomes))                 // 3 (one outcome per child)\n"
-    "```\n"
-    "\n"
-    "## Select\n"
-    "```xray\n"
-    "const ch1 = Channel<i64>(2)\n"
-    "const ch2 = Channel<i64>(2)\n"
-    "\n"
-    "select {\n"
-    "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n"
-    "    msg from ch2 -> { print(\"got from ch2:\", msg) }      // receive arm\n"
-    "    100  to   ch1 -> { print(\"sent 100 to ch1\") }        // send arm\n"
-    "    _ -> { print(\"no channel ready\") }                   // default arm (non-blocking)\n"
-    "}\n"
-    "```\n"
-    "\n"
-    "## Atomic \xe2\x80\x94 lock-free shared state\n"
-    "`Atomic<T>` wraps `i64`, `f64`, or `bool` with C11 atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation.\n"
-    "\n"
-    "Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`, `toString`.\n"
-    "\n"
-    "All methods accept optional `Ordering` enum (default `SeqCst`): `Relaxed`, `Acquire`, `Release`, `AcquireRelease`, `SeqCst`.\n"
-    "\n"
-    "```xray\n"
-    "const counter = Atomic(0)\n"
-    "counter.add(1)\n"
-    "var (old, ok) = counter.compareExchange(1, 42)\n"
-    "print(counter.load())  // 42\n"
-    "```\n"
-    "\n"
-    "Frozen next cutover: Ordering identity and permissions are rechecked; compareExchange returns a real owned Tuple prepared before cell access. f64 transport preserves every binary64 payload, while numeric results stay canonical. One f64 CAS attempt per resume continues on failure without suspension or a second pipeline. Complete execution and unsupported-target admission remain pending implementation and qualification (spec 10.9/17.24).\n"
-    "\n"
-    "## Locks \xe2\x80\x94 explicit execution domain\n"
-    "`sync.*` locks are coroutine-domain primitives: they may suspend and require `import sync`. `sys.Os*` locks are OS-thread-domain primitives: they block the current OS thread and require `import sys`. Name synchronization handles with `const`; their audited methods provide synchronized interior mutation.\n"
-    "\n"
-    "```xray\n"
-    "import sync\n"
-    "import sys\n"
-    "\n"
-    "const m = sync.Mutex<i64>(0)\n"
-    "const os_m = sys.OsMutex()\n"
-    "```\n"
-    "";
+    "# Xray Concurrency Model\n" "\n" "## Sharing contract and qualification\n" "The settled target contract requires Sendable arguments and captures at go boundaries and forbids every ordinary outer var capture, including reads. Const, COW, and atomic reference counts alone do not prove Sendable. These are language contracts, not evidence that the complete go, Task, resource, or synchronization families are implemented in new XIR; qualification follows spec \xc2\xa7""17.\n" "\n" "## Channels: communication\n" "```xray\n" "const ch  = Channel<i64>(10)    // buffered, capacity = 10\n" "const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)\n" "const cha = Channel(3)          // element type inferred from the first send\n" "```\n" "```xray\n" "const ch = Channel<i64>(10)\n" "ch.send(42)                             // blocking send\n" "var v = match (ch.recv()) {\n" "    Recv.Value { value } -> value\n" "    Recv.Closed -> -1\n" "    _ -> -1\n" "}\n" "\n"
+    "var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed\n" "match (ch.tryRecv()) {\n" "    Recv.Value { value: next } -> print(next)\n" "    Recv.Empty -> print(\"empty\")\n" "    Recv.Closed -> print(\"closed\")\n" "    Recv.Timeout -> print(\"timeout\")\n" "}\n" "\n" "ch.send(7)\n" "ch.close()\n" "for (msg in ch) {\n" "    print(msg)\n" "}\n" "\n" "var value = ch.recvOr(-1)\n" "```\n" "\n" "## Const and synchronized capabilities\n" "```xray\n" "const channel = Channel<i64>(16)\n" "const counter = Atomic(0)\n" "\n" "var source = [1, 2, 3]\n" "const snapshot = source\n" "source[0] = 9\n" "var current = snapshot\n" "current.push(4)\n" "print(snapshot[0])          // 1\n" "print(len(snapshot))        // 3\n" "```\n" "\n" "## Value arguments and declared consumption\n"
+    "Copyable, Sendable values pass as logical copies; ordinary Array arguments do not require copy(array), explicit move, or unique backing. Copying stops at class and synchronization identities. Only noncopyable resources use consuming parameter declarations; an explicit move marker may identify that transfer. Complete go admission remains a separate obligation.\n" "```xray\n" "// Form 1: call an existing function\n" "var t1 = go worker(0, channel)\n" "\n" "// Inline logic: a lambda must still form a complete call with explicit arguments\n" "var t2 = go fn(d: JSON.Object) -> i64 {\n" "    return d.value * 2\n" "}(payload)\n" "\n" "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n" "var t3 = go fn() -> i64 {\n" "    return compute()\n" "}()\n" "\n" "// Optional debugging name\n" "var named = go(name: \"worker-1\") worker(1, channel)\n" "```\n" "\n" "## Structured concurrency\n" "```xray\n" "// lexical scope use\n" "var x = 1\n" "scope {\n"
+    "    var x = 10            // shadow the outer x; in effect inside the block\n" "    print(x)              // 10\n" "}\n" "print(x)                  // 1\n" "\n" "// structured concurrency use (with go)\n" "scope {\n" "    go worker_a()\n" "    go worker_b()\n" "    // before the block exits, both a/b are awaited; an exception in either does not affect siblings\n" "}\n" "```\n" "```xray\n" "// linked scope: failure propagation\n" "try {\n" "    linked scope {\n" "        go ok_worker()\n" "        go failing_worker()         // throws\n" "    }\n" "} catch (e) {\n" "    print(\"caught:\", e)              // hits this branch\n" "}\n" "\n" "// scope: keep task handles and inspect each outcome after the block\n" "var first: Task<i64>?\n" "var second: Task<i64>?\n" "var third: Task<i64>?\n" "scope {\n" "    first = go failing(\"error1\")\n" "    second = go failing(\"error2\")\n" "    third = go ok()\n" "}\n" "var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]\n"
+    "print(len(outcomes))                 // 3 (one outcome per child)\n" "```\n" "\n" "## Select\n" "```xray\n" "const ch1 = Channel<i64>(2)\n" "const ch2 = Channel<i64>(2)\n" "\n" "select {\n" "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n" "    msg from ch2 -> { print(\"got from ch2:\", msg) }      // receive arm\n" "    100  to   ch1 -> { print(\"sent 100 to ch1\") }        // send arm\n" "    _ -> { print(\"no channel ready\") }                   // default arm (non-blocking)\n" "}\n" "```\n" "\n" "## Atomic \xe2\x80\x94 lock-free shared state\n" "`Atomic<T>` wraps `i64`, `f64`, or `bool` with C11 atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation.\n" "\n" "Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`, `toString`.\n" "\n" "All methods accept optional `Ordering` enum (default `SeqCst`): `Relaxed`, `Acquire`, `Release`, `AcquireRelease`, `SeqCst`.\n" "\n" "```xray\n"
+    "const counter = Atomic(0)\n" "counter.add(1)\n" "var (old, ok) = counter.compareExchange(1, 42)\n" "print(counter.load())  // 42\n" "```\n" "\n" "Frozen next cutover: Ordering identity and permissions are rechecked; compareExchange returns a real owned Tuple prepared before cell access. f64 transport preserves every binary64 payload, while numeric results stay canonical. One f64 CAS attempt per resume continues on failure without suspension or a second pipeline. Complete execution and unsupported-target admission remain pending implementation and qualification (spec 10.9/17.24).\n" "\n" "## Locks \xe2\x80\x94 explicit execution domain\n" "`sync.*` locks are coroutine-domain primitives: they may suspend and require `import sync`. `sys.Os*` locks are OS-thread-domain primitives: they block the current OS thread and require `import sys`. Name synchronization handles with `const`; their audited methods provide synchronized interior mutation.\n" "\n" "```xray\n" "import sync\n" "import sys\n" "\n"
+    "const m = sync.Mutex<i64>(0)\n" "const os_m = sys.OsMutex()\n" "```\n" "";
 
 XR_DATADEF const char xmcp_generated_stdlib_list[] =
-    "# Xray Standard Library Modules\n"
-    "\n"
-    "| Module | Description |\n"
-    "|--------|-------------|\n"
-    "| `base64` | Base64 encoding/decoding |\n"
-    "| `cluster` | Distributed cluster communication |\n"
-    "| `compress` | Compression/decompression and checksums |\n"
-    "| `crypto` | Cryptographic hashing, encryption, randomness, and constant-time comparison |\n"
-    "| `csv` | CSV parsing and generation |\n"
-    "| `datetime` | Date and time manipulation |\n"
-    "| `encoding` | Character encoding conversion |\n"
-    "| `http` | HTTP/1.x client/server, REST API, and routing |\n"
-    "| `http2` | HTTP/2 capability and typed request transport |\n"
-    "| `io` | File I/O operations |\n"
-    "| `log` | Structured logging system |\n"
-    "| `math` | Mathematical functions |\n"
-    "| `mem` | Raw memory, Buffer, page allocation, volatile access, and memory primitives |\n"
-    "| `net` | TCP/UDP/TLS networking |\n"
-    "| `os` | Operating system interface |\n"
-    "| `parallel` | Structured CPU data-parallel operations |\n"
-    "| `path` | File path manipulation |\n"
-    "| `regex` | Regular expressions |\n"
-    "| `runtime` | Runtime and heap introspection |\n"
-    "| `sync` | Coroutine-domain synchronization primitives |\n"
-    "| `sys` | OS-thread-domain system primitives |\n"
-    "| `time` | Time, timers, sleep |\n"
-    "| `toml` | TOML configuration parsing |\n"
-    "| `url` | URL parsing and construction |\n"
-    "| `ws` | WebSocket client and server |\n"
-    "| `xml` | XML parsing |\n"
-    "| `yaml` | YAML parsing |\n"
-    "\n"
-    "Usage: `import <module>` then call `module.function()`. All listed modules ship in the Xray standard-library installation unit.\n"
-    "\n"
-    "The prelude `JSON` namespace exposes `JSON.parse<T>()`, `JSON.parseObject()`, `JSON.value()`, and `JSON.stringify()` without an import; it is not an importable module or a value type.\n"
-    "";
+    "# Xray Standard Library Modules\n" "\n" "| Module | Description |\n" "|--------|-------------|\n" "| `base64` | Base64 encoding/decoding |\n" "| `cluster` | Distributed cluster communication |\n" "| `compress` | Compression/decompression and checksums |\n" "| `crypto` | Cryptographic hashing, encryption, randomness, and constant-time comparison |\n" "| `csv` | CSV parsing and generation |\n" "| `datetime` | Date and time manipulation |\n" "| `encoding` | Character encoding conversion |\n" "| `http` | HTTP/1.x client/server, REST API, and routing |\n" "| `http2` | HTTP/2 capability and typed request transport |\n" "| `io` | File I/O operations |\n" "| `log` | Structured logging system |\n" "| `math` | Mathematical functions |\n" "| `mem` | Raw memory, Buffer, page allocation, volatile access, and memory primitives |\n" "| `net` | TCP/UDP/TLS networking |\n" "| `os` | Operating system interface |\n" "| `parallel` | Structured CPU data-parallel operations |\n" "| `path` | File path manipulation |\n"
+    "| `regex` | Regular expressions |\n" "| `runtime` | Runtime and heap introspection |\n" "| `sync` | Coroutine-domain synchronization primitives |\n" "| `sys` | OS-thread-domain system primitives |\n" "| `time` | Time, timers, sleep |\n" "| `toml` | TOML configuration parsing |\n" "| `url` | URL parsing and construction |\n" "| `ws` | WebSocket client and server |\n" "| `xml` | XML parsing |\n" "| `yaml` | YAML parsing |\n" "\n" "Usage: `import <module>` then call `module.function()`. All listed modules ship in the Xray standard-library installation unit.\n" "\n" "The prelude `JSON` namespace exposes `JSON.parse<T>()`, `JSON.parseObject()`, `JSON.value()`, and `JSON.stringify()` without an import; it is not an importable module or a value type.\n" "";
 
 // clang-format on

@@ -94,7 +94,11 @@ static XrXirStatus dependencies_admit(const XmcpSourceRequest *request,
         if (status != XR_XIR_OK) return status;
         const XrXirSourceDependency *entry = &dependencies->entries[i];
         if (i == dependencies->entry && entry->kind == XR_XIR_DEPENDENCY_MEMORY) continue;
-        if (entry->kind != XR_XIR_DEPENDENCY_STDLIB || !module_allowed(entry->path)) {
+        /* Native type methods depend on the compiler's implicit prelude.
+         * This admits only its resolved stdlib identity; explicit imports
+         * still pass the separate spelling policy before resolution. */
+        bool allowed = module_allowed(entry->path) || (entry->path && !strcmp(entry->path, "prelude"));
+        if (entry->kind != XR_XIR_DEPENDENCY_STDLIB || !allowed) {
             if (diagnostic) snprintf(diagnostic->source.message, sizeof(diagnostic->source.message),
                 "MCP runner does not allow resolved dependency '%s'", entry->path ? entry->path : "");
             return XR_XIR_BAD_STRUCTURE;
