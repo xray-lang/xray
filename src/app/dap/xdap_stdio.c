@@ -67,3 +67,14 @@ XR_FUNC XrXirStatus xdap_stdio_write(void *context,const char *bytes,size_t leng
 XR_FUNC XrXirStatus xdap_stdio_wait(XdapStdio *io,uint32_t milliseconds) {
     return io ? xdap_framed_wait(io->framed,milliseconds) : XR_XIR_BAD_STRUCTURE;
 }
+XR_FUNC XrXirOutputStatus xdap_stdio_host_output(void *context,XrXirOutputStream stream,const char *bytes,size_t length) {
+    if (context || (length && !bytes) || length>1048576 || (stream!=XR_XIR_STDOUT && stream!=XR_XIR_STDERR))
+        return XR_XIR_OUTPUT_BAD_ARGUMENT;
+#ifdef XR_OS_WINDOWS
+    XrXirStatus status=stdio_platform_write_stream(stream==XR_XIR_STDOUT ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE,bytes,length);
+    return status==XR_XIR_OK ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
+#else
+    FILE *output=stream==XR_XIR_STDOUT ? stdout : stderr;
+    return fwrite(bytes,1,length,output)==length && !fflush(output) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
+#endif
+}

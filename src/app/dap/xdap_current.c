@@ -6,7 +6,7 @@
  *
  * xdap_current.c - Typed DAP control without a legacy VM fallback
  */
-#include "xdap_current.h"
+#include "xdap_current_control.h"
 #include "../../xir/xxir_value_internal.h"
 #include "../../xir/xxir_vm_debug_internal.h"
 #include <string.h>
@@ -188,4 +188,9 @@ XR_FUNC XrXirCallStatus xdap_current_stop(XdapCurrent *session) {
     XrXirCallStatus status=xr_xir_instance_stop(session->instance);session->driving=false;
     if (status!=XR_XIR_CALL_BUSY) session->ended=true;
     return status;
+}
+XR_FUNC XrXirCallStatus xdap_current_detach(XdapCurrent *session) {
+    if (!session || session->ended) return XR_XIR_CALL_BAD_STATE;
+    if (session->driving || xir_vm_debug_write_pending(session->debug)) return XR_XIR_CALL_BUSY;
+    xr_xir_vm_debug_disable(session->debug);return XR_XIR_CALL_READY;
 }

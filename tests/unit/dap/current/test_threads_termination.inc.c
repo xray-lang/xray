@@ -68,7 +68,7 @@ static size_t threads_termination_fault(uint32_t mode,bool paused,size_t fail) {
         threads_protocol(&fixture,ids,3);threads_termination_continue(adapter);
         CHECK(xdap_adapter_step(adapter,16)==XR_XIR_OK && adapter->running && !adapter->snapshot && !adapter->terminal);
         capture.count=0;request(adapter,requests[mode]);
-    } else CHECK(status==XR_XIR_OK && capture.count==1 && adapter->seq==sequence+1);
+    } else CHECK(status==XR_XIR_OK && capture.count==(mode ? 2u : 1u) && adapter->seq==sequence+(mode ? 2u : 1u));
     XrJsonValue *reply=last_response(mode ? "disconnect" : "terminate",true);xjson_free(reply);
     CHECK(adapter->closed==(mode!=0) && !adapter->snapshot && !adapter->stop_epoch);
     uint32_t count=77;CHECK(xdap_current_threads(adapter->launch->control,ids,64,&count)==XR_XIR_VALUE_OK && !count);

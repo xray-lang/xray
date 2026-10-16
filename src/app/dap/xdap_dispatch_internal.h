@@ -35,12 +35,23 @@ typedef struct XdapBreakpointSet {
     const XdapSourceBreakpoint *sources;
     uint32_t source_count;
 } XdapBreakpointSet;
+struct XdapDetached {
+    XrCompileResources *resources;
+    XdapAdapter *adapter;
+    XdapLaunch *launch;
+    XrXirOutputProvider output;
+    XrXirTimeProvider time;
+    XrXirCallResult outcome;
+    uint64_t wait_epoch,wait_wake,wait_start,wait_duration;
+    bool started,ended,driving;
+};
 struct XdapAdapter {
     XrSourceCompiler *compiler;
     XrCompileResources *resources;
     XdapAdapterConfig config;
     XrXirOutputSink sink;
     XdapLaunch *launch;
+    XdapDetached *execution;
     XrXirVmDebugSnapshot *snapshot;
     XrXirCallResult outcome;
     XdapStopFrame frames[64];
@@ -55,7 +66,7 @@ struct XdapAdapter {
     uint32_t depth, next_handle, seq;
     uint64_t stop_epoch;
     uint64_t wait_epoch, wait_wake, wait_start, wait_duration;
-    bool initialized, configured, running, closed, busy, terminal, stop_entry, variable_types, variable_paging;
+    bool initialized, configured, running, closed, busy, terminal, stop_entry, variable_types, variable_paging, attached;
     const char *stop_reason;
     bool break_throw;
 };

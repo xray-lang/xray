@@ -99,10 +99,13 @@ static XrXirOutputStatus dispatch_output(void *context,XrXirOutputStream stream,
     return status==XR_XIR_OK ? XR_XIR_OUTPUT_OK : status==XR_XIR_OUT_OF_MEMORY ? XR_XIR_OUTPUT_OOM :
         status==XR_XIR_BUDGET ? XR_XIR_OUTPUT_LIMIT : XR_XIR_OUTPUT_ERROR;
 }
+#include "xdap_detached.inc.c"
 XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapterConfig *config,XdapAdapter **output) {
     if (!compiler || !*compiler || !config || !output || *output || !config->write ||
         !config->message_limit || config->message_limit>1048576 || !config->instance.depth_limit ||
         config->instance.depth_limit>64 || !xr_xir_domain_current(config->observer_metadata)) return XR_XIR_BAD_STRUCTURE;
+    if (config->detached && (*config->detached || !config->instance.output.write ||
+        !xr_xir_output_provider_valid(&config->instance.output))) return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context=xr_source_compiler_context(*compiler);
     if (!context || !xr_xir_domain_retain(config->observer_metadata)) return XR_XIR_BUDGET;
     XdapAdapter *s=NULL;XrCompileResourceStatus allocated=xr_compile_resources_calloc(context->resources,1,sizeof(*s),(void **)&s);
@@ -111,9 +114,16 @@ XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapt
         return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     }
     s->compiler=*compiler;s->resources=context->resources;s->config=*config;s->seq=1;s->next_handle=1;
-    /* The instance owns this sink context only while the adapter stays alive. */
+    allocated=xr_compile_resources_calloc(context->resources,1,sizeof(*s->execution),(void **)&s->execution);
+    if (allocated!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_resources_free(s);xr_xir_domain_drop(config->observer_metadata);
+        return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
+    }
+    s->execution->resources=s->resources;s->execution->adapter=s;
+    s->execution->output=config->instance.output;s->execution->time=config->instance.time;
+    /* This stable routing owner can outlive the compiler and control connection. */
     s->sink=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,dispatch_output,s,s->config.message_limit};
-    s->config.instance.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&s->sink};
+    s->config.instance.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,detached_output,s->execution};
     *compiler=NULL;*output=s;return XR_XIR_OK;
 }
 XR_FUNC bool xdap_adapter_running(const XdapAdapter *s) { return s && s->running && !s->closed; }
@@ -122,8 +132,8 @@ XR_FUNC bool xdap_adapter_closed(const XdapAdapter *s) { return !s || s->closed;
 XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *s) {
     if (!s) return XR_XIR_CALL_READY;
     if (s->busy) return XR_XIR_CALL_BUSY;
-    xdap_dispatch_clear_stop(s);XrXirCallStatus status=xdap_launch_free(s->launch);
-    if (status==XR_XIR_CALL_BUSY) return status;
+    s->busy=true;xdap_dispatch_clear_stop(s);XrXirCallStatus status=xdap_launch_free(s->launch);
+    if (status==XR_XIR_CALL_BUSY) { s->busy=false;return status; }
     xr_xir_call_result_drop(&s->outcome);
     for (uint32_t i=0;i<s->function_breakpoint_count;++i) {
         xr_compile_resources_free(s->function_breakpoints[i]);xdap_predicate_free(&s->function_predicates[i]);
@@ -131,6 +141,7 @@ XR_FUNC XrXirCallStatus xdap_adapter_free(XdapAdapter *s) {
     for (uint32_t i=0;i<s->source_breakpoint_count;++i) {
         xr_compile_resources_free(s->source_breakpoints[i].identity);xdap_predicate_free(&s->source_breakpoints[i].predicate);
     }
+    if (s->execution) { s->execution->adapter=NULL;xdap_detached_free(s->execution); }
     xr_source_compiler_free(s->compiler);
     xr_xir_domain_drop(s->config.observer_metadata);xr_compile_resources_free(s);return status;
 }
@@ -169,6 +180,10 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
         "\"supportsConditionalBreakpoints\":true,\"supportsLogPoints\":true,"
         "\"supportsSetVariable\":true,\"supportsEvaluateForHovers\":true,\"supportsPauseRequest\":true,"
         "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false}]}");
+    if (s->config.detached) {
+        if (body.length && body.bytes[body.length-1]=='}') --body.length;
+        XDAP_TEXT(&body,",\"supportTerminateDebuggee\":true}");
+    }
     XrXirStatus status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }
     return status;
@@ -214,6 +229,7 @@ static XrXirStatus dispatch_source(XdapAdapter *s,const XdapRequest *r) {
     status=xdap_dispatch_response(s,r,true,NULL,NULL);
     if (status!=XR_XIR_OK) { xdap_launch_free(launch);return status; }
     s->launch=launch;s->stop_entry=stop && r->document.nodes[stop].boolean;
+    s->attached=!strcmp(r->document.nodes[r->command].text,"attach");
     return XR_XIR_OK;
 }
 static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
@@ -319,29 +335,33 @@ static XrXirStatus dispatch_terminate(XdapAdapter *s,const XdapRequest *r,bool d
         if (status!=XR_XIR_OK) return status;
         if (terminate && r->document.nodes[terminate].kind!=XDAP_JSON_BOOL)
             return xdap_dispatch_response(s,r,false,NULL,"Invalid terminateDebuggee policy");
-        /* The adapter still owns every target and its output context. Detach
-         * needs an independent owner before this control connection can close. */
-        if (terminate && !r->document.nodes[terminate].boolean && s->launch && !s->terminal)
-            return xdap_dispatch_response(s,r,false,NULL,"Detached execution has no independent owner");
+        bool keep=terminate ? !r->document.nodes[terminate].boolean : s->attached;
+        if (keep && s->launch && !s->terminal) return dispatch_detach(s,r);
     }
-    XdapJsonWriter response={0};XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
-    if (status!=XR_XIR_OK) return status;
+    bool notify=disconnect && !s->terminal;
+    if (notify && s->seq>INT32_MAX-2) return XR_XIR_BUDGET;
+    XdapJsonWriter response={0},event={0};XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
+    if (status!=XR_XIR_OK) goto done;
+    if (notify) { status=dispatch_prepare_end(s,&event);if (status!=XR_XIR_OK) goto done; }
     if (s->launch && !s->terminal) {
         XrXirCallStatus cancelled=xdap_current_stop(s->launch->control);
         if (cancelled==XR_XIR_CALL_BUSY) {
-            xdap_json_writer_free(&response);return xdap_dispatch_response(s,r,false,NULL,"Target is busy");
+            status=xdap_dispatch_response(s,r,false,NULL,"Target is busy");goto done;
         }
         xdap_dispatch_clear_stop(s);s->running=true;s->wait_wake=0;
         if (cancelled!=XR_XIR_CALL_READY && cancelled!=XR_XIR_CALL_CANCELLED) {
-            xdap_json_writer_free(&response);return xdap_dispatch_response(s,r,false,NULL,"Target cleanup failed");
+            status=xdap_dispatch_response(s,r,false,NULL,"Target cleanup failed");goto done;
         }
     }
-    status=xdap_dispatch_send_prepared(s,&response);xdap_json_writer_free(&response);
+    status=xdap_dispatch_send_prepared(s,&response);
+    if (status==XR_XIR_OK && notify) status=xdap_dispatch_send_prepared(s,&event);
     if (disconnect && status==XR_XIR_OK) s->closed=true;
-    return status;
+done:
+    xdap_json_writer_free(&response);xdap_json_writer_free(&event);return status;
 }
 XR_FUNC XrXirStatus xdap_adapter_request(XdapAdapter *s,const char *bytes,size_t length) {
     if (!s || s->busy || s->closed || !bytes) return XR_XIR_BAD_STRUCTURE;
+    if (s->seq==INT32_MAX) return XR_XIR_BUDGET;
     s->busy=true;XdapRequest r={0};XrXirStatus status=dispatch_request_parse(s,bytes,length,&r);
     if (status!=XR_XIR_OK) goto done;
     const char *command=r.document.nodes[r.command].text;

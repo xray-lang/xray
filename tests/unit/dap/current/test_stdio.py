@@ -16,10 +16,11 @@ parser.add_argument('--fixture',type=Path,required=True)
 parser.add_argument('--start-request',choices=('launch','attach'),default='launch')
 parser.add_argument('--transport',choices=('stdio','tcp'),default='stdio')
 parser.add_argument('--scenario',choices=('legacy','disconnect-clean','stop-on-entry','line-breakpoint','logpoint','mutate-oracle','owned-oracle',
-    'source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle'),default='legacy')
+    'source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle',
+    'detach-running','detach-stopped','detach-unstarted','detach-timer','detach-attach','detach-output-closed'),default='legacy')
 parser.add_argument('--oracle',type=Path)
 args=parser.parse_args()
-if args.scenario!='legacy' and args.scenario!='disconnect-clean':assert args.oracle
+if args.scenario not in ('legacy','disconnect-clean') and not args.scenario.startswith('detach-'):assert args.oracle
 
 if args.transport=='tcp':
     for flags in [('--stdio','--port','0'),('--port','65536'),('--port','4294967296'),('--port','-1')]:
@@ -430,6 +431,64 @@ def original_control_wire():
             client.process.wait(timeout=20)
 
 
-if args.scenario=='legacy':legacy_wire()
+def detached_tcp_wire():
+    assert args.transport=='tcp'
+    client=Client()
+    try:
+        initialized=client.send('initialize')
+        assert initialized['success'] and initialized['body']['supportTerminateDebuggee'],initialized
+        client.event('initialized')
+        launch={'program':args.fixture.resolve().as_posix()}
+        if args.scenario not in ('detach-unstarted','detach-timer','detach-output-closed'):launch['stopOnEntry']=True
+        assert client.send('attach' if args.scenario=='detach-attach' else 'launch',launch)['success']
+        if args.scenario not in ('detach-unstarted','detach-output-closed'):
+            assert client.send('configurationDone')['success']
+            if args.scenario!='detach-timer':
+                stopped=client.event('stopped')
+                assert stopped['body']['reason']=='entry',stopped
+                frames=client.send('stackTrace',{'threadId':stopped['body']['threadId']})
+                assert frames['success'] and frames['body']['stackFrames'],frames
+        start=time.monotonic()
+        policy=None if args.scenario=='detach-attach' else {'terminateDebuggee':False}
+        if args.scenario=='detach-output-closed':client.process.stdout.close()
+        if args.scenario=='detach-running':
+            client.seq+=1;resume=client.seq
+            client.seq+=1;disconnect=client.seq
+            client.input.write(wire({'seq':resume,'type':'request','command':'continue',
+                                     'arguments':{'threadId':stopped['body']['threadId']}})+
+                               wire({'seq':disconnect,'type':'request','command':'disconnect','arguments':policy}))
+            client.input.flush();seen={}
+            while len(seen)<2:
+                message=client.receive()
+                if message['type']=='response':seen[message['request_seq']]=message
+            assert seen[resume]['success'] and seen[resume]['command']=='continue',seen
+            assert seen[disconnect]['success'] and seen[disconnect]['command']=='disconnect',seen
+        else:
+            reply=client.send('disconnect',policy);assert reply['success'],reply
+        client.event('terminated')
+        final=client.messages.get(timeout=20)
+        if isinstance(final,BaseException):raise final
+        assert final is None,final
+        client.reader.join(timeout=2);assert not client.reader.is_alive()
+        client.output.close();client.peer.close();client.input.closed=True
+        client.process.wait(timeout=20)
+        stderr=client.process.stderr.read()
+        if args.scenario=='detach-output-closed':
+            assert client.process.returncode==1,(client.process.returncode,stderr)
+            assert b'DAP: protocol, source admission, resource or cleanup failure' in stderr,stderr
+        else:
+            expected=b'owned\0value\n' if args.scenario=='detach-unstarted' else b'timer done\n' if args.scenario=='detach-timer' else b'33\n'
+            actual=client.process.stdout.read()
+            assert client.process.returncode==0 and actual==expected and not stderr,(client.process.returncode,actual,expected,stderr)
+            if args.scenario=='detach-timer':assert time.monotonic()-start>=0.10,'detached timer resumed early'
+        assert not any(item['event'] in ('output','exited') for item in client.events),client.events
+        print(f'TCP {args.scenario}: response/terminated/actual socket EOF, independent host output/result and process cleanup PASS')
+    finally:
+        if client.process.poll() is None:
+            client.process.kill();client.process.wait(timeout=20)
+
+
+if args.scenario.startswith('detach-'):detached_tcp_wire()
+elif args.scenario=='legacy':legacy_wire()
 elif args.scenario.startswith('source-') or args.scenario in ('condition-oracle','hit-oracle','replace-oracle'):original_control_wire()
 else:original_wire()

@@ -8,7 +8,7 @@
  */
 #ifndef XDAP_DISPATCH_H
 #define XDAP_DISPATCH_H
-#include "xdap_launch.h"
+#include "xdap_detached.h"
 #include "xdap_json.h"
 typedef struct XdapAdapter XdapAdapter;
 typedef XrXirStatus (*XdapMessageWrite)(void *,const char *,size_t);
@@ -18,6 +18,10 @@ typedef struct XdapAdapterConfig {
     XdapMessageWrite write;
     void *context;
     size_t message_limit;
+    /* Optional empty host-owned receiving slot. The original instance.output
+     * and time contexts must outlive the detached target and every DAP object.
+     * Transfer is committed before response I/O; the slot owns on I/O failure. */
+    XdapDetached **detached;
 } XdapAdapterConfig;
 /* Success takes compiler; failure preserves both owners. Every method belongs
  * to the sole control/drive owner. Callback reentry cannot mutate the adapter.

@@ -39,12 +39,15 @@ static XrXirStatus stdio_platform_read(char *bytes,size_t capacity,size_t *lengt
 }
 static XrXirStatus stdio_platform_wait(uint32_t milliseconds) { Sleep(milliseconds);return XR_XIR_OK; }
 /* Native writes preserve protocol bytes without changing a CRT text mode. */
-static XrXirStatus stdio_platform_write(const char *bytes,size_t length) {
-    HANDLE output=stdio_platform_handle(STD_OUTPUT_HANDLE);if (output==INVALID_HANDLE_VALUE) return XR_XIR_IO;
+static XrXirStatus stdio_platform_write_stream(DWORD stream,const char *bytes,size_t length) {
+    HANDLE output=stdio_platform_handle(stream);if (output==INVALID_HANDLE_VALUE) return XR_XIR_IO;
     while (length) {
         DWORD written=0;
         if (!WriteFile(output,bytes,(DWORD)length,&written,NULL) || !written) return XR_XIR_IO;
         bytes+=written;length-=written;
     }
     return XR_XIR_OK;
+}
+static XrXirStatus stdio_platform_write(const char *bytes,size_t length) {
+    return stdio_platform_write_stream(STD_OUTPUT_HANDLE,bytes,length);
 }

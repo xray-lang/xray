@@ -202,6 +202,19 @@ if(XR_BUILD_DAP)
     add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp --start-request attach)
     set_tests_properties(dap_current_tcp dap_current_tcp_attach PROPERTIES TIMEOUT 120 LABELS "dap;tcp;cli;execution;ownership")
+    foreach(XR_DAP_DETACH_MODE running stopped unstarted timer attach output-closed)
+        set(XR_DAP_DETACH_SOURCE threads_fixture.xr)
+        if(XR_DAP_DETACH_MODE MATCHES "^(unstarted|output-closed)$")
+            set(XR_DAP_DETACH_SOURCE wire_fixture.xr)
+        elseif(XR_DAP_DETACH_MODE STREQUAL "timer")
+            set(XR_DAP_DETACH_SOURCE timer_fixture.xr)
+        endif()
+        add_test(NAME dap_current_tcp_detach_${XR_DAP_DETACH_MODE} COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+            --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/${XR_DAP_DETACH_SOURCE}
+            --transport tcp --scenario detach-${XR_DAP_DETACH_MODE})
+        set_tests_properties(dap_current_tcp_detach_${XR_DAP_DETACH_MODE} PROPERTIES TIMEOUT 120 LABELS "dap;tcp;detach;cli;execution;ownership")
+    endforeach()
+
     configure_file(${PROJECT_SOURCE_DIR}/tests/regression/dap/fixtures/current/oracle.json ${XR_DAP_FIXTURE_DIR}/oracle.json COPYONLY)
     foreach(XR_DAP_WIRE_SCENARIO disconnect-clean stop-on-entry line-breakpoint logpoint mutate-oracle owned-oracle
         source-step-in source-next source-step-out condition-oracle hit-oracle replace-oracle)
@@ -361,6 +374,20 @@ endif()
 add_test(NAME test_dap_threads COMMAND test_dap_threads)
 add_test(NAME test_dap_threads_resources COMMAND test_dap_threads --resources)
 set_tests_properties(test_dap_threads test_dap_threads_resources PROPERTIES TIMEOUT 120 LABELS "dap;threads;source;ownership;resources")
+
+add_executable(test_dap_detach test_detach.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_detach PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_detach PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_THREADS_FIXTURE="${XR_DAP_FIXTURE_DIR}/threads_fixture.xr"
+    XR_DAP_TIMER_FIXTURE="${XR_DAP_FIXTURE_DIR}/timer_fixture.xr")
+if(MSVC)
+    target_compile_options(test_dap_detach PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_detach PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_detach COMMAND test_dap_detach)
+add_test(NAME test_dap_detach_resources COMMAND test_dap_detach --resources)
+set_tests_properties(test_dap_detach test_dap_detach_resources PROPERTIES TIMEOUT 120 LABELS "dap;detach;source;ownership;resources")
 
 add_executable(test_dap_disassembly test_disassembly.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_disassembly PRIVATE xray_dap_current)
