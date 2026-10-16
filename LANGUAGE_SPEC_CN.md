@@ -6409,7 +6409,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-下表保留完整32成员分母。截至本次容量合同冻结，实际治理已准入get/set/push、map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear、reverse/unshift/pop/shift/resize及entries/fill/concat，共23个operation；其余9个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入26个成员（24个实例方法、withCapacity和capacity）；未准入的六个实例方法为sort、iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
@@ -6427,11 +6427,11 @@ pop/shift资格为allocation=may_heap、failures=allocation,retain,limit、owner
 
 n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；返回拥有式Array与发布receiver为独立逻辑副本，旧alias保旧值，复制在class／同步身份处停止且保Nullable层。n=0返回拥有空Array，同长度不承诺零分配或backing不变。n<0在两个实参后经现有NUMERIC_RANGE/E0422 panic拒绝且无发布；不可表示尺寸及有限额度沿现有LIMIT／预算拒绝。候选允许重选容量，capacity/withCapacity/reserve观察保证另冻。
 
-完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。resize现已准入，当前21/32；独立VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放均须保留。
+完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。resize现已准入，当前同源准入清单；独立VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放均须保留。
 
 只读声明族 `entries() -> Array<(i64, T)>` 现已准入：零显式／可选／默认／variadic／方法类型参数，receiver 表达式仅一次，形成拥有式 Array 逻辑快照 A。结果是独立拥有的 Array，长度 L 与快照一致，按递增 i64 索引产生 [(0,A[0]),...,(L-1,A[L-1])]；空数组返回拥有空 Array。每个 T 字段是普通拥有式逻辑副本，保内联值及 Nullable 层，复制在 class／同步身份处停止。不消费或改写 receiver，无 PLACE_WRITE；结果元素替换不改变源 Array 或旧别名，但同身份对象的修改仍按身份语义可见。只要求 Array 已有可复制／可保存能力，不额外要求 Equal、Compare、ToString、Sendable 或授予反射／构造权限；普通泛型定义处检查，Checked 特化后复验，const/read 参数与临时 Array 按 READ 权限合法。
 
-entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前21/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
+entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前同源准入清单；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
 
 冻结容量声明族：只读属性 `capacity: i64`、`static withCapacity(capacity: i64) -> Array<T>`、`ref reserve(capacity: i64) -> Array<T>`。静态构造与reserve各有一个必需精确i64的READ实参，无可选、默认、variadic或方法类型参数；T只须满足既有Array可复制、可保存约束，不要求Default、Equal、Compare、ToString或Sendable。普通泛型定义处检查，Checked特化后复验；只有实际治理Array身份取得这些内建操作，词法影子、同名用户声明和描述查询不能扩大构造、可见性或写权限。
 
@@ -6439,7 +6439,7 @@ capacity自身只读已认证Array的header、不分配，返回 `0≤len≤capa
 
 普通Array复制保复制当时的容量及全部逻辑值；reserve的返回和发布receiver为独立逻辑副本，旧alias保旧容量/内容。普通set/push、跨域或nested路径的COW分离不得降低操作前的容量；len增长仍保持len≤capacity。reverse/unshift/pop/shift/resize/clear/entries/fill/concat各自已冻结的候选容量选择规则不因此改成保容量。复制仍在class/同步身份边界停止，Nullable、嵌套值及NUL字节保持。闲置容量不是已初始化元素，不遍历、retain或析构未初始化slot；零尺寸的已准入T也使用有限i64逻辑容量，不返回usize最大值，不开放新的普通泛型Unit或资源域。
 
-withCapacity/reserve的n<0在全部实参后以现有NUMERIC_RANGE/E0422拒绝；真实不可表示尺寸与有限live/requested/work不足沿LIMIT/预算失败，不clamp、不溢出相乘或加法。所有实际heap请求包括realloc按完整请求预收费，OOM保累计费用，重试不补额。准备/发布失败及提交前取消保全当前root/alias/元素身份并清临时owner；已完成实参副作用或发布后父表达式失败不回滚。内部无用户callback、新语言挂起或跨挂起loan，真实量子取消及费用照常。capacity内核qualification=allocation:no_heap,failures:limit,ownership:owned；withCapacity/reserve为allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺精确容量、底层地址或复杂度。本次只冻结合同，三个成员实施及完整资格PENDING，当前实际治理仍23/32。
+withCapacity/reserve的n<0在全部实参后以现有NUMERIC_RANGE/E0422拒绝；真实不可表示尺寸与有限live/requested/work不足沿LIMIT/预算失败，不clamp、不溢出相乘或加法。所有实际heap请求包括realloc按完整请求预收费，OOM保累计费用，重试不补额。准备/发布失败及提交前取消保全当前root/alias/元素身份并清临时owner；已完成实参副作用或发布后父表达式失败不回滚。内部无用户callback、新语言挂起或跨挂起loan，真实量子取消及费用照常。capacity内核qualification=allocation:no_heap,failures:limit,ownership:owned；withCapacity/reserve为allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺精确容量、底层地址或复杂度。三个成员已取得结构化操作准入；完整故障、安全及性能资格仍以实际批次证据为准。
 
 冻结只读声明族 `concat(...arrays: Array<T>) -> Array<T>`：一个可为空的尾部variadic参数、无可选/默认参数或方法类型参数，每个显式实参精确为接收者的Array<T>，参数模式READ。receiver表达式先且仅一次求值形成拥有快照，然后从左到右每个实参仅一次求值并分别持有快照；后续实参对源binding的重绑/写入不改变此前快照。全部实参成功后构造结果，顺序为receiver全部元素，随后各实参数组全部元素；零实参也返回独立拥有的逻辑副本。允许const/read receiver与临时Array，只要求已有Array可复制/可保存能力，不增加Equal、Compare、ToString、Sendable或反射/构造权限。普通泛型定义处检查，Checked特化后复验。
 
@@ -6483,12 +6483,18 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `get(k)` / `set(k, v)` | `get` 在缺失时返回 `null`；`set` 写入 |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
 | `keys()` / `values()` / `entries()` | 返回键、值、键值对 |
-| `forEach(fn)` | 遍历 |
+| `forEach(fn)` | 按插入序调用精确 `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
 **Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
+
+`containsValue(value)` 是 READ 查询，receiver 后 value 各求值一次；value 按精确 V 检查。本方法单独要求定义处 V: Equal，不要求其他 Map 操作具有该条件。比较使用普通值相等而非键等价：NaN 不等于自身，正负零相等；Array 和 Nullable 沿现行 Equal 条件递归，不能按共享 backing 跳过浮点叶。空 Map 也不能绕过类型条件。结果为 bool，不消费输入；分配、保留或有限资源失败保留输入且不发布结果。
+
+`forEach(callback)` 是 READ 操作，返回 `()`。先取得 receiver 的拥有式逻辑快照，再求 callback 一次；空 Map 也求 callback，但不调用。回调必须精确接受两个 READ 参数 K、V 并返回 Unit，不接受额外 index 或省略参数，不额外要求 V:Equal/Compare/Sendable。按插入顺序逐项复制参数后进行普通间接调用，不会提前复制整批 entry。callback 修改原绑定不改变快照；class 和同步身份仍按普通身份语义共享。参数复制失败、throw、panic、挂起及取消沿普通 Call 管线处理，已经发生的实参和回调副作用不撤销，后续项不继续执行。泛型定义处的 Hashable 与普通调用效果义务保持。
+
+`keys()`、`values()` 和 `entries()` 是零参数 READ 查询，分别返回独立拥有的 `Array<K>`、`Array<V>` 和 `Array<(K,V)>`，保持插入顺序。覆盖已有键保留位置；删除后重新插入位于末尾。receiver 只求值一次；空 Map 返回拥有式空 Array。修改结果或其 COW 副本不改写 Map，后续 Map 修改也不改写既有结果。每个元素及元组字段按普通拥有式逻辑复制，复制在 class／同步身份处停止；身份对象的修改仍按身份语义共享可见。结果可在源容器、Instance 和 Program 释放后继续存活。查询不消费 receiver、不要求 REF，也不额外要求 V 具有 Equal、Compare 或 Sendable；分配、保留或有限资源失败不发布部分结果。
 
 ### 14.9 `Set<T>` 方法
 
@@ -6498,10 +6504,20 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `add(x)` / `contains(x)` / `delete(x)` | 插入、查询、删除 |
 | `clear()` | 清空 |
 | `values()` | 返回 `Array<T>` |
-| `forEach(fn)` | 遍历 |
+| `toArray()` | 返回独立拥有的 `Array<T>` |
+| `union(other)` / `intersection(other)` | 并集与交集，返回 `Set<T>` |
+| `difference(other)` / `symmetricDifference(other)` | 差集与对称差集，返回 `Set<T>` |
+| `isSubset(other)` / `isSuperset(other)` | 包含关系，返回 `bool`，相等时也成立 |
+| `forEach(fn)` | 按插入序调用精确 `fn(T)->()` |
 | `iterator()` | 迭代协议 |
 
 **Set 字面量**：`#[1, 2, 3]` 或 `#[]`。
+
+`values()` 以同样的零参数 READ 和拥有式快照规则返回 `Array<T>`，按首次插入顺序排列；重复添加不改变位置，删除后重新添加位于末尾。
+
+`forEach(callback)` 采用 Map 的 READ 快照、一次 callback 求值和普通调用失败/挂起规则，按插入顺序调用精确的 `fn(T)->()`。不接受 index 或省略参数；每项在调用前取得普通拥有式副本，空 Set 不调用 callback。T 的定义处 Hashable 义务保持，不新增 Equal/Compare/Sendable 条件。
+
+`toArray()` 使用与 `values()` 相同的拥有式快照规则。四种集合运算和两种包含关系均以零消费的 READ receiver 和普通 `other: Set<T>` 实参执行，要求相同的精确 T，使用 §9.2 键等价关系，按 receiver 后 other 各一次的顺序求值。并集先保留左侧顺序，再追加仅右侧存在的元素；交集和差集保留左侧中符合条件元素的顺序；对称差集先放仅左侧存在的元素，再放仅右侧存在的元素，各自保持原顺序。结果是独立拥有的 Set；两个输入、旧别名和已返回结果的后续修改不相互改写。空集是任意同型集合的子集；子集/超集包含相等情形。失败保留输入且不发布部分结果，不消费或要求 REF，不添加 Equal/Compare/Sendable 约束；T 已有 Hashable 义务保持。
 
 ### 14.10 `Channel<T>` 方法
 
@@ -7426,7 +7442,7 @@ NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等�
 
 ### 17.26 XIR Array值与源码边界
 
-`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，冻结READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`三原语，以及map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear十二个声明recipe及reverse/unshift/pop/shift/resize，共20个operation。其余12个成员保留清单身份，不因此获得执行资格。Source先查找准确public成员声明，再按已准入native operation/recipe identity选择实现，query记录原声明身份与CALL引用；不按名字另立执行表。回调、查询、清空的类型、求值、效应与所有权合同见§14.7。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
+`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32成员的26项操作准入及六个未准入方法见§14.7，不能把旧批次的20/23项记成当前清单。Source先查找准确public成员声明，再按准入native operation/recipe identity选择实现，query保留声明身份与CALL引用；不按名字另立执行表。索引读写使用相同操作，全局`len`独立按core intrinsic身份解析。词法、模块和import解析先于prelude，用户同名函数仍为普通函数。完整安全与性能资格须实际批次验证。
 
 源码准入显式`Array<T>`、同类型元素字面量、有Array上下文的空字面量、普通赋值复制、参数、返回、局部及入口模块状态。空字面量没有元素上下文时拒绝。元素从左到右求值，使用既有上下文类型规则；嵌套Array与函数元素遵循统一构造类型池的可复制、可存储准入，unit、内部CELL、视图和未准入的不可复制资源不能成为普通元素。`Array<T>`泛型体在定义处按约束检查，在Checked上特化后复验；普通实例在Program封存前完成，不能按具体实参补造定义处未证明的能力。其他容器与用户struct/class声明族仍须分别准入。
 
@@ -7914,6 +7930,16 @@ math公开模块的函数和常量沿普通Checked库声明、初始化、导入
 运行期熵只能通过当前真实活跃CallView取得系统随机字节，每次拒绝采样尝试先付原activation work；伪造或复制view拒绝。共同无偏算法产生[0,1)的f64或含端点的i64区间，倒置边界交换，相等整数边界不取熵。回调失败或预算耗尽立即终止，不以固定值、另一随机源或无界重试替代，失败输出保持不变。原step/frame/depth、累计work、分配和live限额继续有效。
 
 Checked语义及SDK身份使用§17.6的唯一现行协议，Math引入前的旧完整包及SDK身份须由真实消费者早拒。独立数值、重算摘要攻击、来源销毁、VM/native双向混合、实际SDK链接、完整故障和安全门分别保留。公开math接入不开放库私有var，也不自动完成其他标准库或跨平台发布资格。
+
+### 17.72 统一声明与哈希容器身份
+
+native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/Ordering/Task的声明编号为1–5，i64/f64/bool/rune为6–9，Map/Set为10/11；不得用旧Map6/Set7覆盖标量声明。Map/Set的XIR类型种类仍为9/10。声明源、完整泛型绑定器及约束、共享生成表、Source查询和API盘点消费同一唯一声明；声明存在不授予未实现成员的执行权限。
+
+当前共同协议由§17.6的唯一实现常量定义。Map类型记录携带准确key/value边，Set携带准确element边；普通声明保留真实rest、导出const和逐帧出生权限的既有字段。旧31/78声明包、旧28/75哈希包及双方完整SDK前像均保留为拒绝证据；不设置旧reader、别名或按版本猜测的接收通道。独立模型遍历全部字段和递归来源，旧Nullable夹具缺失的声明字段以显式命名事实重建，不能从产品writer刷新期望。
+
+紧凑哈希字段的拥有式载体读取须恢复子对象的实际arena/type，不将局部类型序号贴到另一个出生池的对象。哈希图遍历使用真实对象所保留的arena；存储准备沿同一已检查目标类型及原Domain、work、scratch和失败责任。此身份接收不代表完整Map/Set普通库方法、union、匿名记录、视图或普通Iterable已完成，完整资源、取消、安全及provider资格仍独立要求。
+
+读取或修改已接收Map/Set时，先在调用方类型池认证完整容器身份，再用实际出生池中的key/value类型解释探测、解包、COW克隆及写回。place保留调用方静态预期，payload恢复真实载体；不能把静态序号写入旧对象头。新字段按已认证身份匹配，可引用接收池新建的等价构造值。局部请求保留原Domain、函数gate/context，只向原请求回写实际消耗的work和释放后的scratch；失败保原根、快照与输出。该行为不扩大普通Source成员准入或函数执行权限。
 
 ---
 

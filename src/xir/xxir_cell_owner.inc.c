@@ -27,16 +27,27 @@ static XirCell *cell_root(const XirCell *cell) {
     XirObject *object = cell_root_object(cell);
     return object && object->kind == XIR_OBJECT_CELL ? (XirCell *)object : NULL;
 }
-static bool cell_scope_contains(const XirCell *scope, const XirCell *target) {
-    if (!scope || !target || cell_root_object(scope) != cell_root_object(target)) return false;
-    if (!scope->projection_count) return true;
-    if (scope->projection_count > target->projection_count) return false;
+static XrXirValueStatus cell_scope_contains(const XirCell *scope, const XirCell *target,
+    XrXirValueAdmission *admission, bool *contains) {
+    *contains = false;
+    if (!scope || !target || cell_root_object(scope) != cell_root_object(target)) return XR_XIR_VALUE_OK;
+    if (!scope->projection_count) { *contains = true; return XR_XIR_VALUE_OK; }
+    if (scope->projection_count > target->projection_count) return XR_XIR_VALUE_OK;
     const XrXirValuePathStep *a = (const XrXirValuePathStep *)(scope + 1);
     const XrXirValuePathStep *b = (const XrXirValuePathStep *)(target + 1);
-    for (uint32_t i = 0; i < scope->projection_count; ++i)
-        if (a[i].kind != b[i].kind || a[i].container != b[i].container ||
-            a[i].selector != b[i].selector) return false;
-    return true;
+    for (uint32_t i = 0; i < scope->projection_count; ++i) {
+        if (a[i].kind != b[i].kind || a[i].container != b[i].container) return XR_XIR_VALUE_OK;
+        if (a[i].kind == XR_XIR_PATH_KEY) {
+            if (!admission) return XR_XIR_VALUE_BAD_ARGUMENT;
+            XrXirValue left = path_key_value(&a[i], scope->object.arena);
+            XrXirValue right = path_key_value(&b[i], target->object.arena);
+            bool equal = false;
+            XrXirValueStatus status = xr_xir_key_equal(&left, &right, admission, &equal);
+            if (status != XR_XIR_VALUE_OK) return status;
+            if (!equal) return XR_XIR_VALUE_OK;
+        } else if (a[i].selector != b[i].selector) return XR_XIR_VALUE_OK;
+    }
+    *contains = true; return XR_XIR_VALUE_OK;
 }
 static bool cell_authority_valid(const XrXirCellAuthority *authority) {
     return authority && authority->activation && authority->frame && authority->epoch;
@@ -110,8 +121,8 @@ static bool cell_loan_empty(const XrXirCellLoan *loan) {
     return loan && !loan->cell && !loan->scope && !loan->previous &&
         !loan->authority.activation && !loan->authority.frame && !loan->authority.epoch;
 }
-XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *value,
-    const XrXirCellAuthority *parent, XrXirCellLoan *output) {
+static XrXirValueStatus cell_loan_prepare_operation(const XrXirValue *value,
+    const XrXirCellAuthority *parent, XrXirCellLoan *output, XrXirValueAdmission *admission) {
     if (!cell_loan_empty(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *cell = cell_owner(value);
     XirObject *owner = cell_root_object(cell);
@@ -121,19 +132,26 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *value,
     if (storage && storage->prepared_loan) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirClassObject *identity = owner->kind == XIR_OBJECT_CLASS ? (XirClassObject *)owner : NULL;
     if (identity && !class_origin_reserve(identity, true)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status = XR_XIR_VALUE_OK;
     bool allowed = !*top ? !cell->projection_count ||
         cell_authority_equal(&cell->projection_authority, parent) :
-        cell_authority_equal(&(*top)->authority, parent) && (!(*top)->scope || cell_scope_contains((*top)->scope, cell));
+        cell_authority_equal(&(*top)->authority, parent);
+    if (allowed && *top && (*top)->scope)
+        status = cell_scope_contains((*top)->scope, cell, admission, &allowed);
     if (identity && ((class_origin_state(identity) & XIR_CLASS_ORIGIN_BORROWED) != 0) != (*top != NULL))
         allowed = false;
-    if (!allowed) {
+    if (!allowed || status != XR_XIR_VALUE_OK) {
         if (identity) class_origin_cancel(identity);
-        return XR_XIR_VALUE_BAD_ARGUMENT;
+        return status != XR_XIR_VALUE_OK ? status : XR_XIR_VALUE_BAD_ARGUMENT;
     }
     *output = (XrXirCellLoan){owner, cell, *top, {0}};
     /* Preparation excludes all aliases until this exact record commits or aborts. */
     if (storage) storage->prepared_loan = output;
     return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare(const XrXirValue *value,
+    const XrXirCellAuthority *parent, XrXirCellLoan *output) {
+    return cell_loan_prepare_operation(value, parent, output, NULL);
 }
 XR_FUNC void xr_xir_cell_loan_abort(XrXirCellLoan *loan) {
     XR_CHECK(loan && loan->cell && !cell_authority_valid(&loan->authority),

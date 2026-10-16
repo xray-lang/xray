@@ -20,6 +20,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xhash.h"
 #include <stdio.h>
+#include "xxir_checked_codec.inc.c"
 typedef struct SpecMemory { struct SpecMemory *next; } SpecMemory;
 typedef struct SpecInstance {
     uint32_t declaration;
@@ -153,12 +154,14 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         const XrXirTypeNode *source = &c->source->types->nodes[frame->index];
         uint32_t components = source->kind == XR_XIR_TYPE_NOMINAL ? source->nominal.argument_count :
             source->kind == XR_XIR_TYPE_CALLABLE ? source->parameter_count + 1 :
-            source->kind == XR_XIR_TYPE_TUPLE ? source->parameter_count : 1;
+            source->kind == XR_XIR_TYPE_TUPLE ? source->parameter_count :
+            source->kind == XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next == components) {
             *spec_type_cache(c, instance, frame->index) = spec_node(c, frame->node);
             --count; continue;
         }
         XrXirType child = source->element;
+        if (source->kind == XR_XIR_TYPE_MAP && frame->next) child = source->result;
         if (source->kind == XR_XIR_TYPE_NOMINAL) child = source->nominal.arguments[frame->next];
         if (source->kind == XR_XIR_TYPE_TUPLE) child = source->parameters[frame->next].type;
         if (source->kind == XR_XIR_TYPE_CALLABLE)
@@ -172,6 +175,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         }
         if (source->kind == XR_XIR_TYPE_NOMINAL)
             ((XrXirType *) frame->node.nominal.arguments)[frame->next] = result;
+        else if (source->kind == XR_XIR_TYPE_MAP && frame->next) frame->node.result = result;
         else if (source->kind != XR_XIR_TYPE_CALLABLE && source->kind != XR_XIR_TYPE_TUPLE) frame->node.element = result;
         else if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next == source->parameter_count) frame->node.result = result;
         else {
@@ -637,4 +641,16 @@ done:
     while (c.memory) { SpecMemory *next = c.memory->next; xr_compile_resources_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;
+}
+
+XR_FUNC XrXirStatus xir_compile_specialized_packet(const XrXirArtifact *source,
+    XrXirCheckedPacket *output) {
+    if (!source || !output || output->bytes || output->length) return XR_XIR_BAD_STRUCTURE;
+    XrXirArtifact *closed=NULL;
+    XrXirStatus status=xr_xir_compile_specialize(source,&closed,NULL);
+    /* Specialization publishes only after complete independent receiving.
+     * This owner has not escaped, so no external mutation can invalidate it
+     * between that proof and the same canonical encoder used by transitions. */
+    if (status==XR_XIR_OK) status=checked_encode(closed,output,NULL);
+    xr_xir_compile_artifact_free(closed);return status;
 }

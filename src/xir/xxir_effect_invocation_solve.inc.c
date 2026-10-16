@@ -469,8 +469,14 @@ static XrXirStatus effect_invocation_local_type(EffectInvocationLocalRead *read,
             arguments=node->nominal.arguments;arity=node->nominal.argument_count;
         } else if (node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_CELL ||
             node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ATOMIC ||
-            node->kind==XR_XIR_TYPE_TASK) {
+            node->kind==XR_XIR_TYPE_TASK || node->kind==XR_XIR_TYPE_SET ||
+            node->kind==XR_XIR_TYPE_MAP) {
             status=effect_invocation_local_type_edge(read,node->element,i,&span);
+            if (status==XR_XIR_OK && node->kind==XR_XIR_TYPE_MAP) {
+                uint32_t child=0;
+                status=effect_invocation_local_type_edge(read,node->result,i,&child);
+                if (child>span) span=child;
+            }
         } else if (node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
             if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
             if (node->kind==XR_XIR_TYPE_CALLABLE)

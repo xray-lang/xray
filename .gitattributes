@@ -83,3 +83,58 @@ tests/unit/xir/xir_rune78_golden.h text eol=lf
 tests/unit/xir/sdk_previous78_identity_golden.h text eol=lf
 tests/unit/xir/export_constants/retired78_wire.h text eol=lf
 tests/unit/xir/rest_declarations/retired78_wire.h text eol=lf
+
+# Retained independent inputs from the hash declaration boundary.
+
+tests/unit/xir/compile_owner/checked_sizing76_golden.h text eol=lf
+
+tests/unit/xir/root_construction72_goldens.h text eol=lf
+
+tests/unit/xir/unit_values/unit_wire_golden.h text eol=lf
+
+tests/unit/xir/xir_assert_panics76_golden.h text eol=lf
+
+tests/unit/xir/xir_checked_range76_golden.h text eol=lf
+
+tests/unit/xir/xir_checked_scalar76_golden.h text eol=lf
+
+tests/unit/xir/xir_error_marker76_golden.h text eol=lf
+
+tests/unit/xir/xir_generic_method76_golden.h text eol=lf
+
+tests/unit/xir/xir_rune76_golden.h text eol=lf
+
+tests/unit/xir/xir_hash75_golden.h text eol=lf
+
+tests/unit/xir/xir_nullable75_golden.h text eol=lf
+
+tests/unit/xir/xir_nested_nullable75_golden.h text eol=lf
+
+tests/unit/xir/export_constants/wire78_golden.h text eol=lf
+
+tests/unit/xir/rest_declarations/wire78_golden.h text eol=lf
+
+tests/unit/xir/retired_hash75/checked_sizing75_golden.h text eol=lf
+
+tests/unit/xir/retired_hash75/xir_assert_panics75_golden.h text eol=lf
+
+tests/unit/xir/retired_hash75/xir_checked_range75_golden.h text eol=lf
+
+tests/unit/xir/retired_hash75/xir_checked_scalar75_golden.h text eol=lf
+
+tests/unit/xir/retired_hash75/xir_error_marker75_golden.h text eol=lf
+
+tests/unit/xir/retired_hash75/xir_generic_method75_golden.h text eol=lf
+
+tests/unit/xir/retired_hash75/xir_rune75_golden.h text eol=lf
+
+tests/unit/xir/root_construction75_goldens.h text eol=lf
+
+# Full independent receiving inputs and current protocol models.
+tests/unit/xir/hash_protocol28_inputs/** text eol=lf
+tests/unit/xir/source_hash_receiving/** text eol=lf
+tests/unit/xir/*84*.h text eol=lf
+tests/unit/xir/compile_owner/*84*.h text eol=lf
+tests/unit/xir/unit_values/*84*.h text eol=lf
+tests/unit/xir/*/retired79_wire.h text eol=lf
+tests/unit/xir/sdk_previous79_identity_golden.h text eol=lf

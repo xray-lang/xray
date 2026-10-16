@@ -1,0 +1,614 @@
+[
+  {
+    "source": "compile_owner/checked_sizing79_golden.h",
+    "target": "compile_owner/checked_sizing84_golden.h",
+    "sha256": "964a2181e2741479d6752e46cbc9bcc1ee7aed170eaa1cdf08d32a2fbe2363e3",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "sizing79_golden",
+      "sizing79_embedded_golden",
+      "sizing79_empty_golden"
+    ],
+    "rename": {
+      "79": "84"
+    }
+  },
+  {
+    "source": "root_construction79_goldens.h",
+    "target": "root_construction84_goldens.h",
+    "sha256": "20c9d930c9f70a8b1ee2496f88a9fbda84e796b694a720eeea3caaa71bf29e88",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "root_construction72_checked",
+      "root_construction72_instance"
+    ],
+    "rename": {
+      "79": "84",
+      "root_construction72": "root_construction84",
+      "ROOT_CONSTRUCTION72": "ROOT_CONSTRUCTION84"
+    },
+    "offset_models": {
+      "ROOT_CONSTRUCTION72_CHECKED_OWNER": "root_construction72_checked",
+      "ROOT_CONSTRUCTION72_RECURSIVE_OWNER": "root_construction72_instance"
+    }
+  },
+  {
+    "source": "unit_values/unit79_wire_golden.h",
+    "target": "unit_values/unit84_wire_golden.h",
+    "sha256": "e87953f2f0aba1310f788880f3c9cc839c3e63da80be01623b760d2a1b635ece",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "unit79_packet"
+    ],
+    "rename": {
+      "79": "84"
+    }
+  },
+  {
+    "source": "xir_assert_panics79_golden.h",
+    "target": "xir_assert_panics84_golden.h",
+    "sha256": "b11dce741d6e12c5c50fc0fb3ca3135766aff56c92e82474735be2882dea2c21",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "assert_panics79_golden"
+    ],
+    "rename": {
+      "79": "84"
+    },
+    "offset_models": {
+      "XR_PANICS": "assert_panics79_golden"
+    }
+  },
+  {
+    "source": "xir_checked_range79_golden.h",
+    "target": "xir_checked_range84_golden.h",
+    "sha256": "fb742745f4884609b1bb99d96f5f9f8d3b6226a412aba69d8d999bdab17d8faf",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "checked_range79_golden"
+    ],
+    "rename": {
+      "79": "84"
+    }
+  },
+  {
+    "source": "xir_checked_scalar79_golden.h",
+    "target": "xir_checked_scalar84_golden.h",
+    "sha256": "97ec25604ef9849e60f5bcf1482805533e3fb1e17e5b56375322bb2ba2575fad",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "checked_scalar79_golden"
+    ],
+    "rename": {
+      "79": "84"
+    }
+  },
+  {
+    "source": "xir_error_marker79_golden.h",
+    "target": "xir_error_marker84_golden.h",
+    "sha256": "d965017cf3788f442accc17be09d0ea73401a9c84ede3e6461b300c589d14f0d",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "error_marker79_golden"
+    ],
+    "rename": {
+      "79": "84",
+      "error_marker73_previous": "error_marker73_retained_by84_previous"
+    },
+    "offset_models": {
+      "ERROR_MARKER": "error_marker79_golden"
+    }
+  },
+  {
+    "source": "xir_generic_method79_golden.h",
+    "target": "xir_generic_method84_golden.h",
+    "sha256": "0f97a4eea8fbe47f9c0905650ec0b873783b03cb6ecff1738e2dafcc0fd18319",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "generic_method79_golden",
+      "generic_method79_invalid_flags0",
+      "generic_method79_invalid_flags1"
+    ],
+    "rename": {
+      "79": "84"
+    },
+    "offset_models": {
+      "GENERIC_METHOD": "generic_method79_golden"
+    }
+  },
+  {
+    "source": "xir_rune79_golden.h",
+    "target": "xir_rune84_golden.h",
+    "sha256": "e3aac317f6568d9121a74963a6b994ce66e5f9b5479f1df6b753418c40460364",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "rune79_golden"
+    ],
+    "rename": {
+      "79": "84"
+    }
+  },
+  {
+    "source": "rest_declarations/retired79_wire.h",
+    "target": "rest_declarations/wire_golden.h",
+    "sha256": "36da1ae07ebf0f6e257fb2564adce4028f15f6bdcf53240c44fe68fa76b5becb",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "rest_wire"
+    ],
+    "rename": {}
+  },
+  {
+    "source": "export_constants/retired79_wire.h",
+    "target": "export_constants/wire_golden.h",
+    "sha256": "b6039b96ac8e9ff0ffdcc611883e79322d6f98d096f0d51f39a90447d82c878a",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "constant_wire"
+    ],
+    "rename": {}
+  },
+  {
+    "source": "math_library/retired79_wire.h",
+    "target": "math_library/invalid_entry_wire.h",
+    "sha256": "09916cb1ec66488455bd38e4e855684e1e3b06812dcb0ea7e8510c07ccf05c65",
+    "identity": [
+      31,
+      79
+    ],
+    "models": [
+      "math_wire"
+    ],
+    "rename": {
+      "MATH_": "MATH_INVALID_ENTRY_",
+      "math_wire": "math_invalid_entry_wire"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing83_golden.h",
+    "target": "compile_owner/checked_sizing84_golden.h",
+    "sha256": "88abf2355d97913faa9af91ea3538e6da154212c6a395da614efababf204e43e",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "sizing83_golden",
+      "sizing83_embedded_golden",
+      "sizing83_empty_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction83_goldens.h",
+    "target": "root_construction84_goldens.h",
+    "sha256": "663512f72344d90c0da5769d0ad45ac502d0b98d3384356034c3c732de803b46",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "root_construction83_checked",
+      "root_construction83_instance"
+    ],
+    "rename": {
+      "83": "84"
+    },
+    "offset_models": {
+      "ROOT_CONSTRUCTION83_CHECKED_OWNER": "root_construction83_checked",
+      "ROOT_CONSTRUCTION83_RECURSIVE_OWNER": "root_construction83_instance"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics83_golden.h",
+    "target": "xir_assert_panics84_golden.h",
+    "sha256": "ae24cb34e6178b8a1138b9ef15c0e9d90d63dd26ae479dd932559ce24f405845",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "assert_panics83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    },
+    "offset_models": {
+      "XR_PANICS": "assert_panics83_golden"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range83_golden.h",
+    "target": "xir_checked_range84_golden.h",
+    "sha256": "db733fde7c5786d681c6dfbb9520e897d5e7aaac54d0c01e8a41f4959fc13a28",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "checked_range83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar83_golden.h",
+    "target": "xir_checked_scalar84_golden.h",
+    "sha256": "25d54c5e162d28c7bc772e1a9bba9cb011f0d468c8f38a27d2cbb89c9866bc4f",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "checked_scalar83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker83_golden.h",
+    "target": "xir_error_marker84_golden.h",
+    "sha256": "0ed91154b0685a305931fe883139a91fba9a0751a608c9f6db37e660a72f2596",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "error_marker83_golden"
+    ],
+    "rename": {
+      "83": "84",
+      "error_marker73_previous": "error_marker73_retained_by84_previous"
+    },
+    "offset_models": {
+      "ERROR_MARKER": "error_marker83_golden"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method83_golden.h",
+    "target": "xir_generic_method84_golden.h",
+    "sha256": "7d5b38e829cc88f1c56f248cd5c2461c4367bf231902d0dd956a39675e57d549",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "generic_method83_golden",
+      "generic_method83_invalid_flags0",
+      "generic_method83_invalid_flags1"
+    ],
+    "rename": {
+      "83": "84"
+    },
+    "offset_models": {
+      "GENERIC_METHOD": "generic_method83_golden"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash83_golden.h",
+    "target": "xir_hash84_golden.h",
+    "sha256": "82ae33aac8765001d620dfc97aff59eb0d930325a2067ed75bf1f392b5c1f064",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "hash83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members83_golden.h",
+    "target": "xir_hash_members84_golden.h",
+    "sha256": "5fec93c9f579cbc7a99e47fbe6946428f2dd82c32c17d1018082aa49a357b5b5",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "hash_members83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_position83_golden.h",
+    "target": "xir_hash_position84_golden.h",
+    "sha256": "18c397e4cb8bcd48a93d3065da1821dad40ed03875a6c3f9deae23a12d333922",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "hash_position83_map_key",
+      "hash_position83_map_value",
+      "hash_position83_set_key",
+      "hash_position83_bad_key_receiver",
+      "hash_position83_bad_value_receiver",
+      "hash_position83_bad_key_result",
+      "hash_position83_bad_value_result",
+      "hash_position83_bad_index",
+      "hash_position83_bad_key_proof"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_projection83_golden.h",
+    "target": "xir_hash_projection84_golden.h",
+    "sha256": "527a6abd3b2547ae4badd086fb85d6280b75e04ab9ccbeca88e25253c5f0d70d",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "hash_projection83_keys",
+      "hash_projection83_values",
+      "hash_projection83_entries",
+      "hash_projection83_set_values",
+      "hash_projection83_bad_keys",
+      "hash_projection83_bad_values",
+      "hash_projection83_bad_set_keys",
+      "hash_projection83_bad_entries",
+      "hash_projection83_bad_entry_fields"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index83_golden.h",
+    "target": "xir_map_index84_golden.h",
+    "sha256": "8e62f0829b2109f7263cfc0bc52b41208867ade75bf5b7997e98226e8bfd624a",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "map_index83_golden",
+      "map_index83_bad_result",
+      "map_index83_bad_key"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_key_path83_golden.h",
+    "target": "xir_map_key_path84_golden.h",
+    "sha256": "af53da59267b6e22e7d8c36fb6d4d1089aec6171b0d345495c9263cf4219084c",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "map_key_path83_path_i64",
+      "map_key_path83_path_string",
+      "map_key_path83_bad_map_key",
+      "map_key_path83_bad_map_result",
+      "map_key_path83_bad_array_key",
+      "map_key_path83_bad_set_parent",
+      "map_key_path83_bad_value_parent",
+      "map_key_path83_map_go",
+      "map_key_path83_set_go",
+      "map_key_path83_bad_map_go_callable_value"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_membership83_golden.h",
+    "target": "xir_map_membership84_golden.h",
+    "sha256": "c2d197c54e7c28fed9c5569089a485cee2061236118386f439b05864399baec8",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "map_membership83_valid",
+      "map_membership83_bad_receiver",
+      "map_membership83_bad_value_width",
+      "map_membership83_bad_result",
+      "map_membership83_bad_equal",
+      "map_membership83_bad_key_proof"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable83_golden.h",
+    "target": "xir_nested_nullable84_golden.h",
+    "sha256": "d3deb3a8d8fd51dcb2f9a40298ae97963c7615a952df915d13d1bb344820e44f",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "nested_nullable83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable83_golden.h",
+    "target": "xir_nullable84_golden.h",
+    "sha256": "c67e09a0ce7afb460c68a3055e04e6198d322ec170d05405ee6a371e19c960f7",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "nullable_none83_golden",
+      "nullable_some83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune83_golden.h",
+    "target": "xir_rune84_golden.h",
+    "sha256": "1d2e47ce70743081b1b68a97b6192e78e29639352d78a272a3167bd1cbf982a6",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "rune83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_set_algebra83_golden.h",
+    "target": "xir_set_algebra84_golden.h",
+    "sha256": "5ac5207ea017c81dd24e7e112753a9902d5e78d89274cb133715b540b26be994",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "set_algebra83_union",
+      "set_algebra83_intersection",
+      "set_algebra83_difference",
+      "set_algebra83_symmetric_difference",
+      "set_algebra83_is_subset",
+      "set_algebra83_is_superset",
+      "set_algebra83_bad_receiver",
+      "set_algebra83_bad_other_kind",
+      "set_algebra83_bad_other_element",
+      "set_algebra83_bad_set_result",
+      "set_algebra83_bad_relation_result",
+      "set_algebra83_bad_hashable"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_go83_golden_part1.h",
+    "target": "xir_task_go84_golden_part1.h",
+    "sha256": "67bd3e88113bd8b1ad8270e7860b885ab21bb25c4e50fcdda27dc827903a3310",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "task_go83_golden",
+      "task_go83_scalar_go",
+      "task_go83_initializer_target",
+      "task_go83_await_place",
+      "task_go83_go_target"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_go83_golden_part2.h",
+    "target": "xir_task_go84_golden_part2.h",
+    "sha256": "fdc45959fabb164bdb6b595c05d158fa9bb2727d183d427e013b368ffcc9fc5c",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "task_go83_await_binding",
+      "task_go83_mutable_worker",
+      "task_go83_cleanup_helper"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_map_kind83_golden.h",
+    "target": "xir_task_map_kind84_golden.h",
+    "sha256": "6a3b33b96d2913c352f7bc3bcfc53506a2cc4e4bf018de95090bf94e1d5fbb56",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "task_map_kind83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_types83_golden.h",
+    "target": "xir_task_types84_golden.h",
+    "sha256": "2e817d09e75f08603f7c03600bec6254949113e35801dce5d34d7fd54b870798",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "task_types83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_unit83_golden.h",
+    "target": "xir_task_unit84_golden.h",
+    "sha256": "fc81e5ffe5e50c5f82f3c235c478ac934babe22f53819f796c3717ef75f0991c",
+    "identity": [
+      28,
+      83
+    ],
+    "models": [
+      "task_unit83_golden"
+    ],
+    "rename": {
+      "83": "84"
+    }
+  }
+]

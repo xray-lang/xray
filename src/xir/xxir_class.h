@@ -14,7 +14,8 @@
 #include "xxir_value.h"
 /* Trusted callers already hold checked construction/member permission.
  * GET reads retained data only and never recovers executable authority.
- * It requires the exact receiver arena and bounded work/scratch. Leaf copies
+ * It requires the actual receiver arena or an authenticated receiving identity,
+ * then reads the actual owner layout with bounded work/scratch. Leaf copies
  * need no allocation domain; inline snapshots require an explicit live domain,
  * which owns new materialized storage but never takes over existing leaves. */
 XR_FUNC XrXirValueStatus xr_xir_class_new(XrXirType type, const XrXirValue *fields,

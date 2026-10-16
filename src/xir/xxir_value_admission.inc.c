@@ -71,22 +71,23 @@ static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissio
     stack->frames[stack->depth++] = frame;
     return XR_XIR_VALUE_OK;
 }
-static XrXirValueStatus array_needs_admission(const XirArray *array,
+static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType type,
     XrXirValueAdmission *admission, bool *needed) {
-    XrXirType type = array->object.type;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(array->object.arena);
     for (;;) {
         if (!admission->work) return XR_XIR_VALUE_LIMIT;
         --admission->work;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
-            node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+            node->kind == XR_XIR_TYPE_TUPLE ||
             node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
-        if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
-        type = node->element;
+        if (node->kind == XR_XIR_TYPE_SET) { *needed = false; return XR_XIR_VALUE_OK; }
+        /* Nullable adds no execution authority beyond its element type. */
+        if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
+            node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
+        type = node->kind == XR_XIR_TYPE_MAP ? node->result : node->element;
     }
 }
 static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *arena,
@@ -108,11 +109,32 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
         *span = (StorageSpan){node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field],
             frame->packed.bytes ? frame->packed.bytes +
                 (node->kind == XR_XIR_TYPE_NULLABLE ? layout->value.alignment : layout->field_offsets[field]) : NULL};
+    } else if (frame->boxed.object->kind == XR_XIR_TYPE_MAP || frame->boxed.object->kind == XR_XIR_TYPE_SET) {
+        const XirHash *map = (const XirHash *)frame->boxed.object;
+        bool map_value = map->object.kind == XR_XIR_TYPE_MAP && (index & 1);
+        *span = hash_span(map, map->object.kind == XR_XIR_TYPE_MAP ? index / 2 : index, map_value);
+        *inlined = span->type != XR_XIR_UNIT;
+        if (!*inlined) { *tuple_field = true; *value = (XrXirValue){0}; }
     } else if (*inlined) {
         const XirArray *array = (const XirArray *)frame->boxed.object;
         *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
-    } else if (*tuple_field) *value=((XirTuple *)frame->boxed.object)->fields[index];
-    else *value = ((XirNominalValue *)frame->boxed.object)->fields[index];
+    } else if (*tuple_field) {
+        const XrXirTypeNode *node=xr_xir_tuple_signature(
+            xr_xir_compile_type_arena_types(arena),frame->boxed.object->type);
+        *value=((XirTuple *)frame->boxed.object)->fields[index];
+        span->type=node->parameters[index].type;
+    } else {
+        const XirNominalValue *record=(const XirNominalValue *)frame->boxed.object;
+        const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
+        const XrXirTypeNode *node=xr_xir_type_node(types,record->object.type);
+        uint32_t begin=0;
+        if (node->kind==XR_XIR_TYPE_NOMINAL) {
+            const XrXirNominalIdentity *identity=&types->nominals->identities[node->nominal.declaration];
+            if (identity->kind==XR_XIR_NOMINAL_ENUM) begin=identity->variants[record->variant].field_begin;
+        }
+        *value=record->fields[index];
+        span->type=node->kind==XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[begin+index];
+    }
 }
 static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     StorageSpan span,const XrXirTypeArena *arena,XrXirValueAdmission *admission) {
@@ -200,17 +222,28 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     count = ((XirNominalValue *) object)->count;
                 } else if (object->kind == XR_XIR_TYPE_ARRAY) {
                     bool needed = false;
-                    status = array_needs_admission((XirArray *) object, admission, &needed);
+                    status = type_needs_admission(xr_xir_compile_type_arena_types(object->arena),
+                        object->type, admission, &needed);
                     if (status != XR_XIR_VALUE_OK) break;
                     if (needed) count = ((XirArray *) object)->length;
+                } else if (object->kind == XR_XIR_TYPE_MAP || object->kind == XR_XIR_TYPE_SET) {
+                    XirHash *map = (XirHash *)object;
+                    bool needed = false;
+                    status = type_needs_admission(xr_xir_compile_type_arena_types(object->arena),
+                        object->type, admission, &needed);
+                    if (status != XR_XIR_VALUE_OK) break;
+                    if (needed) count = map->length * (object->kind == XR_XIR_TYPE_MAP ? 2u : 1u);
                 } else if (object->kind == XR_XIR_TYPE_TASK || object->kind == XR_XIR_TYPE_ATOMIC) {
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {
                     if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                     if (object->kind == XIR_OBJECT_FUNCTION) {
                         if (!admission->function) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
+                        const XrXirTypeArena *caller_arena=admission->arena;
+                        admission->arena=arena;
                         status = admission->function(admission->context,
                             &((XirFunction *) object)->binding, type, &admission->work);
+                        admission->arena=caller_arena;
                         if (status != XR_XIR_VALUE_OK) break;
                     } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
                         /* Atomic cells have scalar payloads and no graph children. */
@@ -219,7 +252,10 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                         type = cell->projection_count ? (XrXirType)cell->value.type :
                             xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), type);
                         tuple_field = !cell->projection_count && type == XR_XIR_UNIT;
-                        current = cell->value; inlined = false; continue;
+                        current=cell->value;
+                        /* A projection retains its actual root, not a value in its own storage type. */
+                        if (cell->projection_count) arena=xr_xir_value_arena(&current);
+                        inlined=false;continue;
                     } else { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 }
                 if (count) {
@@ -233,7 +269,9 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
         if (!stack.depth) break;
         arena=admission_frame_arena(&stack.frames[stack.depth-1]);
         admission_child(&stack.frames[stack.depth - 1], arena, &current, &span, &inlined, &tuple_field);
-        type = inlined ? span.type : (XrXirType)current.type;
+        /* Boxed children retain their own birth tags. The parent arena names
+         * the sealed field type, not that child's unrelated local ordinal. */
+        type = span.type;
     }
     if (stack.frames) {
         if (stack.frames != &stack.first)

@@ -1,0 +1,226 @@
+#include "xir_construction_fixture.h"
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * product_identity_gates.h - Independent layout framing and packet corruption gates
+ */
+#ifndef PRODUCT_IDENTITY_GATES_H
+#define PRODUCT_IDENTITY_GATES_H
+#include "xir_hash83_identity.h"
+static const uint8_t product_layout_value21_digest[]={0x53,0x25,0xdf,0xf6,0x6e,0xbc,0x0d,0xb5,0x0f,0x20,0xdd,0xa2,0xed,0x30,0xb0,0x02,0xe4,0xb6,0xfb,0xbd,0xac,0x04,0xc9,0x5a,0x58,0x89,0xd7,0x55,0x40,0x7a,0x78,0x9a};
+
+static const uint8_t product_layout_value22_digest[]={
+    0xda,0x05,0x81,0x09,0xc9,0x28,0xde,0xe7,0xc9,0x79,0xda,0xe4,
+    0xb0,0xfa,0x05,0xbf,0x0c,0x45,0xa8,0x9c,0x51,0x88,0xd9,0xa7,
+    0xc7,0xa7,0x38,0xf3,0x52,0x67,0x25,0xe9,
+};
+
+static const uint8_t layout_previous21_preimage[]={
+    0x78,0x72,0x61,0x79,0x3a,0x78,0x69,0x72,0x2d,0x6c,0x6f,0x77,
+    0x65,0x72,0x65,0x64,0x2d,0x6c,0x61,0x79,0x6f,0x75,0x74,0x3a,
+    0x76,0x31,0x01,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x15,0x00,
+    0x00,0x00,0x1a,0x00,0x00,0x00,0x1d,0x00,0x00,0x00,0x02,0x00,
+    0x00,0x00,0x03,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x01,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0xff,0xff,0xff,0xff,0x10,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,
+    0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0xff,0xff,0xff,0xff,0x02,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0xff,0xff,0xff,0xff,
+};
+
+static const uint8_t layout_current22_preimage[]={
+    0x78,0x72,0x61,0x79,0x3a,0x78,0x69,0x72,0x2d,0x6c,0x6f,0x77,
+    0x65,0x72,0x65,0x64,0x2d,0x6c,0x61,0x79,0x6f,0x75,0x74,0x3a,
+    0x76,0x31,0x01,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x16,0x00,
+    0x00,0x00,0x1c,0x00,0x00,0x00,0x1d,0x00,0x00,0x00,0x02,0x00,
+    0x00,0x00,0x03,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x01,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0xff,0xff,0xff,0xff,0x10,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,
+    0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0xff,0xff,0xff,0xff,0x02,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0xff,0xff,0xff,0xff,
+};
+
+static const uint8_t layout_current24_preimage[]={
+    0x78,0x72,0x61,0x79,0x3a,0x78,0x69,0x72,0x2d,0x6c,0x6f,0x77,
+    0x65,0x72,0x65,0x64,0x2d,0x6c,0x61,0x79,0x6f,0x75,0x74,0x3a,
+    0x76,0x31,0x01,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x18,0x00,
+    0x00,0x00,0x1d,0x00,0x00,0x00,0x1e,0x00,0x00,0x00,0x02,0x00,
+    0x00,0x00,0x03,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x01,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0xff,0xff,0xff,0xff,0x10,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x10,0x00,
+    0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0xff,0xff,0xff,0xff,0x02,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x08,0x00,
+    0x00,0x00,0x10,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0xff,0xff,0xff,0xff,
+};
+
+static const uint8_t product_layout_value24_digest[]={
+    0x12,0x00,0x11,0xa8,0xff,0xcd,0x14,0x75,0xaf,0x75,0xc1,0xc5,
+    0x55,0x0d,0xb5,0x86,0x36,0x78,0xe5,0xe7,0x98,0x39,0x24,0x98,
+    0x5b,0x23,0xb1,0xe6,0xfb,0x43,0x69,0xf3,
+};
+
+static void product_layout_vector(void) {
+    const XrXirType parameter=XR_XIR_STRING;
+    const XrXirInstruction identity[]={{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    const XrXirInstruction initialize[]={{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    const XrXirInstruction entry[]={
+        {XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    const XrXirBlock one={0,1,0,0},two={0,2,0,0};
+    const XrXirFunction functions[]={
+        {"identity",8,&parameter,1,XR_XIR_STRING,&one,1,identity,1,NULL,0},
+        {"init",4,NULL,0,XR_XIR_UNIT,&one,1,initialize,1,NULL,0},
+        {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0}};
+    const XrXirSourceModule source={"m",1,NULL,0,1};
+    const XrXirFunctionIdentity ids[3]={{0,1,0,0,0,0,0, 0, 0},{0},{0}};
+    const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,2,NULL};
+    const XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    size_t live=runtime_live,bytes=runtime_bytes;
+    /* The framing contains 26 domain bytes and 43 little-endian words.
+     * Work includes hash init/final, each encoded byte and each hash input byte. */
+    for (unsigned bound=0;bound<3;++bound) {
+        const XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+        XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
+        CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+        XrXirArtifact *checked=NULL,*lowered=NULL;
+        CHECK(xir_fixture_check(&context, &module, &checked, NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK);
+        xr_xir_compile_artifact_free(checked);
+        XrXirSourceProductFacts facts={0};facts.target=target;facts.entry=2;facts.function_count=3;facts.module_count=1;
+        /* The old literal remains independently framed; it cannot identify
+         * the historical Value22/Call28 Lowered artifact. */
+        XrCompileResourceStats before={0},after={0};
+        CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+        const uint64_t units=27+43*8+33;
+        if (bound) CHECK(xr_compile_resources_work(context.resources,UINT64_MAX-before.work-units+(bound==2))==XR_COMPILE_RESOURCE_OK);
+        CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+        uint8_t digest[32];memset(digest,0x5a,sizeof(digest));uint8_t saved[32];memcpy(saved,digest,32);
+        XrXirStatus status=source_product_layout_digest(lowered,&facts,digest);
+        if (bound==2) CHECK(status==XR_XIR_BUDGET && !memcmp(digest,saved,32));
+        else {
+            CHECK(status==XR_XIR_OK && !memcmp(digest,product_layout_value25_digest,32));
+            CHECK(memcmp(digest,product_layout_value24_digest,32));
+            CHECK(memcmp(digest,product_layout_value21_digest,32) && memcmp(digest,product_layout_value22_digest,32));
+            CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+            CHECK(after.work-before.work==units);
+        }
+        const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(lowered,0);
+        CHECK(layout->slot_count==2 && layout->frame_bytes==8 && layout->result.size==16 && layout->result.alignment==8);
+        CHECK(layout->owned_count==1 && !layout->outgoing_count && !layout->path_count);
+        CHECK(layout->offsets[0]==0 && layout->offsets[1]==UINT32_MAX && layout->owned_offsets[0]==0);
+        CHECK(layout->parameters[0].size==16 && layout->parameters[0].alignment==8);
+        if (!bound) {
+            uint8_t historical[32],current[32];
+            _Static_assert(sizeof(layout_previous21_preimage)==198 && sizeof(layout_current22_preimage)==198,"independent Lowered layout preimages require 198 bytes");
+            xr_sha256(layout_previous21_preimage,sizeof(layout_previous21_preimage),historical);
+            xr_sha256(layout_current22_preimage,sizeof(layout_current22_preimage),current);
+            CHECK(!memcmp(historical,product_layout_value21_digest,32) && !memcmp(current,product_layout_value22_digest,32));
+            xr_sha256(layout_current25_preimage,sizeof(layout_current25_preimage),current);
+            CHECK(!memcmp(current,product_layout_value25_digest,32));
+            _Static_assert(XR_XIR_VALUE_ABI_VERSION==25u && XR_XIR_CALL_ABI_VERSION==29u && XR_XIR_PROGRAM_ABI_VERSION==30u,"owned Domain layout identity");
+            for(unsigned previous=21;previous<25;++previous) {
+                facts.target.abi_version=previous;
+                memset(digest,0x5a,sizeof(digest));memcpy(saved,digest,sizeof(saved));
+                CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+                CHECK(source_product_layout_digest(lowered,&facts,digest)==XR_XIR_BAD_STRUCTURE);
+                CHECK(!memcmp(digest,saved,sizeof(digest)));
+                CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+                CHECK(after.work==before.work && after.live_bytes==before.live_bytes);
+            }
+            facts.target=target;
+        }
+        xr_compile_resources_release(context.resources);xr_xir_compile_artifact_free(lowered);
+        CHECK(runtime_live==live && runtime_bytes==bytes);
+    }
+    puts("independent static 198-byte layout KAT; result/parameter/owned/Unit slots; exact/minus1 work PASS");
+}
+static void product_rehash(uint8_t *bytes,size_t length) {
+    XrSHA256Context sha;xr_sha256_init(&sha);
+    xr_sha256_update(&sha,bytes,32);xr_sha256_update(&sha,bytes+64,length-64);xr_sha256_final(&sha,bytes+32);
+}
+static void product_corruptions(XrXirSourceProduct *product) {
+    size_t live=runtime_live,bytes=runtime_bytes;XrXirSourceProduct original=*product;
+    XrXirSourceProductFacts *facts=&product->facts;
+    uint32_t *words[]={&facts->entry,&facts->target.architecture,&facts->target.abi_version,&facts->function_count,&facts->module_count};
+    for (size_t i=0;i<sizeof(words)/sizeof(*words);++i) {
+        uint32_t old=*words[i];*words[i]=old+1;
+        CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STRUCTURE);*words[i]=old;
+        CHECK(runtime_live==live && runtime_bytes==bytes);
+    }
+    facts->lowered_layout_digest[0]^=1;
+    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_LAYOUT);facts->lowered_layout_digest[0]^=1;
+    facts->source_digest[0]^=1;
+    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STRUCTURE);facts->source_digest[0]^=1;
+    facts->closed_digest[0]^=1;
+    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STRUCTURE);facts->closed_digest[0]^=1;
+    for (unsigned kind=0;kind<2;++kind) {
+        XrXirCheckedPacket *packet=kind ? &product->closed_packet : &product->source_packet;
+        uint8_t *identity=kind ? facts->closed_digest : facts->source_digest;
+        uint8_t *copy=xr_malloc(packet->length);CHECK(copy);memcpy(copy,packet->bytes,packet->length);
+        uint8_t *previous=packet->bytes;packet->bytes=copy;
+        const unsigned positions[]={8,12,20};
+        for (size_t i=0;i<sizeof(positions)/sizeof(*positions);++i) {
+            memcpy(copy,previous,packet->length);copy[positions[i]]^=1;product_rehash(copy,packet->length);
+            xr_sha256(copy,packet->length,identity);
+            CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STRUCTURE);
+        }
+        packet->bytes=previous;xr_sha256(previous,packet->length,identity);xr_free(copy);
+        CHECK(runtime_live==live && runtime_bytes==bytes);
+    }
+    CHECK(!memcmp(product,&original,sizeof(original)));
+    puts("opaque internal tamper gates: entry/target/count/layout/twoSHA; 6 valid-rehash wire/semantic/reserved refusals PASS");
+}
+static void product_crossed_owners(XrXirSourceProduct *product,const char *directory,const char *stdlib) {
+    size_t live=runtime_live,bytes=runtime_bytes;char path[1024];
+    int length=snprintf(path,sizeof(path),"%s/product2.xr",directory);CHECK(length>0 && (size_t)length<sizeof(path));
+    XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(product->context.resources,&session)==XR_COMPILER_SESSION_OK);
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
+    XrXirSourceProductRequest request={{session,path,&authority,&product->context,stdlib,NULL,XR_XIR_PROGRAM,NULL},
+        {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+    XrXirSourceProduct *other=NULL;CHECK(xr_xir_compile_source_product_build(&request,&other,NULL)==XR_XIR_OK);
+    xr_compile_session_free(session);memset(&request,0xcc,sizeof(request));memset(&authority,0xcc,sizeof(authority));
+    CHECK(xr_xir_compile_source_product_verify(other,16777216,NULL)==XR_XIR_OK);
+    CHECK(product->facts.function_count==other->facts.function_count && product->facts.module_count==other->facts.module_count);
+    CHECK(!memcmp(product->facts.lowered_layout_digest,other->facts.lowered_layout_digest,32));
+    CHECK(memcmp(product->facts.source_digest,other->facts.source_digest,32));
+    CHECK(memcmp(product->facts.closed_digest,other->facts.closed_digest,32));
+    XrXirSourceProduct saved=*product;size_t held_live=runtime_live,held_bytes=runtime_bytes;
+    product->source_packet=other->source_packet;memcpy(product->facts.source_digest,other->facts.source_digest,32);
+    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STRUCTURE);
+    *product=saved;CHECK(runtime_live==held_live && runtime_bytes==held_bytes);
+    product->closed_packet=other->closed_packet;memcpy(product->facts.closed_digest,other->facts.closed_digest,32);
+    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STRUCTURE);
+    *product=saved;CHECK(runtime_live==held_live && runtime_bytes==held_bytes);
+    product->lowered=other->lowered;
+    CHECK(xr_xir_compile_source_product_verify(product,16777216,NULL)==XR_XIR_BAD_STRUCTURE);
+    *product=saved;CHECK(runtime_live==held_live && runtime_bytes==held_bytes);
+    xr_xir_compile_source_product_free(other);CHECK(runtime_live==live && runtime_bytes==bytes);
+    puts("two genuine independently Checked owners: source/closed/Lowered cross-pair rejection with identical layout PASS");
+}
+#endif // PRODUCT_IDENTITY_GATES_H

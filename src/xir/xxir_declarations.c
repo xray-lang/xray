@@ -94,8 +94,8 @@ XR_FUNC bool xr_xir_slot_readable(const XrXirDeclarations *d,uint32_t from,uint3
         return false;
     const XrXirSlot *slot=&d->slots[index];
     if (slot->module>=d->module_count) return false;
-    return from==slot->module || (slot->exported==1 && !slot->mutable &&
-        xr_xir_module_imports(d,from,slot->module));
+    return from==slot->module || ((xr_xir_module_same_scope(d,from,slot->module) ||
+        (slot->exported==1 && !slot->mutable)) && xr_xir_module_imports(d,from,slot->module));
 }
 #include "xxir_nominal_access.inc.c"
 XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile_context, const XrXirDeclarations *d, uint32_t *order) {

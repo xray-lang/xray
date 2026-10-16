@@ -36,11 +36,11 @@ def main():
     model = json.loads((args.models or directory / 'native_projection72_identity_models.json').read_text(encoding='utf-8'))
     assert len(model['records']) == 10
     for value, file, macro in (
-        (29,'xxir_checked.h','XR_XIR_CHECKED_SCHEMA'),
-        (76,'xxir_checked.h','XR_XIR_CHECKED_CONTRACT'),
-        (24,'xxir_value.h','XR_XIR_VALUE_ABI_VERSION'),
+        (32,'xxir_checked.h','XR_XIR_CHECKED_SCHEMA'),
+        (84,'xxir_checked.h','XR_XIR_CHECKED_CONTRACT'),
+        (25,'xxir_value.h','XR_XIR_VALUE_ABI_VERSION'),
         (29,'xxir_call.h','XR_XIR_CALL_ABI_VERSION'),
-        (31,'xxir_program.h','XR_XIR_PROGRAM_ABI_VERSION'),
+        (34,'xxir_program.h','XR_XIR_PROGRAM_ABI_VERSION'),
     ):
         text = (root / 'src/xir' / file).read_text(encoding='utf-8')
         assert re.findall(r'^#define\s+' + macro + r'\s+(\d+)u?\s*$', text, re.M) == [str(value)]
@@ -69,7 +69,7 @@ def main():
         assert preimages['71'][:offset] == preimages['72'][:offset]
         assert preimages['71'][offset+8:] == preimages['72'][offset+8:]
         assert len({hashlib.sha256(value).digest() for value in preimages.values()}) == 5
-    assert 'CHECK(!memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value24 : original_policy_value24,32));' in header
+    assert 'CHECK(!memcmp(input->codegen_policy_id.bytes,linked ? linked_policy84 : original_policy84,32));' in header
     for suffix in ('','69','70','71','72'):
         assert 'CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy' + suffix + ' : original_policy' + suffix + ',32));' in header
     for role in ('linked','original'):
@@ -82,7 +82,21 @@ def main():
         frame=DOMAIN+struct.pack('<7I',1,29,76,24,29,31,len(prefix))+prefix
         assert literal(header,role+'_policy_value24_preimage')==frame
         assert literal(header,role+'_policy_value24')==hashlib.sha256(frame).digest()
-    print(json.dumps({'status':'INDEPENDENT_CURRENT28_74_FULL_FRAMES_PASS',
+    previous=(directory/'xir_hash75_identity.h').read_text(encoding='utf-8')
+    for role in ('linked','original'):
+        prefix=(role+'_source').encode('ascii')
+        frame=DOMAIN+struct.pack('<7I',1,28,75,25,29,30,len(prefix))+prefix
+        assert literal(previous,role+'_policy_value25_preimage')==frame
+        assert literal(previous,role+'_policy_value25')==hashlib.sha256(frame).digest()
+    current=(directory/'xir_hash83_identity.h').read_text(encoding='utf-8')
+    for role in ('linked','original'):
+        prefix=(role+'_source').encode('ascii')
+        frame=DOMAIN+struct.pack('<7I',1,28,83,25,29,30,len(prefix))+prefix
+        assert literal(current,role+'_policy_value25_preimage')==frame
+        assert literal(current,role+'_policy_value25')==hashlib.sha256(frame).digest()
+    assert '#include "xir_semantic84_identity.h"' in header
+    assert 'CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value25 : original_policy_value25,32));' in header
+    print(json.dumps({'status':'INDEPENDENT_CURRENT32_84_FULL_FRAMES_PASS',
                       'records':records, 'current_macro_authority_checked':True,
                       'all_prior_runtime_negative_responsibilities_retained':True,
                       'product_output_used_as_oracle':False}, indent=2))

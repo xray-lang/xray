@@ -1,0 +1,710 @@
+[
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing74_golden.h",
+    "sha256": "0d8d9eba137b0a3b1281049612d6eca9f0e49abe14586f930f20dec23b40e940"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing75_golden.h",
+    "sha256": "3baf06a35d0d60fa258c3be4de81d98582d15aa88aa9c35e62a1eb1334ce4781"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing76_golden.h",
+    "sha256": "90669e7ed805b4381ebd7646331ccc876d07ec5b150bdf69d82f2cc7d15f476d"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing77_golden.h",
+    "sha256": "260680231f9ff455ea675ecaddc849645e71f0502809ba2ce98e2e42cdfd0df3"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing78_golden.h",
+    "sha256": "54af30c3b163d4e71637ebd279f99b5ebeac7b35dbd0fc0fcd3394ccb54cfa7e"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing79_golden.h",
+    "sha256": "c4a50b5caa66dbf15f31f2fb9cb96229aef701e89b33e1456fd817213f4ceab9"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing80_golden.h",
+    "sha256": "e361dad751db92a88ce93b76bb94fa09ce6c422d6b739789fbbc73a13c51735a"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing81_golden.h",
+    "sha256": "6f48f774194aa151cd2d574c6f50a6fd38c8c81bff7b95797dc0f979a6388c82"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing82_golden.h",
+    "sha256": "a23a92ea34595826203bbc9993b8d13faea40df7bfd67a4e3cf4a044c682e864"
+  },
+  {
+    "source": "hash_protocol28_inputs/compile_owner/checked_sizing83_golden.h",
+    "sha256": "88abf2355d97913faa9af91ea3538e6da154212c6a395da614efababf204e43e"
+  },
+  {
+    "source": "hash_protocol28_inputs/p09_hash_current83_packet_table.h",
+    "sha256": "87b7c2cdcf65c429b69c20ffc0419dec19afce439ce57453ed6f2068471c35ef"
+  },
+  {
+    "source": "hash_protocol28_inputs/p09_hash_retired82_packet_table.h",
+    "sha256": "e6d36b461e2e17614e56d52357e4bf708102212ffd2dbc6e3dfbf81566925c24"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction75_goldens.h",
+    "sha256": "d8244bb0c86ab29a444b3b4bae5d25033f7734b93765ff02fc9b840302c087a8"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction76_goldens.h",
+    "sha256": "97c439cfed005d081ef7f34beba68fb9eebf33c633431cd84732774e41711de6"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction77_goldens.h",
+    "sha256": "0bfbcd4de3605449925f1745c47595ca517a750f8d35cad68411b494bbaa2363"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction78_goldens.h",
+    "sha256": "cb6965a46c30bfd4413f4a2869ca1d8c0b542852b6ca976576b83d46ae68baf2"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction79_goldens.h",
+    "sha256": "cb258cf7b3673c918610496c698feabe1e226450805bab41f18be581de868450"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction80_goldens.h",
+    "sha256": "a70e0a7c4272187d9ba788a11d8545a43205396aada048d659e4375d24e839a3"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction81_goldens.h",
+    "sha256": "e33d998d4709091850cd9512a590dfe32b69f6c1c9aa6f4fce8da3095e1bfd2f"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction82_goldens.h",
+    "sha256": "7028db5bc7aab3e14f90f7adbb2000ebeb2d61197572d2642dbeeca79ba28f6a"
+  },
+  {
+    "source": "hash_protocol28_inputs/root_construction83_goldens.h",
+    "sha256": "663512f72344d90c0da5769d0ad45ac502d0b98d3384356034c3c732de803b46"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_current_identity_golden.h",
+    "sha256": "cf6251e994957e445c04046136d5d44f19d12f9cefc72af9b990b8e26b3a687a"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous75_identity_golden.h",
+    "sha256": "5aae7e6075a71658000c0a5b8ac349f1a64f5bcb74667c3257d3232af79e9342"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous76_identity_golden.h",
+    "sha256": "7fc50c59c33feafd5f02a678944ffaa0ca6d51fffffbf01abdf80c8a655e2352"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous77_identity_golden.h",
+    "sha256": "2e2fcb36a5e254884f9d7a39f865e8e30b2264281d03ee173a74440244974e3c"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous78_identity_golden.h",
+    "sha256": "974c734d107d5ca24540264e83a8c1adc125b840afcae73622937ce63eef5720"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous79_identity_golden.h",
+    "sha256": "1c45e851c5a2afaf991287c1da6c628d54d26fddaae5371882f5fe6d10e08f69"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous80_identity_golden.h",
+    "sha256": "0c88fd85123cd0d5ccacb10f8b573d369d05aec0315d759e90128ed548b09de1"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous81_identity_golden.h",
+    "sha256": "aa2b83274e3776f569c554276dc1f55cbda45c28c269d6788947aa0b3aee1d06"
+  },
+  {
+    "source": "hash_protocol28_inputs/sdk_previous82_identity_golden.h",
+    "sha256": "a32d473fb2d17c11c2e80c515780e4f44491852477db07495df8b8e874b3123b"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics75_golden.h",
+    "sha256": "6d4ff6ee074ab0a29384fd344f10101de11a47d20c1c0b2699372761b2b63de9"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics76_golden.h",
+    "sha256": "05843215bb811bd29a00e88a612f4f40550f8f3f1450ddc35b881689d42fc3b4"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics77_golden.h",
+    "sha256": "1e9f5abdc90004194cd474303e4d94f87fa093bb1fd1c9d1cc53e9f987bdc7d5"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics78_golden.h",
+    "sha256": "a84700b93f872c2d2df851d7cceca703bbe94a9bbf46530a520796bbb3d20a34"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics79_golden.h",
+    "sha256": "5a9d5eb62932970cf8e2959d04d213d7e62505dadbb24713b943960ba846e81d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics80_golden.h",
+    "sha256": "00d5fb5df01568a9f030698eb192db1088751781bbc153fdb8c9c027ef0b010c"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics81_golden.h",
+    "sha256": "1b14f7faf20baa914650b60a4fafa93d009c6ed84b66a62b7cfa601c61ea6bd2"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics82_golden.h",
+    "sha256": "8cbc2feb552e6eda82c606a2c681b7307a3ae7c47d1a228a3c95113a0d22cce1"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_assert_panics83_golden.h",
+    "sha256": "ae24cb34e6178b8a1138b9ef15c0e9d90d63dd26ae479dd932559ce24f405845"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range75_golden.h",
+    "sha256": "941e6751b0dd9ff314dcab52a91b9ebb6ec1b9543144756f8414566998efab9f"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range76_golden.h",
+    "sha256": "75f0d5448151de82e1dabfefd6cbac92e300aef795d43fc1f9844c0b06732ba1"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range77_golden.h",
+    "sha256": "1942d8f3dde8dd2b11896805bfb4b6b0c8804f12dc4657e43fb2000360d54006"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range78_golden.h",
+    "sha256": "5f6fdb825e90fd0169e6bd692e2acb89ff98bf5ba167f0960b8f43b98a047c99"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range79_golden.h",
+    "sha256": "0bbccf949d952e9ee7d9db2ecd8d3f95eb994631915e90037d42c0fa860fd33d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range80_golden.h",
+    "sha256": "a801673b9eaab35bf392a9f9e03eec0a325a23ea26b58b2910658d4eb83a7567"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range81_golden.h",
+    "sha256": "6963c4c8676620da8ef2c0f2b94cebb74cb3b61f912b99d0b6754934394ceaf8"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range82_golden.h",
+    "sha256": "a1cb8a5e26d5f94943def8aba9b61326bc20392843e730b433d1e5e5e6b82ce3"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_range83_golden.h",
+    "sha256": "db733fde7c5786d681c6dfbb9520e897d5e7aaac54d0c01e8a41f4959fc13a28"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar75_golden.h",
+    "sha256": "0f99f2b69037989e02ff69e6776c05e6148ff5e8a19184a16f9cf04fb2f9cad1"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar76_golden.h",
+    "sha256": "7e7b1592ea4cc0c0652e15ae9ed326db6d9fe486fd787948859e98a53d567401"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar77_golden.h",
+    "sha256": "96446e0d2837c08bb576a6670a4a25e5a98e6e0acba82fdd9e49cbcf03ea12d9"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar78_golden.h",
+    "sha256": "735544713498f12d86a8fba6fe93b346be607f5f5edd95cdfdf0ea16faf1b762"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar79_golden.h",
+    "sha256": "9d12c884ac4ce1571499b97109960c691d2e2b81f38c5f9648b1641e1cf4e581"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar80_golden.h",
+    "sha256": "0c00a7cc171c9a8179723b879ad7fd7a38f0b7f98b915df90dd8e17045240cc1"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar81_golden.h",
+    "sha256": "35f0ba2c72c5064da6d56466afcba5aa420ec87c59ffe2123c0f6c29d6b363a0"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar82_golden.h",
+    "sha256": "bf202577bf88159963cc04be3fb27bf7e735659e5c2a1fc852ea9b3aee47b252"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_checked_scalar83_golden.h",
+    "sha256": "25d54c5e162d28c7bc772e1a9bba9cb011f0d468c8f38a27d2cbb89c9866bc4f"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker75_golden.h",
+    "sha256": "c00b70d10cebc83973ce60141e649321d2008d3bbda9011954e2ce0680cf08f1"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker76_golden.h",
+    "sha256": "138d91a9b0754c04526d00a0a2b9a16db5f289efbe52c8200838f5d7e7d59673"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker77_golden.h",
+    "sha256": "e856e8eec9244cdae1e857c854aab92a8d5d0c6e46d619ec219cf420b669f750"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker78_golden.h",
+    "sha256": "e5162d7e37f98c890104e48e0df3c39e345b53d7fe3afa18600e9ba0a4477874"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker79_golden.h",
+    "sha256": "1a1dc74fd60d095de98e8a200203613627b2ad93c35178c5c7254b3f72300cb7"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker80_golden.h",
+    "sha256": "3ac6a72925d2449e794e217444020f20c82b7d0148295320bb46d7c4bee441dd"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker81_golden.h",
+    "sha256": "68502c83b8313fb01df881dc37c2fb84da6dcab2232cb546e157f4d6b8e75cd1"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker82_golden.h",
+    "sha256": "7728212702ecc9a7acd00b3abc9e278151a2fbcd63b4e36c8c5991aa18199d09"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_error_marker83_golden.h",
+    "sha256": "0ed91154b0685a305931fe883139a91fba9a0751a608c9f6db37e660a72f2596"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method75_golden.h",
+    "sha256": "efd34da09fec09e84fa356c87a65d814fb4197ea623f52efa54f4ed05d6d87b5"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method76_golden.h",
+    "sha256": "c8dc0d3aa5e6cac5beadd8534f51406a8a6445353fe787fca2ec1c5be6153102"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method77_golden.h",
+    "sha256": "5fdcab2167204f7be37522dd7f4fbfe17e2fd9891ff631acd95c5503a6106dba"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method78_golden.h",
+    "sha256": "cbd6bd23644029d794f42ee32f54f2648e5f76abe72d391186a0c987bb126a9d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method79_golden.h",
+    "sha256": "be75ecf46424242494beec07d9ff3d2fe696f344e4f105a0b182edff02abee25"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method80_golden.h",
+    "sha256": "d079d969f89055f6947fd5839937b6ca04b7e0f48880b9c733d49b943fc89e51"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method81_golden.h",
+    "sha256": "6fdc229ab78a48acff4cd5290f44719f8e4452ce5056ce8324b47bc1585f4f3e"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method82_golden.h",
+    "sha256": "14b573806380d4360d5e49144e3ca7455da261191e8c3ace6af564099a73c4a9"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_generic_method83_golden.h",
+    "sha256": "7d5b38e829cc88f1c56f248cd5c2461c4367bf231902d0dd956a39675e57d549"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash75_golden.h",
+    "sha256": "0ed0d0639a2d309397e579bb3379da06a999efa670670d92c478047662b0feb0"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash75_identity.h",
+    "sha256": "7cccb439d24c17d82acd5800891decf998fb2586dcaf4ac32e5d20995b187945"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash76_golden.h",
+    "sha256": "4e4950019ba90a7bedfcfca96d9494ce59173204cc9122ef8238c1a3880be05a"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash76_identity.h",
+    "sha256": "4f5e883406bab51f5d9db2b4a6e397ca98fb294f3936d167ba4efede49ed5bae"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash77_golden.h",
+    "sha256": "9ea2c177c564d26a0135ec43a06ac4c5d258cf3c860483bf3f641661094527f4"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash77_identity.h",
+    "sha256": "2d9fac1bc4d2ea2cd1169f970f9d49cafe2927e09908ebaa46bf6be56bc3dbeb"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash78_golden.h",
+    "sha256": "3d625e422be10ecb8f66a84aea3ed5dc9da10376f1ccd35f24862e3f84c8be0a"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash78_identity.h",
+    "sha256": "48be3b19a4a256b0ad90f48915f8023cdacdc7227165eea8e91ce0e0cab078ca"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash79_golden.h",
+    "sha256": "76e02a50ab12d30abef10ba338c5a59b17933b6c5d7081678eda91b8e988828a"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash79_identity.h",
+    "sha256": "f8ce0702fd77f348bf1a7eb5555a0180844312265d696c04b5faa601e1cf49cf"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash80_golden.h",
+    "sha256": "07b53e469f55eb727ba532742121a590f377037ae651318f83a9d6a5a8e78526"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash80_identity.h",
+    "sha256": "e8d69db6f4a3393fd22eb3bd1d2172d87b3c66c5e5ecd2f63fe39c78b7776b0e"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash81_golden.h",
+    "sha256": "004ebb9f63984d5bf3273ffd0537c6c60a71a04d13d09e4131ce67db45f5ecdb"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash81_identity.h",
+    "sha256": "e3d8a645588a146fbb027da057ff4985b330abda0a400f19241230918029eedb"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash82_golden.h",
+    "sha256": "97d291cfd7d850ff7d2514f4d489efcdc42221e7942f4b80635030daab3353dd"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash83_golden.h",
+    "sha256": "82ae33aac8765001d620dfc97aff59eb0d930325a2067ed75bf1f392b5c1f064"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash83_identity.h",
+    "sha256": "0ac4267799cf1e4a523c2ca808f75f370aec18a6df3a84f1bbcd8db06828de36"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members76_golden.h",
+    "sha256": "18789a8fa91d5b0dc689842d63588b391c89f603d285dddc08d7cfa0fdf44548"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members77_golden.h",
+    "sha256": "00d9ec1ae0ed2d2ab3ace64ebe474c4345a8bbad4f637fe8805b94b1ca97e8be"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members78_golden.h",
+    "sha256": "62560a48e5567db090808a81b2463742979c1b439401db8b376583a79e76e4d0"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members79_golden.h",
+    "sha256": "d74cb275803d0d02876ffe1f7e2c7f09cde9494a88423152324c8c65743e1f80"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members80_golden.h",
+    "sha256": "0420346e840df506333c9af79cd0321a524e210b154070def8228258e4c836c2"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members81_golden.h",
+    "sha256": "4a28121d09b2cc5866b10219f81e382c12570e301c46f17039e840dc89fe9a8c"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members82_golden.h",
+    "sha256": "57d1ef7011adb50efccd891873314f09681d76a3cc7e0355295731fa0e936b41"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_members83_golden.h",
+    "sha256": "5fec93c9f579cbc7a99e47fbe6946428f2dd82c32c17d1018082aa49a357b5b5"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_position81_golden.h",
+    "sha256": "e3044f359912889123aa48116f8380edc0e47091b25c05acd158919411203693"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_position82_golden.h",
+    "sha256": "8c5642b82822a9983360d2346060563260395d9fc0b192b3f1c8588c3703c121"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_position83_golden.h",
+    "sha256": "18c397e4cb8bcd48a93d3065da1821dad40ed03875a6c3f9deae23a12d333922"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_projection78_golden.h",
+    "sha256": "a855525026dc00dc8fbcec12f1186f9180f7c8be36c2c697f6f1cb567ac4a4cb"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_projection79_golden.h",
+    "sha256": "6ee11bab903849c683a744dd8d1d030c7880e0d31ad0ea31d49d96cecd8384d7"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_projection80_golden.h",
+    "sha256": "e2ed32a7e03ef6d2abbe06bb3af61d78cfe0eaf5bc595c63dc8c1ad324cbb391"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_projection81_golden.h",
+    "sha256": "44d7293c37fb048c83b61bb892f2dc9ca7067f62ddea02bcd9fe9fb05b080e2c"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_projection82_golden.h",
+    "sha256": "3469d0ebc38eeb1494069656a42c7085b83772373bc5461b5a4204128458102e"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_hash_projection83_golden.h",
+    "sha256": "527a6abd3b2547ae4badd086fb85d6280b75e04ab9ccbeca88e25253c5f0d70d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index77_golden.h",
+    "sha256": "32142679d3554f8ee10e6c69c73c98b238290cb821cc4ee34cc8283630e10a57"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index78_golden.h",
+    "sha256": "5a25ead69e803d2fc5c580428e771346f9629e9f670abe1da623da0702955530"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index79_golden.h",
+    "sha256": "3f819ff0d8de93c2b7f1f90e4a195bd50a2e611c355f8ecd2f41ef394cfe8f0c"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index80_golden.h",
+    "sha256": "8f59f3034a01f17c986373972543d151c1312307d308c9da8644ff969c069f1d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index81_golden.h",
+    "sha256": "1972a769566932f3eb877f7546ddcd947b215cca084ef26b729297122ebd36d3"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index82_golden.h",
+    "sha256": "96f4b19609f01684ab5aa2b3341cabbe5fcf03b50d7a0745f2ae2550a2ad0047"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_index83_golden.h",
+    "sha256": "8e62f0829b2109f7263cfc0bc52b41208867ade75bf5b7997e98226e8bfd624a"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_key_path82_golden.h",
+    "sha256": "ff9d0744e925ce4c8af118b768016f5d3773a4897f573f2ae9500cc2c9633b57"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_key_path83_golden.h",
+    "sha256": "af53da59267b6e22e7d8c36fb6d4d1089aec6171b0d345495c9263cf4219084c"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_membership80_golden.h",
+    "sha256": "fcdf99006155cb13513c0552dfe4037f4abcd579eb89af5ddef2abcfa629c85b"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_membership81_golden.h",
+    "sha256": "fa284e73cbf0156365695ee0a10d238db085de323fd093b223ac29795d6eb364"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_membership82_golden.h",
+    "sha256": "797c057d2d9057d4d03f1cb8bb7aebc44f194ae3856b9498133a74cb0a18ea76"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_map_membership83_golden.h",
+    "sha256": "c2d197c54e7c28fed9c5569089a485cee2061236118386f439b05864399baec8"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable75_golden.h",
+    "sha256": "18bd7b854c0fa53f8319999ea46f21023b642c1cf8ac15d396f7654f45cef1c4"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable76_golden.h",
+    "sha256": "a03ec1e814dfa0607ae5fe497533819280d3eb4b2ad38a6f0857bacd350b34be"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable77_golden.h",
+    "sha256": "7399551bc6003dc8b295b98192079fa73d3d1385be12676d50a69539f05e2a85"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable78_golden.h",
+    "sha256": "8cf6589942c8030d822e3e7b18e2fcf9bd587947487eb9a26b0836de4a515c71"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable79_golden.h",
+    "sha256": "cd4362fe398187be57b1f824644655fbc0710c39071395f7876f88a8ae8c7d78"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable80_golden.h",
+    "sha256": "ed793f4631edeb0e4403ab7fbef454819aca837a19fbd8dc202a79110741605a"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable81_golden.h",
+    "sha256": "3733dd5b17ce7b14bfcdd36a04edb96dc69796cb76787d9f78aa756823abbe47"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable82_golden.h",
+    "sha256": "ef4533c55b69ecb7842d0d23cc899d1b28525c90a9d6413ae50ddb4350c546c3"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nested_nullable83_golden.h",
+    "sha256": "d3deb3a8d8fd51dcb2f9a40298ae97963c7615a952df915d13d1bb344820e44f"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable75_golden.h",
+    "sha256": "7936a3f03de7aad4030598f98617ebb69635f872a31a821ca849f2b6b203c47f"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable76_golden.h",
+    "sha256": "24f50618264cbee9c09dc77e8c9026fc45b856af5d6658ddd192a0d4202f21a0"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable77_golden.h",
+    "sha256": "32b6c52eb999a788eb31313fa23f69c39ffc900862b44fa0379e20230089ed44"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable78_golden.h",
+    "sha256": "1f9476b8d5f47eaf893363f9ad4258b09c642fda3909041fab13ada7969b9c3e"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable79_golden.h",
+    "sha256": "0384b5102efa0e7ed758a80272f284fb80e7bde7942a780cb3e4768329db6e53"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable80_golden.h",
+    "sha256": "5f017441d6ceb88876d08340a1aa113b898ed1d19e7d1a16da8617fda7659c82"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable81_golden.h",
+    "sha256": "ce4069a5671578f2c4b90bef0846638b4feae3b427bb7be0817575d575d16ddc"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable82_golden.h",
+    "sha256": "fc7529e33e9d33c092c5de7aab7bfbcecb75a38a9496a01f9361f23ab3d2244e"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_nullable83_golden.h",
+    "sha256": "c67e09a0ce7afb460c68a3055e04e6198d322ec170d05405ee6a371e19c960f7"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune75_golden.h",
+    "sha256": "dd170bcb4b0f137c28f0b0633fbc8963ede88d2edaf6c3af35cd1f8c8343d80f"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune76_golden.h",
+    "sha256": "a5ecc395634818fd9ab58f4b14046ef97a44a31c3071d4579e457af2b817a3c3"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune77_golden.h",
+    "sha256": "f32452f6b93092ade5cfc935c393902ac8810a43e1ef8001d942b166f959ac1d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune78_golden.h",
+    "sha256": "8e68ccf1426e2038d61792aae316a4acb8878866437ab0456ac767744021733d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune79_golden.h",
+    "sha256": "3af319b1995f0656e4598eb7841c0c824b9c330bf8f940df1d002376ee3ba358"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune80_golden.h",
+    "sha256": "4ef38aa8d0e93f0c10a2ce922218b7141174d0b8b4612dd04768f3bacef686ab"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune81_golden.h",
+    "sha256": "aa7f721aa33ab583a947b94d19544d9810e68ce048115c92e9aba3813cf18e3d"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune82_golden.h",
+    "sha256": "63bd07e6dde30a2856aba341d8906a7ed70a83d532930af2f101e45387a7ba3e"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_rune83_golden.h",
+    "sha256": "1d2e47ce70743081b1b68a97b6192e78e29639352d78a272a3167bd1cbf982a6"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_set_algebra79_golden.h",
+    "sha256": "73a0daf7e50524b0e6a7dfb95b95071989e4a8d87481d7545d4cdb69239537ca"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_set_algebra80_golden.h",
+    "sha256": "0e8defd3976b53ca122f0d76f2bc3563d1e901b1032f1d30fa6acc977aeb047c"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_set_algebra81_golden.h",
+    "sha256": "b7fce8f8d8cf54eea5ccf7a9fd00d9aa484939c4fbb05d291eb9f4c3eed07c81"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_set_algebra82_golden.h",
+    "sha256": "6f9106d9d58538e71f70b99bd311aa2127e714c50e551836596dffbbe0abb420"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_set_algebra83_golden.h",
+    "sha256": "5ac5207ea017c81dd24e7e112753a9902d5e78d89274cb133715b540b26be994"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_source_product_identity.h",
+    "sha256": "3cb3495fc72ef7eda87cbfe042f99b29e002fb6b38bac00779d316d6a924e05b"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_go83_golden.h",
+    "sha256": "1c6fed5ddeaf931e42ec3775b664bc743d6ac54e542deacfc787953dbca25b68"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_go83_golden_part1.h",
+    "sha256": "67bd3e88113bd8b1ad8270e7860b885ab21bb25c4e50fcdda27dc827903a3310"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_go83_golden_part2.h",
+    "sha256": "fdc45959fabb164bdb6b595c05d158fa9bb2727d183d427e013b368ffcc9fc5c"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_map_kind83_golden.h",
+    "sha256": "6a3b33b96d2913c352f7bc3bcfc53506a2cc4e4bf018de95090bf94e1d5fbb56"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_types83_golden.h",
+    "sha256": "2e817d09e75f08603f7c03600bec6254949113e35801dce5d34d7fd54b870798"
+  },
+  {
+    "source": "hash_protocol28_inputs/xir_task_unit83_golden.h",
+    "sha256": "fc81e5ffe5e50c5f82f3c235c478ac934babe22f53819f796c3717ef75f0991c"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/compile_owner/checked_sizing79_golden.h",
+    "sha256": "960c537dbd84ab01b0ecb1326e4d8ff25c51e9b7bcd17875a667a5008672b9c6"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/derive_semantic79_vectors.py",
+    "sha256": "315b5c9144aed7038146819ae01f79d483c3838141c96898964859d48ab262d1"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/root_construction79_goldens.h",
+    "sha256": "a5315b8c8e7a20cb87ec76f9040fe2ffbbe2cf8a46fa61886219762f11605590"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/sdk_current_identity_golden.h",
+    "sha256": "0032e24624d466d504616c3aa3cf7ce8b7774e4ee73c175ecf528a99a3901bbb"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/semantic79_inputs.json",
+    "sha256": "d3f9fea5654ce8772953a25c699fcb46e0b5c1306653d675e80dde69595a5223"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/unit_values/unit79_wire_golden.h",
+    "sha256": "6e94927c5652bc4aeeac83690b30ed8012b9935f16f7e1ddbddae35698f8bbcd"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_assert_panics79_golden.h",
+    "sha256": "2eb2915b95c6a54767319e3f7cab7f4c70bb9b6098a0800b30bd0bbee2f83cc9"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_checked_range79_golden.h",
+    "sha256": "dbe0d5ba78753a9da08abe9d8fb26eb723a09d9f499a0983c5a53d63fd8492a6"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_checked_scalar79_golden.h",
+    "sha256": "ccc5a22c483618d7bea04bb9e15b92f2becf0dc148407c1cac74a192cec349b0"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_error_marker79_golden.h",
+    "sha256": "6e2e687afdca60d6a526522f77b713bf0e63f91e517d4c446d75233cebd07774"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_generic_method79_golden.h",
+    "sha256": "8138e49db316474f099948efbf2833bffadd8d7791bc0388011d03e7a4607786"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_hash79_golden.h",
+    "sha256": "30b91043c5e8155908c0dca851185c8300a505bfd4f1cfeebe0bf7126816d327"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_nested_nullable79_golden.h",
+    "sha256": "3f3d99fb0c0e5a06230f04a6c238fa27a8d4fe8a0b63fd3042ed4b701a5bb5d5"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_nullable79_golden.h",
+    "sha256": "1e41f3531f5a57e4100c939b351e99dab7240964c34b84653577ce474e7c90df"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_rune79_golden.h",
+    "sha256": "b14a96ac93688f4ebaf9828384e5864afef9ce3b280c66160dba33fcdc483748"
+  },
+  {
+    "source": "source_hash_receiving/retired32_79/xir_semantic79_identity.h",
+    "sha256": "e22b50a9ecd39f173b48f5b0f53630da9a569668420cfa5a725d62a7e3aab1fc"
+  }
+]

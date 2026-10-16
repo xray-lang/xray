@@ -590,6 +590,30 @@ static void pc_local_formal_preflight(const XrXirCompileContext *c) {
     effect_body_material_free(body);
 }
 
+/* Hash key and value edges use the same complete prefix induction as other
+ * constructed types. Neither a zero span nor a later type ID proves closure. */
+static void pc_local_hash_type_controls(const XrXirCompileContext *c,EffectBodyMaterial *body) {
+    XrXirTypeNode *nodes=(XrXirTypeNode *)body->domain.types->nodes;
+    XrXirTypeNode saved=nodes[1];
+    for (unsigned kind=0;kind<2;++kind) {
+        XrXirTypeNode hash={.kind=kind?XR_XIR_TYPE_MAP:XR_XIR_TYPE_SET,
+            .element=XR_XIR_STRING,.result=kind?XR_XIR_I64:XR_XIR_UNIT};
+        nodes[1]=hash;EffectInvocationLocalRead read={c,body,0};
+        CHECK(effect_invocation_local_type(&read,(XrXirType)EE_CELL)==XR_XIR_OK);
+        for (unsigned mode=0;mode<(kind?5u:3u);++mode) {
+            nodes[1]=hash;
+            if (!mode) nodes[1].element=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+            if (mode==1) nodes[1].element=(XrXirType)EE_CELL;
+            if (mode==2) nodes[1].parameter_span=1;
+            if (mode==3) nodes[1].result=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+            if (mode==4) nodes[1].result=(XrXirType)EE_CELL;
+            read=(EffectInvocationLocalRead){c,body,0};
+            CHECK(effect_invocation_local_type(&read,(XrXirType)EE_CELL)==XR_XIR_BAD_TYPE);
+        }
+    }
+    nodes[1]=saved;
+}
+
 /* Corrupt the actual owned type input, including a forged zero parameter
  * span and a backward-order violation. Each new read must rediscover it. */
 static void pc_local_type_controls(const XrXirCompileContext *c,EffectBodyMaterial *body) {
@@ -609,6 +633,7 @@ static void pc_local_type_controls(const XrXirCompileContext *c,EffectBodyMateri
     }
     nodes[1]=saved;read=(EffectInvocationLocalRead){c,body,0};
     CHECK(effect_invocation_local_type(&read,(XrXirType)EE_CELL)==XR_XIR_OK);
+    pc_local_hash_type_controls(c,body);
     CHECK(attempts==allocations && pc_stats(c).allocated_bytes==before.allocated_bytes &&
         pc_stats(c).live_bytes==before.live_bytes);
 }

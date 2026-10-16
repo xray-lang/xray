@@ -18,14 +18,19 @@
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}} while(0)
 #include "../xir_library_compile_owner.h"
 #include "wire_golden.h"
+#include "invalid_entry_wire.h"
 #include "../rest_declarations/retired78_wire.h"
 #include "../export_constants/retired78_wire.h"
 _Static_assert(XR_XIR_MATH_UNARY_F64==154 && XR_XIR_MATH_BINARY_F64==155 &&
     XR_XIR_MATH_UNARY_I64==156 && XR_XIR_RANDOM_F64==157 && XR_XIR_RANDOM_I64==158 &&
-    XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==79,"Independent math operation framing");
+    XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==84,"Independent math operation framing");
 static XrXirStatus math_wire_operation(const XrXirCompileContext *context,void *unused) {
     (void)unused;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_checked_read(context,math_wire,sizeof(math_wire),&artifact,NULL);
+    XrXirDiagnostic diagnostic={0};
+    XrXirStatus status=xr_xir_compile_checked_read(context,math_wire,sizeof(math_wire),&artifact,&diagnostic);
+    if (status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
+        fprintf(stderr,"Math packet read status%u function%u block%u instruction%u reason%u\n",
+            status,diagnostic.function,diagnostic.block,diagnostic.instruction,diagnostic.reason);
     if (status==XR_XIR_OK) {
         status=xr_xir_compile_checked_write(artifact,&packet,NULL);
         if (status==XR_XIR_OK) CHECK(packet.length==sizeof(math_wire) && !memcmp(packet.bytes,math_wire,packet.length));
@@ -112,12 +117,16 @@ static void math_execution(const XrXirCompileContext *context) {
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,4,NULL,0)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_LIMIT);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
+    /* Disposal preserves exhaustion of the same cumulative execution bank. */
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_LIMIT);xr_xir_compile_program_drop(program);
     xr_compile_resources_free(entries);xr_compile_resources_free(bindings);xr_xir_compile_artifact_free(lowered);
 }
 int main(void) {
     library_compile_operation_cases("Independent complete math read/write",math_wire_operation,NULL);
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+    XrXirArtifact *invalid=NULL;
+    CHECK(xr_xir_compile_checked_read(&owner.context,math_invalid_entry_wire,
+        sizeof(math_invalid_entry_wire),&invalid,NULL)==XR_XIR_BAD_TYPE && !invalid);
     math_old_packets(&owner.context);math_attacks(&owner.context);math_execution(&owner.context);
     library_compile_owner_drop(&owner);library_compile_observer_free();
     puts("Independent five math operations, fourteen rehashed attacks, exact budgets/physical FI and complete old78 early refusal PASS");

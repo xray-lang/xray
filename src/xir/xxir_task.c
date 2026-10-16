@@ -10,6 +10,7 @@
  *   A public handle never drives or cancels the executor that owns pending work.
  */
 #include "xxir_task_internal.h"
+#include "xxir_task_shapes.h"
 #include "xxir_error.h"
 #include <string.h>
 
@@ -50,8 +51,7 @@ XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
     const XrXirTypeNode *node = xr_xir_type_node(types, task->object.type);
     if (!node || node->kind != XR_XIR_TYPE_TASK) return false;
     XrXirType result = node->element;
-    if (result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
-        return false;
+    if (!xr_xir_task_result_shape(types, result)) return false;
     XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
     if (state == XIR_TASK_PREPARING)
         return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
@@ -246,7 +246,7 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
     if (!node || node->kind != XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = node->element;
-    if ((result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) ||
+    if (!xr_xir_task_result_shape(program->types, result) ||
         request->entry >= program->entry_count ||
         program->entries[request->entry].result != result || program->entries[request->entry].cleanup_owner)
         return XR_XIR_CALL_BAD_ARGUMENT;

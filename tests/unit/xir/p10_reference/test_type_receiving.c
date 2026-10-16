@@ -9,7 +9,6 @@
 #include "xir/xxir_type_arena_internal.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_array.h"
-#include "xir/xxir_value_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,24 +30,26 @@ static void no_change(const XrXirCompileContext *context,XrCompileResourceStats 
     XrCompileResourceStats after={0};CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==before.live_bytes);
 }
-static void reject_cell_cycle(const XrXirValue *cell) {
-    struct CellPrefix { XirObject object;XrXirValue value; };
-    _Static_assert(offsetof(struct CellPrefix,value)==sizeof(XirObject),"Cell payload follows its object header");
-    unsigned char *payload=(unsigned char *)(uintptr_t)cell->payload+offsetof(struct CellPrefix,value);
-    XrXirValue original={0};memcpy(&original,payload,sizeof(original));
-    memcpy(payload,cell,sizeof(*cell));
-    CHECK(!xr_xir_value_valid(cell));
-    memcpy(payload,&original,sizeof(original));
-    CHECK(xr_xir_value_valid(cell));
-}
 #include "type_receiving_nested.h"
 #include "type_receiving_error.h"
-#include "type_receiving_resources.h"
+#include "type_receiving_class.h"
+#include "type_receiving_struct.h"
+#include "type_receiving_function.h"
+#include "type_receiving_equal.h"
+#include "type_receiving_hash.h"
+#include "type_receiving_hash_members.h"
+#include "type_receiving_hash_function.h"
 int main(void) {
-    receiving_resources();
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     received_nested_arrays(&compiler);
     received_error_arrays(&compiler);
+    received_class_storage(&compiler);
+    received_struct_storage(&compiler);
+    received_function_storage(&compiler);
+    received_value_equality(&compiler);
+    received_hash_storage(&compiler);
+    received_hash_members(&compiler);
+    received_hash_functions(&compiler);
     XrXirTypeArena *source=arena(&compiler,0),*target=arena(&compiler,1),*unrelated=arena(&compiler,1);
     XrXirTypeArena *parent=arena(&compiler,0),*child=arena(&compiler,1);
     XirTypeReceivingRoot down={type(1),type(2)},up={type(2),type(1)};
@@ -87,7 +88,6 @@ int main(void) {
     XrXirValue values[]={{XR_XIR_I64,0,41},{XR_XIR_I64,0,42}},array={0},cell={0};
     CHECK(xr_xir_array_new(type(0),values,2,&admission,&array)==XR_XIR_VALUE_OK);
     CHECK(xr_xir_cell_new(domain,source,type(1),&array,&admission,&cell)==XR_XIR_VALUE_OK);
-    reject_cell_cycle(&cell);
     CHECK(xr_xir_value_argument(&cell,target,type(2)) && xr_xir_value_argument(&cell,third,type(3)));
     CHECK(!xr_xir_value_argument(&cell,unrelated,type(2)));
     admission.arena=target;

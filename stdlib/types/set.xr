@@ -1,17 +1,30 @@
-// Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c
-class Set<T: Hashable> {
+// @native-type id=11
+struct Set<T: Hashable> {
+    // @native-operation SET_ADD allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref add(value: T)
+    // @native-operation HASH_CONTAINS allocation=may_heap failures=allocation,retain,limit ownership=owned
     contains(value: T) -> bool
+    // @native-operation HASH_DELETE allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref delete(value: T) -> bool
+    // @native-operation HASH_CLEAR allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref clear()
+    // @native-operation HASH_VALUES allocation=may_heap failures=allocation,retain,limit ownership=owned
     values() -> Array<T>
+    // @native-operation HASH_FOR_EACH allocation=may_heap failures=allocation,retain,limit,callback ownership=unit
     forEach(fn: fn(value: T)) -> ()
+    // @native-operation SET_UNION allocation=may_heap failures=allocation,retain,limit ownership=owned
     union(other: Set<T>) -> Set<T>
+    // @native-operation SET_INTERSECTION allocation=may_heap failures=allocation,retain,limit ownership=owned
     intersection(other: Set<T>) -> Set<T>
+    // @native-operation SET_DIFFERENCE allocation=may_heap failures=allocation,retain,limit ownership=owned
     difference(other: Set<T>) -> Set<T>
+    // @native-operation SET_SYMMETRIC_DIFFERENCE allocation=may_heap failures=allocation,retain,limit ownership=owned
     symmetricDifference(other: Set<T>) -> Set<T>
+    // @native-operation SET_IS_SUBSET allocation=may_heap failures=allocation,retain,limit ownership=owned
     isSubset(other: Set<T>) -> bool
+    // @native-operation SET_IS_SUPERSET allocation=may_heap failures=allocation,retain,limit ownership=owned
     isSuperset(other: Set<T>) -> bool
+    // @native-operation HASH_VALUES allocation=may_heap failures=allocation,retain,limit ownership=owned
     toArray() -> Array<T>
     // Iteration protocol — yields each element T (used by for-in).
     iterator() -> Iterator<T>

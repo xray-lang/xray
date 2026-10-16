@@ -29,7 +29,7 @@ static bool source_native_task_declaration(SourceContext *ctx) {
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
     record->native_identity = native->id; record->exported = true;
     record->generic_parameter_count = 1; record->generic_constraints = constraints;
-    SourceName parameter = {0}; parameter.name = source_owned_text(ctx, native->parameter_name);
+    SourceName parameter = {0}; parameter.name = source_owned_text(ctx, native->parameter_names[0]);
     if (!parameter.name || !source_query_declare(ctx, &parameter, XR_XIR_SOURCE_TYPE_PARAMETER,
         ctx->task_declaration, (XrXirSourceRange) {ctx->task_module, 0, 0, 0, 0})) return false;
     record = (XrXirSourceDeclaration *) &ctx->query.declarations[parameter.declaration - 1];

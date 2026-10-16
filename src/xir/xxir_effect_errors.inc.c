@@ -110,7 +110,9 @@ static bool error_closed_node_shape(const XrXirTypeNode *node) {
     case XR_XIR_TYPE_TUPLE:
         return node->element == XR_XIR_UNIT && node->result == XR_XIR_UNIT && !node->flags &&
             node->parameter_count && node->parameters;
-    case XR_XIR_TYPE_ARRAY: case XR_XIR_TYPE_NULLABLE:
+    case XR_XIR_TYPE_MAP:
+        return !node->parameters && !node->parameter_count && !node->flags;
+    case XR_XIR_TYPE_ARRAY: case XR_XIR_TYPE_NULLABLE: case XR_XIR_TYPE_SET:
         return !node->parameters && !node->parameter_count && node->result == XR_XIR_UNIT && !node->flags;
     case XR_XIR_TYPE_ATOMIC:
         return !node->parameters && !node->parameter_count && node->result == XR_XIR_UNIT && !node->flags &&

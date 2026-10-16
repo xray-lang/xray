@@ -25,6 +25,9 @@
 #include "xxir_error.h"
 #include "xxir_panic.h"
 #include "xxir_equal.h"
+#include "xxir_key.h"
+#include "xxir_map.h"
+#include "xxir_hash_iteration.h"
 #include "xxir_nullable.h"
 #include "xxir_tuple.h"
 #include "xxir_float.h"
@@ -79,6 +82,11 @@ static XrXirValueStatus cell_projection_write(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValue *value,
     XrXirValueAdmission *admission);
 static bool cell_access(const XirCell *cell, const XrXirCellAuthority *authority);
+static XrXirValue path_key_value(const XrXirValuePathStep *step, const XrXirTypeArena *arena) {
+    if (step->kind != XR_XIR_PATH_KEY) return (XrXirValue){0};
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    return (XrXirValue){(uint32_t)xr_xir_map_key(types, step->container), 0, step->selector};
+}
 typedef struct XirArray {
     XirObject object;
     unsigned char *data;
@@ -104,7 +112,7 @@ _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8
 static void class_observation_dispose(XrXirDomain *domain);
 /* The immutable prefix is readable before any generation-specific field.
  * Its fifth byte excludes both supported old atomic-bool representations. */
-static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x18,0x00,0x00,0x01};
+static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x19,0x00,0x00,0x01};
 _Static_assert(offsetof(XrXirDomain, identity) == 0 && sizeof(atomic_bool) == 1 &&
     sizeof(_Atomic(uint32_t)) == 4, "domain identity rejects the complete retired prefix");
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain) {
@@ -170,6 +178,8 @@ static bool array_storage_valid(const XirArray *array) {
         array->capacity <= INT64_MAX && (!stride || array->capacity <= SIZE_MAX / stride) &&
         ((array->capacity != 0 && stride != 0) == (array->data != NULL));
 }
+static uint32_t array_release_depth(const XrXirTypeArena *arena, XrXirType element);
+#include "xxir_hash_storage.inc.c"
 static bool storage_leaf_value(const XrXirTypeArena *arena,XrXirType type,
     const unsigned char *bytes,uint32_t size,XrXirValue *output) {
     XR_CHECK(bytes && size && size <= sizeof(uint64_t), "compact leaf needs exact payload storage");
@@ -191,7 +201,8 @@ static bool value_object_kind_known(uint32_t kind) {
     return !kind || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
         kind == XIR_OBJECT_FUNCTION || kind == XR_XIR_TYPE_ARRAY ||
         kind == XR_XIR_TYPE_NOMINAL || kind == XR_XIR_TYPE_NULLABLE ||
-        kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK;
+        kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK ||
+        kind == XR_XIR_TYPE_MAP || kind == XR_XIR_TYPE_SET;
 }
 static bool value_header_valid(const XrXirValue *value) {
     if (!value || value->reserved) return false;
@@ -228,8 +239,7 @@ static bool value_header_valid(const XrXirValue *value) {
     return node && !node->parameter_span && object_storage_kind(node->kind) == object->kind &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
-         node->kind == XR_XIR_TYPE_TASK ||
-         node->kind == XR_XIR_TYPE_TASK ||
+         node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
          (node->kind == XR_XIR_TYPE_ATOMIC && ((XirAtomic *)object)->element ==
           xr_xir_atomic_element(xr_xir_compile_type_arena_types(object->arena), type)));
 }
@@ -290,6 +300,8 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         return true;
     }
     if (object->kind == XR_XIR_TYPE_ARRAY) return array_storage_valid((XirArray *) object);
+    if (object->kind == XR_XIR_TYPE_MAP || object->kind == XR_XIR_TYPE_SET)
+        return hash_storage_valid((XirHash *)object);
     if (object->kind == XIR_OBJECT_FUNCTION) {
         const XrXirFunctionBinding *binding = &((XirFunction *) object)->binding;
         return binding->owner && binding->release && binding->capture_count <= 65536 &&
@@ -725,6 +737,7 @@ static bool array_owned_elements(const XirArray *array) {
         return array_release_depth(array->object.arena, array->element) != 0;
     return owned_carrier_type(array->element);
 }
+#include "xxir_hash_lifetime.inc.c"
 typedef struct ClassAllocation {
     size_t bytes, release_offset;
     uint32_t release_capacity;
@@ -802,7 +815,14 @@ static void release_pending(XirObject *pending) {
             xr_xir_domain_deallocate(domain, task, sizeof(*task));
         } else if (object->kind == XIR_OBJECT_CELL) {
             XirCell *cell = (XirCell *) object;
-            if (!object->graph_dead) queue_release(&cell->value, &pending);
+            if (!object->graph_dead) {
+                XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
+                for (uint32_t i = 0; i < cell->projection_count; ++i) {
+                    XrXirValue key = path_key_value(&steps[i], arena);
+                    queue_release(&key, &pending);
+                }
+                queue_release(&cell->value, &pending);
+            }
             xr_xir_domain_deallocate(domain, cell, cell->allocation_bytes);
         } else if (object->kind == XIR_OBJECT_FUNCTION) {
             XirFunction *function = (XirFunction *) object;
@@ -828,6 +848,14 @@ static void release_pending(XirObject *pending) {
             XirNominalValue *record = (XirNominalValue *) object;
             for (uint32_t i = object->graph_dead ? 0 : record->count; i; --i) queue_release(&record->fields[i - 1], &pending);
             xr_xir_domain_deallocate(domain, record, sizeof(*record) + (size_t) record->count * sizeof(XrXirValue));
+        } else if (object->kind == XR_XIR_TYPE_MAP || object->kind == XR_XIR_TYPE_SET) {
+            XirHash *map = (XirHash *)object;
+            for (size_t i = 0; !object->graph_dead && i < map->length; ++i)
+                hash_queue_entry(map, i, &pending);
+            size_t bytes = 0;
+            XR_CHECK(hash_data_size(map->capacity, map->stride, &bytes), "hash release retains its original extent");
+            if (map->data) xr_xir_domain_deallocate(domain, map->data, bytes);
+            xr_xir_domain_deallocate(domain, map, (size_t)hash_header_bytes(map));
         } else if (object->kind == XR_XIR_TYPE_ARRAY) {
             XirArray *array = (XirArray *) object;
             uint32_t depth = array_release_depth(arena, array->element);
@@ -1433,6 +1461,14 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
     return graph_outcome;
 }
 
+#include "xxir_hash_prepare.inc.c"
+#include "xxir_hash_clone.inc.c"
+#include "xxir_hash_mutation.inc.c"
+#include "xxir_hash_delete.inc.c"
+#include "xxir_hash_value.inc.c"
+#include "xxir_hash_position.inc.c"
+#include "xxir_hash_projection.inc.c"
+#include "xxir_set_algebra.inc.c"
 #include "xxir_cell_owner.inc.c"
 #include "xxir_class_value.inc.c"
 #include "xxir_struct_value.inc.c"
@@ -1443,3 +1479,5 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_error_value.inc.c"
 #include "xxir_panic_value.inc.c"
 #include "xxir_value_equal.inc.c"
+#include "xxir_map_contains_value.inc.c"
+#include "xxir_value_key.inc.c"

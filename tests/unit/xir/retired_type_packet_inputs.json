@@ -1,0 +1,90 @@
+[
+  {
+    "source": "compile_owner/checked_sizing78_golden.h",
+    "sha256": "ae36f27095cf5f13134b3583f7ee14bf0da425a3f3218584af0af21797e8d8ea"
+  },
+  {
+    "source": "root_construction78_goldens.h",
+    "sha256": "64e2ffaf02ae98aa2adf134eb9b73586cdeaa70d3dd08767b88c9ca367bd2e79"
+  },
+  {
+    "source": "unit_values/unit78_wire_golden.h",
+    "sha256": "38df217b95cda8eca5a2ae08729318c8355f5c639dd5ff2d2b96acc7b34ec8ea"
+  },
+  {
+    "source": "xir_assert_panics78_golden.h",
+    "sha256": "3b1f3adb394893f50228ca6215afe052d8a723db7a2f93dba6d824ce9ac234de"
+  },
+  {
+    "source": "xir_checked_range78_golden.h",
+    "sha256": "7f0d407e444aef0fc933a68c3dd43f0d45ca3070ba948a32432944ef24daa7fc"
+  },
+  {
+    "source": "xir_checked_scalar78_golden.h",
+    "sha256": "785fa84078f8407feb69bc387b663498aad10caccf085c7daba323083518aafd"
+  },
+  {
+    "source": "xir_error_marker78_golden.h",
+    "sha256": "f49576e35e648853d3fa0786eeed7d006f02f2be1ccb2e4a2b5b05a26476eb58"
+  },
+  {
+    "source": "xir_generic_method78_golden.h",
+    "sha256": "b70cca6216f2a6c4bd98346f7f2adf50f122d95864bba46350c9f330de69c1a0"
+  },
+  {
+    "source": "xir_rune78_golden.h",
+    "sha256": "bc3170191919b76e14565826fd802286aeeff290649e1e6423c861917dd16ab3"
+  },
+  {
+    "source": "export_constants/wire78_golden.h",
+    "sha256": "2ce9172439f55c88db80c48baf88d39168ede0604dc4eb5b7b0eb5b38218fe6c"
+  },
+  {
+    "source": "rest_declarations/wire78_golden.h",
+    "sha256": "169ab1c82b01af89ff6dd26f0de5da59133e98419498b856c99560d8638afb7d"
+  },
+  {
+    "source": "retired_hash75/checked_sizing75_golden.h",
+    "sha256": "3baf06a35d0d60fa258c3be4de81d98582d15aa88aa9c35e62a1eb1334ce4781"
+  },
+  {
+    "source": "retired_hash75/xir_assert_panics75_golden.h",
+    "sha256": "6d4ff6ee074ab0a29384fd344f10101de11a47d20c1c0b2699372761b2b63de9"
+  },
+  {
+    "source": "retired_hash75/xir_checked_range75_golden.h",
+    "sha256": "941e6751b0dd9ff314dcab52a91b9ebb6ec1b9543144756f8414566998efab9f"
+  },
+  {
+    "source": "retired_hash75/xir_checked_scalar75_golden.h",
+    "sha256": "0f99f2b69037989e02ff69e6776c05e6148ff5e8a19184a16f9cf04fb2f9cad1"
+  },
+  {
+    "source": "retired_hash75/xir_error_marker75_golden.h",
+    "sha256": "c00b70d10cebc83973ce60141e649321d2008d3bbda9011954e2ce0680cf08f1"
+  },
+  {
+    "source": "retired_hash75/xir_generic_method75_golden.h",
+    "sha256": "efd34da09fec09e84fa356c87a65d814fb4197ea623f52efa54f4ed05d6d87b5"
+  },
+  {
+    "source": "retired_hash75/xir_rune75_golden.h",
+    "sha256": "dd170bcb4b0f137c28f0b0633fbc8963ede88d2edaf6c3af35cd1f8c8343d80f"
+  },
+  {
+    "source": "root_construction75_goldens.h",
+    "sha256": "d8244bb0c86ab29a444b3b4bae5d25033f7734b93765ff02fc9b840302c087a8"
+  },
+  {
+    "source": "xir_hash75_golden.h",
+    "sha256": "0ed0d0639a2d309397e579bb3379da06a999efa670670d92c478047662b0feb0"
+  },
+  {
+    "source": "xir_nullable75_golden.h",
+    "sha256": "7936a3f03de7aad4030598f98617ebb69635f872a31a821ca849f2b6b203c47f"
+  },
+  {
+    "source": "xir_nested_nullable75_golden.h",
+    "sha256": "18bd7b854c0fa53f8319999ea46f21023b642c1cf8ac15d396f7654f45cef1c4"
+  }
+]

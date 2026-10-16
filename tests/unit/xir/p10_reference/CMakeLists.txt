@@ -1,5 +1,15 @@
 add_executable(test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/test_language_reference.c")
 add_executable(test_xir_p10_lexical_scope "${CMAKE_CURRENT_LIST_DIR}/test_lexical_scope.c")
+add_executable(test_xir_p10_type_receiving "${CMAKE_CURRENT_LIST_DIR}/test_type_receiving.c")
+target_link_libraries(test_xir_p10_type_receiving PRIVATE xray_xir_scalar)
+set_target_properties(test_xir_p10_type_receiving PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p10_type_receiving PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_p10_type_receiving PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p10_type_receiving COMMAND test_xir_p10_type_receiving)
+set_tests_properties(test_xir_p10_type_receiving PROPERTIES LABELS "unit;xir;p10;ownership;type-identity" TIMEOUT 60)
 target_link_libraries(test_xir_p10_lexical_scope PRIVATE xray_xir_admission)
 set_target_properties(test_xir_p10_lexical_scope PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
@@ -11,18 +21,6 @@ add_test(NAME test_xir_p10_lexical_scope COMMAND test_xir_p10_lexical_scope)
 set_tests_properties(test_xir_p10_lexical_scope PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;ownership;lexical-scope")
 target_link_libraries(test_xir_p10_reference PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 add_executable(test_xir_p10_source_generations "${CMAKE_CURRENT_LIST_DIR}/test_source_generations.c")
-
-add_executable(test_xir_p10_type_receiving "${CMAKE_CURRENT_LIST_DIR}/test_type_receiving.c")
-target_link_libraries(test_xir_p10_type_receiving PRIVATE xray_xir_vm)
-set_target_properties(test_xir_p10_type_receiving PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-if(MSVC)
-    target_compile_options(test_xir_p10_type_receiving PRIVATE /W4 /WX /utf-8)
-else()
-    target_compile_options(test_xir_p10_type_receiving PRIVATE -Wall -Wextra -Werror)
-endif()
-add_test(NAME test_xir_p10_type_receiving COMMAND test_xir_p10_type_receiving)
-set_tests_properties(test_xir_p10_type_receiving PROPERTIES
-    TIMEOUT 30 LABELS "unit;xir;p10;generation;ownership;type-receiving")
 target_link_libraries(test_xir_p10_source_generations PRIVATE xray_xir_source xray_xir_vm)
 target_compile_definitions(test_xir_p10_source_generations PRIVATE XR_GENERATION_STDLIB="${CMAKE_CURRENT_LIST_DIR}/fixtures/generation_stdlib")
 set_target_properties(test_xir_p10_source_generations PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
@@ -32,8 +30,16 @@ else()
     target_compile_options(test_xir_p10_source_generations PRIVATE -Wall -Wextra -Werror)
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
+add_test(NAME test_xir_p10_source_history_function_value
+    COMMAND test_xir_p10_source_generations --history-function-value)
+add_test(NAME test_xir_p10_source_history_function_call
+    COMMAND test_xir_p10_source_generations --history-function-call)
+set_tests_properties(test_xir_p10_source_history_function_call PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept;birth-function")
+set_tests_properties(test_xir_p10_source_history_function_value PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept;birth-function")
 set_tests_properties(test_xir_p10_source_generations PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source")
-foreach(fact IN ITEMS function generic type stateful cell cell-write array array-const)
+foreach(fact IN ITEMS function generic type stateful cell cell-write array array-const class class-array array-equal class-ref class-inline-ref)
     string(REPLACE "-" "_" suffix "${fact}")
     add_test(NAME test_xir_p10_source_history_${suffix}
         COMMAND test_xir_p10_source_generations --history-${fact})
@@ -54,7 +60,7 @@ set_target_properties(source_history_native_producer PROPERTIES C_STANDARD 11 C_
 set(history_native_dir "${CMAKE_CURRENT_BINARY_DIR}/source_history_native")
 set(history_native_header "${history_native_dir}/source_history_native_generated.h")
 set(history_native_sources)
-foreach(history_mode IN ITEMS read write array array_const)
+foreach(history_mode IN ITEMS read write array array_const class class_array array_equal class_ref class_inline_ref function_call function_value)
     foreach(history_generation RANGE 1 4)
         list(APPEND history_native_sources "${history_native_dir}/source_history_${history_mode}_${history_generation}.c")
     endforeach()
@@ -63,6 +69,7 @@ add_custom_command(OUTPUT ${history_native_sources} "${history_native_header}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${history_native_dir}"
     COMMAND $<TARGET_FILE:source_history_native_producer> "${history_native_dir}"
     DEPENDS source_history_native_producer "${CMAKE_CURRENT_LIST_DIR}/source_history_cell_fixture.h"
+        "${CMAKE_CURRENT_LIST_DIR}/source_history_function_fixture.h"
     VERBATIM)
 add_library(source_history_native_entries STATIC ${history_native_sources} "${history_native_header}")
 target_link_libraries(source_history_native_entries PRIVATE xray_xir_scalar)
@@ -94,7 +101,7 @@ foreach(history_backend IN ITEMS native vm_native native_vm)
     else()
         target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
     endif()
-    foreach(history_kind IN ITEMS cell cell-write array array-const)
+    foreach(history_kind IN ITEMS cell cell-write array array-const class class-array array-equal class-ref class-inline-ref function-call function-value)
         string(REPLACE "-" "_" history_suffix "${history_kind}")
         add_test(NAME test_xir_p10_source_history_${history_suffix}_${history_backend}
             COMMAND ${history_target} --history-${history_kind})
@@ -116,6 +123,33 @@ set_tests_properties(test_xir_p10_source_birth_storage_resources PROPERTIES
 add_test(NAME test_xir_p10_source_birth_storage_baseline COMMAND test_xir_p10_source_birth_storage_resources --baseline)
 set_tests_properties(test_xir_p10_source_birth_storage_baseline PROPERTIES
     TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;resource-control")
+add_test(NAME test_xir_p10_source_birth_storage_first_mode_fi
+    COMMAND test_xir_p10_source_birth_storage_resources --mode 0)
+set_tests_properties(test_xir_p10_source_birth_storage_first_mode_fi PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+foreach(ref_mode IN ITEMS abort publish)
+    if(ref_mode STREQUAL "abort")
+        set(ref_ordinal 16)
+    else()
+        set(ref_ordinal 17)
+    endif()
+    add_test(NAME test_xir_p10_source_birth_storage_class_ref_${ref_mode}_fi
+        COMMAND test_xir_p10_source_birth_storage_resources --mode ${ref_ordinal})
+    set_tests_properties(test_xir_p10_source_birth_storage_class_ref_${ref_mode}_fi PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+endforeach()
+foreach(ref_mode IN ITEMS abort publish)
+    if(ref_mode STREQUAL "abort")
+        set(ref_ordinal 18)
+    else()
+        set(ref_ordinal 19)
+    endif()
+    add_test(NAME test_xir_p10_source_birth_storage_class_inline_ref_${ref_mode}_fi
+        COMMAND test_xir_p10_source_birth_storage_resources --mode ${ref_ordinal})
+    set_tests_properties(test_xir_p10_source_birth_storage_class_inline_ref_${ref_mode}_fi PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+endforeach()
+
 target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source xray_xir_vm)
 set_target_properties(test_xir_p10_source_generation_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
@@ -696,7 +730,14 @@ foreach(target IN ITEMS test_xir_p10_initializer_lifecycle
         TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;xir;p10;init;ownership;resources;fault-injection")
 endforeach()
 
-foreach(storage_kind IN ITEMS array array-const)
+xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
+xray_prepend_windows_asan_runtime_to_directory_tests()
+
+foreach(storage_kind IN ITEMS array array-const array-equal class-first class-abort class-publish
+    class-array-first class-array-abort class-array-publish class-ref-first class-ref-abort class-ref-publish
+    class-inline-ref-first class-inline-ref-abort class-inline-ref-publish
+    function-call-first function-call-abort function-call-publish
+    function-value-first function-value-abort function-value-publish)
     string(REPLACE "-" "_" storage_suffix "${storage_kind}")
     add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_resources
         COMMAND test_xir_p10_source_generation_resources --program-${storage_kind})
@@ -706,7 +747,27 @@ foreach(storage_kind IN ITEMS array array-const)
         COMMAND test_xir_p10_source_generation_resources --program-${storage_kind} --baseline)
     set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_baseline PROPERTIES
         TIMEOUT 60 LABELS "unit;xir;p10;source;resources;generation;ownership;baseline")
+    if(storage_kind MATCHES "^(class|function)")
+        add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_boundary_fault
+            COMMAND test_xir_p10_source_generation_resources --program-${storage_kind} --focused-fault)
+        set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_boundary_fault PROPERTIES
+            TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+    endif()
 endforeach()
 
-xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
-xray_prepend_windows_asan_runtime_to_directory_tests()
+foreach(function_kind IN ITEMS call value)
+    foreach(function_outcome IN ITEMS abort publish)
+        if(function_kind STREQUAL "call")
+            set(function_mode 20)
+        else()
+            set(function_mode 22)
+        endif()
+        if(function_outcome STREQUAL "publish")
+            math(EXPR function_mode "${function_mode}+1")
+        endif()
+        add_test(NAME test_xir_p10_source_birth_function_${function_kind}_${function_outcome}_fi
+            COMMAND test_xir_p10_source_birth_storage_resources --mode ${function_mode})
+        set_tests_properties(test_xir_p10_source_birth_function_${function_kind}_${function_outcome}_fi PROPERTIES
+            TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+    endforeach()
+endforeach()

@@ -39,7 +39,8 @@ static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type)
     while (count) {
         AstNode *step = steps[--count];
         if (step->type == AST_INDEX_GET) {
-            *type = xr_xir_type_is_array(&ctx->types,*type) ? xr_xir_array_element(&ctx->types,*type) : XR_XIR_UNIT;
+            *type = xr_xir_type_is_array(&ctx->types,*type) ? xr_xir_array_element(&ctx->types,*type) :
+                xr_xir_type_is_map(&ctx->types,*type) ? xr_xir_map_element(&ctx->types,*type) : XR_XIR_UNIT;
         } else {
             const XrXirTypeNode *container = xr_xir_type_node(&ctx->types,*type);
             if (!container || (!xr_xir_type_is_struct(&ctx->types,*type) && !xr_xir_type_is_class(&ctx->types,*type))) {
@@ -75,6 +76,7 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
     bool narrowed = root && root_type != root->type;
     if (reference && (narrowed || !root || root->construction ||
         (!xr_xir_type_is_struct(&ctx->types,root_type) && !xr_xir_type_is_array(&ctx->types,root_type) &&
+            !xr_xir_type_is_map(&ctx->types,root_type) &&
             !xr_xir_type_is_class(&ctx->types,root_type))))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"projected ref requires an actual stored root");
     bool constructing = root && root->construction;
@@ -118,20 +120,23 @@ static bool source_value_place_mode(SourceContext *ctx, AstNode *node, SourceVal
             if (!source_struct_field(ctx,step,place->type,step->as.member_access.name,3,&field,&type) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_FIELD_PLACE,type,{place->id},{0},field,{0}},place)) return false;
         } else {
-            if (!xr_xir_type_is_array(&ctx->types,place->type))
-                return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed place is not an Array");
-            XrXirType element = xr_xir_array_element(&ctx->types,place->type); SourceValue index;
+            bool map = xr_xir_type_is_map(&ctx->types,place->type);
+            if (!map && !xr_xir_type_is_array(&ctx->types,place->type))
+                return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed place requires an Array or Map");
+            XrXirType key = map ? xr_xir_map_key(&ctx->types,place->type) : XR_XIR_I64;
+            XrXirType element = map ? xr_xir_map_element(&ctx->types,place->type) :
+                xr_xir_array_element(&ctx->types,place->type); SourceValue index;
             if (plan) {
                 if (selector >= plan->count)
                     return source_fail(ctx,step,XR_XIR_BAD_STRUCTURE,"reference selector plan is incomplete");
                 SourceExpressionPlan *index_plan = plan->selectors[selector++];
                 if (!index_plan || index_plan->owner != ctx->function ||
                     index_plan->syntax != step->as.index_get.index || index_plan->state != SOURCE_TERM_UNRESOLVED ||
-                    !index_plan->expected.present || index_plan->expected.type != XR_XIR_I64)
+                    !index_plan->expected.present || index_plan->expected.type != key)
                     return source_fail(ctx,step,XR_XIR_BAD_STRUCTURE,"reference selector plan does not match its path");
                 if (!source_plan_complete(ctx,index_plan,&index)) return false;
             } else if (!source_plan_expression(ctx,step->as.index_get.index,
-                (SourceExpectedType){true,XR_XIR_I64,false,false},&index)) return false;
+                (SourceExpectedType){true,key,false,false},&index)) return false;
             if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_INDEX_PLACE,element,{place->id,index.id},{0},0,{0}},place)) return false;
         }
         if (!source_query_expression(ctx,step,place->type)) return false;
@@ -189,8 +194,14 @@ static bool source_reference_effects(SourceContext *ctx, AstNode *node, SourceRe
     while (count) {
         AstNode *step=steps[--count];
         if (step->type!=AST_INDEX_GET) continue;
+        XrXirType container = XR_XIR_UNIT;
+        if (!source_path_type(ctx,step->as.index_get.array,&container)) return false;
+        bool map = xr_xir_type_is_map(&ctx->types,container);
+        if (!map && !xr_xir_type_is_array(&ctx->types,container))
+            return source_fail(ctx,step,XR_XIR_BAD_TYPE,"indexed ref requires an Array or Map");
+        XrXirType key = map ? xr_xir_map_key(&ctx->types,container) : XR_XIR_I64;
         SourceExpressionPlan *index=source_plan_collect(ctx,step->as.index_get.index,
-            (SourceExpectedType){true,XR_XIR_I64,false,false});
+            (SourceExpectedType){true,key,false,false});
         if (!index || !source_planned_effects(ctx,index,0)) return false;
         plan->selectors[selector++] = index;
     }

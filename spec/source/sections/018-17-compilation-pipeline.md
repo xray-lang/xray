@@ -361,7 +361,7 @@ NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等�
 
 ### 17.26 XIR Array值与源码边界
 
-`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，冻结READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`三原语，以及map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear十二个声明recipe及reverse/unshift/pop/shift/resize，共20个operation。其余12个成员保留清单身份，不因此获得执行资格。Source先查找准确public成员声明，再按已准入native operation/recipe identity选择实现，query记录原声明身份与CALL引用；不按名字另立执行表。回调、查询、清空的类型、求值、效应与所有权合同见§14.7。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
+`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32成员的26项操作准入及六个未准入方法见§14.7，不能把旧批次的20/23项记成当前清单。Source先查找准确public成员声明，再按准入native operation/recipe identity选择实现，query保留声明身份与CALL引用；不按名字另立执行表。索引读写使用相同操作，全局`len`独立按core intrinsic身份解析。词法、模块和import解析先于prelude，用户同名函数仍为普通函数。完整安全与性能资格须实际批次验证。
 
 源码准入显式`Array<T>`、同类型元素字面量、有Array上下文的空字面量、普通赋值复制、参数、返回、局部及入口模块状态。空字面量没有元素上下文时拒绝。元素从左到右求值，使用既有上下文类型规则；嵌套Array与函数元素遵循统一构造类型池的可复制、可存储准入，unit、内部CELL、视图和未准入的不可复制资源不能成为普通元素。`Array<T>`泛型体在定义处按约束检查，在Checked上特化后复验；普通实例在Program封存前完成，不能按具体实参补造定义处未证明的能力。其他容器与用户struct/class声明族仍须分别准入。
 
@@ -850,6 +850,16 @@ math公开模块的函数和常量沿普通Checked库声明、初始化、导入
 
 Checked语义及SDK身份使用§17.6的唯一现行协议，Math引入前的旧完整包及SDK身份须由真实消费者早拒。独立数值、重算摘要攻击、来源销毁、VM/native双向混合、实际SDK链接、完整故障和安全门分别保留。公开math接入不开放库私有var，也不自动完成其他标准库或跨平台发布资格。
 
+### 17.72 统一声明与哈希容器身份
+
+native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/Ordering/Task的声明编号为1–5，i64/f64/bool/rune为6–9，Map/Set为10/11；不得用旧Map6/Set7覆盖标量声明。Map/Set的XIR类型种类仍为9/10。声明源、完整泛型绑定器及约束、共享生成表、Source查询和API盘点消费同一唯一声明；声明存在不授予未实现成员的执行权限。
+
+当前共同协议由§17.6的唯一实现常量定义。Map类型记录携带准确key/value边，Set携带准确element边；普通声明保留真实rest、导出const和逐帧出生权限的既有字段。旧31/78声明包、旧28/75哈希包及双方完整SDK前像均保留为拒绝证据；不设置旧reader、别名或按版本猜测的接收通道。独立模型遍历全部字段和递归来源，旧Nullable夹具缺失的声明字段以显式命名事实重建，不能从产品writer刷新期望。
+
+紧凑哈希字段的拥有式载体读取须恢复子对象的实际arena/type，不将局部类型序号贴到另一个出生池的对象。哈希图遍历使用真实对象所保留的arena；存储准备沿同一已检查目标类型及原Domain、work、scratch和失败责任。此身份接收不代表完整Map/Set普通库方法、union、匿名记录、视图或普通Iterable已完成，完整资源、取消、安全及provider资格仍独立要求。
+
+读取或修改已接收Map/Set时，先在调用方类型池认证完整容器身份，再用实际出生池中的key/value类型解释探测、解包、COW克隆及写回。place保留调用方静态预期，payload恢复真实载体；不能把静态序号写入旧对象头。新字段按已认证身份匹配，可引用接收池新建的等价构造值。局部请求保留原Domain、函数gate/context，只向原请求回写实际消耗的work和释放后的scratch；失败保原根、快照与输出。该行为不扩大普通Source成员准入或函数执行权限。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1317,7 +1327,7 @@ Without a unique floating context the default is f64. Annotations, assignments, 
 
 ### 17.26 XIR Array values and source boundary
 
-The `struct Array<T>` declaration in `stdlib/types/array.xr` is this family's sole source authority. The compiler, member adapters and API inventory consume the same structured declaration. Of its current 32 members, the frozen boundary contains the three READ `get(index: i64) -> T`, REF `set(index: i64, value: T) -> ()` and REF `push(value: T) -> ()` primitives plus twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. Together with reverse/unshift/pop/shift/resize these are 20 operations; the other 12 retain inventory identities without execution authority. Source finds the exact public member declaration before selecting implementation by its admitted native operation/recipe identity; queries record the declaration identity and CALL reference without a separate name-based execution table. See §14.7 for callback/query/clear typing, evaluation, effects and ownership. Index reads/writes use the same operations. Global `len` resolves separately by its core intrinsic identity; this subset accepts only Array and returns i64. Lexical, module and import resolution precede the prelude, so a user function named `len` remains an ordinary function.
+The `struct Array<T>` declaration in `stdlib/types/array.xr` is this family's sole source authority. The compiler, member adapters and API inventory consume the same structured declaration. See §14.7 for26 admitted operations among32 members and the six remaining methods; historical20/23-entry steps are not the current inventory. Source resolves the exact public member declaration before selecting an admitted native operation/recipe identity, preserving declaration identity and CALL references in queries without a name-based execution table. Index operations use the same identities, while global `len` resolves separately by its core intrinsic identity. Lexical, module and import resolution precede the prelude, so user functions with the same name remain ordinary functions. Full safety and performance qualification requires actual batch evidence.
 
 Source admits explicit `Array<T>`, homogeneous literals, empty literals with an Array context, ordinary assignment copies, parameters, returns, locals and entry-module state. An empty literal without an element context rejects. Elements evaluate left to right under ordinary contextual typing. Nested arrays and function elements use the unified constructed pool's copyable/storable admission; unit, internal CELL, views and unadmitted noncopyable resources are not ordinary elements. Generic bodies using `Array<T>` are checked against their declared constraints, specialized on Checked, then reverified. Ordinary instances finish before Program sealing; concrete arguments cannot invent capabilities missing at definition checking. Other container and user struct/class families require separate admission.
 
@@ -1810,5 +1820,15 @@ Pure Math computes with nearest rounding in an isolated default host floating en
 Runtime entropy obtains system random bytes only through the actual active CallView. Every rejection-sampling attempt first charges the original activation work; forged or copied views reject. The common unbiased algorithm produces f64 in [0,1) or i64 in an inclusive interval, swaps reversed bounds and draws no entropy for equal integer bounds. Callback failure or budget exhaustion terminates immediately, without a fixed fallback, another random source or unbounded retries, and preserves output. Original step, frame, depth, cumulative work, allocation and live limits remain.
 
 Checked semantics and SDK identity use the sole current protocols from section17.6. Actual consumers must reject old complete pre-Math packets and SDK identities early. Independent numeric references, rehashed attacks, source destruction, both VM/native mixed directions, actual SDK linking, complete fault and safety gates remain distinct obligations. Public math admission opens no private library variables and does not qualify other standard libraries or cross-platform publication.
+
+### 17.72 Unified declaration and hash container identities
+
+Native declaration IDs and XIR type kinds occupy separate namespaces. Array/string/Atomic/Ordering/Task retain declaration IDs1–5; i64/f64/bool/rune use6–9, and Map/Set use10/11. Retired Map6/Set7 cannot overwrite scalar declarations. Map/Set retain XIR type kinds9/10. Declaration sources, complete ordered binders and constraints, generated tables, Source queries and API inventory consume one identity. A declaration does not authorize an unimplemented member.
+
+The sole current protocol identity is defined by the implementation constants in section17.6. Map records carry exact key/value edges, and Set records carry their exact element edge. Ordinary declarations retain authentic rest, exported constants and existing per-frame birth authority. Complete old31/78 declaration packets, old28/75 hash packets and both SDK preimages remain rejection evidence. There is no old reader, alias or version-guessing admission path. Independent models traverse all fields and recursive origins. Missing declaration fields in retired Nullable fixtures are reconstructed from named facts without refreshing expectations from the product writer.
+
+Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
+
+Reading or mutating a received Map/Set first authenticates the complete container identity in the caller arena, then interprets keys and values in the actual birth arena for probing, unpacking, COW cloning and publication. Places retain the caller static expectation while payload recovery preserves the actual carrier; a static ordinal never rewrites an old object header. Prepared fields match authenticated identities and may contain equivalent constructed values newly allocated in the receiving arena. Local requests retain the original Domain and function gate/context, returning only consumed work and released scratch to the original request. Failure preserves roots, snapshots and outputs. This behavior does not expand ordinary Source member admission or callable execution authority.
 
 <!-- /xr-spec:en -->

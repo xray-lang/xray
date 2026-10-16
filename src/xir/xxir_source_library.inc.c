@@ -227,6 +227,10 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
         if (!map->history)
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
         break;
+    case XR_XIR_TO_STRING:
+        if (!map->history)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program body operation requires a history owner");
+        break;
     default:
         if (!library_catalog_local_instruction(result.op))
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library instruction remapping is not admitted");

@@ -24,7 +24,7 @@ static XrXirOutputStatus birth_output(void *context,const XrXirOutputGroup *grou
     ++*calls;return XR_XIR_OUTPUT_OK;
 }
 static uint64_t birth_source(XrXirSourceGenerations *owner,const char *source,const char *name,
-    XrXirProgram **output,uint32_t *entry) {
+    XrXirProgram **output,uint32_t *entry,uint32_t *escape) {
     XrXirSourceText text={NULL,source,strlen(source)};uint64_t serial=0;
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_generation_prepare(owner,&text,&serial,&diagnostic);
@@ -38,20 +38,28 @@ static uint64_t birth_source(XrXirSourceGenerations *owner,const char *source,co
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);bool found=false;
+    if (escape) *escape=UINT32_MAX;
     for (uint32_t f=0;f<module->function_count;++f) {
+        if (escape && module->functions[f].name_length==6 && !memcmp(module->functions[f].name,"escape",6)) {
+            CHECK(*escape==UINT32_MAX);*escape=f;
+        }
         if (module->declarations->functions[f].module!=module->declarations->root_module ||
             module->functions[f].name_length!=strlen(name) || memcmp(module->functions[f].name,name,strlen(name))) continue;
         CHECK(!found);found=true;*entry=f;
     }
-    CHECK(found && xr_xir_compile_vm_program_take(&lowered,output)==XR_XIR_OK && !lowered);
+    CHECK(found && (!escape || *escape!=UINT32_MAX) && xr_xir_compile_vm_program_take(&lowered,output)==XR_XIR_OK && !lowered);
     CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,*output)==XR_XIR_OK);
     return serial;
 }
-static XrXirCallStatus birth_drive(XrXirInstance *instance,uint32_t entry) {
+static XrXirCallStatus birth_drive(XrXirInstance *instance,uint32_t entry,XrXirCallStatus *accepted) {
+    if (accepted) *accepted=XR_XIR_CALL_READY;
     XrXirCallStatus status=xr_xir_instance_start(instance,entry,NULL,0);
     if (status!=XR_XIR_CALL_READY) return status;
     status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
-    if (status!=XR_XIR_CALL_RETURNED) return status;
+    if (status!=XR_XIR_CALL_RETURNED) {
+        if (accepted) *accepted=status;
+        return status;
+    }
     XrXirValue value={0};
     CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
@@ -72,8 +80,13 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
         "const value=41\nfn old()->i64{return value+1}\nprint(17)\nexport fn seed()->i64{return old()}";
     if (storage_kind==2) source="var value:Array<i64> = [41]\nfn old()->i64{return value[0]+1}\nprint(17)\nexport fn seed()->i64{return old()}";
     if (storage_kind==3) source="const value:Array<i64> = [41]\nfn old()->i64{return value[0]+1}\nprint(17)\nexport fn seed()->i64{return old()}";
+    if (storage_kind==4) source="var cell:Box=Box(41)\nfn old()->i64{return cell.value+1}\nclass Box{value:i64 init(first:i64){this.value=first}}\nprint(17)\nexport fn seed()->i64{return old()}";
+    if (storage_kind==5) source="var cell:Box=Box(41)\nfn old()->i64{return cell.value[0]+1}\nclass Box{value:Array<i64> init(first:i64){this.value=[first]}}\nprint(17)\nexport fn seed()->i64{return old()}";
+    if (storage_kind==6) source="var value:Array<i64> = [41]\nfn old()->i64{if(value==[41]){return 42}else{return 0}}\nprint(17)\nexport fn seed()->i64{return old()}";
+    if (storage_kind==7) source="var cell:Box=Box(\"birth\")\nfn old()->i64{if(cell.value==\"birth\"){return 42}else{return 0}}\nclass Box{value:string init(first:string){this.value=first}}\nfn fetch()->Box{return cell}\nprint(17)\nexport fn seed()->i64{return old()}";
+    if (storage_kind==8) source="var cell:Box=Box(41)\nfn old()->i64{return cell.value.value+1}\nclass Box{value:Leaf init(first:i64){this.value=Leaf{value:first}}}\nstruct Leaf{value:i64}\nfn fetch()->Box{return cell}\nprint(17)\nexport fn seed()->i64{return old()}";
     uint64_t first=birth_source(owner,source,
-        "seed",&first_program,&first_entry);
+        "seed",&first_program,&first_entry,NULL);
     XrXirInstanceConfig runtime;CHECK(xr_xir_instance_config_init(&runtime,sizeof(runtime))==XR_XIR_CALL_READY);
     unsigned calls=0;runtime.output=(XrXirOutputProvider){.abi_version=XR_XIR_CALL_ABI_VERSION,
         .write=birth_output,.context=&calls};
@@ -81,27 +94,33 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
     CHECK(xr_xir_instance_generation_new(&runtime,&instance)==XR_XIR_CALL_READY);
     uint64_t generation=0;
     CHECK(xr_xir_source_generation_prepare_instance(owner,first,instance,&generation)==XR_XIR_CALL_READY);
-    CHECK(birth_drive(instance,first_entry)==XR_XIR_CALL_READY);
+    CHECK(birth_drive(instance,first_entry,NULL)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_generation_publish(instance,generation)==XR_XIR_CALL_READY);
     CHECK(xr_xir_compile_source_generation_publish(owner,first)==XR_XIR_OK);
-    uint64_t next=birth_source(owner,text_value ? "const value=99\nexport fn answer()->i64{return old()}" :
-        "const value=\"shadow\"\nexport fn answer()->i64{return old()}",
-        "answer",&next_program,&next_entry);
+    const char *next_source=text_value ? "const value=99\nexport fn answer()->i64{return old()}" :
+        "const value=\"shadow\"\nexport fn answer()->i64{return old()}";
+    if (storage_kind==4) next_source="const value=\"shadow\"\nexport fn answer()->i64{return cell.value+1}";
+    if (storage_kind==5) next_source="const value=\"shadow\"\nexport fn answer()->i64{return cell.value[0]+1}";
+    if (storage_kind==7) next_source="struct Padding{flag:bool}\nconst value=\"shadow\"\nfn read(slot:ref string)->i64{if(slot==\"birth\"){return 42}else{return 0}}\nexport fn answer()->i64{var object=fetch();return read(ref object.value)}";
+    if (storage_kind==8) next_source="struct Padding{flag:bool}\nconst value=\"shadow\"\nfn read(slot:ref Leaf)->i64{return slot.value+1}\nexport fn answer()->i64{var object=fetch();return read(ref object.value)}";
+    uint64_t next=birth_source(owner,next_source,"answer",&next_program,&next_entry,NULL);
     size_t before_blocks=runtime_live,before_bytes=runtime_bytes;
     runtime_attempts=0;runtime_fail_at=ordinal;generation=0;
+    XrXirCallStatus accepted=XR_XIR_CALL_READY;
     XrXirCallStatus status=xr_xir_source_generation_prepare_instance(owner,next,instance,&generation);
-    if (status==XR_XIR_CALL_READY) status=birth_drive(instance,next_entry);
+    if (status==XR_XIR_CALL_READY) status=birth_drive(instance,next_entry,&accepted);
     bool complete=status==XR_XIR_CALL_READY;
     CHECK(complete || status==XR_XIR_CALL_OOM);
+    CHECK(accepted==XR_XIR_CALL_READY || (!complete && generation && accepted==status));
     cost->sites=runtime_attempts;cost->status=status;runtime_fail_at=SIZE_MAX;
     if (complete && publish) {
         CHECK(xr_xir_instance_generation_publish(instance,generation)==XR_XIR_CALL_READY);
         CHECK(xr_xir_compile_source_generation_publish(owner,next)==XR_XIR_OK);
     } else {
-        if (generation) CHECK(xr_xir_instance_generation_abort(instance,generation)==XR_XIR_CALL_READY);
+        if (generation) CHECK(xr_xir_instance_generation_abort(instance,generation)==accepted);
         CHECK(xr_xir_compile_source_generation_abort(owner,next)==XR_XIR_OK);
         CHECK(runtime_live==before_blocks && runtime_bytes==before_bytes);
-        CHECK(birth_drive(instance,first_entry)==XR_XIR_CALL_READY);
+        CHECK(birth_drive(instance,first_entry,NULL)==XR_XIR_CALL_READY);
     }
     CHECK(calls==1);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
@@ -114,24 +133,39 @@ static bool birth_trial(size_t ordinal,bool publish,bool text_value,unsigned sto
     CHECK(!runtime_live && !runtime_bytes);instance_compile_zero();
     return complete;
 }
+#include "source_birth_function_resources.h"
 int main(int argc,char **argv) {
-    bool baseline=argc==2;
-    CHECK(argc==1 || (baseline && !strcmp(argv[1],"--baseline")));
-    for (unsigned mode=0;mode<10;++mode) {
+    bool baseline=argc==2;unsigned first=0,last=24;
+    CHECK(argc==1 || (baseline && !strcmp(argv[1],"--baseline")) ||
+        (argc==3 && !strcmp(argv[1],"--mode")));
+    if (argc==3) {
+        char *end=NULL;unsigned long selected=strtoul(argv[2],&end,10);
+        CHECK(*argv[2] && end && !*end && selected<24);first=(unsigned)selected;last=first+1;
+    }
+    for (unsigned mode=first;mode<last;++mode) {
         bool publish=(mode&1)!=0,text_value=mode<4 && (mode&2)!=0;
-        unsigned storage_kind=mode<4 ? 0 : mode<6 ? 1 : mode<8 ? 2 : 3;
+        unsigned storage_kind=mode<4 ? 0 : mode<6 ? 1 : mode<8 ? 2 : mode<10 ? 3 : mode<12 ? 4 : mode<14 ? 5 : mode<16 ? 6 : mode<18 ? 7 : 8;
         bool cell_value=storage_kind==1 || storage_kind==2;
-        BirthCost normal={0};CHECK(birth_trial(SIZE_MAX,publish,text_value,storage_kind,&normal));
+        BirthCost normal={0};
+        CHECK(mode>=20 ? birth_function_trial(SIZE_MAX,publish,mode>=22,&normal) :
+            birth_trial(SIZE_MAX,publish,text_value,storage_kind,&normal));
         CHECK(normal.sites && normal.sites<20000);
-        printf("BIRTH_STORAGE_BASELINE mode=%u publish=%u string=%u cell=%u sites=%zu compiler_and_runtime_physical=0/0\n",
+        if (mode>=20) printf("BIRTH_FUNCTION_BASELINE mode=%u publish=%u escaped=%u sites=%zu compiler_and_runtime_physical=0/0\n",
+            mode,(unsigned)publish,(unsigned)(mode>=22),normal.sites);
+        else printf("BIRTH_STORAGE_BASELINE mode=%u publish=%u string=%u cell=%u sites=%zu compiler_and_runtime_physical=0/0\n",
             mode,(unsigned)publish,(unsigned)text_value,(unsigned)cell_value,normal.sites);
         if (baseline) continue;
         for (size_t ordinal=0;ordinal<normal.sites;++ordinal) {
-            BirthCost failure={0};CHECK(!birth_trial(ordinal,publish,text_value,storage_kind,&failure));
+            BirthCost failure={0};
+            CHECK(!(mode>=20 ? birth_function_trial(ordinal,publish,mode>=22,&failure) :
+                birth_trial(ordinal,publish,text_value,storage_kind,&failure)));
             CHECK(failure.status==XR_XIR_CALL_OOM && failure.sites>ordinal);
         }
-        BirthCost retry={0};CHECK(birth_trial(SIZE_MAX,publish,text_value,storage_kind,&retry) && retry.sites==normal.sites);
-        printf("BIRTH_STORAGE_FI mode=%u sites=%zu all=OOM old42_preserved=1 retry42=1 initialization_once=1 physical=0/0\n",mode,normal.sites);
+        BirthCost retry={0};
+        CHECK((mode>=20 ? birth_function_trial(SIZE_MAX,publish,mode>=22,&retry) :
+            birth_trial(SIZE_MAX,publish,text_value,storage_kind,&retry)) && retry.sites==normal.sites);
+        if (mode>=20) printf("BIRTH_FUNCTION_FI mode=%u sites=%zu all=OOM old_capture_preserved=1 retry42=1 initialization_once=1 dead_owner_capture=1 physical=0/0\n",mode,normal.sites);
+        else printf("BIRTH_STORAGE_FI mode=%u sites=%zu all=OOM old42_preserved=1 retry42=1 initialization_once=1 physical=0/0\n",mode,normal.sites);
     }
     return 0;
 }

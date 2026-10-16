@@ -17,6 +17,7 @@
 #include "xxir_checked.h"
 #include "xxir_program.h"
 #include "xxir_atomic.h"
+#include "xxir_map.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
@@ -611,6 +612,7 @@ static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
     }
 }
 #include "xxir_emit_path.inc.c"
+#include "xxir_emit_hash.inc.c"
 static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     EMIT_STATIC(buffer, es_0eecdf36a03e6314, " { XrXirCallStatus status; XrXirFaultDetail fault = {0};\n");
@@ -697,8 +699,9 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
         if(op->op == XR_XIR_CLASS_SET) {
             EMIT_LITERAL(buffer," value = ");emit_value(buffer,function,layout,op->args[1]);EMIT_LITERAL(buffer,";\n");
             EMIT_FORMAT(buffer, et_105640b30c89915c," status=xr_xir_class_set(&receiver,%uu,&value,xr_xir_call_admission(view));\n",(uint32_t)op->immediate);
-        } else EMIT_FORMAT(buffer, et_a81a2bf8209a647d," status=xr_xir_value_admit(&receiver,(XrXirType)receiver.type,xr_xir_call_admission(view));\n"
-            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",(uint32_t)op->immediate);
+        } else append(buffer," status=xr_xir_value_admit(&receiver,(XrXirType)%uu,xr_xir_call_admission(view));\n"
+            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",
+            (uint32_t)xr_xir_operand_type(function,op->args[0]),(uint32_t)op->immediate);
     }
     EMIT_STATIC(buffer, es_ee88b60d69c79771," if(status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         " status == XR_XIR_VALUE_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"
@@ -916,6 +919,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         emit_cleanup_step(buffer, function, layout, index); return;
+    }
+    if (op->op >= XR_XIR_MAP_NEW && op->op <= XR_XIR_MAP_VALUE_AT) {
+        emit_hash_step(buffer, function, op, layout, destination, index);
+        return;
     }
     if (xr_xir_op_uses_value_path(function, op)) {
         emit_path_step(buffer, function, op, layout, destination, index); return;
@@ -1148,11 +1155,11 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                 " return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, concrete, {0}, 0}; }\n");
             return;
         }
-        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, {%uu, 0, ",
-               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN", type);
-        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "0");
-        else EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
-        EMIT_LITERAL(buffer, "}, {0}, 0};\n");
+        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, ",
+               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN");
+        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "{0}");
+        else emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer, ", {0}, 0};\n");
         return;
     }
     default:
@@ -1648,8 +1655,8 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
-    EMIT_FORMAT(buffer, et_f4aa1dd22452154c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
-           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
+    EMIT_FORMAT(buffer, et_6a7d224a1652a595, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_instance_hash.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
            "#include \"xir/xxir_task.h\"\n#include \"xir/xxir_math_runtime.h\"\n"

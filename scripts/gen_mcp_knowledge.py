@@ -2,7 +2,7 @@
 """Regenerate src/app/mcp/xmcp_knowledge_generated.c from docs/knowledge/.
 
 Reads docs/knowledge/{topics,stdlib,resources}/*.md plus the language
-reference manual and emits a single C source file consumed by
+reference manual and emits a C entry source with bounded included tables consumed by
 xmcp_knowledge.c at build time. The output is committed so the build does
 not depend on Python; CI re-runs this script and fails when the working tree
 is dirty.
@@ -413,6 +413,35 @@ def render(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def render_files(rendered: str, output: Path) -> dict[Path, str]:
+    """Keep complete declarations together in bounded include fragments."""
+    starts = [match.start() for match in re.finditer(
+        r"^(?:static const |XR_DATADEF )", rendered, re.M)]
+    if not starts:
+        raise ValueError("generated knowledge has no declarations")
+    ends = starts[1:] + [len(rendered)]
+    chunks: list[str] = []
+    current = ""
+    for start, end in zip(starts, ends):
+        declaration = rendered[start:end]
+        if len((BANNER + "\n" + declaration).splitlines()) > 2800:
+            raise ValueError("one generated knowledge declaration exceeds the file bound")
+        if current and len((BANNER + "\n" + current + declaration).splitlines()) > 2800:
+            chunks.append(current)
+            current = ""
+        current += declaration
+    if current:
+        chunks.append(current)
+    files: dict[Path, str] = {}
+    entry = rendered[:starts[0]]
+    for index, chunk in enumerate(chunks, 1):
+        part = output.with_name(f"{output.stem}_part{index}.inc.c")
+        files[part] = BANNER + "\n" + chunk.rstrip() + "\n"
+        entry += f'#include "{part.name}"\n'
+    files[output] = entry
+    return files
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -440,16 +469,18 @@ def main(argv: list[str]) -> int:
     stdlib = load_stdlib(args.docs, api_index)
     resources = load_resources(args.docs)
 
-    rendered = render(topics, stdlib, resources)
+    files = render_files(render(topics, stdlib, resources), args.out)
+    stale_parts = set(args.out.parent.glob(f"{args.out.stem}_part*.inc.c")) - files.keys()
+    if stale_parts:
+        print(f"error: obsolete generated fragments: {sorted(map(str, stale_parts))}", file=sys.stderr)
+        return 1
 
     if args.check:
-        if not args.out.exists():
-            print(f"error: {args.out}: missing; run without --check to create", file=sys.stderr)
-            return 1
-        existing = args.out.read_text(encoding="utf-8")
-        if existing != rendered:
+        stale = [path for path, text in files.items()
+                 if not path.exists() or path.read_text(encoding="utf-8") != text]
+        if stale:
             print(
-                f"error: {args.out}: stale; rerun "
+                f"error: {', '.join(map(str, stale))}: missing or stale; rerun "
                 f"`python3 scripts/gen_mcp_knowledge.py --docs {args.docs} --spec {args.spec}"
                 f" --api-inventory {args.api_inventory} --out {args.out}`",
                 file=sys.stderr,
@@ -458,7 +489,8 @@ def main(argv: list[str]) -> int:
         return 0
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(rendered, encoding="utf-8")
+    for path, text in files.items():
+        path.write_text(text, encoding="utf-8")
     print(
         f"wrote {args.out} "
         f"({len(topics)} topics, {len(stdlib)} stdlib modules, "

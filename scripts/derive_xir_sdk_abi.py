@@ -139,9 +139,23 @@ OBSERVER_LINKS = '''    XrXirCallStatus (*volatile open_api)(XrXirInstance *, ui
     (void)open_api; (void)retain_api; (void)drop_api; (void)drain_api;
 '''
 
-MATH_STRUCTURES = [(4800,'XrXirMathEntropy',[('context','ptr'),('fill','ptr')]),
+SUPPLEMENTAL_STRUCTURES = [(4800,'XrXirMathEntropy',[('context','ptr'),('fill','ptr')]),
                    (4806,'XrXirMathSignature',[('parameter','enum'),('result','enum'),('arity','u32'),('random','bool')])]
 
+HASH_PROTOTYPES = '''_Static_assert(_Generic(&xr_xir_instance_hash_new,
+    XrXirCallStatus (*)(XrXirCallView *, XrXirType, const XrXirValue *, uint32_t, XrXirValue *): 1,
+    default: 0), "hash construction prototype");
+_Static_assert(_Generic(&xr_xir_instance_hash_apply,
+    XrXirCallStatus (*)(XrXirCallView *, const XrXirHashRequest *, XrXirValue *, XrXirFaultDetail *): 1,
+    default: 0), "hash mutation prototype");
+static XrXirCallStatus (*volatile hash_new_link)(XrXirCallView *, XrXirType,
+    const XrXirValue *, uint32_t, XrXirValue *) = xr_xir_instance_hash_new;
+static XrXirCallStatus (*volatile hash_apply_link)(XrXirCallView *, const XrXirHashRequest *,
+    XrXirValue *, XrXirFaultDetail *) = xr_xir_instance_hash_apply;
+'''
+HASH_LINKS = 'if (!hash_new_link || !hash_apply_link) return 9;\n'
+
+SUPPLEMENTAL_STRUCTURES += [(4900,'XrXirHashRequest',[('operation','enum'),('result','enum'),('instruction','u32'),('receiver','ptr'),('path','ptr'),('key','ptr'),('value','ptr')])]
 
 def align(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
@@ -150,7 +164,7 @@ def prepare(output: Path) -> None:
     output.mkdir(parents=True, exist_ok=False)
     layout = dict(PRIMITIVES)
     rows = [{'id':i,'name':name,'value':value,'expression':expression} for i,name,value,expression in SCALARS]
-    for base, name, fields in STRUCTURES + PUBLIC_STRUCTURES + MATH_STRUCTURES:
+    for base, name, fields in STRUCTURES + PUBLIC_STRUCTURES + SUPPLEMENTAL_STRUCTURES:
         offsets = []; size = 0; alignment = 1
         for field, kind in fields:
             width, boundary = layout[kind]
@@ -176,13 +190,16 @@ def prepare(output: Path) -> None:
                   {'id':4805,'name':'MathEntropyFill.align','value':8,'expression':'_Alignof(XrXirMathEntropyFill)'}]
     rows=[row for row in rows if not 4800<=row['id']<4812]+sorted(math_rows,key=lambda row:row['id'])
     assert len(math_rows)==12
+    hash_rows=[row for row in rows if 4900<=row['id']<4909]
+    assert len(hash_rows)==9
+    rows=[row for row in rows if not 4900<=row['id']<4909]+hash_rows
     assert len({row['id'] for row in rows}) == len(rows), 'ABI field IDs must be unique'
     document = {'recipe':'xray:xir-runtime-abi-measurements:v1','rows':rows,
                 'basis':'Independent natural Windows x86_64 C layout: pointer/size_t/u64 align8, '
                         'u32/int/enum align4, bool align1; declaration field sequence copied '
                         'from actual versioned runtime headers. Never from a compiler probe output.'}
     (output/'EXPECTED.json').write_text(json.dumps(document,indent=2)+'\n',encoding='utf-8',newline='\n')
-    source = '#include "xir/xxir_math.h"\n#include "xir/xxir_program.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS
+    source = '#include "xir/xxir_instance_hash.h"\n#include "xir/xxir_math.h"\n#include "xir/xxir_program.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + HASH_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS + HASH_LINKS
     for index, row in enumerate(rows):
         tail = ',' if index+1 < len(rows) else ''
         source += f'printf("  {{\\"id\\":{row["id"]},\\"value\\":%u}}{tail}\\n",(unsigned)({row["expression"]}));\n'

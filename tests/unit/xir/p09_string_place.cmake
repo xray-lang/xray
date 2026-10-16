@@ -35,7 +35,7 @@ endif()
 add_test(NAME test_xir_p09_string_checked COMMAND test_xir_p09_string_checked)
 set_tests_properties(test_xir_p09_string_checked PROPERTIES TIMEOUT 120 LABELS "unit;xir;string;ownership;rejection;abi")
 
-add_test(NAME test_xir_p09_sizing74_vectors COMMAND ${XRAY_PYTHON}
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/compile_owner/derive_checked_sizing74_golden.py"
-    --source-root "${PROJECT_SOURCE_DIR}" --output-root "${PROJECT_SOURCE_DIR}")
-set_tests_properties(test_xir_p09_sizing74_vectors PROPERTIES TIMEOUT 120 LABELS "unit;xir;wire;independent;compiler")
+add_test(NAME test_xir_p09_sizing75_vectors COMMAND ${XRAY_PYTHON}
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_hash75_vectors.py"
+)
+set_tests_properties(test_xir_p09_sizing75_vectors PROPERTIES TIMEOUT 120 LABELS "unit;xir;wire;independent;compiler")
