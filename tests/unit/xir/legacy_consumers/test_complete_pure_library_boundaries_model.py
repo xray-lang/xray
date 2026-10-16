@@ -114,7 +114,7 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
     def test_four_complete_math_random_domain_traces(self):
         expected={'math_core_direct_type_preserve':['f64','42.0','f64',True,'f64','3.0','f64','7.0','f64','5.0','4.0','9.0','10.0','f64','5.5',1,2,2,1,
          '0.0','1.0','0.0','0.0','0.0','0.0','0.0','0.0','2.0','3.0','1.0','0.0','1.0','0.0','5.0','3.0','3.0','0.0','0.0','2.5','0.0','0.0',-1,True,True,False],
-         'rounding_boundary':['0.3','5.55111512312578e-17','-2.77555756156289e-17','1.4142135623731','2.0','0.01','0.333333333333333','0.666666666666667'],
+         'rounding_boundary':['0.30000000000000004','5.551115123125783e-17','-2.7755575615628914e-17','1.4142135623730951','2.0000000000000004','0.010000000000000002','0.3333333333333333','0.6666666666666666'],
          'crypto_random_system_direct':[True]*11,'runtime_domain_bytes':[True]*3}
         self.assertEqual(sum(map(len,expected.values())),67);self.assertEqual(m.system_observations(),expected)
         self.assertEqual(sum(map(len,m.observations().values())),112);self.assertEqual(len(m.expected_rows()),7)
@@ -145,13 +145,25 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
             self.assertLess(lower*lower,value);self.assertGreater(upper*upper,value)
         with self.assertRaises(ValueError):m.sqrt_bits(-1)
 
-    def test_human_float_format_uses_fifteen_digits_and_g_thresholds(self):
-        for value,text in [(m.Fraction(3,10),'0.3'),(m.Fraction(1,10000),'0.0001'),(m.Fraction(1,100000),'1e-05'),
-          (10**14,'100000000000000.0'),(10**15,'1e+15'),(m.Fraction(1999999999999999,10**15),'2.0')]:
-            with self.subTest(value=value):self.assertEqual(m.human_float(m.fraction_bits(value)),text)
-        self.assertEqual(m.human_float(1<<63),'-0.0');self.assertEqual(m.human_float(0),'0.0')
-        self.assertNotEqual(m.rounding_trace()[0],'0.30000000000000004')
-        with self.assertRaises(ValueError):m.human_float(0x7ff8000000000000)
+    def test_typed_float_uses_shortest_roundtrip_and_frozen_notation(self):
+        for value,text in [(m.Fraction(3,10),'0.3'),(m.Fraction(1,10000),'0.0001'),(m.Fraction(1,100000),'1e-5'),
+          (10**14,'100000000000000.0'),(10**15,'1000000000000000.0'),(10**16,'1e+16'),(m.Fraction(1999999999999999,10**15),'1.999999999999999')]:
+            with self.subTest(value=value):self.assertEqual(m.shortest_float(m.fraction_bits(value)),text)
+        for bits,text in [(1<<63,'-0.0'),(0,'0.0'),(0x7ff8000000000000,'nan'),(0xfff0000000000001,'nan'),(0x7ff0000000000000,'inf'),(0xfff0000000000000,'-inf')]:
+            with self.subTest(bits=bits):self.assertEqual(m.shortest_float(bits),text)
+        self.assertEqual(m.rounding_trace()[0],'0.30000000000000004')
+        with self.assertRaises(ValueError):m.shortest_float(1<<64)
+
+    def test_shortest_candidates_round_back_without_native_float_or_product(self):
+        values=[m.Fraction(1,10),m.Fraction(1,3),m.Fraction(2,3),m.Fraction(3,10),m.Fraction(2**63),m.Fraction(1999999999999999,10**15)]
+        for value in values:
+            bits=m.fraction_bits(value);text=m.shortest_float(bits)
+            self.assertEqual(m.fraction_bits(m.Fraction(text)),bits);self.assertLess(len(text),32)
+        for bits,text in [(1,'5e-324'),(2,'1e-323'),(0x0010000000000000,'2.2250738585072014e-308'),(0x7fefffffffffffff,'1.7976931348623157e+308')]:
+            with self.subTest(bits=bits):
+                self.assertEqual(m.shortest_float(bits),text);candidate=m.Fraction(text);value=m.bits_fraction(bits);previous=m.bits_fraction(bits-1)
+                following=m.bits_fraction(bits+1) if bits<0x7fefffffffffffff else m.power(2,1024)
+                self.assertGreaterEqual(candidate,(previous+value)/2);self.assertLessEqual(candidate,(value+following)/2)
 
     def test_math_return_families_follow_declared_f64_context(self):
         for name,args in [('abs',(-42,)),('min',(3,7,5)),('max',(3,7,5)),('clamp',(5,10,0))]:

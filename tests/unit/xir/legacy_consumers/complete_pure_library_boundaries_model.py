@@ -60,7 +60,7 @@ _SYSTEM_PROGRAMS={
 }
 _NAMES=_NAMES|frozenset(_SYSTEM_PROGRAMS)
 _PROGRAMS.update(_SYSTEM_PROGRAMS)
-_AUTHORITIES+=("stdlib/math/math.xr","stdlib/runtime/runtime.xr","src/shared/xr_float_fmt.h","src/coro/xchannel.c","src/coro/xchannel.h","src/runtime/xshared.h",)
+_AUTHORITIES+=("stdlib/math/math.xr","stdlib/runtime/runtime.xr","src/coro/xchannel.c","src/coro/xchannel.h","src/runtime/xshared.h","spec/source/sections/018-17-compilation-pipeline.md","src/xir/xxir_float.h","src/xir/xxir_float_format.inc.c",)
 _INPUTS.update({
  "tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr": "ed86297b0fc6c1bf2f6fa5ebe975f065454775865009d48b2be0d7426efa46c4",
  "tests/diff/cases/semantics/float_fmt/rounding_boundary.xr": "19fa8714c9d146eb83f4067df1b81f2bbbdbfb192868a36324a24cb5d7353e61",
@@ -68,10 +68,12 @@ _INPUTS.update({
  "tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr": "9f5e53e86d9d923f072babd0e98c9594fbea8f9a8e54f8b5f01bc620fcfbb324",
  "stdlib/math/math.xr": "0126a1eb1db1760b5950da3f6be0c47f504f65070afaff3757f7b45f27a86115",
  "stdlib/runtime/runtime.xr": "9f4d87664a727e7b29ceec161efe07d67d4e416c47030b06c682062f8f2fe57c",
- "src/shared/xr_float_fmt.h": "dc3f35e72dd96729e5948f98b8103810d1362bad8cec207aabf93db1352f983b",
  "src/coro/xchannel.c": "8cc701e6dd5e14e2a9b44a64ca77c209b1d2e1736cf5011b1e2e2999ef84f9b3",
  "src/coro/xchannel.h": "2ee14ccab5cf19bab7172a29c1d2ecaaa85bf30a856d1bc5cd21bbfaaa06e6c8",
- "src/runtime/xshared.h": "152b7729cf355225e6bdb77c32734b5da33b0b39e409cb556898a83bca2e56c8"
+ "src/runtime/xshared.h": "152b7729cf355225e6bdb77c32734b5da33b0b39e409cb556898a83bca2e56c8",
+ "spec/source/sections/018-17-compilation-pipeline.md": "91e9ef4bc0ce560d6621a1dbf8bd6a3f23c58e073e97469b10b7dece5866e440",
+ "src/xir/xxir_float.h": "51da2cda6e5da3a0cbd63201a4d20a743fd3671ed7c077337ee8a5407e8ccc63",
+ "src/xir/xxir_float_format.inc.c": "84b274ea969dbd5a62a7b8b780d87cad905c20dff46c3f752662c1aab87ef457"
 })
 
 
@@ -305,19 +307,36 @@ def sqrt_bits(value):
     return (exponent+1023)<<52|(significand-(1<<52))
 
 
-def human_float(bits):
-    value=bits_fraction(bits);sign='-' if bits>>63 else '';value=abs(value)
-    if not value:return sign+'0.0'
-    exponent=floor_log(value,10);coefficient=nearest_even(value*power(10,14-exponent))
-    if coefficient==10**15:coefficient//=10;exponent+=1
-    digits=str(coefficient).rstrip('0')
-    if -4<=exponent<15:
+def shortest_float(bits):
+    if type(bits) is not int or not 0<=bits<1<<64:raise ValueError('Invalid binary64 bits')
+    sign='-' if bits>>63 else '';magnitude=bits&((1<<63)-1);exponent_bits=(magnitude>>52)&2047
+    if exponent_bits==2047:return 'nan' if magnitude&((1<<52)-1) else sign+'inf'
+    if not magnitude:return sign+'0.0'
+    value=bits_fraction(magnitude);previous=bits_fraction(magnitude-1)
+    following=bits_fraction(magnitude+1) if magnitude<0x7fefffffffffffff else power(2,1024)
+    lower,upper=(previous+value)/2,(value+following)/2;closed=magnitude%2==0
+    exponent=floor_log(value,10);chosen=None
+    for precision in range(1,18):
+        scale=power(10,precision-1-exponent);nearest=nearest_even(value*scale);candidates=[]
+        for coefficient in {max(1,nearest-1),max(1,nearest),nearest+1}:
+            candidate=Fraction(coefficient)/scale
+            if (candidate>lower or closed and candidate==lower) and (candidate<upper or closed and candidate==upper):
+                normalized=coefficient
+                while normalized%10==0:normalized//=10
+                candidates.append((abs(candidate-value),normalized%2,coefficient))
+        if candidates:
+            coefficient=min(candidates)[2];decimal_power=exponent-precision+1;chosen=(coefficient,decimal_power);break
+    if chosen is None:raise ValueError('No shortest binary64 round-trip candidate within17digits')
+    coefficient,decimal_power=chosen
+    while coefficient%10==0:coefficient//=10;decimal_power+=1
+    digits=str(coefficient);exponent=decimal_power+len(digits)-1
+    if -4<=exponent<16:
         position=exponent+1
         if position<=0:text='0.'+'0'*-position+digits
         elif position>=len(digits):text=digits+'0'*(position-len(digits))
         else:text=digits[:position]+'.'+digits[position:]
-    else:text=digits[0]+('.'+digits[1:] if len(digits)>1 else '')+'e'+('+' if exponent>=0 else '-')+str(abs(exponent)).zfill(2)
-    if '.' not in text and 'e' not in text:text+='.0'
+        if '.' not in text:text+='.0'
+    else:text=digits[0]+('.'+digits[1:] if len(digits)>1 else '')+'e'+('+' if exponent>=0 else '-')+str(abs(exponent))
     return sign+text
 
 
@@ -329,7 +348,7 @@ class FloatValue:
     def fraction(self):return bits_fraction(self.bits)
     def nan(self):return self.bits&0x7ff0000000000000==0x7ff0000000000000 and bool(self.bits&((1<<52)-1))
     def finite(self):return self.bits&0x7ff0000000000000!=0x7ff0000000000000
-    def text(self):return human_float(self.bits)
+    def text(self):return shortest_float(self.bits)
     def typename(self):return 'f64'
 
 
@@ -499,5 +518,5 @@ def expected_rows():
         rows.append(row)
     for row in rows:
         if row['original_source'] in _SYSTEM_PROGRAMS.values():
-            row['model']='Complete unchanged original;independent exact rational/binary64 arithmetic and15-significant-digit display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.'
+            row['model']='Complete unchanged original;independent exact rational/binary64 arithmetic and shortest decimal interval display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.'
     return rows
