@@ -11,6 +11,7 @@
  *   User declarations and serialized facts cannot enter the binding boundary.
  */
 #include "xir_core_declarations_source.inc.c"
+#include "xxir_core_source_identity.h"
 
 static bool source_core_contract(SourceContext *ctx) {
     if (!ctx->core_factory || ctx->graph->spec_count != 1 || ctx->function_count != 7 ||
@@ -302,7 +303,7 @@ static bool source_core_load(SourceContext *ctx, AstNode *site) {
     XrCompilerSessionStatus opened=xr_compile_session_new(ctx->compile.resources,&session);
     XrModuleResolverConfig config={0};
     XrModuleResolver *resolver=NULL;
-    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"xray-core-assertions-v1",NULL};
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,XIR_CORE_SOURCE_NAMESPACE,NULL};
     XrXirSourceResult result={0};
     char *error=NULL;
     if (opened!=XR_COMPILER_SESSION_OK) source_fail(&core,NULL,opened==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET :

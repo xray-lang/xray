@@ -7580,6 +7580,9 @@ Admitted Array calls also retain the actual instantiated owner, checked and conv
 
 An open Array<T> native declaration schema belongs only to the owned query type pool. After successful Checked construction, query projection preserves the complete executable type-ID prefix and either reuses an existing canonical open node or appends a separate query node. Declaration schemas never enter the executable pool. Array recipe temporaries retain the declared type bound of the checked receiver element rather than becoming new user inference variables. This boundary grants no execution, construction, Final or effect authority.
 
+Checked observations for assert, assertEqual and assertPanics retain the INTRINSIC declaration family rather than impersonating ordinary functions. Before accepting their known signatures, attachment checks governed stable IDs, names, arity, Unit result, generic arity, actual name locations, and the unique builtin source memory-module identity and domain- and length-framed content fingerprint. Origin checks reuse the module identity and fingerprint algorithms. Resource failure leaves attachment unpublished without resetting the receiving ledger. Query facts establish no intrinsic execution binding and invent no file URI for memory provenance.
+
+
 
 The Windows source VM, native, mixed-entry and Checked-reload paths verify the two-module string program against independent expectations: `red\nblue\n2\ngreen\nblue\ngreen\n3\n`. Separate assertions cover instance isolation, result lifetime, sticky initialization bounds and physical release after allocation failure. The output golden does not replace OOM, retain, work-budget or full sanitizer gates. Complete batch qualification still requires fresh affected targets, regression, contract and sanitizer gates; this section does not claim those complete gates or macOS have passed.
 

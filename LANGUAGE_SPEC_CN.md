@@ -7424,6 +7424,9 @@ GET及索引读返回独立拥有的元素，并保留索引求值前选定的�
 
 原生声明的开放Array<T> schema只属于拥有式查询类型池。成功Checked后，查询投影保留全部可执行类型ID前缀，并复用已有规范开放节点或追加独立查询节点；不把声明schema插入可执行类型池。Array recipe中的临时存储保留已检查receiver元素的声明类型界限，不作为新的用户类型推断变量。此边界不授予执行、构造、Final或效果权限。
 
+assert、assertEqual及assertPanics的已检查调用观察保留INTRINSIC声明族，不伪装普通函数。附件接收这些已知签名前，核对治理的稳定ID、名称、参数数、Unit结果及泛型参数数、真实名称位置，以及唯一内建源码的memory模块身份和带域及长度边界的内容指纹。来源检查复用模块身份和指纹算法，资源失败保持附件未发布，不重置接收账本。查询事实不建立内建执行绑定，也不为memory来源虚构文件URI。
+
+
 
 此子集的Windows源码VM、native、混合条目及Checked重载按独立预期验证两模块字符串程序，输出为`red\nblue\n2\ngreen\nblue\ngreen\n3\n`；实例隔离、结果寿命、初始化越界粘滞与分配失败物理释放另有断言。输出golden不替代OOM、retain、工作预算或全量sanitizer门。完整批次资格仍要求受影响目标重建、回归、合同和sanitizer门；本节不声明这些完整门或macOS已通过。
 

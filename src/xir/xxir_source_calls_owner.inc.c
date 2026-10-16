@@ -87,6 +87,7 @@ static const XrNativeMemberDeclaration *query_call_native(SourceQueryCopy *copy,
         memcmp(&module->fingerprint,&declaration->source_fingerprint,sizeof(module->fingerprint)))return NULL;
     return member;
 }
+#include "xxir_source_core_calls_owner.inc.c"
 static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceCall *call) {
     const XrXirSourceCallSignature *signature=&call->signature;
     if(!signature->known) {
@@ -123,7 +124,10 @@ static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceC
         view->declarations[target-1].native_identity) {
         native=query_call_native(copy,target);if(copy->status!=XR_XIR_OK)return copy->status;
         if(!native)return XR_XIR_BAD_STRUCTURE;
-    } else if(!query_call_callable(copy->snapshot,target))return XR_XIR_BAD_STRUCTURE;
+    } else if(!query_call_callable(copy->snapshot,target)||
+        (target&&target<=view->declaration_count&&view->declarations[target-1].native_identity)) {
+        XrXirStatus core=query_call_core(copy,target);if(core!=XR_XIR_OK)return core;
+    }
     const XrXirSourceDeclaration *callee=&view->declarations[view->references[call->reference].target-1];
     if(signature->parameter_count!=callee->parameter_count)return XR_XIR_BAD_STRUCTURE;
     uint32_t receivers=0;
