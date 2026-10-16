@@ -220,9 +220,9 @@ def main():
             checked(not union.intersection(points), "Duplicate fault points across processes")
             union.update(points)
         checked(union == set(range(1, sites + 1)), "Original allocation denominator is incomplete")
+        final_hashes, final_absent = actual_files(actual_inputs)
         checked(sha(executable) == record["executable_sha256"] and
-                all(sha(Path(path)) == expected for path, expected in hashes.items()) and
-                all(not Path(path).exists() for path in absent), "Actual inputs or authority changed")
+                final_hashes == hashes and final_absent == absent, "Actual inputs or authority changed")
         remaining = job_processes(job)
         checked(not active and remaining == 1, "Unobserved descendants remain")
         checked(time.monotonic() < deadline, "Original 600-second overall deadline exhausted")
