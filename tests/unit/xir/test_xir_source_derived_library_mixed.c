@@ -20,8 +20,8 @@ static void cold_mixed_release(void *pointer) {
     ColdMixedOwner *owner=pointer;xr_xir_compile_artifact_free(owner->artifact);xr_compile_resources_free(owner->entries);
     xr_compile_resources_free(owner->bindings);xr_compile_resources_free(owner);++cold_mixed_released;
 }
-static XrXirArtifact *cold_mixed_lower(const XrXirCompileContext *context) {
-    FILE *file=fopen(XR_DERIVED_LIBRARY_PACKET,"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
+static XrXirArtifact *cold_mixed_lower(const XrXirCompileContext *context,const char *path) {
+    FILE *file=fopen(path,"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);
     CHECK(length>0 && length<=67108864 && !fseek(file,0,SEEK_SET));void *bytes=NULL;
     CHECK(xr_compile_resources_alloc(context->resources,(size_t)length,&bytes)==XR_COMPILE_RESOURCE_OK);
     CHECK(fread(bytes,1,(size_t)length,file)==(size_t)length && !fclose(file));XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
@@ -31,10 +31,10 @@ static XrXirArtifact *cold_mixed_lower(const XrXirCompileContext *context) {
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
 }
-static void cold_mixed(unsigned direction) {
+static void cold_mixed(unsigned direction,bool faults,const char *path) {
     XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
-    XrXirArtifact *artifact=cold_mixed_lower(&context);const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    XrXirArtifact *artifact=cold_mixed_lower(&context,path);const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     CHECK(module->function_count==fixture_derived_library_program.entry_count);
     uint32_t caller=fixture_derived_library_selection[1],method=fixture_derived_library_selection[2];
     CHECK(caller<module->function_count && method<module->function_count && module->functions[method].name_length==7 &&
@@ -46,8 +46,8 @@ static void cold_mixed(unsigned direction) {
     CHECK(xr_compile_resources_calloc(context.resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);owner->artifact=artifact;
     CHECK(xr_xir_compile_vm_bind_table(artifact,&owner->bindings,&owner->entries)==XR_XIR_OK);
     if(!direction)owner->entries[method]=fixture_derived_library_program.entries[method];
-    else for(uint32_t f=0;f<module->function_count;++f)if(f!=method)owner->entries[f]=fixture_derived_library_program.entries[f];
-    CHECK((owner->entries[caller].resume==fixture_derived_library_program.entries[caller].resume)==(direction!=0) &&
+    else if(direction==1)for(uint32_t f=0;f<module->function_count;++f)if(f!=method)owner->entries[f]=fixture_derived_library_program.entries[f];
+    CHECK((owner->entries[caller].resume==fixture_derived_library_program.entries[caller].resume)==(direction==1) &&
         (owner->entries[method].resume==fixture_derived_library_program.entries[method].resume)==(direction==0));
     unsigned released=cold_mixed_released;
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,
@@ -55,8 +55,13 @@ static void cold_mixed(unsigned direction) {
     XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(&context,&spec,&program);
     if(status!=XR_XIR_OK){CHECK(!program);cold_mixed_release(owner);xr_compile_resources_release(context.resources);CHECK(!runtime_live && !runtime_bytes && !source_fixture_compile_live && !source_fixture_compile_bytes);}
     fprintf(stderr,"Cold library mixed direction%u seal%u\n",direction,(unsigned)status);CHECK(status==XR_XIR_OK);
+    cold_runtime_faults(program,fixture_derived_library_selection,faults);
     XrXirValue kept=cold_runtime_results(program,fixture_derived_library_selection);xr_xir_compile_program_drop(program);
     xr_compile_resources_release(context.resources);CHECK(cold_mixed_released==released+1);cold_runtime_retained(&kept);
     printf("Cold library mixed direction%u: actual private READ CALL42, last String, one lease and physical0\n",direction);
 }
-int main(void) {cold_mixed(0);cold_mixed(1);return 0;}
+int main(int argc,char **argv) {
+    bool faults=(argc==2 || argc==3) && !strcmp(argv[1],"--runtime-resources"),vm=(argc==2 || argc==3) && !strcmp(argv[1],"--vm-runtime-resources");CHECK(argc==1 || faults || vm);
+    const char *path=argc==3?argv[2]:XR_DERIVED_LIBRARY_PACKET;
+    if(vm)cold_mixed(2,true,path);else{cold_mixed(0,faults,path);cold_mixed(1,faults,path);if(!faults)cold_mixed(2,false,path);}return 0;
+}

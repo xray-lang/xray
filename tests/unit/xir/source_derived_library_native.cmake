@@ -28,5 +28,13 @@ foreach(cold_scope RANGE 0 1)
         add_test(NAME ${cold_target} COMMAND ${cold_target})
         set_tests_properties(${cold_target} PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
             LABELS "unit;xir;source;ctfe;generated;library;ownership;execution;abi")
+        add_test(NAME "${cold_target}_runtime_resources" COMMAND ${cold_target} --runtime-resources)
+        set_tests_properties("${cold_target}_runtime_resources" PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+            LABELS "unit;xir;source;generated;library;ownership;runtime-fault;resources")
+        if(cold_engine STREQUAL "mixed")
+            add_test(NAME "test_xir_source_derived_library_vm_${cold_scope}_runtime_resources" COMMAND ${cold_target} --vm-runtime-resources)
+            set_tests_properties("test_xir_source_derived_library_vm_${cold_scope}_runtime_resources" PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+                LABELS "unit;xir;source;generated;library;ownership;runtime-fault;resources")
+        endif()
     endforeach()
 endforeach()
