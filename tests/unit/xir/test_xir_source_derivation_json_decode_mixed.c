@@ -64,6 +64,9 @@ static void decode_mixed(unsigned direction,const char *path) {
     printf("Ordinary JSON tokens mixed direction%u/real CALL/one lease/retained nullable/physical0\n",direction);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || argc==2);const char *path=argc==2?argv[1]:XR_JSON_DECODE_PACKET;
-    decode_mixed(0,path);decode_mixed(1,path);return 0;
+    bool vm=(argc==2 || argc==3) && !strcmp(argv[1],"--vm-runtime-resources");
+    decode_faults=vm || ((argc==2 || argc==3) && !strcmp(argv[1],"--runtime-resources"));
+    CHECK(argc==1 || decode_faults || (argc==2 && argv[1][0]!='-'));
+    const char *path=decode_faults?(argc==3?argv[2]:XR_JSON_DECODE_PACKET):(argc==2?argv[1]:XR_JSON_DECODE_PACKET);
+    if(vm)decode_mixed(2,path);else{decode_mixed(0,path);decode_mixed(1,path);}return 0;
 }

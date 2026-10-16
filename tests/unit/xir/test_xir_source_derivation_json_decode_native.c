@@ -14,7 +14,8 @@
 #include "xir_source_derivation_json_decode_runtime.h"
 XR_DATA const XrXirProgramSpec fixture_json_decode_program;
 XR_DATA const uint32_t fixture_json_decode_selection[5];
-int main(void) {
+int main(int argc,char **argv) {
+    decode_faults=argc==2 && !strcmp(argv[1],"--runtime-resources");CHECK(argc==1 || decode_faults);
     XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&fixture_json_decode_program,&program)==XR_XIR_OK);

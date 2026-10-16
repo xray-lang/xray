@@ -37,3 +37,11 @@ foreach(decoder_test IN ITEMS test_xir_source_derivation_json_decode_native test
     set_tests_properties(${decoder_test} PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
         LABELS "unit;xir;source;ctfe;generated;library;json;ownership;authorization;execution;abi")
 endforeach()
+foreach(decoder_test IN ITEMS test_xir_source_derivation_json_decode_native test_xir_source_derivation_json_decode_mixed)
+    add_test(NAME ${decoder_test}_runtime_resources COMMAND ${decoder_test} --runtime-resources)
+    set_tests_properties(${decoder_test}_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+        LABELS "unit;xir;source;ctfe;generated;json;ownership;runtime-fault;resources")
+endforeach()
+add_test(NAME test_xir_source_derivation_json_decode_runtime_resources COMMAND test_xir_source_derivation_json_decode_mixed --vm-runtime-resources)
+set_tests_properties(test_xir_source_derivation_json_decode_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;ctfe;generated;json;ownership;runtime-fault;resources")
