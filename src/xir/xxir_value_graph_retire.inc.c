@@ -47,8 +47,17 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
     if (object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC) return true;
     if (object->type == XR_XIR_PANIC_INFO)
         return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context);
-    if (object->kind == XIR_OBJECT_CELL)
-        return graph_direct_edge(&((XirCell *)object)->value, visit, context);
+    if (object->kind == XIR_OBJECT_CELL) {
+        XirCell *cell = (XirCell *)object;
+        XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
+        for (uint32_t i = 0; i < cell->projection_count; ++i) {
+            if (!graph_edge_work(budget)) return false;
+            if (steps[i].kind != XR_XIR_PATH_KEY) continue;
+            XrXirValue key = path_key_value(&steps[i], object->arena);
+            if (!visit(&key, &steps[i].selector, context)) return false;
+        }
+        return graph_direct_edge(&cell->value, visit, context);
+    }
     if (object->kind == XIR_OBJECT_FUNCTION) {
         const XrXirFunctionBinding *binding = &((XirFunction *)object)->binding;
         for (uint32_t i = 0; i < binding->capture_count; ++i)

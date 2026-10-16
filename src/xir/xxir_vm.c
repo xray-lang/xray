@@ -15,6 +15,7 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_map.h"
 #include "xxir_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
@@ -26,6 +27,7 @@
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_instance_value.h"
+#include "xxir_instance_hash.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_struct.h"
 #include "xxir_class.h"
@@ -176,6 +178,7 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
 }
 #include "xxir_vm_atomic.inc.c"
 #include "xxir_vm_path.inc.c"
+#include "xxir_vm_hash.inc.c"
 static XrXirRunStatus vm_array_capacity_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -562,6 +565,10 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         op->op == XR_XIR_ARRAY_RESERVE) {
         state->instruction = next;
         return vm_array_capacity_step(run, state, op, run->layout->offsets[result_id], action);
+    }
+    if (op->op >= XR_XIR_MAP_NEW && op->op <= XR_XIR_MAP_VALUE_AT) {
+        state->instruction = next;
+        return vm_hash_step(run, state, op, run->layout->offsets[result_id], action);
     }
     if (xr_xir_op_uses_value_path(run->function, op)) {
         state->instruction = next;

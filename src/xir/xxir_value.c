@@ -26,6 +26,7 @@
 #include "xxir_equal.h"
 #include "xxir_key.h"
 #include "xxir_map.h"
+#include "xxir_hash_iteration.h"
 #include "xxir_nullable.h"
 #include "xxir_tuple.h"
 #include "xxir_float.h"
@@ -80,6 +81,11 @@ static XrXirValueStatus cell_projection_write(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValue *value,
     XrXirValueAdmission *admission);
 static bool cell_access(const XirCell *cell, const XrXirCellAuthority *authority);
+static XrXirValue path_key_value(const XrXirValuePathStep *step, const XrXirTypeArena *arena) {
+    if (step->kind != XR_XIR_PATH_KEY) return (XrXirValue){0};
+    const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
+    return (XrXirValue){(uint32_t)xr_xir_map_key(types, step->container), 0, step->selector};
+}
 typedef struct XirArray {
     XirObject object;
     unsigned char *data;
@@ -786,7 +792,14 @@ static void release_pending(XirObject *pending) {
             xr_xir_domain_deallocate(domain, task, sizeof(*task));
         } else if (object->kind == XIR_OBJECT_CELL) {
             XirCell *cell = (XirCell *) object;
-            if (!object->graph_dead) queue_release(&cell->value, &pending);
+            if (!object->graph_dead) {
+                XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
+                for (uint32_t i = 0; i < cell->projection_count; ++i) {
+                    XrXirValue key = path_key_value(&steps[i], arena);
+                    queue_release(&key, &pending);
+                }
+                queue_release(&cell->value, &pending);
+            }
             xr_xir_domain_deallocate(domain, cell, cell->allocation_bytes);
         } else if (object->kind == XIR_OBJECT_FUNCTION) {
             XirFunction *function = (XirFunction *) object;
@@ -1803,6 +1816,9 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_hash_mutation.inc.c"
 #include "xxir_hash_delete.inc.c"
 #include "xxir_hash_value.inc.c"
+#include "xxir_hash_position.inc.c"
+#include "xxir_hash_projection.inc.c"
+#include "xxir_set_algebra.inc.c"
 #include "xxir_cell_owner.inc.c"
 #include "xxir_class_value.inc.c"
 #include "xxir_struct_value.inc.c"
@@ -1813,4 +1829,5 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_error_value.inc.c"
 #include "xxir_panic_value.inc.c"
 #include "xxir_value_equal.inc.c"
+#include "xxir_map_contains_value.inc.c"
 #include "xxir_value_key.inc.c"

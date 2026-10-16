@@ -369,7 +369,7 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
         bool store=op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_WRITE ||
             op->op==XR_XIR_CELL_LOCAL_WRITE || op->op==XR_XIR_PLACE_WRITE ||
             op->op==XR_XIR_SLOT_INIT || op->op==XR_XIR_SLOT_GROUP_INIT ||
-            op->op==XR_XIR_SLOT_STORE || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_SET ||
+            op->op==XR_XIR_SLOT_STORE || op->op==XR_XIR_MAP_NEW || op->op==XR_XIR_SET_NEW || op->op==XR_XIR_MAP_SET || op->op==XR_XIR_SET_ADD || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_SET ||
             op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_SET ||
             op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_SET || op->op==XR_XIR_ENUM_NEW ||
             op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_NULLABLE_SOME;

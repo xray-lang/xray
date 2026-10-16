@@ -76,7 +76,7 @@ static const uint8_t sizing_empty_golden[220] = {
 #include "checked_sizing71_golden.h"
 #include "checked_sizing72_golden.h"
 #include "checked_sizing73_golden.h"
-#include "checked_sizing75_golden.h"
+#include "checked_sizing83_golden.h"
 static void sizing_historical_rejections(void) {
     const uint8_t *const retired74[] = {sizing74_retired_golden, sizing74_retired_embedded_golden, sizing74_retired_empty_golden};
     for (unsigned i = 0; i < 3; ++i) {
@@ -201,9 +201,9 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {
         CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 224 : 228));
-        if (!variant) CHECK(!memcmp(packet.bytes,sizing75_golden,sizeof(sizing75_golden)));
-        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing75_embedded_golden,sizeof(sizing75_embedded_golden)));
-        else CHECK(!memcmp(packet.bytes,sizing75_empty_golden,sizeof(sizing75_empty_golden)));
+        if (!variant) CHECK(!memcmp(packet.bytes,sizing83_golden,sizeof(sizing83_golden)));
+        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing83_embedded_golden,sizeof(sizing83_embedded_golden)));
+        else CHECK(!memcmp(packet.bytes,sizing83_empty_golden,sizeof(sizing83_empty_golden)));
         xr_xir_compile_checked_packet_free(&packet);
     }
     xr_xir_compile_construction_free(artifact.construction);
@@ -270,8 +270,8 @@ static void sizing_public_golden(void) {
     XrXirArtifact *checked = NULL, *decoded = NULL; XrXirCheckedPacket packet = {0};
     CHECK(xir_fixture_check(&context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(sizing75_golden) && !memcmp(packet.bytes,sizing75_golden,sizeof(sizing75_golden)));
-    CHECK(xr_xir_compile_checked_read(&context,sizing75_golden,sizeof(sizing75_golden),&decoded,NULL) == XR_XIR_OK);
+    CHECK(packet.length == sizeof(sizing83_golden) && !memcmp(packet.bytes,sizing83_golden,sizeof(sizing83_golden)));
+    CHECK(xr_xir_compile_checked_read(&context,sizing83_golden,sizeof(sizing83_golden),&decoded,NULL) == XR_XIR_OK);
     CHECK(decoded->module.functions[0].instructions[0].immediate == 42);
     xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_checked_packet_free(&packet); CHECK(live_count == 1);

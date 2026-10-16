@@ -4570,3 +4570,18 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_keys.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_source.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_contains.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_members.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_map_index.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_projection.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_set_algebra.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_map_value.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_map_membership.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_hash_foreach.cmake)
+
+include(xir/p09_hash_sendable.cmake)
+
+add_test(NAME test_xir_source_array_reorder_query COMMAND test_xir_source_arrays --query-only)
+set_tests_properties(test_xir_source_array_reorder_query PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;query;target-impact")
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_map_key_path.cmake)

@@ -1,14 +1,24 @@
 // @native-type id=6
 struct Map<K: Hashable, V> {
+    // @native-operation MAP_GET allocation=may_heap failures=allocation,retain,limit ownership=owned
     get(key: K) -> V?
+    // @native-operation MAP_SET allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref set(key: K, value: V)
+    // @native-operation HASH_CONTAINS allocation=may_heap failures=allocation,retain,limit ownership=owned
     containsKey(key: K) -> bool
+    // @native-operation MAP_CONTAINS_VALUE allocation=may_heap failures=allocation,retain,limit ownership=owned
     containsValue(value: V) -> bool
+    // @native-operation HASH_DELETE allocation=may_heap failures=allocation,retain,limit ownership=owned
     ref delete(key: K) -> bool
+    // @native-operation HASH_CLEAR allocation=may_heap failures=allocation,retain,limit ownership=unit
     ref clear()
+    // @native-operation HASH_KEYS allocation=may_heap failures=allocation,retain,limit ownership=owned
     keys() -> Array<K>
+    // @native-operation HASH_VALUES allocation=may_heap failures=allocation,retain,limit ownership=owned
     values() -> Array<V>
+    // @native-operation MAP_ENTRIES allocation=may_heap failures=allocation,retain,limit ownership=owned
     entries() -> Array<(K, V)>
+    // @native-operation HASH_FOR_EACH allocation=may_heap failures=allocation,retain,limit,callback ownership=unit
     forEach(fn: fn(key: K, value: V)) -> ()
     // Iteration protocol — iterator() yields each key K (used by
     // single-variable `for (k in m)`); entriesIterator() yields each

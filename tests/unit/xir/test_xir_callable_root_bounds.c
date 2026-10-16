@@ -21,7 +21,7 @@
 _Static_assert(XR_XIR_CALLABLE_NO_SUSPEND==1 && XR_XIR_CALLABLE_ROOT_NONE==2 &&
     XR_XIR_CALLABLE_ROOT_REQUIRED==4 && XR_XIR_CALLABLE_ROOT_UNRESOLVED==8 &&
     XR_XIR_CALLABLE_ROOT_MASK==14,"The closed bound bit assignments are one contract");
-_Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==75,"The callable dependency contract has one wire identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==83,"The callable dependency contract has one wire identity");
 
 static void bound_matrix(void) {
     static const bool admitted[16]={false,false,true,true,true,true,false,false,true,true,false,false,true,true,false,false};

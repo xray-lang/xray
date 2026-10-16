@@ -676,7 +676,8 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
     parent->effect_pending=false;
     parent->pending_invocation=(XirEffectInvocationSelection){0};
     if (status != XR_XIR_CALL_READY) {
-        if (!cleanup && status == XR_XIR_CALL_BOUNDS && xr_xir_fault_bounds_valid(preparation_fault)) {
+        if (!cleanup && ((status == XR_XIR_CALL_BOUNDS && xr_xir_fault_bounds_valid(preparation_fault)) ||
+            (status == XR_XIR_CALL_RUNTIME_PANIC && xr_xir_fault_runtime_valid(preparation_fault)))) {
             XrXirCallResult failed = call_result(status);
             failed.panic.detail = preparation_fault;
             if (action.flags & XR_XIR_ACTION_PROTECTED) {

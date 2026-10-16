@@ -257,7 +257,10 @@ class NativeDeclarations(unittest.TestCase):
             header, members = schema.parse_source(source, self.prelude)
             self.assertEqual(header[:3], (identity, name, binders))
             self.assertEqual(len(members), count)
-            self.assertTrue(all(member.operation == 'NONE' for member in members))
+            self.assertEqual({member.name for member in members if member.operation != 'NONE'},
+                {'get', 'set', 'containsKey', 'containsValue', 'delete', 'clear', 'keys', 'values', 'entries', 'forEach'} if stem == 'map' else
+                {'add', 'contains', 'delete', 'clear', 'values', 'toArray', 'union', 'intersection',
+                 'difference', 'symmetricDifference', 'isSubset', 'isSuperset', 'forEach'})
             self.assertNotIn(f'xr_native_def_{stem}', embed.render(ROOT / 'stdlib/types'))
             for before, after in [('struct ', 'class '), (': Hashable', ''),
                                   (': Hashable', ': Equal'), ('ref clear()', 'clear()'),
@@ -270,9 +273,26 @@ class NativeDeclarations(unittest.TestCase):
         put = next(member for member in members if member.name == 'set')
         self.assertEqual(schema.simple_term(get.result, ('K', 'V')), 'NULLABLE_VALUE')
         self.assertEqual([schema.simple_term(p[1], ('K', 'V')) for p in put.parameters], ['KEY', 'VALUE'])
+        for name, operation, result in [('keys', 'HASH_KEYS', 'ARRAY_KEY'),
+                ('values', 'HASH_VALUES', 'ARRAY_VALUE'), ('entries', 'MAP_ENTRIES', 'ARRAY_KEY_VALUE')]:
+            member = next(member for member in members if member.name == name)
+            self.assertEqual(member.operation, operation)
+            self.assertEqual(schema.simple_term(member.result, ('K', 'V')), result)
+            self.assertEqual(len(member.parameters), 0)
+            self.assertEqual(member.receiver, 'READ')
         for header in ('Map<V, K: Hashable>', 'Map<K: Hashable, K>', 'Map<K: Hashable>', 'Map<K, V: Hashable>'):
             with self.subTest(header=header), self.assertRaises(ValueError):
                 schema.parse_source(source.replace('Map<K: Hashable, V>', header), self.prelude)
+        source = (ROOT / 'stdlib/types/set.xr').read_text(encoding='utf-8')
+        _, members = schema.parse_source(source, self.prelude)
+        for name, operation in [('union', 'SET_UNION'), ('intersection', 'SET_INTERSECTION'),
+                ('difference', 'SET_DIFFERENCE'), ('symmetricDifference', 'SET_SYMMETRIC_DIFFERENCE'),
+                ('isSubset', 'SET_IS_SUBSET'), ('isSuperset', 'SET_IS_SUPERSET')]:
+            member = next(member for member in members if member.name == name)
+            self.assertEqual(member.operation, operation)
+            self.assertEqual(member.receiver, 'READ')
+            self.assertEqual([schema.simple_term(p[1], ('T',)) for p in member.parameters], ['SET_ELEMENT'])
+            self.assertEqual(schema.simple_term(member.result, ('T',)), 'BOOL' if name.startswith('is') else 'SET_ELEMENT')
 
     def test_inventory_preserves_governed_hash_signatures_and_admission(self):
         for stem, identity, names, signature in [('array', 1, ['T'], 'Array<T>'),
@@ -288,7 +308,10 @@ class NativeDeclarations(unittest.TestCase):
             self.assertEqual(declaration['native_type_id'], identity)
             self.assertEqual(declaration['declaration_kind'], 'struct')
             if stem in ('map', 'set'):
-                self.assertTrue(all(not member['xir_admitted'] for member in rows[1:]))
+                self.assertEqual({member['name'] for member in rows[1:] if member['xir_admitted']},
+                    {'get', 'set', 'containsKey', 'containsValue', 'delete', 'clear', 'keys', 'values', 'entries', 'forEach'} if stem == 'map' else
+                    {'add', 'contains', 'delete', 'clear', 'values', 'toArray', 'union', 'intersection',
+                     'difference', 'symmetricDifference', 'isSubset', 'isSuperset', 'forEach'})
             else:
                 self.assertTrue(any(member['xir_admitted'] for member in rows[1:]))
         with self.assertRaises(ValueError):

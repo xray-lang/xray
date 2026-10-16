@@ -17,6 +17,7 @@
 #include "xxir_checked.h"
 #include "xxir_program.h"
 #include "xxir_atomic.h"
+#include "xxir_map.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
@@ -598,6 +599,7 @@ static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
     }
 }
 #include "xxir_emit_path.inc.c"
+#include "xxir_emit_hash.inc.c"
 static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     EMIT_STATIC(buffer, es_0eecdf36a03e6314, " { XrXirCallStatus status; XrXirFaultDetail fault = {0};\n");
@@ -888,6 +890,10 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         emit_cleanup_step(buffer, function, layout, index); return;
+    }
+    if (op->op >= XR_XIR_MAP_NEW && op->op <= XR_XIR_MAP_VALUE_AT) {
+        emit_hash_step(buffer, function, op, layout, destination, index);
+        return;
     }
     if (xr_xir_op_uses_value_path(function, op)) {
         emit_path_step(buffer, function, op, layout, destination, index); return;
@@ -1615,8 +1621,8 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
-    EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
-           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
+    EMIT_FORMAT(buffer, et_29f4a940f732c72e, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_instance_hash.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
            "#include \"xir/xxir_task.h\"\n"

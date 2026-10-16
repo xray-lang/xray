@@ -138,6 +138,8 @@ def simple_term(term, binder):
     if isinstance(binder, tuple):
         if len(binder) == 2:
             key, value = [('name', name, ()) for name in binder]
+            if term == TypeParser(f'fn(key: {binder[0]}, value: {binder[1]})').type():
+                return 'CALLBACK_KEY_VALUE_VISIT'
             return {key: 'KEY', value: 'VALUE', ('nullable', value): 'NULLABLE_VALUE',
                     ('name', 'Array', (key,)): 'ARRAY_KEY',
                     ('name', 'Array', (value,)): 'ARRAY_VALUE',
@@ -161,6 +163,8 @@ def simple_term(term, binder):
     if binder:
         if term == ('name', 'U', ()):
             return 'RESULT_VARIABLE'
+        if term == ('name', 'Set', (('name', binder, ()),)):
+            return 'SET_ELEMENT'
         if term == ('name', 'Array', (('name', binder, ()),)):
             return 'ARRAY_ELEMENT'
         if term == ('name', 'Array', (('tuple', (('name', 'i64', ()), ('name', binder, ()))),)):
@@ -169,6 +173,8 @@ def simple_term(term, binder):
             return 'ARRAY_RESULT'
         if term == ('nullable', ('name', binder, ())):
             return 'NULLABLE_ELEMENT'
+        if term == TypeParser(f'fn(value: {binder})').type():
+            return 'CALLBACK_ELEMENT_VISIT'
         callback_terms = {
             f'fn(item: {binder}, index: i64) -> U': 'CALLBACK_MAP',
             f'fn(item: {binder}, index: i64) -> bool': 'CALLBACK_PREDICATE_INDEXED',
@@ -381,7 +387,7 @@ def parse_source(source, prelude):
 
 
 def validate_hash_members(identity, members):
-    """Signatures describe the type; no member gains execution authority here."""
+    """Admitted members require their complete signature and operation contract."""
     contracts = {
         6: {'get': ('READ', '(key: K) -> V?'), 'set': ('REF', '(key: K, value: V)'),
             'containsKey': ('READ', '(key: K) -> bool'), 'containsValue': ('READ', '(value: V) -> bool'),
@@ -401,10 +407,26 @@ def validate_hash_members(identity, members):
     }[identity]
     if {member.name for member in members} != set(contracts):
         raise ValueError('incorrect native hash member inventory')
+    admitted = {6: {'get': 'MAP_GET', 'set': 'MAP_SET', 'containsKey': 'HASH_CONTAINS',
+                    'containsValue': 'MAP_CONTAINS_VALUE',
+                    'delete': 'HASH_DELETE', 'clear': 'HASH_CLEAR', 'keys': 'HASH_KEYS',
+                    'values': 'HASH_VALUES', 'entries': 'MAP_ENTRIES', 'forEach': 'HASH_FOR_EACH'},
+                7: {'add': 'SET_ADD', 'contains': 'HASH_CONTAINS',
+                    'delete': 'HASH_DELETE', 'clear': 'HASH_CLEAR', 'values': 'HASH_VALUES', 'toArray': 'HASH_VALUES',
+                    'union': 'SET_UNION', 'intersection': 'SET_INTERSECTION', 'difference': 'SET_DIFFERENCE',
+                    'symmetricDifference': 'SET_SYMMETRIC_DIFFERENCE',
+                    'isSubset': 'SET_IS_SUBSET', 'isSuperset': 'SET_IS_SUPERSET', 'forEach': 'HASH_FOR_EACH'}}[identity]
     for member in members:
         receiver, signature = contracts[member.name]
+        operation = admitted.get(member.name, 'NONE')
+        if operation != 'NONE':
+            ownership = 'unit' if member.name in ('set', 'add', 'clear', 'forEach') else 'owned'
+            failures = 'allocation,retain,limit,callback' if member.name == 'forEach' else 'allocation,retain,limit'
+            if (member.operation, member.allocation, member.failures, member.ownership) != (
+                    operation, 'may_heap', failures, ownership):
+                raise ValueError('native hash operation disagrees with its execution contract: ' + member.name)
         if (member.receiver != receiver or tokens(member.signature) != tokens(signature) or
-                member.static or not member.method or member.lowered or member.operation != 'NONE'):
+                member.static or not member.method or member.lowered or member.operation != operation):
             raise ValueError('native hash declaration disagrees with its signature contract: ' + member.name)
 
 

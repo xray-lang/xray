@@ -123,7 +123,8 @@ static XrXirStatus constraint_markers(const XrXirConstraintEnvironment *environm
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (node && node->kind == XR_XIR_TYPE_ATOMIC)
             return constraint_atomic(environment,node->element,XR_XIR_CONSTRAINT_ATOMIC_VALUE,work);
-        if (node && (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_NOMINAL))
+        if (node && (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_NOMINAL ||
+                     node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET))
             return constraint_sendable_graph(environment,type,work);
         if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE &&
                       node->kind != XR_XIR_TYPE_TASK)) return XR_XIR_BAD_TYPE;

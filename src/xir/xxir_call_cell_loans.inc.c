@@ -126,7 +126,8 @@ static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame,
         if (prepared != XR_XIR_VALUE_OK) return prepared == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
             prepared == XR_XIR_VALUE_LIMIT || prepared == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT :
             prepared == XR_XIR_VALUE_BOUNDS && xr_xir_fault_bounds_valid(*fault) ?
-                XR_XIR_CALL_BOUNDS : XR_XIR_CALL_BAD_ARGUMENT;
+                XR_XIR_CALL_BOUNDS : prepared == XR_XIR_VALUE_BOUNDS && xr_xir_fault_runtime_valid(*fault) ?
+                XR_XIR_CALL_RUNTIME_PANIC : XR_XIR_CALL_BAD_ARGUMENT;
         /* Every successful preparation is now an owned rollback obligation. */
         record->parameter = p; ++frame->loan_count;
     }

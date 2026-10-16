@@ -16,9 +16,11 @@ static bool effect_class_access_opcode(XrXirOp op,XirEffectClassAccessKind kind)
     case XIR_EFFECT_ACCESS_CELL_WRITE:
         return op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE;
     case XIR_EFFECT_ACCESS_PROJECT: return op==XR_XIR_CELL_PROJECT;
-    case XIR_EFFECT_ACCESS_PATH_READ: return op==XR_XIR_PLACE_READ || op==XR_XIR_ARRAY_GET;
+    case XIR_EFFECT_ACCESS_PATH_READ: return op==XR_XIR_PLACE_READ || op==XR_XIR_ARRAY_GET ||
+        (op>=XR_XIR_MAP_GET && op<=XR_XIR_MAP_VALUE_AT);
     case XIR_EFFECT_ACCESS_PATH_WRITE:
-        return op==XR_XIR_PLACE_WRITE || op==XR_XIR_ARRAY_SET || op==XR_XIR_STRUCT_SET;
+        return op==XR_XIR_PLACE_WRITE || op==XR_XIR_ARRAY_SET || op==XR_XIR_STRUCT_SET ||
+        op==XR_XIR_MAP_SET || op==XR_XIR_SET_ADD || op==XR_XIR_HASH_DELETE || op==XR_XIR_HASH_CLEAR;
     case XIR_EFFECT_ACCESS_PUSH: return op==XR_XIR_ARRAY_PUSH;
     case XIR_EFFECT_ACCESS_LENGTH: return op==XR_XIR_ARRAY_LEN;
     case XIR_EFFECT_ACCESS_CAPACITY: return op==XR_XIR_ARRAY_CAPACITY;
@@ -81,7 +83,7 @@ XR_FUNC XrXirStatus xir_effects_class_access(const XrXirEffects *effects,
     if (status!=XR_XIR_OK) return status;
     if (!effect_class_access_opcode(op.op,request->kind)) return XR_XIR_BAD_STRUCTURE;
     uint32_t value=op.args[0];
-    if (op.op==XR_XIR_ARRAY_SET) {
+    if (op.op==XR_XIR_ARRAY_SET || op.op==XR_XIR_MAP_SET) {
         if (!body->operands || value>=body->operand_count || op.args[1]!=3)
             return XR_XIR_BAD_STRUCTURE;
         value=body->operands[value];

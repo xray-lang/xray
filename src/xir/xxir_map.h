@@ -36,6 +36,9 @@ XR_FUNC XrXirValueStatus xr_xir_map_contains_key(const XrXirValue *map, const Xr
     XrXirValueAdmission *admission, bool *output);
 XR_FUNC XrXirValueStatus xr_xir_set_contains(const XrXirValue *set, const XrXirValue *element,
     XrXirValueAdmission *admission, bool *output);
+/* Value membership uses the finite Equal domain, never key equivalence. */
+XR_FUNC XrXirValueStatus xr_xir_map_contains_value(const XrXirValue *map, const XrXirValue *value,
+    XrXirValueAdmission *admission, bool *output);
 /* Places require a caller-pinned writable root and authenticated whole loan.
  * Shared roots separate; failed preparation never publishes partial storage. */
 XR_FUNC XrXirValueStatus xr_xir_map_set(const XrXirValuePlace *place, const XrXirValue *key,
@@ -46,4 +49,26 @@ XR_FUNC XrXirValueStatus xr_xir_hash_delete(const XrXirValuePlace *place, const 
     XrXirValueAdmission *admission, bool *removed);
 XR_FUNC XrXirValueStatus xr_xir_hash_clear(const XrXirValuePlace *place,
     XrXirValueAdmission *admission);
+/* Projections preserve insertion order and own independent Array storage.
+ * Entry tuples retain each key/value; failure leaves the Unit output empty. */
+XR_FUNC XrXirValueStatus xr_xir_map_keys(const XrXirValue *map, XrXirType array_type,
+    XrXirValueAdmission *admission, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_hash_values(const XrXirValue *container, XrXirType array_type,
+    XrXirValueAdmission *admission, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_map_entries(const XrXirValue *map, XrXirType array_type,
+    XrXirValueAdmission *admission, XrXirValue *output);
+/* Binary Set queries preserve both inputs and insertion order. Set results
+ * own a complete independent logical value; failures preserve the output. */
+XR_FUNC XrXirValueStatus xr_xir_set_union(const XrXirValue *left, const XrXirValue *right,
+    XrXirValueAdmission *admission, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_set_intersection(const XrXirValue *left, const XrXirValue *right,
+    XrXirValueAdmission *admission, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_set_difference(const XrXirValue *left, const XrXirValue *right,
+    XrXirValueAdmission *admission, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_set_symmetric_difference(const XrXirValue *left, const XrXirValue *right,
+    XrXirValueAdmission *admission, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_set_is_subset(const XrXirValue *left, const XrXirValue *right,
+    XrXirValueAdmission *admission, bool *output);
+XR_FUNC XrXirValueStatus xr_xir_set_is_superset(const XrXirValue *left, const XrXirValue *right,
+    XrXirValueAdmission *admission, bool *output);
 #endif // XXIR_MAP_H

@@ -285,27 +285,27 @@ static const XrNativeParameter xr_native_map_parameters_4[] = {
     {"key", "K", XR_NATIVE_TERM_KEY, false, false},
 };
 static const XrNativeParameter xr_native_map_parameters_9[] = {
-    {"fn", "fn ( key : K , value : V )", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"fn", "fn ( key : K , value : V )", XR_NATIVE_TERM_CALLBACK_KEY_VALUE_VISIT, false, false},
 };
 static const XrNativeMemberDeclaration xr_native_map_members[] = {
-    {1, "get", "(key: K) -> V?", "V ?", 3, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_map_parameters_0, 1, XR_NATIVE_TERM_NULLABLE_VALUE},
-    {2, "set", "(key: K, value: V)", "()", 4, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_map_parameters_1, 2, XR_NATIVE_TERM_UNIT},
-    {3, "containsKey", "(key: K) -> bool", "bool", 5, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_map_parameters_2, 1, XR_NATIVE_TERM_BOOL},
-    {4, "containsValue", "(value: V) -> bool", "bool", 6, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_map_parameters_3, 1, XR_NATIVE_TERM_BOOL},
-    {5, "delete", "(key: K) -> bool", "bool", 7, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_map_parameters_4, 1, XR_NATIVE_TERM_BOOL},
-    {6, "clear", "()", "()", 8, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNIT},
-    {7, "keys", "() -> Array<K>", "Array < K >", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_ARRAY_KEY},
-    {8, "values", "() -> Array<V>", "Array < V >", 10, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_ARRAY_VALUE},
-    {9, "entries", "() -> Array<(K, V)>", "Array < ( K , V ) >", 11, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_ARRAY_KEY_VALUE},
-    {10, "forEach", "(fn: fn(key: K, value: V)) -> ()", "( )", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_map_parameters_9, 1, XR_NATIVE_TERM_UNIT},
-    {11, "iterator", "() -> Iterator<K>", "Iterator < K >", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {12, "entriesIterator", "() -> Iterator<(K, V)>", "Iterator < ( K , V ) >", 17, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {13, "toString", "() -> string", "string", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
+    {1, "get", "(key: K) -> V?", "V ?", 4, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_MAP_GET, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_map_parameters_0, 1, XR_NATIVE_TERM_NULLABLE_VALUE},
+    {2, "set", "(key: K, value: V)", "()", 6, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_MAP_SET, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_map_parameters_1, 2, XR_NATIVE_TERM_UNIT},
+    {3, "containsKey", "(key: K) -> bool", "bool", 8, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_CONTAINS, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_map_parameters_2, 1, XR_NATIVE_TERM_BOOL},
+    {4, "containsValue", "(value: V) -> bool", "bool", 10, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_MAP_CONTAINS_VALUE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_map_parameters_3, 1, XR_NATIVE_TERM_BOOL},
+    {5, "delete", "(key: K) -> bool", "bool", 12, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_HASH_DELETE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_map_parameters_4, 1, XR_NATIVE_TERM_BOOL},
+    {6, "clear", "()", "()", 14, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_HASH_CLEAR, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, NULL, 0, XR_NATIVE_TERM_UNIT},
+    {7, "keys", "() -> Array<K>", "Array < K >", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_KEYS, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_KEY},
+    {8, "values", "() -> Array<V>", "Array < V >", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_VALUES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_VALUE},
+    {9, "entries", "() -> Array<(K, V)>", "Array < ( K , V ) >", 20, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_MAP_ENTRIES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_KEY_VALUE},
+    {10, "forEach", "(fn: fn(key: K, value: V)) -> ()", "( )", 22, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_map_parameters_9, 1, XR_NATIVE_TERM_UNIT},
+    {11, "iterator", "() -> Iterator<K>", "Iterator < K >", 26, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {12, "entriesIterator", "() -> Iterator<(K, V)>", "Iterator < ( K , V ) >", 27, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {13, "toString", "() -> string", "string", 28, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
 };
 static const char *const xr_native_map_type_parameters[] = {"K", "V"};
 static const XrNativeTypeDeclaration xr_native_map = {
     6, XR_NATIVE_DECLARATION_VALUE, "Map", xr_native_map_type_parameters, 2,
-    "stdlib/types/map.xr", "xray-native:prelude/Map", {{73, 197, 241, 221, 214, 208, 173, 218, 183, 96, 141, 145, 139, 187, 98, 126, 101, 82, 25, 202, 102, 209, 1, 84, 202, 183, 176, 87, 115, 72, 143, 49}},
+    "stdlib/types/map.xr", "xray-native:prelude/Map", {{55, 199, 10, 156, 60, 207, 253, 110, 13, 51, 181, 187, 123, 1, 237, 67, 182, 184, 186, 131, 27, 14, 46, 188, 235, 188, 17, 182, 151, 182, 131, 96}},
     2, 8, xr_native_map_members, 13
 };
 
@@ -319,46 +319,46 @@ static const XrNativeParameter xr_native_set_parameters_2[] = {
     {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_5[] = {
-    {"fn", "fn ( value : T )", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"fn", "fn ( value : T )", XR_NATIVE_TERM_CALLBACK_ELEMENT_VISIT, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_6[] = {
-    {"other", "Set < T >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"other", "Set < T >", XR_NATIVE_TERM_SET_ELEMENT, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_7[] = {
-    {"other", "Set < T >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"other", "Set < T >", XR_NATIVE_TERM_SET_ELEMENT, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_8[] = {
-    {"other", "Set < T >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"other", "Set < T >", XR_NATIVE_TERM_SET_ELEMENT, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_9[] = {
-    {"other", "Set < T >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"other", "Set < T >", XR_NATIVE_TERM_SET_ELEMENT, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_10[] = {
-    {"other", "Set < T >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"other", "Set < T >", XR_NATIVE_TERM_SET_ELEMENT, false, false},
 };
 static const XrNativeParameter xr_native_set_parameters_11[] = {
-    {"other", "Set < T >", XR_NATIVE_TERM_UNADMITTED, false, false},
+    {"other", "Set < T >", XR_NATIVE_TERM_SET_ELEMENT, false, false},
 };
 static const XrNativeMemberDeclaration xr_native_set_members[] = {
-    {1, "add", "(value: T)", "()", 3, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_0, 1, XR_NATIVE_TERM_UNIT},
-    {2, "contains", "(value: T) -> bool", "bool", 4, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_1, 1, XR_NATIVE_TERM_BOOL},
-    {3, "delete", "(value: T) -> bool", "bool", 5, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_2, 1, XR_NATIVE_TERM_BOOL},
-    {4, "clear", "()", "()", 6, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNIT},
-    {5, "values", "() -> Array<T>", "Array < T >", 7, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_ARRAY_ELEMENT},
-    {6, "forEach", "(fn: fn(value: T)) -> ()", "( )", 8, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_5, 1, XR_NATIVE_TERM_UNIT},
-    {7, "union", "(other: Set<T>) -> Set<T>", "Set < T >", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_6, 1, XR_NATIVE_TERM_UNADMITTED},
-    {8, "intersection", "(other: Set<T>) -> Set<T>", "Set < T >", 10, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_7, 1, XR_NATIVE_TERM_UNADMITTED},
-    {9, "difference", "(other: Set<T>) -> Set<T>", "Set < T >", 11, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_8, 1, XR_NATIVE_TERM_UNADMITTED},
-    {10, "symmetricDifference", "(other: Set<T>) -> Set<T>", "Set < T >", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_9, 1, XR_NATIVE_TERM_UNADMITTED},
-    {11, "isSubset", "(other: Set<T>) -> bool", "bool", 13, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_10, 1, XR_NATIVE_TERM_BOOL},
-    {12, "isSuperset", "(other: Set<T>) -> bool", "bool", 14, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_set_parameters_11, 1, XR_NATIVE_TERM_BOOL},
-    {13, "toArray", "() -> Array<T>", "Array < T >", 15, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_ARRAY_ELEMENT},
-    {14, "iterator", "() -> Iterator<T>", "Iterator < T >", 17, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
-    {15, "toString", "() -> string", "string", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
+    {1, "add", "(value: T)", "()", 4, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_SET_ADD, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_set_parameters_0, 1, XR_NATIVE_TERM_UNIT},
+    {2, "contains", "(value: T) -> bool", "bool", 6, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_CONTAINS, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_1, 1, XR_NATIVE_TERM_BOOL},
+    {3, "delete", "(value: T) -> bool", "bool", 8, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_HASH_DELETE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_2, 1, XR_NATIVE_TERM_BOOL},
+    {4, "clear", "()", "()", 10, 9, XR_NATIVE_RECEIVER_REF, false, true, false, true, XR_NATIVE_OPERATION_HASH_CLEAR, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, NULL, 0, XR_NATIVE_TERM_UNIT},
+    {5, "values", "() -> Array<T>", "Array < T >", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_VALUES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_ELEMENT},
+    {6, "forEach", "(fn: fn(value: T)) -> ()", "( )", 14, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_FOR_EACH, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,callback", XR_NATIVE_RESULT_OWNERSHIP_UNIT, xr_native_set_parameters_5, 1, XR_NATIVE_TERM_UNIT},
+    {7, "union", "(other: Set<T>) -> Set<T>", "Set < T >", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_UNION, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_6, 1, XR_NATIVE_TERM_SET_ELEMENT},
+    {8, "intersection", "(other: Set<T>) -> Set<T>", "Set < T >", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_INTERSECTION, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_7, 1, XR_NATIVE_TERM_SET_ELEMENT},
+    {9, "difference", "(other: Set<T>) -> Set<T>", "Set < T >", 20, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_DIFFERENCE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_8, 1, XR_NATIVE_TERM_SET_ELEMENT},
+    {10, "symmetricDifference", "(other: Set<T>) -> Set<T>", "Set < T >", 22, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_SYMMETRIC_DIFFERENCE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_9, 1, XR_NATIVE_TERM_SET_ELEMENT},
+    {11, "isSubset", "(other: Set<T>) -> bool", "bool", 24, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_IS_SUBSET, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_10, 1, XR_NATIVE_TERM_BOOL},
+    {12, "isSuperset", "(other: Set<T>) -> bool", "bool", 26, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_SET_IS_SUPERSET, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_set_parameters_11, 1, XR_NATIVE_TERM_BOOL},
+    {13, "toArray", "() -> Array<T>", "Array < T >", 28, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_HASH_VALUES, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ARRAY_ELEMENT},
+    {14, "iterator", "() -> Iterator<T>", "Iterator < T >", 30, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {15, "toString", "() -> string", "string", 31, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
 };
 static const char *const xr_native_set_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_set = {
     7, XR_NATIVE_DECLARATION_VALUE, "Set", xr_native_set_type_parameters, 1,
-    "stdlib/types/set.xr", "xray-native:prelude/Set", {{108, 128, 98, 105, 55, 1, 214, 9, 130, 245, 80, 186, 139, 118, 107, 76, 32, 146, 76, 158, 211, 108, 176, 220, 20, 107, 228, 95, 150, 147, 219, 143}},
+    "stdlib/types/set.xr", "xray-native:prelude/Set", {{68, 125, 54, 255, 140, 96, 241, 222, 134, 22, 136, 253, 65, 125, 169, 71, 67, 251, 10, 82, 117, 250, 30, 249, 122, 42, 142, 194, 131, 210, 15, 53}},
     2, 8, xr_native_set_members, 15
 };

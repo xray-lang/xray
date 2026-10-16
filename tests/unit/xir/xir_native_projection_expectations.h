@@ -12,7 +12,7 @@
 #include "base/xsha256.h"
 
 /* Independent complete prior and current policy frames. */
-#include "xir_hash75_identity.h"
+#include "xir_hash83_identity.h"
 static const uint8_t linked_policy71_preimage[71]={
     0x78,0x72,0x61,0x79,0x3a,0x78,0x69,0x72,0x2d,0x63,0x31,0x31,
     0x2d,0x63,0x6f,0x64,0x65,0x67,0x65,0x6e,0x2d,0x70,0x6f,0x6c,
@@ -140,6 +140,9 @@ static const uint8_t original_policy73[] = {
     0xfa,0x6a,0x1d,0x1a,0x2c,0xa6,0x0c,0x90,0x3c,0xe9,0x6d,0x3b,0x43,0xc7,0xd7,0xdf,
 };
     CHECK(!memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value25 : original_policy_value25,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy75 : original_policy75,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy81 : original_policy81,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy82 : original_policy82,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value24 : original_policy_value24,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy73 : original_policy73,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy72 : original_policy72,32));

@@ -87,7 +87,7 @@ static void string_checked(unsigned attack) {
     consumer_context_ephemeral_free(&context, baseline);
 }
 int main(void) {
-    _Static_assert(XR_XIR_CELL_STRING_APPEND == 153 && XR_XIR_OP_COUNT == 154 && XR_XIR_CHECKED_CONTRACT == 75,
+    _Static_assert(XR_XIR_CELL_STRING_APPEND == 153 && XR_XIR_OP_COUNT == 176 && XR_XIR_CHECKED_CONTRACT == 83,
         "String mutation instruction and semantic identity");
     consumer_context = consumer_context_default();
     for (unsigned attack = 0; attack < 14; ++attack) string_checked(attack);

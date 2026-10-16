@@ -10,6 +10,7 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_task_shapes.h"
 #include "xxir_map.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_compile_memory.h"
@@ -83,9 +84,9 @@ XR_FUNC bool xr_xir_task_parameter_supported(const XrXirTypes *types, XrXirType 
     /* Closed I64 Atomic and Task handles retain their identity when copied
      * to this Instance's child. The common GO checker still proves Sendable,
      * closed root effects and full argument admission before publication. */
-    return node && (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-                    node->kind == XR_XIR_TYPE_TASK) &&
-        node->element == XR_XIR_I64;
+    return xr_xir_task_hash_shape(types, type) ||
+        (node && (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+                    node->kind == XR_XIR_TYPE_TASK) && node->element == XR_XIR_I64);
 }
 XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
