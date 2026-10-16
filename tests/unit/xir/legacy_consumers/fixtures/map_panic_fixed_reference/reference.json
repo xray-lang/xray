@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "fixed_source_commit": "460622cf45c82ab0bc93be14d2f0ac3fce21bef6",
+  "accepted_product_cli_sha256": "4da822ed581b7b22f56cd6a5cb24037ac7f51fcf1088f5440d628e7a4a11b11e",
+  "accepted_product_manifest_sha256": "d5ddf7eec828b84e8d52b56816efbfded091658eb73cd264c3bc2409f87f54b8",
+  "canonical_fault": {
+    "code": 431,
+    "message": "map key not found"
+  },
+  "retired_reference": {
+    "source_path": "src/aot/xrt_coll.h",
+    "lf_sha256": "a9607a14e582818c5c56e9bff9f5ac4fba91daed7c741d2bcd0631fdd1f8e96e",
+    "message": "Map key not found",
+    "role": "Historical migration reference only;not current target execution authority"
+  },
+  "source_snapshots": [
+    {
+      "source_path": "src/xir/xxir_fault.h",
+      "snapshot_path": "tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_fault.h.txt",
+      "git_blob_oid": "065a9aa29e5a918f5f27f06c7625880e4038abc4",
+      "lf_sha256": "ae4c2c8feb94f29730681574218a4f2d44e69a2fe5b237f895111516e3e40c5c"
+    },
+    {
+      "source_path": "src/xir/xxir_panic_value.inc.c",
+      "snapshot_path": "tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_panic_value.inc.c.txt",
+      "git_blob_oid": "31eca424d6e347f8b4776af144e9688be2b0d253",
+      "lf_sha256": "24164946e69744c5f79669e7fe035c602b58db5b2c527169a72412a4fa7703fd"
+    },
+    {
+      "source_path": "tests/unit/xir/p09_map_index_program.h",
+      "snapshot_path": "tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/p09_map_index_program.h.txt",
+      "git_blob_oid": "ec174ba0d60725afc3bc4c882505c09d60262f5b",
+      "lf_sha256": "e079760cd61b9a3047d41d62c4106801a7886e63129fed6be4eb8064e5d9365c"
+    }
+  ],
+  "qualification": "Exact default-message reference for the already accepted fixed4606 target;no provider,SDK,FI,lifetime,readonly-storage or package qualification"
+}

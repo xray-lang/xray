@@ -30888,7 +30888,7 @@
       "source": "tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr",
       "source_lf_sha256": "da740a26e3a592a62251b4114cea9d09c603e82e871855743a1cd5fa37da9f8f",
       "entry": "run",
-      "stdout_utf8": "7\nMap key not found\n431\ntrue\ntrue\ntrue\n",
+      "stdout_utf8": "7\nmap key not found\n431\ntrue\ntrue\ntrue\n",
       "stderr_utf8": "",
       "expected_exit_code": 0,
       "arguments": [],
@@ -30904,17 +30904,28 @@
         "P13",
         "P14"
       ],
-      "independent_execution_model": "Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and fixed diagnostic acceptance text,all print continuations and catch order preserved. Static/prehashed storage is a required product gate,not established by the independent value model.",
+      "independent_execution_model": "Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and committed fixed4606 canonical default-message reference replace the retired backend text as target authority. Exact lowercase UTF8 only;all print continuations/catch order/presence semantics retained. Static/prehashed storage,FI,lifetime and provider require separate real qualification.",
       "preserved_original_identity": {
         "source": "tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr",
         "source_lf_sha256": "da740a26e3a592a62251b4114cea9d09c603e82e871855743a1cd5fa37da9f8f"
       },
       "remaining_gates": [
         "Complete original strict indexing,optional get,nullable payload/containsKey branch,Map/Set top-level readonly candidates,and caught panic code/message order all retained.",
-        "All12 original observations,atomic print-argument panic and skipped bad-index continuation;actual VM/C/native/static-prehashed and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+        "All12 original observations,atomic print-argument panic and skipped bad-index continuation;actual VM/C/native/static-prehashed and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success.",
+        "Current exact diagnostic uses the already accepted fixed4606 canonical formatter/fault code and producer assertion snapshots;the retired uppercase P19 preparation oracle and its original failed execution remain historical. No case normalization,source rewrite,ABI/FI/provider/storage qualification transfer."
       ],
       "source_context": "original_absolute",
-      "independent_observation_count": 6
+      "independent_observation_count": 6,
+      "diagnostic_acceptance_basis": {
+        "fixed_source_commit": "460622cf45c82ab0bc93be14d2f0ac3fce21bef6",
+        "reference": "tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/reference.json",
+        "target_message": "map key not found",
+        "target_code": 431,
+        "retired_message_for_history": "Map key not found",
+        "acceptance": "Exact UTF8;no case folding or dual accepted message",
+        "qualification_scope": "Default-message reference only",
+        "SDK_FI_lifetime_provider_or_readonly_storage_qualified": false
+      }
     },
     {
       "id": "complete_error_boundaries_map_set_static_missing_key_prehashed",
@@ -30922,7 +30933,7 @@
       "source": "tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr",
       "source_lf_sha256": "e8e3b30e380386e0afc58578202fe50102d4fa12b82ae5850af53dcf6196eac7",
       "entry": "run",
-      "stdout_utf8": "true\nfalse\n7\ntrue\n431\nMap key not found\n",
+      "stdout_utf8": "true\nfalse\n7\ntrue\n431\nmap key not found\n",
       "stderr_utf8": "",
       "expected_exit_code": 0,
       "arguments": [],
@@ -30938,17 +30949,28 @@
         "P13",
         "P14"
       ],
-      "independent_execution_model": "Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and fixed diagnostic acceptance text,all print continuations and catch order preserved. Static/prehashed storage is a required product gate,not established by the independent value model.",
+      "independent_execution_model": "Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and committed fixed4606 canonical default-message reference replace the retired backend text as target authority. Exact lowercase UTF8 only;all print continuations/catch order/presence semantics retained. Static/prehashed storage,FI,lifetime and provider require separate real qualification.",
       "preserved_original_identity": {
         "source": "tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr",
         "source_lf_sha256": "e8e3b30e380386e0afc58578202fe50102d4fa12b82ae5850af53dcf6196eac7"
       },
       "remaining_gates": [
         "Complete original strict indexing,optional get,nullable payload/containsKey branch,Map/Set top-level readonly candidates,and caught panic code/message order all retained.",
-        "All12 original observations,atomic print-argument panic and skipped bad-index continuation;actual VM/C/native/static-prehashed and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+        "All12 original observations,atomic print-argument panic and skipped bad-index continuation;actual VM/C/native/static-prehashed and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success.",
+        "Current exact diagnostic uses the already accepted fixed4606 canonical formatter/fault code and producer assertion snapshots;the retired uppercase P19 preparation oracle and its original failed execution remain historical. No case normalization,source rewrite,ABI/FI/provider/storage qualification transfer."
       ],
       "source_context": "original_absolute",
-      "independent_observation_count": 6
+      "independent_observation_count": 6,
+      "diagnostic_acceptance_basis": {
+        "fixed_source_commit": "460622cf45c82ab0bc93be14d2f0ac3fce21bef6",
+        "reference": "tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/reference.json",
+        "target_message": "map key not found",
+        "target_code": 431,
+        "retired_message_for_history": "Map key not found",
+        "acceptance": "Exact UTF8;no case folding or dual accepted message",
+        "qualification_scope": "Default-message reference only",
+        "SDK_FI_lifetime_provider_or_readonly_storage_qualified": false
+      }
     },
     {
       "id": "complete_collection_values_container_print",

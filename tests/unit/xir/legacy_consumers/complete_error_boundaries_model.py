@@ -111,6 +111,7 @@ def expected_rows():
         path=Path(name)
         if path.is_absolute() or path.as_posix()!=name or '..' in path.parts or path.parts[0] not in {'tests','spec','stdlib','src'}:raise ValueError('Error boundary input is not delivered')
         if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Error boundary source or authority changed: '+name)
+    reference=map_diagnostic_reference()
     rows=[]
     for name,values in sorted(observations().items()):
         source=_PROGRAMS[name]
@@ -123,23 +124,55 @@ def expected_rows():
          'observation_count':len(values)})
         if name in _MAP_PROGRAMS:
             rows[-1]['required_semantic_trace']=map_boundary_traces()[name]
-            rows[-1]['model']='Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and fixed diagnostic acceptance text,all print continuations and catch order preserved. Static/prehashed storage is a required product gate,not established by the independent value model.'
+            rows[-1]['diagnostic_acceptance_basis']=reference
+            rows[-1]['model']='Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and committed fixed4606 canonical default-message reference replace the retired backend text as target authority. Exact lowercase UTF8 only;all print continuations/catch order/presence semantics retained. Static/prehashed storage,FI,lifetime and provider require separate real qualification.'
     return rows
 
 
 _MAP_PROGRAMS={name:'tests/diff/cases/semantics/collections/'+name+'.xr' for name in (
     'map_index_missing_key_panic','map_set_static_missing_key_prehashed')}
 _MAP_NAMES=frozenset({'map_index_missing_key_panic','map_set_static_missing_key_prehashed'})
-_MAP_INPUTS={"tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr":"da740a26e3a592a62251b4114cea9d09c603e82e871855743a1cd5fa37da9f8f","tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr":"e8e3b30e380386e0afc58578202fe50102d4fa12b82ae5850af53dcf6196eac7","stdlib/types/map.xr":"49c5f1ddd6d0addab7608d918bbb627e655219ca66d10154cab7b05773488f31","stdlib/types/set.xr":"6c8062693701d60982f550ba8b766b4c20924c9ed36cb0dc146be45f9693db8f","src/runtime/xerror_codes.h":"c57c353946012402931711b2b736013c8b5208fcb5de22370a230cc75e0f8a56","src/aot/xrt_coll.h":"a9607a14e582818c5c56e9bff9f5ac4fba91daed7c741d2bcd0631fdd1f8e96e"}
+_MAP_INPUTS={"tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr":"da740a26e3a592a62251b4114cea9d09c603e82e871855743a1cd5fa37da9f8f","tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr":"e8e3b30e380386e0afc58578202fe50102d4fa12b82ae5850af53dcf6196eac7","stdlib/types/map.xr":"49c5f1ddd6d0addab7608d918bbb627e655219ca66d10154cab7b05773488f31","stdlib/types/set.xr":"6c8062693701d60982f550ba8b766b4c20924c9ed36cb0dc146be45f9693db8f","src/runtime/xerror_codes.h":"c57c353946012402931711b2b736013c8b5208fcb5de22370a230cc75e0f8a56"}
+
+_MAP_REFERENCE_PATH='tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/reference.json'
+_MAP_REFERENCE_FILES=('tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_fault.h.txt', 'tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_panic_value.inc.c.txt', 'tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/p09_map_index_program.h.txt')
+_MAP_INPUTS.update({'tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/reference.json': 'c939a447f6e5349d2bfd1c0b71eaa3e4dbf8eda99b4f5ec39d288c5625c3eb86', 'tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_fault.h.txt': 'ae4c2c8feb94f29730681574218a4f2d44e69a2fe5b237f895111516e3e40c5c', 'tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_panic_value.inc.c.txt': '24164946e69744c5f79669e7fe035c602b58db5b2c527169a72412a4fa7703fd', 'tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/p09_map_index_program.h.txt': 'e079760cd61b9a3047d41d62c4106801a7886e63129fed6be4eb8064e5d9365c'})
+
 _PROGRAMS.update(_MAP_PROGRAMS)
 _NAMES=_NAMES|_MAP_NAMES
 _INPUTS.update(_MAP_INPUTS)
 _REQUIRED_INPUTS=_REQUIRED_INPUTS+tuple(name for name in _MAP_INPUTS if name not in _REQUIRED_INPUTS)
 
 
+def map_diagnostic_reference():
+    """Read committed target evidence, never execution output or a live worktree."""
+    import json
+    reference=json.loads((ROOT/_MAP_REFERENCE_PATH).read_text(encoding='utf-8'))
+    if reference['schema']!=1 or reference['fixed_source_commit']!='460622cf45c82ab0bc93be14d2f0ac3fce21bef6' or reference['canonical_fault']!={'code':431,'message':'map key not found'}:
+        raise ValueError('Canonical Map diagnostic reference identity changed')
+    if reference['accepted_product_cli_sha256']!='4da822ed581b7b22f56cd6a5cb24037ac7f51fcf1088f5440d628e7a4a11b11e' or reference['accepted_product_manifest_sha256']!='d5ddf7eec828b84e8d52b56816efbfded091658eb73cd264c3bc2409f87f54b8':raise ValueError('Map target reference lost the accepted exact product binding')
+    expected=dict(zip(('src/xir/xxir_fault.h','src/xir/xxir_panic_value.inc.c','tests/unit/xir/p09_map_index_program.h'),_MAP_REFERENCE_FILES))
+    rows=reference['source_snapshots']
+    if len(rows)!=3 or {row['source_path']:row['snapshot_path'] for row in rows}!=expected:raise ValueError('Map diagnostic lost a whole committed source snapshot')
+    contents={}
+    for row in rows:
+        data=(ROOT/row['snapshot_path']).read_bytes().replace(b'\r\n',b'\n')
+        if hashlib.sha256(data).hexdigest()!=row['lf_sha256'] or hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()!=row['git_blob_oid']:
+            raise ValueError('Map committed source snapshot bytes changed')
+        contents[row['source_path']]=data.decode('utf-8')
+    if '#define XR_XIR_PANIC_KEY_NOT_FOUND 431u' not in contents['src/xir/xxir_fault.h'] or 'case XR_XIR_PANIC_KEY_NOT_FOUND: written = snprintf(buffer, capacity, "map key not found"); break;' not in contents['src/xir/xxir_panic_value.inc.c'] or 'length == 17 && !memcmp(bytes, "map key not found", 17)' not in contents['tests/unit/xir/p09_map_index_program.h']:
+        raise ValueError('Map target code/message and independent producer assertion differ')
+    retired=reference['retired_reference']
+    if retired['source_path']!='src/aot/xrt_coll.h' or retired['message']!='Map key not found':raise ValueError('Original Map oracle provenance was not preserved separately')
+    return {'fixed_source_commit':reference['fixed_source_commit'],'reference':_MAP_REFERENCE_PATH,
+        'target_message':'map key not found','target_code':431,'retired_message_for_history':'Map key not found',
+        'acceptance':'Exact UTF8;no case folding or dual accepted message','qualification_scope':'Default-message reference only',
+        'SDK_FI_lifetime_provider_or_readonly_storage_qualified':False}
+
+
 class MissingMapKey(Exception):
     code=431
-    message='Map key not found'
+    message='map key not found'
 
 
 class StringKeyMap:
@@ -176,7 +209,7 @@ def map_boundary_traces():
     present=payloads.contains('present-null')
     if present:outputs.append(payloads.strict('present-null') is None)
     outputs.append(payloads.optional('absent') is None)
-    if not present or scores.items!=before or outputs!=[7,'Map key not found',431,True,True,True]:
+    if not present or scores.items!=before or outputs!=[7,'map key not found',431,True,True,True]:
         raise ValueError('Complete optional/nullable strict Map boundary requirement changed')
     ordinary={'outputs':outputs,'bad_index_continuation_executed':bad,'stored_null_is_present':present,
         'stored_null_payload':payloads.strict('present-null'),'absent_is_present':payloads.contains('absent'),
@@ -184,7 +217,7 @@ def map_boundary_traces():
     static_scores=StringKeyMap({'ada':7,'lin':9});seen=frozenset(['ada','lin'])
     output=[static_scores.optional('missing') is None,'missing' in seen,static_scores.strict('ada'),'lin' in seen]
     caught,bad=_caught_missing(static_scores,code_first=True);output+=caught
-    if output!=[True,False,7,True,431,'Map key not found'] or static_scores.items!=before:
+    if output!=[True,False,7,True,431,'map key not found'] or static_scores.items!=before:
         raise ValueError('Complete top-level readonly Map/Set strict lookup requirement changed')
     static={'outputs':output,'bad_index_continuation_executed':bad,'scores_after_caught_panic':dict(static_scores.items),
         'seen_after_reads':sorted(seen),'original_top_level_const_map_entries':2,'original_top_level_const_set_entries':2,
