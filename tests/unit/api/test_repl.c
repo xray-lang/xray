@@ -7,6 +7,7 @@
  * test_repl.c - Original REPL expectations through the actual Source owner
  */
 #include "source_repl_original_support.h"
+#include "source_repl_original_hosted.h"
 
 TEST(globals_dict_set_get_round_trip) {
     original_open();ASSERT_TRUE(original_eval("var answer = 0\n"));
@@ -215,6 +216,9 @@ TEST(repl_failed_callable_input_cannot_change_published_targets) {
 }
 
 TEST_MAIN_BEGIN()
+RUN_TEST(product_profiles_install_exact_authority_and_reject_missing_profile);
+RUN_TEST(sync_root_elides_coroutine_with_ordinary_allocation);
+RUN_TEST(repl_profile_clears_each_call);
 RUN_TEST(globals_dict_set_get_round_trip);
 RUN_TEST(globals_dict_overwrite_keeps_count);
 RUN_TEST(globals_dict_missing_key_returns_null);

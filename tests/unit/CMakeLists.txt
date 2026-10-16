@@ -3677,7 +3677,19 @@ set_tests_properties(test_stdlib_generators_content_stable PROPERTIES
 # api/ — Public API defense tests
 # ============================================================================
 
-add_xray_unit_test(test_api_defense api/test_api_defense.c)
+add_executable(test_api_defense api/test_api_defense.c)
+target_link_libraries(test_api_defense PRIVATE xray_source_api)
+target_include_directories(test_api_defense PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_api_defense PRIVATE XR_API_DEFENSE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_API_DEFENSE_FILE="${PROJECT_SOURCE_DIR}/tests/unit/api/source_repl_hosted/program.xr")
+set_target_properties(test_api_defense PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_api_defense PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_api_defense PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_api_defense COMMAND test_api_defense)
+set_tests_properties(test_api_defense PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;original")
 foreach(source_entry IN ITEMS test_dostring_module_defaults test_dostring_program_image)
     add_executable(${source_entry} api/${source_entry}.c)
     target_link_libraries(${source_entry} PRIVATE xray_source_api)
@@ -3788,12 +3800,12 @@ set_tests_properties(test_crypto_native_error_abi PROPERTIES
     TIMEOUT 120
 )
 
-# Original Source semantics use the actual new owner; remaining native-runtime
-# and corrupted legacy authority obligations retain a distinct executable.
+# All original REPL names execute through the actual Source and runtime owners.
 add_executable(test_repl api/test_repl.c)
 target_link_libraries(test_repl PRIVATE xray_source_api)
 target_include_directories(test_repl PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(test_repl PRIVATE XR_ORIGINAL_REPL_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+target_compile_definitions(test_repl PRIVATE XR_ORIGINAL_REPL_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_ORIGINAL_REPL_HOSTED="${PROJECT_SOURCE_DIR}/tests/unit/api/source_repl_hosted")
 set_target_properties(test_repl PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_repl PRIVATE /W4 /WX /utf-8)
@@ -3802,12 +3814,6 @@ else()
 endif()
 add_test(NAME test_repl COMMAND test_repl)
 set_tests_properties(test_repl PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;original")
-add_executable(test_repl_runtime_authority api/test_repl_runtime_authority.c
-    ${CMAKE_SOURCE_DIR}/src/api/xisolate_profile.c)
-target_include_directories(test_repl_runtime_authority PRIVATE ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/api)
-target_link_libraries(test_repl_runtime_authority PRIVATE xray_core)
-add_test(NAME test_repl_runtime_authority COMMAND test_repl_runtime_authority)
 
 # ============================================================================
 # lsp/ — Language Server Protocol (conditional)

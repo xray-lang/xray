@@ -8,6 +8,7 @@
  */
 #include "xcli.h"
 #include "../../api/xsource_compile.h"
+#include "../../execution/xr_xir_host_execution.h"
 #include "../../api/xsource_paths.h"
 #include "../../base/xio_policy.inc.h"
 #include "../../frontend/parser/xparse.h"
@@ -145,7 +146,7 @@ static void check_semantic(CheckWork *work, const char *path) {
     XrSourceCompileStatus status = xr_source_paths(work->resources, path, &paths, &path_diagnostic);
     if (status == XR_SOURCE_COMPILE_OK) {
         XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+            xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
         status = xr_source_compile_build(&request, &product, &diagnostic);
         if (status != XR_SOURCE_COMPILE_OK) {
             const XrXirSourceDiagnostic *source = &diagnostic.source.source;

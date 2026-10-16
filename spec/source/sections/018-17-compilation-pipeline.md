@@ -642,6 +642,10 @@ Cell读取与写入使用实际出生存储；跨池写入的身份查找在原�
 
 Class字段读取和即时贷款也保真实出生carrier：VM以当前已检查operand类型准入，值存储经原精确类型接收表回到真实owner arena，Class贷款、模块存储、worker和字段权限继续由原检查决定。历史Cell与Class的carrier序号不当作当前池序号，不重标记或按形状授予权限。
 
+宿主产品共用本机Lowered目标和Instance默认配置；后者重置全部trace/provider上下文并安装真实系统时间provider，调用者随后显式设置输出与预算覆盖。Compiler保存已准入目标，REPL沿用同一值；目标/ABI观察与旧profile名字均不授予权限，真实Catalog、Checked、sealed Program与Instance仍决定准入。缺失目标或错误Value ABI在Compiler构造前拒绝且不扣资源，错误配置前缀保持输出不变。
+
+公开交互调用总是选择显式拥有者，不按线程中最后创建的VM选择会话；多个拥有者各保Compiler账本、Domain、执行器、回调上下文及终态寿命。普通Array分配的同步根使用执行器内联的真实根Call，不创建子Task；go才在同一拥有者中建立真实子Task及FIFO。子Task的yield由共同执行器调度，根的真实对外yield才按观察到的epoch/wake恢复。一个拥有者销毁不改变另一个仍待执行的子Task；拥有读值和结果在两者销毁后仍有效。这些入口检查不代替完整worker/ref/Task、资源与安全资格。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1404,5 +1408,9 @@ Cross-input mutable Array push changes the actual Cell through an ordinary check
 Public C writes borrow an authentic Value and execute the latest published mutable declaration's ordinary birth writer. Its exact Checked signature is registered through specialization and Lowered correspondence in the same Instance. Names select declarations; ordinary Instance admission decides argument types, arena identity, birth permission and runtime limits. Values are not converted or retagged, declarations are not created implicitly, and no input or replacement it is published. Const and function declarations, missing names, wrong types and unrelated same-shape arenas reject. Pending input and callback reentry return BUSY. Writes share the original cumulative ledger and retire the actual activation before return; failed cleanup stops the owner. Old functions still read the same birth Cell, and owned read values survive the entire owner. Original dictionary tests now begin with explicit typed declarations while retaining real C set/get, stable counts on overwrite and empty missing outputs. Corrupting the actual Checked type table or function bounds cannot authorize a later input.
 
 Class field reads and immediate loans also retain authentic birth carriers. The VM admits against the current checked operand type, and value storage uses the original exact type receiving table to access the real owner arena. Existing Class loan, module storage, worker and field permissions remain authoritative. Historical Cell and Class carrier ordinals are not current-pool ordinals; no retagging or shape-based permission occurs.
+
+Hosted products share the native Lowered target and Instance defaults. Initialization resets every trace/provider context and installs the real system time provider; callers then explicitly choose output and budget overrides. The Compiler stores its admitted target and the REPL reuses that value. Target/ABI observations and old profile names grant no permission: the real Catalog, Checked owner, sealed Program and Instance still decide admission. A missing target or wrong Value ABI rejects before Compiler construction without spending resources, and an invalid configuration prefix preserves output.
+
+Public interactive operations always select their explicit owner instead of a thread's last-created VM. Concurrently live owners retain separate Compiler ledgers, Domains, executors, callback contexts and terminal lifetimes. A synchronous root with ordinary Array allocation uses the executor's authentic inline root Call without creating a child Task; go creates a real same-owner child and FIFO entry. Child yields are scheduled by the shared executor. An actual external root yield resumes only with its observed epoch/wake. Destroying one owner does not alter another owner's pending child; owned read values and results survive both. These entry checks do not replace complete worker/ref/Task, resource or safety qualification.
 
 <!-- /xr-spec:en -->

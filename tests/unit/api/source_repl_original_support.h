@@ -11,13 +11,19 @@
 #include "../test_framework.h"
 #include "api/xsource_api.c"
 #include "api/xsource_submission.c"
+#include "xir/xxir_task.c"
+#include "xir/xxir_instance.c"
 #include <string.h>
 
 typedef struct OriginalReplFixture {
     XrSourceRepl *owner;
+    XrSourceProgram *program;
+    XrXirInstance *runtime;
+    XrSourceCall sink;
     XrSourceResult *results[16];
     XrSourceValue *values[16];
     size_t result_count,value_count,output_length;
+    unsigned trace_events;
     XrSourceDiagnostic *diagnostic;
     XrSourceEvent event;
     char output[4096];
@@ -36,13 +42,15 @@ static void original_open(void) {
     ASSERT_EQ_INT(xray_source_repl_new(&compiler,"repl-fixture-v1",&runtime,&fixture.owner),XR_SOURCE_OK);
 }
 static void original_close(void) {
+    XrXirCallStatus retired=fixture.runtime?xr_xir_instance_free(fixture.runtime):XR_XIR_CALL_READY;
+    xray_source_program_free(fixture.program);
     XrSourceEvent cleanup={0};
     XrSourceStatus status=xray_source_repl_drop(&fixture.owner,&cleanup);
     for(size_t i=0;i<fixture.result_count;++i)xray_source_result_free(fixture.results[i]);
     for(size_t i=0;i<fixture.value_count;++i)xray_source_value_free(fixture.values[i]);
     xray_source_diagnostic_free(fixture.diagnostic);
     memset(&fixture,0,sizeof(fixture));
-    ASSERT_EQ_INT(status,XR_SOURCE_OK);ASSERT_EQ_INT(cleanup.state,XR_SOURCE_RUN_READY);
+    ASSERT_EQ_INT(retired,XR_XIR_CALL_READY);ASSERT_EQ_INT(status,XR_SOURCE_OK);ASSERT_EQ_INT(cleanup.state,XR_SOURCE_RUN_READY);
 }
 static XrSourceStatus original_submit(const char *source,bool query) {
     xray_source_diagnostic_free(fixture.diagnostic);fixture.diagnostic=NULL;

@@ -7701,6 +7701,10 @@ Cell读取与写入使用实际出生存储；跨池写入的身份查找在原�
 
 Class字段读取和即时贷款也保真实出生carrier：VM以当前已检查operand类型准入，值存储经原精确类型接收表回到真实owner arena，Class贷款、模块存储、worker和字段权限继续由原检查决定。历史Cell与Class的carrier序号不当作当前池序号，不重标记或按形状授予权限。
 
+宿主产品共用本机Lowered目标和Instance默认配置；后者重置全部trace/provider上下文并安装真实系统时间provider，调用者随后显式设置输出与预算覆盖。Compiler保存已准入目标，REPL沿用同一值；目标/ABI观察与旧profile名字均不授予权限，真实Catalog、Checked、sealed Program与Instance仍决定准入。缺失目标或错误Value ABI在Compiler构造前拒绝且不扣资源，错误配置前缀保持输出不变。
+
+公开交互调用总是选择显式拥有者，不按线程中最后创建的VM选择会话；多个拥有者各保Compiler账本、Domain、执行器、回调上下文及终态寿命。普通Array分配的同步根使用执行器内联的真实根Call，不创建子Task；go才在同一拥有者中建立真实子Task及FIFO。子Task的yield由共同执行器调度，根的真实对外yield才按观察到的epoch/wake恢复。一个拥有者销毁不改变另一个仍待执行的子Task；拥有读值和结果在两者销毁后仍有效。这些入口检查不代替完整worker/ref/Task、资源与安全资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)

@@ -9,6 +9,7 @@
 #include "xcli.h"
 #include "xcli_toolchain_config.h"
 #include "../../api/xsource_compile.h"
+#include "../../execution/xr_xir_host_execution.h"
 #include "../../api/xsource_paths.h"
 #include "../toolchain/xtc_xir_publication.h"
 #include "../toolchain/xtc_xir_local_toolchain.h"
@@ -123,7 +124,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         result=build_source_exit(source); goto cleanup;
     }
     XrSourceCompileRequest request={&context,paths.entry,paths.stdlib,NULL,
-        xr_source_compile_default_manifest_limits(),{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
+        xr_source_compile_default_manifest_limits(),xr_xir_host_target(), NULL};
     source=xr_source_compile_build(&request,&product,&diagnostic);
     if (source!=XR_SOURCE_COMPILE_OK) { build_source_report(&diagnostic);result=build_source_exit(source);goto cleanup; }
     XrXirNativeProjectionRequest prepare={product,"xray_app",(size_t)BUILD_C_LIMIT};

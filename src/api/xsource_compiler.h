@@ -58,6 +58,8 @@ XR_FUNC const XrXirCompileContext *xr_source_compiler_context(const XrSourceComp
 XR_FUNC XrCompilerSession *xr_source_compiler_session(const XrSourceCompiler *);
 XR_FUNC XrCompileState *xr_source_compiler_state(const XrSourceCompiler *);
 XR_FUNC XrCompileResources *xr_source_compiler_resources(const XrSourceCompiler *);
+/* Copies the admitted lowering target; this observation grants no authority. */
+XR_FUNC XrXirTarget xr_source_compiler_target(const XrSourceCompiler *);
 /* Borrows this compiler's actual Catalog, locator and cumulative context.
  * The compiler must outlive the generation owner; namespace is copied by that
  * owner's ordinary admission. This observation creates no parser or ledger. */

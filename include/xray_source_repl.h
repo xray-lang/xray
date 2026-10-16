@@ -34,6 +34,8 @@ XRAY_API XrSourceStatus xray_source_repl_bindings(const XrSourceRepl *,
  * Options and namespace are copied during construction. Output callbacks and
  * their context remain caller-owned until drop. Every operation requires
  * caller exclusion; mutation during an output callback returns BUSY.
+ * Each call selects this explicit owner. Concurrently live owners keep their
+ * own domains and executors; there is no ambient current-VM selection.
  * OOM/BUDGET from preparation or reading latches the same Compiler state;
  * retry cannot allocate or obtain a fresh allowance after that first failure.
  * Inputs use the common Source checker. A non-Unit tail owns an immutable
