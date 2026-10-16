@@ -179,3 +179,9 @@ add_test(NAME test_xir_root_conditional_canonical_run_storage
     COMMAND test_xir_root_conditional_helpers --canonical-run-storage)
 set_tests_properties(test_xir_root_conditional_canonical_run_storage PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# One immutable declaration proof rechecks every real reference edge.
+add_test(NAME test_xir_reference_root_operation
+    COMMAND test_xir_root_conditional_helpers --reference-root-operation)
+set_tests_properties(test_xir_reference_root_operation PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 PROCESSORS 1)

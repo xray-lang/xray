@@ -1751,7 +1751,11 @@ static void conditional_ordinary_environment_keys(void) {
     }
 }
 
+#include "xir_reference_root_operation_cases.h"
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--reference-root-operation")) {
+        root_operation_cases();return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
