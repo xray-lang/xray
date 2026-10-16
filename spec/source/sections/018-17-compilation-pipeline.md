@@ -644,7 +644,13 @@ Class字段读取、写入、短期整对象loan与模块发布扫描先按准�
 
 Struct直接字段读取也先在原账本中核对准确接收身份，再使用真实拥有类型池中的字段布局与递归准入；返回字段保留实际对象头。Class字段中的inline Struct经新类型池的ref投影修改后，普通Struct读取不能把出生编号解释成当前编号。同形但无接收对应、错误字段和预算不足仍拒绝，失败保全输出；这不扩张Struct写入或闭包调用权限。
 
-Cell读取与写入使用实际出生存储；跨池写入的身份查找在原工作量账本内有界计费，实际存储操作仍检查原Domain和借用权限。普通旧Cell副作用在后继候选失败后保留；只撤销候选的新绑定和拥有存储。I64/String与Cell<i64>历史、嵌套Cell/Array身份和写回已验证；真实Source的旧Cell读写也覆盖VM、native及两个混合方向。Class/Array全部操作、闭包/调用绑定、其他历史类型根与完整G2/G3、P14协调及全部资源/安全门仍未完成。
+函数值的深准入在回调期间使用实际函数对象的出生类型池，并核对同一运行域中仍保留的真实出生gate、Program、函数入口、完整声明上界及捕获角色。回调仍保留接收方context和原work字段，嵌套准入与失败返回都恢复接收类型池。跨代弱化先在当前准确接收类型上核对上界，再通过既有准确身份寻找出生池中的弱化类型；新值保留出生gate、入口和捕获。出生池没有该类型时明确拒绝，不以当前gate改标，也不制造producer证明。
+
+根执行流中的间接调用通过实际函数gate选择出生Program的入口表、类型池、准入context和Cell角色。每帧保留自己的元数据坐标，同一Call继续独占原执行器绑定、帧栈、深度、恢复、取消、清理和预算账本；参数准备失败及子帧退出都恢复父帧坐标，不复制或重置work。模块就绪状态与值准入仍分别核对；旧代码及描述在所有帧清理前保持拥有。VM、native与两个混合方向使用同一路由。不同Program的worker调用仍须独立的封装producer与invocation对应，缺少证明时拒绝；RootNone或Sendable不能替代该证明。
+
+宿主调用旧函数只选择该次执行的出生代；后续Source存储接收仍从准确的已发布世代开始，不能把最近一次执行的旧代当作已发布Source身份。pending候选、外部Instance及已停止拥有者的宿主调用继续拒绝。逃逸函数值在Source、Instance及调用方Program引用释放后仍保留准确出生Program和拥有捕获，最终drop释放这些租约。上述语义不代表完整闭包族、函数/泛型额外类型根、G2/G3、成对REPL协调或完整资源与安全资格已经完成。
+
+Cell读取与写入使用实际出生存储；跨池写入的身份查找在原工作量账本内有界计费，实际存储操作仍检查原Domain和借用权限。普通旧Cell副作用在后继候选失败后保留；只撤销候选的新绑定和拥有存储。I64/String与Cell<i64>历史、嵌套Cell/Array身份和写回已验证；真实Source的旧Cell读写也覆盖VM、native及两个混合方向。Class/Array全部操作、完整闭包/调用族、其他历史类型根与完整G2/G3、P14协调及全部资源/安全门仍未完成。
 
 <!-- /xr-spec:cn -->
 
@@ -1401,6 +1407,12 @@ Ordinary function arguments and results recover actual object headers from trust
 
 Direct Struct field reads validate exact receiving identity on the original ledger, then use the actual owner arena for field layout and recursive admission. Returned fields retain actual object headers. After a ref projection in a new arena modifies an inline Struct inside a Class field, an ordinary Struct read must not interpret its birth identifier in the current pool. Matching shapes without receiving correspondence, invalid fields and insufficient work still reject while preserving output. This does not extend Struct writes or closure call authority.
 
-Cell reads and writes use actual birth storage. Cross-arena write lookup charges a bounded walk on the original work ledger; the storage operation still checks its actual Domain and loan authority. Ordinary old-Cell side effects survive a later candidate failure; only new candidate bindings and owned storage are revoked. I64/String and Cell<i64> history, nested Cell/Array identities and writeback have been verified. Real Source Cell reads and writes cover VM, native and both mixed directions. Complete Class/Array operations, closure/call binding, other historical type roots, full G2/G3, P14 coordination and all resource and safety gates remain unfinished.
+Deep function admission uses the actual function object's birth type arena during its callback, checking the retained real gate, Program, entry, complete declared bounds and capture roles in the same runtime Domain. The receiver context and original work field remain in scope; nested admission and failed returns restore the receiver arena. Cross-generation weakening checks the current exactly received signature, then locates the weakened type by existing exact identity in the birth arena. The new value retains its birth gate, entry and captures. A missing birth type rejects explicitly; no current-gate relabeling or producer proof is manufactured.
+
+An indirect call in the root execution stream selects its birth Program's entries, arena, admission context and Cell roles from the actual function gate. Each frame retains its own metadata coordinates. The same Call keeps the original executor binding, frame stack, depth, resumes, cancellation, cleanup and budget ledger; failed argument preparation and child exit restore parent metadata without copying or resetting work. Module readiness and value admission remain separate checks. Old code and descriptors stay owned until all frames drain. VM, native and both mixed directions use this route. A worker call across Programs still needs an independent sealed producer and invocation correspondence and rejects without it; RootNone or Sendable cannot replace that proof.
+
+A host call to an old function selects its birth generation only for that execution. Subsequent Source storage receiving starts at the exact published generation, never treating the most recently executed old Program as published Source identity. Host calls still reject a pending candidate, a foreign Instance or a stopped owner. Escaped functions retain the exact birth Program and owned captures after Source, Instance and caller Program references die; final drop releases those leases. These semantics do not establish complete closure families, extra function/generic type roots, full G2/G3, paired REPL coordination or complete resource and safety qualification.
+
+Cell reads and writes use actual birth storage. Cross-arena write lookup charges a bounded walk on the original work ledger; the storage operation still checks its actual Domain and loan authority. Ordinary old-Cell side effects survive a later candidate failure; only new candidate bindings and owned storage are revoked. I64/String and Cell<i64> history, nested Cell/Array identities and writeback have been verified. Real Source Cell reads and writes cover VM, native and both mixed directions. Complete Class/Array operations, complete closure/call families, other historical type roots, full G2/G3, P14 coordination and all resource and safety gates remain unfinished.
 
 <!-- /xr-spec:en -->
