@@ -13,6 +13,7 @@
 #ifndef XXIR_SOURCE_GENERATION_H
 #define XXIR_SOURCE_GENERATION_H
 #include "xxir_source.h"
+#include "xxir_source_ast_owner.h"
 #include "xxir_instance_generation.h"
 struct AstNode;
 struct XrXirProgram;
@@ -74,6 +75,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare(XrXirSourceGenerati
  * exact Checked observations, not runtime authority or historical receiving. */
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceText *text, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
+/* Retains the complete immutable AST owner through abort or record disposal.
+ * No source bytes are rendered, reparsed or replayed; fingerprint is zero.
+ * MEMORY path rules and actual parser/ledger admission remain unchanged.
+ * Failure releases any temporary pin and preserves input and empty serial. */
+XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_ast_bindings(XrXirSourceGenerations *owner,
+    const XrXirSourceAstOwner *ast, uint64_t *serial, XrXirSourceDiagnostic *diagnostic);
 /* Source publication allocates and charges nothing. The execution coordinator
  * calls this only after the corresponding Instance candidate returned normally.
  * These declaration observations do not authenticate runtime publication. */
@@ -81,6 +88,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_publish(XrXirSourceGenerati
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_abort(XrXirSourceGenerations *owner, uint64_t serial);
 /* Binds one prepared record to a real sealed Program. The ordinary compiler
  * derives its exact specialized/Lowered proof and compares the sealed identity.
+ * Every active foreign mutable slot must occur in the exact history receiving
+ * map. This coverage admits no new library storage; Instance preparation still
+ * verifies the actual published birth routes before execution.
  * Success retains the Program until record disposal. Repeat binding to the
  * same Program is allocation-free; replacing a binding or binding after publish
  * is rejected. This code correspondence alone grants no storage permission. */

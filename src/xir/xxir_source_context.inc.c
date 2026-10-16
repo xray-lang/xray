@@ -19,7 +19,7 @@ struct SourceSemanticEnvironment {
     XrModuleGraph *graph;
     SourceName **names, *symbols, **latest;
     uint32_t module_count, symbol_count, latest_count;
-    uint32_t *binding_reads;
+    uint32_t *binding_reads, *binding_writes;
     uint32_t slot_count;
     SourceHistoryCorrespondence history;
 };
@@ -88,7 +88,7 @@ typedef struct SourceContext {
     uint32_t function_count, slot_count, literal_count, literal_capacity;
     uint32_t module_count, entry_function;
     bool core_factory, binding_readers;
-    uint32_t *binding_reads;
+    uint32_t *binding_reads, *binding_writes;
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;

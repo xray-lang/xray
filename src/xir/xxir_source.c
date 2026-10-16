@@ -203,6 +203,8 @@ typedef struct SourceComptimeSite SourceComptimeSite;
 static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment **output);
 static const XrXirModule *source_history_module(SourceContext *ctx,const SourceHistoryUnit *unit);
 static SourceName *source_history_name(SourceContext *ctx,const char *name);
+static bool source_history_binding_read(SourceContext *ctx,const SourceName *symbol,SourceValue *value);
+static bool source_history_binding_write(SourceContext *ctx,const SourceName *symbol,SourceValue value);
 
 static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
     *declarations = (XrXirDeclarations){ctx->modules,ctx->module_count,ctx->identities,
@@ -2246,7 +2248,11 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
                 if (slots==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                 ++slots;
-                if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) ++readers;
+                if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) {
+                    uint32_t added=node->type==AST_VAR_DECL ? 2u : 1u;
+                    if (readers>UINT32_MAX-added) return source_fail(ctx,node,XR_XIR_BUDGET,"binding accessor inventory exhausted");
+                    readers+=added;
+                }
             }
             if(node->type==AST_DESTRUCTURE_DECL) {
                 uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
@@ -2255,7 +2261,11 @@ static bool collect_declarations(SourceContext *ctx) {
                     if(node->as.destructure_decl.pattern->as.array.elements[f]->type==PATTERN_SKIP)continue;
                     if(slots==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                     ++slots;
-                    if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) ++readers;
+                    if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) {
+                        uint32_t added=node->as.destructure_decl.is_const ? 1u : 2u;
+                        if (readers>UINT32_MAX-added) return source_fail(ctx,node,XR_XIR_BUDGET,"binding accessor inventory exhausted");
+                        readers+=added;
+                    }
                 }
             }
         }

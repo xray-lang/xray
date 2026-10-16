@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Input selection precedes the same checked construction and owned publication.
  */
+#include "xxir_source_ast_owner.h"
 typedef struct SourceInputCapture {
     AstNode *ast;
     uint32_t module;
@@ -22,6 +23,7 @@ typedef struct SourceInput {
     bool prelude_factory;
     SourceInputCapture *capture;
     AstNode *ast;
+    const XrXirSourceAstOwner *ast_owner;
     bool ast_input;
     bool binding_readers;
     const SourceHistoryUnit *history, *self;
@@ -40,7 +42,9 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (!request || !xir_compile_context_valid(request->context) || !request->session ||
         (!supplied && !input.ast_input && !request->entry_path) || !request->authority ||
         (supplied && !text) || !output || output->checked || output->snapshot ||
-        (input.ast_input && (!input.ast || supplied || overlays || overlay_count || input.capture)) ||
+        (input.ast_input && (!input.ast || supplied || overlays || overlay_count ||
+            (input.capture && (!input.ast_owner || input.ast_owner->input.program!=input.ast ||
+                input.ast_owner->resources!=request->context->resources)))) ||
         (input.binding_readers && (!input.capture || request->linkage_kind!=XR_XIR_PROGRAM)) ||
         (failure_path && *failure_path)) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
