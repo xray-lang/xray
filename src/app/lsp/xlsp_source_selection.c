@@ -16,14 +16,18 @@ static const XrJsonValue *selection_field(SelectionReader *r,const XrJsonValue *
     if(r->status!=XR_XIR_OK||!object||object->type!=XR_JSON_OBJECT)return NULL;
     if(object->as.object.count<0||object->as.object.count>object->as.object.capacity||
        (object->as.object.count&&!object->as.object.members)){r->status=XR_XIR_BAD_STRUCTURE;return NULL;}
-    size_t length=strlen(key);
+    size_t length=strlen(key);const XrJsonValue *found=NULL;
     for(int i=0;i<object->as.object.count;++i) {
         r->status=selection_work(r->resources,sizeof(XrJsonMember));if(r->status!=XR_XIR_OK)return NULL;
-        const XrJsonMember *member=&object->as.object.members[i];if(member->key_len!=length)continue;
+        const XrJsonMember *member=&object->as.object.members[i];
+        if(!member->key||!member->value){r->status=XR_XIR_BAD_STRUCTURE;return NULL;}
+        if(member->key_len!=length)continue;
         r->status=selection_work(r->resources,length);if(r->status!=XR_XIR_OK)return NULL;
-        if(member->key&&!memcmp(member->key,key,length))return member->value;
+        if(!memcmp(member->key,key,length)) {
+            if(found){r->status=XR_XIR_BAD_STRUCTURE;return NULL;}found=member->value;
+        }
     }
-    return NULL;
+    return found;
 }
 static bool selection_uinteger(const XrJsonValue *value,uint32_t *out) {
     if(!value||value->type!=XR_JSON_NUMBER||!value->is_integer||value->as.integer<0||value->as.integer>INT32_MAX)return false;

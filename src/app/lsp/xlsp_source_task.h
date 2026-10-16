@@ -22,5 +22,7 @@
 // Mode 15 produces signature help from parser boundaries and Checked Source.
 // Mode 16 prepares binding type/parameter hints; public dispatch requires the full
 // type and effect hint contract before switching its request boundary.
+// Mode 17 folds canonical syntax; mode 18 selects UTF-16 text ranges; mode 19
+// produces canonical document symbols. Each owns only its selected document.
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *, const XlspRequestId *, XrJsonValue *, unsigned mode);
 #endif // XLSP_SOURCE_TASK_H

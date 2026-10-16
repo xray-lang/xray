@@ -12,6 +12,7 @@
  */
 
 #include "xlsp_handlers_textdoc.h"
+#include "xlsp_hierarchy_request.h"
 #include "xlsp_server.h"
 #include "../../base/xjson.h"
 #include "xlsp_analysis.h"
@@ -185,21 +186,8 @@ XrJsonValue *xlsp_handle_td_hover(XrLspServer *server, XrJsonValue *params) {
     return xlsp_navigation_handle(server, params, 3);
 }
 
-XrJsonValue *xlsp_handle_td_document_symbol(XrLspServer *server, XrJsonValue *params) {
-    if(!server)return NULL;
-    server->source_failure.stage=10;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
-    XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri");
-    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
-    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
-    if(!doc||doc->server!=server||!doc->source_open||!doc->syntax_snapshot) {
-        server->source_failure.status=XR_XIR_UNRESOLVED;return NULL;
-    }
-    XlspSourceOutline *outline=NULL;XrJsonValue *result=NULL;
-    XrXirStatus status=xlsp_source_syntax_outline(doc->syntax_snapshot,&outline);
-    if(status==XR_XIR_OK)status=xlsp_source_outline_json(outline,&result);
-    xlsp_source_outline_free(outline);server->source_failure.status=(unsigned)status;
-    if(status==XR_XIR_OK)server->source_failure.stage=0;
-    return result;
+XR_FUNC XrJsonValue *xlsp_handle_td_document_symbol(XrLspServer *server,XrJsonValue *params) {
+    return xlsp_source_scope_query(server,params,0,XLSP_SOURCE_DOCUMENT_SYMBOLS);
 }
 
 XrJsonValue *xlsp_handle_td_definition(XrLspServer *server, XrJsonValue *params) {

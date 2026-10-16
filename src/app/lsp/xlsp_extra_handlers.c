@@ -13,7 +13,7 @@
 #include "xlsp_links.h"
 #include "xlsp_source_index_store.h"
 #include "xlsp_index_json.h"
-#include "xlsp_source_selection.h"
+#include "xlsp_hierarchy_request.h"
 #include "../../api/xsource_compile.h"
 #include <string.h>
 #include <stdlib.h>
@@ -79,18 +79,8 @@ XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server,XrJsonValue *param
 // Selection Range
 // ============================================================================
 
-XrJsonValue *xlsp_handle_selection_range(XrLspServer *server,XrJsonValue *params) {
-    if(!server)return NULL;server->source_failure.stage=14;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
-    XrJsonValue *document=xjson_get_object(params,"textDocument"),*uri=xjson_get(document,"uri");
-    if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len))return NULL;
-    XrLspDocument *doc=xlsp_document_get(server,uri->as.string);
-    if(!doc||doc->server!=server||!doc->content)return NULL;
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();XrCompileResources *resources=NULL;
-    XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);XrJsonValue *result=NULL;
-    XrXirStatus status=created==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    if(status==XR_XIR_OK)status=xlsp_source_selection_json(resources,doc->content,doc->length,xjson_get(params,"positions"),&result);
-    xr_compile_resources_release(resources);server->source_failure.status=(unsigned)status;
-    if(status==XR_XIR_OK)server->source_failure.stage=0;return result;
+XR_FUNC XrJsonValue *xlsp_handle_selection_range(XrLspServer *server,XrJsonValue *params) {
+    return xlsp_source_scope_query(server,params,0,XLSP_SOURCE_SELECTION);
 }
 
 // ============================================================================
