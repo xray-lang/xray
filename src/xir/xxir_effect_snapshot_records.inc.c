@@ -497,6 +497,30 @@ static XrXirStatus effect_body_instruction_ref_prepare(const EffectBodyRead *rea
     if (!effect_body_read_work(read,units+EFFECT_BODY_WORDS)) return XR_XIR_BUDGET;
     return XR_XIR_OK;
 }
+/* A run classifier validates every varying column before publishing its
+ * opcode. It does not construct the other nine unconsumed instruction words. */
+static XrXirStatus effect_body_instruction_ref_opcode(const EffectBodyRead *read,
+    const EffectBodyRun *ref,uint32_t instruction,XrXirOp *output) {
+    if (!read || !ref || !output || (ref->mask&~EFFECT_BODY_MASK) || (ref->count==1 && ref->mask) ||
+        instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,1+sizeof(uint32_t)+((ref->mask&UINT32_C(1))?3:0)))
+        return XR_XIR_BUDGET;
+    uint32_t operation=effect_body_source_word(&ref->base,0)+((ref->mask&UINT32_C(1))?
+        ref->delta[0]*(instruction-ref->first):0);
+    if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if (ref->mask) {
+        if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t remaining=ref->mask;
+        do {
+            if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+            uint32_t w=(uint32_t)__builtin_ctz(remaining);remaining&=remaining-1;
+            if (!ref->delta[w]) return XR_XIR_BAD_STRUCTURE;
+        } while (remaining);
+    }
+    if (!effect_body_read_work(read,2+sizeof(*output))) return XR_XIR_BUDGET;
+    *output=(XrXirOp)operation;return XR_XIR_OK;
+}
+
 static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
     const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;

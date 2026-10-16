@@ -148,6 +148,7 @@ static void conditional_compact_tiny_masks(void) {
             EffectBodyInstructionFields fields;
             CHECK(effect_body_instruction_fields_get(&read,&body,i,&fields)==XR_XIR_OK &&
                 fields.op==expected[i].op && fields.type==expected[i].type && fields.source==expected[i].args[0]);
+            conditional_compact_seed_opcode(&context,&body,i,expected[i].op);
         }
         CHECK(effect_body_records_match(&read,&body,&raw)==XR_XIR_OK);
         conditional_compact_tiny_damage(&context,&body,expected);
@@ -156,6 +157,7 @@ static void conditional_compact_tiny_masks(void) {
         xr_compile_resources_free(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
     }
     puts("compact tiny directories: all 1024 physical masks, one/two runs, damage and every read refusal passed");
+    puts("seed opcode: all 1024 masks, erased producer, unused delta damage and every refusal passed");
 }
 
 static void conditional_compact_directory_literals(void) {

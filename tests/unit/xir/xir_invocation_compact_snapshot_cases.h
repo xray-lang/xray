@@ -42,6 +42,48 @@ static bool conditional_compact_read_work(const void *owner,uint64_t units) {
 }
 #include "xir_invocation_head_result_cases.h"
 
+/* The selected opcode comes from the independent erased-producer oracle.
+ * Every other varying column still has a refusal boundary of its own. */
+static void conditional_compact_seed_opcode(const XrXirCompileContext *context,
+    const EffectBodyFunction *body,uint32_t instruction,XrXirOp expected) {
+    EffectBodyRead read=effect_body_compile_read(context);const EffectBodyRun *ref=NULL;
+    CHECK(effect_body_record_ref(&read,body,instruction,&ref)==XR_XIR_OK && ref);
+    XrCompileResourceStats before=rp_stats(context);size_t attempts=rp_attempts;
+    XrXirOp opcode=XR_XIR_INVALID;
+    CHECK(effect_body_instruction_ref_opcode(&read,ref,instruction,&opcode)==XR_XIR_OK && opcode==expected);
+    uint64_t narrow=rp_stats(context).work-before.work;before=rp_stats(context);
+    XrXirInstruction full;
+    CHECK(effect_body_instruction_ref_value(&read,ref,instruction,&full)==XR_XIR_OK && full.op==expected);
+    CHECK(narrow<rp_stats(context).work-before.work && rp_attempts==attempts);
+    ConditionalCompactRead observed={context,0,UINT64_MAX};
+    EffectBodyRead delegated={&observed,conditional_compact_read_work};
+    CHECK(effect_body_instruction_ref_opcode(&delegated,ref,instruction,&opcode)==XR_XIR_OK);
+    uint64_t points=observed.calls;CHECK(points);
+    for (uint64_t at=0;at<points;++at) {
+        observed.calls=0;observed.reject=at;opcode=XR_XIR_OP_COUNT;
+        CHECK(effect_body_instruction_ref_opcode(&delegated,ref,instruction,&opcode)==XR_XIR_BUDGET &&
+            opcode==XR_XIR_OP_COUNT && observed.calls==at+1);
+    }
+    EffectBodyRun *changed=(EffectBodyRun *)ref;
+    for (uint32_t word=0;word<EFFECT_BODY_WORDS;++word) if (ref->mask&(UINT32_C(1)<<word)) {
+        uint32_t saved=changed->delta[word];changed->delta[word]=0;opcode=XR_XIR_OP_COUNT;
+        CHECK(effect_body_instruction_ref_opcode(&read,ref,instruction,&opcode)==XR_XIR_BAD_STRUCTURE &&
+            opcode==XR_XIR_OP_COUNT);
+        changed->delta[word]=saved;
+    }
+    uint32_t saved_mask=changed->mask;changed->mask|=UINT32_C(1024);opcode=XR_XIR_OP_COUNT;
+    CHECK(effect_body_instruction_ref_opcode(&read,ref,instruction,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_OP_COUNT);
+    changed->mask=saved_mask;
+    XrXirOp saved_op=changed->base.op;changed->base.op=XR_XIR_INVALID;
+    CHECK(effect_body_instruction_ref_opcode(&read,ref,ref->first,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_OP_COUNT);
+    changed->base.op=saved_op;
+    CHECK(effect_body_instruction_ref_opcode(NULL,ref,instruction,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_OP_COUNT);
+    CHECK(effect_body_instruction_ref_opcode(&read,NULL,instruction,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_OP_COUNT);
+    CHECK(effect_body_instruction_ref_opcode(&read,ref,instruction,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_body_instruction_ref_opcode(&read,ref,ref->first+ref->count,&opcode)==XR_XIR_BAD_STRUCTURE && opcode==XR_XIR_OP_COUNT);
+    CHECK(effect_body_instruction_ref_opcode(&read,ref,instruction,&opcode)==XR_XIR_OK && opcode==expected && rp_attempts==attempts);
+}
+
 static void conditional_compact_read_failures(const XrXirCompileContext *context,
     const EffectBodyFunction *body,uint32_t instruction,const XrXirInstruction *expected) {
     ConditionalCompactRead observation={context,0,UINT64_MAX};

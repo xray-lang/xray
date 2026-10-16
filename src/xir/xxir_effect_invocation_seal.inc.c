@@ -311,11 +311,14 @@ static XrXirStatus effect_invocation_input_seed(const XrXirCompileContext *work,
         XrXirStatus status=effect_body_range_ref(&body_request.read,head,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
         finish=(EffectBodyRecordCursor){ref->first,cursor.run-1,cursor.first-1};
+        XrXirOp opcode=XR_XIR_INVALID;
+        status=effect_body_instruction_ref_opcode(&body_request.read,ref,ref->first,&opcode);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(work,4+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        if (!(ref->mask&UINT32_C(1)) && effect_root_seed_rule(opcode)==EFFECT_ROOT_SEED_NONE) continue;
         XrXirInstruction storage;
         status=effect_body_instruction_ref_value(&body_request.read,ref,ref->first,&storage);
         if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(work,4+sizeof(uint32_t))) return XR_XIR_BUDGET;
-        if (!(ref->mask&UINT32_C(1)) && effect_root_seed_rule(storage.op)==EFFECT_ROOT_SEED_NONE) continue;
         for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
             if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
             if (i!=ref->first) {
