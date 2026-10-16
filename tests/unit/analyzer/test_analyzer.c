@@ -1241,7 +1241,7 @@ TEST(analyzer_rest_parameters_require_element_annotations) {
         "class Totals { sum(...nums: i64) -> i64 { return 0 }\n"
         "static from(...nums: i64) -> i64 { return 0 } }\n"
         "class Counter { value: i64\n"
-        "constructor(value) { this.value = value } }\n");
+        "init(value) { this.value = value } }\n");
     ASSERT(a != NULL);
     int count = 0;
     bool accepted = true;
@@ -1275,14 +1275,14 @@ TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked) {
     xa_analyzer_free(valid);
 
     XaAnalyzer *read_write = analyzer_run_source(
-        "receiver-read-write.xr", "class Counter { value: i64\n constructor() { this.value = 0 }\n"
+        "receiver-read-write.xr", "class Counter { value: i64\n init() { this.value = 0 }\n"
                                   "  update() { this.value = 1 }\n }\n");
     ASSERT(read_write != NULL);
     ASSERT(analyzer_diag_contains(read_write, "declare it with 'ref'"));
     xa_analyzer_free(read_write);
 
     XaAnalyzer *read_alias = analyzer_run_source(
-        "receiver-read-alias.xr", "class Counter { value: i64\n constructor() { this.value = 0 }\n"
+        "receiver-read-alias.xr", "class Counter { value: i64\n init() { this.value = 0 }\n"
                                   "  ref mutate() { this.value = 1 }\n"
                                   "  probe() { var alias = this\n alias.mutate() }\n }\n");
     ASSERT(read_alias != NULL);
@@ -1290,7 +1290,7 @@ TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked) {
     xa_analyzer_free(read_alias);
 
     XaAnalyzer *ref_alias = analyzer_run_source(
-        "receiver-ref-alias.xr", "class Counter { value: i64\n constructor() { this.value = 0 }\n"
+        "receiver-ref-alias.xr", "class Counter { value: i64\n init() { this.value = 0 }\n"
                                  "  ref mutate() { this.value = 1 }\n"
                                  "  ref forward() { var alias = this\n alias.mutate() }\n }\n");
     ASSERT(ref_alias != NULL);
@@ -1300,7 +1300,7 @@ TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked) {
     XaAnalyzer *owned_projection =
         analyzer_run_source("receiver-owned-projection.xr",
                             "class Item {}\n"
-                            "class Holder { item: Item\n constructor() { this.item = Item() }\n"
+                            "class Holder { item: Item\n init() { this.item = Item() }\n"
                             "  ref project() -> Item { return this.item }\n }\n");
     ASSERT(owned_projection != NULL);
     ASSERT(!analyzer_diag_contains(owned_projection, "cannot return borrowed 'ref' parameter"));
@@ -1865,7 +1865,7 @@ TEST(analyzer_receiver_permission_is_independent_from_observed_memory_effect) {
     ASSERT(a != NULL);
     const char *source = "class Counter {\n"
                          "  value: i64\n"
-                         "  constructor() { this.value = 0 }\n"
+                         "  init() { this.value = 0 }\n"
                          "  ref noOp() {}\n"
                          "  ref writeDirect() { this.value = 1 }\n"
                          "  ref writeViaAlias() { var alias = this\n alias.value = 2 }\n"
@@ -2746,7 +2746,7 @@ TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations) {
                          "fn privateCallable(o: Opts = PRIVATE_OPTS) -> i64 { return o.indent }\n"
                          "export class Widget {\n"
                          "    n: i64\n"
-                         "    constructor(n: i64 = PRIVATE_OPTS.indent) { this.n = n }\n"
+                         "    init(n: i64 = PRIVATE_OPTS.indent) { this.n = n }\n"
                          "}\n"
                          "print(privateCallable(), viaPrivateConst(), Widget().n)\n";
     AstNode *program = xr_parse(g_session, source);
@@ -2797,7 +2797,7 @@ TEST(analyzer_class_value_held_in_a_variable_is_not_callable) {
     ASSERT(a != NULL);
     const char *source = "class Widget {\n"
                          "    n: i64\n"
-                         "    constructor(n: i64) { this.n = n }\n"
+                         "    init(n: i64) { this.n = n }\n"
                          "}\n"
                          "var W = Widget\n"
                          "var direct = Widget(1)\n"
@@ -4053,14 +4053,14 @@ TEST(cycle_candidate_marks_every_field_shape) {
 TEST(cycle_candidate_weak_field_breaks_the_edge) {
     XaAnalyzer *a = analyzer_run_source("cycle_weak_edge.xr",
                                         "class Parent { children: Array<Child>\n"
-                                        "  constructor() { this.children = [] } }\n"
+                                        "  init() { this.children = [] } }\n"
                                         "class Child { weak parent: Parent?\n"
-                                        "  constructor() { this.parent = null } }\n"
+                                        "  init() { this.parent = null } }\n"
                                         /* same shape, no weak: must stay a candidate */
                                         "class StrongParent { children: Array<StrongChild>\n"
-                                        "  constructor() { this.children = [] } }\n"
+                                        "  init() { this.children = [] } }\n"
                                         "class StrongChild { parent: StrongParent?\n"
-                                        "  constructor() { this.parent = null } }\n");
+                                        "  init() { this.parent = null } }\n");
     ASSERT(a != NULL);
 
     ASSERT(!analyzer_class_is_cycle_candidate(a, "Parent"));
@@ -4076,9 +4076,9 @@ TEST(cycle_candidate_weak_field_breaks_the_edge) {
 TEST(cycle_candidate_weak_self_reference_breaks_the_edge) {
     XaAnalyzer *a =
         analyzer_run_source("cycle_weak_self.xr", "class WeakList { weak next: WeakList?\n"
-                                                  "  constructor() { this.next = null } }\n"
+                                                  "  init() { this.next = null } }\n"
                                                   "class StrongList { next: StrongList?\n"
-                                                  "  constructor() { this.next = null } }\n");
+                                                  "  init() { this.next = null } }\n");
     ASSERT(a != NULL);
 
     ASSERT(!analyzer_class_is_cycle_candidate(a, "WeakList"));
@@ -4091,13 +4091,13 @@ TEST(cycle_candidate_weak_self_reference_breaks_the_edge) {
 TEST(cycle_candidate_follows_inherited_fields) {
     XaAnalyzer *a = analyzer_run_source("cycle_inherited_field.xr",
                                         "class Base { peer: Derived?\n"
-                                        "  constructor() { this.peer = null } }\n"
+                                        "  init() { this.peer = null } }\n"
                                         "class Derived extends Base { n: i64\n"
-                                        "  constructor() { super(); this.n = 0 } }\n"
+                                        "  init() { super(); this.n = 0 } }\n"
                                         "class LoneBase { n: i64\n"
-                                        "  constructor() { this.n = 0 } }\n"
+                                        "  init() { this.n = 0 } }\n"
                                         "class LoneDerived extends LoneBase { label: string\n"
-                                        "  constructor() { super(); this.label = \"\" } }\n");
+                                        "  init() { super(); this.label = \"\" } }\n");
     ASSERT(a != NULL);
 
     ASSERT(analyzer_class_is_cycle_candidate(a, "Base"));
@@ -4119,11 +4119,11 @@ TEST(cycle_candidate_follows_inherited_fields) {
 TEST(cycle_candidate_marks_recursive_tree_types) {
     XaAnalyzer *a = analyzer_run_source("cycle_recursive_tree.xr",
                                         "class TreeNode { children: Array<TreeNode>\n"
-                                        "  constructor() { this.children = [] } }\n"
+                                        "  init() { this.children = [] } }\n"
                                         "class ListNode { next: ListNode?\n"
-                                        "  constructor() { this.next = null } }\n"
+                                        "  init() { this.next = null } }\n"
                                         "class Leaf { value: i64\n"
-                                        "  constructor() { this.value = 0 } }\n");
+                                        "  init() { this.value = 0 } }\n");
     ASSERT(a != NULL);
 
     ASSERT(analyzer_class_is_cycle_candidate(a, "TreeNode"));
@@ -4214,7 +4214,7 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "  failEffect()\n"
                          "}\n"
                          "class Thrower {\n"
-                         "  constructor() { }\n"
+                         "  init() { }\n"
                          "  fail() { throw MethodErr.Boom }\n"
                          "  static failStatic() { throw MethodErr.Boom }\n"
                          "  invoke(cb: fn()) { cb() }\n"

@@ -95,7 +95,7 @@ static bool current_is_removed_public_modifier(Parser *parser) {
     Token peek = xr_scanner_scan(&saved);
     if (!xr_parser_healthy(parser)) return false;
     return peek.type == TK_NAME || peek.type == TK_STATIC || peek.type == TK_PRIVATE ||
-           peek.type == TK_PROTECTED || peek.type == TK_CONST || peek.type == TK_CONSTRUCTOR ||
+           peek.type == TK_PROTECTED || peek.type == TK_CONST ||
            peek.type == TK_OPERATOR || peek.type == TK_FINAL;
 }
 
@@ -115,7 +115,7 @@ static bool current_is_removed_oop_modifier(Parser *parser, const char **out_nam
     Token peek = xr_scanner_scan(&saved);
     if (!xr_parser_healthy(parser)) return false;
     if (peek.type != TK_NAME && peek.type != TK_STATIC && peek.type != TK_PRIVATE &&
-        peek.type != TK_PROTECTED && peek.type != TK_CONSTRUCTOR && peek.type != TK_OPERATOR)
+        peek.type != TK_PROTECTED && peek.type != TK_OPERATOR)
         return false;
     if (out_name)
         *out_name = name;
@@ -126,7 +126,7 @@ static bool current_can_start_class_member_after_recovery(Parser *parser) {
     if (!xr_parser_healthy(parser)) return false;
     return xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_PRIVATE) ||
            xr_parser_check(parser, TK_PROTECTED) || xr_parser_check(parser, TK_CONST) ||
-           xr_parser_check(parser, TK_STATIC) || xr_parser_check(parser, TK_CONSTRUCTOR) ||
+           xr_parser_check(parser, TK_STATIC) ||
            xr_parser_check(parser, TK_FINAL) || xr_parser_check(parser, TK_OPERATOR);
 }
 
@@ -325,7 +325,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         // Skip unknown tokens to avoid infinite loop
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
             !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
-            !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_CONSTRUCTOR) &&
+            !xr_parser_check(parser, TK_STATIC) &&
             !xr_parser_check(parser, TK_FINAL) && !xr_parser_check(parser, TK_OPERATOR) &&
             !xr_parser_check(parser, TK_AT)) {
             do {
@@ -575,7 +575,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
             !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
             !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_OPERATOR) &&
-            !xr_parser_check(parser, TK_CONSTRUCTOR) && !xr_parser_check(parser, TK_AT)) {
+            !xr_parser_check(parser, TK_AT)) {
             do {
                 xr_parser_error_expected_name(parser, "expected field or method name in struct");
                 if (!xr_parser_healthy(parser)) return NULL;
@@ -727,7 +727,7 @@ AstNode *xr_parse_union_declaration(Parser *parser) {
         if (xr_parser_check(parser, TK_STATIC) || xr_parser_check(parser, TK_PRIVATE) ||
             xr_parser_check(parser, TK_PROTECTED) || xr_parser_check(parser, TK_CONST) ||
             xr_parser_check(parser, TK_OPERATOR) || xr_parser_check(parser, TK_FN) ||
-            xr_parser_check(parser, TK_CONSTRUCTOR)) {
+            xr_parser_check_name(parser, XR_INIT_MEMBER_NAME)) {
             do {
                 xr_parser_error_at_current(parser,
                                        "union declarations may contain only plain typed fields");
@@ -929,7 +929,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         is_static = true;
 
         // Check for static constructor: static constructor()
-        if (xr_parser_check(parser, TK_CONSTRUCTOR)) {
+        if (xr_parser_check_name(parser, XR_INIT_MEMBER_NAME)) {
             if (is_private || is_protected) {
                 do {
                     xr_parser_error_at_current(parser,
@@ -941,7 +941,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             do {
                 xr_parser_advance(parser);
                 if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);  // consume 'constructor'
+            } while (0);  // consume the contextual initializer name
             AstNode *method = xr_parse_static_constructor(parser, is_private);
             if (!xr_parser_healthy(parser)) return NULL;
             if (attr_count > 0)
@@ -990,7 +990,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         return method;
     }
 
-    // Parse member name (may be 'constructor' keyword)
+    if (xr_parser_check_name(parser, "constructor")) {
+        return reject_removed_member_modifier(parser, is_method_out,
+            "constructor spelling was removed; use init");
+    }
+
+    // The initializer name is contextual only at a type member declaration.
     char *name = NULL;
     bool is_constructor = false;
 
@@ -998,8 +1003,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     int name_column = 0;
     int name_length = 0;
 
-    if (xr_parser_match(parser, TK_CONSTRUCTOR)) {
-        // 'constructor' keyword
+    if (xr_parser_match_name(parser, XR_INIT_MEMBER_NAME)) {
+        // Contextual initializer declaration
         is_constructor = true;
         if (is_override)
             do {
@@ -1016,17 +1021,17 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
             } while (0);
         }
         do {
-            name = (char *) ast_alloc(parser->compiler_session, sizeof(XR_KEYWORD_CONSTRUCTOR));
+            name = (char *) ast_alloc(parser->compiler_session, sizeof(XR_INIT_MEMBER_NAME));
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         do {
-            xr_parser_copy_string(parser, name, XR_KEYWORD_CONSTRUCTOR);
+            xr_parser_copy_string(parser, name, XR_INIT_MEMBER_NAME);
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
         name_line = parser->previous.line;
         name_column = parser->previous.column;
         do {
-            name_length = (int) (sizeof(XR_KEYWORD_CONSTRUCTOR) - 1);
+            name_length = (int) (sizeof(XR_INIT_MEMBER_NAME) - 1);
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
     } else {
@@ -1194,7 +1199,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     int line = name_line;
 
     // Check if this is a constructor
-    bool is_constructor = (xr_parser_compare_string(parser, name, XR_KEYWORD_CONSTRUCTOR) == 0);
+    bool is_constructor = (xr_parser_compare_string(parser, name, XR_INIT_MEMBER_NAME) == 0);
     if (!xr_parser_healthy(parser)) return NULL;
 
     /* Parse optional generic type parameters: methodName<T, U: Hashable>(...).
@@ -1268,7 +1273,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                     param->default_value = xr_parse_expression(parser);
                     if (!xr_parser_healthy(parser)) return NULL;
                 } while (0);
-                if (param->type == NULL && param->default_value != NULL) {
+                if (!is_constructor && param->type == NULL && param->default_value != NULL) {
                     AstNode *dv = param->default_value;
                     switch (dv->type) {
                         case AST_LITERAL_INT:

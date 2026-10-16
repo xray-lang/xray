@@ -51,7 +51,7 @@ class Point {
     x: i64
     y: i64
     
-    constructor(x, y) {
+    init(x, y) {
         this.x = x
         this.y = y
     }
@@ -80,7 +80,7 @@ class Item {
     id: i64
     name: string
     
-    constructor(name) {
+    init(name) {
         this.id = Item.nextId
         Item.nextId = Item.nextId + 1
         this.name = name

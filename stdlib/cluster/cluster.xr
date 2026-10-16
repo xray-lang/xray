@@ -251,7 +251,7 @@ final class _PeerEndpoint {
     ready: Channel<i64>
     wake: Channel<i64>
 
-    constructor(runtimeToken: i64, generation: i64,
+    init(runtimeToken: i64, generation: i64,
                 conn: NetConn, ready: Channel<i64>, wake: Channel<i64>) {
         this.runtimeToken = runtimeToken
         this.generation = generation
@@ -1845,7 +1845,7 @@ export final class PhiDetector {
     sumSquares: f64
     lastHeartbeatMs: i64
 
-    constructor(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS) {
+    init(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS) {
         this.intervals = Array<f64>(PHI_WINDOW_SIZE)
         this.sampleCount = 0
         this.writeIndex = 0

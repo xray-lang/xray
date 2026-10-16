@@ -167,7 +167,7 @@ void xr_map_register_native_type(XrVMRuntime *isolate) {
         {NULL, NULL, 0},
     };
     static const XrNativeMethod map_statics[] = {
-        {"constructor", xr_builtin_map_construct, 0},
+        {"init", xr_builtin_map_construct, 0},
         {"from", xr_builtin_map_from, 1},
         {NULL, NULL, 0},
     };

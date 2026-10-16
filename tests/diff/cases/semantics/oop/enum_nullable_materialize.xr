@@ -19,7 +19,7 @@ enum E {
 
 class Box {
     node: E?
-    constructor() { this.node = null }
+    init() { this.node = null }
     ref set(v: E?) { this.node = v }
     get() -> E? { return this.node }
 }

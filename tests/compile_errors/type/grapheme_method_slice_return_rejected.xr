@@ -1,7 +1,7 @@
 class GraphemeProbe {
     text: string = ""
 
-    constructor(text: string) {
+    init(text: string) {
         this.text = text
     }
 

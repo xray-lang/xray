@@ -10,7 +10,7 @@ class Window {
     bytes: Array<u8>
     start: i64
 
-    constructor(bytes: Array<u8>, start: i64) {
+    init(bytes: Array<u8>, start: i64) {
         this.bytes = bytes
         this.start = start
     }

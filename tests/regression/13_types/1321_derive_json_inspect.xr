@@ -6,7 +6,7 @@ class User {
     name: string
     age: i64
 
-    constructor(name: string, age: i64) {
+    init(name: string, age: i64) {
         this.name = name
         this.age = age
     }
@@ -16,7 +16,7 @@ class User {
 class InspectOnly {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }
@@ -25,7 +25,7 @@ class InspectOnly {
 class JsonOnly {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }

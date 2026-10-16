@@ -73,7 +73,7 @@ fn test_typeof_function() {
 
 class MyClass {
     value: i64
-    constructor(v) { this.value = v }
+    init(v) { this.value = v }
 }
 
 @test

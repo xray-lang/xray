@@ -5,7 +5,7 @@ interface Shape {
 class Circle implements Shape {
     r: i64
 
-    constructor(r: i64) {
+    init(r: i64) {
         this.r = r
     }
 
@@ -17,7 +17,7 @@ class Circle implements Shape {
 class Square implements Shape {
     side: i64
 
-    constructor(side: i64) {
+    init(side: i64) {
         this.side = side
     }
 

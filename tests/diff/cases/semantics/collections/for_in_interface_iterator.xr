@@ -3,7 +3,7 @@
 // hosted AOT runtime resolves the calls through the symbol-method table.
 class CountIter implements Iterator<i64> {
     i: i64
-    constructor(n: i64) { this.i = n }
+    init(n: i64) { this.i = n }
     hasNext() -> bool { return this.i > 0 }
     ref next() -> i64 { this.i -= 1; return this.i + 1 }
     nth(index: i64) -> i64 { return this.i - index }
@@ -11,7 +11,7 @@ class CountIter implements Iterator<i64> {
 
 class Countdown {
     n: i64
-    constructor(n: i64) { this.n = n }
+    init(n: i64) { this.n = n }
     iterator() -> Iterator<i64> { return CountIter(this.n) }
 }
 

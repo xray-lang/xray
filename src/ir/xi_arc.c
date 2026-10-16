@@ -822,7 +822,7 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
     /* Constructing a class allocates its instance, so the result cannot alias
      * an argument. Lowering proved this (XI_LOWERING_FLAG_CONSTRUCTOR_CALL);
      * the callee's spelling would not, because `super(...)` lowers to the same
-     * method call named "constructor" while returning the receiver at +0. */
+     * method call named "init" while returning the receiver at +0. */
     if (xi_value_is_constructor_call(v))
         return true;
     if (v && v->op == XI_CALL_BUILTIN && v->nargs == 0 && v->aux &&

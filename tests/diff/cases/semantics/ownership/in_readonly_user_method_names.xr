@@ -1,7 +1,7 @@
 class PureCounter {
     value: i64
 
-    constructor(v) {
+    init(v) {
         this.value = v
     }
 

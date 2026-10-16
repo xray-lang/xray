@@ -165,7 +165,7 @@ class Tag159 {}
 
 class C0<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C1<T>(this.v)
         return n.get()
@@ -173,7 +173,7 @@ class C0<T> {
 }
 class C1<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C2<T>(this.v)
         return n.get()
@@ -181,7 +181,7 @@ class C1<T> {
 }
 class C2<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C3<T>(this.v)
         return n.get()
@@ -189,7 +189,7 @@ class C2<T> {
 }
 class C3<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C4<T>(this.v)
         return n.get()
@@ -197,7 +197,7 @@ class C3<T> {
 }
 class C4<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C5<T>(this.v)
         return n.get()
@@ -205,7 +205,7 @@ class C4<T> {
 }
 class C5<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C6<T>(this.v)
         return n.get()
@@ -213,7 +213,7 @@ class C5<T> {
 }
 class C6<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C7<T>(this.v)
         return n.get()
@@ -221,7 +221,7 @@ class C6<T> {
 }
 class C7<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C8<T>(this.v)
         return n.get()
@@ -229,7 +229,7 @@ class C7<T> {
 }
 class C8<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C9<T>(this.v)
         return n.get()
@@ -237,7 +237,7 @@ class C8<T> {
 }
 class C9<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C10<T>(this.v)
         return n.get()
@@ -245,7 +245,7 @@ class C9<T> {
 }
 class C10<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C11<T>(this.v)
         return n.get()
@@ -253,7 +253,7 @@ class C10<T> {
 }
 class C11<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C12<T>(this.v)
         return n.get()
@@ -261,7 +261,7 @@ class C11<T> {
 }
 class C12<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C13<T>(this.v)
         return n.get()
@@ -269,7 +269,7 @@ class C12<T> {
 }
 class C13<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C14<T>(this.v)
         return n.get()
@@ -277,7 +277,7 @@ class C13<T> {
 }
 class C14<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C15<T>(this.v)
         return n.get()
@@ -285,7 +285,7 @@ class C14<T> {
 }
 class C15<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C16<T>(this.v)
         return n.get()
@@ -293,7 +293,7 @@ class C15<T> {
 }
 class C16<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C17<T>(this.v)
         return n.get()
@@ -301,7 +301,7 @@ class C16<T> {
 }
 class C17<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C18<T>(this.v)
         return n.get()
@@ -309,7 +309,7 @@ class C17<T> {
 }
 class C18<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C19<T>(this.v)
         return n.get()
@@ -317,7 +317,7 @@ class C18<T> {
 }
 class C19<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C20<T>(this.v)
         return n.get()
@@ -325,7 +325,7 @@ class C19<T> {
 }
 class C20<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C21<T>(this.v)
         return n.get()
@@ -333,7 +333,7 @@ class C20<T> {
 }
 class C21<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C22<T>(this.v)
         return n.get()
@@ -341,7 +341,7 @@ class C21<T> {
 }
 class C22<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C23<T>(this.v)
         return n.get()
@@ -349,7 +349,7 @@ class C22<T> {
 }
 class C23<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C24<T>(this.v)
         return n.get()
@@ -357,7 +357,7 @@ class C23<T> {
 }
 class C24<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C25<T>(this.v)
         return n.get()
@@ -365,7 +365,7 @@ class C24<T> {
 }
 class C25<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C26<T>(this.v)
         return n.get()
@@ -373,7 +373,7 @@ class C25<T> {
 }
 class C26<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C27<T>(this.v)
         return n.get()
@@ -381,7 +381,7 @@ class C26<T> {
 }
 class C27<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C28<T>(this.v)
         return n.get()
@@ -389,7 +389,7 @@ class C27<T> {
 }
 class C28<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C29<T>(this.v)
         return n.get()
@@ -397,7 +397,7 @@ class C28<T> {
 }
 class C29<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C30<T>(this.v)
         return n.get()
@@ -405,7 +405,7 @@ class C29<T> {
 }
 class C30<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C31<T>(this.v)
         return n.get()
@@ -413,7 +413,7 @@ class C30<T> {
 }
 class C31<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C32<T>(this.v)
         return n.get()
@@ -421,7 +421,7 @@ class C31<T> {
 }
 class C32<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C33<T>(this.v)
         return n.get()
@@ -429,7 +429,7 @@ class C32<T> {
 }
 class C33<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C34<T>(this.v)
         return n.get()
@@ -437,7 +437,7 @@ class C33<T> {
 }
 class C34<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C35<T>(this.v)
         return n.get()
@@ -445,7 +445,7 @@ class C34<T> {
 }
 class C35<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C36<T>(this.v)
         return n.get()
@@ -453,7 +453,7 @@ class C35<T> {
 }
 class C36<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C37<T>(this.v)
         return n.get()
@@ -461,7 +461,7 @@ class C36<T> {
 }
 class C37<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C38<T>(this.v)
         return n.get()
@@ -469,7 +469,7 @@ class C37<T> {
 }
 class C38<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C39<T>(this.v)
         return n.get()
@@ -477,7 +477,7 @@ class C38<T> {
 }
 class C39<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C40<T>(this.v)
         return n.get()
@@ -485,7 +485,7 @@ class C39<T> {
 }
 class C40<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C41<T>(this.v)
         return n.get()
@@ -493,7 +493,7 @@ class C40<T> {
 }
 class C41<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C42<T>(this.v)
         return n.get()
@@ -501,7 +501,7 @@ class C41<T> {
 }
 class C42<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C43<T>(this.v)
         return n.get()
@@ -509,7 +509,7 @@ class C42<T> {
 }
 class C43<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C44<T>(this.v)
         return n.get()
@@ -517,7 +517,7 @@ class C43<T> {
 }
 class C44<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C45<T>(this.v)
         return n.get()
@@ -525,7 +525,7 @@ class C44<T> {
 }
 class C45<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C46<T>(this.v)
         return n.get()
@@ -533,7 +533,7 @@ class C45<T> {
 }
 class C46<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C47<T>(this.v)
         return n.get()
@@ -541,7 +541,7 @@ class C46<T> {
 }
 class C47<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C48<T>(this.v)
         return n.get()
@@ -549,7 +549,7 @@ class C47<T> {
 }
 class C48<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C49<T>(this.v)
         return n.get()
@@ -557,7 +557,7 @@ class C48<T> {
 }
 class C49<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C50<T>(this.v)
         return n.get()
@@ -565,7 +565,7 @@ class C49<T> {
 }
 class C50<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C51<T>(this.v)
         return n.get()
@@ -573,7 +573,7 @@ class C50<T> {
 }
 class C51<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C52<T>(this.v)
         return n.get()
@@ -581,7 +581,7 @@ class C51<T> {
 }
 class C52<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C53<T>(this.v)
         return n.get()
@@ -589,7 +589,7 @@ class C52<T> {
 }
 class C53<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C54<T>(this.v)
         return n.get()
@@ -597,7 +597,7 @@ class C53<T> {
 }
 class C54<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C55<T>(this.v)
         return n.get()
@@ -605,7 +605,7 @@ class C54<T> {
 }
 class C55<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C56<T>(this.v)
         return n.get()
@@ -613,7 +613,7 @@ class C55<T> {
 }
 class C56<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C57<T>(this.v)
         return n.get()
@@ -621,7 +621,7 @@ class C56<T> {
 }
 class C57<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C58<T>(this.v)
         return n.get()
@@ -629,7 +629,7 @@ class C57<T> {
 }
 class C58<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C59<T>(this.v)
         return n.get()
@@ -637,7 +637,7 @@ class C58<T> {
 }
 class C59<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C60<T>(this.v)
         return n.get()
@@ -645,7 +645,7 @@ class C59<T> {
 }
 class C60<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C61<T>(this.v)
         return n.get()
@@ -653,7 +653,7 @@ class C60<T> {
 }
 class C61<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C62<T>(this.v)
         return n.get()
@@ -661,7 +661,7 @@ class C61<T> {
 }
 class C62<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C63<T>(this.v)
         return n.get()
@@ -669,7 +669,7 @@ class C62<T> {
 }
 class C63<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C64<T>(this.v)
         return n.get()
@@ -677,7 +677,7 @@ class C63<T> {
 }
 class C64<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C65<T>(this.v)
         return n.get()
@@ -685,7 +685,7 @@ class C64<T> {
 }
 class C65<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C66<T>(this.v)
         return n.get()
@@ -693,7 +693,7 @@ class C65<T> {
 }
 class C66<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C67<T>(this.v)
         return n.get()
@@ -701,7 +701,7 @@ class C66<T> {
 }
 class C67<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C68<T>(this.v)
         return n.get()
@@ -709,7 +709,7 @@ class C67<T> {
 }
 class C68<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C69<T>(this.v)
         return n.get()
@@ -717,7 +717,7 @@ class C68<T> {
 }
 class C69<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C70<T>(this.v)
         return n.get()
@@ -725,7 +725,7 @@ class C69<T> {
 }
 class C70<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C71<T>(this.v)
         return n.get()
@@ -733,7 +733,7 @@ class C70<T> {
 }
 class C71<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C72<T>(this.v)
         return n.get()
@@ -741,7 +741,7 @@ class C71<T> {
 }
 class C72<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C73<T>(this.v)
         return n.get()
@@ -749,7 +749,7 @@ class C72<T> {
 }
 class C73<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C74<T>(this.v)
         return n.get()
@@ -757,7 +757,7 @@ class C73<T> {
 }
 class C74<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C75<T>(this.v)
         return n.get()
@@ -765,7 +765,7 @@ class C74<T> {
 }
 class C75<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C76<T>(this.v)
         return n.get()
@@ -773,7 +773,7 @@ class C75<T> {
 }
 class C76<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C77<T>(this.v)
         return n.get()
@@ -781,7 +781,7 @@ class C76<T> {
 }
 class C77<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C78<T>(this.v)
         return n.get()
@@ -789,7 +789,7 @@ class C77<T> {
 }
 class C78<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C79<T>(this.v)
         return n.get()
@@ -797,7 +797,7 @@ class C78<T> {
 }
 class C79<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C80<T>(this.v)
         return n.get()
@@ -805,7 +805,7 @@ class C79<T> {
 }
 class C80<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C81<T>(this.v)
         return n.get()
@@ -813,7 +813,7 @@ class C80<T> {
 }
 class C81<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C82<T>(this.v)
         return n.get()
@@ -821,7 +821,7 @@ class C81<T> {
 }
 class C82<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C83<T>(this.v)
         return n.get()
@@ -829,7 +829,7 @@ class C82<T> {
 }
 class C83<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C84<T>(this.v)
         return n.get()
@@ -837,7 +837,7 @@ class C83<T> {
 }
 class C84<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C85<T>(this.v)
         return n.get()
@@ -845,7 +845,7 @@ class C84<T> {
 }
 class C85<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C86<T>(this.v)
         return n.get()
@@ -853,7 +853,7 @@ class C85<T> {
 }
 class C86<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C87<T>(this.v)
         return n.get()
@@ -861,7 +861,7 @@ class C86<T> {
 }
 class C87<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C88<T>(this.v)
         return n.get()
@@ -869,7 +869,7 @@ class C87<T> {
 }
 class C88<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C89<T>(this.v)
         return n.get()
@@ -877,7 +877,7 @@ class C88<T> {
 }
 class C89<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C90<T>(this.v)
         return n.get()
@@ -885,7 +885,7 @@ class C89<T> {
 }
 class C90<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C91<T>(this.v)
         return n.get()
@@ -893,7 +893,7 @@ class C90<T> {
 }
 class C91<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C92<T>(this.v)
         return n.get()
@@ -901,7 +901,7 @@ class C91<T> {
 }
 class C92<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C93<T>(this.v)
         return n.get()
@@ -909,7 +909,7 @@ class C92<T> {
 }
 class C93<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C94<T>(this.v)
         return n.get()
@@ -917,7 +917,7 @@ class C93<T> {
 }
 class C94<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C95<T>(this.v)
         return n.get()
@@ -925,7 +925,7 @@ class C94<T> {
 }
 class C95<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C96<T>(this.v)
         return n.get()
@@ -933,7 +933,7 @@ class C95<T> {
 }
 class C96<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C97<T>(this.v)
         return n.get()
@@ -941,7 +941,7 @@ class C96<T> {
 }
 class C97<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C98<T>(this.v)
         return n.get()
@@ -949,7 +949,7 @@ class C97<T> {
 }
 class C98<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C99<T>(this.v)
         return n.get()
@@ -957,7 +957,7 @@ class C98<T> {
 }
 class C99<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C100<T>(this.v)
         return n.get()
@@ -965,7 +965,7 @@ class C99<T> {
 }
 class C100<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C101<T>(this.v)
         return n.get()
@@ -973,7 +973,7 @@ class C100<T> {
 }
 class C101<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C102<T>(this.v)
         return n.get()
@@ -981,7 +981,7 @@ class C101<T> {
 }
 class C102<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C103<T>(this.v)
         return n.get()
@@ -989,7 +989,7 @@ class C102<T> {
 }
 class C103<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C104<T>(this.v)
         return n.get()
@@ -997,7 +997,7 @@ class C103<T> {
 }
 class C104<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C105<T>(this.v)
         return n.get()
@@ -1005,7 +1005,7 @@ class C104<T> {
 }
 class C105<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C106<T>(this.v)
         return n.get()
@@ -1013,7 +1013,7 @@ class C105<T> {
 }
 class C106<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C107<T>(this.v)
         return n.get()
@@ -1021,7 +1021,7 @@ class C106<T> {
 }
 class C107<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C108<T>(this.v)
         return n.get()
@@ -1029,7 +1029,7 @@ class C107<T> {
 }
 class C108<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C109<T>(this.v)
         return n.get()
@@ -1037,7 +1037,7 @@ class C108<T> {
 }
 class C109<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C110<T>(this.v)
         return n.get()
@@ -1045,7 +1045,7 @@ class C109<T> {
 }
 class C110<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C111<T>(this.v)
         return n.get()
@@ -1053,7 +1053,7 @@ class C110<T> {
 }
 class C111<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C112<T>(this.v)
         return n.get()
@@ -1061,7 +1061,7 @@ class C111<T> {
 }
 class C112<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C113<T>(this.v)
         return n.get()
@@ -1069,7 +1069,7 @@ class C112<T> {
 }
 class C113<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C114<T>(this.v)
         return n.get()
@@ -1077,7 +1077,7 @@ class C113<T> {
 }
 class C114<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C115<T>(this.v)
         return n.get()
@@ -1085,7 +1085,7 @@ class C114<T> {
 }
 class C115<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C116<T>(this.v)
         return n.get()
@@ -1093,7 +1093,7 @@ class C115<T> {
 }
 class C116<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C117<T>(this.v)
         return n.get()
@@ -1101,7 +1101,7 @@ class C116<T> {
 }
 class C117<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C118<T>(this.v)
         return n.get()
@@ -1109,7 +1109,7 @@ class C117<T> {
 }
 class C118<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C119<T>(this.v)
         return n.get()
@@ -1117,7 +1117,7 @@ class C118<T> {
 }
 class C119<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C120<T>(this.v)
         return n.get()
@@ -1125,7 +1125,7 @@ class C119<T> {
 }
 class C120<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C121<T>(this.v)
         return n.get()
@@ -1133,7 +1133,7 @@ class C120<T> {
 }
 class C121<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C122<T>(this.v)
         return n.get()
@@ -1141,7 +1141,7 @@ class C121<T> {
 }
 class C122<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C123<T>(this.v)
         return n.get()
@@ -1149,7 +1149,7 @@ class C122<T> {
 }
 class C123<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C124<T>(this.v)
         return n.get()
@@ -1157,7 +1157,7 @@ class C123<T> {
 }
 class C124<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C125<T>(this.v)
         return n.get()
@@ -1165,7 +1165,7 @@ class C124<T> {
 }
 class C125<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C126<T>(this.v)
         return n.get()
@@ -1173,7 +1173,7 @@ class C125<T> {
 }
 class C126<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         var n = C127<T>(this.v)
         return n.get()
@@ -1181,7 +1181,7 @@ class C126<T> {
 }
 class C127<T> {
     v: i64
-    constructor(v: i64) { this.v = v }
+    init(v: i64) { this.v = v }
     get() -> i64 {
         return this.v
     }

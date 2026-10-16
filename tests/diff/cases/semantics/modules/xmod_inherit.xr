@@ -5,7 +5,7 @@
 import { Animal } from "./_animals"
 
 class Dog extends Animal {
-    constructor(n: string) {
+    init(n: string) {
         super(n, 4)
     }
     override describe() -> string {

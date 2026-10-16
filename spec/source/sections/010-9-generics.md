@@ -32,7 +32,7 @@ var b = identity("hello")               // 推断 T=string
 // 泛型类
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
     get() -> T { return this.value }
 }
 
@@ -43,7 +43,7 @@ var b2 = Box<string>("hi")
 class Pair<K, V> {
     key: K
     value: V
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k; this.value = v
     }
 }
@@ -110,7 +110,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 class Token implements Hashable {
     value: i64
 
-    constructor(value: i64) { this.value = value }
+    init(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
     operator==(other: Token) -> bool { return this.value == other.value }
@@ -355,7 +355,7 @@ var b = identity("hello")               // T inferred as string
 // Generic class
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
     get() -> T { return this.value }
 }
 
@@ -366,7 +366,7 @@ var b2 = Box<string>("hi")
 class Pair<K, V> {
     key: K
     value: V
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k; this.value = v
     }
 }
@@ -440,7 +440,7 @@ Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a
 class Token implements Hashable {
     value: i64
 
-    constructor(value: i64) { this.value = value }
+    init(value: i64) { this.value = value }
 
     // the parameter is spelled Token, not Self
     operator==(other: Token) -> bool { return this.value == other.value }

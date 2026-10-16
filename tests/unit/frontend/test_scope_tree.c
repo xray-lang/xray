@@ -401,7 +401,7 @@ TEST(scope_consistency_after_analysis) {
                                       "}\n"
                                       "class Foo {\n"
                                       "    val: i64\n"
-                                      "    constructor(v: i64) {\n"
+                                      "    init(v: i64) {\n"
                                       "        this.val = v\n"
                                       "    }\n"
                                       "    get() -> i64 {\n"

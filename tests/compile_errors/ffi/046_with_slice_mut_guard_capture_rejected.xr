@@ -2,7 +2,7 @@ import mem
 
 class Guard {
     value: i64
-    constructor() { this.value = 0 }
+    init() { this.value = 0 }
     ref resize() { this.value = this.value + 1 }
 }
 

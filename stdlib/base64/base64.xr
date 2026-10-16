@@ -25,7 +25,7 @@ export class Base64EncodeOptions {
     alphabet: Base64Alphabet
     padding: bool
 
-    constructor() {
+    init() {
         this.alphabet = Base64Alphabet.Standard
         this.padding = true
     }
@@ -35,7 +35,7 @@ export class Base64DecodeOptions {
     alphabet: Base64Alphabet
     padding: Base64PaddingPolicy
 
-    constructor() {
+    init() {
         this.alphabet = Base64Alphabet.Standard
         this.padding = Base64PaddingPolicy.Required
     }

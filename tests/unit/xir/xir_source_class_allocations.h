@@ -16,7 +16,7 @@ static void source_class_allocations(void){
     CHECK(xr_test_mkdtemp(directory) && xr_test_realpath_buf(directory,absolute,sizeof(absolute)));
     CHECK(snprintf(path,sizeof(path),"%s/root.xr",absolute)>0);
     FILE *file=fopen(path,"wb");CHECK(file);
-    CHECK(fputs("final class Counter<T>{private n:i64;const label:string;constructor(n:i64,b:bool){this.n=n;if(b){this.label=\"counter\"}else{this.label=\"other\"}};add()->i64{this.n+=1;return this.n};static make()->Counter<T>{return Counter<T>(40,true)}}\nexport fn answer()->i64{const first=Counter<string>.make();const alias=first;return alias.add()}\n",file)>=0 && fclose(file)==0);
+    CHECK(fputs("final class Counter<T>{private n:i64;const label:string;init(n:i64,b:bool){this.n=n;if(b){this.label=\"counter\"}else{this.label=\"other\"}};add()->i64{this.n+=1;return this.n};static make()->Counter<T>{return Counter<T>(40,true)}}\nexport fn answer()->i64{const first=Counter<string>.make();const alias=first;return alias.add()}\n",file)>=0 && fclose(file)==0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
     XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};size_t sites=allocation_case_begin(23);
     for(size_t site=allocation_first();allocation_more(site,sites);site=allocation_next(site)){

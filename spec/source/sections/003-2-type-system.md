@@ -878,9 +878,9 @@ Xray 默认只保留最小类型身份层：
 
 ```xray @id=narrowing-extract-binding
 class Address { city: string
-    constructor(city: string) { this.city = city } }
+    init(city: string) { this.city = city } }
 class User { address: Address?
-    constructor(address: Address?) { this.address = address } }
+    init(address: Address?) { this.address = address } }
 
 fn show(u: User) {
     var addr = u.address          // 提取为简单绑定
@@ -1996,9 +1996,9 @@ Rules `N-1` … `N-13` in this section are normative. Each has a conformance cas
 
 ```xray @id=narrowing-extract-binding
 class Address { city: string
-    constructor(city: string) { this.city = city } }
+    init(city: string) { this.city = city } }
 class User { address: Address?
-    constructor(address: Address?) { this.address = address } }
+    init(address: Address?) { this.address = address } }
 
 fn show(u: User) {
     var addr = u.address          // extract into a simple binding

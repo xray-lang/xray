@@ -3,7 +3,7 @@
 // Skipped as a standalone diff case because its basename starts with '_'.
 export class Options {
     weight: i64
-    constructor(weight: i64 = 20) {
+    init(weight: i64 = 20) {
         this.weight = weight
     }
 }

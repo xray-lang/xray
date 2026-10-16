@@ -126,7 +126,7 @@ static bool program_phase(const char *argument,ProgramTrial *trial,unsigned *pha
     static const char *const names[]={"--program-class-first","--program-class-abort","--program-class-publish",
         "--program-class-array-first","--program-class-array-abort","--program-class-array-publish",
         "--program-class-ref-first","--program-class-ref-abort","--program-class-ref-publish"};
-    static const unsigned storage[]={4,5,7};
+    static const unsigned storage[]={4,5,6};
     for (unsigned i=0;i<9;++i) if (!strcmp(argument,names[i])) {
         trial->storage=storage[i/3];*phase=1+i%3;return true;
     }

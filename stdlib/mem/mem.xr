@@ -37,7 +37,7 @@ export const PROT_EXEC: i64 = 4
 export final class Buffer implements Lengthable {
     private _storage: __BufferStorage
 
-    constructor(n: i64, zeroed: bool = false, align: i64 = 0) {
+    init(n: i64, zeroed: bool = false, align: i64 = 0) {
         var size = _allocationSize(n)
         if (align != 0) {
             assert(_validAlignment(align),

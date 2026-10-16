@@ -41,6 +41,9 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
         if (!xr_xir_module_imports(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
     }
     if (access == XR_XIR_NOMINAL_TYPE) return XR_XIR_OK;
+    if (access == XR_XIR_NOMINAL_CONSTRUCT && identity.kind == XR_XIR_NOMINAL_STRUCT &&
+        (identity.flags & XR_XIR_NOMINAL_MODULE_LITERAL) && declaring_module != caller->module)
+        return XR_XIR_BAD_TYPE;
     if (access != XR_XIR_NOMINAL_CONSTRUCT && field >= identity.field_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t first = access == XR_XIR_NOMINAL_CONSTRUCT ? 0 : field;
     uint32_t end = access == XR_XIR_NOMINAL_CONSTRUCT ? identity.field_count : field + 1;

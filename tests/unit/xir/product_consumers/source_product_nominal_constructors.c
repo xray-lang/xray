@@ -29,11 +29,11 @@ static void emit_deep_class_graph(FILE *output) {
     for (int32_t index = CLASS_COUNT - 1; index >= 0; --index) {
         int written = index == CLASS_COUNT - 1
                           ? snprintf(source + used, SOURCE_CAPACITY - used,
-                                     "class C%d {\n  value: i64\n  constructor(value: i64) { "
+                                     "class C%d {\n  value: i64\n  init(value: i64) { "
                                      "this.value = value }\n}\n",
                                      index)
                           : snprintf(source + used, SOURCE_CAPACITY - used,
-                                     "class C%d {\n  next: C%d?\n  constructor(next: C%d?) { "
+                                     "class C%d {\n  next: C%d?\n  init(next: C%d?) { "
                                      "this.next = next }\n}\n",
                                      index, index + 1, index + 1);
         ASSERT_TRUE(written > 0 && (size_t) written < SOURCE_CAPACITY - used);

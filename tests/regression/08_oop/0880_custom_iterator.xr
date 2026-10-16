@@ -8,7 +8,7 @@ class CustomRangeIter {
     current: i64
     end: i64
     
-    constructor(start: i64, end: i64) {
+    init(start: i64, end: i64) {
         this.current = start
         this.end = end
     }
@@ -28,7 +28,7 @@ class CustomRange {
     start: i64
     end: i64
     
-    constructor(start: i64, end: i64) {
+    init(start: i64, end: i64) {
         this.start = start
         this.end = end
     }
@@ -72,7 +72,7 @@ class StepIterator {
     end: i64
     step: i64
     
-    constructor(start: i64, end: i64, step: i64) {
+    init(start: i64, end: i64, step: i64) {
         this.current = start
         this.end = end
         this.step = step
@@ -98,7 +98,7 @@ class StepRange {
     end: i64
     step: i64
     
-    constructor(start: i64, end: i64, step: i64) {
+    init(start: i64, end: i64, step: i64) {
         this.start = start
         this.end = end
         this.step = step
@@ -145,7 +145,7 @@ class FibIterator {
     count: i64
     max: i64
     
-    constructor(max: i64) {
+    init(max: i64) {
         this.a = 0
         this.b = 1
         this.count = 0
@@ -169,7 +169,7 @@ class FibIterator {
 class Fibonacci {
     max: i64
     
-    constructor(n: i64) {
+    init(n: i64) {
         this.max = n
     }
     
@@ -201,7 +201,7 @@ class CharIterator {
     str: string
     index: i64
     
-    constructor(s: string) {
+    init(s: string) {
         this.str = s
         this.index = 0
     }
@@ -220,7 +220,7 @@ class CharIterator {
 class Chars {
     str: string
     
-    constructor(s: string) {
+    init(s: string) {
         this.str = s
     }
     

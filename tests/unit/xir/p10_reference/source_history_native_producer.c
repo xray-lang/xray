@@ -26,7 +26,7 @@ static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group
     ++*calls;return XR_XIR_OUTPUT_OK;
 }
 static void produce_mode(const char *directory,FILE *header,unsigned kind) {
-    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==7;
+    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==6;
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,"history-check-test",NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;
@@ -76,7 +76,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
         } else {
             CHECK(status==XR_XIR_CALL_RETURNED);
             XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
-            if (kind==7 && generation>1) {
+            if (kind==6 && generation>1) {
                 const char *expected=generation==2 ? "ax1" : "ax1x1",*bytes=NULL;size_t length=0;
                 CHECK(xr_xir_string_view(&value,&bytes,&length) && length==strlen(expected) && !memcmp(bytes,expected,length));
             } else CHECK(value.type==XR_XIR_I64 && value.payload==(generation==1 ? 0 : mutating && generation==3 ? 43 : 42));

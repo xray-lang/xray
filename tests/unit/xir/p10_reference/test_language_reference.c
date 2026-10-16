@@ -16,6 +16,8 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
+#include "xir/xxir_nominal.h"
+#include "xir/xxir_construction.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +35,32 @@ static uint32_t answer_entry(const XrXirArtifact *artifact) {
         }
     }
     CHECK(entry != UINT32_MAX); return entry;
+}
+
+static void initialization_authority(SourceFixtureOwner *owner, const XrXirArtifact *artifact) {
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    const XrXirNominalTable *original = module->types->nominals;
+    CHECK(original && original->declarations && original->count == 2);
+    XrXirNominalDeclaration records[2] = {original->declarations[0], original->declarations[1]};
+    uint32_t box = UINT32_MAX, plain = UINT32_MAX;
+    for (uint32_t n = 0; n < 2; ++n) {
+        if (records[n].name.length == 3 && !memcmp(records[n].name.bytes, "Box", 3)) box = n;
+        if (records[n].name.length == 5 && !memcmp(records[n].name.bytes, "Plain", 5)) plain = n;
+    }
+    CHECK(box < 2 && plain < 2 && box != plain);
+    CHECK(records[box].flags == XR_XIR_NOMINAL_MODULE_LITERAL && !records[plain].flags);
+    uint32_t caller = answer_entry(artifact);
+    CHECK(xr_xir_compile_nominal_access(&owner->context, module, caller, box, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&owner->context, module, caller, plain, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_OK);
+    XrXirNominalTable table = {records, 2, NULL};
+    XrXirTypes types = *module->types; types.nominals = &table;
+    XrXirModule forged = *module; forged.types = &types;
+    records[box].flags = 0;
+    CHECK(xr_xir_compile_verify_v2(&owner->context, &forged, xr_xir_compile_artifact_construction(artifact), NULL) == XR_XIR_BAD_STRUCTURE);
+    records[box].flags = XR_XIR_NOMINAL_MODULE_LITERAL;
+    records[plain].flags = XR_XIR_NOMINAL_MODULE_LITERAL;
+    CHECK(xr_xir_compile_verify_v2(&owner->context, &forged, xr_xir_compile_artifact_construction(artifact), NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(original->declarations[box].flags == XR_XIR_NOMINAL_MODULE_LITERAL && !original->declarations[plain].flags);
 }
 
 static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expected) {
@@ -88,7 +116,7 @@ static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, 
 
 int main(int argc, char **argv) {
     CHECK((argc == 4 && !strcmp(argv[1], "--accept")) ||
-          (argc == 5 && (!strcmp(argv[1], "--reject") || !strcmp(argv[1], "--emit"))));
+          (argc == 5 && (!strcmp(argv[1], "--reject") || !strcmp(argv[1], "--reject-structure") || !strcmp(argv[1], "--emit"))));
     char path[1024]; int length = snprintf(path, sizeof(path), "%s/%s.xr", XR_LANGUAGE_FIXTURES, argv[2]);
     CHECK(length > 0 && (size_t)length < sizeof(path));
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
@@ -102,13 +130,14 @@ int main(int argc, char **argv) {
         diagnostic.module, diagnostic.line, diagnostic.column, diagnostic.message);
     char *end = NULL; int64_t expected = (int64_t)strtoll(argv[3], &end, 10);
     CHECK(end && end != argv[3] && !*end);
-    if (!strcmp(argv[1], "--reject")) {
-        CHECK(status == XR_XIR_BAD_TYPE && diagnostic.status == status);
+    if (!strcmp(argv[1], "--reject") || !strcmp(argv[1], "--reject-structure")) {
+        CHECK(status == (!strcmp(argv[1], "--reject") ? XR_XIR_BAD_TYPE : XR_XIR_BAD_STRUCTURE) && diagnostic.status == status);
         CHECK(diagnostic.line == expected && strstr(diagnostic.message, argv[4]));
         CHECK(!result.checked && !result.snapshot);
         xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     } else {
         CHECK(status == XR_XIR_OK && result.checked && result.snapshot);
+        if (!strcmp(argv[2], "init_module_authority")) initialization_authority(&owner, result.checked);
         accept_packet(&owner, &result, session, expected, !strcmp(argv[1], "--emit") ? argv[4] : NULL);
     }
     source_fixture_owner_free(&owner);

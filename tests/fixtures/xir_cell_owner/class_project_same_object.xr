@@ -5,7 +5,7 @@ fn pair(left: ref i64, right: ref i64) -> i64 {
 final class Holder {
     private left: i64
     private right: i64
-    constructor() { this.left = 0; this.right = 0; }
+    init() { this.left = 0; this.right = 0; }
     collide(alias: Holder) -> i64 { return pair(ref this.left, ref alias.right); }
     current() -> i64 { return this.left * 10 + this.right; }
 }

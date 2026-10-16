@@ -11,7 +11,7 @@
 // so a call site cannot pick up half the checking again.
 
 class C {
-    constructor() {}
+    init() {}
 
     id<T>(x: T) -> T { return x }
 }

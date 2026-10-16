@@ -1,5 +1,5 @@
 class Labeler {
-    constructor() {
+    init() {
     }
 
     mark(x: i64) -> string {

@@ -40,7 +40,7 @@ fn processValue(val) {
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 }
@@ -48,7 +48,7 @@ class Animal {
 class Dog extends Animal {
     breed: string
 
-    constructor(name, breed) {
+    init(name, breed) {
         super(name)
         this.breed = breed
     }
@@ -57,7 +57,7 @@ class Dog extends Animal {
 class Cat extends Animal {
     color: string
 
-    constructor(name, color) {
+    init(name, color) {
         super(name)
         this.color = color
     }

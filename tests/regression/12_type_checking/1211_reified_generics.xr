@@ -2,14 +2,14 @@
 
 class Box<T> {
     value: T
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
 }
 class Pair<A, B> {
     first: A
     second: B
-    constructor(a: A, b: B) {
+    init(a: A, b: B) {
         this.first = a
         this.second = b
     }

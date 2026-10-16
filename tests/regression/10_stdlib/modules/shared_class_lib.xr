@@ -8,7 +8,7 @@ export type CounterStats = {
 export class Counter {
     count: Atomic<i64>
 
-    constructor() {
+    init() {
         this.count = Atomic<i64>(0)
     }
 

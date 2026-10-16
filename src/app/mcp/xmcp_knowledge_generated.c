@@ -247,7 +247,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
         .summary = "",
     },
     {
-        .name = "Base64DecodeOptions.constructor",
+        .name = "Base64DecodeOptions.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -267,7 +267,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
         .summary = "",
     },
     {
-        .name = "Base64EncodeOptions.constructor",
+        .name = "Base64EncodeOptions.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -780,7 +780,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
-        .name = "PhiDetector.constructor",
+        .name = "PhiDetector.init",
         .signature = "(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()",
         .summary = "",
     },
@@ -1217,7 +1217,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .summary = "",
     },
     {
-        .name = "CsvDiagnostic.constructor",
+        .name = "CsvDiagnostic.init",
         .signature = "(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()",
         .summary = "",
     },
@@ -1247,13 +1247,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .summary = "",
     },
     {
-        .name = "CsvDocument.constructor",
-        .signature = "(): ()",
+        .name = "CsvDocument.headers",
+        .signature = ": Array<string>",
         .summary = "",
     },
     {
-        .name = "CsvDocument.headers",
-        .signature = ": Array<string>",
+        .name = "CsvDocument.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -1332,11 +1332,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .summary = "",
     },
     {
-        .name = "CsvParseReport.constructor",
-        .signature = "(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()",
-        .summary = "",
-    },
-    {
         .name = "CsvParseReport.delimiter",
         .signature = ": rune",
         .summary = "",
@@ -1349,6 +1344,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     {
         .name = "CsvParseReport.document",
         .signature = ": CsvDocument",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseReport.init",
+        .signature = "(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()",
         .summary = "",
     },
     {
@@ -1425,11 +1425,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
         .summary = "",
     },
     {
-        .name = "DateTime.constructor",
-        .signature = "(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()",
-        .summary = "",
-    },
-    {
         .name = "DateTime.day",
         .signature = ": i64 { fn() { return this._day } }",
         .summary = "",
@@ -1457,6 +1452,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     {
         .name = "DateTime.hour",
         .signature = ": i64 { fn() { return this._hour } }",
+        .summary = "",
+    },
+    {
+        .name = "DateTime.init",
+        .signature = "(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()",
         .summary = "",
     },
     {
@@ -1593,13 +1593,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
         .summary = "",
     },
     {
-        .name = "Utf16DecodeOptions.constructor",
-        .signature = "(): ()",
+        .name = "Utf16DecodeOptions.consumeBom",
+        .signature = ": bool",
         .summary = "",
     },
     {
-        .name = "Utf16DecodeOptions.consumeBom",
-        .signature = ": bool",
+        .name = "Utf16DecodeOptions.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -1613,7 +1613,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
         .summary = "",
     },
     {
-        .name = "Utf16EncodeOptions.constructor",
+        .name = "Utf16EncodeOptions.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -1666,11 +1666,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ChunkedBody.constructor",
-        .signature = "(body: string, trailers: Headers, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "ChunkedBody.consumedBytes",
         .signature = ": i64",
         .summary = "",
@@ -1686,6 +1681,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "ChunkedBody.init",
+        .signature = "(body: string, trailers: Headers, consumedBytes: i64): ()",
+        .summary = "",
+    },
+    {
         .name = "ChunkedBody.trailers",
         .signature = ": Headers",
         .summary = "",
@@ -1693,11 +1693,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "Cookie",
         .signature = "Cookie",
-        .summary = "",
-    },
-    {
-        .name = "Cookie.constructor",
-        .signature = "(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()",
         .summary = "",
     },
     {
@@ -1718,6 +1713,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "Cookie.httpOnly",
         .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "Cookie.init",
+        .signature = "(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()",
         .summary = "",
     },
     {
@@ -1766,11 +1766,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "CookieJar.constructor",
-        .signature = "(maxCookies: i64 = 300): ()",
-        .summary = "",
-    },
-    {
         .name = "CookieJar.cookies",
         .signature = ": Array<Cookie>",
         .summary = "",
@@ -1783,6 +1778,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "CookieJar.getHeader",
         .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?",
+        .summary = "",
+    },
+    {
+        .name = "CookieJar.init",
+        .signature = "(maxCookies: i64 = 300): ()",
         .summary = "",
     },
     {
@@ -1806,13 +1806,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "FormData.constructor",
-        .signature = "(maxTotalSize: i64, maxFileSize: i64): ()",
+        .name = "FormData.fields",
+        .signature = ": Array<_FormField>",
         .summary = "",
     },
     {
-        .name = "FormData.fields",
-        .signature = ": Array<_FormField>",
+        .name = "FormData.init",
+        .signature = "(maxTotalSize: i64, maxFileSize: i64): ()",
         .summary = "",
     },
     {
@@ -1836,11 +1836,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "Headers.constructor",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "Headers.contains",
         .signature = "(name: string): bool",
         .summary = "",
@@ -1861,13 +1856,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpMethod",
-        .signature = "HttpMethod",
+        .name = "Headers.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
-        .name = "HttpMethod.constructor",
-        .signature = "(token: string): ()",
+        .name = "HttpMethod",
+        .signature = "HttpMethod",
         .summary = "",
     },
     {
@@ -1888,6 +1883,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "HttpMethod.head",
         .signature = "(): HttpMethod",
+        .summary = "",
+    },
+    {
+        .name = "HttpMethod.init",
+        .signature = "(token: string): ()",
         .summary = "",
     },
     {
@@ -1931,11 +1931,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpRequest.constructor",
-        .signature = "(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()",
-        .summary = "",
-    },
-    {
         .name = "HttpRequest.contentLength",
         .signature = ": i64",
         .summary = "",
@@ -1943,6 +1938,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "HttpRequest.headers",
         .signature = ": Headers",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.init",
+        .signature = "(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()",
         .summary = "",
     },
     {
@@ -2046,13 +2046,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "HttpResponse.constructor",
-        .signature = "(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()",
+        .name = "HttpResponse.headers",
+        .signature = ": Headers",
         .summary = "",
     },
     {
-        .name = "HttpResponse.headers",
-        .signature = ": Headers",
+        .name = "HttpResponse.init",
+        .signature = "(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()",
         .summary = "",
     },
     {
@@ -2111,13 +2111,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "MultipartBody.constructor",
-        .signature = "(body: string, contentType: string): ()",
+        .name = "MultipartBody.contentType",
+        .signature = ": string",
         .summary = "",
     },
     {
-        .name = "MultipartBody.contentType",
-        .signature = ": string",
+        .name = "MultipartBody.init",
+        .signature = "(body: string, contentType: string): ()",
         .summary = "",
     },
     {
@@ -2126,13 +2126,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RedirectDecision.constructor",
-        .signature = "(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()",
+        .name = "RedirectDecision.dropBody",
+        .signature = ": bool",
         .summary = "",
     },
     {
-        .name = "RedirectDecision.dropBody",
-        .signature = ": bool",
+        .name = "RedirectDecision.init",
+        .signature = "(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()",
         .summary = "",
     },
     {
@@ -2161,11 +2161,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RequestHead.constructor",
-        .signature = "(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
-        .summary = "",
-    },
-    {
         .name = "RequestHead.contentLength",
         .signature = ": i64",
         .summary = "",
@@ -2188,6 +2183,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "RequestHead.headers",
         .signature = ": Headers",
+        .summary = "",
+    },
+    {
+        .name = "RequestHead.init",
+        .signature = "(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
         .summary = "",
     },
     {
@@ -2221,11 +2221,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RequestMessage.constructor",
-        .signature = "(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "RequestMessage.consumedBytes",
         .signature = ": i64",
         .summary = "",
@@ -2251,6 +2246,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "RequestMessage.init",
+        .signature = "(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()",
+        .summary = "",
+    },
+    {
         .name = "RequestMessage.trailers",
         .signature = ": Headers",
         .summary = "",
@@ -2263,11 +2263,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "ResponseHead.chunked",
         .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "ResponseHead.constructor",
-        .signature = "(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
         .summary = "",
     },
     {
@@ -2293,6 +2288,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "ResponseHead.headers",
         .signature = ": Headers",
+        .summary = "",
+    },
+    {
+        .name = "ResponseHead.init",
+        .signature = "(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
         .summary = "",
     },
     {
@@ -2326,11 +2326,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "ResponseMessage.constructor",
-        .signature = "(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "ResponseMessage.consumedBytes",
         .signature = ": i64",
         .summary = "",
@@ -2356,6 +2351,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "ResponseMessage.init",
+        .signature = "(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()",
+        .summary = "",
+    },
+    {
         .name = "ResponseMessage.trailers",
         .signature = ": Headers",
         .summary = "",
@@ -2366,7 +2366,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "RouteMatch.constructor",
+        .name = "RouteMatch.init",
         .signature = "(value: T, params: Map<string, string>): ()",
         .summary = "",
     },
@@ -2386,13 +2386,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "Router.constructor",
-        .signature = "(): ()",
+        .name = "Router.find",
+        .signature = "(method: string, path: string): RouteMatch<T>?",
         .summary = "",
     },
     {
-        .name = "Router.find",
-        .signature = "(method: string, path: string): RouteMatch<T>?",
+        .name = "Router.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -2401,13 +2401,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
-        .name = "Server.constructor",
-        .signature = "(): ()",
+        .name = "Server.handler",
+        .signature = ": fn(HttpRequest) -> HttpResponse",
         .summary = "",
     },
     {
-        .name = "Server.handler",
-        .signature = ": fn(HttpRequest) -> HttpResponse",
+        .name = "Server.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -2584,11 +2584,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
         .summary = "",
     },
     {
-        .name = "FrameHeader.constructor",
-        .signature = "(length: i64, kind: i64, flags: i64, streamId: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "FrameHeader.flags",
         .signature = ": i64",
         .summary = "",
@@ -2596,6 +2591,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
     {
         .name = "FrameHeader.hasFlag",
         .signature = "(flag: i64): bool",
+        .summary = "",
+    },
+    {
+        .name = "FrameHeader.init",
+        .signature = "(length: i64, kind: i64, flags: i64, streamId: i64): ()",
         .summary = "",
     },
     {
@@ -2624,13 +2624,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
         .summary = "",
     },
     {
-        .name = "HeaderList.constructor",
-        .signature = "(): ()",
+        .name = "HeaderList.count",
+        .signature = "(): i64",
         .summary = "",
     },
     {
-        .name = "HeaderList.count",
-        .signature = "(): i64",
+        .name = "HeaderList.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -2649,7 +2649,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
         .summary = "",
     },
     {
-        .name = "HpackDecoder.constructor",
+        .name = "HpackDecoder.init",
         .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()",
         .summary = "",
     },
@@ -2674,7 +2674,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
         .summary = "",
     },
     {
-        .name = "HpackEncoder.constructor",
+        .name = "HpackEncoder.init",
         .signature = "(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()",
         .summary = "",
     },
@@ -2734,13 +2734,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
         .summary = "",
     },
     {
-        .name = "Settings.constructor",
-        .signature = "(): ()",
+        .name = "Settings.get",
+        .signature = "(id: i64): i64",
         .summary = "",
     },
     {
-        .name = "Settings.get",
-        .signature = "(id: i64): i64",
+        .name = "Settings.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -2832,7 +2832,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
-        .name = "BufWriter.constructor",
+        .name = "BufWriter.init",
         .signature = "(path: Path, capacity: i64 = 131072): ()",
         .summary = "",
     },
@@ -2907,11 +2907,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
-        .name = "FileStat.constructor",
-        .signature = "(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()",
-        .summary = "",
-    },
-    {
         .name = "FileStat.ctime",
         .signature = ": i64",
         .summary = "",
@@ -2919,6 +2914,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     {
         .name = "FileStat.gid",
         .signature = ": i64",
+        .summary = "",
+    },
+    {
+        .name = "FileStat.init",
+        .signature = "(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()",
         .summary = "",
     },
     {
@@ -2962,13 +2962,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "",
     },
     {
-        .name = "LineIterator.constructor",
-        .signature = "(reader: BufReader): ()",
+        .name = "LineIterator.hasNext",
+        .signature = "(): bool",
         .summary = "",
     },
     {
-        .name = "LineIterator.hasNext",
-        .signature = "(): bool",
+        .name = "LineIterator.init",
+        .signature = "(reader: BufReader): ()",
         .summary = "",
     },
     {
@@ -3298,11 +3298,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
         .summary = "",
     },
     {
-        .name = "Logger.constructor",
-        .signature = "(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()",
-        .summary = "",
-    },
-    {
         .name = "Logger.debug",
         .signature = "(...args: JSON.Value): ()",
         .summary = "",
@@ -3325,6 +3320,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     {
         .name = "Logger.info",
         .signature = "(...args: JSON.Value): ()",
+        .summary = "",
+    },
+    {
+        .name = "Logger.init",
+        .signature = "(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()",
         .summary = "",
     },
     {
@@ -3822,7 +3822,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "DialOptions.constructor",
+        .name = "DialOptions.init",
         .signature = "(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()",
         .summary = "",
     },
@@ -3842,13 +3842,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "Endpoint.constructor",
-        .signature = "(host: string, port: i64): ()",
+        .name = "Endpoint.host",
+        .signature = ": string",
         .summary = "",
     },
     {
-        .name = "Endpoint.host",
-        .signature = ": string",
+        .name = "Endpoint.init",
+        .signature = "(host: string, port: i64): ()",
         .summary = "",
     },
     {
@@ -3862,7 +3862,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "IpAddress.constructor",
+        .name = "IpAddress.init",
         .signature = "(value: string): ()",
         .summary = "",
     },
@@ -3882,7 +3882,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "NetConn.constructor",
+        .name = "NetConn.init",
         .signature = "(storage: __NetConnStorage): ()",
         .summary = "",
     },
@@ -3892,7 +3892,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "NetListener.constructor",
+        .name = "NetListener.init",
         .signature = "(storage: __NetListenerStorage): ()",
         .summary = "",
     },
@@ -3932,13 +3932,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "",
     },
     {
-        .name = "UdpFrom.constructor",
-        .signature = "(n: i64, host: string, port: i64): ()",
+        .name = "UdpFrom.host",
+        .signature = ": string",
         .summary = "",
     },
     {
-        .name = "UdpFrom.host",
-        .signature = ": string",
+        .name = "UdpFrom.init",
+        .signature = "(n: i64, host: string, port: i64): ()",
         .summary = "",
     },
     {
@@ -4120,13 +4120,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
         .summary = "",
     },
     {
-        .name = "ExecResult.constructor",
-        .signature = "(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()",
+        .name = "ExecResult.exitCode",
+        .signature = ": i64",
         .summary = "",
     },
     {
-        .name = "ExecResult.exitCode",
-        .signature = ": i64",
+        .name = "ExecResult.init",
+        .signature = "(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()",
         .summary = "",
     },
     {
@@ -4283,7 +4283,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
         .summary = "",
     },
     {
-        .name = "Options.constructor",
+        .name = "Options.init",
         .signature = "(workers: i64 = 0): ()",
         .summary = "",
     },
@@ -4298,7 +4298,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
         .summary = "",
     },
     {
-        .name = "Plan.constructor",
+        .name = "Plan.init",
         .signature = "(options: Options, init: fn(i64) -> S): ()",
         .summary = "",
     },
@@ -4336,7 +4336,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
         .summary = "",
     },
     {
-        .name = "Path.constructor",
+        .name = "Path.init",
         .signature = "(raw: string): ()",
         .summary = "",
     },
@@ -4361,11 +4361,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
         .summary = "",
     },
     {
-        .name = "PathInfo.constructor",
-        .signature = "(root: string, dir: Path, base: string, name: string, ext: string): ()",
-        .summary = "",
-    },
-    {
         .name = "PathInfo.dir",
         .signature = ": Path",
         .summary = "",
@@ -4373,6 +4368,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "PathInfo.ext",
         .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "PathInfo.init",
+        .signature = "(root: string, dir: Path, base: string, name: string, ext: string): ()",
         .summary = "",
     },
     {
@@ -4464,13 +4464,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
         .summary = "",
     },
     {
-        .name = "Regex.constructor",
-        .signature = "(pattern: string, flags: string = \"\"): ()",
+        .name = "Regex.flags",
+        .signature = ": i64",
         .summary = "",
     },
     {
-        .name = "Regex.flags",
-        .signature = ": i64",
+        .name = "Regex.init",
+        .signature = "(pattern: string, flags: string = \"\"): ()",
         .summary = "",
     },
     {
@@ -4489,11 +4489,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
         .summary = "",
     },
     {
-        .name = "RegexMatch.constructor",
-        .signature = "(start: i64, end: i64, text: string, groups: Array<string>): ()",
-        .summary = "",
-    },
-    {
         .name = "RegexMatch.end",
         .signature = ": i64",
         .summary = "",
@@ -4501,6 +4496,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "RegexMatch.groups",
         .signature = ": Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "RegexMatch.init",
+        .signature = "(start: i64, end: i64, text: string, groups: Array<string>): ()",
         .summary = "",
     },
     {
@@ -4587,13 +4587,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
         .summary = "",
     },
     {
-        .name = "RuntimeInfo.constructor",
-        .signature = "(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()",
+        .name = "RuntimeInfo.finalizerCount",
+        .signature = ": i64",
         .summary = "",
     },
     {
-        .name = "RuntimeInfo.finalizerCount",
-        .signature = ": i64",
+        .name = "RuntimeInfo.init",
+        .signature = "(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()",
         .summary = "",
     },
     {
@@ -5303,7 +5303,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Barrier.constructor",
+        .name = "Barrier.init",
         .signature = "(parties: i64): ()",
         .summary = "",
     },
@@ -5328,7 +5328,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Condvar.constructor",
+        .name = "Condvar.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -5353,13 +5353,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "CountdownLatch.constructor",
-        .signature = "(count: i64): ()",
+        .name = "CountdownLatch.done",
+        .signature = "(count: i64 = 1): i64",
         .summary = "",
     },
     {
-        .name = "CountdownLatch.done",
-        .signature = "(count: i64 = 1): i64",
+        .name = "CountdownLatch.init",
+        .signature = "(count: i64): ()",
         .summary = "",
     },
     {
@@ -5403,13 +5403,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "EventCount.constructor",
-        .signature = "(epoch: i64): ()",
+        .name = "EventCount.epoch",
+        .signature = ": i64 { fn() { return this._epoch.load(Ordering.Acquire) } }",
         .summary = "",
     },
     {
-        .name = "EventCount.epoch",
-        .signature = ": i64 { fn() { return this._epoch.load(Ordering.Acquire) } }",
+        .name = "EventCount.init",
+        .signature = "(epoch: i64): ()",
         .summary = "",
     },
     {
@@ -5428,7 +5428,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Mutex.constructor",
+        .name = "Mutex.init",
         .signature = "(v: T): ()",
         .summary = "",
     },
@@ -5453,7 +5453,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Once.constructor",
+        .name = "Once.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -5468,7 +5468,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "ResultGroup.constructor",
+        .name = "ResultGroup.init",
         .signature = "(batchSize: i64 = 1): ()",
         .summary = "",
     },
@@ -5493,7 +5493,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "RwLock.constructor",
+        .name = "RwLock.init",
         .signature = "(v: T): ()",
         .summary = "",
     },
@@ -5528,7 +5528,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "Semaphore.constructor",
+        .name = "Semaphore.init",
         .signature = "(permits: i64): ()",
         .summary = "",
     },
@@ -5558,7 +5558,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
         .summary = "",
     },
     {
-        .name = "WorkQueue.constructor",
+        .name = "WorkQueue.init",
         .signature = "(shards: i64 = 1, capacity: i64 = 256): ()",
         .summary = "",
     },
@@ -5591,7 +5591,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "Dylib.constructor",
+        .name = "Dylib.init",
         .signature = "(handle: i64): ()",
         .summary = "",
     },
@@ -5616,7 +5616,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "OsBarrier.constructor",
+        .name = "OsBarrier.init",
         .signature = "(parties: i64): ()",
         .summary = "",
     },
@@ -5636,7 +5636,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "OsCondvar.constructor",
+        .name = "OsCondvar.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -5661,7 +5661,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "OsMutex.constructor",
+        .name = "OsMutex.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -5691,7 +5691,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "OsOnce.constructor",
+        .name = "OsOnce.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -5701,7 +5701,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "OsRwLock.constructor",
+        .name = "OsRwLock.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -5731,7 +5731,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "Pipe.constructor",
+        .name = "Pipe.init",
         .signature = "(readHandle: i64, writeHandle: i64): ()",
         .summary = "",
     },
@@ -5766,13 +5766,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "Process.constructor",
-        .signature = "(id: i64, detached: bool = false): ()",
+        .name = "Process.id",
+        .signature = ": i64 { fn() { return this._id } }",
         .summary = "",
     },
     {
-        .name = "Process.id",
-        .signature = ": i64 { fn() { return this._id } }",
+        .name = "Process.init",
+        .signature = "(id: i64, detached: bool = false): ()",
         .summary = "",
     },
     {
@@ -5791,11 +5791,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "ProcessOptions.constructor",
-        .signature = "(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()",
-        .summary = "",
-    },
-    {
         .name = "ProcessOptions.cwd",
         .signature = ": string?",
         .summary = "",
@@ -5808,6 +5803,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     {
         .name = "ProcessOptions.env",
         .signature = ": Map<string, string>?",
+        .summary = "",
+    },
+    {
+        .name = "ProcessOptions.init",
+        .signature = "(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()",
         .summary = "",
     },
     {
@@ -5831,7 +5831,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
         .summary = "",
     },
     {
-        .name = "ThreadLocal.constructor",
+        .name = "ThreadLocal.init",
         .signature = "(init: fn() -> T): ()",
         .summary = "",
     },
@@ -5955,7 +5955,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
-        .name = "TomlArray.constructor",
+        .name = "TomlArray.init",
         .signature = "(): ()",
         .summary = "",
     },
@@ -5975,7 +5975,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
-        .name = "TomlDateTime.constructor",
+        .name = "TomlDateTime.init",
         .signature = "(raw: string): ()",
         .summary = "",
     },
@@ -6005,7 +6005,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
-        .name = "TomlDiagnostic.constructor",
+        .name = "TomlDiagnostic.init",
         .signature = "(kind: TomlErrorKind, line: i64, column: i64, message: string): ()",
         .summary = "",
     },
@@ -6030,7 +6030,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
-        .name = "TomlFloat.constructor",
+        .name = "TomlFloat.init",
         .signature = "(value: f64, text: string = \"\"): ()",
         .summary = "",
     },
@@ -6055,11 +6055,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
-        .name = "TomlParseReport.constructor",
-        .signature = "(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "TomlParseReport.data",
         .signature = ": TomlValue",
         .summary = "",
@@ -6067,6 +6062,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     {
         .name = "TomlParseReport.errors",
         .signature = ": Array<TomlDiagnostic>",
+        .summary = "",
+    },
+    {
+        .name = "TomlParseReport.init",
+        .signature = "(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()",
         .summary = "",
     },
     {
@@ -6085,11 +6085,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
-        .name = "TomlTable.constructor",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "TomlTable.containsKey",
         .signature = "(key: string): bool",
         .summary = "",
@@ -6097,6 +6092,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     {
         .name = "TomlTable.get",
         .signature = "(key: string): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "TomlTable.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -6200,11 +6200,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
         .summary = "",
     },
     {
-        .name = "TomlValue.constructor",
-        .signature = "(kind: string): ()",
-        .summary = "",
-    },
-    {
         .name = "TomlValue.dateTimeValue",
         .signature = ": TomlDateTime?",
         .summary = "",
@@ -6217,6 +6212,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     {
         .name = "TomlValue.get",
         .signature = "(key: string): TomlValue?",
+        .summary = "",
+    },
+    {
+        .name = "TomlValue.init",
+        .signature = "(kind: string): ()",
         .summary = "",
     },
     {
@@ -6383,11 +6383,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
         .summary = "",
     },
     {
-        .name = "QueryParams.constructor",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "QueryParams.encode",
         .signature = "(): string",
         .summary = "",
@@ -6408,13 +6403,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
         .summary = "",
     },
     {
-        .name = "URL",
-        .signature = "URL",
+        .name = "QueryParams.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
-        .name = "URL.constructor",
-        .signature = "(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()",
+        .name = "URL",
+        .signature = "URL",
         .summary = "",
     },
     {
@@ -6435,6 +6430,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     {
         .name = "URL.href",
         .signature = ": string",
+        .summary = "",
+    },
+    {
+        .name = "URL.init",
+        .signature = "(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()",
         .summary = "",
     },
     {
@@ -6531,7 +6531,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "ClosePayload.constructor",
+        .name = "ClosePayload.init",
         .signature = "(code: i64, reason: string): ()",
         .summary = "",
     },
@@ -6546,11 +6546,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "ParsedFrame.constructor",
-        .signature = "(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "ParsedFrame.consumedBytes",
         .signature = ": i64",
         .summary = "",
@@ -6558,6 +6553,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "ParsedFrame.fin",
         .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "ParsedFrame.init",
+        .signature = "(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()",
         .summary = "",
     },
     {
@@ -6586,13 +6586,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "ParsedUpgradeRequest.constructor",
-        .signature = "(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()",
+        .name = "ParsedUpgradeRequest.deflate",
+        .signature = ": bool",
         .summary = "",
     },
     {
-        .name = "ParsedUpgradeRequest.deflate",
-        .signature = ": bool",
+        .name = "ParsedUpgradeRequest.init",
+        .signature = "(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()",
         .summary = "",
     },
     {
@@ -6621,13 +6621,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "ParsedUpgradeResponse.constructor",
-        .signature = "(statusCode: i64, protocol: string? = null, deflate: bool = false): ()",
+        .name = "ParsedUpgradeResponse.deflate",
+        .signature = ": bool",
         .summary = "",
     },
     {
-        .name = "ParsedUpgradeResponse.deflate",
-        .signature = ": bool",
+        .name = "ParsedUpgradeResponse.init",
+        .signature = "(statusCode: i64, protocol: string? = null, deflate: bool = false): ()",
         .summary = "",
     },
     {
@@ -6646,13 +6646,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "WsConn.constructor",
-        .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()",
+        .name = "WsConn.error",
+        .signature = ": string?",
         .summary = "",
     },
     {
-        .name = "WsConn.error",
-        .signature = ": string?",
+        .name = "WsConn.init",
+        .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()",
         .summary = "",
     },
     {
@@ -6686,7 +6686,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "WsConnectOptions.constructor",
+        .name = "WsConnectOptions.init",
         .signature = "(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()",
         .summary = "",
     },
@@ -6721,11 +6721,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "WsMessage.constructor",
-        .signature = "(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()",
-        .summary = "",
-    },
-    {
         .name = "WsMessage.data",
         .signature = ": Array<u8>?",
         .summary = "",
@@ -6733,6 +6728,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "WsMessage.error",
         .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "WsMessage.init",
+        .signature = "(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()",
         .summary = "",
     },
     {
@@ -6746,13 +6746,13 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
         .summary = "",
     },
     {
-        .name = "WsUrl.constructor",
-        .signature = "(secure: bool, host: string, port: i64, path: string): ()",
+        .name = "WsUrl.host",
+        .signature = ": string",
         .summary = "",
     },
     {
-        .name = "WsUrl.host",
-        .signature = ": string",
+        .name = "WsUrl.init",
+        .signature = "(secure: bool, host: string, port: i64, path: string): ()",
         .summary = "",
     },
     {
@@ -6909,7 +6909,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .summary = "",
     },
     {
-        .name = "XmlAttribute.constructor",
+        .name = "XmlAttribute.init",
         .signature = "(name: XmlName, value: string): ()",
         .summary = "",
     },
@@ -6934,7 +6934,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .summary = "",
     },
     {
-        .name = "XmlDiagnostic.constructor",
+        .name = "XmlDiagnostic.init",
         .signature = "(kind: XmlErrorKind, line: i64, column: i64, message: string): ()",
         .summary = "",
     },
@@ -6959,7 +6959,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .summary = "",
     },
     {
-        .name = "XmlName.constructor",
+        .name = "XmlName.init",
         .signature = "(prefix: string, local: string): ()",
         .summary = "",
     },
@@ -7009,11 +7009,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .summary = "",
     },
     {
-        .name = "XmlParseReport.constructor",
-        .signature = "(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()",
-        .summary = "",
-    },
-    {
         .name = "XmlParseReport.diagnostics",
         .signature = ": Array<XmlDiagnostic>",
         .summary = "",
@@ -7021,6 +7016,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     {
         .name = "XmlParseReport.doc",
         .signature = ": XmlNode?",
+        .summary = "",
+    },
+    {
+        .name = "XmlParseReport.init",
+        .signature = "(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()",
         .summary = "",
     },
     {
@@ -7142,7 +7142,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
-        .name = "YamlAnchor.constructor",
+        .name = "YamlAnchor.init",
         .signature = "(name: string): ()",
         .summary = "",
     },
@@ -7162,7 +7162,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
-        .name = "YamlDiagnostic.constructor",
+        .name = "YamlDiagnostic.init",
         .signature = "(kind: YamlErrorKind, line: i64, column: i64, message: string): ()",
         .summary = "",
     },
@@ -7187,11 +7187,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
-        .name = "YamlMapping.constructor",
-        .signature = "(): ()",
-        .summary = "",
-    },
-    {
         .name = "YamlMapping.containsKey",
         .signature = "(key: string): bool",
         .summary = "",
@@ -7199,6 +7194,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     {
         .name = "YamlMapping.get",
         .signature = "(key: string): YamlValue?",
+        .summary = "",
+    },
+    {
+        .name = "YamlMapping.init",
+        .signature = "(): ()",
         .summary = "",
     },
     {
@@ -7237,11 +7237,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
-        .name = "YamlParseReport.constructor",
-        .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()",
-        .summary = "",
-    },
-    {
         .name = "YamlParseReport.data",
         .signature = ": YamlValue",
         .summary = "",
@@ -7252,18 +7247,23 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
+        .name = "YamlParseReport.init",
+        .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()",
+        .summary = "",
+    },
+    {
         .name = "YamlTag",
         .signature = "YamlTag",
         .summary = "",
     },
     {
-        .name = "YamlTag.constructor",
-        .signature = "(handle: string, suffix: string): ()",
+        .name = "YamlTag.handle",
+        .signature = ": string",
         .summary = "",
     },
     {
-        .name = "YamlTag.handle",
-        .signature = ": string",
+        .name = "YamlTag.init",
+        .signature = "(handle: string, suffix: string): ()",
         .summary = "",
     },
     {
@@ -7277,7 +7277,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
-        .name = "YamlTagged.constructor",
+        .name = "YamlTagged.init",
         .signature = "(tag: YamlTag, value: YamlValue): ()",
         .summary = "",
     },
@@ -7569,7 +7569,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    name: string                       // field\n"
             "    private _age: i64 = 0              // private field with default value\n"
             "\n"
-            "    constructor(name: string) {\n"
+            "    init(name: string) {\n"
             "        this.name = name\n"
             "    }\n"
             "\n"
@@ -7590,7 +7590,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Inheritance\n"
             "```xray\n"
             "class Dog extends Animal {\n"
-            "    constructor(name: string) {\n"
+            "    init(name: string) {\n"
             "        super(name)                    // **must** be the first statement (derived classes only)\n"
             "    }\n"
             "\n"
@@ -8205,7 +8205,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// A recursive enum payload must be indirected through a class node\n"
             "class ExprNode {\n"
             "    expr: Expr\n"
-            "    constructor(expr: Expr) { this.expr = expr }\n"
+            "    init(expr: Expr) { this.expr = expr }\n"
             "    get() -> Expr { return this.expr }\n"
             "}\n"
             "\n"
@@ -8355,7 +8355,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// Generic class\n"
             "class Box<T> {\n"
             "    value: T\n"
-            "    constructor(v: T) { this.value = v }\n"
+            "    init(v: T) { this.value = v }\n"
             "    get() -> T { return this.value }\n"
             "}\n"
             "\n"
@@ -8366,7 +8366,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "class Pair<K, V> {\n"
             "    key: K\n"
             "    value: V\n"
-            "    constructor(k: K, v: V) {\n"
+            "    init(k: K, v: V) {\n"
             "        this.key = k; this.value = v\n"
             "    }\n"
             "}\n"
@@ -8447,7 +8447,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "class Circle implements Shape {\n"
             "    radius: f64\n"
-            "    constructor(r: f64) { this.radius = r }\n"
+            "    init(r: f64) { this.radius = r }\n"
             "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
             "    perimeter() -> f64 { return 6.28 * this.radius }\n"
             "}\n"
@@ -8455,7 +8455,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// Implement multiple interfaces\n"
             "class Logger implements Shape, Greeter {\n"
             "    radius: f64\n"
-            "    constructor(r: f64) { this.radius = r }\n"
+            "    init(r: f64) { this.radius = r }\n"
             "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
             "    perimeter() -> f64 { return 6.28 * this.radius }\n"
             "    greet(name: string) { print(\"hello,\", name) }\n"
@@ -8529,7 +8529,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "export fn helper() { return }\n"
             "export final class MyClass {\n"
             "    value: i64\n"
-            "    constructor() { this.value = 1 }\n"
+            "    init() { this.value = 1 }\n"
             "}\n"
             "export const VERSION = \"1.0\"\n"
             "\n"
@@ -8569,9 +8569,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "Never narrowed, even after a null check: `p.f`, `this.f`, `a[i]`, `t.0`, `f()`, and any other non-identifier expression. Extract a local binding first (N-3).\n"
             "```xray\n"
             "class Address { city: string\n"
-            "    constructor(city: string) { this.city = city } }\n"
+            "    init(city: string) { this.city = city } }\n"
             "class User { address: Address?\n"
-            "    constructor(address: Address?) { this.address = address } }\n"
+            "    init(address: Address?) { this.address = address } }\n"
             "\n"
             "fn show(u: User) {\n"
             "    var addr = u.address          // extract into a simple binding\n"
@@ -9180,11 +9180,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Base64DecodeOptions` | `Base64DecodeOptions` |  |\n"
             "| `Base64DecodeOptions.alphabet` | `: Base64Alphabet` |  |\n"
-            "| `Base64DecodeOptions.constructor` | `(): ()` |  |\n"
+            "| `Base64DecodeOptions.init` | `(): ()` |  |\n"
             "| `Base64DecodeOptions.padding` | `: Base64PaddingPolicy` |  |\n"
             "| `Base64EncodeOptions` | `Base64EncodeOptions` |  |\n"
             "| `Base64EncodeOptions.alphabet` | `: Base64Alphabet` |  |\n"
-            "| `Base64EncodeOptions.constructor` | `(): ()` |  |\n"
+            "| `Base64EncodeOptions.init` | `(): ()` |  |\n"
             "| `Base64EncodeOptions.padding` | `: bool` |  |\n"
             "| `base64.decode` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<u8>` |  |\n"
             "| `base64.encode` | `(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()): string` |  |\n"
@@ -9313,7 +9313,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.PHI_WINDOW_SIZE` | `: i64` |  |\n"
             "| `cluster.PROOF_SIZE` | `: i64` |  |\n"
             "| `PhiDetector` | `PhiDetector` |  |\n"
-            "| `PhiDetector.constructor` | `(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()` |  |\n"
+            "| `PhiDetector.init` | `(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS): ()` |  |\n"
             "| `PhiDetector.intervals` | `: Array<f64>` |  |\n"
             "| `PhiDetector.lastHeartbeatMs` | `: i64` |  |\n"
             "| `PhiDetector.mean` | `: f64` |  |\n"
@@ -9475,14 +9475,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvDiagnostic` | `CsvDiagnostic` |  |\n"
             "| `CsvDiagnostic.byteOffset` | `: i64` |  |\n"
             "| `CsvDiagnostic.column` | `: i64` |  |\n"
-            "| `CsvDiagnostic.constructor` | `(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()` |  |\n"
+            "| `CsvDiagnostic.init` | `(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()` |  |\n"
             "| `CsvDiagnostic.kind` | `: CsvErrorKind` |  |\n"
             "| `CsvDiagnostic.line` | `: i64` |  |\n"
             "| `CsvDiagnostic.message` | `: string` |  |\n"
             "| `CsvDiagnostic.record` | `: i64` |  |\n"
             "| `CsvDocument` | `CsvDocument` |  |\n"
-            "| `CsvDocument.constructor` | `(): ()` |  |\n"
             "| `CsvDocument.headers` | `: Array<string>` |  |\n"
+            "| `CsvDocument.init` | `(): ()` |  |\n"
             "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
             "| `csv.CsvParseOptions` | `{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: i64, maxRecords: i64, maxInputBytes: i64, maxFieldBytes: i64, maxColumns: i64 }` |  |\n"
             "| `csv.CsvParseOptions.commentPrefix` | `string` | Type alias field |\n"
@@ -9498,10 +9498,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `csv.CsvParseOptions.skipRecords` | `i64` | Type alias field |\n"
             "| `csv.CsvParseOptions.trimFields` | `bool` | Type alias field |\n"
             "| `CsvParseReport` | `CsvParseReport` |  |\n"
-            "| `CsvParseReport.constructor` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n"
             "| `CsvParseReport.delimiter` | `: rune` |  |\n"
             "| `CsvParseReport.diagnostics` | `: Array<CsvDiagnostic>` |  |\n"
             "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
+            "| `CsvParseReport.init` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n"
             "| `CsvParseReport.linebreak` | `: string` |  |\n"
             "| `CsvParseReport.truncated` | `: bool` |  |\n"
             "| `csv.CsvWriteOptions` | `{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }` |  |\n"
@@ -9534,13 +9534,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `DateTime` | `DateTime` |  |\n"
             "| `DateTime.add` | `(amount: i64, unit: string): DateTime` |  |\n"
-            "| `DateTime.constructor` | `(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()` |  |\n"
             "| `DateTime.day` | `: i64 { fn() { return this._day } }` |  |\n"
             "| `DateTime.daysInMonth` | `(): i64` |  |\n"
             "| `DateTime.diff` | `(other: DateTime, unit: string = \"seconds\"): i64` |  |\n"
             "| `DateTime.equals` | `(other: DateTime): bool` |  |\n"
             "| `DateTime.format` | `(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string` |  |\n"
             "| `DateTime.hour` | `: i64 { fn() { return this._hour } }` |  |\n"
+            "| `DateTime.init` | `(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()` |  |\n"
             "| `DateTime.isAfter` | `(other: DateTime): bool` |  |\n"
             "| `DateTime.isBefore` | `(other: DateTime): bool` |  |\n"
             "| `DateTime.isLeapYear` | `(): bool` |  |\n"
@@ -9585,11 +9585,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Utf16DecodeOptions` | `Utf16DecodeOptions` |  |\n"
-            "| `Utf16DecodeOptions.constructor` | `(): ()` |  |\n"
             "| `Utf16DecodeOptions.consumeBom` | `: bool` |  |\n"
+            "| `Utf16DecodeOptions.init` | `(): ()` |  |\n"
             "| `Utf16DecodeOptions.order` | `: Endian` |  |\n"
             "| `Utf16EncodeOptions` | `Utf16EncodeOptions` |  |\n"
-            "| `Utf16EncodeOptions.constructor` | `(): ()` |  |\n"
+            "| `Utf16EncodeOptions.init` | `(): ()` |  |\n"
             "| `Utf16EncodeOptions.order` | `: Endian` |  |\n"
             "| `encoding.hexDecode` | `(hex: string): Array<u8>` |  |\n"
             "| `encoding.hexEncode` | `(data: Slice<u8>): string` |  |\n"
@@ -9617,17 +9617,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `ChunkedBody` | `ChunkedBody` |  |\n"
             "| `ChunkedBody.body` | `: string` |  |\n"
-            "| `ChunkedBody.constructor` | `(body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
             "| `ChunkedBody.consumedBytes` | `: i64` |  |\n"
             "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n"
             "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n"
+            "| `ChunkedBody.init` | `(body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
             "| `ChunkedBody.trailers` | `: Headers` |  |\n"
             "| `Cookie` | `Cookie` |  |\n"
-            "| `Cookie.constructor` | `(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()` |  |\n"
             "| `Cookie.domain` | `: string` |  |\n"
             "| `Cookie.expires` | `: i64` |  |\n"
             "| `Cookie.hostOnly` | `: bool` |  |\n"
             "| `Cookie.httpOnly` | `: bool` |  |\n"
+            "| `Cookie.init` | `(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()` |  |\n"
             "| `Cookie.isExpired` | `(nowSeconds: i64 = 0): bool` |  |\n"
             "| `Cookie.matches` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): bool` |  |\n"
             "| `Cookie.name` | `: string` |  |\n"
@@ -9637,31 +9637,31 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Cookie.serialize` | `(): string` |  |\n"
             "| `Cookie.value` | `: string` |  |\n"
             "| `CookieJar` | `CookieJar` |  |\n"
-            "| `CookieJar.constructor` | `(maxCookies: i64 = 300): ()` |  |\n"
             "| `CookieJar.cookies` | `: Array<Cookie>` |  |\n"
             "| `CookieJar.count` | `: i64 { fn() { return len(this.cookies) } }` |  |\n"
             "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?` |  |\n"
+            "| `CookieJar.init` | `(maxCookies: i64 = 300): ()` |  |\n"
             "| `CookieJar.maxCookies` | `: i64` |  |\n"
             "| `FormData` | `FormData` |  |\n"
             "| `FormData.boundary` | `: string` |  |\n"
             "| `FormData.build` | `(): MultipartBody` |  |\n"
-            "| `FormData.constructor` | `(maxTotalSize: i64, maxFileSize: i64): ()` |  |\n"
             "| `FormData.fields` | `: Array<_FormField>` |  |\n"
+            "| `FormData.init` | `(maxTotalSize: i64, maxFileSize: i64): ()` |  |\n"
             "| `FormData.maxFileSize` | `: i64` |  |\n"
             "| `FormData.maxTotalSize` | `: i64` |  |\n"
             "| `FormData.totalSize` | `: i64` |  |\n"
             "| `Headers` | `Headers` |  |\n"
-            "| `Headers.constructor` | `(): ()` |  |\n"
             "| `Headers.contains` | `(name: string): bool` |  |\n"
             "| `Headers.entries` | `(): Array<(string, string)>` |  |\n"
             "| `Headers.get` | `(name: string): string?` |  |\n"
             "| `Headers.getAll` | `(name: string): Array<string>` |  |\n"
+            "| `Headers.init` | `(): ()` |  |\n"
             "| `HttpMethod` | `HttpMethod` |  |\n"
-            "| `HttpMethod.constructor` | `(token: string): ()` |  |\n"
             "| `HttpMethod.delete` | `(): HttpMethod` |  |\n"
             "| `HttpMethod.fromToken` | `(token: string): HttpMethod?` |  |\n"
             "| `HttpMethod.get` | `(): HttpMethod` |  |\n"
             "| `HttpMethod.head` | `(): HttpMethod` |  |\n"
+            "| `HttpMethod.init` | `(token: string): ()` |  |\n"
             "| `HttpMethod.options` | `(): HttpMethod` |  |\n"
             "| `HttpMethod.patch` | `(): HttpMethod` |  |\n"
             "| `HttpMethod.post` | `(): HttpMethod` |  |\n"
@@ -9670,9 +9670,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpMethod.token` | `: string` |  |\n"
             "| `HttpRequest` | `HttpRequest` |  |\n"
             "| `HttpRequest.body` | `: Array<u8>` |  |\n"
-            "| `HttpRequest.constructor` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()` |  |\n"
             "| `HttpRequest.contentLength` | `: i64` |  |\n"
             "| `HttpRequest.headers` | `: Headers` |  |\n"
+            "| `HttpRequest.init` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()` |  |\n"
             "| `HttpRequest.json` | `(): T` |  |\n"
             "| `HttpRequest.jsonObject` | `(): JSON.Object` |  |\n"
             "| `HttpRequest.jsonValue` | `(): JSON.Value` |  |\n"
@@ -9693,8 +9693,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.HttpRequestOptions.version` | `HttpVersion?` | Type alias field |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: Array<u8>` |  |\n"
-            "| `HttpResponse.constructor` | `(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()` |  |\n"
             "| `HttpResponse.headers` | `: Headers` |  |\n"
+            "| `HttpResponse.init` | `(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()` |  |\n"
             "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
             "| `HttpResponse.json` | `(): T` |  |\n"
             "| `HttpResponse.jsonObject` | `(): JSON.Object` |  |\n"
@@ -9706,66 +9706,66 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpResponse.version` | `: HttpVersion` |  |\n"
             "| `MultipartBody` | `MultipartBody` |  |\n"
             "| `MultipartBody.body` | `: string` |  |\n"
-            "| `MultipartBody.constructor` | `(body: string, contentType: string): ()` |  |\n"
             "| `MultipartBody.contentType` | `: string` |  |\n"
+            "| `MultipartBody.init` | `(body: string, contentType: string): ()` |  |\n"
             "| `RedirectDecision` | `RedirectDecision` |  |\n"
-            "| `RedirectDecision.constructor` | `(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()` |  |\n"
             "| `RedirectDecision.dropBody` | `: bool` |  |\n"
+            "| `RedirectDecision.init` | `(url: string, method: string, stripSensitiveHeaders: bool, dropBody: bool): ()` |  |\n"
             "| `RedirectDecision.method` | `: string` |  |\n"
             "| `RedirectDecision.stripSensitiveHeaders` | `: bool` |  |\n"
             "| `RedirectDecision.url` | `: string` |  |\n"
             "| `RequestHead` | `RequestHead` |  |\n"
             "| `RequestHead.chunked` | `: bool` |  |\n"
-            "| `RequestHead.constructor` | `(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
             "| `RequestHead.contentLength` | `: i64` |  |\n"
             "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
             "| `RequestHead.headerBytes` | `: i64` |  |\n"
             "| `RequestHead.headers` | `: Headers` |  |\n"
+            "| `RequestHead.init` | `(method: string, requestTarget: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
             "| `RequestHead.keepAlive` | `: bool` |  |\n"
             "| `RequestHead.method` | `: string` |  |\n"
             "| `RequestHead.requestTarget` | `: string` |  |\n"
             "| `RequestHead.version` | `: string` |  |\n"
             "| `RequestMessage` | `RequestMessage` |  |\n"
             "| `RequestMessage.body` | `: string` |  |\n"
-            "| `RequestMessage.constructor` | `(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
             "| `RequestMessage.consumedBytes` | `: i64` |  |\n"
             "| `RequestMessage.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `RequestMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `RequestMessage.head` | `: RequestHead` |  |\n"
+            "| `RequestMessage.init` | `(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
             "| `RequestMessage.trailers` | `: Headers` |  |\n"
             "| `ResponseHead` | `ResponseHead` |  |\n"
             "| `ResponseHead.chunked` | `: bool` |  |\n"
-            "| `ResponseHead.constructor` | `(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
             "| `ResponseHead.contentLength` | `: i64` |  |\n"
             "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n"
             "| `ResponseHead.headerBytes` | `: i64` |  |\n"
             "| `ResponseHead.headers` | `: Headers` |  |\n"
+            "| `ResponseHead.init` | `(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
             "| `ResponseHead.keepAlive` | `: bool` |  |\n"
             "| `ResponseHead.reason` | `: string` |  |\n"
             "| `ResponseHead.status` | `: i64` |  |\n"
             "| `ResponseHead.version` | `: string` |  |\n"
             "| `ResponseMessage` | `ResponseMessage` |  |\n"
             "| `ResponseMessage.body` | `: string` |  |\n"
-            "| `ResponseMessage.constructor` | `(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
             "| `ResponseMessage.consumedBytes` | `: i64` |  |\n"
             "| `ResponseMessage.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `ResponseMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `ResponseMessage.head` | `: ResponseHead` |  |\n"
+            "| `ResponseMessage.init` | `(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
             "| `ResponseMessage.trailers` | `: Headers` |  |\n"
             "| `RouteMatch` | `RouteMatch` |  |\n"
-            "| `RouteMatch.constructor` | `(value: T, params: Map<string, string>): ()` |  |\n"
+            "| `RouteMatch.init` | `(value: T, params: Map<string, string>): ()` |  |\n"
             "| `RouteMatch.params` | `: Map<string, string>` |  |\n"
             "| `RouteMatch.value` | `: T` |  |\n"
             "| `Router` | `Router` |  |\n"
-            "| `Router.constructor` | `(): ()` |  |\n"
             "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n"
+            "| `Router.init` | `(): ()` |  |\n"
             "| `Server` | `Server` |  |\n"
-            "| `Server.constructor` | `(): ()` |  |\n"
             "| `Server.handler` | `: fn(HttpRequest) -> HttpResponse` |  |\n"
+            "| `Server.init` | `(): ()` |  |\n"
             "| `Server.listen` | `(port: i64, running: Atomic<bool>): bool` |  |\n"
             "| `Server.method` | `: string,` |  |\n"
             "| `Server.path` | `: string,` |  |\n"
@@ -9818,25 +9818,25 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http2.FLOW_CONTROL_ERROR` | `: i64` |  |\n"
             "| `http2.FRAME_SIZE_ERROR` | `: i64` |  |\n"
             "| `FrameHeader` | `FrameHeader` |  |\n"
-            "| `FrameHeader.constructor` | `(length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n"
             "| `FrameHeader.flags` | `: i64` |  |\n"
             "| `FrameHeader.hasFlag` | `(flag: i64): bool` |  |\n"
+            "| `FrameHeader.init` | `(length: i64, kind: i64, flags: i64, streamId: i64): ()` |  |\n"
             "| `FrameHeader.kind` | `: i64` |  |\n"
             "| `FrameHeader.length` | `: i64` |  |\n"
             "| `FrameHeader.streamId` | `: i64` |  |\n"
             "| `http2.HTTP_1_1_REQUIRED` | `: i64` |  |\n"
             "| `HeaderList` | `HeaderList` |  |\n"
-            "| `HeaderList.constructor` | `(): ()` |  |\n"
             "| `HeaderList.count` | `(): i64` |  |\n"
+            "| `HeaderList.init` | `(): ()` |  |\n"
             "| `HeaderList.names` | `: Array<string>` |  |\n"
             "| `HeaderList.values` | `: Array<string>` |  |\n"
             "| `HpackDecoder` | `HpackDecoder` |  |\n"
-            "| `HpackDecoder.constructor` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
+            "| `HpackDecoder.init` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
             "| `HpackDecoder.lookupName` | `(index: i64): string?` |  |\n"
             "| `HpackDecoder.lookupValue` | `(index: i64): string?` |  |\n"
             "| `HpackDecoder.table` | `: HpackTable` |  |\n"
             "| `HpackEncoder` | `HpackEncoder` |  |\n"
-            "| `HpackEncoder.constructor` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
+            "| `HpackEncoder.init` | `(maxTableSize: i64 = DEFAULT_HEADER_TABLE_SIZE): ()` |  |\n"
             "| `HpackEncoder.staticFull` | `(name: string, value: string): i64` |  |\n"
             "| `HpackEncoder.staticName` | `(name: string): i64` |  |\n"
             "| `HpackEncoder.table` | `: HpackTable` |  |\n"
@@ -9848,8 +9848,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http2.SETTINGS_TIMEOUT` | `: i64` |  |\n"
             "| `http2.STREAM_CLOSED` | `: i64` |  |\n"
             "| `Settings` | `Settings` |  |\n"
-            "| `Settings.constructor` | `(): ()` |  |\n"
             "| `Settings.get` | `(id: i64): i64` |  |\n"
+            "| `Settings.init` | `(): ()` |  |\n"
             "| `Settings.values` | `: Array<i64>` |  |\n"
             "| `http2.applySettingsPayload` | `(settings: ref Settings, payload: Array<u8>, start: i64, length: i64): i64` |  |\n"
             "| `http2.encodeClientSettings` | `(settings: Settings): Array<u8>` |  |\n"
@@ -9885,7 +9885,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `BufReader.open` | `(path: Path, chunkSize: i64 = 131072): BufReader?` |  |\n"
             "| `BufWriter` | `BufWriter` |  |\n"
             "| `BufWriter.bytes` | `(): Array<u8>` |  |\n"
-            "| `BufWriter.constructor` | `(path: Path, capacity: i64 = 131072): ()` |  |\n"
+            "| `BufWriter.init` | `(path: Path, capacity: i64 = 131072): ()` |  |\n"
             "| `BufWriter.path` | `(): Path` |  |\n"
             "| `BufWriter.size` | `(): i64` |  |\n"
             "| `File` | `File` |  |\n"
@@ -9900,9 +9900,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `File.writeString` | `(data: string, offset: i64): i64` |  |\n"
             "| `FileStat` | `FileStat` |  |\n"
             "| `FileStat.atime` | `: i64` |  |\n"
-            "| `FileStat.constructor` | `(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n"
             "| `FileStat.ctime` | `: i64` |  |\n"
             "| `FileStat.gid` | `: i64` |  |\n"
+            "| `FileStat.init` | `(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n"
             "| `FileStat.isDir` | `: bool` |  |\n"
             "| `FileStat.isFile` | `: bool` |  |\n"
             "| `FileStat.isSymlink` | `: bool` |  |\n"
@@ -9911,8 +9911,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `FileStat.size` | `: i64` |  |\n"
             "| `FileStat.uid` | `: i64` |  |\n"
             "| `LineIterator` | `LineIterator` |  |\n"
-            "| `LineIterator.constructor` | `(reader: BufReader): ()` |  |\n"
             "| `LineIterator.hasNext` | `(): bool` |  |\n"
+            "| `LineIterator.init` | `(reader: BufReader): ()` |  |\n"
             "| `io.appendFile` | `(path: Path, data: string): bool` |  |\n"
             "| `io.chdir` | `(path: Path): bool` |  |\n"
             "| `io.chmod` | `(path: Path, mode: i64): bool` |  |\n"
@@ -10026,12 +10026,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Logger` | `Logger` |  |\n"
             "| `Logger.asyncMode` | `: bool` |  |\n"
             "| `Logger.child` | `(...fields: JSON.Value): Logger` |  |\n"
-            "| `Logger.constructor` | `(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()` |  |\n"
             "| `Logger.debug` | `(...args: JSON.Value): ()` |  |\n"
             "| `Logger.error` | `(...args: JSON.Value): ()` |  |\n"
             "| `Logger.fatal` | `(...args: JSON.Value): ()` |  |\n"
             "| `Logger.format` | `: LogFormat` |  |\n"
             "| `Logger.info` | `(...args: JSON.Value): ()` |  |\n"
+            "| `Logger.init` | `(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()` |  |\n"
             "| `Logger.jsonContext` | `: string` |  |\n"
             "| `Logger.level` | `: LogLevel` |  |\n"
             "| `Logger.output` | `: Path?` |  |\n"
@@ -10219,21 +10219,21 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CopyBidirectionalResult.bToA` | `: i64` |  |\n"
             "| `DialOptions` | `DialOptions` |  |\n"
             "| `DialOptions.alpnProtocols` | `: Array<string>?` |  |\n"
-            "| `DialOptions.constructor` | `(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()` |  |\n"
+            "| `DialOptions.init` | `(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false, alpnProtocols: Array<string>? = null): ()` |  |\n"
             "| `DialOptions.timeoutMs` | `: i64` |  |\n"
             "| `DialOptions.tls` | `: bool` |  |\n"
             "| `Endpoint` | `Endpoint` |  |\n"
-            "| `Endpoint.constructor` | `(host: string, port: i64): ()` |  |\n"
             "| `Endpoint.host` | `: string` |  |\n"
+            "| `Endpoint.init` | `(host: string, port: i64): ()` |  |\n"
             "| `Endpoint.port` | `: i64` |  |\n"
             "| `IpAddress` | `IpAddress` |  |\n"
-            "| `IpAddress.constructor` | `(value: string): ()` |  |\n"
+            "| `IpAddress.init` | `(value: string): ()` |  |\n"
             "| `IpAddress.toString` | `(): string` |  |\n"
             "| `IpAddress.value` | `: string` |  |\n"
             "| `NetConn` | `NetConn` |  |\n"
-            "| `NetConn.constructor` | `(storage: __NetConnStorage): ()` |  |\n"
+            "| `NetConn.init` | `(storage: __NetConnStorage): ()` |  |\n"
             "| `NetListener` | `NetListener` |  |\n"
-            "| `NetListener.constructor` | `(storage: __NetListenerStorage): ()` |  |\n"
+            "| `NetListener.init` | `(storage: __NetListenerStorage): ()` |  |\n"
             "| `TlsClientContext` | `TlsClientContext` |  |\n"
             "| `TlsClientContext.create` | `(caFile: string = \"\", certFile: string = \"\", keyFile: string = \"\", verifyPeer: bool = true, alpnProtocols: Array<string>? = null): TlsClientContext` |  |\n"
             "| `TlsClientContext.upgrade` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
@@ -10241,8 +10241,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TlsServerContext.accept` | `(conn: NetConn, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
             "| `TlsServerContext.create` | `(certFile: string, keyFile: string, caFile: string = \"\", requireClientCertificate: bool = false, alpnProtocols: Array<string>? = null): TlsServerContext` |  |\n"
             "| `UdpFrom` | `UdpFrom` |  |\n"
-            "| `UdpFrom.constructor` | `(n: i64, host: string, port: i64): ()` |  |\n"
             "| `UdpFrom.host` | `: string` |  |\n"
+            "| `UdpFrom.init` | `(n: i64, host: string, port: i64): ()` |  |\n"
             "| `UdpFrom.n` | `: i64` |  |\n"
             "| `UdpFrom.port` | `: i64` |  |\n"
             "| `net.accept` | `(listener: NetListener): NetConn?` |  |\n"
@@ -10296,8 +10296,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `ExecResult` | `ExecResult` |  |\n"
-            "| `ExecResult.constructor` | `(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()` |  |\n"
             "| `ExecResult.exitCode` | `: i64` |  |\n"
+            "| `ExecResult.init` | `(stdout: Array<u8>, stderr: Array<u8>, exitCode: i64, stdoutTruncated: bool, stderrTruncated: bool): ()` |  |\n"
             "| `ExecResult.stderr` | `: Array<u8>` |  |\n"
             "| `ExecResult.stderrTruncated` | `: bool` |  |\n"
             "| `ExecResult.stdout` | `: Array<u8>` |  |\n"
@@ -10368,10 +10368,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Options` | `Options` |  |\n"
-            "| `Options.constructor` | `(workers: i64 = 0): ()` |  |\n"
+            "| `Options.init` | `(workers: i64 = 0): ()` |  |\n"
             "| `Options.workers` | `: i64` |  |\n"
             "| `Plan` | `Plan` |  |\n"
-            "| `Plan.constructor` | `(options: Options, init: fn(i64) -> S): ()` |  |\n"
+            "| `Plan.init` | `(options: Options, init: fn(i64) -> S): ()` |  |\n"
             "| `Plan.options` | `: Options` |  |\n"
             "| `parallel.forEach` | `(range: Range, body: fn(i64), options: Options = Options()): ()` |  |\n"
             "| `parallel.map` | `(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>` |  |\n"
@@ -10396,14 +10396,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Path` | `Path` |  |\n"
-            "| `Path.constructor` | `(raw: string): ()` |  |\n"
+            "| `Path.init` | `(raw: string): ()` |  |\n"
             "| `Path.raw` | `: string` |  |\n"
             "| `Path.toString` | `(): string` |  |\n"
             "| `PathInfo` | `PathInfo` |  |\n"
             "| `PathInfo.base` | `: string` |  |\n"
-            "| `PathInfo.constructor` | `(root: string, dir: Path, base: string, name: string, ext: string): ()` |  |\n"
             "| `PathInfo.dir` | `: Path` |  |\n"
             "| `PathInfo.ext` | `: string` |  |\n"
+            "| `PathInfo.init` | `(root: string, dir: Path, base: string, name: string, ext: string): ()` |  |\n"
             "| `PathInfo.name` | `: string` |  |\n"
             "| `PathInfo.root` | `: string` |  |\n"
             "| `path.basename` | `(p: Path): string` |  |\n"
@@ -10439,14 +10439,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Regex` | `Regex` |  |\n"
-            "| `Regex.constructor` | `(pattern: string, flags: string = \"\"): ()` |  |\n"
             "| `Regex.flags` | `: i64` |  |\n"
+            "| `Regex.init` | `(pattern: string, flags: string = \"\"): ()` |  |\n"
             "| `Regex.pattern` | `: string` |  |\n"
             "| `Regex.prog` | `: Array<i64>` |  |\n"
             "| `RegexMatch` | `RegexMatch` |  |\n"
-            "| `RegexMatch.constructor` | `(start: i64, end: i64, text: string, groups: Array<string>): ()` |  |\n"
             "| `RegexMatch.end` | `: i64` |  |\n"
             "| `RegexMatch.groups` | `: Array<string>` |  |\n"
+            "| `RegexMatch.init` | `(start: i64, end: i64, text: string, groups: Array<string>): ()` |  |\n"
             "| `RegexMatch.start` | `: i64` |  |\n"
             "| `RegexMatch.text` | `: string` |  |\n"
             "| `regex.compile` | `(pattern: string, flags: string = \"\"): Regex` |  |\n"
@@ -10481,8 +10481,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `RuntimeInfo` | `RuntimeInfo` |  |\n"
-            "| `RuntimeInfo.constructor` | `(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()` |  |\n"
             "| `RuntimeInfo.finalizerCount` | `: i64` |  |\n"
+            "| `RuntimeInfo.init` | `(liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64): ()` |  |\n"
             "| `RuntimeInfo.liveBytes` | `: i64` |  |\n"
             "| `RuntimeInfo.liveKB` | `: f64` |  |\n"
             "| `RuntimeInfo.liveObjects` | `: i64` |  |\n"
@@ -10691,18 +10691,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Barrier` | `Barrier` |  |\n"
-            "| `Barrier.constructor` | `(parties: i64): ()` |  |\n"
+            "| `Barrier.init` | `(parties: i64): ()` |  |\n"
             "| `Barrier.wait` | `(): bool` |  |\n"
             "| `CachePadded` | `CachePadded` |  |\n"
             "| `CachePadded.value` | `: T` |  |\n"
             "| `Condvar` | `Condvar` |  |\n"
-            "| `Condvar.constructor` | `(): ()` |  |\n"
+            "| `Condvar.init` | `(): ()` |  |\n"
             "| `Condvar.lock` | `(): ()` |  |\n"
             "| `Condvar.unlock` | `(): ()` |  |\n"
             "| `CountdownLatch` | `CountdownLatch` |  |\n"
             "| `CountdownLatch.close` | `(): ()` |  |\n"
-            "| `CountdownLatch.constructor` | `(count: i64): ()` |  |\n"
             "| `CountdownLatch.done` | `(count: i64 = 1): i64` |  |\n"
+            "| `CountdownLatch.init` | `(count: i64): ()` |  |\n"
             "| `CountdownLatch.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
             "| `CountdownLatch.remaining` | `: i64 { fn() { return this._remaining.load(Ordering.Acquire) } }` |  |\n"
             "| `CountdownLatch.reset` | `(count: i64): bool` |  |\n"
@@ -10711,38 +10711,38 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `EventCount` | `EventCount` |  |\n"
             "| `EventCount.advance` | `(step: i64 = 1): i64` |  |\n"
             "| `EventCount.close` | `(): ()` |  |\n"
-            "| `EventCount.constructor` | `(epoch: i64): ()` |  |\n"
             "| `EventCount.epoch` | `: i64 { fn() { return this._epoch.load(Ordering.Acquire) } }` |  |\n"
+            "| `EventCount.init` | `(epoch: i64): ()` |  |\n"
             "| `EventCount.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
             "| `EventCount.wait` | `(lastEpoch: i64, workerHint: i64 = -1): i64` |  |\n"
             "| `Mutex` | `Mutex` |  |\n"
-            "| `Mutex.constructor` | `(v: T): ()` |  |\n"
+            "| `Mutex.init` | `(v: T): ()` |  |\n"
             "| `Mutex.lock` | `(body: fn(T) -> U): U` |  |\n"
             "| `Mutex.tryLock` | `(body: fn(T) -> U): U?` |  |\n"
             "| `Mutex.value` | `: T` |  |\n"
             "| `Once` | `Once` |  |\n"
-            "| `Once.constructor` | `(): ()` |  |\n"
+            "| `Once.init` | `(): ()` |  |\n"
             "| `ResultGroup` | `ResultGroup` |  |\n"
             "| `ResultGroup.batchSize` | `: i64 { fn() { return this._batchSize } }` |  |\n"
-            "| `ResultGroup.constructor` | `(batchSize: i64 = 1): ()` |  |\n"
+            "| `ResultGroup.init` | `(batchSize: i64 = 1): ()` |  |\n"
             "| `ResultGroup.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
             "| `ResultGroup.pendingCount` | `: i64 { fn() { return this._pending.load(Ordering.Acquire) } }` |  |\n"
             "| `ResultGroup.readyCount` | `: i64 { fn() { return len(this._ready) } }` |  |\n"
             "| `RwLock` | `RwLock` |  |\n"
-            "| `RwLock.constructor` | `(v: T): ()` |  |\n"
+            "| `RwLock.init` | `(v: T): ()` |  |\n"
             "| `RwLock.value` | `: T` |  |\n"
             "| `RwLock.write` | `(body: fn(T) -> U): U` |  |\n"
             "| `Semaphore` | `Semaphore` |  |\n"
             "| `Semaphore.acquire` | `(): bool` |  |\n"
             "| `Semaphore.available` | `: i64 { fn() { return this._available.load(Ordering.Acquire) } }` |  |\n"
             "| `Semaphore.close` | `(): ()` |  |\n"
-            "| `Semaphore.constructor` | `(permits: i64): ()` |  |\n"
+            "| `Semaphore.init` | `(permits: i64): ()` |  |\n"
             "| `Semaphore.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
             "| `Semaphore.release` | `(count: i64 = 1): i64` |  |\n"
             "| `Semaphore.tryAcquire` | `(): bool` |  |\n"
             "| `WorkQueue` | `WorkQueue` |  |\n"
             "| `WorkQueue.close` | `(): ()` |  |\n"
-            "| `WorkQueue.constructor` | `(shards: i64 = 1, capacity: i64 = 256): ()` |  |\n"
+            "| `WorkQueue.init` | `(shards: i64 = 1, capacity: i64 = 256): ()` |  |\n"
             "| `WorkQueue.isClosed` | `: bool { fn() { return this._closed.load(Ordering.Acquire) } }` |  |\n"
             "| `WorkQueue.length` | `: i64 { fn() { return len(this._items) } }` |  |\n"
             "| `WorkQueue.shardCount` | `: i64 { fn() { return this._shards } }` |  |\n"
@@ -10766,55 +10766,55 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Dylib` | `Dylib` |  |\n"
-            "| `Dylib.constructor` | `(handle: i64): ()` |  |\n"
+            "| `Dylib.init` | `(handle: i64): ()` |  |\n"
             "| `Dylib.lastError` | `(): string` |  |\n"
             "| `Dylib.open` | `(path: Path): Dylib?` |  |\n"
             "| `Dylib.symbol` | `(name: string): Ptr<u8>?` |  |\n"
             "| `OsBarrier` | `OsBarrier` |  |\n"
-            "| `OsBarrier.constructor` | `(parties: i64): ()` |  |\n"
+            "| `OsBarrier.init` | `(parties: i64): ()` |  |\n"
             "| `OsBarrier.wait` | `(): bool` |  |\n"
             "| `OsCondvar` | `OsCondvar` |  |\n"
             "| `OsCondvar.broadcast` | `(): ()` |  |\n"
-            "| `OsCondvar.constructor` | `(): ()` |  |\n"
+            "| `OsCondvar.init` | `(): ()` |  |\n"
             "| `OsCondvar.signal` | `(): ()` |  |\n"
             "| `OsCondvar.wait` | `(mutex: OsMutex): ()` |  |\n"
             "| `OsCondvar.waitFor` | `(mutex: OsMutex, timeoutNs: i64): bool` |  |\n"
             "| `OsMutex` | `OsMutex` |  |\n"
-            "| `OsMutex.constructor` | `(): ()` |  |\n"
+            "| `OsMutex.init` | `(): ()` |  |\n"
             "| `OsMutex.lock` | `(): ()` |  |\n"
             "| `OsMutex.tryLock` | `(): bool` |  |\n"
             "| `OsMutex.unlock` | `(): ()` |  |\n"
             "| `OsOnce` | `OsOnce` |  |\n"
             "| `OsOnce.call` | `(body: fn()): ()` |  |\n"
-            "| `OsOnce.constructor` | `(): ()` |  |\n"
+            "| `OsOnce.init` | `(): ()` |  |\n"
             "| `OsRwLock` | `OsRwLock` |  |\n"
-            "| `OsRwLock.constructor` | `(): ()` |  |\n"
+            "| `OsRwLock.init` | `(): ()` |  |\n"
             "| `OsRwLock.rdlock` | `(): ()` |  |\n"
             "| `OsRwLock.rdunlock` | `(): ()` |  |\n"
             "| `OsRwLock.wrlock` | `(): ()` |  |\n"
             "| `OsRwLock.wrunlock` | `(): ()` |  |\n"
             "| `Pipe` | `Pipe` |  |\n"
-            "| `Pipe.constructor` | `(readHandle: i64, writeHandle: i64): ()` |  |\n"
+            "| `Pipe.init` | `(readHandle: i64, writeHandle: i64): ()` |  |\n"
             "| `Pipe.open` | `(): Pipe?` |  |\n"
             "| `Pipe.read` | `(maxBytes: i64 = 8192): Array<u8>?` |  |\n"
             "| `Pipe.readEnd` | `(): i64` |  |\n"
             "| `Pipe.write` | `(data: Array<u8>): i64` |  |\n"
             "| `Pipe.writeEnd` | `(): i64` |  |\n"
             "| `Process` | `Process` |  |\n"
-            "| `Process.constructor` | `(id: i64, detached: bool = false): ()` |  |\n"
             "| `Process.id` | `: i64 { fn() { return this._id } }` |  |\n"
+            "| `Process.init` | `(id: i64, detached: bool = false): ()` |  |\n"
             "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
             "| `Process.spawn` | `(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?` |  |\n"
             "| `ProcessOptions` | `ProcessOptions` |  |\n"
-            "| `ProcessOptions.constructor` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()` |  |\n"
             "| `ProcessOptions.cwd` | `: string?` |  |\n"
             "| `ProcessOptions.detached` | `: bool` |  |\n"
             "| `ProcessOptions.env` | `: Map<string, string>?` |  |\n"
+            "| `ProcessOptions.init` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()` |  |\n"
             "| `ProcessOptions.stderr` | `: i64?` |  |\n"
             "| `ProcessOptions.stdin` | `: i64?` |  |\n"
             "| `ProcessOptions.stdout` | `: i64?` |  |\n"
             "| `ThreadLocal` | `ThreadLocal` |  |\n"
-            "| `ThreadLocal.constructor` | `(init: fn() -> T): ()` |  |\n"
+            "| `ThreadLocal.init` | `(init: fn() -> T): ()` |  |\n"
             "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n"
             "| `sys.pinToCpu` | `(cpu: i64): bool` |  |\n"
             "| `sys.threadYield` | `(): ()` |  |\n"
@@ -10898,35 +10898,35 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `TomlArray` | `TomlArray` |  |\n"
             "| `TomlArray.at` | `(index: i64): TomlValue?` |  |\n"
-            "| `TomlArray.constructor` | `(): ()` |  |\n"
+            "| `TomlArray.init` | `(): ()` |  |\n"
             "| `TomlArray.len` | `(): i64` |  |\n"
             "| `TomlArray.values` | `: Array<TomlValue>` |  |\n"
             "| `TomlDateTime` | `TomlDateTime` |  |\n"
-            "| `TomlDateTime.constructor` | `(raw: string): ()` |  |\n"
+            "| `TomlDateTime.init` | `(raw: string): ()` |  |\n"
             "| `TomlDateTime.raw` | `: string` |  |\n"
             "| `TomlDateTime.toISOString` | `(): string` |  |\n"
             "| `TomlDateTime.toString` | `(): string` |  |\n"
             "| `TomlDiagnostic` | `TomlDiagnostic` |  |\n"
             "| `TomlDiagnostic.column` | `: i64` |  |\n"
-            "| `TomlDiagnostic.constructor` | `(kind: TomlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
+            "| `TomlDiagnostic.init` | `(kind: TomlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
             "| `TomlDiagnostic.kind` | `: TomlErrorKind` |  |\n"
             "| `TomlDiagnostic.line` | `: i64` |  |\n"
             "| `TomlDiagnostic.message` | `: string` |  |\n"
             "| `TomlFloat` | `TomlFloat` |  |\n"
-            "| `TomlFloat.constructor` | `(value: f64, text: string = \"\"): ()` |  |\n"
+            "| `TomlFloat.init` | `(value: f64, text: string = \"\"): ()` |  |\n"
             "| `TomlFloat.text` | `: string` |  |\n"
             "| `TomlFloat.toString` | `(): string` |  |\n"
             "| `TomlFloat.value` | `: f64` |  |\n"
             "| `TomlParseReport` | `TomlParseReport` |  |\n"
-            "| `TomlParseReport.constructor` | `(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()` |  |\n"
             "| `TomlParseReport.data` | `: TomlValue` |  |\n"
             "| `TomlParseReport.errors` | `: Array<TomlDiagnostic>` |  |\n"
+            "| `TomlParseReport.init` | `(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()` |  |\n"
             "| `TomlParseReport.keys` | `: i64` |  |\n"
             "| `TomlParseReport.lines` | `: i64` |  |\n"
             "| `TomlTable` | `TomlTable` |  |\n"
-            "| `TomlTable.constructor` | `(): ()` |  |\n"
             "| `TomlTable.containsKey` | `(key: string): bool` |  |\n"
             "| `TomlTable.get` | `(key: string): TomlValue?` |  |\n"
+            "| `TomlTable.init` | `(): ()` |  |\n"
             "| `TomlTable.keys` | `(): Array<string>` |  |\n"
             "| `TomlTable.values` | `: Map<string, TomlValue>` |  |\n"
             "| `TomlValue` | `TomlValue` |  |\n"
@@ -10947,10 +10947,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TomlValue.asTable` | `(): TomlTable?` |  |\n"
             "| `TomlValue.at` | `(index: i64): TomlValue?` |  |\n"
             "| `TomlValue.boolValue` | `: bool` |  |\n"
-            "| `TomlValue.constructor` | `(kind: string): ()` |  |\n"
             "| `TomlValue.dateTimeValue` | `: TomlDateTime?` |  |\n"
             "| `TomlValue.floatValue` | `: TomlFloat?` |  |\n"
             "| `TomlValue.get` | `(key: string): TomlValue?` |  |\n"
+            "| `TomlValue.init` | `(kind: string): ()` |  |\n"
             "| `TomlValue.intValue` | `: i64` |  |\n"
             "| `TomlValue.keys` | `(): Array<string>` |  |\n"
             "| `TomlValue.kind` | `: string` |  |\n"
@@ -11001,17 +11001,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `QueryParams` | `QueryParams` |  |\n"
-            "| `QueryParams.constructor` | `(): ()` |  |\n"
             "| `QueryParams.encode` | `(): string` |  |\n"
             "| `QueryParams.entries` | `(): Array<(string, string)>` |  |\n"
             "| `QueryParams.get` | `(name: string): string?` |  |\n"
             "| `QueryParams.getAll` | `(name: string): Array<string>` |  |\n"
+            "| `QueryParams.init` | `(): ()` |  |\n"
             "| `URL` | `URL` |  |\n"
-            "| `URL.constructor` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n"
             "| `URL.hash` | `: string` |  |\n"
             "| `URL.host` | `: string` |  |\n"
             "| `URL.hostname` | `: string` |  |\n"
             "| `URL.href` | `: string` |  |\n"
+            "| `URL.init` | `(protocol: string, hostname: string, port: string, pathname: string, search: string, hash: string, username: string, password: string, host: string, origin: string, href: string): ()` |  |\n"
             "| `URL.origin` | `: string` |  |\n"
             "| `URL.password` | `: string` |  |\n"
             "| `URL.pathname` | `: string` |  |\n"
@@ -11048,51 +11048,51 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `ClosePayload` | `ClosePayload` |  |\n"
             "| `ClosePayload.code` | `: i64` |  |\n"
-            "| `ClosePayload.constructor` | `(code: i64, reason: string): ()` |  |\n"
+            "| `ClosePayload.init` | `(code: i64, reason: string): ()` |  |\n"
             "| `ClosePayload.reason` | `: string` |  |\n"
             "| `ParsedFrame` | `ParsedFrame` |  |\n"
-            "| `ParsedFrame.constructor` | `(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()` |  |\n"
             "| `ParsedFrame.consumedBytes` | `: i64` |  |\n"
             "| `ParsedFrame.fin` | `: bool` |  |\n"
+            "| `ParsedFrame.init` | `(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()` |  |\n"
             "| `ParsedFrame.masked` | `: bool` |  |\n"
             "| `ParsedFrame.opcode` | `: i64` |  |\n"
             "| `ParsedFrame.payload` | `: Array<u8>` |  |\n"
             "| `ParsedFrame.rsv1` | `: bool` |  |\n"
             "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n"
-            "| `ParsedUpgradeRequest.constructor` | `(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n"
             "| `ParsedUpgradeRequest.deflate` | `: bool` |  |\n"
+            "| `ParsedUpgradeRequest.init` | `(requestTarget: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n"
             "| `ParsedUpgradeRequest.origin` | `: string?` |  |\n"
             "| `ParsedUpgradeRequest.protocol` | `: string?` |  |\n"
             "| `ParsedUpgradeRequest.requestTarget` | `: string` |  |\n"
             "| `ParsedUpgradeRequest.secKey` | `: string` |  |\n"
             "| `ParsedUpgradeResponse` | `ParsedUpgradeResponse` |  |\n"
-            "| `ParsedUpgradeResponse.constructor` | `(statusCode: i64, protocol: string? = null, deflate: bool = false): ()` |  |\n"
             "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
+            "| `ParsedUpgradeResponse.init` | `(statusCode: i64, protocol: string? = null, deflate: bool = false): ()` |  |\n"
             "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
             "| `ParsedUpgradeResponse.statusCode` | `: i64` |  |\n"
             "| `WsConn` | `WsConn` |  |\n"
-            "| `WsConn.constructor` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()` |  |\n"
             "| `WsConn.error` | `: string?` |  |\n"
+            "| `WsConn.init` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()` |  |\n"
             "| `WsConn.isOpen` | `(): bool` |  |\n"
             "| `WsConn.ping` | `(): bool` |  |\n"
             "| `WsConn.sendBytes` | `(data: Array<u8>, binary: bool = false): bool` |  |\n"
             "| `WsConn.sendText` | `(data: string): bool` |  |\n"
             "| `WsConn.url` | `: string` |  |\n"
             "| `WsConnectOptions` | `WsConnectOptions` |  |\n"
-            "| `WsConnectOptions.constructor` | `(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()` |  |\n"
+            "| `WsConnectOptions.init` | `(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()` |  |\n"
             "| `WsConnectOptions.maxMessageSize` | `: i64` |  |\n"
             "| `WsConnectOptions.pingIntervalMs` | `: i64` |  |\n"
             "| `WsConnectOptions.pongTimeoutMs` | `: i64` |  |\n"
             "| `WsConnectOptions.timeoutMs` | `: i64` |  |\n"
             "| `WsMessage` | `WsMessage` |  |\n"
             "| `WsMessage.binary` | `: bool` |  |\n"
-            "| `WsMessage.constructor` | `(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()` |  |\n"
             "| `WsMessage.data` | `: Array<u8>?` |  |\n"
             "| `WsMessage.error` | `: string?` |  |\n"
+            "| `WsMessage.init` | `(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()` |  |\n"
             "| `WsMessage.text` | `(): string?` |  |\n"
             "| `WsUrl` | `WsUrl` |  |\n"
-            "| `WsUrl.constructor` | `(secure: bool, host: string, port: i64, path: string): ()` |  |\n"
             "| `WsUrl.host` | `: string` |  |\n"
+            "| `WsUrl.init` | `(secure: bool, host: string, port: i64, path: string): ()` |  |\n"
             "| `WsUrl.path` | `: string` |  |\n"
             "| `WsUrl.port` | `: i64` |  |\n"
             "| `WsUrl.secure` | `: bool` |  |\n"
@@ -11141,17 +11141,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `xml.XML_DEFAULT_OPTIONS` | `: XmlOptions` |  |\n"
             "| `xml.XML_DEFAULT_WRITE_OPTIONS` | `: XmlWriteOptions` |  |\n"
             "| `XmlAttribute` | `XmlAttribute` |  |\n"
-            "| `XmlAttribute.constructor` | `(name: XmlName, value: string): ()` |  |\n"
+            "| `XmlAttribute.init` | `(name: XmlName, value: string): ()` |  |\n"
             "| `XmlAttribute.name` | `: XmlName` |  |\n"
             "| `XmlAttribute.value` | `: string` |  |\n"
             "| `XmlDiagnostic` | `XmlDiagnostic` |  |\n"
             "| `XmlDiagnostic.column` | `: i64` |  |\n"
-            "| `XmlDiagnostic.constructor` | `(kind: XmlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
+            "| `XmlDiagnostic.init` | `(kind: XmlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
             "| `XmlDiagnostic.kind` | `: XmlErrorKind` |  |\n"
             "| `XmlDiagnostic.line` | `: i64` |  |\n"
             "| `XmlDiagnostic.message` | `: string` |  |\n"
             "| `XmlName` | `XmlName` |  |\n"
-            "| `XmlName.constructor` | `(prefix: string, local: string): ()` |  |\n"
+            "| `XmlName.init` | `(prefix: string, local: string): ()` |  |\n"
             "| `XmlName.local` | `: string` |  |\n"
             "| `XmlName.prefix` | `: string` |  |\n"
             "| `XmlName.qualified` | `(): string` |  |\n"
@@ -11161,9 +11161,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `xml.XmlOptions.preserveWhitespace` | `bool` | Type alias field |\n"
             "| `xml.XmlOptions.validateEntities` | `bool` | Type alias field |\n"
             "| `XmlParseReport` | `XmlParseReport` |  |\n"
-            "| `XmlParseReport.constructor` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
             "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n"
             "| `XmlParseReport.doc` | `: XmlNode?` |  |\n"
+            "| `XmlParseReport.init` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
             "| `xml.XmlWriteOptions` | `{ indent: i64, declaration: bool, encoding: string }` |  |\n"
             "| `xml.XmlWriteOptions.declaration` | `bool` | Type alias field |\n"
             "| `xml.XmlWriteOptions.encoding` | `string` | Type alias field |\n"
@@ -11205,18 +11205,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `YamlAnchor` | `YamlAnchor` |  |\n"
-            "| `YamlAnchor.constructor` | `(name: string): ()` |  |\n"
+            "| `YamlAnchor.init` | `(name: string): ()` |  |\n"
             "| `YamlAnchor.name` | `: string` |  |\n"
             "| `YamlDiagnostic` | `YamlDiagnostic` |  |\n"
             "| `YamlDiagnostic.column` | `: i64` |  |\n"
-            "| `YamlDiagnostic.constructor` | `(kind: YamlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
+            "| `YamlDiagnostic.init` | `(kind: YamlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
             "| `YamlDiagnostic.kind` | `: YamlErrorKind` |  |\n"
             "| `YamlDiagnostic.line` | `: i64` |  |\n"
             "| `YamlDiagnostic.message` | `: string` |  |\n"
             "| `YamlMapping` | `YamlMapping` |  |\n"
-            "| `YamlMapping.constructor` | `(): ()` |  |\n"
             "| `YamlMapping.containsKey` | `(key: string): bool` |  |\n"
             "| `YamlMapping.get` | `(key: string): YamlValue?` |  |\n"
+            "| `YamlMapping.init` | `(): ()` |  |\n"
             "| `YamlMapping.keys` | `: Array<string>` |  |\n"
             "| `YamlMapping.size` | `(): i64` |  |\n"
             "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
@@ -11224,15 +11224,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `yaml.YamlOptions.strict` | `bool` | Type alias field |\n"
             "| `YamlParseReport` | `YamlParseReport` |  |\n"
             "| `YamlParseReport.anchors` | `: i64` |  |\n"
-            "| `YamlParseReport.constructor` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()` |  |\n"
             "| `YamlParseReport.data` | `: YamlValue` |  |\n"
             "| `YamlParseReport.diagnostics` | `: Array<YamlDiagnostic>` |  |\n"
+            "| `YamlParseReport.init` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()` |  |\n"
             "| `YamlTag` | `YamlTag` |  |\n"
-            "| `YamlTag.constructor` | `(handle: string, suffix: string): ()` |  |\n"
             "| `YamlTag.handle` | `: string` |  |\n"
+            "| `YamlTag.init` | `(handle: string, suffix: string): ()` |  |\n"
             "| `YamlTag.suffix` | `: string` |  |\n"
             "| `YamlTagged` | `YamlTagged` |  |\n"
-            "| `YamlTagged.constructor` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
+            "| `YamlTagged.init` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
             "| `YamlTagged.tag` | `: YamlTag` |  |\n"
             "| `YamlTagged.value` | `: YamlValue` |  |\n"
             "| `yaml.YamlWriteOptions` | `{ indent: i64 }` |  |\n"
@@ -11371,7 +11371,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## OOP and data declarations\n"
     "```xray\n"
     "class Dog extends Animal {\n"
-    "    constructor(name: string) {\n"
+    "    init(name: string) {\n"
     "        super(name)                    // **must** be the first statement (derived classes only)\n"
     "    }\n"
     "\n"
@@ -11417,7 +11417,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "\n"
     "class Circle implements Shape {\n"
     "    radius: f64\n"
-    "    constructor(r: f64) { this.radius = r }\n"
+    "    init(r: f64) { this.radius = r }\n"
     "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
     "    perimeter() -> f64 { return 6.28 * this.radius }\n"
     "}\n"
@@ -11425,7 +11425,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "// Implement multiple interfaces\n"
     "class Logger implements Shape, Greeter {\n"
     "    radius: f64\n"
-    "    constructor(r: f64) { this.radius = r }\n"
+    "    init(r: f64) { this.radius = r }\n"
     "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
     "    perimeter() -> f64 { return 6.28 * this.radius }\n"
     "    greet(name: string) { print(\"hello,\", name) }\n"
@@ -11605,7 +11605,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "export fn helper() { return }\n"
     "export final class MyClass {\n"
     "    value: i64\n"
-    "    constructor() { this.value = 1 }\n"
+    "    init() { this.value = 1 }\n"
     "}\n"
     "export const VERSION = \"1.0\"\n"
     "\n"

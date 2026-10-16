@@ -24,6 +24,9 @@ typedef struct XrXirNominalField {
  * without it is an open root: no declaration may name it as a parent yet, so it
  * executes exactly like a final one and carries no dispatch state. */
 #define XR_XIR_NOMINAL_FINAL 1u
+/* An explicit struct initializer limits field literals to its declaring module.
+ * Calls retain their own constructor permissions; this flag grants none. */
+#define XR_XIR_NOMINAL_MODULE_LITERAL 2u
 
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {

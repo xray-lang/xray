@@ -545,7 +545,7 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     setup();
 
     AstNode *ctor_class = parse_first("class Box {\n"
-                                      "  constructor(value: ref i64) {}\n"
+                                      "  init(value: ref i64) {}\n"
                                       "}");
     AstNode *ctor = ctor_class->as.class_decl.methods[0];
     ASSERT_EQ_INT(ctor->type, AST_METHOD_DECL);
@@ -636,7 +636,7 @@ TEST(parser_receiver_modes_are_explicit_method_contracts) {
 
     ASSERT_NULL(xr_parse(X_session, "class Bad { ref field: i64 }"));
     ASSERT_NULL(xr_parse(X_session, "class Bad { ref static method() {} }"));
-    ASSERT_NULL(xr_parse(X_session, "class Bad { ref constructor() {} }"));
+    ASSERT_NULL(xr_parse(X_session, "class Bad { ref init() {} }"));
     ASSERT_NULL(xr_parse(X_session, "interface Bad { ref property: i64 }"));
 
     teardown();
@@ -1233,7 +1233,7 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
     ASSERT_EQ_INT(new_expr->as.new_expr.arg_accesses[0], XR_CALL_ARG_MOVE);
 
     AstNode *class_stmt = parse_first("class Child extends Base {\n"
-                                      "  constructor(value: "
+                                      "  init(value: "
                                       "ref i64, result: "
                                       "move i64) {\n"
                                       "    super("

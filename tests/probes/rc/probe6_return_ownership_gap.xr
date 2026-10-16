@@ -27,12 +27,12 @@ enum UnwindErr {
 
 class Node {
     v: i64
-    constructor(v) { this.v = v }
+    init(v) { this.v = v }
 }
 
 class Holder {
     n: Node?
-    constructor() { this.n = null }
+    init() { this.n = null }
 }
 
 // ① 被 return 转移：所有权跨函数边界移交，调用方负责释放

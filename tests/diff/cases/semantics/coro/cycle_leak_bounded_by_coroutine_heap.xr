@@ -19,7 +19,7 @@
 class Node {
     peer: Node?
     tag: i64
-    constructor(tag) { this.peer = null; this.tag = tag }
+    init(tag) { this.peer = null; this.tag = tag }
 }
 
 // Builds a two-object cycle and returns a checksum computed by walking it.

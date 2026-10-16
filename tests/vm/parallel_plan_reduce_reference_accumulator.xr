@@ -3,7 +3,7 @@ import { Plan, Options } from parallel
 class Box {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }
@@ -11,7 +11,7 @@ class Box {
 class GBox<T> {
     value: T
 
-    constructor(value: T) {
+    init(value: T) {
         this.value = value
     }
 }

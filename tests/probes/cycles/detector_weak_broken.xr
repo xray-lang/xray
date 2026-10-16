@@ -12,21 +12,21 @@
 class WeakPlain {
     weak peer: WeakPlain?
     tag: i64
-    constructor(tag) { this.peer = null; this.tag = tag }
+    init(tag) { this.peer = null; this.tag = tag }
 }
 
 // 对应 MapNode：环经过一个容器。`weak` 标在持有容器的那条边上
 // （union 字段不在此列——`weak` 只能标引用类型，union 标了是 E0394）
 class WeakMap {
     weak peers: Map<string, WeakMap>?
-    constructor() { this.peers = #{} }
+    init() { this.peers = #{} }
 }
 
 // 对应 BigNode：大对象参与，缓冲走 large_set
 class WeakBig {
     pad: Array<i64>
     weak peer: WeakBig?
-    constructor() { this.pad = Array<i64>(2000, 0); this.peer = null }
+    init() { this.pad = Array<i64>(2000, 0); this.peer = null }
 }
 
 fn plain_pair() { var a = WeakPlain(1); var b = WeakPlain(2); a.peer = b; b.peer = a }

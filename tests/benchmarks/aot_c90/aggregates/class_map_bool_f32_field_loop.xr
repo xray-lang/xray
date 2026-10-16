@@ -1,7 +1,7 @@
 class BoolFloatMapBag {
     values: Map<bool, f32>
 
-    constructor() {
+    init() {
         var values: Map<bool, f32> = #{}
         this.values = values
     }

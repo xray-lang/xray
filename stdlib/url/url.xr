@@ -17,7 +17,7 @@ export class QueryParams {
     private names: Array<string>
     private values: Array<string>
 
-    constructor() {
+    init() {
         this.names = []
         this.values = []
     }
@@ -98,7 +98,7 @@ export class URL {
     origin: string
     href: string
 
-    constructor(
+    init(
         protocol: string,
         hostname: string,
         port: string,
