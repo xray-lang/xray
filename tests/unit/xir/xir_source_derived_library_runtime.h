@@ -40,7 +40,11 @@ static void cold_runtime_fault_attempt(XrXirProgram *program,uint32_t entry,bool
         else CHECK(value.type==XR_XIR_I64 && !value.reserved && value.payload==42);
         xr_xir_value_drop(&value);
     }else if(instance) {
-        CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_STATE);
+        XrXirCallStatus received=xr_xir_instance_take_result(instance,&value);
+        XrXirCallStatus expected=entered_oom?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;
+        if(received!=expected)fprintf(stderr,"Cold runtime failed entry%u entered%u poll%u take%u expected%u\n",
+            entry,(unsigned)entered_oom,(unsigned)status,(unsigned)received,(unsigned)expected);
+        CHECK(received==expected);
         CHECK(!value.type && !value.reserved && !value.payload);
     }
     if(instance)CHECK(xr_xir_instance_free(instance)==(entered_oom?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
