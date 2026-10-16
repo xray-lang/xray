@@ -71,6 +71,11 @@ _DECLARATION_ONLY={
  '1130_linked_scope':'test_linked_scope','1131_linked_go_expr':'test_linked_go_expr'}
 
 
+_EVENT_PROGRAMS = {"await_array":"tests/diff/cases/semantics/coro/await_array.xr","channel_send_timeout_partner_arrives":"tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr","deterministic_timer_schedule_order":"tests/diff/cases/semantics/coro/deterministic_timer_schedule_order.xr","poll_try_recv_safepoint":"tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr","poll_try_send_safepoint":"tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr","1109_await_any":"tests/regression/11_coroutine/1109_await_any.xr","1138_get_result":"tests/regression/11_coroutine/1138_get_result.xr","1139_error_isolation":"tests/regression/11_coroutine/1139_error_isolation.xr","1140_task_error":"tests/regression/11_coroutine/1140_task_error.xr"}
+_INPUTS.update({"tests/diff/cases/semantics/coro/await_array.xr":"928d3bd06ec8a5a3987ccbecc25a39423b61e24f1f174b1940234f7f215eafd1","tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr":"d62312e2333c4c428d31bb0ef021cafa73a7e372cc8bae109d6073e02aac9d6d","tests/diff/cases/semantics/coro/deterministic_timer_schedule_order.xr":"81cce152dbed095583200fc3a4ae9c81f33fcd95c60e6522fc980a3906d5050e","tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr":"a45db6387cc4c6f5a5fbde13026822e9c472912736cf10201f849ca1d16924a4","tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr":"179711fffdcd808cf96ce1a134c90ee132329a7c0942da6728a6471e1b090600","tests/regression/11_coroutine/1109_await_any.xr":"a9056ae38e8450667dfd630a2bfe6654fa8d690e5064086e065a573ddd031160","tests/regression/11_coroutine/1138_get_result.xr":"647aa45870e4e15850d39aa00b739cfc3ed6f445b2b465405bf7c273d348600a","tests/regression/11_coroutine/1139_error_isolation.xr":"32e73b7f3f7528671672176c4b8004f3aa4457de04d174fcf7cb66f87fedc3e7","tests/regression/11_coroutine/1140_task_error.xr":"a2c5b05617be28e65fab3f3bc60adf5fb8bb8cc82bf6597ad5af602ab4d24f9f"})
+_PROGRAMS.update(_EVENT_PROGRAMS)
+_NAMES = _NAMES | frozenset(_EVENT_PROGRAMS)
+
 class Enum:
     def __init__(self,name,variant):self.name,self.variant=name,variant
     def __str__(self):return self.name+'.'+self.variant
@@ -193,6 +198,136 @@ def named_requirements():
             '1131_linked_go_expr':{'assertion_results':go_checks}}
 
 
+class EventTask(Task):
+    """Observe a checked arithmetic fault without inventing its public payload."""
+    def finish(self):
+        if self.state in {'Success','Failed','Cancelled'}:return
+        if self.cancel_requested:self.state='Cancelled';return
+        if not self.ready():self.state='Running';return
+        self.executions+=1
+        try:self.value=copy.deepcopy(self.action());self.state='Success'
+        except ZeroDivisionError:self.value={'observed_runtime_fault_code':420};self.state='Failed'
+    def poll(self):
+        return (self.state,copy.deepcopy(self.value)) if self.state in {'Success','Failed','Cancelled'} else ('Pending',None)
+    @property
+    def done(self):return self.state in {'Success','Failed','Cancelled'}
+
+
+class Rendezvous:
+    """A pending zero-capacity sender is an operation, never a buffered item."""
+    def __init__(self):self.pending=None;self.completed_sends=0;self.closed=False
+    def offer(self,value):
+        if self.closed or self.pending is not None:raise ValueError('Only one reviewed pending sender')
+        self.pending=(value,)
+    def try_recv(self):
+        if self.pending is None:return ('Closed' if self.closed else 'Empty'),None
+        value=self.pending[0];self.pending=None;self.completed_sends+=1;return 'Value',value
+    def close(self):self.closed=True
+
+
+class WaitTokens:
+    """Operation generations keep cancelled timers from completing later waits."""
+    def __init__(self):self.next_id=0;self.active={};self.completed={}
+    def begin(self,start,timeout):
+        if timeout<=0:raise ValueError('Only positive original wait durations')
+        self.next_id+=1;self.active[self.next_id]=start+timeout;return self.next_id
+    def complete(self,token,status):
+        if token not in self.active:return None
+        del self.active[token];self.completed[token]=status;return status
+    def expire(self,token,now):
+        if token not in self.active or now<self.active[token]:return None
+        return self.complete(token,'Timeout')
+
+
+def known_completed_any(tasks):
+    if not tasks:raise ValueError('No reviewed empty await-any input')
+    ready=[task for task in tasks if task.state=='Success']
+    if len(ready)==1:return ready[0].await_value()
+    if len(ready)==len(tasks):return tasks[0].await_value()
+    raise ValueError('No oracle for ambiguous competing completion order')
+
+
+def partner_timeout_trace():
+    waits=WaitTokens();rendezvous=Rendezvous();first=waits.begin(0,2000);rendezvous.offer(7)
+    receiver_at=5;state,value=rendezvous.try_recv();assert (state,value)==('Value',7)
+    sent=waits.complete(first,'Sent');second=waits.begin(receiver_at,10)
+    assert waits.expire(first,receiver_at) is None
+    timeout=waits.expire(second,receiver_at+10);rendezvous.close()
+    stale=waits.expire(first,2000)
+    return {'outputs':['sent' if sent=='Sent' else 'first-timeout','second-timeout' if timeout=='Timeout' else 'second-sent'],
+            'capacity':0,'original_receiver_sleep_ms':5,'original_send_timeout_ms':[2000,10],
+            'transferred_values':[value],'completed_sends':rendezvous.completed_sends,
+            'two_distinct_wait_generations':first!=second,'cancelled_first_timer_cannot_complete_second':stale is None,
+            'channel_closed':rendezvous.closed,'abstract_event_times_not_measured_host_latency':True}
+
+
+def receive_poll_trace(empty_prefix=0):
+    if type(empty_prefix) is not int or empty_prefix<0:raise ValueError('Invalid finite failure prefix')
+    data=Rendezvous()
+    for _ in range(empty_prefix):assert data.try_recv()==('Empty',None)
+    data.offer(42);state,value=data.try_recv();out=Channel(1);out.send(value);result=out.recv()[1]
+    data.close();out.close()
+    return {'outputs':[result],'assertion_results':[state=='Value',result==42],
+            'data_capacity':0,'out_capacity':1,'original_receive_timeout_ms':1000,
+            'failed_poll_prefix':empty_prefix,'source_poll_loop_has_no_new_iteration_cap':True,
+            'zero_capacity_buffered_items':0,'completed_rendezvous_sends':data.completed_sends,
+            'channels_closed':data.closed and out.closed,'cooperative_progress_is_product_obligation':True}
+
+
+def send_poll_trace(full_prefix=0):
+    if type(full_prefix) is not int or full_prefix<0:raise ValueError('Invalid finite failure prefix')
+    data,out=Channel(1),Channel(1);first=data.try_send(7)
+    for _ in range(full_prefix):assert data.try_send(42)=='Full'
+    drained=data.recv()[1];sent=data.try_send(42);out.send(1)
+    done=out.recv()[1];value=data.recv()[1];data.close();out.close()
+    return {'outputs':[done,value],'assertion_results':[first=='Sent',done==1,value==42],
+            'data_capacity':1,'out_capacity':1,'original_receive_timeout_ms':[1000,1000],
+            'failed_poll_prefix':full_prefix,'source_poll_loop_has_no_new_iteration_cap':True,
+            'drained_initial_value':drained,'successful_retry':sent,'channels_closed':data.closed and out.closed,
+            'cooperative_progress_is_product_obligation':True}
+
+
+def event_boundary_traces():
+    traces={}
+    group=[Task(lambda n=n:n*100) for n in (1,2,3)];first=ordered_values([task.await_value() for task in group])
+    other=[Task(lambda n=n:n*100) for n in (4,5)];second=ordered_values([task.await_value() for task in other])
+    ready=[Task(lambda n=n:n*100) for n in (6,7)]
+    for task in ready:task.await_value()
+    traces['await_array']={'outputs':[first,second,known_completed_any(ready)],'original_compute_calls':7,
+        'homogeneous_task_element_type':'i64','await_all_input_lengths':[3,2],'preawaited_any_input_length':2,
+        'all_results_sticky':all(task.executions==1 for task in group+other+ready)}
+    traces['channel_send_timeout_partner_arrives']=partner_timeout_trace()
+    deadlines=[(50,1),(10,2),(30,3)];outputs=[identity for delay,identity in sorted(deadlines)]
+    traces['deterministic_timer_schedule_order']={'outputs':outputs,'original_sleep_delays_ms':[50,10,30],
+        'channel_capacity':3,'original_assertion_results':[a==b for a,b in zip(outputs,[2,3,1])],
+        'timer_cohort':'Original deterministic deadline-order acceptance;host registration skew and wall-time latency are not established by this value model.'}
+    traces['poll_try_recv_safepoint']=receive_poll_trace();traces['poll_try_send_safepoint']=send_poll_trace()
+    single=Task(lambda:100);single.finish();tasks=[Task(lambda n=n:n*100) for n in (2,3,4)]
+    for task in tasks:task.await_value()
+    values=[known_completed_any([single]),known_completed_any(tasks),known_completed_any(tasks)]
+    left,right=Channel(1),Channel(1);blocked1=Task(lambda:left.recv()[1],lambda:bool(left.queue));blocked2=Task(lambda:right.recv()[1],lambda:bool(right.queue))
+    right.send(999);blocked2.finish();values.append(known_completed_any([blocked1,blocked2]));blocked1.cancel();left.close();right.close();values.append('done')
+    traces['1109_await_any']={'outputs':values,'all_already_completed_scan_is_input_order':True,'reawait_execution_counts':[task.executions for task in tasks],
+        'only_ready_blocked_task_value':999,'other_blocked_task_cancel_requested':blocked1.cancel_requested,'both_channels_closed':left.closed and right.closed,
+        'cancel_completion_not_observed_by_original':True}
+    data=Rendezvous();blocked=EventTask(lambda:data.try_recv()[1],lambda:data.pending is not None)
+    before=blocked.poll()[0]=='Pending';data.offer(21);value=blocked.await_value();again=blocked.poll()[1];data.close()
+    cancelled=EventTask(lambda:99,lambda:False);cancelled.cancel();cancel_state,_=cancelled.await_result()
+    completed=EventTask(lambda:21*2);complete_state,complete_value=completed.await_result()
+    traces['1138_get_result']={'outputs':[line('before pending:',before),line('after:',value),line('again:',again),line('cancelled:',cancel_state=='Cancelled'),line('completed:',complete_value if complete_state=='Success' else -1)],
+        'blocked_body_executions':blocked.executions,'cancelled_body_executions':cancelled.executions,'completed_body_executions':completed.executions,
+        'pending_poll_does_not_run_or_complete_body':before,'unbuffered_completed_sends':data.completed_sends}
+    for name in ('1139_error_isolation','1140_task_error'):
+        fault=EventTask(lambda:1//0);fault_state,_=fault.await_result();good=EventTask(lambda:42);good_state,good_value=good.await_result()
+        outputs=([ 'test1: error isolation',line('  done:',fault.done),line('  failed:',fault_state=='Failed'),
+                   'test2: error does not affect other coroutines',line('  result:',good_value)] if name=='1139_error_isolation' else
+                 [line('t1.done:',fault.done),line('t1.failed:',fault_state=='Failed'),line('t2.done:',good.done),line('t2.result:',good_value if good_state=='Success' else -1)])
+        traces[name]={'outputs':outputs,'observed_runtime_fault_code':420,'fault_body_executions':fault.executions,'good_body_executions':good.executions,
+            'failed_task_did_not_cancel_unlinked_good_task':good_state=='Success','Error_or_PanicInfo_payload_shape_not_invented':True}
+    if set(traces)!=set(_EVENT_PROGRAMS):raise ValueError('Complete event program set changed')
+    return traces
+
+
 def observations():
     out={'1100_cancelled':[False]};channel=Channel(3)
     values=[channel.capacity==3]+[channel.try_send(value)=='Sent' for value in [10,20,30,40]]
@@ -230,12 +365,13 @@ def observations():
     out['1121_defer_block']=['=== defer 块语法测试 ===',*close_with_defer(['开始','结束'],[['defer 块']]),'=== 多个 defer 块 ===',*close_with_defer(['执行中','结束'],[['defer 1'],['defer 2']]),'=== defer 混合测试 ===',*close_with_defer(['执行'],[['cleanup 函数'],['defer 块 A']])]
     for name in _DECLARATION_ONLY:out[name]=[]
     out['1128_yield']=['test1: main yield','test1: after yield',line('test2: result =','yielded'),line('test3:',*ordered_values([10,20,30])),line('test4: sum =',sum(range(5))),line('test5: sums =',*ordered_values([sum(range(10))]*3))]
+    out.update({name:trace['outputs'] for name,trace in event_boundary_traces().items()})
     if set(out)!=_NAMES:raise ValueError('Task model lost a complete original program')
     return out
 
 
 def expected_rows():
-    if set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items()) or set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()):
+    if set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items() if name not in _EVENT_PROGRAMS) or {name:_PROGRAMS.get(name) for name in _EVENT_PROGRAMS}!=_EVENT_PROGRAMS or set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()):
         raise ValueError('Task model lost an exact program or normative input')
     for path,digest in _INPUTS.items():
         if hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Task source or authority changed: '+path)
@@ -247,7 +383,8 @@ def expected_rows():
     for name,values in sorted(observations().items()):
         row={'id':'complete_task_regression_'+name,'source':_PROGRAMS[name],'original_source':_PROGRAMS[name],'required_target':None,
              'expected':{'exit_code':0,'stdout_utf8':''.join(render(value)+'\n' for value in values),'stderr_utf8':''},'observation_count':len(values),
-             'model':'Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.'}
+             'model':('Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.' if name in _EVENT_PROGRAMS else 'Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.')}
+        if name in _EVENT_PROGRAMS:row['required_semantic_trace']={key:value for key,value in event_boundary_traces()[name].items() if key!='outputs'}
         if name in named:row['separate_named_body_obligation']={'name':_DECLARATION_ONLY[name],**named[name],'executed_by_run':False,'qualification':'OPEN_REQUIRES_NAMED_TEST_EXECUTION'}
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10

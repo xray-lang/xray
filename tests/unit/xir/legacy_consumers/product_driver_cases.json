@@ -31582,6 +31582,303 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 1
+    },
+    {
+      "id": "complete_task_regression_1109_await_any",
+      "oracle_id": "complete_task_regression_1109_await_any",
+      "source": "tests/regression/11_coroutine/1109_await_any.xr",
+      "source_lf_sha256": "a9056ae38e8450667dfd630a2bfe6654fa8d690e5064086e065a573ddd031160",
+      "entry": "run",
+      "stdout_utf8": "100\n200\n200\n999\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1109_await_any.xr",
+        "source_lf_sha256": "a9056ae38e8450667dfd630a2bfe6654fa8d690e5064086e065a573ddd031160"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 5
+    },
+    {
+      "id": "complete_task_regression_1138_get_result",
+      "oracle_id": "complete_task_regression_1138_get_result",
+      "source": "tests/regression/11_coroutine/1138_get_result.xr",
+      "source_lf_sha256": "647aa45870e4e15850d39aa00b739cfc3ed6f445b2b465405bf7c273d348600a",
+      "entry": "run",
+      "stdout_utf8": "before pending: true\nafter: 21\nagain: 21\ncancelled: true\ncompleted: 42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1138_get_result.xr",
+        "source_lf_sha256": "647aa45870e4e15850d39aa00b739cfc3ed6f445b2b465405bf7c273d348600a"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 5
+    },
+    {
+      "id": "complete_task_regression_1139_error_isolation",
+      "oracle_id": "complete_task_regression_1139_error_isolation",
+      "source": "tests/regression/11_coroutine/1139_error_isolation.xr",
+      "source_lf_sha256": "32e73b7f3f7528671672176c4b8004f3aa4457de04d174fcf7cb66f87fedc3e7",
+      "entry": "run",
+      "stdout_utf8": "test1: error isolation\n  done: true\n  failed: true\ntest2: error does not affect other coroutines\n  result: 42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1139_error_isolation.xr",
+        "source_lf_sha256": "32e73b7f3f7528671672176c4b8004f3aa4457de04d174fcf7cb66f87fedc3e7"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 5
+    },
+    {
+      "id": "complete_task_regression_1140_task_error",
+      "oracle_id": "complete_task_regression_1140_task_error",
+      "source": "tests/regression/11_coroutine/1140_task_error.xr",
+      "source_lf_sha256": "a2c5b05617be28e65fab3f3bc60adf5fb8bb8cc82bf6597ad5af602ab4d24f9f",
+      "entry": "run",
+      "stdout_utf8": "t1.done: true\nt1.failed: true\nt2.done: true\nt2.result: 42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1140_task_error.xr",
+        "source_lf_sha256": "a2c5b05617be28e65fab3f3bc60adf5fb8bb8cc82bf6597ad5af602ab4d24f9f"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_task_regression_await_array",
+      "oracle_id": "complete_task_regression_await_array",
+      "source": "tests/diff/cases/semantics/coro/await_array.xr",
+      "source_lf_sha256": "928d3bd06ec8a5a3987ccbecc25a39423b61e24f1f174b1940234f7f215eafd1",
+      "entry": "run",
+      "stdout_utf8": "[100, 200, 300]\n[400, 500]\n600\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/await_array.xr",
+        "source_lf_sha256": "928d3bd06ec8a5a3987ccbecc25a39423b61e24f1f174b1940234f7f215eafd1"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
+    },
+    {
+      "id": "complete_task_regression_channel_send_timeout_partner_arrives",
+      "oracle_id": "complete_task_regression_channel_send_timeout_partner_arrives",
+      "source": "tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr",
+      "source_lf_sha256": "d62312e2333c4c428d31bb0ef021cafa73a7e372cc8bae109d6073e02aac9d6d",
+      "entry": "run",
+      "stdout_utf8": "sent\nsecond-timeout\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/channel_send_timeout_partner_arrives.xr",
+        "source_lf_sha256": "d62312e2333c4c428d31bb0ef021cafa73a7e372cc8bae109d6073e02aac9d6d"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
+    },
+    {
+      "id": "complete_task_regression_deterministic_timer_schedule_order",
+      "oracle_id": "complete_task_regression_deterministic_timer_schedule_order",
+      "source": "tests/diff/cases/semantics/coro/deterministic_timer_schedule_order.xr",
+      "source_lf_sha256": "81cce152dbed095583200fc3a4ae9c81f33fcd95c60e6522fc980a3906d5050e",
+      "entry": "run",
+      "stdout_utf8": "2\n3\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/deterministic_timer_schedule_order.xr",
+        "source_lf_sha256": "81cce152dbed095583200fc3a4ae9c81f33fcd95c60e6522fc980a3906d5050e"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
+    },
+    {
+      "id": "complete_task_regression_poll_try_recv_safepoint",
+      "oracle_id": "complete_task_regression_poll_try_recv_safepoint",
+      "source": "tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr",
+      "source_lf_sha256": "a45db6387cc4c6f5a5fbde13026822e9c472912736cf10201f849ca1d16924a4",
+      "entry": "run",
+      "stdout_utf8": "42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr",
+        "source_lf_sha256": "a45db6387cc4c6f5a5fbde13026822e9c472912736cf10201f849ca1d16924a4"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_task_regression_poll_try_send_safepoint",
+      "oracle_id": "complete_task_regression_poll_try_send_safepoint",
+      "source": "tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr",
+      "source_lf_sha256": "179711fffdcd808cf96ce1a134c90ee132329a7c0942da6728a6471e1b090600",
+      "entry": "run",
+      "stdout_utf8": "1\n42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr",
+        "source_lf_sha256": "179711fffdcd808cf96ce1a134c90ee132329a7c0942da6728a6471e1b090600"
+      },
+      "remaining_gates": [
+        "Complete original source,all go/await/any/poll/awaitResult/cancel,zero-capacity rendezvous,timer and polling loops,assertions and channel closes retained.",
+        "All original sleep5/send2000+10/timers50+10+30/recv1000 limits retained;actual VM,C,native,cooperative scheduler,clock latency and all FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
     }
   ]
 }

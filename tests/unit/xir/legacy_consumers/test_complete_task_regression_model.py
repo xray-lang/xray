@@ -31,8 +31,15 @@ class TaskRegressionTraces(unittest.TestCase):
           '1122_coro_naming':'','1125_coro_local':'',
           '1128_yield':'test1: main yield\ntest1: after yield\ntest2: result = yielded\ntest3: 10 20 30\ntest4: sum = 10\ntest5: sums = 45 45 45\n',
           '1130_linked_scope':'','1131_linked_go_expr':''}
+        expected.update({'await_array':'[100, 200, 300]\n[400, 500]\n600\n',
+          'channel_send_timeout_partner_arrives':'sent\nsecond-timeout\n','deterministic_timer_schedule_order':'2\n3\n1\n',
+          'poll_try_recv_safepoint':'42\n','poll_try_send_safepoint':'1\n42\n',
+          '1109_await_any':'100\n200\n200\n999\ndone\n',
+          '1138_get_result':'before pending: true\nafter: 21\nagain: 21\ncancelled: true\ncompleted: 42\n',
+          '1139_error_isolation':'test1: error isolation\n  done: true\n  failed: true\ntest2: error does not affect other coroutines\n  result: 42\n',
+          '1140_task_error':'t1.done: true\nt1.failed: true\nt2.done: true\nt2.result: 42\n'})
         traces=model.observations()
-        self.assertEqual(set(expected),set(traces));self.assertEqual(sum(map(len,traces.values())),133)
+        self.assertEqual(set(expected),set(traces));self.assertEqual(sum(map(len,traces.values())),163)
         for name,text in expected.items():
             with self.subTest(program=name):self.assertEqual(''.join(model.render(v)+'\n' for v in traces[name]),text)
 
@@ -59,7 +66,7 @@ class TaskRegressionTraces(unittest.TestCase):
         first,second=model.Channel(1),model.Channel(1);first.try_send(1);second.try_send(2)
         with self.assertRaises(ValueError):model.receive_only_ready([first,second],'default')
         self.assertEqual(first.queue,[1]);self.assertEqual(second.queue,[2])
-        for name in ['1109_await_any','1116_task_status','1117_await_timeout']:
+        for name in ['1116_task_status','1117_await_timeout']:
             self.assertNotIn(name,model._NAMES)
 
     def test_complete_cleanup_order_and_typed_status_display(self):
@@ -107,5 +114,68 @@ class TaskRegressionTraces(unittest.TestCase):
                     self.assertEqual(case['stdout_utf8'],expected['expected']['stdout_utf8'])
                     self.assertEqual(case.get('source_context'),'original_absolute' if not named else None)
 
+
+    def test_precompleted_any_is_limited_to_known_selection_paths(self):
+        tasks=[model.Task(lambda n=n:n) for n in (200,300,400)]
+        for task in tasks:task.finish()
+        self.assertEqual(model.known_completed_any(tasks),200)
+        self.assertEqual(model.known_completed_any(list(reversed(tasks))),400)
+        pending=model.Task(lambda:999,lambda:False)
+        self.assertEqual(model.known_completed_any([pending,tasks[1]]),300)
+        with self.assertRaises(ValueError):model.known_completed_any([*tasks[:2],pending])
+        with self.assertRaises(ValueError):model.known_completed_any([pending])
+        self.assertEqual([task.executions for task in tasks],[1,1,1]);self.assertEqual(pending.executions,0)
+
+    def test_cancelled_wait_generation_cannot_complete_a_later_operation(self):
+        waits=model.WaitTokens();first=waits.begin(0,2000);self.assertEqual(waits.complete(first,'Sent'),'Sent')
+        second=waits.begin(5,10);self.assertNotEqual(first,second)
+        self.assertIsNone(waits.expire(second,14));self.assertIsNone(waits.expire(first,2000))
+        self.assertEqual(waits.active,{second:15});self.assertEqual(waits.expire(second,15),'Timeout')
+        self.assertIsNone(waits.expire(first,3000));self.assertIsNone(waits.complete(second,'Sent'))
+        self.assertEqual(waits.completed,{first:'Sent',second:'Timeout'})
+
+    def test_poll_output_is_invariant_over_arbitrary_finite_failure_prefixes(self):
+        for failed in (0,1,2,7,31):
+            with self.subTest(failed=failed):
+                received=model.receive_poll_trace(failed);sent=model.send_poll_trace(failed)
+                self.assertEqual(received['outputs'],[42]);self.assertEqual(sent['outputs'],[1,42])
+                self.assertEqual(received['data_capacity'],0);self.assertEqual(received['zero_capacity_buffered_items'],0)
+                self.assertEqual(received['completed_rendezvous_sends'],1);self.assertEqual(sent['drained_initial_value'],7)
+                self.assertTrue(all(received['assertion_results']+sent['assertion_results']))
+                self.assertTrue(received['source_poll_loop_has_no_new_iteration_cap']);self.assertTrue(sent['channels_closed'])
+        for invalid in (-1,True):
+            with self.assertRaises(ValueError):model.receive_poll_trace(invalid)
+            with self.assertRaises(ValueError):model.send_poll_trace(invalid)
+
+    def test_zero_capacity_pending_send_is_not_a_buffered_message(self):
+        channel=model.Rendezvous();self.assertEqual(channel.try_recv(),('Empty',None));channel.offer(42)
+        self.assertEqual(channel.completed_sends,0);self.assertEqual(channel.try_recv(),('Value',42))
+        self.assertEqual(channel.completed_sends,1);self.assertEqual(channel.try_recv(),('Empty',None))
+        channel.close();self.assertEqual(channel.try_recv(),('Closed',None))
+        with self.assertRaises(ValueError):channel.offer(7)
+
+    def test_failed_task_observation_is_sticky_and_does_not_cancel_sibling(self):
+        faulty=model.EventTask(lambda:1//0);self.assertFalse(faulty.done);self.assertEqual(faulty.poll(),('Pending',None))
+        state,payload=faulty.await_result();self.assertEqual(state,'Failed');self.assertTrue(faulty.done)
+        payload['observed_runtime_fault_code']=0;faulty.cancel();self.assertEqual(faulty.poll(),('Failed',{'observed_runtime_fault_code':420}))
+        self.assertEqual(faulty.await_result(),('Failed',{'observed_runtime_fault_code':420}));self.assertEqual(faulty.executions,1)
+        sibling=model.EventTask(lambda:42);self.assertEqual(sibling.await_value(),42);self.assertTrue(sibling.done)
+        cancelled=model.EventTask(lambda:99,lambda:False);cancelled.cancel();self.assertEqual(cancelled.await_result(),('Cancelled',None));self.assertEqual(cancelled.executions,0)
+
+    def test_complete_event_rows_keep_original_deadlines_assertions_and_roots(self):
+        rows=[row for row in model.expected_rows() if row['source'] in model._EVENT_PROGRAMS.values()]
+        self.assertEqual(len(rows),9);self.assertEqual(sum(row['observation_count'] for row in rows),30)
+        traces=model.event_boundary_traces();partner=traces['channel_send_timeout_partner_arrives']
+        self.assertEqual(partner['capacity'],0);self.assertEqual(partner['original_receiver_sleep_ms'],5)
+        self.assertEqual(partner['original_send_timeout_ms'],[2000,10]);self.assertEqual(partner['transferred_values'],[7])
+        self.assertEqual(traces['poll_try_recv_safepoint']['original_receive_timeout_ms'],1000)
+        self.assertEqual(traces['poll_try_send_safepoint']['original_receive_timeout_ms'],[1000,1000])
+        self.assertEqual(traces['deterministic_timer_schedule_order']['original_sleep_delays_ms'],[50,10,30])
+        self.assertTrue(all(traces['deterministic_timer_schedule_order']['original_assertion_results']))
+        self.assertEqual(traces['await_array']['original_compute_calls'],7)
+        for row in rows:
+            self.assertEqual(row['source'],row['original_source']);self.assertIn('required_semantic_trace',row)
+        self.assertIn('1109_await_any',model._NAMES)
+        for name in ('1116_task_status','task_result_failed_error_value','suspended_frame_release'):self.assertNotIn(name,model._NAMES)
 
 if __name__=='__main__':unittest.main()
