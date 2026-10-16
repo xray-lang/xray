@@ -2270,7 +2270,7 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
 
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
-    SourceClosureCount closures = {ctx,0,0,0,0,0};
+    SourceClosureCount closures = {ctx,0,0,0,0,0,false};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
@@ -2720,7 +2720,7 @@ static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCa
 /* Inside its own body a nested declaration is the closure value rebuilt from the
  * body's captures, so recursion needs no extra capture and no cell. */
 static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
-    uint32_t index, XrXirType type) {
+    uint32_t index, uint32_t target, XrXirType type) {
     SourceFunction *body = &ctx->bodies[index];
     for (const SourceCapture *p = scan->captures; p; p = p->next) {
         if (!source_work(ctx, node)) return false;
@@ -2734,7 +2734,7 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
     if ((scan->count && !captures) || (count && !types) || !symbol) return false;
     for (uint32_t i = 0; i < scan->count; ++i) captures[i] = (SourceValue) {i, body->parameters[i]};
     for (uint32_t i = 0; i < count; ++i) types[i] = (XrXirType) (XR_XIR_TYPE_PARAMETER_BASE + i);
-    XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, index, {0}};
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, target, {0}};
     SourceValue self;
     if (!source_type_arguments(ctx, node, types, count, &op) || !source_recipe_group(ctx, op, captures, scan->count, &self))
         return false;
@@ -2743,6 +2743,7 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
     ctx->locals = symbol;
     return true;
 }
+#include "xxir_source_generator_closure.inc.c"
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     const XrXirTypeNode *context = expected.present ? xr_xir_callable_signature(&ctx->types, expected.type) : NULL;
     if (expected.present && !context)
@@ -2753,7 +2754,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     if (context) { context_copy = *context; context = &context_copy; }
     bool no_suspend = context && (context->flags & XR_XIR_CALLABLE_NO_SUSPEND);
     FunctionDeclNode *decl = &node->as.function_expr;
-    if (decl->is_generator || decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_count ||
+    if (decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_count ||
         decl->borrow_origin_count || !decl->body || decl->param_count < 0 || decl->param_count > 65536)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closure contract is not implemented in XIR");
     if (context) {
@@ -2811,10 +2812,16 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     }
     /* A declaration states its result, so its signature is known before the body
      * and the body can name the function it belongs to. */
+    uint32_t factory=index;
+    if(ok) ok=source_generator_declaration(ctx,node,index,&ctx->identities[index]);
+    if(ok && (ctx->identities[index].promises & XR_XIR_FUNCTION_GENERATOR)) {
+        ctx->identities[index].promises&=~XR_XIR_FUNCTION_NO_SUSPEND;
+        ok=source_generator_closure_factory(ctx,node,index,no_suspend,&factory);
+    }
     bool nested_function = node->type == AST_FUNCTION_DECL;
     if (ok && nested_function) {
         ok = source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type);
-        if (ok && scan.self_used) ok = source_closure_self(ctx, node, &scan, index, type);
+        if (ok && scan.self_used) ok = source_closure_self(ctx, node, &scan, index, factory, type);
     }
     ok = ok &&
         statement(ctx, decl->body, false) && finish_body(ctx) &&
@@ -2852,7 +2859,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
             if (!source_constructor_value(ctx, node, &captures[p->index])) return false;
         } else captures[p->index] = (SourceValue) {p->source->index, capture_type};
     }
-    XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, index, {0}};
+    XrXirInstruction op = {XR_XIR_FUNCTION_REF, type, {0}, {0}, factory, {0}};
     uint32_t count = ctx->generics[index].parameter_count;
     XrXirType *types = count ? source_alloc(ctx, count, sizeof(*types)) : NULL;
     if (count && !types) return false;
