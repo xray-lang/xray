@@ -74,3 +74,28 @@ endif()
 add_test(NAME test_xir_source_derived_library COMMAND test_xir_source_derived_library)
 set_tests_properties(test_xir_source_derived_library PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;source;ctfe;generated;library;ownership;receiving")
+foreach(derived_scope RANGE 0 1)
+    if(derived_scope EQUAL 0)
+        set(derived_resource_target test_xir_source_derived_library)
+    else()
+        set(derived_resource_target test_xir_source_derived_library_resources_1)
+        add_executable(${derived_resource_target} "${CMAKE_CURRENT_LIST_DIR}/test_xir_source_derived_library.c")
+        target_link_libraries(${derived_resource_target} PRIVATE xray_xir_source xray_xir_vm)
+        target_compile_definitions(${derived_resource_target} PRIVATE XR_DERIVED_LIBRARY_WORK="${XR_DERIVED_LIBRARY_WORK}"
+            XR_DERIVED_LIBRARY_VARIANT=1)
+        set_target_properties(${derived_resource_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+        if(MSVC)
+            target_compile_options(${derived_resource_target} PRIVATE /utf-8 /W4 /WX)
+        else()
+            target_compile_options(${derived_resource_target} PRIVATE -Wall -Wextra -Werror)
+        endif()
+    endif()
+    add_test(NAME "test_xir_source_derived_library_compiler_controls_${derived_scope}" COMMAND ${derived_resource_target} --compiler-controls)
+    set_tests_properties("test_xir_source_derived_library_compiler_controls_${derived_scope}" PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+        LABELS "unit;xir;source;ctfe;generated;library;ownership;compiler-fault;resources")
+    add_test(NAME "test_xir_source_derived_library_compiler_resources_${derived_scope}" COMMAND ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_LIST_DIR}/run_source_derivation_compiler_faults.py" --exe $<TARGET_FILE:${derived_resource_target}>
+        --output "${CMAKE_CURRENT_BINARY_DIR}/derived-library-compiler-fi-${derived_scope}")
+    set_tests_properties("test_xir_source_derived_library_compiler_resources_${derived_scope}" PROPERTIES TIMEOUT 600 COST 600 PROCESSORS 8 RUN_SERIAL TRUE
+        LABELS "unit;xir;source;ctfe;generated;library;ownership;compiler-fault;resources")
+endforeach()

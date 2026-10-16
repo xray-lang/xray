@@ -134,14 +134,14 @@ static XrXirValue library_execute(const XrXirCompileContext *context,XrXirSource
     }
     xr_xir_compile_program_drop(program);return retained;
 }
-int main(void) {
-    XrXirCompileContext transport=library_context(),producer=library_context();char generator[12000];
+static XrXirCheckedPacket library_fixture(const XrXirCompileContext *transport,XrXirLibraryModuleInput bindings[2]) {
+    XrXirCompileContext producer=library_context();char generator[12000];
     int n=snprintf(generator,sizeof(generator),names_generator,generated_schema_source,XR_XIR_CONST_STRING,XR_XIR_RETURN);
     CHECK(n>0 && n<(int)sizeof(generator));
     int extra=snprintf(generator+n,sizeof(generator)-(size_t)n,read_generator_source,XR_XIR_STRUCT_GET,XR_XIR_RETURN);
     CHECK(extra>0 && (size_t)extra<sizeof(generator)-(size_t)n);XrXirSourceResult source={0};
     CHECK(library_source(&producer,NULL,"constructor_names.xr",generator,XR_XIR_LIBRARY,&source)==XR_XIR_OK);
-    memset(generator,0xa5,sizeof(generator));XrXirCheckedPacket g=library_transport(&transport,&source);xr_compile_resources_release(producer.resources);
+    memset(generator,0xa5,sizeof(generator));XrXirCheckedPacket g=library_transport(transport,&source);xr_compile_resources_release(producer.resources);
     XrXirCompileContext middle=library_context();XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_DERIVED_LIBRARY_WORK};
     XrXirLibraryModuleInput generator_binding={authority,"constructor_names.xr"};
     XrXirLibraryCatalog *catalog=library_catalog(&middle,&g,&generator_binding,1);
@@ -159,7 +159,7 @@ int main(void) {
     for(uint32_t i=0;i<module->declarations->module_count;++i)fprintf(stderr,"Module%u %.*s\n",i,
         (int)module->declarations->modules[i].name_length,module->declarations->modules[i].name);
     CHECK(module->declarations->module_count==2 && module->declarations->root_module==UINT32_MAX);
-    XrXirLibraryModuleInput bindings[2]={{0}};const char *paths[]={"derived_library.xr","constructor_names.xr"};
+    memset(bindings,0,2*sizeof(*bindings));const char *paths[]={"derived_library.xr","constructor_names.xr"};
     for(unsigned p=0;p<2;++p) {
         char *canonical=NULL;CHECK(xr_compile_module_identity_from_logical(middle.resources,&authority,paths[p],&canonical)==XR_MODULE_OK);
         unsigned matched=0;
@@ -169,8 +169,13 @@ int main(void) {
         }
         CHECK(matched==1);xr_compile_resources_free(canonical);
     }
-    XrXirCheckedPacket derived=library_transport(&transport,&source);xr_compile_resources_release(middle.resources);
+    XrXirCheckedPacket derived=library_transport(transport,&source);xr_compile_resources_release(middle.resources);
     memset(g.bytes,0xa5,g.length);xr_xir_compile_checked_packet_free(&g);
+    return derived;
+}
+static int library_normal(void) {
+    XrXirCompileContext transport=library_context();XrXirLibraryModuleInput bindings[2];
+    XrXirCheckedPacket derived=library_fixture(&transport,bindings);XrXirSourceResult source={0};int n=0;
     XrXirCompileContext receivers[4];XrXirLibraryCatalog *catalogs[4];
     for(unsigned i=0;i<4;++i){receivers[i]=library_context();catalogs[i]=library_catalog(&receivers[i],&derived,bindings,2);}
     memset(bindings,0xa5,sizeof(bindings));
@@ -204,3 +209,6 @@ int main(void) {
     CHECK(!runtime_live && !runtime_bytes && !source_fixture_compile_live && !source_fixture_compile_bytes);
     puts("Cold derived library: dead producers and packets, imported plus local actual derivation/comptime42, private init/field refusal, last String owner and physical0");return 0;
 }
+
+#include "xir_source_derived_library_resources.h"
+int main(int argc,char **argv) {return argc==1?library_normal():library_resource_main(argc,argv);}
