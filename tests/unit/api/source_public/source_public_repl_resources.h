@@ -16,6 +16,14 @@ typedef struct PublicReplOwners {
 } PublicReplOwners;
 static size_t public_repl_boundaries[11];
 static bool public_repl_rooted_case,public_repl_file_case,public_repl_array_case,public_repl_write_case;
+enum { PUBLIC_REPL_FAULT_WORKERS=8 };
+static struct {
+    FILE *report;
+    size_t index,expected;
+    bool partition,single_point;
+} public_repl_partition;
+static const XrCompileResourceLimits public_repl_fault_limits={
+    UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
 static void public_repl_close(PublicReplOwners *owners) {
     XrSourceEvent cleanup={0};
     CHECK(xray_source_repl_drop(&owners->owner,&cleanup)==XR_SOURCE_OK && !owners->owner);
@@ -130,21 +138,42 @@ static void public_repl_sticky(PublicReplOwners *owners) {
         !memcmp(&before,&after,sizeof(before)));
 }
 static void public_repl_faults(bool probe) {
-    const XrCompileResourceLimits limits={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};size_t sites=0;
-    for(size_t point=0;!point || (!probe && point<=sites);++point) {
+    size_t sites=0;
+    size_t completed=0;
+    for(size_t point=0;!point || (!probe && point<=sites);
+        point=public_repl_partition.partition ? (!point ? public_repl_partition.index+1 :
+            public_repl_partition.single_point ? sites+1 : point+PUBLIC_REPL_FAULT_WORKERS) : point+1) {
         PublicReplOwners owners={0};runtime_attempts=0;runtime_fail_at=point?point-1:SIZE_MAX;
-        XrSourceStatus status=public_repl_drive(&limits,&owners);
-        if(!point){CHECK(status==XR_SOURCE_OK && owners.independent);sites=runtime_attempts;CHECK(sites);}
+        XrSourceStatus status=public_repl_drive(&public_repl_fault_limits,&owners);
+        if(!point) {
+            CHECK(status==XR_SOURCE_OK && owners.independent);sites=runtime_attempts;CHECK(sites);
+            CHECK(!public_repl_partition.partition || sites==public_repl_partition.expected);
+        }
         else {
             if(status!=XR_SOURCE_OUT_OF_MEMORY || owners.independent)
                 fprintf(stderr,"public REPL FI point=%zu/%zu status=%u\n",point,sites,(unsigned)status);
             CHECK(status==XR_SOURCE_OUT_OF_MEMORY && !owners.independent && runtime_attempts>runtime_fail_at);
             public_repl_sticky(&owners);
         }
+        size_t attempts=runtime_attempts;
+        bool empty=owners.independent==NULL;
         runtime_fail_at=SIZE_MAX;public_repl_close(&owners);
+        if(point)++completed;
+        if(public_repl_partition.report) {
+            CHECK(fprintf(public_repl_partition.report,
+                "{\"kind\":\"%s\",\"point\":%zu,\"sites\":%zu,\"status\":%u,"
+                "\"attempts\":%zu,\"empty_output\":%s,\"compiler_blocks\":%zu,\"compiler_bytes\":%zu}\n",
+                point?"point":"baseline",point,sites,(unsigned)status,attempts,
+                empty?"true":"false",runtime_live,runtime_bytes)>0);
+        }
     }
+    if(public_repl_partition.report)CHECK(fprintf(public_repl_partition.report,
+        "{\"kind\":\"complete\",\"sites\":%zu,\"points\":%zu,\"index\":%zu,"
+        "\"workers\":%u,\"single_point\":%s,\"compiler_blocks\":%zu,\"compiler_bytes\":%zu}\n",
+        sites,completed,public_repl_partition.index,(unsigned)PUBLIC_REPL_FAULT_WORKERS,
+        public_repl_partition.single_point?"true":"false",runtime_live,runtime_bytes)>0);
     printf("public Source REPL %s actual allocation sites=%zu swept=%zu; %s; sticky retry and physical=0/0\n",
-        public_repl_write_case?"C-write":public_repl_array_case?"array-birth":public_repl_file_case?"file+input":public_repl_rooted_case?"rooted":public_repl_inspection_case?"inspection":"history",sites,probe?0:sites,
+        public_repl_write_case?"C-write":public_repl_array_case?"array-birth":public_repl_file_case?"file+input":public_repl_rooted_case?"rooted":public_repl_inspection_case?"inspection":"history",sites,completed,
         public_repl_write_case?"actual scalar/String/Array/struct/Class/Unit birth writes, same observations, state42/4/9/9 and owned String after producer death":
         public_repl_array_case?"actual checked birth push, const array read, panic old effect, owned array after producer death":
         public_repl_file_case?"real lexer/file intake, repeat path and exact old closure, syntax failure and owned bytes":

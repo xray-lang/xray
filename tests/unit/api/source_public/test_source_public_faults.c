@@ -126,7 +126,9 @@ static void named_copy_guards(void) {
 #include "source_public_projection_resources.h"
 #include "source_public_instance_resources.h"
 #include "source_public_repl_resources.h"
+#include "source_public_repl_partitions.h"
 int main(int argc,char **argv) {
+    if(argc>1 && !strncmp(argv[1],"--repl-fi-",10))return public_repl_partition_command(argc,argv);
     CHECK(argc==1 || (argc==2 && (!strcmp(argv[1],"--scalar-task") || !strcmp(argv[1],"--constructed-task") ||
         !strcmp(argv[1],"--named") || !strcmp(argv[1],"--named-probe") || !strcmp(argv[1],"--named-copy-guards") ||
         !strcmp(argv[1],"--array-format") || !strcmp(argv[1],"--array-probe") ||
