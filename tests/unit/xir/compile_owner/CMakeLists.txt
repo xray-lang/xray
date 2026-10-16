@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 get_filename_component(XR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
 add_library(compile_owner_core STATIC
     "${XR_ROOT}/src/xir/xxir.c"
+    "${XR_ROOT}/src/xir/xxir_input_owned.c"
     "${XR_ROOT}/src/xir/xxir_verify.c"
     "${XR_ROOT}/src/xir/xxir_defaults.c"
     "${XR_ROOT}/src/xir/xxir_effects.c"
