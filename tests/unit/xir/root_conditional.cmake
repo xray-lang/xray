@@ -185,3 +185,6 @@ add_test(NAME test_xir_reference_root_operation
     COMMAND test_xir_root_conditional_helpers --reference-root-operation)
 set_tests_properties(test_xir_reference_root_operation PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 PROCESSORS 1)
+
+add_test(NAME test_xir_cell_materialized_replay COMMAND test_xir_root_conditional_helpers --cell-materialized-replay)
+set_tests_properties(test_xir_cell_materialized_replay PROPERTIES TIMEOUT 300 PROCESSORS 1)
