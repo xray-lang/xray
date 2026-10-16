@@ -1019,6 +1019,12 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         emit_time_step(buffer, function, layout, index);
         break;
+    case XR_XIR_F64_TRY_PARSE:
+        EMIT_LITERAL(buffer," { XrXirValue input = "); emit_value(buffer,function,layout,op->args[0]);
+        append(buffer,"; XrXirValue output = {0};\n XrXirValueStatus status = xr_xir_f64_try_parse(&input,(XrXirType)%uu,xr_xir_call_admission(view),&output);\n",(uint32_t)op->type);
+        EMIT_LITERAL(buffer," if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(status == XR_XIR_VALUE_OOM ? XR_XIR_RUN_OUT_OF_MEMORY : status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_RUN_FRAME_LIMIT : XR_XIR_RUN_BAD_ARTIFACT);\n");
+        append(buffer," xr_xir_owned_slot_move(state->frame,%uu,&output); }\n",destination);
+        break;
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
         EMIT_STATIC(buffer, es_ff1a07ada386851d," { XrXirValue output = {0};\n");
         if (op->op == XR_XIR_NULLABLE_SOME) {

@@ -6221,6 +6221,8 @@ These global functions and built-in constructor/static functions are usable with
 
 `f64` text parsing uses the same exact integer conversion kernel as decimal literals, rounding once to binary64 with nearest / ties-to-even. Gradual underflow preserves negative zero; a syntactically valid decimal magnitude that overflows produces signed infinity. The grammar still rejects `inf` / `nan` spellings, independently of libc, locale, or the host floating-point rounding environment. Surrounding ASCII whitespace and the runtime text grammar without underscores are checked separately; literal digit separators do not extend the text grammar.
 
+Current XIR admits `f64.tryParse` through the governed f64 static declaration. Ordinary Source, explicit comptime, VM, and generated C11 share the exact conversion and Nullable Value constructor. Invalid syntax constructs owned None; valid syntax constructs owned Some. Both may allocate. Allocation, retain, or finite-work failure keeps its actual failure identity rather than becoming `null`, and publishes no partial output. Lexical shadowing is checked before declaration binding; a method spelling grants no native authority. This admission does not imply support for other numeric conversions or complete JSON.
+
 ### 13.3 Type Checking
 
 | Function / expression | Signature | Description |

@@ -178,6 +178,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if (op->op == XR_XIR_CELL_READ && xr_xir_type_is_cell(module->types, op->type)) return XR_XIR_BAD_TYPE;
     if ((op->op == XR_XIR_NULLABLE_NONE || op->op == XR_XIR_NULLABLE_SOME) &&
         !xr_xir_type_is_nullable(module->types, op->type)) return XR_XIR_BAD_TYPE;
+    if (op->op == XR_XIR_F64_TRY_PARSE &&
+        xr_xir_nullable_element(module->types, op->type) != XR_XIR_F64) return XR_XIR_BAD_TYPE;
     if (xr_xir_op_references_function(op->op)) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
             return XR_XIR_BAD_STRUCTURE;
@@ -907,6 +909,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         }
         if (op->op == XR_XIR_NULLABLE_SOME)
             expected = xr_xir_nullable_element(context->module->types, op->type);
+        if (op->op == XR_XIR_F64_TRY_PARSE) expected = XR_XIR_STRING;
         if (op->op == XR_XIR_EQUAL) {
             expected = xr_xir_operand_type(function,op->args[0]);
             XrXirStatus status = xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_EQUAL});

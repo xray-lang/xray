@@ -265,3 +265,34 @@ static const XrNativeTypeDeclaration xr_native_task = {
     "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{248, 92, 134, 139, 241, 43, 43, 144, 152, 142, 173, 92, 247, 70, 253, 142, 82, 45, 92, 45, 99, 152, 166, 72, 130, 180, 118, 55, 199, 45, 199, 166}},
     18, 7, xr_native_task_members, 6
 };
+static const XrNativeParameter xr_native_f64_parameters_0[] = {
+    {"text", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeParameter xr_native_f64_parameters_1[] = {
+    {"text", "string", XR_NATIVE_TERM_STRING, false, false},
+};
+static const XrNativeParameter xr_native_f64_parameters_4[] = {
+    {"decimals", "i64", XR_NATIVE_TERM_I64, true, false},
+};
+static const XrNativeParameter xr_native_f64_parameters_10[] = {
+    {"exp", "f64", XR_NATIVE_TERM_F64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_f64_members[] = {
+    {1, "parse", "(text: string) -> f64", "f64", 5, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_f64_parameters_0, 1, XR_NATIVE_TERM_F64},
+    {2, "tryParse", "(text: string) -> f64?", "f64 ?", 8, 12, XR_NATIVE_RECEIVER_READ, true, true, true, true, XR_NATIVE_OPERATION_F64_TRY_PARSE, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_f64_parameters_1, 1, XR_NATIVE_TERM_NULLABLE_F64},
+    {3, "abs", "() -> f64", "f64", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_F64},
+    {4, "toString", "() -> string", "string", 10, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
+    {5, "toFixed", "(decimals?: i64) -> string", "string", 11, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_f64_parameters_4, 1, XR_NATIVE_TERM_STRING},
+    {6, "toI64", "() -> i64", "i64", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_I64},
+    {7, "floor", "() -> i64", "i64", 13, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_I64},
+    {8, "ceil", "() -> i64", "i64", 14, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_I64},
+    {9, "round", "() -> i64", "i64", 15, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_I64},
+    {10, "sqrt", "() -> f64", "f64", 16, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_F64},
+    {11, "pow", "(exp: f64) -> f64", "f64", 17, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_f64_parameters_10, 1, XR_NATIVE_TERM_F64},
+    {12, "isNaN", "() -> bool", "bool", 18, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_BOOL},
+};
+static const XrNativeTypeDeclaration xr_native_f64 = {
+    6, XR_NATIVE_DECLARATION_VALUE, "f64", "", 0,
+    "stdlib/types/f64.xr", "xray-native:prelude/f64", {{2, 163, 215, 89, 111, 107, 70, 80, 159, 18, 153, 48, 162, 36, 102, 43, 77, 35, 254, 84, 175, 124, 30, 136, 66, 8, 252, 169, 22, 151, 181, 63}},
+    3, 7, xr_native_f64_members, 12
+};

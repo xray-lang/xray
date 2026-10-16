@@ -1,8 +1,10 @@
-// Built-in f64 type — implementation in src/runtime/value/xf64_methods.c
+// Governed binary64 value declaration.
+// @native-type id=6
 class f64 {
     // @lowered
     static parse(text: string) -> f64
     // @lowered
+    // @native-operation F64_TRY_PARSE allocation=may_heap failures=allocation,retain,limit ownership=owned
     static tryParse(text: string) -> f64?
     abs() -> f64
     toString() -> string

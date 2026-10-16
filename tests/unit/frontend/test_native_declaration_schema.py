@@ -77,6 +77,29 @@ class NativeDeclarations(unittest.TestCase):
                          {'ptr', 'mutPtr', 'sort', 'toString',
                           'iterator', 'entriesIterator'})
 
+    def test_binary64_owned_text_conversion_contract(self):
+        source = (ROOT / 'stdlib/types/f64.xr').read_text(encoding='utf-8')
+        header, members = schema.parse_source(source, self.prelude)
+        self.assertEqual(header[:3], (6, 'f64', ''))
+        admitted = [m for m in members if m.operation != 'NONE']
+        self.assertEqual(len(admitted), 1)
+        member = admitted[0]
+        self.assertEqual((member.name, member.operation, member.static, member.lowered,
+                          member.allocation, member.failures, member.ownership),
+                         ('tryParse', 'F64_TRY_PARSE', True, True, 'may_heap', 'allocation,retain,limit', 'owned'))
+        self.assertEqual(schema.simple_term(member.result, ''), 'NULLABLE_F64')
+        for before, after in [
+                ('id=6', 'id=5'), ('class f64', 'struct f64'),
+                ('static tryParse', 'tryParse'), ('tryParse(text: string)', 'tryParse(text: i64)'),
+                ('tryParse(text: string)', 'tryParse(text?: string)'),
+                ('tryParse(text: string)', 'tryParse(text: string, extra: string)'),
+                ('-> f64?', '-> f64'), ('allocation=may_heap', 'allocation=no_heap'),
+                ('failures=allocation,retain,limit', 'failures=none'), ('ownership=owned', 'ownership=unit')]:
+            with self.subTest(after=after), self.assertRaises(ValueError):
+                schema.parse_source(source.replace(before, after), self.prelude)
+        with self.assertRaises(ValueError):
+            schema.parse_source(source.replace('// @lowered', ''), self.prelude)
+
     def test_array_recipe_shape_permission_and_result_rejections(self):
         with self.assertRaises(ValueError):
             schema.array_recipe_contracts('U')
@@ -265,7 +288,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/f64.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())

@@ -269,7 +269,7 @@ typedef struct SourceContext {
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t task_module, task_declaration;
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
-    uint32_t string_module, string_declaration, string_members[6], type_info_declaration;
+    uint32_t string_module, string_declaration, string_members[6], type_info_declaration, f64_module, f64_declaration, f64_parse_member;
 } SourceContext;
 
 static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
@@ -1101,6 +1101,7 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
 #include "xxir_source_array.inc.c"
 #include "xxir_source_tuple.inc.c"
 #include "xxir_source_string.inc.c"
+#include "xxir_source_decimal.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 #include "xxir_source_struct.inc.c"
@@ -1238,6 +1239,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
+        if (source_decimal_static_receiver(ctx, member->object))
+            return source_decimal_static_call(ctx, node, value);
         if (source_array_static_receiver(ctx, member->object))
             return source_array_static_call(ctx, node, value);
         SourceName *base = member->object->type == AST_VARIABLE ?

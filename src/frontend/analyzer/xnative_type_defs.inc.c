@@ -10,8 +10,6 @@ static const char xr_native_def_channel[] = "// Built-in Channel<T> type — imp
 
 static const char xr_native_def_coroutine[] = "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum TaskResult<T> {\n    Success { value: T },\n    Failed { error: Error },\n    Cancelled,\n    Timeout,\n    Pending,\n}\n\nenum TaskStatus {\n    Pending,\n    Running,\n    Success,\n    Failed,\n    Cancelled,\n}\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    ref cancel()\n    ref poll() -> TaskResult<T>\n    ref awaitResult() -> TaskResult<T>\n    ref awaitTimeout(timeout: i64) -> TaskResult<T>\n}\n";
 
-static const char xr_native_def_f64[] = "// Built-in f64 type — implementation in src/runtime/value/xf64_methods.c\nclass f64 {\n    // @lowered\n    static parse(text: string) -> f64\n    // @lowered\n    static tryParse(text: string) -> f64?\n    abs() -> f64\n    toString() -> string\n    toFixed(decimals?: i64) -> string\n    toI64() -> i64\n    floor() -> i64\n    ceil() -> i64\n    round() -> i64\n    sqrt() -> f64\n    pow(exp: f64) -> f64\n    isNaN() -> bool\n}\n";
-
 static const char xr_native_def_i64[] = "// Built-in i64 type — implementation in src/runtime/value/xi64_methods.c\nenum NumberParseError {\n    InvalidSyntax,\n    OutOfRange\n}\nclass i64 {\n    // @lowered\n    static parse(text: string) -> i64\n    // @lowered\n    static tryParse(text: string) -> i64?\n    abs() -> i64\n    toString() -> string\n    toBigInt() -> BigInt\n    toF64() -> f64\n    toHex() -> string\n    max(other: i64) -> i64\n    min(other: i64) -> i64\n    sqrt() -> f64\n    pow(exp: f64) -> f64\n    checkedAdd(other: i64) -> i64?\n    checkedSub(other: i64) -> i64?\n    checkedMul(other: i64) -> i64?\n    saturatingAdd(other: i64) -> i64\n    saturatingSub(other: i64) -> i64\n    saturatingMul(other: i64) -> i64\n    wrappingAdd(other: i64) -> i64\n    wrappingSub(other: i64) -> i64\n    wrappingMul(other: i64) -> i64\n    addOverflows(other: i64) -> bool\n    subOverflows(other: i64) -> bool\n    mulOverflows(other: i64) -> bool\n}\n";
 
 static const char xr_native_def_iterator[] = "// Built-in pull iterator handle. Generator-backed and collection-backed\n// implementations share this sealed native surface.\nclass Iterator<T> {\n    // @lowered\n    hasNext() -> bool\n    // @lowered\n    next() -> T\n    // @lowered\n    nth(index: i64) -> T\n    // An iterator is its own iterable; ownership is compiler-owned contract\n    // data rather than part of this signature-only source.\n    iterator() -> Iterator<T>\n    toString() -> string\n}\n";
@@ -36,7 +34,6 @@ static const char xr_native_def_thread[] = "// sys.Thread.spawn is compiler-defi
     X("bool", xr_native_def_bool) \
     X("channel", xr_native_def_channel) \
     X("coroutine", xr_native_def_coroutine) \
-    X("f64", xr_native_def_f64) \
     X("i64", xr_native_def_i64) \
     X("iterator", xr_native_def_iterator) \
     X("json", xr_native_def_json) \

@@ -96,7 +96,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_TO_STRING:
     case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_STRING_LEN:
-    case XR_XIR_STRING_COPY_BYTES:
+    case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES:
     case XR_XIR_STRING_CONTAINS:
     case XR_XIR_STRING_STARTS_WITH:
     case XR_XIR_STRING_ENDS_WITH:
