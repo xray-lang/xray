@@ -28651,6 +28651,364 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 1
+    },
+    {
+      "id": "complete_coordination_work_queue_native_methods",
+      "oracle_id": "complete_coordination_work_queue_native_methods",
+      "source": "tests/diff/cases/semantics/coro/work_queue_native_methods.xr",
+      "source_lf_sha256": "30324910f069d981c14580d235d5eb90395b41d64b2e9d1ed3871d8a3e752200",
+      "entry": "run",
+      "stdout_utf8": "workqueue native ok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original coordination entry with separate named-body duty;legacy per-shard queue requirements and current FIFO conflict both retained. Finite completion/batch models do not qualify actual source,blocking/wakeup/scheduler/atomic/resource/lifetime/provider behavior.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/work_queue_native_methods.xr",
+        "source_lf_sha256": "30324910f069d981c14580d235d5eb90395b41d64b2e9d1ed3871d8a3e752200"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_coordination_1157_work_queue_generic_class",
+      "oracle_id": "complete_coordination_1157_work_queue_generic_class",
+      "source": "tests/regression/11_coroutine/1157_work_queue_generic_class.xr",
+      "source_lf_sha256": "843c4457b8f52f49a629ed278dd0d3021ccb3f35e2f975cfa25e1507ee977aba",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original coordination entry with separate named-body duty;legacy per-shard queue requirements and current FIFO conflict both retained. Finite completion/batch models do not qualify actual source,blocking/wakeup/scheduler/atomic/resource/lifetime/provider behavior.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1157_work_queue_generic_class.xr",
+        "source_lf_sha256": "843c4457b8f52f49a629ed278dd0d3021ccb3f35e2f975cfa25e1507ee977aba"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_1158_work_queue_native",
+      "oracle_id": "complete_coordination_1158_work_queue_native",
+      "source": "tests/regression/11_coroutine/1158_work_queue_native.xr",
+      "source_lf_sha256": "229c73c67aab542be8ccc52402536d6da4d1be0334c4d798533a537dbfa54ed5",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original coordination entry with separate named-body duty;legacy per-shard queue requirements and current FIFO conflict both retained. Finite completion/batch models do not qualify actual source,blocking/wakeup/scheduler/atomic/resource/lifetime/provider behavior.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1158_work_queue_native.xr",
+        "source_lf_sha256": "229c73c67aab542be8ccc52402536d6da4d1be0334c4d798533a537dbfa54ed5"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_1159_work_queue_blocking_pop",
+      "oracle_id": "complete_coordination_1159_work_queue_blocking_pop",
+      "source": "tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr",
+      "source_lf_sha256": "f9c1df9573a00e306c7a388a0d4d3995836e0fd43d6861f3ebee62d3e065e34a",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original coordination entry with separate named-body duty;legacy per-shard queue requirements and current FIFO conflict both retained. Finite completion/batch models do not qualify actual source,blocking/wakeup/scheduler/atomic/resource/lifetime/provider behavior.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr",
+        "source_lf_sha256": "f9c1df9573a00e306c7a388a0d4d3995836e0fd43d6861f3ebee62d3e065e34a"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_1160_work_queue_close_fanout",
+      "oracle_id": "complete_coordination_1160_work_queue_close_fanout",
+      "source": "tests/regression/11_coroutine/1160_work_queue_close_fanout.xr",
+      "source_lf_sha256": "a10afc445848bd4eb65dc76050665629165e79dbe423a196f545a930f009d971",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original coordination entry with separate named-body duty;legacy per-shard queue requirements and current FIFO conflict both retained. Finite completion/batch models do not qualify actual source,blocking/wakeup/scheduler/atomic/resource/lifetime/provider behavior.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1160_work_queue_close_fanout.xr",
+        "source_lf_sha256": "a10afc445848bd4eb65dc76050665629165e79dbe423a196f545a930f009d971"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_1165_result_group_native",
+      "oracle_id": "complete_coordination_1165_result_group_native",
+      "source": "tests/regression/11_coroutine/1165_result_group_native.xr",
+      "source_lf_sha256": "5df403fb091f1126c2a79ee44b2ada9062946ceb54999aa9fa2c978c4c3c9b80",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original coordination entry with separate named-body duty;legacy per-shard queue requirements and current FIFO conflict both retained. Finite completion/batch models do not qualify actual source,blocking/wakeup/scheduler/atomic/resource/lifetime/provider behavior.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1165_result_group_native.xr",
+        "source_lf_sha256": "5df403fb091f1126c2a79ee44b2ada9062946ceb54999aa9fa2c978c4c3c9b80"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_named_1157_work_queue_generic_class",
+      "oracle_id": "complete_coordination_named_1157_work_queue_generic_class",
+      "source": "tests/regression/11_coroutine/1157_work_queue_generic_class.xr",
+      "source_lf_sha256": "843c4457b8f52f49a629ed278dd0d3021ccb3f35e2f975cfa25e1507ee977aba",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged named body with all original asserts/helpers/sleep calls and separate CLI discovery plus VM/C/native execution. Legacy own-LIFO queue requirement is not current FIFO;finite symbolic value invariance is not actual wakeup/scheduler/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1157_work_queue_generic_class.xr",
+        "source_lf_sha256": "843c4457b8f52f49a629ed278dd0d3021ccb3f35e2f975cfa25e1507ee977aba"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_named_1158_work_queue_native",
+      "oracle_id": "complete_coordination_named_1158_work_queue_native",
+      "source": "tests/regression/11_coroutine/1158_work_queue_native.xr",
+      "source_lf_sha256": "229c73c67aab542be8ccc52402536d6da4d1be0334c4d798533a537dbfa54ed5",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged named body with all original asserts/helpers/sleep calls and separate CLI discovery plus VM/C/native execution. Legacy own-LIFO queue requirement is not current FIFO;finite symbolic value invariance is not actual wakeup/scheduler/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1158_work_queue_native.xr",
+        "source_lf_sha256": "229c73c67aab542be8ccc52402536d6da4d1be0334c4d798533a537dbfa54ed5"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_named_1159_work_queue_blocking_pop",
+      "oracle_id": "complete_coordination_named_1159_work_queue_blocking_pop",
+      "source": "tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr",
+      "source_lf_sha256": "f9c1df9573a00e306c7a388a0d4d3995836e0fd43d6861f3ebee62d3e065e34a",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged named body with all original asserts/helpers/sleep calls and separate CLI discovery plus VM/C/native execution. Legacy own-LIFO queue requirement is not current FIFO;finite symbolic value invariance is not actual wakeup/scheduler/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr",
+        "source_lf_sha256": "f9c1df9573a00e306c7a388a0d4d3995836e0fd43d6861f3ebee62d3e065e34a"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_named_1160_work_queue_close_fanout",
+      "oracle_id": "complete_coordination_named_1160_work_queue_close_fanout",
+      "source": "tests/regression/11_coroutine/1160_work_queue_close_fanout.xr",
+      "source_lf_sha256": "a10afc445848bd4eb65dc76050665629165e79dbe423a196f545a930f009d971",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged named body with all original asserts/helpers/sleep calls and separate CLI discovery plus VM/C/native execution. Legacy own-LIFO queue requirement is not current FIFO;finite symbolic value invariance is not actual wakeup/scheduler/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1160_work_queue_close_fanout.xr",
+        "source_lf_sha256": "a10afc445848bd4eb65dc76050665629165e79dbe423a196f545a930f009d971"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_coordination_named_1165_result_group_native",
+      "oracle_id": "complete_coordination_named_1165_result_group_native",
+      "source": "tests/regression/11_coroutine/1165_result_group_native.xr",
+      "source_lf_sha256": "5df403fb091f1126c2a79ee44b2ada9062946ceb54999aa9fa2c978c4c3c9b80",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged named body with all original asserts/helpers/sleep calls and separate CLI discovery plus VM/C/native execution. Legacy own-LIFO queue requirement is not current FIFO;finite symbolic value invariance is not actual wakeup/scheduler/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1165_result_group_native.xr",
+        "source_lf_sha256": "5df403fb091f1126c2a79ee44b2ada9062946ceb54999aa9fa2c978c4c3c9b80"
+      },
+      "remaining_gates": [
+        "All six complete unchanged originals and all five separate named bodies;all80original assertions,helpers,loop,sleep,close and await obligations retained;legacy LIFO requirement and current FIFO conflict remain open.",
+        "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "independent_observation_count": 0
     }
   ]
 }
