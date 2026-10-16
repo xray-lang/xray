@@ -43,6 +43,10 @@ foreach(_root_conditional_gate helpers source)
 endforeach()
 
 # These literals remain reachable before the complete helper cost gate.
+add_test(NAME test_xir_root_conditional_precision_selection
+    COMMAND test_xir_root_conditional_helpers --invocation-precision-selection)
+set_tests_properties(test_xir_root_conditional_precision_selection PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
 add_test(NAME test_xir_root_conditional_type_projection
     COMMAND test_xir_root_conditional_helpers --invocation-type-projection)
 set_tests_properties(test_xir_root_conditional_type_projection PROPERTIES

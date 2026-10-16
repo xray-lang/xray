@@ -223,13 +223,48 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
     return status;
 }
 
+/* An expanded equation without dynamic physical carriers has only its
+ * existing ROOT joins left to propagate. Counts locate work, never permission;
+ * deferred terminals and callable/Class returns always retain full replay. */
+static XrXirStatus effect_invocation_precision_needed(EffectInvocationWorkspace *owner,
+    uint32_t node,bool *output) {
+    if (!owner || !output || !owner->work || !owner->states || node>=owner->final.count ||
+        !owner->final.nodes || !owner->states[node].expanded || !owner->final.physical ||
+        owner->final.physical->resources!=owner->work->resources ||
+        !owner->final.physical->functions) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_request_owned_matches(owner->work,&owner->body,owner->final.material) ||
+        owner->final.material->physical!=owner->final.physical) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationNode *record=&owner->final.nodes[node];
+    if (record->body>=owner->final.physical->count) return XR_XIR_BAD_STRUCTURE;
+    const EffectPhysicalFunction *physical=&owner->final.physical->functions[record->body];
+    if (physical->parameters!=record->parameter_count || physical->instructions!=record->instruction_count ||
+        (uint64_t)physical->parameters+physical->instructions!=physical->values ||
+        physical->rows>physical->values || physical->classes>physical->values ||
+        physical->count>physical->capacity || (physical->count && !physical->records))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,10+sizeof(bool))) return XR_XIR_BUDGET;
+    bool needed=physical->rows || physical->classes || record->class_count || record->producer_count ||
+        record->class_return_mask || record->class_return_rank || record->deferred || record->local_deferred;
+    if (!needed) {
+        EffectBodyFunctionHead head={0};XrXirStatus status=effect_invocation_head(owner,record->body,&head);
+        if (status!=XR_XIR_OK) return status;
+        if (head.parameter_count!=physical->parameters || head.instruction_count!=physical->instructions)
+            return XR_XIR_BAD_STRUCTURE;
+        needed=xr_xir_type_is_class(owner->body.domain.types,head.result) ||
+            xr_xir_callable_signature(owner->body.domain.types,head.result)!=NULL;
+    }
+    *output=needed;return XR_XIR_OK;
+}
+
 /* Actual producer and Class precision revisit the same equation queue.
  * Immutable declaration seeds are never expanded again; delayed Cell
  * terminals add only their genuine local instruction evidence. */
 static XrXirStatus effect_invocation_precision(EffectInvocationWorkspace *owner,
     uint32_t node,bool *changed) {
+    bool needed=true;XrXirStatus status=effect_invocation_precision_needed(owner,node,&needed);
+    if (status!=XR_XIR_OK || !needed) return status;
     EffectInvocationFlow flow={.owner=owner,.node=node,.instruction=UINT32_MAX,.precision=true};
-    XrXirStatus status=effect_invocation_origins(&flow);
+    status=effect_invocation_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->producer_enabled) status=effect_invocation_producer_step(&flow,changed,false);
