@@ -37,7 +37,7 @@ def check_signature(value, variant=0):
         assert value == {"signatures": [{"label": "fn Box<i64>.add(other: i64) -> i64", "parameters": [{"label": "other: i64"}]}], "activeSignature": 0, "activeParameter": 0}, value
         return
     if variant == 21:
-        assert value == {"signatures": [{"label": "fn Box.pick(value: i64) -> i64", "parameters": [{"label": "value: i64"}]}], "activeSignature": 0, "activeParameter": 0}, value
+        assert value == {"signatures": [{"label": "fn Box<i64>.pick(value: i64) -> i64", "parameters": [{"label": "value: i64"}]}], "activeSignature": 0, "activeParameter": 0}, value
         return
     shown_type = "Item" if variant == 24 else "i64"
     parameters = [] if variant == 11 else ["left: ref i64" if variant == 10 else f"left: {shown_type}", f"right: {shown_type}"]

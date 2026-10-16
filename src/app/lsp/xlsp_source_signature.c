@@ -52,18 +52,30 @@ static XrXirStatus signature_json(XrCompileResources *resources,const XlspSource
     if(!signature_adopt(info,"parameters",&parameters)||!signature_push(signatures,&info)||
         !signature_adopt(result,"signatures",&signatures)||
         !signature_member(result,"activeSignature",xjson_new_number(0)))goto done;
-    if(signature->active_argument<signature->parameter_count&&
-        !signature_member(result,"activeParameter",xjson_new_number((double)signature->active_argument)))goto done;
+    size_t active=signature->active_argument;
+    if(signature->variadic&&signature->parameter_count&&active>=signature->parameter_count)active=signature->parameter_count-1;
+    if(active<signature->parameter_count&&
+        !signature_member(result,"activeParameter",xjson_new_number((double)active)))goto done;
     *out=result;result=NULL;status=XR_XIR_OK;
 done:
     xjson_free(item);xjson_free(parameters);xjson_free(info);xjson_free(signatures);xjson_free(result);return status;
 }
 static XrXirStatus signature_equal(XrCompileResources *resources,const XlspSourceSignature *a,
     const XlspSourceSignature *b) {
-    if(a->parameter_count!=b->parameter_count||a->active_argument!=b->active_argument||
+    if(a->parameter_count!=b->parameter_count||a->active_argument!=b->active_argument||a->variadic!=b->variadic||
         a->label.length!=b->label.length)return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=signature_work(resources,a->label.length);if(status!=XR_XIR_OK)return status;
     if(memcmp(a->label.text,b->label.text,a->label.length))return XR_XIR_BAD_STRUCTURE;
+    if(a->target_native_identity!=b->target_native_identity||
+        a->target_identity.length!=b->target_identity.length||a->target_path.length!=b->target_path.length||
+        a->target_range.line!=b->target_range.line||a->target_range.column!=b->target_range.column||
+        a->target_range.end_line!=b->target_range.end_line||a->target_range.end_column!=b->target_range.end_column)
+        return XR_XIR_BAD_STRUCTURE;
+    status=signature_work(resources,a->target_identity.length+a->target_path.length+sizeof(a->target_fingerprint));
+    if(status!=XR_XIR_OK)return status;
+    if(memcmp(a->target_identity.text,b->target_identity.text,a->target_identity.length)||
+        memcmp(a->target_path.text,b->target_path.text,a->target_path.length)||
+        memcmp(&a->target_fingerprint,&b->target_fingerprint,sizeof(a->target_fingerprint)))return XR_XIR_BAD_STRUCTURE;
     for(size_t i=0;i<a->parameter_count;++i) {
         if(a->parameters[i].length!=b->parameters[i].length)return XR_XIR_BAD_STRUCTURE;
         status=signature_work(resources,a->parameters[i].length);if(status!=XR_XIR_OK)return status;
@@ -121,10 +133,14 @@ XR_FUNC XrXirStatus xlsp_source_signature_many_json(const XlspSourceSignatureReq
         status=xlsp_source_signature(request->snapshots[i],&selection,&current);
         if(status!=XR_XIR_OK)goto done;
         XlspSourceLocation location={0};
-        status=xlsp_source_definition(request->snapshots[i],request->uri,request->uri_length,selection.call.callee.start,&location);
-        if(status!=XR_XIR_OK)goto done;
+        if(!current.target_native_identity) {
+            status=xlsp_source_definition(request->snapshots[i],request->uri,request->uri_length,selection.call.callee.start,&location);
+            if(status!=XR_XIR_OK)goto done;
+        }
         if(accepted.label.text) {
-            status=signature_target_equal(request->resources,&target,&location);if(status!=XR_XIR_OK)goto done;
+            if(!current.target_native_identity) {
+                status=signature_target_equal(request->resources,&target,&location);if(status!=XR_XIR_OK)goto done;
+            }
             status=signature_equal(request->resources,&accepted,&current);if(status!=XR_XIR_OK)goto done;
             xlsp_source_signature_free(&current);
         } else {accepted=current;current=(XlspSourceSignature){0};target=location;}

@@ -38,11 +38,11 @@ static void hover_text(LspHoverBuilder *b,const char *text) {
 }
 static const char *hover_builtin(XrXirType type) {
     switch(type) {
-    case XR_XIR_UNIT:return "Unit";case XR_XIR_BOOL:return "bool";
+    case XR_XIR_UNIT:return "()";case XR_XIR_BOOL:return "bool";
     case XR_XIR_I8:return "i8";case XR_XIR_I16:return "i16";case XR_XIR_I32:return "i32";case XR_XIR_I64:return "i64";
     case XR_XIR_U8:return "u8";case XR_XIR_U16:return "u16";case XR_XIR_U32:return "u32";case XR_XIR_U64:return "u64";
-    case XR_XIR_F32:return "f32";case XR_XIR_F64:return "f64";case XR_XIR_STRING:return "String";
-    case XR_XIR_ERROR:return "Error";case XR_XIR_PANIC_INFO:return "PanicInfo";case XR_XIR_RUNE:return "Rune";
+    case XR_XIR_F32:return "f32";case XR_XIR_F64:return "f64";case XR_XIR_STRING:return "string";
+    case XR_XIR_ERROR:return "Error";case XR_XIR_PANIC_INFO:return "PanicInfo";case XR_XIR_RUNE:return "rune";
     default:return NULL;
     }
 }
@@ -92,10 +92,20 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
         if(!n){b->status=XR_XIR_BAD_TYPE;break;}
         if(n->kind==XR_XIR_TYPE_ARRAY||n->kind==XR_XIR_TYPE_CELL||n->kind==XR_XIR_TYPE_ATOMIC||n->kind==XR_XIR_TYPE_TASK||n->kind==XR_XIR_TYPE_NULLABLE) {
             if(!f->stage) {
-                hover_text(b,n->kind==XR_XIR_TYPE_ARRAY?"Array<":n->kind==XR_XIR_TYPE_CELL?"Cell<":
+                if(n->kind==XR_XIR_TYPE_NULLABLE) {
+                    const XrXirTypeNode *child=hover_node(v,n->element);
+                    if(child&&(child->kind==XR_XIR_TYPE_CALLABLE||child->kind==XR_XIR_TYPE_NULLABLE))hover_text(b,"(");
+                } else hover_text(b,n->kind==XR_XIR_TYPE_ARRAY?"Array<":n->kind==XR_XIR_TYPE_CELL?"Cell<":
                     n->kind==XR_XIR_TYPE_ATOMIC?"Atomic<":n->kind==XR_XIR_TYPE_TASK?"Task<":"Nullable<");
                 f->stage=1;next=n->element;push=true;
-            } else {hover_text(b,">");--count;}
+            } else {
+                if(n->kind==XR_XIR_TYPE_NULLABLE) {
+                    const XrXirTypeNode *child=hover_node(v,n->element);
+                    if(child&&(child->kind==XR_XIR_TYPE_CALLABLE||child->kind==XR_XIR_TYPE_NULLABLE))hover_text(b,")");
+                    hover_text(b,"?");
+                } else hover_text(b,">");
+                --count;
+            }
             continue;
         }
         if(n->kind==XR_XIR_TYPE_NOMINAL) {

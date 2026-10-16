@@ -6,6 +6,11 @@ typedef struct XlspSourceSignature {
     XlspSourceHover label;
     XlspSourceHover *parameters;
     size_t parameter_count,active_argument;
+    bool variadic;
+    XlspSourceHover target_identity,target_path;
+    XrFingerprint target_fingerprint;
+    XrXirSourceRange target_range;
+    uint32_t target_native_identity;
 } XlspSourceSignature;
 typedef struct XlspSourceSignatureSelection {
     XrCompileResources *resources;
