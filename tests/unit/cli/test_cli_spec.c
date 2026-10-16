@@ -87,7 +87,7 @@ TEST(spec_toolchain_preferences_registered) {
     static const char *const names[]={"provider","profile","refresh","target","cc","zig","json"};
     ASSERT_EQ_INT(xr_cli_option_count(spec->options),7);
     for(size_t i=0;i<sizeof(names)/sizeof(*names);++i)
-        ASSERT_STR_EQ(spec->options[i].name,names[i]);
+        ASSERT_STR_EQ(spec->options[i].long_name,names[i]);
     ASSERT_EQ_INT(spec->positional_min,1);
     ASSERT_EQ_INT(spec->positional_max,2);
     ASSERT_FALSE(spec->allow_passthrough);
