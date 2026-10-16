@@ -7861,6 +7861,34 @@ Source 先完成普通函数库存，再迭代生成尾部物化函数，避免�
 
 该原子切换采用 Checked schema29、contract74，construction C 接口 revision2 统一由 xr_xir_compile_construction_new_v2 接收 XrXirConstructionSpec；旧无版本构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
 
+### 17.68 有限递归数据与按原拥有者观察
+
+普通Array、Tuple及Nullable描述符只能引用池内前序构造类型；只有另经完整普通验证的nominal字段可闭合递归图。Array/Nullable的原始前向自环不能伪装成合法递归nominal。
+
+CTFE的关闭数据族可包含经Array等真实有限storage handle形成的递归类型描述，例如Node含Array<Node>；这不授权循环对象图。原账本拥有的迭代DFS在灰色回边逐帧收费，拒绝没有有限存储的inline循环及没有终端准入查询的纯Array闭环。遇到允许的类型回边后仍检查每个其余字段；Class、Function、Cell、Error和PanicInfo不能因回边而成为外部常量字段。类型shape仅描述浅层费用并标记动态子图，不能充当递归深度或完整实际值费用的上界。私有materializer类型接收采用同一有限存储边界；materializer实际调用图仍须无环。
+
+Array含拥有结构、结构含动态Array及有限递归数据均按实际活动值逐节点接收。Source只在同步观察中借用Value的真实Domain：调用者保持Value存活，预付完整浅层header校验，接口先收64 work，再检查精确TypeArena及原compiler ledger。失败保全空输出，成功不增加引用、不授予构造、字段、调用或loan权限，不得drop或保存该借用Domain。Array长度/容量和选定元素、struct选定字段使用原arena/Domain的既有观察操作；每个变量子节点另付原拥有者费用，不建立替代Domain后对整个外部子图作无界getter。独立普通Source重放、完整Checked重读、特化复验和Lowered保持。
+
+真实Cell投影的不可变selector数量只在精确arena/Domain上观察，接口先收64 work，失败保全输出；调用者保持Cell存活并预付完整浅层canonical-root header费用。实际prefix加本次suffix共同计费，每个loan保存其真实descriptor的保守selector跨度。递归类型不能假装静态路径深度上界。变量数据写入之前，完整incoming admission的实收费保守扩展同一canonical owner的所有活跃父loan储备；不同loan可具有不同的真实selector跨度，不因跨度不同拒绝合法重借用，也不共享权限。COW旧快照和父loan恢复保持。
+
+所有操作仍使用原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出。完整物理故障逐点覆盖实际分配分母；每个trial内失败与retry使用同一原拥有者。先独立测量完整操作需求，再按已消费前缀核剩余额度：足够则要求完整成功且费用一致，不足则要求BUDGET、空输出/live恢复和再次同owner拒绝，不为强求第二次成功复制账本、退款或调高额度。首末点、census和exact/minus-one不是完整FI资格。
+
+本扩展不改变公共Value/Call/Instance/SourceContext布局、schema或opcode；没有新evaluator、宿主执行或持久缓存。外部复合参数/foreign跨arena接收及活动身份字段常量导出仍拒绝；内部身份子图的data-Cell后代投影按17.69接收。完整资源、真实provider和正式安全门须绑定其实际输入取得证据，普通样本通过不构成整包或生产资格。
+
+### 17.69 身份别名的有界接收储备与真实frame占用
+
+内部Array/struct与Class根的后代ref可以包含实际Class、Function捕获及私有Cell。初始完整接收沿既有拥有型遍历观察真实可变Class/Cell句柄，按实际出现次数收集身份键。已准入carrier的相等性只标识同一对象，不授予字段、构造、调用或loan权限。登记表仅保留这些真实身份的拥有引用；不保存整个根Value快照、字段地址或隐含根访问。非活动Nullable/enum分支不制造身份，普通声明和所有实际可达函数仍独立准入。
+
+本节的真实别名预算规则取代17.62–17.66对活动后代身份的初始投影拒绝限制；外部复合参数、身份常量导出、模块状态和未知调用的拒绝继续生效。初始root接收费用与每个descriptor的真实selector跨度单独保存。实际路径使共同Value接收再次访问完整根时，先按其实际selector次数付费；类型图边数不能代替路径次数。子loan共享稳定的原始预算拥有记录，各descriptor与live接收费用仍独立检查。
+
+每次Class、Cell或路径写入在共同Value变更之前完整接收incoming值，并收集它实际包含的身份及次数。先按目标canonical Class/Cell身份在所有真实活跃loan中查找已登记的出现次数；按该次数乘以incoming接收实收费的四倍，单调扩大相关接收储备。新的嵌套身份以同样出现次数加入原始登记表。只有该原始拥有记录维护身份表，父子loan不能重复登记同一拥有表。每次查找、扫描、复制、计数和扩容先付原账本work；算术溢出或无法支付立即拒绝，失败可留下保守储备但不退款或执行实际写入。
+
+身份键持有实际lease，防止对象销毁后地址复用把新对象误当已登记别名；这些lease不改变Array的逻辑数据快照。临时incoming身份表只同步借用仍由调用者保持存活的输入，完成即释放。表扩容需要的旧加新存储及同时遍历scratch占同一剩余frame上限。所有活跃表字节与activation累计，正常返回、错误、panic及每个准备失败前缀均按原拥有者释放；最后drop不分配。稳定frame/loan地址与原始登记拥有者一起存活，不跨可增长向量保存元素指针。
+
+写入仍运行原目标Cell/Class回边检查、真实prepare/commit/abort/release协议和完整Value接收；身份登记不替代权限、闭包、所有权或循环检查。新Class插入后的后续别名增长、同一Class在多个字段出现、真实捕获Cell、嵌套重借用、旧COW快照及错误/panic cleanup组合都由相同规则约束。完整步骤/深度/frame/output边界、同owner耗尽、物理故障逐点和最后拥有者寿命需要各自实际证据。
+
+本机制保持128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出。公共Value/Call/Instance/SourceContext布局、schema和opcode不变；唯一Lowered evaluator、共同数值核及独立Source重放保持。局部参考通过不授予完整FI、provider、正式安全或P11整包资格。
+
 ---
 
 ## 18. 错误码 (Error Codes)
