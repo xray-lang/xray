@@ -23,15 +23,19 @@
 #include <ctype.h>
 static const char regex_user[]=
  "import {compileRegex,matchesRegex} from \"./regex\"\n"
- "export fn program()->Array<i64>{return comptime compileRegex(\"ab*\")}\n"
- "fn makeRegexPrograms()->Array<Array<i64>>{return [compileRegex(\"\"),compileRegex(\"a\"),compileRegex(\"ab*\"),compileRegex(\"a*b*\"),compileRegex(\"ab*a\")]}\n"
+ "fn prepareRegex()->(Array<Array<i64>>,i64){\n"
+ " const programs:Array<Array<i64>>=[compileRegex(\"\"),compileRegex(\"a\"),compileRegex(\"ab*\"),compileRegex(\"a*b*\"),compileRegex(\"ab*a\")]\n"
+ " const answer=matchesRegex(programs[3],\"aaabbb\") && !matchesRegex(programs[3],\"abba\") ? 42 : 0\n"
+ " return (programs,answer)\n}\n"
+ "const preparedRegex=comptime prepareRegex()\n"
+ "export fn program()->Array<i64>{return preparedRegex.0[2]}\n"
  "export fn matrix()->Array<bool>{\n"
- " const programs=comptime makeRegexPrograms()\n"
+ " const programs=preparedRegex.0\n"
  " const texts:Array<string>=[\"\",\"a\",\"b\",\"ab\",\"abb\",\"aaabbb\",\"aba\",\"abba\",\"bb\",\"c\",\"ac\"]\n"
  " var out:Array<bool>=[];var p:i64=0\n"
  " while(p<len(programs)){var i:i64=0;while(i<len(texts)){out.push(matchesRegex(programs[p],texts[i]));i=i+1};p=p+1}\n"
  " return out\n}\n"
- "export fn answer()->i64{return comptime {const code=compileRegex(\"a*b*\");matchesRegex(code,\"aaabbb\") && !matchesRegex(code,\"abba\") ? 42 : 0}}\n";
+ "export fn answer()->i64{return preparedRegex.1}\n";
 static uint32_t regex_function(const XrXirModule *module,const char *name) {
  uint32_t found=UINT32_MAX;size_t length=strlen(name);
  for(uint32_t f=0;f<module->function_count;++f)if(module->functions[f].name_length==length && !memcmp(module->functions[f].name,name,length)){CHECK(found==UINT32_MAX);found=f;}

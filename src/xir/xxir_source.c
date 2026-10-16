@@ -198,6 +198,7 @@ typedef struct SourceRootQuery {
     bool expression, cell;
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
+typedef struct SourceLibraryAdmission SourceLibraryAdmission;
 typedef struct SourceComptimeSite SourceComptimeSite;
 typedef struct SourceDeriveJob SourceDeriveJob;
 typedef struct SourceContext {
@@ -210,6 +211,7 @@ typedef struct SourceContext {
     SourceMemory *retired_vectors;
     XrXirConstruction *construction;
     SourceLibraryUnit *library_units;
+    SourceLibraryAdmission *library_admissions;
     XrXirDerivationTable derivations;
     SourceDeriveJob *derive_jobs; const SourceDeriveJob *derive_input;
     SourceRootQuery *root_queries;

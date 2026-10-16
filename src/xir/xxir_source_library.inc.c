@@ -11,6 +11,29 @@
  */
 #include "xxir_internal.h"
 #include "xxir_library_import_shape.inc.c"
+/* An immutable catalog artifact is admitted once per Source construction.
+ * Every module view still checks its own identity and exact dependency edges.
+ * The receiving construction starts with a distinct empty admission list. */
+struct SourceLibraryAdmission {
+    SourceLibraryAdmission *next;
+    const XrXirArtifact *artifact;
+};
+static bool source_library_admit(SourceContext *ctx,const XrXirArtifact *artifact) {
+    for (SourceLibraryAdmission *entry=ctx->library_admissions;entry;entry=entry->next) {
+        if (!source_work(ctx,NULL)) return false;
+        if (entry->artifact==artifact) return true;
+    }
+    const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
+    XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile,library,construction,NULL);
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"Checked library verification failed");
+    status=library_catalog_shape(library,construction,&ctx->compile);
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"Checked library import subset is not admitted");
+    SourceLibraryAdmission *entry=source_alloc(ctx,1,sizeof(*entry));
+    if (!entry) return false;
+    entry->artifact=artifact;entry->next=ctx->library_admissions;ctx->library_admissions=entry;
+    return true;
+}
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module) {
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     if(!resource||!resource->checked){source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");return NULL;}
@@ -23,11 +46,7 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
     if(library->linkage_kind!=XR_XIR_LIBRARY||!library->function_count){
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"Checked library kind is required");return NULL;
     }
-    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
-    XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile, library, construction, NULL);
-    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
-    status=library_catalog_shape(library,construction,&ctx->compile);
-    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}
+    if (!source_library_admit(ctx,artifact)) return NULL;
     const XrXirDeclarations *d = library->declarations;
     const XrModuleSpec *spec = &ctx->graph->specs[module];
     if (!d || resource->checked_module >= d->module_count) {
