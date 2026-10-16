@@ -1553,22 +1553,34 @@ XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
         local, type, &admission->work, instance_admission_work);
     if (match != XR_XIR_OK) return match == XR_XIR_BUDGET ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
+    if (!binding) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *carrier=instance;
+    XrXirType carrier_type=type;
     uint32_t entry=0;
-    status=instance_received_function_entry(instance,binding,&entry,&admission->work);
+    if (local==type) {
+        XrXirValueStatus selected=instance_function_admission_state(instance,binding->owner,
+            &admission->work,&carrier);
+        if (selected!=XR_XIR_VALUE_OK) return value_call_status(selected);
+        carrier_type=(XrXirType)input->type;entry=binding->entry;
+    } else {
+        status=instance_received_function_entry(instance,binding,&entry,&admission->work);
+        if (status!=XR_XIR_CALL_READY) return status;
+    }
+    if (!function_bound_admitted(carrier->program, entry,
+        xr_xir_callable_signature(carrier->program->types, carrier_type))) return XR_XIR_CALL_BAD_ARGUMENT;
+    status=prepare_function_gate(carrier);
     if (status!=XR_XIR_CALL_READY) return status;
-    if (!function_bound_admitted(instance->program, entry,
-        xr_xir_callable_signature(instance->program->types, type))) return XR_XIR_CALL_BAD_ARGUMENT;
-    status=prepare_function_gate(instance);
-    if (status!=XR_XIR_CALL_READY) return status;
-    if (!function_gate_retain(instance->function_gate)) return XR_XIR_CALL_LIMIT;
-    /* An explicit conversion creates a new receiving carrier. The original
-     * value keeps its birth gate; this binding uses only the authenticated
-     * received body and its unchanged actual captures. */
-    XrXirFunctionBinding received={instance->function_gate,function_gate_drop,entry,
+    if (!function_gate_retain(carrier->function_gate)) return XR_XIR_CALL_LIMIT;
+    /* Canonical identity keeps the actual birth arena. A changed bound uses
+     * only a compiler-authenticated receiving body. Both create an unstamped
+     * carrier rather than copying producer permission through conversion. */
+    XrXirFunctionBinding received={carrier->function_gate,function_gate_drop,entry,
         binding->captures,binding->capture_count};
-    status = value_call_status(xr_xir_function_new(instance->domain, instance->program->arena,
-        type, &received, admission, output));
-    if (status != XR_XIR_CALL_READY) function_gate_drop(instance->function_gate);
+    XrXirValueAdmission local_admission=*admission;local_admission.arena=carrier->program->arena;
+    status = value_call_status(xr_xir_function_new(instance->domain, carrier->program->arena,
+        carrier_type, &received, &local_admission, output));
+    admission->work=local_admission.work;admission->scratch_bytes=local_admission.scratch_bytes;
+    if (status != XR_XIR_CALL_READY) function_gate_drop(carrier->function_gate);
     return status;
 }
 static XrXirCallStatus prepare_function_gate(XrXirInstance *instance) {

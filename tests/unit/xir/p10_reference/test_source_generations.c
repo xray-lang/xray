@@ -21,6 +21,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 #include "source_history_cell_fixture.h"
+#include "source_history_function_fixture.h"
 #if defined(XR_SOURCE_HISTORY_NATIVE)
 #include "source_history_native_generated.h"
 static bool history_native_case;
@@ -56,7 +57,9 @@ static XrXirProgram *program(const XrXirSourceGenerationView *view,const char *n
     bool native=history_native_case && !(view->serial==1 ? XR_SOURCE_HISTORY_OLD_VM : XR_SOURCE_HISTORY_NEW_VM);
     if (native) {
         CHECK(view->serial>=1 && view->serial<=4);
-        const XrXirProgramSpec *spec=source_history_native_programs[history_native_kind][view->serial-1];
+        unsigned fixture=history_native_kind>=9 ? history_native_kind-5 : history_native_kind;
+        CHECK(fixture<6);
+        const XrXirProgramSpec *spec=source_history_native_programs[fixture][view->serial-1];
         CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(lowered),spec,&output)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);return output;
     }
@@ -96,6 +99,7 @@ static void source_publish(SourceFixtureOwner *compiler,XrXirSourceGenerations *
     CHECK(xr_compile_resources_stats(compiler->context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(before.work==after.work && before.allocated_bytes==after.allocated_bytes && after.live_bytes<=before.live_bytes);
 }
+#include "source_history_function_value.h"
 static void compile_failure(XrXirSourceGenerations *owner,uint64_t first) {
     const char source[]="const value=missing";
     const XrXirSourceText text={NULL,source,sizeof(source)-1};
@@ -393,6 +397,13 @@ static void inspection_definitions(void) {
     xr_xir_compile_source_generations_free(owner);source_fixture_owner_free(&compiler);
 }
 int main(int argc,char **argv) {
+    if (argc==2 && (!strcmp(argv[1],"--history-function-call") || !strcmp(argv[1],"--history-function-value"))) {
+        bool escaped=!strcmp(argv[1],"--history-function-value");
+#if defined(XR_SOURCE_HISTORY_NATIVE)
+        history_native_case=true;history_native_kind=escaped?10u:9u;
+#endif
+        return escaped?history_function_value():history_function_call();
+    }
     if (argc==2) return history_check(argv[1]);
     CHECK(argc==1);
     mutable_definitions();

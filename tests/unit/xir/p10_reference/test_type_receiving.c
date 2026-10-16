@@ -34,6 +34,7 @@ static void no_change(const XrXirCompileContext *context,XrCompileResourceStats 
 }
 #include "type_receiving_nested.h"
 #include "type_receiving_error.h"
+#include "type_receiving_function.h"
 int main(void) {
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     received_nested_arrays(&compiler);
@@ -123,6 +124,7 @@ int main(void) {
     receiving_display_cases(&compiler);
     receiving_error_storage_cases(&compiler);
     receiving_storage_faults(&compiler);
+    received_function_storage(&compiler);
     source_fixture_owner_free(&compiler);instance_compile_zero();
     CHECK(!runtime_live && !runtime_bytes);
     puts("Actual nested Cell/Array carrier retained its birth type through two receiving identities; unrelated lookalike, foreign Domain and failed preparation rejected; physical0");
