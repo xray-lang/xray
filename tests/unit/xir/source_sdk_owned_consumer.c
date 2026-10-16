@@ -12,6 +12,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __cplusplus
+static_assert(sizeof(XrSourceReplBindingInfo)==40,"Public REPL binding layout");
+#else
+_Static_assert(sizeof(XrSourceReplBindingInfo)==40,"Public REPL binding layout");
+#endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 static XrSourceInvocation request(const char *name,const XrSourceValue *const *arguments,size_t count) {
     XrSourceInvocation result;
@@ -130,7 +135,6 @@ static void sdk_repl_inspection_cases(const char *stdlib_path) {
     XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
     CHECK(xray_source_compiler_options_init(&compiler,sizeof(compiler))==XR_SOURCE_OK);
     CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
-    CHECK(sizeof(XrSourceReplBindingInfo)==40);
     SdkReplTrace trace;memset(&trace,0,sizeof(trace));
     compiler.stdlib_path=stdlib_path;runtime.write=sdk_repl_output;runtime.context=&trace;runtime.output_byte_limit=sizeof(trace.bytes);
     XrSourceRepl *owner=NULL;
