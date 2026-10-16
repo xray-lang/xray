@@ -1,6 +1,6 @@
 """Install and admit the exact same runtime bundle without rebuilding its contents."""
 from pathlib import Path
-import argparse, hashlib, json, os, shutil, subprocess
+import argparse, hashlib, json, os, re, shutil, subprocess
 
 
 def main():
@@ -25,8 +25,10 @@ def main():
     expected_files={installed/row['path'] for row in manifest['files']}|{installed/'sdk_manifest.json'}
     if args.source_sdk:
         source_manifest=json.loads((source_original/'source_sdk_manifest.json').read_text(encoding='utf-8'))
-        members=source_manifest['archives']+['include/xray_source.h','include/xray_export.h',
-                                           'source_sdk_manifest.json','source_sdk_recipe.json']
+        headers=['xray_source.h','xray_export.h','xray_source_ast.h','xray_source_value.h',
+                 'xray_source_entry.h','xray_source_instance.h','xray_source_repl.h']
+        members=source_manifest['archives']+['include/'+name for name in headers]
+        members+=['source_sdk_manifest.json','source_sdk_recipe.json']
         assert len(members)==len(set(members))
         assert set(members)=={row['path'] for row in source_manifest['files']}|{'source_sdk_manifest.json'}
         configuration=prefix/'lib/cmake/XraySource/XraySourceConfig.cmake'
@@ -46,6 +48,17 @@ def main():
         assert actual_files==expected_files,(actual_files-expected_files,expected_files-actual_files)
         payload=json.loads(payload_path.read_text(encoding='utf-8'))
         assert payload['schema']==2 and payload['product']=='xray-lang' and payload['components']==['sdk']
+        identity=json.loads((build/'generated/install/install-marker.json').read_text(encoding='utf-8'))
+        for key in ('version','commit','target'):
+            assert payload[key]==identity[key],key
+        header=(build/'generated/xray_build_identity.h').read_text(encoding='utf-8')
+        for key,macro in [('commit','COMMIT'),('buildProfile','PROFILE'),('target','TARGET')]:
+            matches=re.findall(r'^#define XRAY_BUILD_'+macro+r' "([^"\n]+)"$',header,re.M)
+            assert len(matches)==1 and payload[key]==matches[0],key
+        matches=re.findall(r'^#define XRAY_BUILD_DIRTY ([01])$',header,re.M)
+        assert len(matches)==1 and payload['dirty'] is bool(int(matches[0]))
+        assert not (prefix/'bin/xray.exe').exists()
+        assert not any(path.suffix in ('.xr','.chk') for path in prefix.rglob('*'))
         assert [row['path'] for row in payload['files']]==sorted(path.relative_to(prefix).as_posix()
             for path in expected_files-{payload_path})
         for row in payload['files']:

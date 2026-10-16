@@ -63,6 +63,15 @@ if(WIN32)
     foreach(provider msvc clang zig)
         string(TOUPPER ${provider} upper)
         if(XIR_SDK_${upper})
+            if(NOT provider STREQUAL "zig")
+                add_test(NAME test_xir_runtime_sdk_${provider}_archive_closure COMMAND ${XRAY_PYTHON} -B
+                    ${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_archive_closure.py
+                    --build ${CMAKE_BINARY_DIR} --compiler ${XIR_SDK_${upper}}
+                    --linker ${XIR_SDK_LINKER} --archiver ${CMAKE_AR} --provider ${provider}
+                    --output ${CMAKE_CURRENT_BINARY_DIR}/sdk-archive-closure)
+                set_tests_properties(test_xir_runtime_sdk_${provider}_archive_closure PROPERTIES
+                    LABELS "unit;xir;ownership;sdk;abi;archive;closure" RUN_SERIAL TRUE TIMEOUT 300 COST 3)
+            endif()
             add_test(NAME test_xir_runtime_sdk_${provider}_native COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_native_consumers.py
                 --lease $<TARGET_FILE:test_xir_sdk_lease> --generator $<TARGET_FILE:test_xir_source_product_linked>
