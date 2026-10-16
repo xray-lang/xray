@@ -34,6 +34,14 @@ typedef struct CellProofEdge {
     uint32_t from, to, next, reverse;
     bool identity;
 } CellProofEdge;
+/* Receiving coordinates and operation fields are owned only by this request.
+ * They contain no inferred origin, scope permission or retained body pointer. */
+typedef struct CellProofSink {
+    uint32_t function,instruction,ordinal,source;
+    XrXirOp opcode;
+    int64_t immediate;
+} CellProofSink;
+
 typedef struct CellProofBuild {
     const XrXirCompileContext *context;
     const XrXirCellProofBodyRead *body;
@@ -43,8 +51,9 @@ typedef struct CellProofBuild {
     uint32_t *heads, *reverse_heads, *queue;
     uint8_t *queued, *uses;
     CellProofEdge *edges;
+    CellProofSink *sinks;
+    uint32_t sink_count,sink_capacity;
     uint32_t edge_count, edge_capacity, queue_read, queue_write, queue_count;
-    bool counting_edges;
 } CellProofBuild;
 
 static bool cell_proof_work(CellProofBuild *build, uint64_t units) {
@@ -107,24 +116,56 @@ static bool cell_proof_seed(CellProofBuild *build, uint32_t node, uint8_t mask) 
     build->proof->origins[node] = next;
     return cell_proof_enqueue(build,node);
 }
-static bool cell_proof_edge(CellProofBuild *build, uint32_t from, uint32_t to, bool identity) {
-    if (!cell_proof_work(build,3)) return false;
-    if (from >= build->proof->value_count || to >= build->proof->value_count)
-        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
-    if (build->counting_edges) {
-        if (build->edge_count == UINT32_MAX)
-            return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
-        if (!cell_proof_work(build,1)) return false;
-        ++build->edge_count; return true;
+/* Only appended rows are initialized. Growth copies actual live edges and
+ * charges their bytes before publication; a failed prefix retains the owner. */
+static bool cell_proof_edge_reserve(CellProofBuild *build) {
+    if (build->edge_count<build->edge_capacity) return true;
+    if (build->edge_count==UINT32_MAX)
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
+    uint32_t capacity=build->edge_capacity>UINT32_MAX/2?UINT32_MAX:
+        build->edge_capacity?build->edge_capacity*2:4;
+    if ((uint64_t)capacity>SIZE_MAX/sizeof(*build->edges))
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
+    CellProofEdge *next=xir_compile_alloc(build->context,(size_t)capacity*sizeof(*next),&build->status);
+    if (!next) return false;
+    size_t bytes=(size_t)build->edge_count*sizeof(*next);
+    if (!cell_proof_work(build,(uint64_t)bytes+sizeof(build->edges)+sizeof(build->edge_capacity))) {
+        xr_compile_resources_free(next);return false;
     }
-    if (build->edge_count == build->edge_capacity)
-        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
-    if (!cell_proof_work(build,9)) return false;
-    uint32_t id = build->edge_count++;
-    build->edges[id] = (CellProofEdge){from,to,build->heads[from],build->reverse_heads[to],identity};
-    build->heads[from] = id; build->reverse_heads[to] = id;
+    if (bytes) memcpy(next,build->edges,bytes);
+    xr_compile_resources_free(build->edges);build->edges=next;build->edge_capacity=capacity;
     return true;
 }
+static bool cell_proof_edge(CellProofBuild *build,uint32_t from,uint32_t to,bool identity) {
+    if (!cell_proof_work(build,3)) return false;
+    if (from>=build->proof->value_count || to>=build->proof->value_count)
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    if (!cell_proof_edge_reserve(build) || !cell_proof_work(build,9)) return false;
+    uint32_t id=build->edge_count++;
+    build->edges[id]=(CellProofEdge){from,to,build->heads[from],build->reverse_heads[to],identity};
+    build->heads[from]=id;build->reverse_heads[to]=id;return true;
+}
+static bool cell_proof_sink_add(CellProofBuild *build,const CellProofSink *sink) {
+    if (build->sink_count==build->sink_capacity) {
+        if (build->sink_count==UINT32_MAX)
+            return cell_proof_error(build,sink->function,sink->instruction,XR_XIR_BUDGET);
+        uint32_t capacity=build->sink_capacity>UINT32_MAX/2?UINT32_MAX:
+            build->sink_capacity?build->sink_capacity*2:4;
+        if ((uint64_t)capacity>SIZE_MAX/sizeof(*sink))
+            return cell_proof_error(build,sink->function,sink->instruction,XR_XIR_BUDGET);
+        CellProofSink *next=xir_compile_alloc(build->context,(size_t)capacity*sizeof(*next),&build->status);
+        if (!next) return false;
+        size_t bytes=(size_t)build->sink_count*sizeof(*next);
+        if (!cell_proof_work(build,(uint64_t)bytes+sizeof(build->sinks)+sizeof(build->sink_capacity))) {
+            xr_compile_resources_free(next);return false;
+        }
+        if (bytes) memcpy(next,build->sinks,bytes);
+        xr_compile_resources_free(build->sinks);build->sinks=next;build->sink_capacity=capacity;
+    }
+    if (!cell_proof_work(build,sizeof(*sink)+sizeof(build->sink_count))) return false;
+    build->sinks[build->sink_count++]=*sink;return true;
+}
+
 /* The writer and callback walker submit the same physical row. This sink
  * owns no permission: it only accumulates genuine Cell and Place inventory,
  * and the ordinary role, edge, solve and validation stages still follow. */
@@ -303,10 +344,9 @@ static bool cell_proof_inventory(CellProofBuild *build) {
                 if (!cell_proof_work(build,3)) return false;
                 XrXirType type=cell_proof_type(build,f,v);
                 if (build->status!=XR_XIR_OK) return false;
-                XrXirCellProofInstructionShape shape={0};
+                XrXirCellProofInstructionShape shape;
                 const XrXirCellProofInstructionShape *instruction=NULL;
                 if (v>=function->parameter_count) {
-                    if (!cell_proof_work(build,sizeof(shape))) return false;
                     if (!cell_proof_shape(build,f,v-function->parameter_count,&shape)) return false;
                     XrXirType independent=cell_proof_type(build,f,v);
                     if (build->status!=XR_XIR_OK) return false;
@@ -603,7 +643,7 @@ static bool cell_proof_local_uninit(CellProofBuild *build,uint32_t f,uint32_t i)
     return op && op->op==XR_XIR_LOCAL_UNINIT;
 }
 
-/* This exact row receiver is shared by edge count and edge write. */
+/* This row receiver owns edges and Cell use coordinates in one complete walk. */
 static bool cell_proof_edge_row(CellProofBuild *build,uint32_t f,uint32_t i,
     const XrXirCellProofBodyHead *function,const XrXirInstruction *op) {
     XrXirCellProvenance *proof=build->proof;const XirMetadataDomain *module=&build->body->domain;
@@ -645,6 +685,11 @@ static bool cell_proof_edge_row(CellProofBuild *build,uint32_t f,uint32_t i,
         if (value >= proof->functions[f].count)
             return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
         uint32_t source = begin+value;
+        if (cell_proof_tracking(proof,f,value)==1) {
+            if (!cell_proof_work(build,sizeof(CellProofSink))) return false;
+            CellProofSink sink={f,i,a,source,op->op,op->immediate};
+            if (!cell_proof_sink_add(build,&sink)) return false;
+        }
         if (cell && cell_proof_identity_producer(op->op)) {
             if (!cell_proof_edge(build,source,result,true)) return false;
         } else if (op->op == XR_XIR_FUNCTION_REF) {
@@ -714,6 +759,10 @@ static bool cell_proof_edges_range(CellProofBuild *build,uint32_t f,
 static bool cell_proof_build_edges(CellProofBuild *build) {
     for (uint32_t f=0;f<build->body->domain.function_count;++f) {
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
+        const CellProofFunction *stored=&build->proof->functions[f];
+        if (head.parameter_count!=stored->parameters ||
+            (uint64_t)head.parameter_count+head.instruction_count!=stored->count)
+            return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
         if (!build->body->range) {
             for (uint32_t i=0;i<head.instruction_count;++i) {
                 if (!cell_proof_work(build,3)) return false;
@@ -740,28 +789,8 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
     return true;
 }
 
-static bool cell_proof_edge_storage_bytes(size_t count, size_t *bytes) {
-    if (count > SIZE_MAX/sizeof(CellProofEdge)) return false;
-    *bytes = count*sizeof(CellProofEdge); return true;
-}
-/* The same complete walker seeds one proof and counts every actual edge.
- * Replaying it appends the exact ordered graph; seed OR operations are idempotent.
- * No solver or output observes the proof before both finite passes complete. */
 static bool cell_proof_prepare_edges(CellProofBuild *build) {
-    build->counting_edges = true;
-    bool counted = cell_proof_build_edges(build);
-    build->counting_edges = false;
-    if (!counted) return false;
-    build->edge_capacity = build->edge_count; build->edge_count = 0;
-    size_t bytes = 0;
-    if (!cell_proof_edge_storage_bytes(build->edge_capacity,&bytes))
-        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
-    if (!cell_proof_work(build,4)) return false;
-    build->edges = xir_compile_alloc(build->context,bytes,&build->status);
-    if (build->status != XR_XIR_OK || !cell_proof_build_edges(build)) return false;
-    if (!cell_proof_work(build,1)) return false;
-    return build->edge_count == build->edge_capacity ||
-        cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    return cell_proof_build_edges(build);
 }
 
 static bool cell_proof_join(CellProofBuild *build, uint32_t from, uint32_t to) {
@@ -817,32 +846,32 @@ static bool cell_proof_solve(CellProofBuild *build) {
     return true;
 }
 
-static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
-    uint32_t ordinal, uint32_t source,const XrXirInstruction *op) {
-    if (!op) return false;
+static bool cell_proof_sink(CellProofBuild *build,const CellProofSink *sink) {
+    if (!sink) return false;
+    uint32_t f=sink->function,i=sink->instruction,ordinal=sink->ordinal,source=sink->source;
     XrXirCellProvenance *proof = build->proof;
     uint8_t origin = proof->origins[source];
     if (!(origin & (XR_XIR_CELL_ORIGIN_OWNED | XR_XIR_CELL_ORIGIN_SCOPED | XR_XIR_CELL_ORIGIN_MODULE)) ||
         (origin & XR_XIR_CELL_ORIGIN_UNKNOWN)) return cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
-    if (cell_proof_identity_producer(op->op)) return true;
-    if (op->op == XR_XIR_CELL_STRING_APPEND && !ordinal)
+    if (cell_proof_identity_producer(sink->opcode)) return true;
+    if (sink->opcode == XR_XIR_CELL_STRING_APPEND && !ordinal)
         return !(origin & XR_XIR_CELL_ORIGIN_SCOPED) || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
-    if ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE ||
-        op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_CELL_LOCAL_WRITE) && !ordinal) return true;
-    if (op->op == XR_XIR_LOCAL_WRITE || op->op == XR_XIR_OWNED_LOCAL_WRITE) return true;
-    if (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ||
-        op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLEANUP_REGISTER) {
-        uint32_t target = (uint32_t)op->immediate;
+    if ((sink->opcode == XR_XIR_CELL_READ || sink->opcode == XR_XIR_CELL_WRITE ||
+        sink->opcode == XR_XIR_CELL_PLACE || sink->opcode == XR_XIR_CELL_LOCAL_WRITE) && !ordinal) return true;
+    if (sink->opcode == XR_XIR_LOCAL_WRITE || sink->opcode == XR_XIR_OWNED_LOCAL_WRITE) return true;
+    if (sink->opcode == XR_XIR_CALL || sink->opcode == XR_XIR_INVOKE ||
+        sink->opcode == XR_XIR_FUNCTION_REF || sink->opcode == XR_XIR_CLEANUP_REGISTER) {
+        uint32_t target = (uint32_t)sink->immediate;
         uint8_t role = proof->roles[proof->functions[target].begin+ordinal];
-        if (op->op == XR_XIR_FUNCTION_REF)
+        if (sink->opcode == XR_XIR_FUNCTION_REF)
             return (role == XR_XIR_CELL_PROOF_OWNED_CAPTURE && origin == XR_XIR_CELL_ORIGIN_OWNED) ||
                 cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
-        if (op->op == XR_XIR_CLEANUP_REGISTER)
+        if (sink->opcode == XR_XIR_CLEANUP_REGISTER)
             return role == XR_XIR_CELL_PROOF_LEXICAL_CLEANUP || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
         return role == XR_XIR_CELL_PROOF_SCOPED_REF || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     }
-    if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
-        XrXirType callee = cell_proof_type(build,f,(uint32_t)op->immediate);
+    if (sink->opcode == XR_XIR_CALL_INDIRECT || sink->opcode == XR_XIR_INVOKE_INDIRECT) {
+        XrXirType callee = cell_proof_type(build,f,(uint32_t)sink->immediate);
         const XrXirTypeNode *signature = xr_xir_callable_signature(build->body->domain.types,callee);
         if (!signature || ordinal >= signature->parameter_count)
             return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
@@ -852,63 +881,29 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
                 cell_proof_type(build,f,source-proof->functions[f].begin)) ||
             cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
     }
-    if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_GROUP_INIT)
+    if (sink->opcode == XR_XIR_SLOT_INIT || sink->opcode == XR_XIR_SLOT_GROUP_INIT)
         return origin == (XR_XIR_CELL_ORIGIN_OWNED | XR_XIR_CELL_ORIGIN_MODULE) ||
             cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     /* Return, aggregate, capture, GO and unsupported retention fail closed. */
     return cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
 }
 
-static bool cell_proof_validate_row(CellProofBuild *build,uint32_t f,uint32_t i,
-    const XrXirCellProofBodyHead *function,const XrXirInstruction *op) {
-    XrXirCellProvenance *proof=build->proof;uint32_t begin=proof->functions[f].begin;
-    uint32_t count = cell_proof_operand_count(build,f,function,op);
-    for (uint32_t a = 0; a < count; ++a) {
-        if (!cell_proof_work(build,4)) return false;
-        if (op->op == XR_XIR_PHI && !(a & 1u)) continue;
-        uint32_t value = cell_proof_operand(function,op,a);
-        if (value >= proof->functions[f].count)
-            return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
-        uint32_t source = begin+value;
-        if (cell_proof_tracking(proof,f,value) == 1 && !cell_proof_sink(build,f,i,a,source,op)) return false;
-    }
-    return true;
-}
-
+/* Solving changes only origin rows. Every sink still uses the independently
+ * admitted current operation fields received during this request's full walk. */
 static bool cell_proof_validate(CellProofBuild *build) {
-    XrXirCellProvenance *proof = build->proof;
-    for (uint32_t f = 0; f < build->body->domain.function_count; ++f) {
-        XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
-        const XrXirCellProofBodyHead *function=&head;
-        uint32_t begin = proof->functions[f].begin;
-        for (uint32_t p = 0; p < function->parameter_count; ++p) {
+    XrXirCellProvenance *proof=build->proof;
+    for (uint32_t f=0;f<proof->function_count;++f) {
+        const CellProofFunction *function=&proof->functions[f];
+        if (!cell_proof_work(build,2)) return false;
+        for (uint32_t p=0;p<function->parameters;++p) {
             if (!cell_proof_work(build,3)) return false;
-            if (proof->functions[f].stored && proof->roles[begin+p] == XR_XIR_CELL_PROOF_OWNED_CAPTURE &&
-                proof->origins[begin+p] != XR_XIR_CELL_ORIGIN_OWNED)
+            if (function->stored && proof->roles[function->begin+p]==XR_XIR_CELL_PROOF_OWNED_CAPTURE &&
+                proof->origins[function->begin+p]!=XR_XIR_CELL_ORIGIN_OWNED)
                 return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_VALUE);
         }
-        if (!build->body->range) {
-            for (uint32_t i=0;i<function->instruction_count;++i) {
-                if (!cell_proof_work(build,1)) return false;
-                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_instruction(build,f,i,&operation);
-                if (!op || !cell_proof_validate_row(build,f,i,function,op)) return false;
-            }
-            continue;
-        }
-        if (!cell_proof_work(build,sizeof(XrXirCellProofRunCursor))) return false;
-        XrXirCellProofRunCursor cursor={.function=f};
-        while (cursor.next<function->instruction_count) {
-            XrXirCellProofRun run;bool zero=false;
-            if (!cell_proof_run(build,function,&cursor,&run) ||
-                !cell_proof_zero_operands(build,f,function,&run,&zero)) return false;
-            if (zero) continue;
-            for (uint32_t i=run.first;i-run.first<run.count;++i) {
-                if (!cell_proof_work(build,1)) return false;
-                XrXirInstruction operation;const XrXirInstruction *op=
-                    cell_proof_run_operation(build,f,&run,i,&operation);
-                if (!op || !cell_proof_validate_row(build,f,i,function,op)) return false;
-            }
-        }
+    }
+    for (uint32_t n=0;n<build->sink_count;++n) {
+        if (!cell_proof_work(build,2) || !cell_proof_sink(build,&build->sinks[n])) return false;
     }
     return true;
 }
@@ -940,6 +935,7 @@ static void cell_proof_workspace_free(CellProofBuild *build) {
     xr_compile_resources_free(build->heads);xr_compile_resources_free(build->reverse_heads);
     xr_compile_resources_free(build->queue);xr_compile_resources_free(build->queued);
     xr_compile_resources_free(build->uses);xr_compile_resources_free(build->edges);
+    xr_compile_resources_free(build->sinks);
 }
 static XrXirStatus cell_proof_derive(const XrXirCompileContext *context,
     const XrXirCellProofBodyRead *body, XrXirCellProvenance **output, XrXirDiagnostic *diagnostic) {

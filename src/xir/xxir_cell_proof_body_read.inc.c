@@ -109,17 +109,17 @@ static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,ui
     return i==run->first?&run->operation:cell_proof_instruction(build,f,i,storage);
 }
 
+/* The caller's private row is the sole initialized destination. A failed
+ * callback cannot expose this scratch or publish the containing proof. */
 static bool cell_proof_shape(CellProofBuild *build,uint32_t f,uint32_t i,
     XrXirCellProofInstructionShape *output) {
-    if (build->status!=XR_XIR_OK || !output) return false;
-    XrXirCellProofInstructionShape shape={0};
-    if (!cell_proof_work(build,sizeof(shape))) return false;
-    XrXirStatus status=build->body->shape(build->context,build->body->owner,f,i,&shape);
+    if (build->status!=XR_XIR_OK || !output || !cell_proof_work(build,sizeof(*output))) return false;
+    *output=(XrXirCellProofInstructionShape){0};
+    XrXirStatus status=build->body->shape(build->context,build->body->owner,f,i,output);
     if (status!=XR_XIR_OK) return cell_proof_error(build,f,i,status);
-    if (shape.op<=XR_XIR_INVALID || shape.op>=XR_XIR_OP_COUNT)
+    if (output->op<=XR_XIR_INVALID || output->op>=XR_XIR_OP_COUNT)
         return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
-    if (!cell_proof_work(build,sizeof(*output))) return false;
-    *output=shape;return true;
+    return true;
 }
 static XrXirType cell_proof_type(CellProofBuild *build,uint32_t f,uint32_t value) {
     XrXirType type=XR_XIR_UNIT;

@@ -239,7 +239,9 @@ static void cell_proof_indirect_ref(void) {
 #include "xir_cell_zero_tracked_cases.h"
 #include "xir_cell_class_fact_cases.h"
 #include "xir_cell_body_read_cases.h"
+#include "xir_cell_sink_receiving_cases.h"
 int main(void) {
+    cell_sink_receiving_cases();
     cell_body_read_cases();
     cell_class_fact_cases();
     cell_zero_tracked_cases();
