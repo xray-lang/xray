@@ -25,7 +25,6 @@ typedef struct XrXirProgramFunctionRef {
 } XrXirProgramFunctionRef;
 typedef struct XrXirProgramPermission {
     uint32_t reference_begin, reference_count;
-    uint32_t root_parameter_begin, root_parameter_count, intrinsic_root;
     bool requires_root, unresolved;
     XrXirStatus worker;
 } XrXirProgramPermission;
@@ -35,10 +34,7 @@ typedef struct XrXirProgramPermissions {
     uint64_t frame_bytes;
     XrXirProgramPermission *entries;
     XrXirProgramFunctionRef *references;
-    uint32_t *parameter_offsets;
-    uint32_t *root_parameters;
-    uint8_t *cell_roles;
-    uint32_t root_parameter_count, reference_count;
+    uint32_t reference_count;
     struct XrXirEffects *effects;
     XrXirFunctionLayout *layouts;
     XrXirTarget target;

@@ -57,10 +57,6 @@ static void cell_proof_actual_edges(void) {
     CHECK(xr_xir_compile_cell_access(&context,proof,&request,&access) == XR_XIR_OK && access == 2);
     XrXirCellProvenance *occupied = proof;
     CHECK(xr_xir_compile_cell_provenance_verified(&context,&fixture.module,&occupied,NULL) == XR_XIR_BAD_STRUCTURE && occupied == proof);
-    uint32_t offsets[7] = {0}; uint8_t roles[4] = {0};
-    CHECK(xr_xir_compile_cell_roles_verified(&context,&fixture.module,offsets,roles,NULL) == XR_XIR_OK);
-    const uint32_t expected_offsets[] = {0,0,0,1,2,3,4}; const uint8_t expected_roles[] = {2,1,3,0};
-    CHECK(!memcmp(offsets,expected_offsets,sizeof(offsets)) && !memcmp(roles,expected_roles,sizeof(roles)));
     /* Every source buffer dies while the finite proof remains independently owned. */
     memset(&fixture,0xCC,sizeof(fixture)); cell_proof_view(&context,proof,2,0,true);
     XrXirCompileContext foreign = cell_proof_context(33554432);
@@ -239,7 +235,11 @@ static void cell_proof_indirect_ref(void) {
 #include "xir_cell_zero_tracked_cases.h"
 #include "xir_cell_class_fact_cases.h"
 #include "xir_cell_body_read_cases.h"
-int main(void) {
+#include "xir_cell_final_runtime_cases.h"
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--final-runtime")));
+    cell_final_runtime_cases();
+    if (argc==2) return 0;
     cell_body_read_cases();
     cell_class_fact_cases();
     cell_zero_tracked_cases();

@@ -4542,6 +4542,8 @@ target_include_directories(test_xir_cell_provenance PRIVATE "${CMAKE_SOURCE_DIR}
 target_link_libraries(test_xir_cell_provenance PRIVATE xray_xir)
 add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
 set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
+add_test(NAME test_xir_cell_final_runtime COMMAND test_xir_cell_provenance --final-runtime)
+set_tests_properties(test_xir_cell_final_runtime PROPERTIES LABELS "xir;ownership;finite-control;runtime;cell" TIMEOUT 60)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")

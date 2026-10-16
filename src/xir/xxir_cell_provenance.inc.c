@@ -1254,29 +1254,3 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_access(const XrXirCompileContext *contex
     *output = result;
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_cell_roles_verified(const XrXirCompileContext *context,
-    const XrXirModule *module, uint32_t *offsets, uint8_t *roles, XrXirDiagnostic *diagnostic) {
-    if (!offsets) return XR_XIR_BAD_STRUCTURE;
-    XrXirCellProvenance *proof = NULL;
-    XrXirStatus status = xr_xir_compile_cell_provenance_verified(context,module,&proof,diagnostic);
-    if (status != XR_XIR_OK) return status;
-    uint64_t total = 0;
-    if (!xir_compile_work(context,(uint64_t)proof->function_count*2)) status = XR_XIR_BUDGET;
-    if (status == XR_XIR_OK)
-        for (uint32_t f = 0; f < proof->function_count; ++f) total += proof->functions[f].parameters;
-    if (status == XR_XIR_OK && ((total && !roles) || total > UINT32_MAX)) status = XR_XIR_BAD_STRUCTURE;
-    if (status == XR_XIR_OK && !xir_compile_work(context,(uint64_t)proof->function_count*2+1+total*2)) status = XR_XIR_BUDGET;
-    if (status == XR_XIR_OK) {
-        uint32_t cursor = 0;
-        for (uint32_t f = 0; f < proof->function_count; ++f) {
-            offsets[f] = cursor;
-            const CellProofFunction *function = &proof->functions[f];
-            for (uint32_t p = 0; p < function->parameters; ++p)
-                roles[cursor++] = (uint8_t)xr_xir_cell_provenance_role(proof,f,p);
-        }
-        offsets[proof->function_count] = cursor;
-    }
-    xr_xir_compile_cell_provenance_free(proof);
-    if (diagnostic) diagnostic->status = status;
-    return status;
-}
