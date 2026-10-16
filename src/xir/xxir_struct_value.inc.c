@@ -66,10 +66,13 @@ static XrXirValueStatus xr_xir_struct_get_graph_operation(const XrXirValue *valu
 XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local={0};
+    XrXirValueStatus status=storage_admission_begin(value,admission,&local);
+    if (status!=XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_struct_get_graph_operation(value, field, admission, output);
+    XrXirValueStatus graph_outcome = xr_xir_struct_get_graph_operation(value, field, &local, output);
     xr_xir_value_graph_end();
-    return graph_outcome;
+    return storage_admission_end(admission,&local,graph_outcome);
 }
 static XrXirValueStatus xr_xir_struct_set_graph_operation(const XrXirValuePlace *place, uint32_t field,
     const XrXirValue *value, XrXirValueAdmission *admission) {

@@ -299,9 +299,8 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGen
     if (program->context.resources!=owner->config.context.resources) return XR_XIR_BAD_STRUCTURE;
     if (!program->permissions) return XR_XIR_BAD_STRUCTURE;
     if (program->permissions->frame_bytes>owner->config.context.limits.frame_bytes) return XR_XIR_BUDGET;
-    XrXirArtifact *closed=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_specialize(record->result.checked,&closed,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(closed,&packet,NULL);
+    XrXirCheckedPacket packet={0};
+    XrXirStatus status=xir_compile_specialized_packet(record->result.checked,&packet);
     if (status==XR_XIR_OK && (packet.length>UINT64_MAX-sizeof(program->checked_identity) ||
         !xir_compile_work(&owner->config.context,packet.length+sizeof(program->checked_identity))))
         status=XR_XIR_BUDGET;
@@ -312,7 +311,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_bind_program(XrXirSourceGen
         if (memcmp(identity,program->checked_identity,sizeof(identity)))
             status=XR_XIR_BAD_STRUCTURE;
     }
-    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(closed);
+    xr_xir_compile_checked_packet_free(&packet);
     if (status!=XR_XIR_OK) return status;
     status=generation_program_correspondence(&owner->config.context,record,program);
     if (status!=XR_XIR_OK) return status;
