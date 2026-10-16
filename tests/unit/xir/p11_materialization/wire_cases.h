@@ -44,8 +44,8 @@ static void wire_built(const XrXirCompileContext *context) {
     XrXirProvenance evidence={.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=contracts,.contract_count=4};
     XrXirModule built={XR_XIR_BUILT,functions,4,&declarations,NULL,&types,&evidence,XR_XIR_PROGRAM,NULL};
     uint32_t defaults[2]={0};XrXirConstructionRow row={0,defaults,2};
-    XrXirMaterializationBinding edge={1,0,2,0};XrXirConstructionSpec input={&row,1,&edge,1};
-    XrXirConstruction *owner=NULL;CHECK(xr_xir_compile_construction_new_v2(context,&types,&input,&owner)==XR_XIR_OK);
+    XrXirMaterializationBinding edge={1,0,2,0};XrXirConstructionSpec input={&row,1,&edge,1,NULL};
+    XrXirConstruction *owner=NULL;CHECK(xr_xir_compile_construction_new_v3(context,&types,&input,&owner)==XR_XIR_OK);
     CHECK(xr_xir_compile_types_structure_verify(context,&types)==XR_XIR_OK);
     CHECK(xr_xir_compile_declarations_verify(context,&declarations,&types,4,XR_XIR_PROGRAM)==XR_XIR_OK);
     CHECK(xir_construction_verify(context,&built,owner)==XR_XIR_OK);
@@ -62,10 +62,10 @@ static void wire_built(const XrXirCompileContext *context) {
     node.nominal.fields=field_types;node.nominal.field_count=2;
     xr_xir_compile_construction_free(owner);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    if (packet.length!=sizeof(materialization74_golden) || memcmp(packet.bytes,materialization74_golden,packet.length)) {
-        size_t at=0;while (at<packet.length && at<sizeof(materialization74_golden) && packet.bytes[at]==materialization74_golden[at]) ++at;
-        fprintf(stderr,"Independent materializer comparison actual=%zu literal=%zu first=%zu\n",packet.length,sizeof(materialization74_golden),at);
+    if (packet.length!=sizeof(materialization75_golden) || memcmp(packet.bytes,materialization75_golden,packet.length)) {
+        size_t at=0;while (at<packet.length && at<sizeof(materialization75_golden) && packet.bytes[at]==materialization75_golden[at]) ++at;
+        fprintf(stderr,"Independent materializer comparison actual=%zu literal=%zu first=%zu\n",packet.length,sizeof(materialization75_golden),at);
     }
-    CHECK(packet.length==sizeof(materialization74_golden) && !memcmp(packet.bytes,materialization74_golden,packet.length));
+    CHECK(packet.length==sizeof(materialization75_golden) && !memcmp(packet.bytes,materialization75_golden,packet.length));
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
 }

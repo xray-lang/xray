@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   A live immutable input may use another ledger; every receiving copy is charged.
  */
+#include "xxir_comptime_construction.inc.c"
 /* Dense immutable facts share the same receiving Compile owner as the graph. */
 static XrXirStatus construction_rows_shape(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionRow *rows, uint32_t count) {
@@ -46,9 +47,13 @@ XR_FUNC void xr_xir_compile_construction_free(XrXirConstruction *construction) {
     xr_compile_resources_free(construction->rows);
     xr_compile_resources_free(construction->kinds);
     xr_compile_resources_free(construction->materializations);
+    for (uint32_t b=0;b<construction->comptime.binding_count;++b)
+        xr_compile_resources_free((void *)construction->comptime.bindings[b].arguments);
+    xr_compile_resources_free((void *)construction->comptime.bindings);
+    xr_compile_resources_free((void *)construction->comptime.sites);
     xr_compile_resources_free(construction);
 }
-XR_FUNC XrXirStatus xr_xir_compile_construction_new_v2(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_construction_new_v3(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionSpec *input,
     XrXirConstruction **output) {
     if (!output || *output || !input) return XR_XIR_BAD_STRUCTURE;
@@ -56,6 +61,7 @@ XR_FUNC XrXirStatus xr_xir_compile_construction_new_v2(const XrXirCompileContext
     XrXirStatus status = construction_rows_shape(context, types, rows, count);
     if (status==XR_XIR_OK) status=construction_materialization_shape(context,types,
         input->materializations,input->materialization_count);
+    if (status==XR_XIR_OK) status=comptime_storage_shape(context,input->comptime);
     if (status != XR_XIR_OK) return status;
     XrXirConstruction *owned = xir_compile_calloc(context, 1, sizeof(*owned), &status);
     if (!owned) return status;
@@ -86,6 +92,8 @@ XR_FUNC XrXirStatus xr_xir_compile_construction_new_v2(const XrXirCompileContext
         if (!owned->materializations) goto failed;
         owned->materialization_count=input->materialization_count;
     }
+    status=comptime_storage_copy(context,input->comptime,&owned->comptime);
+    if (status!=XR_XIR_OK) goto failed;
     *output = owned;
     return XR_XIR_OK;
 failed:
@@ -134,21 +142,21 @@ XR_FUNC XrXirStatus xir_construction_shape(const XrXirCompileContext *context,
         if (construction->kinds[n] != types->nominals->declarations[n].kind)
             return XR_XIR_BAD_STRUCTURE;
     }
-    return construction_materialization_shape(context,types,construction->materializations,
-        construction->materialization_count);
+    status=construction_materialization_shape(context,types,construction->materializations,construction->materialization_count);
+    return status==XR_XIR_OK?comptime_storage_shape(context,&construction->comptime):status;
 }
 XR_FUNC XrXirStatus xir_construction_clone(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstruction *source, XrXirConstruction **output) {
     XrXirStatus status = xir_construction_shape(context, types, source);
     XrXirConstructionSpec input={source?source->rows:NULL,source?source->count:0,
-        source?source->materializations:NULL,source?source->materialization_count:0};
-    return status == XR_XIR_OK ? xr_xir_compile_construction_new_v2(context,types,&input,output) : status;
+        source?source->materializations:NULL,source?source->materialization_count:0,source?&source->comptime:NULL};
+    return status == XR_XIR_OK ? xr_xir_compile_construction_new_v3(context,types,&input,output) : status;
 }
 XR_FUNC XrXirStatus xir_construction_lower(const XrXirCompileContext *context,
     const XrXirTypes *types,const XrXirConstruction *source,XrXirConstruction **output) {
-    if (!source) return XR_XIR_BAD_STRUCTURE;
-    XrXirConstructionSpec input={NULL,0,source->materializations,source->materialization_count};
-    return xr_xir_compile_construction_new_v2(context,types,&input,output);
+    if (!source || source->comptime.site_count || source->comptime.binding_count) return XR_XIR_BAD_STRUCTURE;
+    XrXirConstructionSpec input={NULL,0,source->materializations,source->materialization_count,NULL};
+    return xr_xir_compile_construction_new_v3(context,types,&input,output);
 }
 /* Only a projection may synthesize all-zero facts, before independent recheck.
  * Public admission never substitutes this for a missing owner. */

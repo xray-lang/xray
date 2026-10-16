@@ -480,6 +480,8 @@ static const unsigned char library_golden_30[] =
 #include "xir_checked_scalar71_golden.h"
 #include "xir_generic_method71_golden.h"
 #include "xir_checked_scalar72_golden.h"
+#include "xir_checked_scalar75_golden.h"
+#include "xir_generic_method75_golden.h"
 #include "xir_generic_method72_golden.h"
 static void library_current_callable_boundary(const uint8_t *bytes,size_t length) {
  size_t blocks=source_live,physical=source_bytes;XrXirArtifact *artifact=NULL;
@@ -492,13 +494,15 @@ static void library_current_callable_boundary(const uint8_t *bytes,size_t length
 static void library_independent_goldens(void) {
  library_prior_packet_rejection(library_context,generic_method71_invalid_flags0,sizeof(generic_method71_invalid_flags0));
  library_prior_packet_rejection(library_context,generic_method71_invalid_flags1,sizeof(generic_method71_invalid_flags1));
- library_current_callable_boundary(generic_method72_invalid_flags0,sizeof(generic_method72_invalid_flags0));
- library_current_callable_boundary(generic_method72_invalid_flags1,sizeof(generic_method72_invalid_flags1));
+ library_current_callable_boundary(generic_method75_invalid_flags0,sizeof(generic_method75_invalid_flags0));
+ library_current_callable_boundary(generic_method75_invalid_flags1,sizeof(generic_method75_invalid_flags1));
  struct {const char *name;const unsigned char *bytes;size_t length;bool valid;} cases[]={
  {"generic26-71.xrc",generic_method71_golden,sizeof(generic_method71_golden),false},
- {"generic27-72.xrc",generic_method72_golden,sizeof(generic_method72_golden),true},
+ {"generic27-72.xrc",generic_method72_golden,sizeof(generic_method72_golden),false},
+ {"generic30-75.xrc",generic_method75_golden,sizeof(generic_method75_golden),true},
  {"scalar26-71.xrc",checked_scalar71_golden,sizeof(checked_scalar71_golden),false},
- {"scalar27-72.xrc",checked_scalar72_golden,sizeof(checked_scalar72_golden),true},
+ {"scalar27-72.xrc",checked_scalar72_golden,sizeof(checked_scalar72_golden),false},
+ {"scalar30-75.xrc",checked_scalar75_golden,sizeof(checked_scalar75_golden),true},
  {"generic-kind-UINTMAX.xrc",library_golden_0,sizeof(library_golden_0)-1,false},
  {"generic-old-semantic47.xrc",library_golden_1,sizeof(library_golden_1)-1,false},
  {"generic-old-semantic48.xrc",library_golden_2,sizeof(library_golden_2)-1,false},

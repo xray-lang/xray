@@ -13,7 +13,7 @@
 #ifndef XXIR_CONSTRUCTION_H
 #define XXIR_CONSTRUCTION_H
 #include "xxir.h"
-#define XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION 2u
+#define XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION 3u
 
 typedef struct XrXirConstruction XrXirConstruction;
 typedef struct XrXirConstructionRow {
@@ -28,19 +28,38 @@ typedef struct XrXirMaterializationBinding {
     uint32_t caller, instruction, function, nominal;
 } XrXirMaterializationBinding;
 
+typedef struct XrXirComptimeSite {
+    uint32_t caller,instruction,helper;
+} XrXirComptimeSite;
+typedef struct XrXirComptimeBinding {
+    uint32_t site;
+    const XrXirType *arguments;
+    uint32_t argument_count,provider;
+} XrXirComptimeBinding;
+/* Sites are sorted by current caller/instruction. Bindings are sorted by site
+ * and ordered local type keys; complete structural checking rejects aliases.
+ * Providers are ordinary private literal functions, never cached Values. */
+typedef struct XrXirComptimeTable {
+    const XrXirComptimeSite *sites;
+    uint32_t site_count;
+    const XrXirComptimeBinding *bindings;
+    uint32_t binding_count;
+} XrXirComptimeTable;
+
 typedef struct XrXirConstructionSpec {
     const XrXirConstructionRow *rows;
     uint32_t count;
     const XrXirMaterializationBinding *materializations;
     uint32_t materialization_count;
+    const XrXirComptimeTable *comptime;
 } XrXirConstructionSpec;
 
-/* The unversioned constructor symbol is retired because its input layout and
- * argument count differ. Old compiled clients must fail to link, not misbind.
+/* Earlier constructor symbols are retired because their input layouts differ.
+ * Old compiled clients must fail to link, not misbind.
  * The input has exactly one row per declaration and one value per field.
  * IDs are zero for no binding, otherwise one plus the actual helper function.
  * Even a zero-row construction produces a real immutable receiving owner. */
-XR_FUNC XrXirStatus xr_xir_compile_construction_new_v2(const XrXirCompileContext *context,
+XR_FUNC XrXirStatus xr_xir_compile_construction_new_v3(const XrXirCompileContext *context,
     const XrXirTypes *types, const XrXirConstructionSpec *input,
     XrXirConstruction **output);
 XR_FUNC void xr_xir_compile_construction_free(XrXirConstruction *construction);
@@ -52,5 +71,6 @@ XR_FUNC uint32_t xr_xir_compile_construction_materialization_count(const XrXirCo
 XR_FUNC const XrXirMaterializationBinding *xr_xir_compile_construction_materialization(
     const XrXirConstruction *construction, uint32_t ordinal);
 XR_FUNC const XrXirConstruction *xr_xir_compile_artifact_construction(const XrXirArtifact *artifact);
+XR_FUNC const XrXirComptimeTable *xr_xir_compile_construction_comptime(const XrXirConstruction *construction);
 
 #endif // XXIR_CONSTRUCTION_H

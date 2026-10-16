@@ -27,6 +27,7 @@ typedef struct ProvenanceMatch {
     const XrXirEffects *effects;
     XirEffectContextScope *selection_scope;
 } ProvenanceMatch;
+#include "xxir_provenance_comptime.inc.c"
 
 static XrXirStatus provenance_effect_context(ProvenanceMatch *c, uint32_t caller,
     uint32_t instruction, XirEffectContextView *output) {
@@ -117,6 +118,9 @@ static XrXirStatus provenance_effect_call(ProvenanceMatch *c,
     uint32_t caller, uint32_t instruction, uint32_t family) {
     const XrXirFunction *function=&c->destination->functions[caller];
     const XrXirInstruction *op=&function->instructions[instruction];
+    bool constant=false;
+    XrXirStatus constant_status=provenance_comptime_match(c,&c->origins[caller],instruction,op,&constant);
+    if (constant_status!=XR_XIR_OK || constant) return constant_status;
     const XrXirFunction *original=&c->source->functions[c->origins[caller].function];
     if (!family && (instruction>=original->instruction_count ||
         original->instructions[instruction].op!=XR_XIR_CLEANUP_REGISTER || op->op!=XR_XIR_CLEANUP_REGISTER))
@@ -206,7 +210,11 @@ static XrXirStatus provenance_effect_proofs(ProvenanceMatch *c) {
     return XR_XIR_OK;
 }
 static XrXirStatus provenance_call_match(ProvenanceMatch *c, const XrXirOrigin *origin,
-    const XrXirInstruction *from, const XrXirInstruction *to) {
+    const XrXirInstruction *from, const XrXirInstruction *to,uint32_t instruction) {
+    if (instruction!=UINT32_MAX) {
+        bool constant=false;XrXirStatus status=provenance_comptime_match(c,origin,instruction,to,&constant);
+        if (status!=XR_XIR_OK || constant) return status;
+    }
     if (to->immediate < 0 || (uint64_t)to->immediate >= c->count || to->type_arguments[0] || to->type_arguments[1])
         return XR_XIR_BAD_STRUCTURE;
     const XrXirOrigin *target = &c->origins[to->immediate];
@@ -237,7 +245,7 @@ static XrXirStatus provenance_default_match(ProvenanceMatch *c,const XrXirOrigin
     if(status!=XR_XIR_OK) return status;
     if(!binding) return XR_XIR_BAD_STRUCTURE;
     XrXirInstruction ordinary=*from; ordinary.immediate=binding->function;
-    return provenance_call_match(c,origin,&ordinary,to);
+    return provenance_call_match(c,origin,&ordinary,to,UINT32_MAX);
 }
 static XrXirStatus provenance_requirement_match(ProvenanceMatch *c, const XrXirOrigin *origin,
     const XrXirInstruction *from, const XrXirInstruction *to, const XrXirFunction *function) {
@@ -442,7 +450,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 XrXirStatus status = provenance_requirement_match(c,origin,a,b,to);
                 if (status != XR_XIR_OK) return status;
             } else if (xr_xir_op_references_function(a->op)) {
-                XrXirStatus status = provenance_call_match(c, origin, a, b);
+                XrXirStatus status = provenance_call_match(c, origin, a, b,i);
                 if (status != XR_XIR_OK) return status;
             } else if (a->op == XR_XIR_ERROR_IS) {
                 if (a->type_arguments[0] || a->type_arguments[1] || b->type_arguments[0] || b->type_arguments[1] ||

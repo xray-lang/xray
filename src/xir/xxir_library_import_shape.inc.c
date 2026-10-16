@@ -193,6 +193,9 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
     const XrXirDeclarations *d=m->declarations;
     uint32_t nominal_count=m->types && m->types->nominals ? m->types->nominals->count : 0;
     if (!construction || xr_xir_compile_construction_count(construction)!=nominal_count) return XR_XIR_BAD_STRUCTURE;
+    /* Import must relocate every canonical site before admitting its helpers. */
+    const XrXirComptimeTable *comptime=xr_xir_compile_construction_comptime(construction);
+    if (!comptime || comptime->site_count || comptime->binding_count) return XR_XIR_BAD_STAGE;
     if(m->linkage_kind!=XR_XIR_LIBRARY || m->stage!=XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
     if(!d || !d->module_count || !d->modules) return XR_XIR_BAD_STAGE;
     /* State remains lexically private. The shared checker has verified each

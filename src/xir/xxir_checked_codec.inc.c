@@ -494,6 +494,7 @@ static void checked_defaults(CheckedCursor *c, XrXirModule *module) {
         if (c->reading) records[i] = record;
     }
 }
+#include "xxir_checked_comptime.inc.c"
 /* The exact dense denominators are wire facts, even when every helper is zero. */
 static void checked_construction(CheckedCursor *c, XrXirModule *module,
     XrXirConstruction **construction) {
@@ -542,6 +543,7 @@ static void checked_construction(CheckedCursor *c, XrXirModule *module,
         row.function=checked_u32(c,row.function);row.nominal=checked_u32(c,row.nominal);
         if (c->reading) bindings[i]=row;
     }
+    if (c->status==XR_XIR_OK) checked_comptime(c,owner);
 }
 
 static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit);

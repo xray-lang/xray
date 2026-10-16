@@ -426,8 +426,13 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
             declaration = witness.function; types = complete; count = complete_count;
             op->op = XR_XIR_CALL; op->targets[0] = op->targets[1] = 0;
         }
+        XirComptimeSelection selection={c->source,&c->types,instance->declaration,i,types,count};
+        const XrXirComptimeBinding *constant=NULL;
+        c->diagnostic.status=xir_comptime_select(&c->remaining,c->source_artifact->construction,&selection,&constant);
+        if (c->diagnostic.status!=XR_XIR_OK) return false;
+        if (constant) { declaration=constant->provider;types=NULL;count=0; }
         SpecEffectInput input={function,op,index,i};SpecEffectVector effect={0};
-        if (!spec_effect_vector(c,declaration,types,count,&input,&effect)) return false;
+        if (!spec_effect_vector(c,declaration,types,count,constant?NULL:&input,&effect)) return false;
         c->cleanup_owner=op->op==XR_XIR_CLEANUP_REGISTER ? index : UINT32_MAX;
         uint32_t target = spec_intern(c, declaration, types, count,effect.arguments,effect.count);
         c->cleanup_owner=UINT32_MAX;

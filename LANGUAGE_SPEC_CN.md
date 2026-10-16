@@ -7858,7 +7858,7 @@ Source 先完成普通函数库存，再迭代生成尾部物化函数，避免�
 
 库内 comptime 由同一不可变源码图独立构造普通 Program，经过完整 Built/Checked/特化/Lowered 路径后使用唯一 CTFE 求值器。库模板不改标为可执行产物。结果按实际语法 occurrence、模块、声明祖先、期望上下文和完整跨池结果类型接收，再由独立 Library Source 构造复验。所有临时 Program、目录、快照和失败前缀使用原 ledger，不重置预算。
 
-该原子切换采用 Checked schema29、contract74，construction C 接口 revision2 统一由 xr_xir_compile_construction_new_v2 接收 XrXirConstructionSpec；旧无版本构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
+物化目录最初增加于 Checked schema29/contract74；当前由17.76原子切到schema30/contract75，construction C接口revision3统一由xr_xir_compile_construction_new_v3接收XrXirConstructionSpec；旧无版本及v2构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
 
 ### 17.68 有限递归数据与按原拥有者观察
 
@@ -7945,6 +7945,16 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 内部执行入口自动收集本次Program图中实际形成的泛型comptime调用，无调用者函数序号、外池类型ID、Value或PASS。每项保留当前原定义/原调用指令与关闭caller/callee/指令坐标，经17.74拥有批次独立接收和执行。视图完整复验当前产物及实际来源packet，再逐项核真实调用和全部有序替换，最后原子发布。Checked与Lowered的类型ID各属自己的池；类型关系按完整结构检查，不能直接比较外池ordinal。结果与原定义在AST、session及生产者死亡后仍保活，最终释放不分配。
 
 这些结果是编译器内部的站点执行数据，不发布含未绑定comptime的Source程序。公共Source入口在逐实例常量替换尚未接通时继续编译失败；Library未来实例与无当前Source节点的站点也没有由此获得权限。全部收费来自原有限ledger，原steps/frame/output/depth和work/allocated/live不变。完整语法接回、规范站点/结果绑定、独立packet、完整FI与正式安全仍须各自完成，不以此准备接点关闭C0/C1。
+
+### 17.76 泛型编译期调用的规范站点与关闭结果绑定
+
+共同construction拥有真实Source caller/指令/helper站点和按站点、有序关闭类型向量排序的结果绑定。词法helper保留调用者的完整binder、约束、模块及nominal owner；调用上的完整符号实参必须逐项对应。绑定仅引用同词法owner下的私有、无运行期参数、无泛型参数的普通literal provider。共同Checker验证实际调用、全部关闭实参及原约束、完整结构结果类型、provider纯字面量边界和helper完整引用库存；同结构的重复键拒绝。名称、相同签名、裸类型ordinal、旧身份或PASS不构成对应。
+
+普通特化只对真实当前调用及完整关闭替换选择provider，缺键编译失败。INSTANCE对应检查独立重做同一选择，保留原泛型Source、普通requirement/private witness以及其他body/effect验证；不在verifier执行CTFE，不抹除关闭来源。投影INSTANCE和Lowered不携带未解决站点，递归来源仍完整拥有原表。表、每项实参、wire读写、clone、清理及失败前缀均使用接收方原有限ledger；最后释放不分配，不退款或重置预算。
+
+由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked原子切到schema30/contract75；construction C接口revision3只提供xr_xir_compile_construction_new_v3，旧无版本和v2构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
+
+当前仅贯通共同规范绑定依赖，公共Source仍未接回逐实例常量，继续拒绝依赖外围类型实参的comptime。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。无AST typed literal构造、未来Library实例、公共语法接回、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
 
 ---
 

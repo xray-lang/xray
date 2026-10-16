@@ -22,16 +22,16 @@ count=struct.unpack('>Q' if width==8 else '>I',payload[:width])[0]
 begin=width*(count+1);assert begin<=size
 names=payload[begin:].split(b'\0');assert len(names)>=count
 symbols={s.decode('ascii') for s in names[:count]}
-old='xr_xir_compile_construction_new';new=old+'_v2'
-retired=old in symbols or '_'+old in symbols
+old='xr_xir_compile_construction_new';new=old+'_v3'
+retired=any(s in symbols or '_'+s in symbols for s in [old,old+'_v2'])
 present=new in symbols or '_'+new in symbols
 header=a.header.read_text('utf-8')
-version=bool(re.search(r'#define\s+XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION\s+2u\b',header))
+version=bool(re.search(r'#define\s+XR_XIR_CONSTRUCTION_C_INTERFACE_VERSION\s+3u\b',header))
 if not a.observe:
     assert present and not retired,(present,retired)
     assert version and re.search(r'\b'+new+r'\s*\(',header)
     assert not re.search(r'\b'+old+r'\s*\(',header)
 print(json.dumps(dict(archive=str(a.archive),bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),
                      public_symbols=count,old_unversioned_symbol_present=retired,
-                     new_versioned_symbol_present=present,compiler_interface_version2=version,
+                     new_versioned_symbol_present=present,compiler_interface_version3=version,
                      qualification='Actual archive definitions; no product execution or compatibility alias'),indent=2))

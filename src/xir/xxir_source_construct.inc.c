@@ -37,8 +37,8 @@ static bool source_construction_prepare(SourceContext *ctx) {
     }
     XrXirMaterializationBinding *bindings=NULL;uint32_t binding_count=0;
     if (!source_materialization_bindings(ctx,&bindings,&binding_count)) return false;
-    XrXirConstructionSpec input={rows,count,bindings,binding_count};
-    XrXirStatus status=xr_xir_compile_construction_new_v2(&ctx->compile,&ctx->types,&input,&ctx->construction);
+    XrXirConstructionSpec input={rows,count,bindings,binding_count,NULL};
+    XrXirStatus status=xr_xir_compile_construction_new_v3(&ctx->compile,&ctx->types,&input,&ctx->construction);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
