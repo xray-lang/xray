@@ -222,6 +222,11 @@ int main(int argc, char **argv) {
     SourceTestFiles files = {0}; source_files_open(&files);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, files.root};
     XrXirSourceRequest request = {NULL, files.entry, &authority, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    if (argc==2 && !strcmp(argv[1],"--qualified-boundary")) {
+        source_fixed_promise_case(&request);source_files_close(&files);
+        CHECK(!runtime_live && !runtime_bytes);effects_source_owners_free();
+        puts("Source fixed callable promise boundary survived owned execution");return 0;
+    }
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = effect_execution_check(&request, &result, &diagnostic);
     if (status != XR_XIR_OK) fprintf(stderr, "%u at %d:%d: %s\n", status,
