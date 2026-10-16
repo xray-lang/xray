@@ -65,6 +65,8 @@ static void numbers_mixed(unsigned direction,const char *path) {
     printf("Ordinary JSON tokens mixed direction%u/real CALL/one lease/retained tuple/physical0\n",direction);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==1 || argc==2);const char *path=argc==2?argv[1]:XR_JSON_NUMBERS_PACKET;
-    numbers_mixed(0,path);numbers_mixed(1,path);return 0;
+    bool vm=(argc==2 || argc==3) && !strcmp(argv[1],"--vm-runtime-resources");
+    json_numbers_faults=vm || ((argc==2 || argc==3) && !strcmp(argv[1],"--runtime-resources"));CHECK(argc==1 || json_numbers_faults);
+    const char *path=argc==3?argv[2]:XR_JSON_NUMBERS_PACKET;
+    if(vm)numbers_mixed(2,path);else{numbers_mixed(0,path);numbers_mixed(1,path);}return 0;
 }

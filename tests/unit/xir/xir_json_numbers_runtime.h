@@ -15,6 +15,9 @@
 #include "xir/xxir_type_arena.h"
 #include <inttypes.h>
 typedef struct JsonNumberExpected {bool token,integer;int64_t value;} JsonNumberExpected;
+typedef struct JsonNumberTrial {const char *text;size_t size;JsonNumberExpected expected;bool constant;} JsonNumberTrial;
+static bool json_numbers_faults;
+static size_t json_numbers_fault_cases,json_numbers_fault_sites;
 static XrXirValue json_numbers_call(XrXirProgram *program,uint32_t entry,const char *bytes,size_t length) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
     XrXirValue argument={0},result={0};CHECK(xr_xir_string_new(domain,bytes,length,&argument)==XR_XIR_VALUE_OK);
@@ -40,7 +43,53 @@ static void json_numbers_expected(const XrXirValue *value,JsonNumberExpected exp
     else CHECK(!integer);
     xr_xir_value_drop(&token);xr_xir_value_drop(&field);
 }
+static void json_numbers_trial(XrXirProgram *program,uint32_t entry,const JsonNumberTrial *trial) {
+    XrXirDomain *domain=NULL;XrXirInstance *instance=NULL;XrXirValue argument={0},result={0};
+    XrXirCallStatus status=XR_XIR_CALL_READY;bool driven=false;
+    if(!trial->constant) {
+        XrXirValueStatus made=xr_xir_domain_new(65536,&domain);
+        if(made!=XR_XIR_VALUE_OK) {CHECK(made==XR_XIR_VALUE_OOM && !domain);status=XR_XIR_CALL_OOM;goto done;}
+        made=xr_xir_string_new(domain,trial->text,trial->size,&argument);
+        if(made!=XR_XIR_VALUE_OK) {CHECK(made==XR_XIR_VALUE_OOM && !argument.type && !argument.reserved && !argument.payload);status=XR_XIR_CALL_OOM;goto done;}
+    }
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    status=xr_xir_instance_new(program,&config,&instance);if(status==XR_XIR_CALL_OOM){CHECK(!instance);goto done;}
+    CHECK(status==XR_XIR_CALL_READY);
+    status=xr_xir_instance_start(instance,entry,trial->constant?NULL:&argument,trial->constant?0:1);
+    xr_xir_value_drop(&argument);if(domain){xr_xir_domain_drop(domain);domain=NULL;}
+    if(status==XR_XIR_CALL_READY) {
+        status=xr_xir_instance_poll_bounded(instance,4096).outcome.status;driven=status==XR_XIR_CALL_OOM;
+    }
+    if(status==XR_XIR_CALL_RETURNED)CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+    else {
+        CHECK(status==XR_XIR_CALL_OOM);XrXirCallStatus expected=xr_xir_instance_state(instance)==XR_XIR_INSTANCE_FAILED || !driven?
+            XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_OOM;
+        CHECK(xr_xir_instance_take_result(instance,&result)==expected && !result.type && !result.reserved && !result.payload);
+    }
+done:
+    if(instance)CHECK(xr_xir_instance_free(instance)==(driven?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
+    xr_xir_value_drop(&argument);if(domain)xr_xir_domain_drop(domain);
+    CHECK(status==XR_XIR_CALL_RETURNED || (runtime_fail_at!=SIZE_MAX && status==XR_XIR_CALL_OOM));
+    if(status==XR_XIR_CALL_RETURNED) {
+        if(trial->constant)CHECK(result.type==XR_XIR_I64 && !result.reserved && result.payload==42);
+        else json_numbers_expected(&result,trial->expected);
+    }
+    xr_xir_value_drop(&result);
+}
+static void json_numbers_full_faults(XrXirProgram *program,uint32_t entry,const JsonNumberTrial *trial) {
+    size_t held=runtime_live,bytes=runtime_bytes;CHECK(runtime_fail_at==SIZE_MAX);runtime_attempts=0;
+    json_numbers_trial(program,entry,trial);size_t sites=runtime_attempts;CHECK(sites && runtime_live==held && runtime_bytes==bytes);
+    for(size_t site=0;site<sites;++site) {
+        runtime_attempts=0;runtime_fail_at=site;json_numbers_trial(program,entry,trial);
+        CHECK(runtime_attempts>site && runtime_live==held && runtime_bytes==bytes);
+        runtime_fail_at=SIZE_MAX;json_numbers_trial(program,entry,trial);CHECK(runtime_live==held && runtime_bytes==bytes);
+    }
+    ++json_numbers_fault_cases;json_numbers_fault_sites+=sites;
+}
 static void json_numbers_case(XrXirProgram *program,uint32_t entry,const char *text,size_t size,JsonNumberExpected expected) {
+    if(json_numbers_faults) {
+        JsonNumberTrial trial={text,size,expected,false};json_numbers_full_faults(program,entry,&trial);return;
+    }
     XrXirValue value=json_numbers_call(program,entry,text,size);json_numbers_expected(&value,expected);xr_xir_value_drop(&value);
 }
 static void json_numbers_oracles(XrXirProgram *program,const uint32_t entries[4]) {
@@ -79,6 +128,11 @@ static void json_numbers_oracles(XrXirProgram *program,const uint32_t entries[4]
         json_numbers_case(program,entries[1],inside,sizeof(inside),(JsonNumberExpected){token,digit,digit?102+10*((int64_t)c-48):0});++cases;
     }
     const char nul[]={'1',0,'2'};json_numbers_case(program,entries[1],nul,sizeof(nul),(JsonNumberExpected){false,false,0});++cases;
+    if(json_numbers_faults) {
+        JsonNumberTrial trial={NULL,0,{false,false,0},true};json_numbers_full_faults(program,entries[0],&trial);
+        printf("Ordinary JSON number full runtime FI: cases=%zu actual allocation sites=%zu, every ordinal and same Program retry\n",
+            json_numbers_fault_cases,json_numbers_fault_sites);
+    }
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entries[0],NULL,0)==XR_XIR_CALL_READY);
