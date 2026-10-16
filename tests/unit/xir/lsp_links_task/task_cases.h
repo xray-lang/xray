@@ -73,6 +73,7 @@ static void links_admission(LinksFixture *f,const LinksRun *options) {
 static int links_death(const LinksRun *options) {
     LinksFixture f;links_base(&f,options);XlspHierarchyRequest *request=NULL;
     CHECK(xlsp_hierarchy_request_capture(&f.server,f.params,0,XLSP_SOURCE_DOCUMENT_LINKS,&request)==XR_XIR_OK);
+    CHECK(xlsp_pending_request_remove(&f.server.pending_requests,&f.id));
     xjson_free(f.params);f.params=NULL;xlsp_document_store_free(f.server.doc_table);f.server.doc_table=NULL;
     memset(&f.server,0xa5,sizeof(f.server));_Atomic bool cancel=false;XlspSourceRequestResult result={0},again={0};
     CHECK(xlsp_hierarchy_request_run(request,&cancel,&result)==XR_XIR_OK&&result.status==XR_XIR_OK&&result.json&&!result.token_update);
