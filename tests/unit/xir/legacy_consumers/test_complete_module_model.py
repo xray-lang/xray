@@ -51,4 +51,13 @@ class ModuleTraces(unittest.TestCase):
                 with patch.dict(model._INPUTS,{path:'0'*64}):
                     with self.assertRaisesRegex(ValueError,'source or authority changed'):model.expected_rows()
 
+    def test_complete_module_product_companions_carry_exact_path_and_hash(self):
+        import json
+        cases={case['id']:case for case in json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_text(encoding='utf-8'))['cases']}
+        for name in model._REACHABILITY_PROGRAMS:
+            with self.subTest(program=name):
+                case=cases['complete_module_'+name]
+                self.assertEqual(case['companions'],[{'path':path,'lf_sha256':model._INPUTS[path]} for path in model._COMPANIONS[name]])
+                self.assertEqual(case['source'],model._PROGRAMS[name]);self.assertEqual(case['source_context'],'original_absolute')
+
 if __name__=='__main__':unittest.main()

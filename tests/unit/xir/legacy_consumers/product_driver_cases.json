@@ -31519,7 +31519,10 @@
       "arguments": [],
       "stdin_hex": "",
       "companions": [
-        "tests/diff/cases/semantics/modules/_dead_net_helper.xr"
+        {
+          "path": "tests/diff/cases/semantics/modules/_dead_net_helper.xr",
+          "lf_sha256": "fb8bd04809d12d90ca2f8e87f413652c88a073f807b6abb8696c1791c5649c41"
+        }
       ],
       "owners": [
         "P02",
@@ -31554,7 +31557,10 @@
       "arguments": [],
       "stdin_hex": "",
       "companions": [
-        "tests/diff/cases/semantics/modules/_ptr_offset_const_lib.xr"
+        {
+          "path": "tests/diff/cases/semantics/modules/_ptr_offset_const_lib.xr",
+          "lf_sha256": "790909ef590b7c0b3c198712aafe077c335cedaed53ea5ec8d5056fe6973d702"
+        }
       ],
       "owners": [
         "P02",
