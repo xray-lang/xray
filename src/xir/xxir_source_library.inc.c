@@ -248,6 +248,7 @@ static void *source_library_bytes(SourceContext *ctx, const void *input,
     if (output && !source_copy_bytes(ctx, NULL, output, input, (size_t)count * size)) return NULL;
     return output;
 }
+#include "xxir_source_library_derivations.inc.c"
 
 /* Local binder ordinals remain local; each interface application and type ID
  * is deeply owned and remapped to the canonical receiver declarations. */
@@ -501,6 +502,14 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
         if (!library->types->nominals || from->nominal_declaration>=library->types->nominals->count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library implementation owner is not mapped");
         XrXirImplementation *to=&records[i];
+        if (from->derivation_policy) {
+            const XrXirDerivationTable *policies=library->declarations->derivations;
+            uint32_t p=from->derivation_policy-1;
+            if (!policies || p>=policies->policy_count || !map->unit->derivation_policies ||
+                map->unit->derivation_policies[p]==UINT32_MAX)
+                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library witness derivation policy is not mapped");
+            to->derivation_policy=map->unit->derivation_policies[p]+1;
+        }
         to->nominal_declaration=map->unit->nominals[from->nominal_declaration];
         const XrXirInterfaceApplication *application=NULL;
         if (!source_library_applications(ctx,map->unit,&from->interface,1,&application)) return false;
@@ -531,7 +540,7 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
     }
-    if (!source_library_initializers(ctx,library,map) ||
+    if (!source_library_derivations(ctx,library,map) || !source_library_initializers(ctx,library,map) ||
         !source_library_implementations(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {

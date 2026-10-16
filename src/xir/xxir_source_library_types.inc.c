@@ -9,6 +9,7 @@ struct SourceLibraryUnit {
     XrXirType *types;
     uint32_t type_count;
     uint32_t *functions; uint32_t function_count;
+    uint32_t *derivation_policies;
     XrXirImplementationTable implementations;
 };
 static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,

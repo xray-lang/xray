@@ -64,6 +64,10 @@ XR_FUNC XrXirStatus xir_derivations_structure_verify(const XrXirCompileContext *
 XR_FUNC void xir_derivations_free(XrXirDerivationTable *);
 XR_FUNC XrXirStatus xir_derivations_verify(const XrXirCompileContext *,
     const XrXirModule *);
+/* Validate one authentic definition before its generated methods exist.
+ * Imported grants remain intact; complete module verification still follows. */
+XR_FUNC XrXirStatus xir_derivation_policy_verify(const XrXirCompileContext *,
+    const XrXirModule *, const XrXirDerivationPolicy *);
 
 typedef struct XrXirDerivationAccess {
     uint32_t function, field, operation;

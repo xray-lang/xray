@@ -7,7 +7,14 @@
  * xxir_source_implements.inc.c - Explicit declaration-owned method witnesses
  */
 static bool source_implementation_applications(SourceContext *ctx) {
-    uint32_t count = ctx->derivations.policy_count;
+    uint32_t count = 0;
+    for (uint32_t p=0;p<ctx->derivations.policy_count;++p) {
+        if (!source_work(ctx,NULL)) return false;
+        const XrXirTypeNode *target=xr_xir_type_node(&ctx->types,ctx->derivations.policies[p].target);
+        if (!target || target->kind!=XR_XIR_TYPE_NOMINAL || target->nominal.declaration>=ctx->nominals.count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"derived implementation target is invalid");
+        if (!ctx->nominal_sources[target->nominal.declaration]->checked_library) ++count;
+    }
     for (SourceLibraryUnit *unit=ctx->library_units; unit; unit=unit->next) {
         if (!source_work(ctx,NULL)) return false;
         if (unit->implementations.count>UINT32_MAX-count)
@@ -38,8 +45,10 @@ static bool source_implementation_applications(SourceContext *ctx) {
     }
     SourceTypeScope saved = ctx->type_scope;
     for (uint32_t p=0;p<ctx->derivations.policy_count;++p) {
+        if (!source_work(ctx,NULL)) return false;
         const XrXirDerivationPolicy *policy=&ctx->derivations.policies[p];
         const XrXirTypeNode *target=xr_xir_type_node(&ctx->types,policy->target);
+        if (ctx->nominal_sources[target->nominal.declaration]->checked_library) continue;
         records[next++]=(XrXirImplementation){target->nominal.declaration,policy->protocol,NULL,0,p+1};
     }
     uint32_t module = ctx->module;

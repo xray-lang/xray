@@ -191,7 +191,7 @@ static bool source_derive_policy(SourceContext *ctx,SourceDeriveJob *job) {
 }
 static bool source_derivations_prepare(SourceContext *ctx) {
     if (!ctx->derive_present) return true;
-    SourceDeriveJob **tail=&ctx->derive_jobs;uint32_t count=0;
+    SourceDeriveJob **tail=&ctx->derive_jobs;uint32_t base=ctx->derivations.policy_count,count=base;
     for (uint32_t n=0;n<ctx->nominals.count;++n) {
         SourceName *owner=ctx->nominal_sources[n];if (owner->checked_library) continue;
         AstNode *node=owner->node;XrAttribute **attributes;int attribute_count;
@@ -205,9 +205,10 @@ static bool source_derivations_prepare(SourceContext *ctx) {
             job->owner=owner;job->attribute=attributes[a];job->policy=count++;*tail=job;tail=&job->next;
         }
     }
-    if (!count) return true;
-    ctx->derivations.policies=source_alloc(ctx,count,sizeof(*ctx->derivations.policies));
-    if (!ctx->derivations.policies) return false;
+    if (count==base) return true;
+    XrXirDerivationPolicy *policies=source_alloc(ctx,count,sizeof(*policies));
+    if (!policies || !source_copy_bytes(ctx,NULL,policies,ctx->derivations.policies,(size_t)base*sizeof(*policies))) return false;
+    ctx->derivations.policies=policies;
     ctx->derivations.policy_count=count;
     SourceTypeScope saved=ctx->type_scope;bool ok=true;
     for (SourceDeriveJob *job=ctx->derive_jobs;job && ok;job=job->next) ok=source_derive_policy(ctx,job);
@@ -215,9 +216,7 @@ static bool source_derivations_prepare(SourceContext *ctx) {
     if (!ok) return false;
     for (SourceDeriveJob *job=ctx->derive_jobs;job;job=job->next) {
         XrXirDeclarations declarations;XrXirModule built=source_module_view(ctx,&declarations);
-        XrXirDerivationTable single={&ctx->derivations.policies[job->policy],1,NULL,0};
-        declarations.derivations=&single;
-        XrXirStatus status=xir_derivations_verify(&ctx->compile,&built);
+        XrXirStatus status=xir_derivation_policy_verify(&ctx->compile,&built,&ctx->derivations.policies[job->policy]);
         if (status==XR_XIR_OK) continue;
         ctx->module=job->owner->module;
         source_fail(ctx,job->owner->node,status,"derive definition policy failed independent validation");

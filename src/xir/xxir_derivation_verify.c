@@ -142,6 +142,16 @@ static XrXirStatus derivation_policy_verify(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) status=derivation_policy_members(context,target,p);
     return status;
 }
+XR_FUNC XrXirStatus xir_derivation_policy_verify(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirDerivationPolicy *policy) {
+    if (!xir_compile_context_valid(context) || !module || !module->declarations || !module->types || !policy)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!module->declarations->modules || !module->declarations->module_count ||
+        !module->declarations->functions || !module->function_count) return XR_XIR_BAD_STRUCTURE;
+    XrXirDerivationTable single={policy,1,NULL,0};
+    XrXirStatus status=xir_derivations_structure_verify(context,&single);
+    return status==XR_XIR_OK?derivation_policy_verify(context,module,policy):status;
+}
 static XrXirStatus derivation_origin_equal(const XrXirCompileContext *context,
     const XrXirGeneratedOrigin *a,const XrXirGeneratedOrigin *b) {
     const XrXirGeneratedText left[]={a->module,a->file,a->field_path};
