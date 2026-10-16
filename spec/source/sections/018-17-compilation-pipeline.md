@@ -914,7 +914,17 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked原子切到schema30/contract75；construction C接口revision3只提供xr_xir_compile_construction_new_v3，旧无版本和v2构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
 
-当前仅贯通共同规范绑定依赖，公共Source仍未接回逐实例常量，继续拒绝依赖外围类型实参的comptime。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。无AST typed literal构造、未来Library实例、公共语法接回、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
+本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Source仍未接回逐实例常量，继续拒绝依赖外围类型实参的comptime。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。未来Library实例、公共语法接回、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
+
+### 17.77 无AST的拥有式实例字面量接收
+
+内部typed literal接收核只接收17.74的真实拥有式CTFE批次、准确结果数及同一原有限编译context。每次先完整复验当前Checked、Lowered及其实际来源packet，然后借用实际原泛型定义、完整有序关闭替换和拥有值。调用者不能提供Value、外国类型ordinal、AST节点、声明名或PASS。所有语法生产者可以已经销毁；批次在整个同步借用期间保持存活且不可变。
+
+接收方复制可变函数/类型描述头，以真实Checked声明建立库存，复用同一普通常量recipe writer，生成私有、零运行期参数、非泛型provider。关闭实参按完整结构复制并intern到接收池；专化后才出现的新类型无需原本就有本地ID，完整有序向量由返回结果独立拥有。原泛型函数、约束、requirement/private witness、模块/nominal身份和全部原TEMPLATE根效应契约保留；新增literal函数生成普通契约，完整共同Checker重新验证所有body/effect和构造绑定。不会把关闭INSTANCE伪装成无来源Built，也不清空原TEMPLATE来绕过验证。
+
+Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原配方语义。私有字段值在其实际声明库存中解析唯一模块及nominal owner，通过17.67同一literal materializer及精确调用绑定接收；不伪造AST/query声明，不由结果类型授予一般私有访问。既有materializer绑定和comptime表完整复制。最终Checked拥有全部函数、类型、字符串、契约及构造信息，批次和生产者死亡后仍可独立packet写读、普通特化、Lowered和唯一CTFE。知道私有provider ordinal仍不授外部运行期入口权限。
+
+整个操作、当前复验、类型接收、配方、契约和最终检查计入原work128000000、累计分配64MiB、live8MiB；不重置、退款或提高steps/frame65536、depth128、policy2/8MiB输出及替换深度128。任一失败不发布部分结果，所有前缀可回收，最后析构不分配。公开布局、schema30/contract75、construction C3和opcode保持。本内部核尚未把provider绑定到公共逐实例comptime语法，也未完成Library未来实例收集与重定位。完整FI、原owner重试、当前全矩阵、正式安全/provider及原C0/C1退出门仍各需真实固定输入证据。
 
 <!-- /xr-spec:cn -->
 
@@ -1962,6 +1972,16 @@ Ordinary specialization selects a provider only for a real current call and its 
 
 The common input layout and Module encoding actually add site and binding counts and fields, requiring an atomic Checked schema30/contract75 cutover. Construction C interface revision3 exposes only xr_xir_compile_construction_new_v3; unversioned and v2 constructor symbols retire, old wire is rejected, and no shim remains. Every Module encodes site_count and caller/instruction/helper rows after the materialization catalogue, then binding_count and site/argument_count/arguments/provider rows, recursively in Source provenance. Value24, Call29, Program30, opcodes and all existing budgets remain unchanged. Historical bytes remain refusal vectors; current fixed vectors derive from independent complete field models.
 
-This connects only the common canonical binding dependency. Public Source still lacks per-instance constant receiving and rejects comptime depending on enclosing type arguments. Library import lacks complete relocation of sites and keys, so a nonempty table is explicitly refused rather than discarded while runtime helper calls survive. AST-independent typed literal construction, future Library instances, public syntax receiving, complete FI and formal safety each remain outstanding. This mechanism and focused validation do not complete P11/C0/C1.
+This section connects the common canonical binding dependency; AST-independent typed literal receiving follows17.77. Public Source still lacks per-instance constant receiving and rejects comptime depending on enclosing type arguments. Library import lacks complete relocation of sites and keys, so a nonempty table is explicitly refused rather than discarded while runtime helper calls survive. Future Library instances, public syntax receiving, complete FI and formal safety each remain outstanding. This mechanism and focused validation do not complete P11/C0/C1.
+
+### 17.77 AST-independent receiving of owned instance literals
+
+The internal typed-literal receiver accepts only17.74's authentic owned CTFE batch, its exact result count and the same original finite compiler context. Each call completely verifies current Checked, Lowered and the actual source packet before borrowing genuine original generic definitions, complete ordered closed substitutions and owned values. Callers supply no Value, foreign type ordinal, AST node, declaration name or PASS. Every syntax producer may already be dead; the batch stays live and immutable throughout synchronous borrowing.
+
+Receiving copies mutable function/type descriptor heads and builds inventory from actual Checked declarations. The same ordinary constant recipe writer produces private, zero-runtime-parameter, non-generic providers. Closed arguments are structurally copied and interned into the receiving pool; types introduced only by specialization need no pre-existing local ID. The returned result independently owns complete ordered argument vectors. Original generic functions, constraints, requirement/private witnesses, module/nominal identities and every original TEMPLATE root-effect contract survive. New literal functions receive ordinary contracts, and the complete common Checker independently verifies all bodies/effects and construction bindings. No closed INSTANCE is recast as provenance-free Built, and clearing an original TEMPLATE cannot bypass verification.
+
+Array, Nullable, Tuple, struct/enum, scalar, String and Unit retain the original recipe semantics. Private field data resolves its unique module and nominal owner from actual declarations and uses17.67's same literal materializer and exact call bindings. No AST/query declaration is fabricated, and result types grant no general private access. Existing materializer bindings and comptime tables copy completely. Final Checked owns functions, types, strings, contracts and construction information; independent packet receiving, ordinary specialization, Lowered and the sole CTFE remain possible after batch and producer death. Knowing a private provider ordinal still grants no external runtime-entry permission.
+
+Current verification, type receiving, recipes, contracts and final checking charge the original128000000 work,64MiB cumulative allocation and8MiB live quotas. Original65536 steps/frame,128 depth,policy2/8MiB output and128 substitution depth remain without reset, refund or increase. Any failure publishes no partial result and releases every prefix; final destruction allocates nothing. Public layouts, schema30/contract75, construction C3 and opcodes remain. This internal receiver does not yet bind providers to public per-instance comptime syntax or complete Library future-instance collection/relocation. Complete FI, original-owner retries, current full matrices, formal safety/provider and original C0/C1 exit gates each require actual fixed-input evidence.
 
 <!-- /xr-spec:en -->

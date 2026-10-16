@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   A request retains one already received constant, not its producer call.
- *   Its declaration is resolved through the current real Source inventory.
+ *   Its declaration comes from the current real Source or Checked inventory.
  */
 struct SourceMaterialization {
     SourceMaterialization *next;
@@ -17,12 +17,13 @@ struct SourceMaterialization {
     XrXirValue value;
     XrXirType type;
     uint32_t function,caller;
+    uint32_t nominal,module;
 };
 static bool source_materialization_receive(SourceContext *ctx,AstNode *node,
     const XrXirValue *value,XrXirType type,SourceValue *output,bool *handled) {
     *handled=false;
     const XrXirTypeNode *target=xr_xir_type_node(&ctx->types,type);
-    if ((!ctx->comptime_input && !ctx->instance_constants) || !target || target->kind!=XR_XIR_TYPE_NOMINAL)
+    if ((!ctx->comptime_input && !ctx->instance_constants && !ctx->literal_definition) || !target || target->kind!=XR_XIR_TYPE_NOMINAL)
         return true;
     uint32_t nominal=target->nominal.declaration;
     if (nominal>=ctx->nominals.count) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant declaration is absent");
@@ -34,14 +35,28 @@ static bool source_materialization_receive(SourceContext *ctx,AstNode *node,
         restricted|=(record->fields[f].flags&(XR_XIR_FIELD_PRIVATE|XR_XIR_FIELD_PROTECTED))!=0;
     }
     if (!restricted) return true;
-    SourceName *owner=ctx->nominal_sources[nominal];
-    if (!owner || owner->kind!=SOURCE_NOMINAL || owner->index!=nominal ||
-        !owner->declaration || owner->declaration>ctx->query.declaration_count)
-        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant has no current declaration owner");
-    const XrXirSourceDeclaration *declaration=&ctx->query.declarations[owner->declaration-1];
-    if (declaration->kind!=XR_XIR_SOURCE_TYPE || declaration->range.module>=ctx->module_count ||
-        (!owner->checked_library && !owner->node))
-        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant declaration birth is incomplete");
+    SourceName *owner=ctx->literal_definition?NULL:ctx->nominal_sources[nominal];
+    uint32_t module=UINT32_MAX;
+    if (ctx->literal_definition) {
+        for (uint32_t m=0;m<ctx->module_count;++m) {
+            XrXirLiteral name={ctx->modules[m].name,ctx->modules[m].name_length};
+            if (!source_work_units(ctx,node,sizeof(XrXirSourceModule))) return false;
+            if (source_comptime_name_same(ctx,node,record->module,name)) {
+                if (module!=UINT32_MAX) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant declaration module is ambiguous");
+                module=m;
+            }
+        }
+        if (module==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant declaration module is absent");
+    } else {
+        if (!owner || owner->kind!=SOURCE_NOMINAL || owner->index!=nominal ||
+            !owner->declaration || owner->declaration>ctx->query.declaration_count)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant has no current declaration owner");
+        const XrXirSourceDeclaration *declaration=&ctx->query.declarations[owner->declaration-1];
+        if (declaration->kind!=XR_XIR_SOURCE_TYPE || declaration->range.module>=ctx->module_count ||
+            (!owner->checked_library && !owner->node))
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"constant declaration birth is incomplete");
+        module=declaration->range.module;
+    }
     SourceComptimeNominalShape shape={0};
     if (!source_comptime_nominal_shape(ctx,node,value,type,&shape)) return false;
     if (ctx->materialization_begin>ctx->compile.limits.functions ||
@@ -54,6 +69,7 @@ static bool source_materialization_receive(SourceContext *ctx,AstNode *node,
         copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,
         "constant materializer receiving failed");
     request->owner=owner;request->site=node;request->type=type;request->caller=ctx->function;
+    request->nominal=nominal;request->module=module;
     request->function=ctx->materialization_begin+ctx->materialization_count++;
     if (ctx->materialization_tail) ctx->materialization_tail->next=request;else ctx->materializations=request;
     ctx->materialization_tail=request;

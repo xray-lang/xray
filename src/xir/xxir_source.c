@@ -13,6 +13,7 @@
 #include "xxir_ctfe.h"
 #include "xxir_source_instance_internal.h"
 #include "xxir_source_comptime_instances_internal.h"
+#include "xxir_literal_internal.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
 #include "xxir_operand_roles.h"
@@ -254,6 +255,7 @@ typedef struct SourceContext {
     uint32_t function, module, depth;
     SourceComptimeSite *comptime_sites;
     const SourceInstanceBatch *instance_constants;
+    const XrXirModule *literal_definition;
     const SourceComptimeSite *comptime_input;
     const XrXirTypes *comptime_input_types;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
@@ -2946,4 +2948,5 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 #include "xxir_source_comptime_pipeline.inc.c"
 #include "xxir_source_instance_pipeline.inc.c"
 #include "xxir_source_comptime_instances.inc.c"
+#include "xxir_literal_pipeline.inc.c"
 #include "xxir_source_input.inc.c"

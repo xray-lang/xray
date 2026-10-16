@@ -166,8 +166,15 @@ static void instance_limits(void) {
 #include "binding_cases.h"
 #include "binding_resources.h"
 #include "binding_wire.h"
+#include "literal_cases.h"
+#include "literal_controls.h"
+#include "literal_resources.h"
 int main(int argc,char **argv) {
     CHECK(argc>=2 && argc<=4);
+    if (!strcmp(argv[1],"literal")) { CHECK(argc==3);literal_normal(argv[2]);return 0; }
+    if (!strcmp(argv[1],"literal-controls")) { CHECK(argc==2);literal_controls();return 0; }
+    if (!strcmp(argv[1],"literal-prefix")) { CHECK(argc==3);literal_resources(argv[2],false);return 0; }
+    if (!strcmp(argv[1],"literal-faults")) { CHECK(argc==3);literal_resources(argv[2],true);return 0; }
     if (!strcmp(argv[1],"limits")) { CHECK(argc==2);instance_limits();return 0; }
     if (!strcmp(argv[1],"tamper")) { CHECK(argc==2);instance_tamper();return 0; }
     if (!strcmp(argv[1],"source-limits")) { CHECK(argc==2);source_receiving_limits();return 0; }

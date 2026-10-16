@@ -36,16 +36,18 @@ static bool source_materialization_birth(SourceContext *ctx,const SourceMaterial
             "constant function inventory changed");
     /* The current declaration supplies scope and ancestry. The closed literal
      * body needs no open generic binders, even for a concrete generic nominal. */
-    XrXirSourceRange range=ctx->query.declarations[owner->declaration-1].range;
     if (!source_work_units(ctx,request->site,sizeof(SourceFunction)+sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity))) return false;
-    ctx->function=f;ctx->module=range.module;++ctx->function_count;
+    ctx->function=f;ctx->module=request->module;++ctx->function_count;
     char *name=source_alloc(ctx,40,1);
     if (!name || source_format(ctx,name,40,"$materialize%u",f)!=XR_DIAG_OK)
         return source_fail(ctx,request->site,ctx->diagnostic.status==XR_XIR_OK?XR_XIR_BUDGET:ctx->diagnostic.status,
             "constant materializer name failed");
     ctx->functions[f]=(XrXirFunction){name,(uint32_t)source_text_size(ctx,name),NULL,0,request->type,NULL,0,NULL,0,NULL,0};
-    ctx->identities[f]=(XrXirFunctionIdentity){.module=range.module,.nominal_owner=owner->index+1,.method_kind=XR_XIR_MATERIALIZER};
-    ctx->bodies[f].node=owner->node;ctx->bodies[f].type_owner=owner->node;ctx->bodies[f].module=range.module;
+    ctx->identities[f]=(XrXirFunctionIdentity){.module=request->module,.nominal_owner=request->nominal+1,.method_kind=XR_XIR_MATERIALIZER};
+    ctx->bodies[f].module=request->module;
+    if (ctx->literal_definition) return true;
+    XrXirSourceRange range=ctx->query.declarations[owner->declaration-1].range;
+    ctx->bodies[f].node=owner->node;ctx->bodies[f].type_owner=owner->node;
     SourceName declaration={.name=name,.node=owner->node};
     if (!source_query_declare(ctx,&declaration,XR_XIR_SOURCE_FUNCTION,owner->declaration,range)) return false;
     ctx->bodies[f].declaration=declaration.declaration;
@@ -53,7 +55,7 @@ static bool source_materialization_birth(SourceContext *ctx,const SourceMaterial
     return true;
 }
 static bool source_materialization_finish(SourceContext *ctx) {
-    if (!ctx->comptime_input && !ctx->instance_constants) return true;
+    if (!ctx->comptime_input && !ctx->instance_constants && !ctx->literal_definition) return true;
     if (ctx->function_count!=ctx->materialization_begin)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"ordinary constant function inventory changed");
     SourceComptimeScope saved=source_comptime_scope(ctx);bool ok=true;
@@ -129,7 +131,7 @@ static bool source_materialization_bindings(SourceContext *ctx,XrXirMaterializat
             if (index>=count || seen[index] || requests[index]->caller!=f || next==count)
                 return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"constant call binding changed");
             seen[index]=1;
-            rows[next++]=(XrXirMaterializationBinding){f,i,(uint32_t)op->immediate,requests[index]->owner->index};
+            rows[next++]=(XrXirMaterializationBinding){f,i,(uint32_t)op->immediate,requests[index]->nominal};
         }
     }
     if (next!=count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"constant call coverage is incomplete");

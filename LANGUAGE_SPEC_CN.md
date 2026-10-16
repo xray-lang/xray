@@ -7954,7 +7954,17 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked原子切到schema30/contract75；construction C接口revision3只提供xr_xir_compile_construction_new_v3，旧无版本和v2构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
 
-当前仅贯通共同规范绑定依赖，公共Source仍未接回逐实例常量，继续拒绝依赖外围类型实参的comptime。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。无AST typed literal构造、未来Library实例、公共语法接回、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
+本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Source仍未接回逐实例常量，继续拒绝依赖外围类型实参的comptime。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。未来Library实例、公共语法接回、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
+
+### 17.77 无AST的拥有式实例字面量接收
+
+内部typed literal接收核只接收17.74的真实拥有式CTFE批次、准确结果数及同一原有限编译context。每次先完整复验当前Checked、Lowered及其实际来源packet，然后借用实际原泛型定义、完整有序关闭替换和拥有值。调用者不能提供Value、外国类型ordinal、AST节点、声明名或PASS。所有语法生产者可以已经销毁；批次在整个同步借用期间保持存活且不可变。
+
+接收方复制可变函数/类型描述头，以真实Checked声明建立库存，复用同一普通常量recipe writer，生成私有、零运行期参数、非泛型provider。关闭实参按完整结构复制并intern到接收池；专化后才出现的新类型无需原本就有本地ID，完整有序向量由返回结果独立拥有。原泛型函数、约束、requirement/private witness、模块/nominal身份和全部原TEMPLATE根效应契约保留；新增literal函数生成普通契约，完整共同Checker重新验证所有body/effect和构造绑定。不会把关闭INSTANCE伪装成无来源Built，也不清空原TEMPLATE来绕过验证。
+
+Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原配方语义。私有字段值在其实际声明库存中解析唯一模块及nominal owner，通过17.67同一literal materializer及精确调用绑定接收；不伪造AST/query声明，不由结果类型授予一般私有访问。既有materializer绑定和comptime表完整复制。最终Checked拥有全部函数、类型、字符串、契约及构造信息，批次和生产者死亡后仍可独立packet写读、普通特化、Lowered和唯一CTFE。知道私有provider ordinal仍不授外部运行期入口权限。
+
+整个操作、当前复验、类型接收、配方、契约和最终检查计入原work128000000、累计分配64MiB、live8MiB；不重置、退款或提高steps/frame65536、depth128、policy2/8MiB输出及替换深度128。任一失败不发布部分结果，所有前缀可回收，最后析构不分配。公开布局、schema30/contract75、construction C3和opcode保持。本内部核尚未把provider绑定到公共逐实例comptime语法，也未完成Library未来实例收集与重定位。完整FI、原owner重试、当前全矩阵、正式安全/provider及原C0/C1退出门仍各需真实固定输入证据。
 
 ---
 
