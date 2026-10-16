@@ -4325,31 +4325,40 @@ add_xray_bootstrap_unit_test(test_callable52_physical_lifecycle
     ${CMAKE_SOURCE_DIR}/src/vm/audit/xr_typed_lifecycle_audit.c)
 
 
-# Substitute only the actual REPL coordinator allocator for this failure gate.
-add_library(xr_repl_publication_allocation_probe OBJECT ${CMAKE_SOURCE_DIR}/src/api/xrepl.c)
-target_include_directories(xr_repl_publication_allocation_probe PRIVATE ${XRAY_COMMON_INCLUDES})
-target_compile_definitions(xr_repl_publication_allocation_probe PRIVATE
-    $<TARGET_PROPERTY:xray_core_objs,COMPILE_DEFINITIONS>)
+add_executable(test_source_repl_generation api/test_source_repl_generation.c)
+target_link_libraries(test_source_repl_generation PRIVATE xray_source_api)
+target_include_directories(test_source_repl_generation PRIVATE
+    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_source_repl_generation PRIVATE
+    XR_GENERATION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_source_repl_generation PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
-    # xrepl.c reaches runtime objects that end in C11 flexible array members,
-    # which cl.exe still reports as the C4200 zero-sized-array extension.
-    target_compile_options(xr_repl_publication_allocation_probe PRIVATE
-        /W4 /WX /wd4200 "/FI${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
+    target_compile_options(test_source_repl_generation PRIVATE /W4 /WX /utf-8)
 else()
-    target_compile_options(xr_repl_publication_allocation_probe PRIVATE
-        -Wall -Wextra -Werror -include "${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
+    target_compile_options(test_source_repl_generation PRIVATE -Wall -Wextra -Werror)
 endif()
-add_executable(test_repl_publication_allocations
-    api/test_repl_publication_allocations.c
-    $<TARGET_OBJECTS:xr_repl_publication_allocation_probe>
-    "$<FILTER:$<TARGET_OBJECTS:xray_core_objs>,EXCLUDE,/xrepl[.]c[.](o|obj)$>")
+add_test(NAME test_source_repl_generation COMMAND test_source_repl_generation)
+set_tests_properties(test_source_repl_generation PROPERTIES
+    LABELS "unit;api;source;ownership;repl;original;generation" TIMEOUT 120)
+
+# Exercise the original publication obligation against actual Source owners.
+add_executable(test_repl_publication_allocations api/test_repl_publication_allocations.c)
+target_link_libraries(test_repl_publication_allocations PRIVATE xray_source_api)
 target_include_directories(test_repl_publication_allocations PRIVATE
-    ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(test_repl_publication_allocations PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
-target_link_libraries(test_repl_publication_allocations PRIVATE xray_stdlib_bootstrap_core)
+    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_repl_publication_allocations PRIVATE
+    XR_PUBLICATION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_repl_publication_allocations PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_repl_publication_allocations PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_repl_publication_allocations PRIVATE -Wall -Wextra -Werror)
+endif()
 add_test(NAME test_repl_publication_allocations COMMAND test_repl_publication_allocations)
 set_tests_properties(test_repl_publication_allocations PROPERTIES
-    LABELS "unit;source;ownership;repl" RUN_SERIAL TRUE TIMEOUT 120)
+    LABELS "unit;api;source;ownership;repl;original;compiler-faults" RUN_SERIAL TRUE TIMEOUT 120)
 
 add_xray_bootstrap_unit_test(test_callable_variadic_declaration
     plan/test_callable_variadic_declaration.c plan/test_callable52_attacker_encoder.c)
