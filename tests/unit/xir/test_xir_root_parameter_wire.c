@@ -37,10 +37,14 @@ static void rw_hash(uint8_t bytes[292]) {
     xr_sha256_final(&sha,bytes+32);
 }
 static void rw_literal(uint8_t bytes[292]) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==73,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==29 && XR_XIR_CHECKED_CONTRACT==75,
         "parameter packet fields require the independently reviewed wire identity");
+    _Static_assert(XR_XIR_CALL_INDIRECT==58 && XR_XIR_RETURN==33 &&
+        XR_XIR_CALLABLE_ROOT_UNRESOLVED==8,"literal opcode and callable flags are fixed wire values");
+    /* The new lexical-scope word belongs only to declaration rows. This packet
+     * has no declarations and retains its independently enumerated 57 words. */
     memset(bytes,0,292);memcpy(bytes,"XRCHK\0\0\0",8);
-    rw_word(bytes,2,28);rw_word(bytes,3,73);rw_word(bytes,4,2);rw_word(bytes,6,228);
+    rw_word(bytes,2,29);rw_word(bytes,3,75);rw_word(bytes,4,2);rw_word(bytes,6,228);
     for (size_t w=0;w<57;++w) rw_word(bytes+64,w,rw_payload[w]);
     rw_hash(bytes);
 }
@@ -87,21 +91,25 @@ static void rw_previous_literal(void) {
     rp_owner_free(&context,live);rp_balanced(mark);
 }
 static void rw_previous_parameter_literal(void) {
-    uint8_t bytes[292];rw_literal(bytes);
     /* This complete previous packet retains the same independently enumerated
      * scalar/callable payload, including its zero nominal construction count. */
-    rw_word(bytes,2,27);rw_word(bytes,3,72);rw_hash(bytes);
     RootParameterMark mark=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
-    XrCompileResourceStats before=rp_stats(&context);size_t attempts=rp_attempts;
-    /* The first read charges the 32-byte header; occupied output is rejected before reading. */
-    for (unsigned occupied=0;occupied<2;++occupied) {
-        XrXirArtifact *sentinel=occupied?(XrXirArtifact *)(uintptr_t)1:NULL,*out=sentinel;
-        CHECK(xr_xir_compile_checked_read(&context,bytes,sizeof(bytes),&out,NULL)==XR_XIR_BAD_STRUCTURE && out==sentinel);
-        XrCompileResourceStats after=rp_stats(&context);
-        CHECK(rp_attempts==attempts && after.live_bytes==before.live_bytes &&
-            after.allocated_bytes==before.allocated_bytes && after.work==before.work+32);
+    uint64_t live=rp_stats(&context).live_bytes;
+    static const uint32_t versions[][2]={{27,72},{28,73}};
+    for (unsigned version=0;version<2;++version) {
+        uint8_t bytes[292];rw_literal(bytes);
+        rw_word(bytes,2,versions[version][0]);rw_word(bytes,3,versions[version][1]);rw_hash(bytes);
+        XrCompileResourceStats before=rp_stats(&context);size_t attempts=rp_attempts;
+        /* The first read charges the 32-byte header; occupied output is rejected before reading. */
+        for (unsigned occupied=0;occupied<2;++occupied) {
+            XrXirArtifact *sentinel=occupied?(XrXirArtifact *)(uintptr_t)1:NULL,*out=sentinel;
+            CHECK(xr_xir_compile_checked_read(&context,bytes,sizeof(bytes),&out,NULL)==XR_XIR_BAD_STRUCTURE && out==sentinel);
+            XrCompileResourceStats after=rp_stats(&context);
+            CHECK(rp_attempts==attempts && after.live_bytes==before.live_bytes &&
+                after.allocated_bytes==before.allocated_bytes && after.work==before.work+32);
+        }
     }
-    rp_owner_free(&context,before.live_bytes);rp_balanced(mark);
+    rp_owner_free(&context,live);rp_balanced(mark);
 }
 static void rw_rejections(void) {
     /* Wire ordinals name the independent payload above, never writer output. */
@@ -109,6 +117,7 @@ static void rw_rejections(void) {
         {2,25,XR_XIR_BAD_STRUCTURE},{3,70,XR_XIR_BAD_STRUCTURE},
         {2,26,XR_XIR_BAD_STRUCTURE},{3,71,XR_XIR_BAD_STRUCTURE},
         {2,27,XR_XIR_BAD_STRUCTURE},{3,72,XR_XIR_BAD_STRUCTURE},
+        {2,28,XR_XIR_BAD_STRUCTURE},{3,73,XR_XIR_BAD_STRUCTURE},
         {4,1,XR_XIR_BAD_STAGE},{5,1,XR_XIR_BAD_STRUCTURE},
         {16+43,0,XR_XIR_BAD_TYPE},{16+43,1,XR_XIR_BAD_TYPE},
         {16+48,0,XR_XIR_BAD_STRUCTURE},{16+49,0,XR_XIR_BAD_STRUCTURE},
@@ -167,7 +176,7 @@ static void rw_resources(void) {
         CHECK(minus?!read:read!=NULL);xr_xir_compile_artifact_free(read);
         rp_owner_free(&c,live);rp_balanced(physical);
     }
-    printf("literal Checked73 reader actual OOM sites=%zu\n",sites);
+    printf("literal Checked75 reader actual OOM sites=%zu\n",sites);
 }
 int main(void) {
     rw_roundtrip();rw_previous_literal();rw_previous_parameter_literal();
