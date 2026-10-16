@@ -31,4 +31,64 @@ class ErrorBoundaries(unittest.TestCase):
         for length,index,valid in [(3,-1,False),(3,2,True),(3,3,False),(3,5,False),(4,4,False)]:
             with self.subTest(length=length,index=index):self.assertEqual(model.checked_index(length,index) is None,valid)
 
+
+
+class StrictMapBoundaries(unittest.TestCase):
+    def test_two_full_original_programs_and_all12_observations(self):
+        traces=model.map_boundary_traces()
+        self.assertEqual(traces['map_index_missing_key_panic']['outputs'],[7,'Map key not found',431,True,True,True])
+        self.assertEqual(traces['map_set_static_missing_key_prehashed']['outputs'],[True,False,7,True,431,'Map key not found'])
+        self.assertEqual(sum(len(x['outputs']) for x in traces.values()),12)
+        self.assertTrue(all(not x['bad_index_continuation_executed'] for x in traces.values()))
+
+    def test_nullable_present_and_absent_are_different_key_states(self):
+        mapping=model.StringKeyMap({'present-null':None,'present-value':5})
+        self.assertTrue(mapping.contains('present-null'));self.assertIsNone(mapping.strict('present-null'))
+        self.assertFalse(mapping.contains('absent'));self.assertIsNone(mapping.optional('absent'))
+        with self.assertRaises(model.MissingMapKey):mapping.strict('absent')
+        self.assertEqual(mapping.strict('present-value'),5)
+
+    def test_missing_index_interrupts_print_argument_and_does_not_mutate(self):
+        mapping=model.StringKeyMap({'ada':7});before=dict(mapping.items)
+        with self.assertRaises(model.MissingMapKey) as panic:mapping.strict('missing')
+        self.assertEqual((panic.exception.code,panic.exception.message),(431,'Map key not found'))
+        self.assertEqual(mapping.items,before)
+        self.assertEqual(model._caught_missing(mapping),(['Map key not found',431],False))
+        self.assertEqual(model._caught_missing(mapping,True),([431,'Map key not found'],False))
+
+    def test_returning_null_for_strict_absence_fails_the_whole_program(self):
+        from unittest import mock
+        with mock.patch.object(model.StringKeyMap,'strict',lambda mapping,key:mapping.items.get(key)),self.assertRaisesRegex(ValueError,'did not interrupt'):
+            model.expected_rows()
+
+    def test_readonly_candidates_keep_all_original_entries_and_no_storage_claim(self):
+        trace=model.map_boundary_traces()['map_set_static_missing_key_prehashed']
+        self.assertEqual(trace['scores_after_caught_panic'],{'ada':7,'lin':9})
+        self.assertEqual(trace['seen_after_reads'],['ada','lin'])
+        self.assertEqual((trace['original_top_level_const_map_entries'],trace['original_top_level_const_set_entries']),(2,2))
+        self.assertIn('OPEN',trace['actual_static_prehashed_emission_or_native_readonly_storage'])
+        with self.assertRaises(ValueError):model.StringKeyMap({1:5})
+
+    def test_full_input_and_diagnostic_authorities_are_pinned(self):
+        from pathlib import Path
+        from unittest import mock
+        saved=Path.read_bytes
+        for name in model._MAP_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==model.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.expected_rows()
+        with mock.patch.dict(model._MAP_PROGRAMS,{},clear=True),self.assertRaises(ValueError):model.expected_rows()
+
+    def test_product_rows_keep_complete_original_run_and_independent_bytes(self):
+        import json
+        from pathlib import Path
+        cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
+        for row in model.expected_rows():
+            if row['source'] not in model._MAP_PROGRAMS.values():continue
+            case=cases[row['id']];self.assertEqual(case['source'],row['source'])
+            self.assertEqual(case['source'],case['preserved_original_identity']['source'])
+            self.assertEqual(case['entry'],'run');self.assertEqual(case['source_context'],'original_absolute')
+            self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
+            self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'')
+
 if __name__=='__main__':unittest.main()

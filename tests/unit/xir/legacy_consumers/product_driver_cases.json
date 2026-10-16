@@ -30881,6 +30881,74 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 13
+    },
+    {
+      "id": "complete_error_boundaries_map_index_missing_key_panic",
+      "oracle_id": "complete_error_boundaries_map_index_missing_key_panic",
+      "source": "tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr",
+      "source_lf_sha256": "da740a26e3a592a62251b4114cea9d09c603e82e871855743a1cd5fa37da9f8f",
+      "entry": "run",
+      "stdout_utf8": "7\nMap key not found\n431\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and fixed diagnostic acceptance text,all print continuations and catch order preserved. Static/prehashed storage is a required product gate,not established by the independent value model.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr",
+        "source_lf_sha256": "da740a26e3a592a62251b4114cea9d09c603e82e871855743a1cd5fa37da9f8f"
+      },
+      "remaining_gates": [
+        "Complete original strict indexing,optional get,nullable payload/containsKey branch,Map/Set top-level readonly candidates,and caught panic code/message order all retained.",
+        "All12 original observations,atomic print-argument panic and skipped bad-index continuation;actual VM/C/native/static-prehashed and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_error_boundaries_map_set_static_missing_key_prehashed",
+      "oracle_id": "complete_error_boundaries_map_set_static_missing_key_prehashed",
+      "source": "tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr",
+      "source_lf_sha256": "e8e3b30e380386e0afc58578202fe50102d4fa12b82ae5850af53dcf6196eac7",
+      "entry": "run",
+      "stdout_utf8": "true\nfalse\n7\ntrue\n431\nMap key not found\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and fixed diagnostic acceptance text,all print continuations and catch order preserved. Static/prehashed storage is a required product gate,not established by the independent value model.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr",
+        "source_lf_sha256": "e8e3b30e380386e0afc58578202fe50102d4fa12b82ae5850af53dcf6196eac7"
+      },
+      "remaining_gates": [
+        "Complete original strict indexing,optional get,nullable payload/containsKey branch,Map/Set top-level readonly candidates,and caught panic code/message order all retained.",
+        "All12 original observations,atomic print-argument panic and skipped bad-index continuation;actual VM/C/native/static-prehashed and all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
     }
   ]
 }

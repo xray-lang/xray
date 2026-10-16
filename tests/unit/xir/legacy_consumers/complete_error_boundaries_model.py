@@ -101,6 +101,7 @@ def observations():
     for name,index in [('array_index_set_append_oob',3),('array_index_set_gap_oob',5),('array_index_set_negative_oob',-1)]:
         message,code=checked_index(3,index)
         rows[name]=['[Uncaught Panic] E'+str(code).zfill(4)+': '+message]
+    rows.update({name:trace['outputs'] for name,trace in map_boundary_traces().items()})
     if set(rows)!=_NAMES:raise ValueError('Error boundary model lost a whole program')
     return rows
 
@@ -120,4 +121,72 @@ def expected_rows():
          'expected':{'exit_code':1 if uncaught else 0,'stdout_utf8':'' if uncaught else text,'stderr_utf8':text if uncaught else ''},
          'model':'Complete original source: independent bounds/code/message/top-level panic formatting or strict decimal grammar/typed failure;no old expected or product-output oracle.',
          'observation_count':len(values)})
+        if name in _MAP_PROGRAMS:
+            rows[-1]['required_semantic_trace']=map_boundary_traces()[name]
+            rows[-1]['model']='Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and fixed diagnostic acceptance text,all print continuations and catch order preserved. Static/prehashed storage is a required product gate,not established by the independent value model.'
     return rows
+
+
+_MAP_PROGRAMS={name:'tests/diff/cases/semantics/collections/'+name+'.xr' for name in (
+    'map_index_missing_key_panic','map_set_static_missing_key_prehashed')}
+_MAP_NAMES=frozenset({'map_index_missing_key_panic','map_set_static_missing_key_prehashed'})
+_MAP_INPUTS={"tests/diff/cases/semantics/collections/map_index_missing_key_panic.xr":"da740a26e3a592a62251b4114cea9d09c603e82e871855743a1cd5fa37da9f8f","tests/diff/cases/semantics/collections/map_set_static_missing_key_prehashed.xr":"e8e3b30e380386e0afc58578202fe50102d4fa12b82ae5850af53dcf6196eac7","stdlib/types/map.xr":"49c5f1ddd6d0addab7608d918bbb627e655219ca66d10154cab7b05773488f31","stdlib/types/set.xr":"6c8062693701d60982f550ba8b766b4c20924c9ed36cb0dc146be45f9693db8f","src/runtime/xerror_codes.h":"c57c353946012402931711b2b736013c8b5208fcb5de22370a230cc75e0f8a56","src/aot/xrt_coll.h":"a9607a14e582818c5c56e9bff9f5ac4fba91daed7c741d2bcd0631fdd1f8e96e"}
+_PROGRAMS.update(_MAP_PROGRAMS)
+_NAMES=_NAMES|_MAP_NAMES
+_INPUTS.update(_MAP_INPUTS)
+_REQUIRED_INPUTS=_REQUIRED_INPUTS+tuple(name for name in _MAP_INPUTS if name not in _REQUIRED_INPUTS)
+
+
+class MissingMapKey(Exception):
+    code=431
+    message='Map key not found'
+
+
+class StringKeyMap:
+    """Presence and nullable payload are distinct; no target hash layout modeled."""
+    def __init__(self,items):
+        if any(type(key) is not str for key in items):raise ValueError('Only original string key identities are reviewed')
+        self.items=dict(items)
+    def contains(self,key):return key in self.items
+    def optional(self,key):return self.items.get(key)
+    def strict(self,key):
+        if key not in self.items:raise MissingMapKey()
+        return self.items[key]
+
+
+def _caught_missing(mapping,code_first=False):
+    outputs=[];bad_continuation=False
+    try:
+        # Evaluating the print argument must finish before any output is emitted.
+        outputs.append(mapping.strict('missing'))
+        bad_continuation=True;outputs.append('bad-index')
+    except MissingMapKey as panic:
+        outputs.extend([panic.code,panic.message] if code_first else [panic.message,panic.code])
+    else:raise ValueError('Missing strict Map index did not interrupt its complete print continuation')
+    if bad_continuation:raise ValueError('Original bad-index continuation executed')
+    return outputs,bad_continuation
+
+
+def map_boundary_traces():
+    if set(_MAP_PROGRAMS)!=_MAP_NAMES:raise ValueError('Complete strict Map boundary program missing')
+    scores=StringKeyMap({'ada':7,'lin':9});before=dict(scores.items)
+    outputs=[scores.strict('ada')];caught,bad=_caught_missing(scores);outputs+=caught
+    outputs.append(scores.optional('missing') is None)
+    payloads=StringKeyMap({'present-null':None,'present-value':5})
+    present=payloads.contains('present-null')
+    if present:outputs.append(payloads.strict('present-null') is None)
+    outputs.append(payloads.optional('absent') is None)
+    if not present or scores.items!=before or outputs!=[7,'Map key not found',431,True,True,True]:
+        raise ValueError('Complete optional/nullable strict Map boundary requirement changed')
+    ordinary={'outputs':outputs,'bad_index_continuation_executed':bad,'stored_null_is_present':present,
+        'stored_null_payload':payloads.strict('present-null'),'absent_is_present':payloads.contains('absent'),
+        'scores_after_caught_panic':dict(scores.items),'nullable_payloads_after_reads':dict(payloads.items)}
+    static_scores=StringKeyMap({'ada':7,'lin':9});seen=frozenset(['ada','lin'])
+    output=[static_scores.optional('missing') is None,'missing' in seen,static_scores.strict('ada'),'lin' in seen]
+    caught,bad=_caught_missing(static_scores,code_first=True);output+=caught
+    if output!=[True,False,7,True,431,'Map key not found'] or static_scores.items!=before:
+        raise ValueError('Complete top-level readonly Map/Set strict lookup requirement changed')
+    static={'outputs':output,'bad_index_continuation_executed':bad,'scores_after_caught_panic':dict(static_scores.items),
+        'seen_after_reads':sorted(seen),'original_top_level_const_map_entries':2,'original_top_level_const_set_entries':2,
+        'actual_static_prehashed_emission_or_native_readonly_storage':'OPEN_REQUIRES_REAL_VM_C_NATIVE_AND_RESOURCE_QUALIFICATION'}
+    return {'map_index_missing_key_panic':ordinary,'map_set_static_missing_key_prehashed':static}
