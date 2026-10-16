@@ -18044,6 +18044,32 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/force_unwrap_panic_channel/root.xr",
+        "lf_sha256": "924629f41d823ab409de260e08e4279afc373041344df4e30dac2b8e7be33b40",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": "Current spec003 N-13 and spec019 E0413 require absent Optional unwrap panic;catch panic is the canonical channel. The spec004 NullThrowError/E0410 example is stale and separately OPEN. Preserve the entire original value declaration,unwrap expression and all three print expressions;the failed first argument emits no line,then message/code remain required.",
+        "differential_input_obligation": {
+          "arguments": [],
+          "stdin_hex": "",
+          "arguments_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/force_unwrap_panic_channel/root.args",
+            "state": "MISSING"
+          },
+          "stdin_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/force_unwrap_panic_channel/root.stdin",
+            "state": "MISSING"
+          },
+          "execution": "NOT_RUN"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_NULL_UNWRAP_PANIC_AFTER_FROZEN_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Current spec003 N-13 and spec019 E0413 require absent Optional unwrap panic;catch panic is the canonical channel. The spec004 NullThrowError/E0410 example is stale and separately OPEN. Preserve the entire original value declaration,unwrap expression and all three print expressions;the failed first argument emits no line,then message/code remain required."
       }
     },
     {

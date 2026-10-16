@@ -32786,6 +32786,48 @@
       ],
       "independent_observation_count": 3,
       "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_error_boundaries_force_unwrap_error_shape",
+      "oracle_id": "complete_error_boundaries_force_unwrap_error_shape",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/force_unwrap_panic_channel/root.xr",
+      "source_lf_sha256": "924629f41d823ab409de260e08e4279afc373041344df4e30dac2b8e7be33b40",
+      "entry": "run",
+      "stdout_utf8": "cannot unwrap a null value\n413\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Complete original absent i64 Optional force-unwrap program after frozen panic-channel port;only catch kind and obsolete comment migrated,all expressions and message/code prints retained. Exact canonical fixed4606 message and E0413;no ordinary error/lifetime/FI/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr",
+        "source_lf_sha256": "9f52172127ce83741fcae558389f26cb3eb00f433bc269ddaf29a22f269af965"
+      },
+      "remaining_gates": [
+        "Whole original and all three print expressions preserved;only panic catch channel and obsolete comments ported.",
+        "Exact message/code2outputs;source refusal remains failure;all original FI/resources/lifetime/cancellation/sanitizer/provider/mixed responsibilities remain OPEN.",
+        "The stale spec004 E0410 example remains an explicit owned-spec reconciliation gap;existing pins are not refreshed."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2,
+      "diagnostic_acceptance_basis": {
+        "fixed_source_commit": "460622cf45c82ab0bc93be14d2f0ac3fce21bef6",
+        "reference": "tests/unit/xir/legacy_consumers/fixtures/null_unwrap_fixed_reference/reference.json",
+        "code": 413,
+        "message": "cannot unwrap a null value",
+        "message_UTF8_bytes": 26,
+        "channel": "PANIC",
+        "legacy_spec004_example_reconciliation": "OPEN",
+        "SDK_FI_lifetime_provider_qualified": false
+      }
     }
   ]
 }

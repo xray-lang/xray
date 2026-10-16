@@ -364,6 +364,9 @@ FROZEN_TARGETS['tests/regression/16_narrowing/1602_optional_chain_shortcircuit.x
 CORE_NAMED_REVIEW += ('tests/regression/08_mem/0804_self_returning_method_rc.xr',)
 FROZEN_TARGETS['tests/regression/08_mem/0804_self_returning_method_rc.xr'] = ('POSITIVE_COMPLETE_RETURN_LIFETIME_AFTER_FROZEN_PORT', 'P10')
 
+FROZEN_TARGETS['tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr'] = ('POSITIVE_NULL_UNWRAP_PANIC_AFTER_FROZEN_PORT', 'P10')
+TARGET_PORT_ARGUMENTS['tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr'] = []
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)

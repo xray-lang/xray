@@ -102,6 +102,7 @@ def observations():
         message,code=checked_index(3,index)
         rows[name]=['[Uncaught Panic] E'+str(code).zfill(4)+': '+message]
     rows.update({name:trace['outputs'] for name,trace in map_boundary_traces().items()})
+    rows['force_unwrap_error_shape']=null_unwrap_trace()['outputs']
     if set(rows)!=_NAMES:raise ValueError('Error boundary model lost a whole program')
     return rows
 
@@ -115,10 +116,11 @@ def expected_rows():
     rows=[]
     for name,values in sorted(observations().items()):
         source=_PROGRAMS[name]
-        if Path(source).stem!=name or source not in _INPUTS:raise ValueError('Error boundary exact source identity changed')
+        original_source=_NULL_ORIGINAL if name==_NULL_NAME else source
+        if Path(original_source).stem!=name or source not in _INPUTS:raise ValueError('Error boundary exact source identity changed')
         uncaught=name.startswith('array_index_set_')
         text=''.join((str(v).lower() if type(v) is bool else str(v))+'\n' for v in values)
-        rows.append({'id':'complete_error_boundaries_'+name,'source':source,'original_source':source,'required_target':None,
+        rows.append({'id':'complete_error_boundaries_'+name,'source':source,'original_source':original_source,'required_target':None,
          'expected':{'exit_code':1 if uncaught else 0,'stdout_utf8':'' if uncaught else text,'stderr_utf8':text if uncaught else ''},
          'model':'Complete original source: independent bounds/code/message/top-level panic formatting or strict decimal grammar/typed failure;no old expected or product-output oracle.',
          'observation_count':len(values)})
@@ -126,6 +128,10 @@ def expected_rows():
             rows[-1]['required_semantic_trace']=map_boundary_traces()[name]
             rows[-1]['diagnostic_acceptance_basis']=reference
             rows[-1]['model']='Complete unchanged strict Map and optional/nullable presence programs;spec E0431 and committed fixed4606 canonical default-message reference replace the retired backend text as target authority. Exact lowercase UTF8 only;all print continuations/catch order/presence semantics retained. Static/prehashed storage,FI,lifetime and provider require separate real qualification.'
+        if name==_NULL_NAME:
+            rows[-1]['required_semantic_trace']=null_unwrap_trace()
+            rows[-1]['diagnostic_acceptance_basis']=null_unwrap_reference()
+            rows[-1]['model']='Complete original absent i64 Optional force-unwrap program after frozen panic-channel port;only catch kind and obsolete comment migrated,all expressions and message/code prints retained. Exact canonical fixed4606 message and E0413;no ordinary error/lifetime/FI/provider qualification.'
     return rows
 
 
@@ -223,3 +229,78 @@ def map_boundary_traces():
         'seen_after_reads':sorted(seen),'original_top_level_const_map_entries':2,'original_top_level_const_set_entries':2,
         'actual_static_prehashed_emission_or_native_readonly_storage':'OPEN_REQUIRES_REAL_VM_C_NATIVE_AND_RESOURCE_QUALIFICATION'}
     return {'map_index_missing_key_panic':ordinary,'map_set_static_missing_key_prehashed':static}
+
+
+_NULL_NAME='force_unwrap_error_shape'
+_NULL_ORIGINAL='tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr'
+_NULL_PORT='tests/unit/xir/legacy_consumers/fixtures/force_unwrap_panic_channel/root.xr'
+_NULL_REFERENCE='tests/unit/xir/legacy_consumers/fixtures/null_unwrap_fixed_reference/reference.json'
+_NULL_TEST_SNAPSHOT='tests/unit/xir/legacy_consumers/fixtures/null_unwrap_fixed_reference/xir_source_nested_nullable_cases.h.txt'
+_NULL_INPUTS={'tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr': '9f52172127ce83741fcae558389f26cb3eb00f433bc269ddaf29a22f269af965', 'tests/unit/xir/legacy_consumers/fixtures/force_unwrap_panic_channel/root.xr': '924629f41d823ab409de260e08e4279afc373041344df4e30dac2b8e7be33b40', 'tests/unit/xir/legacy_consumers/fixtures/null_unwrap_fixed_reference/reference.json': 'f695e9f66f390069e08065aef780808d9ac88b2d3a24287e3899fee761afd935', 'tests/unit/xir/legacy_consumers/fixtures/null_unwrap_fixed_reference/xir_source_nested_nullable_cases.h.txt': '326c49486859719a7df78161ed789a92210ee1a7edcb768db8bf97065ce28408'}
+_PROGRAMS[_NULL_NAME]=_NULL_PORT
+_NAMES=_NAMES|frozenset({_NULL_NAME})
+_INPUTS.update(_NULL_INPUTS)
+_REQUIRED_INPUTS=_REQUIRED_INPUTS+tuple(name for name in _NULL_INPUTS if name not in _REQUIRED_INPUTS)
+
+
+def null_unwrap_reference():
+    import json
+    data=json.loads((ROOT/_NULL_REFERENCE).read_text(encoding='utf-8'))
+    if (data['schema']!=1 or data['fixed_source_commit']!='460622cf45c82ab0bc93be14d2f0ac3fce21bef6'
+            or data['canonical_fault']!={'code':413,'message':'cannot unwrap a null value'}
+            or data['accepted_product_cli_sha256']!='4da822ed581b7b22f56cd6a5cb24037ac7f51fcf1088f5440d628e7a4a11b11e'
+            or data['accepted_product_manifest_sha256']!='d5ddf7eec828b84e8d52b56816efbfded091658eb73cd264c3bc2409f87f54b8'):
+        raise ValueError('Null unwrap reference lost its accepted fixed target identity')
+    expected={'src/xir/xxir_fault.h':_MAP_REFERENCE_FILES[0],
+        'src/xir/xxir_panic_value.inc.c':_MAP_REFERENCE_FILES[1],
+        'tests/unit/xir/xir_source_nested_nullable_cases.h':_NULL_TEST_SNAPSHOT}
+    rows=data['source_snapshots']
+    if len(rows)!=3 or {row['source_path']:row['snapshot_path'] for row in rows}!=expected:
+        raise ValueError('Null unwrap reference lost complete owned source snapshots')
+    contents={}
+    for row in rows:
+        raw=(ROOT/row['snapshot_path']).read_bytes().replace(b'\r\n',b'\n')
+        if (hashlib.sha256(raw).hexdigest()!=row['lf_sha256']
+                or hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()!=row['git_blob_oid']):
+            raise ValueError('Null unwrap reference snapshot bytes changed')
+        contents[row['source_path']]=raw.decode('utf-8')
+    if ('#define XR_XIR_PANIC_NULL_UNWRAP 413u' not in contents['src/xir/xxir_fault.h']
+            or 'case XR_XIR_PANIC_NULL_UNWRAP: written = snprintf(buffer, capacity, "cannot unwrap a null value"); break;' not in contents['src/xir/xxir_panic_value.inc.c']
+            or 'result.panic.detail.code==XR_XIR_PANIC_NULL_UNWRAP' not in contents['tests/unit/xir/xir_source_nested_nullable_cases.h']):
+        raise ValueError('Null unwrap canonical panic channel,code or default message changed')
+    if data['legacy_example_conflict']['old_example']!='NullThrowError (E0410)' or not data['legacy_example_conflict']['state'].startswith('OPEN_'):
+        raise ValueError('Null unwrap legacy spec example conflict was hidden')
+    return {'fixed_source_commit':data['fixed_source_commit'],'reference':_NULL_REFERENCE,
+        'code':413,'message':'cannot unwrap a null value','message_UTF8_bytes':26,'channel':'PANIC',
+        'legacy_spec004_example_reconciliation':'OPEN','SDK_FI_lifetime_provider_qualified':False}
+
+
+class NullUnwrapPanic(BaseException):
+    code=413
+    message='cannot unwrap a null value'
+
+
+def unwrap_i64(value):
+    if value is None:raise NullUnwrapPanic()
+    if type(value) is not int or not -(1<<63)<=value<(1<<63):
+        raise ValueError('Only the reviewed Optional i64 domain is modeled')
+    return value
+
+
+def null_unwrap_trace():
+    outputs=[];argument_emitted=False;ordinary_error_caught=False;reads=0
+    try:
+        reads+=1
+        value=unwrap_i64(None)
+        outputs.append(value);argument_emitted=True
+    except Exception:
+        ordinary_error_caught=True
+    except NullUnwrapPanic as panic:
+        outputs.extend([panic.message,panic.code])
+    if (reads!=1 or argument_emitted or ordinary_error_caught
+            or outputs!=['cannot unwrap a null value',413]):
+        raise ValueError('Whole null unwrap lost panic atomicity or its exact two observations')
+    return {'outputs':outputs,'optional_reads':reads,'normal_print_argument_emitted':argument_emitted,
+        'ordinary_value_error_catch_granted':ordinary_error_caught,'declared_type':'i64?',
+        'outer_absence':True,'unwrapped_layers_attempted':1,'catch_kind':'panic',
+        'all_three_original_print_expressions_preserved':True,'PanicInfo_lifetime_FI_provider_qualification':'OPEN'}

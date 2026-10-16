@@ -131,4 +131,65 @@ class StrictMapBoundaries(unittest.TestCase):
         trace=model.map_boundary_traces()['map_set_static_missing_key_prehashed']
         self.assertIn('OPEN',trace['actual_static_prehashed_emission_or_native_readonly_storage'])
 
+class NullUnwrapBoundary(unittest.TestCase):
+    def test_whole_port_changes_only_the_obsolete_comment_and_catch_channel(self):
+        original=(model.ROOT/model._NULL_ORIGINAL).read_text(encoding='utf-8')
+        target=(model.ROOT/model._NULL_PORT).read_text(encoding='utf-8')
+        body=original[original.index('var value: i64? = null'):]
+        self.assertEqual(target[target.index('var value: i64? = null'):],body.replace('} catch (e) {','} catch panic (e) {'))
+        self.assertEqual(original.count('print('),3);self.assertEqual(target.count('print('),3)
+        self.assertIn('print(value!)',target);self.assertIn('print(e.message)\n    print(e.code)',target)
+
+    def test_optional_i64_absence_panics_while_present_zero_is_a_value(self):
+        for value in (0,7,-(1<<63),(1<<63)-1):self.assertEqual(model.unwrap_i64(value),value)
+        with self.assertRaises(model.NullUnwrapPanic) as panic:model.unwrap_i64(None)
+        self.assertEqual((panic.exception.code,panic.exception.message),(413,'cannot unwrap a null value'))
+        for value in (False,True,'0',1<<63):
+            with self.subTest(value=value),self.assertRaises(ValueError):model.unwrap_i64(value)
+        self.assertFalse(issubclass(model.NullUnwrapPanic,Exception))
+
+    def test_failed_argument_emits_no_value_and_only_the_two_panic_observations(self):
+        trace=model.null_unwrap_trace()
+        self.assertEqual(trace['outputs'],['cannot unwrap a null value',413])
+        self.assertEqual(trace['optional_reads'],1);self.assertFalse(trace['normal_print_argument_emitted'])
+        self.assertFalse(trace['ordinary_value_error_catch_granted'])
+        from unittest import mock
+        for code,message in ((410,'cannot unwrap a null value'),(413,'Cannot unwrap a null value'),(413,'cannot unwrap a null value ')):
+            with self.subTest(code=code,message=message),mock.patch.object(model.NullUnwrapPanic,'code',code),mock.patch.object(model.NullUnwrapPanic,'message',message),self.assertRaises(ValueError):model.expected_rows()
+
+    def test_committed_reference_keeps_code_message_and_legacy_spec_conflict_explicit(self):
+        reference=model.null_unwrap_reference()
+        self.assertEqual((reference['code'],reference['message_UTF8_bytes'],reference['channel']),(413,26,'PANIC'))
+        self.assertEqual(reference['legacy_spec004_example_reconciliation'],'OPEN')
+        self.assertFalse(reference['SDK_FI_lifetime_provider_qualified'])
+        from pathlib import Path
+        from unittest import mock
+        import json,copy
+        original=json.loads((model.ROOT/model._NULL_REFERENCE).read_text(encoding='utf-8'));saved=Path.read_text
+        variants=[]
+        changed=copy.deepcopy(original);changed['canonical_fault']['code']=410;variants.append(changed)
+        changed=copy.deepcopy(original);changed['fixed_source_commit']='0'*40;variants.append(changed)
+        changed=copy.deepcopy(original);changed['source_snapshots'][-1]['git_blob_oid']='0'*40;variants.append(changed)
+        changed=copy.deepcopy(original);changed['source_snapshots'][-1]['snapshot_path']='../outside';variants.append(changed)
+        changed=copy.deepcopy(original);changed['legacy_example_conflict']['state']='PASS';variants.append(changed)
+        for value in variants:
+            def altered(path,*args,**kwargs):return json.dumps(value) if path==model.ROOT/model._NULL_REFERENCE else saved(path,*args,**kwargs)
+            with mock.patch.object(Path,'read_text',altered),self.assertRaises(ValueError):model.expected_rows()
+
+    def test_single_canonical_selection_and_product_keep_original_identity_and_bytes(self):
+        import json,audit,complete_target_selection as selection
+        rows=json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/runner_routes.json').read_text(encoding='utf-8'))['cases']
+        original=next(row for row in rows if row['case_id']==model._NULL_ORIGINAL)
+        runner=audit.load_module('null_unwrap_selection_runner','tests/diff/run_backend_diff.py')
+        selected=selection.select(original,model.ROOT,runner)
+        self.assertTrue(selected['canonical_port_selected']);self.assertFalse(selected['rejection_oracle_required'])
+        self.assertEqual(selected['selected_source'],model._NULL_PORT);self.assertEqual(selected['arguments'],[]);self.assertEqual(selected['stdin_hex'],'')
+        row=selection.expected_for(selected,[],model.expected_rows())
+        self.assertEqual(row['original_source'],model._NULL_ORIGINAL);self.assertEqual(row['observation_count'],2)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'cannot unwrap a null value\n413\n','stderr_utf8':''})
+        products=json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_text(encoding='utf-8'))['cases']
+        product=next(case for case in products if case['id']==row['id'])
+        self.assertEqual(product['source'],model._NULL_PORT);self.assertEqual(product['preserved_original_identity']['source'],model._NULL_ORIGINAL)
+        self.assertEqual(product['stdout_utf8'],row['expected']['stdout_utf8']);self.assertEqual(product['entry'],'run')
+
 if __name__=='__main__':unittest.main()
