@@ -38,6 +38,7 @@ class TaskRegressionTraces(unittest.TestCase):
           '1138_get_result':'before pending: true\nafter: 21\nagain: 21\ncancelled: true\ncompleted: 42\n',
           '1139_error_isolation':'test1: error isolation\n  done: true\n  failed: true\ntest2: error does not affect other coroutines\n  result: 42\n',
           '1140_task_error':'t1.done: true\nt1.failed: true\nt2.done: true\nt2.result: 42\n'})
+        expected.update({name:'' for name in model._NAMED_CHANNEL_PROGRAMS})
         traces=model.observations()
         self.assertEqual(set(expected),set(traces));self.assertEqual(sum(map(len,traces.values())),163)
         for name,text in expected.items():
@@ -80,12 +81,12 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(rows['complete_task_regression_1128_yield']['required_original_yield_checkpoints'],39)
 
     def test_declaration_only_modules_have_separate_full_named_body_requirements(self):
-        entries={x['id']:x for x in model.expected_rows()};named=model.named_expected_rows();self.assertEqual(len(named),4)
+        entries={x['id']:x for x in model.expected_rows()};named=model.named_expected_rows();self.assertEqual(len(named),11)
         for row in named:
             name=row['id'].removeprefix('complete_task_named_')
             self.assertEqual(entries['complete_task_regression_'+name]['expected']['stdout_utf8'],'')
             self.assertFalse(entries['complete_task_regression_'+name]['separate_named_body_obligation']['executed_by_run'])
-            self.assertEqual(row['expected']['required_test_names'],[model._DECLARATION_ONLY[name]])
+            self.assertEqual(row['expected']['required_test_names'],model.named_functions(name))
             self.assertTrue(all(row['required_original_assertion_results']))
         facts=model.named_requirements()
         self.assertEqual(facts['1122_coro_naming']['stdout_utf8'],'10\n10\n20\n30\n40\n50\ndone\n')
@@ -180,5 +181,67 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertTrue(polled['pending_poll_itself_evaluates_no_completion_action'])
         self.assertIn('1109_await_any',model._NAMES)
         for name in ('1116_task_status','task_result_failed_error_value','suspended_frame_release'):self.assertNotIn(name,model._NAMES)
+
+    def test_full_refill_graph_counts_match_independent_bounded_walk_formula(self):
+        from math import comb
+        proof=model.buffered_select_refill_proof(50,10)
+        choose=lambda k:comb(100,k) if 0<=k<=100 else 0
+        paths=sum(choose(50+12*j)-choose(51+12*j) for j in range(-10,11))
+        self.assertEqual(proof['valid_operation_interleavings'],paths)
+        self.assertEqual(paths,883645330487391898920795212)
+        self.assertEqual((proof['received_count'],proof['received_sum'],proof['reachable_states']),(50,1225,506))
+        self.assertEqual(model.buffered_select_refill_proof(3,1)['valid_operation_interleavings'],1)
+        self.assertEqual(model.buffered_select_refill_proof(3,3)['valid_operation_interleavings'],5)
+        self.assertFalse(proof['real_select_refill_wakeup_fairness_and_resources_qualified'])
+
+    def test_dynamic_capacity_uses_both_complete_original_functions(self):
+        facts=model.channel_named_requirements()['1154_dynamic_channel_capacity']
+        self.assertEqual(len(facts['assertion_results']),14);self.assertTrue(all(facts['assertion_results']))
+        first,second=facts['semantic_trace']['functions']
+        self.assertEqual([first['capacity_from_original_variable'],second['capacity_from_original_variable']],[3,2])
+        self.assertEqual(first['send_values'],first['receive_values']);self.assertEqual(first['receive_values'],[1,2,3])
+        self.assertEqual(second['receive_values'],[4,5]);self.assertTrue(first['closed'] and second['closed'])
+        self.assertEqual(model.named_functions('1154_dynamic_channel_capacity'),['test_dynamic_channel_capacity','test_bare_dynamic_channel_capacity'])
+
+    def test_close_select_covers_both_registration_orders_without_assuming_a_park(self):
+        checks,trace=model.close_select_assertions();self.assertEqual(checks,[True,True,True])
+        self.assertEqual(trace['registration_orders_checked'],2);self.assertTrue(all(all(values) for values in trace['all_order_assertions']))
+        self.assertEqual(trace['original_yield_count'],16);self.assertEqual(trace['original_done_timeout_ms'],2000)
+        self.assertEqual(trace['channel_capacities'],[0,0,1]);self.assertEqual(trace['ready_rendezvous_completed_sends'],1)
+        self.assertTrue(trace['sixteen_yields_do_not_prove_a_physical_park'])
+        self.assertFalse(trace['real_close_wake_latency_and_registration_qualified'])
+
+    def test_multiple_waiters_reobserve_one_value_and_zero_capacity_sends_finish_in_order(self):
+        for value,aggregate,want in ((7,False,[314,'done']),(9,True,[318,'done'])):
+            trace=model.multiple_waiter_trace(value,aggregate)
+            self.assertEqual(trace['outputs'],want);self.assertEqual(trace['completion_value_evaluations'],1)
+            self.assertEqual(trace['all_waiter_completion_orders'],2);self.assertEqual(trace['original_delayed_sleep_ms'],80)
+            self.assertTrue(trace['does_not_prove_both_waiters_parked_before_task_completed'])
+        checks,trace=model.send_twice_assertions();self.assertEqual(checks,[True,True,True])
+        self.assertEqual(trace['capacity'],0);self.assertEqual(trace['receive_values'],[21,34])
+        self.assertEqual(trace['completed_rendezvous_sends'],2);self.assertEqual(trace['return_value'],55)
+        self.assertFalse(trace['opcode_register_integrity_and_runtime_lifetime_qualified'])
+
+    def test_any_success_named_body_retains_failure_observation_without_payload_projection(self):
+        body=model.channel_named_requirements()['1137_await_any_success']
+        self.assertEqual(body['stdout_utf8'],'test1: single success\n  result: 42\ntest2: pre-completed tasks\n  result: 42\ntest3: skip failure\n  result: 42\ndone\n')
+        self.assertEqual(body['assertion_results'],[True])
+        self.assertTrue(body['semantic_trace']['business_failure_payload_not_projected_or_retyped'])
+        self.assertTrue(body['semantic_trace']['public_TaskResult_failed_payload_shape_not_qualified'])
+
+    def test_every_new_named_body_keeps_assert_count_and_separate_script_identity(self):
+        import re
+        facts=model.channel_named_requirements();entries={row['original_source']:row for row in model.expected_rows()}
+        named={row['original_source']:row for row in model.named_expected_rows()}
+        self.assertEqual(len(facts),7);self.assertEqual(sum(len(model.named_functions(name)) for name in facts),8)
+        self.assertEqual(sum(len(body['assertion_results']) for body in facts.values()),23)
+        self.assertEqual(sum(len(body.get('stdout_utf8','').splitlines()) for body in facts.values()),11)
+        for name,path in model._NAMED_CHANNEL_PROGRAMS.items():
+            text=(model.ROOT/path).read_text(encoding='utf-8');code=re.sub(r'//[^\n]*','',text)
+            self.assertEqual(len(re.findall(r'\bassert(?:Equal)?\s*\(',code)),len(facts[name]['assertion_results']))
+            for function in model.named_functions(name):self.assertIsNone(re.search(r'(?m)^'+function+r'\s*\(',code))
+            self.assertEqual(entries[path]['expected']['stdout_utf8'],'');self.assertFalse(entries[path]['separate_named_body_obligation']['executed_by_run'])
+            self.assertEqual(named[path]['expected']['required_test_names'],model.named_functions(name))
+            self.assertIn('required_semantic_trace',named[path])
 
 if __name__=='__main__':unittest.main()

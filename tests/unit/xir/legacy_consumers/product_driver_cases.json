@@ -31879,6 +31879,461 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 2
+    },
+    {
+      "id": "complete_task_regression_1137_await_any_success",
+      "oracle_id": "complete_task_regression_1137_await_any_success",
+      "source": "tests/regression/11_coroutine/1137_await_any_success.xr",
+      "source_lf_sha256": "1de5d0186d017722788733a27fb10dad978b0b7ba75e64f2fb429eed17fe1cd4",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1137_await_any_success.xr",
+        "source_lf_sha256": "1de5d0186d017722788733a27fb10dad978b0b7ba75e64f2fb429eed17fe1cd4"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1150_select_block_buffer_wake",
+      "oracle_id": "complete_task_regression_1150_select_block_buffer_wake",
+      "source": "tests/regression/11_coroutine/1150_select_block_buffer_wake.xr",
+      "source_lf_sha256": "b60864a58ecc701663896ac0459176d9beffbfb60402509cf6db88c1523e1a26",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1150_select_block_buffer_wake.xr",
+        "source_lf_sha256": "b60864a58ecc701663896ac0459176d9beffbfb60402509cf6db88c1523e1a26"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1154_dynamic_channel_capacity",
+      "oracle_id": "complete_task_regression_1154_dynamic_channel_capacity",
+      "source": "tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr",
+      "source_lf_sha256": "b77276d0b2dd138dbd98c8b7603fa9f013f8b00fd74dce2583515acb40f149c7",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr",
+        "source_lf_sha256": "b77276d0b2dd138dbd98c8b7603fa9f013f8b00fd74dce2583515acb40f149c7"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1156_select_close_wake",
+      "oracle_id": "complete_task_regression_1156_select_close_wake",
+      "source": "tests/regression/11_coroutine/1156_select_close_wake.xr",
+      "source_lf_sha256": "e80fe3a863216a1ddcd279bd50b1180e4624a332261a8faea411cfdc539de5a3",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1156_select_close_wake.xr",
+        "source_lf_sha256": "e80fe3a863216a1ddcd279bd50b1180e4624a332261a8faea411cfdc539de5a3"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1161_multiple_task_awaiters",
+      "oracle_id": "complete_task_regression_1161_multiple_task_awaiters",
+      "source": "tests/regression/11_coroutine/1161_multiple_task_awaiters.xr",
+      "source_lf_sha256": "206e61534f1d4e81446f353e24f024345daa62be78b8b584209312e5e81e8b3e",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1161_multiple_task_awaiters.xr",
+        "source_lf_sha256": "206e61534f1d4e81446f353e24f024345daa62be78b8b584209312e5e81e8b3e"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1162_overlapping_await_any_waiters",
+      "oracle_id": "complete_task_regression_1162_overlapping_await_any_waiters",
+      "source": "tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr",
+      "source_lf_sha256": "6d640ddb1fc97917916b234399f8328b29b39664d295e2905f343802d7a1f131",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr",
+        "source_lf_sha256": "6d640ddb1fc97917916b234399f8328b29b39664d295e2905f343802d7a1f131"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1163_channel_send_opcode_preserves_receiver",
+      "oracle_id": "complete_task_regression_1163_channel_send_opcode_preserves_receiver",
+      "source": "tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr",
+      "source_lf_sha256": "8a6af93d05b4ad696cfc70afb091fe29be471e292a3e7329eab0bc4c8d49982d",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr",
+        "source_lf_sha256": "8a6af93d05b4ad696cfc70afb091fe29be471e292a3e7329eab0bc4c8d49982d"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_named_1137_await_any_success",
+      "oracle_id": "complete_task_named_1137_await_any_success",
+      "source": "tests/regression/11_coroutine/1137_await_any_success.xr",
+      "source_lf_sha256": "1de5d0186d017722788733a27fb10dad978b0b7ba75e64f2fb429eed17fe1cd4",
+      "entry": "test",
+      "stdout_utf8": "test1: single success\n  result: 42\ntest2: pre-completed tasks\n  result: 42\ntest3: skip failure\n  result: 42\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1137_await_any_success.xr",
+        "source_lf_sha256": "1de5d0186d017722788733a27fb10dad978b0b7ba75e64f2fb429eed17fe1cd4"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 7
+    },
+    {
+      "id": "complete_task_named_1150_select_block_buffer_wake",
+      "oracle_id": "complete_task_named_1150_select_block_buffer_wake",
+      "source": "tests/regression/11_coroutine/1150_select_block_buffer_wake.xr",
+      "source_lf_sha256": "b60864a58ecc701663896ac0459176d9beffbfb60402509cf6db88c1523e1a26",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1150_select_block_buffer_wake.xr",
+        "source_lf_sha256": "b60864a58ecc701663896ac0459176d9beffbfb60402509cf6db88c1523e1a26"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_named_1154_dynamic_channel_capacity",
+      "oracle_id": "complete_task_named_1154_dynamic_channel_capacity",
+      "source": "tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr",
+      "source_lf_sha256": "b77276d0b2dd138dbd98c8b7603fa9f013f8b00fd74dce2583515acb40f149c7",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr",
+        "source_lf_sha256": "b77276d0b2dd138dbd98c8b7603fa9f013f8b00fd74dce2583515acb40f149c7"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_named_1156_select_close_wake",
+      "oracle_id": "complete_task_named_1156_select_close_wake",
+      "source": "tests/regression/11_coroutine/1156_select_close_wake.xr",
+      "source_lf_sha256": "e80fe3a863216a1ddcd279bd50b1180e4624a332261a8faea411cfdc539de5a3",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1156_select_close_wake.xr",
+        "source_lf_sha256": "e80fe3a863216a1ddcd279bd50b1180e4624a332261a8faea411cfdc539de5a3"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_named_1161_multiple_task_awaiters",
+      "oracle_id": "complete_task_named_1161_multiple_task_awaiters",
+      "source": "tests/regression/11_coroutine/1161_multiple_task_awaiters.xr",
+      "source_lf_sha256": "206e61534f1d4e81446f353e24f024345daa62be78b8b584209312e5e81e8b3e",
+      "entry": "test",
+      "stdout_utf8": "314\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1161_multiple_task_awaiters.xr",
+        "source_lf_sha256": "206e61534f1d4e81446f353e24f024345daa62be78b8b584209312e5e81e8b3e"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 2
+    },
+    {
+      "id": "complete_task_named_1162_overlapping_await_any_waiters",
+      "oracle_id": "complete_task_named_1162_overlapping_await_any_waiters",
+      "source": "tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr",
+      "source_lf_sha256": "6d640ddb1fc97917916b234399f8328b29b39664d295e2905f343802d7a1f131",
+      "entry": "test",
+      "stdout_utf8": "318\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr",
+        "source_lf_sha256": "6d640ddb1fc97917916b234399f8328b29b39664d295e2905f343802d7a1f131"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 2
+    },
+    {
+      "id": "complete_task_named_1163_channel_send_opcode_preserves_receiver",
+      "oracle_id": "complete_task_named_1163_channel_send_opcode_preserves_receiver",
+      "source": "tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr",
+      "source_lf_sha256": "8a6af93d05b4ad696cfc70afb091fe29be471e292a3e7329eab0bc4c8d49982d",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr",
+        "source_lf_sha256": "8a6af93d05b4ad696cfc70afb091fe29be471e292a3e7329eab0bc4c8d49982d"
+      },
+      "remaining_gates": [
+        "Whole original module and every named body retained;script entry does not invoke @test functions. Named entries require real CLI discovery and exact separately invoked VM/C/native bodies.",
+        "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 0
     }
   ]
 }

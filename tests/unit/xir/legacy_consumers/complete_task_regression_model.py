@@ -76,6 +76,18 @@ _INPUTS.update({"tests/diff/cases/semantics/coro/await_array.xr":"928d3bd06ec8a5
 _PROGRAMS.update(_EVENT_PROGRAMS)
 _NAMES = _NAMES | frozenset(_EVENT_PROGRAMS)
 
+_NAMED_CHANNEL_PROGRAMS={name:BASE+name+'.xr' for name in ["1137_await_any_success","1150_select_block_buffer_wake","1154_dynamic_channel_capacity","1156_select_close_wake","1161_multiple_task_awaiters","1162_overlapping_await_any_waiters","1163_channel_send_opcode_preserves_receiver"]}
+_PROGRAMS.update(_NAMED_CHANNEL_PROGRAMS)
+_NAMES = _NAMES | frozenset(_NAMED_CHANNEL_PROGRAMS)
+_DECLARATION_ONLY.update({"1137_await_any_success":"test_await_any_success","1150_select_block_buffer_wake":"test_select_wakes_after_buffer_refill","1154_dynamic_channel_capacity":("test_dynamic_channel_capacity","test_bare_dynamic_channel_capacity",),"1156_select_close_wake":"test_select_wakes_on_channel_close","1161_multiple_task_awaiters":"test_multiple_task_awaiters","1162_overlapping_await_any_waiters":"test_overlapping_await_any_waiters","1163_channel_send_opcode_preserves_receiver":"test_chan_send_preserves_receiver"})
+_INPUTS.update({"tests/regression/11_coroutine/1137_await_any_success.xr":"1de5d0186d017722788733a27fb10dad978b0b7ba75e64f2fb429eed17fe1cd4","tests/regression/11_coroutine/1150_select_block_buffer_wake.xr":"b60864a58ecc701663896ac0459176d9beffbfb60402509cf6db88c1523e1a26","tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr":"b77276d0b2dd138dbd98c8b7603fa9f013f8b00fd74dce2583515acb40f149c7","tests/regression/11_coroutine/1156_select_close_wake.xr":"e80fe3a863216a1ddcd279bd50b1180e4624a332261a8faea411cfdc539de5a3","tests/regression/11_coroutine/1161_multiple_task_awaiters.xr":"206e61534f1d4e81446f353e24f024345daa62be78b8b584209312e5e81e8b3e","tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr":"6d640ddb1fc97917916b234399f8328b29b39664d295e2905f343802d7a1f131","tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr":"8a6af93d05b4ad696cfc70afb091fe29be471e292a3e7329eab0bc4c8d49982d"})
+
+
+def named_functions(name):
+    names=_DECLARATION_ONLY[name]
+    return list(names) if isinstance(names,tuple) else [names]
+
+
 class Enum:
     def __init__(self,name,variant):self.name,self.variant=name,variant
     def __str__(self):return self.name+'.'+self.variant
@@ -167,6 +179,120 @@ def joined_counter_paths():
     return results
 
 
+def buffered_select_refill_proof(count=50,capacity=10):
+    """Check the complete finite FIFO state graph without enumerating its paths."""
+    if type(count) is not int or type(capacity) is not int or count<0 or capacity<=0:raise ValueError('Invalid original FIFO domain')
+    paths={(0,0):1}
+    for progress in range(2*count+1):
+        for sent in range(count+1):
+            received=progress-sent
+            if (sent,received) not in paths:continue
+            queue=list(range(received,sent))
+            if not (0<=received<=sent<=count and len(queue)<=capacity):raise ValueError('FIFO invariant violated')
+            if sum(range(received))!=received*(received-1)//2:raise ValueError('Receive prefix sum changed')
+            for next_state,enabled in [((sent+1,received),sent<count and len(queue)<capacity),
+                                       ((sent,received+1),received<sent)]:
+                if enabled:paths[next_state]=paths.get(next_state,0)+paths[sent,received]
+    if (count,count) not in paths:raise ValueError('Complete FIFO graph cannot drain')
+    return {'received_count':count,'received_sum':count*(count-1)//2,'reachable_states':len(paths),
+            'valid_operation_interleavings':paths[count,count],'original_send_count':count,'original_receive_count':count,
+            'capacity':capacity,'all_receive_prefixes_are_FIFO':True,'producer_close_then_buffer_drain_preserved':True,
+            'real_select_refill_wakeup_fairness_and_resources_qualified':False}
+
+
+def dynamic_capacity_assertions(capacity,values):
+    variable_capacity=capacity;channel=Channel(variable_capacity)
+    checks=[channel.capacity==capacity]
+    checks.extend(channel.try_send(value)=='Sent' for value in values)
+    received=[channel.try_recv() for _ in values]
+    checks.extend(state=='Value' for state,value in received)
+    checks.append(sum(value for state,value in received)==sum(values));channel.close()
+    return checks,{'capacity_from_original_variable':variable_capacity,'send_values':list(values),
+                   'receive_values':[value for state,value in received],'closed':channel.closed}
+
+
+def multiple_waiter_trace(value,aggregate):
+    outcomes=[]
+    for order in itertools.permutations((1,2)):
+        task=Task(lambda:value);reports=[]
+        for identity in order:
+            observed=task.await_value()
+            if aggregate:observed=known_completed_any([task])
+            reports.append(identity*100+observed)
+        outcomes.append(sum(reports))
+        if task.executions!=1:raise ValueError('Waiter consumed or recomputed sticky Task result')
+    if len(set(outcomes))!=1:raise ValueError('Report ordering changed sum')
+    return {'outputs':[outcomes[0],'done'],'original_delayed_sleep_ms':80,'waiters':2,
+            'ready_capacity':2,'output_capacity':2,'completion_value_evaluations':1,
+            'ready_and_output_channels_closed':True,'all_waiter_completion_orders':len(outcomes),
+            'aggregate_await_input_lengths':[1,1] if aggregate else [],
+            'does_not_prove_both_waiters_parked_before_task_completed':True}
+
+
+def close_select_assertions():
+    ready=Rendezvous();ready.offer(1);state,ready_value=ready.try_recv()
+    outcomes=[]
+    for close_before_select in (False,True):
+        data=Rendezvous();done=Channel(1)
+        if close_before_select:data.close()
+        was_ready=data.try_recv()[0]=='Closed'
+        if not close_before_select:data.close()
+        if data.try_recv()[0]!='Closed':raise ValueError('Closed zero-capacity select stayed unavailable')
+        done.send(1);done_state,value=done.recv();done.close()
+        outcomes.append([state=='Value' and ready_value==1,done_state=='Value',value==1])
+        if was_ready!=close_before_select:raise ValueError('Wrong pre-close readiness state')
+    ready.close()
+    return outcomes[0],{'registration_orders_checked':2,'all_order_assertions':outcomes,
+        'original_yield_count':16,'original_done_timeout_ms':2000,'channel_capacities':[0,0,1],
+        'ready_rendezvous_completed_sends':ready.completed_sends,'all_channels_closed':True,
+        'sixteen_yields_do_not_prove_a_physical_park':True,'real_close_wake_latency_and_registration_qualified':False}
+
+
+def send_twice_assertions():
+    data=Rendezvous();received=[];return_task=Task(lambda:21+34,lambda:data.completed_sends==2)
+    return_task.finish()
+    for value in (21,34):
+        data.offer(value);state,actual=data.try_recv()
+        if state!='Value':raise ValueError('Rendezvous lost pending sender')
+        received.append(actual)
+    result=return_task.await_value();data.close()
+    return [received[0]==21,received[1]==34,result==55],{
+        'capacity':0,'pending_send_operations':2,'completed_rendezvous_sends':data.completed_sends,
+        'receive_values':received,'return_value':result,'completion_value_evaluations':return_task.executions,
+        'channel_closed':data.closed,'receiver_identity_survives_both_operations_required':True,
+        'opcode_register_integrity_and_runtime_lifetime_qualified':False}
+
+
+def channel_named_requirements():
+    fifo=buffered_select_refill_proof();first,first_trace=dynamic_capacity_assertions(3,(1,2,3));second,second_trace=dynamic_capacity_assertions(2,(4,5))
+    closed_checks,closed_trace=close_select_assertions();send_checks,send_trace=send_twice_assertions()
+    results={
+      '1150_select_block_buffer_wake':{'assertion_results':[fifo['received_count']==50,fifo['received_sum']==1225],'semantic_trace':fifo},
+      '1154_dynamic_channel_capacity':{'assertion_results':first+second,'semantic_trace':{'functions':[
+          {'name':'test_dynamic_channel_capacity','assertion_results':first,**first_trace},
+          {'name':'test_bare_dynamic_channel_capacity','assertion_results':second,**second_trace}]}},
+      '1156_select_close_wake':{'assertion_results':closed_checks,'semantic_trace':closed_trace},
+      '1163_channel_send_opcode_preserves_receiver':{'assertion_results':send_checks,'semantic_trace':send_trace}}
+    for name,value,aggregate in [('1161_multiple_task_awaiters',7,False),('1162_overlapping_await_any_waiters',9,True)]:
+        trace=multiple_waiter_trace(value,aggregate)
+        results[name]={'stdout_utf8':''.join(render(value)+'\n' for value in trace['outputs']),'assertion_results':[],
+                       'semantic_trace':{key:value for key,value in trace.items() if key!='outputs'}}
+    single=Task(lambda:42);single.finish();completed=[Task(lambda:42),Task(lambda:42)]
+    for task in completed:task.await_value()
+    scope=Scope(False)
+    def fail():raise TypedError('CoroErr','Msg',{'message':'error'})
+    failed=scope.add(fail);good=scope.add(lambda:42);failed_tag=failed.observe()[0];good.await_value()
+    values=['test1: single success',line('  result:',known_completed_any([single])),
+            'test2: pre-completed tasks',line('  result:',known_completed_any(completed)),
+            'test3: skip failure',line('  result:',known_completed_any([failed,good])),'done']
+    results['1137_await_any_success']={'stdout_utf8':''.join(render(value)+'\n' for value in values),
+        'assertion_results':[failed_tag=='Failed'],'semantic_trace':{'completed_success_values':[42,42,42],
+        'opaque_business_failure_tag_observed':'Failed','business_failure_payload_not_projected_or_retyped':True,
+        'public_TaskResult_failed_payload_shape_not_qualified':True}}
+    if set(results)!=set(_NAMED_CHANNEL_PROGRAMS):raise ValueError('Full named channel program set changed')
+    return results
+
+
 def named_requirements():
     naming=ordered_values([1*10,sum(range(1,5)),2*10,3*10,4*10,5*10])+['done']
     slots={};name_key,count_key,id_key,value_key=object(),object(),object(),object()
@@ -193,9 +319,11 @@ def named_requirements():
         linked.append(not caught)
     task=Task(lambda:42);value=task.await_value();task2=Task(lambda:42);state,value2=task2.await_result()
     go_checks=[value==42,task2.state=='Success',state=='Success' and value2==42,Task(lambda:42).await_value()==42]
-    return {'1122_coro_naming':{'stdout_utf8':''.join(render(v)+'\n' for v in naming)},
+    result={'1122_coro_naming':{'stdout_utf8':''.join(render(v)+'\n' for v in naming)},
             '1125_coro_local':{'assertion_results':checks},'1130_linked_scope':{'assertion_results':linked},
             '1131_linked_go_expr':{'assertion_results':go_checks}}
+    result.update(channel_named_requirements())
+    return result
 
 
 class EventTask(Task):
@@ -378,7 +506,7 @@ def expected_rows():
     for name,function in _DECLARATION_ONLY.items():
         declarations=re.findall(r'(?m)^\s*@test\s*\n\s*fn\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(',
                                 (ROOT/_PROGRAMS[name]).read_text(encoding='utf-8'))
-        if declarations!=[function]:raise ValueError('Separate named task body lost its exact declaration')
+        if declarations!=named_functions(name):raise ValueError('Separate named task body lost its exact declaration')
     named=named_requirements();rows=[]
     for name,values in sorted(observations().items()):
         row={'id':'complete_task_regression_'+name,'source':_PROGRAMS[name],'original_source':_PROGRAMS[name],'required_target':None,
@@ -386,6 +514,8 @@ def expected_rows():
              'model':('Complete unchanged task/event entry;independent sticky completed results,explicit precompleted input-order any,zero-capacity rendezvous,wait generation invalidation,poll failure-prefix invariance and E0420 isolation. Original loops,deadlines,assertions,cancellation and closes stay in source;no real scheduler,clock skew,arbitrary ties,Task failed payload shape,resource,lifetime or provider qualification.' if name in _EVENT_PROGRAMS else 'Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.')}
         if name in _EVENT_PROGRAMS:row['required_semantic_trace']={key:value for key,value in event_boundary_traces()[name].items() if key!='outputs'}
         if name in named:row['separate_named_body_obligation']={'name':_DECLARATION_ONLY[name],**named[name],'executed_by_run':False,'qualification':'OPEN_REQUIRES_NAMED_TEST_EXECUTION'}
+        if name in _NAMED_CHANNEL_PROGRAMS and isinstance(_DECLARATION_ONLY[name],tuple):
+            obligation=row['separate_named_body_obligation'];obligation.pop('name');obligation['names']=named_functions(name)
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
@@ -400,7 +530,8 @@ def named_expected_rows():
         if not all(body.get('assertion_results',[])):raise ValueError('Named task postcondition failed independently')
         rows.append({'id':'complete_task_named_'+name,'source':_PROGRAMS[name],'original_source':_PROGRAMS[name],
             'required_target':None,'expected':{'exit_code':0,'stdout_utf8':body.get('stdout_utf8',''),'stderr_utf8':'',
-            'required_test_names':[_DECLARATION_ONLY[name]]},
+            'required_test_names':named_functions(name)},
             'required_original_assertion_results':body.get('assertion_results',[]),
             'model':'Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.'})
+        if name in _NAMED_CHANNEL_PROGRAMS:rows[-1]['required_semantic_trace']=body['semantic_trace']
     return rows
