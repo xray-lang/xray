@@ -27267,6 +27267,922 @@
         "Complete unchanged original CLI/VM/generated-C/native on the exact admitted target and native manifest.",
         "All original compiler/runtime FI, callback ABI and constant-stack stress, resource/lifetime/loan-unwind/cancellation/physical/provider/sanitizer qualification."
       ]
+    },
+    {
+      "id": "complete_task_regression_1100_cancelled",
+      "oracle_id": "complete_task_regression_1100_cancelled",
+      "source": "tests/regression/11_coroutine/1100_cancelled.xr",
+      "source_lf_sha256": "702e3fdb6786e6b2ffbdcd25f667b180d2b9fc0f8ef73b1dc1ac32ba2d5aebf4",
+      "entry": "run",
+      "stdout_utf8": "false\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1100_cancelled.xr",
+        "source_lf_sha256": "702e3fdb6786e6b2ffbdcd25f667b180d2b9fc0f8ef73b1dc1ac32ba2d5aebf4"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_task_regression_1101_channel_basic",
+      "oracle_id": "complete_task_regression_1101_channel_basic",
+      "source": "tests/regression/11_coroutine/1101_channel_basic.xr",
+      "source_lf_sha256": "bb0f4e498e310aab83985accf730ef2a1abc7b9617608b901e97e9c1621fc159",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\nfalse\n10\n20\n30\ntrue\nfalse\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1101_channel_basic.xr",
+        "source_lf_sha256": "bb0f4e498e310aab83985accf730ef2a1abc7b9617608b901e97e9c1621fc159"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
+    },
+    {
+      "id": "complete_task_regression_1102_go_await",
+      "oracle_id": "complete_task_regression_1102_go_await",
+      "source": "tests/regression/11_coroutine/1102_go_await.xr",
+      "source_lf_sha256": "698f7bd99153a34b7276a3868e1bfd2d7b3467c7992b78b533db234aec166833",
+      "entry": "run",
+      "stdout_utf8": "30\n30\n60\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1102_go_await.xr",
+        "source_lf_sha256": "698f7bd99153a34b7276a3868e1bfd2d7b3467c7992b78b533db234aec166833"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_task_regression_1103_defer",
+      "oracle_id": "complete_task_regression_1103_defer",
+      "source": "tests/regression/11_coroutine/1103_defer.xr",
+      "source_lf_sha256": "fab6decda9de845a4647ffeeb003067a96435a86b6b33adb69b534ff3f20f7cc",
+      "entry": "run",
+      "stdout_utf8": "start\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\nend\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1103_defer.xr",
+        "source_lf_sha256": "fab6decda9de845a4647ffeeb003067a96435a86b6b33adb69b534ff3f20f7cc"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_task_regression_1104_coroutine_combined",
+      "oracle_id": "complete_task_regression_1104_coroutine_combined",
+      "source": "tests/regression/11_coroutine/1104_coroutine_combined.xr",
+      "source_lf_sha256": "d5f4c5441bae3dc287702d53a71ff8ea6e950d169829b34702d654d4b30bfb76",
+      "entry": "run",
+      "stdout_utf8": "=== 协程综合测试 ===\nproducer done\n6\nfalse\n=== 测试完成 ===\ncleanup done\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1104_coroutine_combined.xr",
+        "source_lf_sha256": "d5f4c5441bae3dc287702d53a71ff8ea6e950d169829b34702d654d4b30bfb76"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_task_regression_1105_defer_args",
+      "oracle_id": "complete_task_regression_1105_defer_args",
+      "source": "tests/regression/11_coroutine/1105_defer_args.xr",
+      "source_lf_sha256": "e99b48c3d05b6b619bdd3923c2defab6d03771395f0e50e64f427e5fbc4351a5",
+      "entry": "run",
+      "stdout_utf8": "start\nwork done\nresult\n42\ncleanup 2\ncleanup 1\nend\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1105_defer_args.xr",
+        "source_lf_sha256": "e99b48c3d05b6b619bdd3923c2defab6d03771395f0e50e64f427e5fbc4351a5"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 7
+    },
+    {
+      "id": "complete_task_regression_1106_select",
+      "oracle_id": "complete_task_regression_1106_select",
+      "source": "tests/regression/11_coroutine/1106_select.xr",
+      "source_lf_sha256": "83ec7dc96dce0a477823fdd079ff02e6506c5f9f36f8a5bef2ad57aee81f7d2f",
+      "entry": "run",
+      "stdout_utf8": "100\n200\nno data\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1106_select.xr",
+        "source_lf_sha256": "83ec7dc96dce0a477823fdd079ff02e6506c5f9f36f8a5bef2ad57aee81f7d2f"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_task_regression_1107_go_deferred",
+      "oracle_id": "complete_task_regression_1107_go_deferred",
+      "source": "tests/regression/11_coroutine/1107_go_deferred.xr",
+      "source_lf_sha256": "68d57ee487372ac250294ee3d080b1c74e15017e19099ae5b7f9b8cde6fa768b",
+      "entry": "run",
+      "stdout_utf8": "start\n1\n2\n3\n1\nend\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1107_go_deferred.xr",
+        "source_lf_sha256": "68d57ee487372ac250294ee3d080b1c74e15017e19099ae5b7f9b8cde6fa768b"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_task_regression_1108_await_all",
+      "oracle_id": "complete_task_regression_1108_await_all",
+      "source": "tests/regression/11_coroutine/1108_await_all.xr",
+      "source_lf_sha256": "e4688cb501188ad8a3d40b8b431a670a7cb934d7f3fda9382b7f83146c623143",
+      "entry": "run",
+      "stdout_utf8": "4\n9\n16\n29\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1108_await_all.xr",
+        "source_lf_sha256": "e4688cb501188ad8a3d40b8b431a670a7cb934d7f3fda9382b7f83146c623143"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 5
+    },
+    {
+      "id": "complete_task_regression_1110_scope",
+      "oracle_id": "complete_task_regression_1110_scope",
+      "source": "tests/regression/11_coroutine/1110_scope.xr",
+      "source_lf_sha256": "05ee9c31ba3c4638accfa8f93738cd401db03c6e6abf6b276e9bccd105b5a687",
+      "entry": "run",
+      "stdout_utf8": "10\n20\n1\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1110_scope.xr",
+        "source_lf_sha256": "05ee9c31ba3c4638accfa8f93738cd401db03c6e6abf6b276e9bccd105b5a687"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_task_regression_1111_comprehensive",
+      "oracle_id": "complete_task_regression_1111_comprehensive",
+      "source": "tests/regression/11_coroutine/1111_comprehensive.xr",
+      "source_lf_sha256": "1e79effca38a65996020a47f98d007317293cda237bfc2d470c1fbda5ec8d1ea",
+      "entry": "run",
+      "stdout_utf8": "1\n2\n6\nworking\nresource2\nresource1\n100\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1111_comprehensive.xr",
+        "source_lf_sha256": "1e79effca38a65996020a47f98d007317293cda237bfc2d470c1fbda5ec8d1ea"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 7
+    },
+    {
+      "id": "complete_task_regression_1112_go_lambda_call",
+      "oracle_id": "complete_task_regression_1112_go_lambda_call",
+      "source": "tests/regression/11_coroutine/1112_go_lambda_call.xr",
+      "source_lf_sha256": "3d434bd12eafcfee138a3bb8949951fb102f31635faeabafcaff7c3f0248a10a",
+      "entry": "run",
+      "stdout_utf8": "100\n200\n300\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1112_go_lambda_call.xr",
+        "source_lf_sha256": "3d434bd12eafcfee138a3bb8949951fb102f31635faeabafcaff7c3f0248a10a"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_task_regression_1113_select_send",
+      "oracle_id": "complete_task_regression_1113_select_send",
+      "source": "tests/regression/11_coroutine/1113_select_send.xr",
+      "source_lf_sha256": "7fd12f28b59176dbb542586e70fbf967b5b681a5a4b26ca68095d8307693b607",
+      "entry": "run",
+      "stdout_utf8": "sent 100\nsent 200\nbuffer full\n100\n200\ntrue\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1113_select_send.xr",
+        "source_lf_sha256": "7fd12f28b59176dbb542586e70fbf967b5b681a5a4b26ca68095d8307693b607"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 7
+    },
+    {
+      "id": "complete_task_regression_1114_select_after",
+      "oracle_id": "complete_task_regression_1114_select_after",
+      "source": "tests/regression/11_coroutine/1114_select_after.xr",
+      "source_lf_sha256": "0e60c77bce822e9a33d5f64d6d8e12cd49e5a38880515b25ee69aa30c53de62c",
+      "entry": "run",
+      "stdout_utf8": "timeout\n42\nimmediate timeout\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1114_select_after.xr",
+        "source_lf_sha256": "0e60c77bce822e9a33d5f64d6d8e12cd49e5a38880515b25ee69aa30c53de62c"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_task_regression_1115_cancel",
+      "oracle_id": "complete_task_regression_1115_cancel",
+      "source": "tests/regression/11_coroutine/1115_cancel.xr",
+      "source_lf_sha256": "a67f9c5ee9f21c523b3f80a5ad0c529a75e0c41ba443a69473cbd7dfba0a3dfe",
+      "entry": "run",
+      "stdout_utf8": "t1 cancelled: true\nt1 status: TaskStatus.Cancelled\nt2 success: true\nt2 result: 42\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1115_cancel.xr",
+        "source_lf_sha256": "a67f9c5ee9f21c523b3f80a5ad0c529a75e0c41ba443a69473cbd7dfba0a3dfe"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 5
+    },
+    {
+      "id": "complete_task_regression_1118_comprehensive",
+      "oracle_id": "complete_task_regression_1118_comprehensive",
+      "source": "tests/regression/11_coroutine/1118_comprehensive.xr",
+      "source_lf_sha256": "f88d0bf14b31b80aa10590950ca190a825a5e47056b9813a85fc6e89139fc4c9",
+      "entry": "run",
+      "stdout_utf8": "=== go/await ===\ntask1 result: 42\n=== status ===\ndone: true\nstatus: TaskStatus.Success\nresult: 100\n=== cancel ===\ncancelled: true\ncancelled status: TaskStatus.Cancelled\n=== channel ===\nrecv: 1 2 3\n=== defer ===\nworking...\ncleanup!\n=== await all ===\nall results: [1, 2, 3]\n=== await any ===\nfirst result: winner\n=== done ===\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1118_comprehensive.xr",
+        "source_lf_sha256": "f88d0bf14b31b80aa10590950ca190a825a5e47056b9813a85fc6e89139fc4c9"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 19
+    },
+    {
+      "id": "complete_task_regression_1119_await_all_syntax",
+      "oracle_id": "complete_task_regression_1119_await_all_syntax",
+      "source": "tests/regression/11_coroutine/1119_await_all_syntax.xr",
+      "source_lf_sha256": "dd0ed9e4275e84e23a73567d47f984b7412da84166c42cb580b3e04fc21db32f",
+      "entry": "run",
+      "stdout_utf8": "test1: await all basic\n  r0: 10\n  r1: 20\n  r2: 30\n  sum: 60\ntest2: await all two tasks\n  r0: 10\n  r1: 20\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1119_await_all_syntax.xr",
+        "source_lf_sha256": "dd0ed9e4275e84e23a73567d47f984b7412da84166c42cb580b3e04fc21db32f"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 8
+    },
+    {
+      "id": "complete_task_regression_1120_scope_basic",
+      "oracle_id": "complete_task_regression_1120_scope_basic",
+      "source": "tests/regression/11_coroutine/1120_scope_basic.xr",
+      "source_lf_sha256": "65805e62988459676f845577bc6ed424266f8a772a204f5b925f7128bbfe170b",
+      "entry": "run",
+      "stdout_utf8": "=== scope 基础测试 ===\nscope 结束\n任务数量: 6\n所有任务完成\n=== 嵌套 scope 测试 ===\n嵌套 scope 结果数量: 5\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1120_scope_basic.xr",
+        "source_lf_sha256": "65805e62988459676f845577bc6ed424266f8a772a204f5b925f7128bbfe170b"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_task_regression_1121_defer_block",
+      "oracle_id": "complete_task_regression_1121_defer_block",
+      "source": "tests/regression/11_coroutine/1121_defer_block.xr",
+      "source_lf_sha256": "e741cca3363be3b5583fe4584621233621d1ccc75b5bed683406a23109b645e5",
+      "entry": "run",
+      "stdout_utf8": "=== defer 块语法测试 ===\n开始\n结束\ndefer 块\n=== 多个 defer 块 ===\n执行中\n结束\ndefer 2\ndefer 1\n=== defer 混合测试 ===\n执行\ndefer 块 A\ncleanup 函数\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1121_defer_block.xr",
+        "source_lf_sha256": "e741cca3363be3b5583fe4584621233621d1ccc75b5bed683406a23109b645e5"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 13
+    },
+    {
+      "id": "complete_task_regression_1122_coro_naming",
+      "oracle_id": "complete_task_regression_1122_coro_naming",
+      "source": "tests/regression/11_coroutine/1122_coro_naming.xr",
+      "source_lf_sha256": "7e871f65cdf7adf8d97e77c3045c8bfb13c28229c954f17398df461f2274f748",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1122_coro_naming.xr",
+        "source_lf_sha256": "7e871f65cdf7adf8d97e77c3045c8bfb13c28229c954f17398df461f2274f748"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_regression_1125_coro_local",
+      "oracle_id": "complete_task_regression_1125_coro_local",
+      "source": "tests/regression/11_coroutine/1125_coro_local.xr",
+      "source_lf_sha256": "b292eb8a34554dfc1b1df358bee33f8838ef9880d8dffebd415a1f8f5e2c99f3",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1125_coro_local.xr",
+        "source_lf_sha256": "b292eb8a34554dfc1b1df358bee33f8838ef9880d8dffebd415a1f8f5e2c99f3"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_regression_1128_yield",
+      "oracle_id": "complete_task_regression_1128_yield",
+      "source": "tests/regression/11_coroutine/1128_yield.xr",
+      "source_lf_sha256": "824e106b9eec6e0bffe13836f0d7e4412c9666eb4e91c64002d611d17ab53c11",
+      "entry": "run",
+      "stdout_utf8": "test1: main yield\ntest1: after yield\ntest2: result = yielded\ntest3: 10 20 30\ntest4: sum = 10\ntest5: sums = 45 45 45\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1128_yield.xr",
+        "source_lf_sha256": "824e106b9eec6e0bffe13836f0d7e4412c9666eb4e91c64002d611d17ab53c11"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
+    },
+    {
+      "id": "complete_task_regression_1130_linked_scope",
+      "oracle_id": "complete_task_regression_1130_linked_scope",
+      "source": "tests/regression/11_coroutine/1130_linked_scope.xr",
+      "source_lf_sha256": "6b58eb44971587073e71ec549b024c8ab5761856089dfe2a31ad478d24ab78b0",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1130_linked_scope.xr",
+        "source_lf_sha256": "6b58eb44971587073e71ec549b024c8ab5761856089dfe2a31ad478d24ab78b0"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_regression_1131_linked_go_expr",
+      "oracle_id": "complete_task_regression_1131_linked_go_expr",
+      "source": "tests/regression/11_coroutine/1131_linked_go_expr.xr",
+      "source_lf_sha256": "20918e1587c913e01a2db249d5835871d832d17df52c48e150e33d713a3beec5",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1131_linked_go_expr.xr",
+        "source_lf_sha256": "20918e1587c913e01a2db249d5835871d832d17df52c48e150e33d713a3beec5"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_named_1122_coro_naming",
+      "oracle_id": "complete_task_named_1122_coro_naming",
+      "source": "tests/regression/11_coroutine/1122_coro_naming.xr",
+      "source_lf_sha256": "7e871f65cdf7adf8d97e77c3045c8bfb13c28229c954f17398df461f2274f748",
+      "entry": "test",
+      "stdout_utf8": "10\n10\n20\n30\n40\n50\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1122_coro_naming.xr",
+        "source_lf_sha256": "7e871f65cdf7adf8d97e77c3045c8bfb13c28229c954f17398df461f2274f748"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_task_named_1125_coro_local",
+      "oracle_id": "complete_task_named_1125_coro_local",
+      "source": "tests/regression/11_coroutine/1125_coro_local.xr",
+      "source_lf_sha256": "b292eb8a34554dfc1b1df358bee33f8838ef9880d8dffebd415a1f8f5e2c99f3",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1125_coro_local.xr",
+        "source_lf_sha256": "b292eb8a34554dfc1b1df358bee33f8838ef9880d8dffebd415a1f8f5e2c99f3"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_task_named_1130_linked_scope",
+      "oracle_id": "complete_task_named_1130_linked_scope",
+      "source": "tests/regression/11_coroutine/1130_linked_scope.xr",
+      "source_lf_sha256": "6b58eb44971587073e71ec549b024c8ab5761856089dfe2a31ad478d24ab78b0",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1130_linked_scope.xr",
+        "source_lf_sha256": "6b58eb44971587073e71ec549b024c8ab5761856089dfe2a31ad478d24ab78b0"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ]
+    },
+    {
+      "id": "complete_task_named_1131_linked_go_expr",
+      "oracle_id": "complete_task_named_1131_linked_go_expr",
+      "source": "tests/regression/11_coroutine/1131_linked_go_expr.xr",
+      "source_lf_sha256": "20918e1587c913e01a2db249d5835871d832d17df52c48e150e33d713a3beec5",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1131_linked_go_expr.xr",
+        "source_lf_sha256": "20918e1587c913e01a2db249d5835871d832d17df52c48e150e33d713a3beec5"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source and all declared bodies, exact normal/named output and test discovery through real CLI/VM/C/native.",
+        "Original scheduler/checkpoint/timing/stress, complete compiler/runtime FI, lifetime/cancellation/physical/resource/sanitizer/provider qualification."
+      ]
     }
   ]
 }
