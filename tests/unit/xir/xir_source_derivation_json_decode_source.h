@@ -12,7 +12,7 @@ static const char json_decode_generator[]=
     "%s"
     "type MethodInfo=(string,i64,i64,i64,i64)\n"
     "type CalleeInfo=(string,string,i64,i64,i64,i64)\n"
-    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64)\n"
+    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64,Array<string>)\n"
     "fn unsupported()->Generated {\n"
     " const f:Array<FunctionRow>=[];const p:Array<i64>=[];const b:Array<BlockRow>=[]\n"
     " const c:Array<InstructionRow>=[];const l:Array<string>=[];return (0,f,p,b,c,p,l,p)\n}\n"

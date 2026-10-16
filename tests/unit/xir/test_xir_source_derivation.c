@@ -33,7 +33,7 @@ static const char generator_format[]=
     "%s"
     "type MethodInfo=(string,i64,i64,i64,i64)\n"
     "type CalleeInfo=(string,string,i64,i64,i64,i64)\n"
-    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64)\n"
+    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64,Array<string>)\n"
     "fn privateBody(info:TypeInfo,context:DeriveContext,field:FieldInfo)->Generated {\n"
     " const functions:Array<FunctionRow>=[(context.0[0].0,0,0,context.0[0].1,0,1,0,1,0,2,0,0,0,0)]\n"
     " const parameters:Array<i64>=[info.0];const blocks:Array<BlockRow>=[(0,2,0,0)]\n"

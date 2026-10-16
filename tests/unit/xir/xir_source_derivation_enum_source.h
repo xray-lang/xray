@@ -12,7 +12,7 @@ static const char enum_generator_format[]=
     "%s"
     "type MethodInfo=(string,i64,i64,i64,i64)\n"
     "type CalleeInfo=(string,string,i64,i64,i64,i64)\n"
-    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64)\n"
+    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64,Array<string>)\n"
     "fn unsupported()->Generated {\n"
     " const functions:Array<FunctionRow>=[];const parameters:Array<i64>=[];const blocks:Array<BlockRow>=[]\n"
     " const code:Array<InstructionRow>=[];const operands:Array<i64>=[];const literals:Array<string>=[];const arguments:Array<i64>=[]\n"

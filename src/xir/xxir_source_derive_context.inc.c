@@ -7,7 +7,7 @@
  * xxir_source_derive_context.inc.c - Logical requirement and callee descriptions
  */
 typedef struct SourceDeriveSchema {
-    XrXirType method,methods,callee,callees,context;
+    XrXirType method,methods,callee,callees,names,context;
     SourceInfoRows parameters;
 } SourceDeriveSchema;
 static bool source_derive_schema(SourceInfoGraph *g,SourceDeriveSchema *s) {
@@ -16,9 +16,10 @@ static bool source_derive_schema(SourceInfoGraph *g,SourceDeriveSchema *s) {
     if (!source_info_tuple_type(g->ctx,method,5,&s->method) ||
         !source_array_element_type(g->ctx,s->method,&s->methods) ||
         !source_info_tuple_type(g->ctx,callee,6,&s->callee) ||
-        !source_array_element_type(g->ctx,s->callee,&s->callees)) return false;
-    const XrXirType context[]={s->methods,s->callees,g->schema.arguments,XR_XIR_I64};
-    return source_info_tuple_type(g->ctx,context,4,&s->context);
+        !source_array_element_type(g->ctx,s->callee,&s->callees) ||
+        !source_array_element_type(g->ctx,XR_XIR_STRING,&s->names)) return false;
+    const XrXirType context[]={s->methods,s->callees,g->schema.arguments,XR_XIR_I64,s->names};
+    return source_info_tuple_type(g->ctx,context,5,&s->context);
 }
 static bool source_derive_parameter_refs(SourceInfoGraph *g,SourceDeriveSchema *schema,
     const XrXirType *types,uint32_t count,SourceValue output[2]) {
@@ -108,10 +109,44 @@ static bool source_derive_callees(SourceInfoGraph *g,SourceDeriveJob *job,
     }
     return source_info_array(g,schema->callees,values,job->callee_count,output);
 }
+/* Names belong only to the explicitly selected definition. They describe
+ * ordered inputs and never authorize an operation on the resulting value. */
+static bool source_derive_constructor_names(SourceInfoGraph *g,SourceDeriveJob *job,
+    const SourceDeriveSchema *schema,SourceValue *output) {
+    SourceContext *ctx=g->facts;
+    const XrXirDerivationPolicy *policy=&ctx->derivations.policies[job->policy];
+    if (!policy->constructor) return source_info_array(g,schema->names,NULL,0,output);
+    uint32_t function=policy->constructor-1;
+    if (function>=ctx->function_count || ctx->identities[function].method_kind!=XR_XIR_CONSTRUCTOR ||
+        ctx->identities[function].nominal_owner!=job->owner->index+1 ||
+        ctx->identities[function].module!=job->owner->module || ctx->bodies[function].checked_library)
+        return source_fail(g->ctx,g->syntax,XR_XIR_BAD_STRUCTURE,"derive constructor names have no current definition");
+    AstNode *node=ctx->bodies[function].node;
+    uint32_t count=ctx->functions[function].parameter_count;
+    if (!node || node->type!=AST_METHOD_DECL || !node->as.method_decl.is_constructor ||
+        node->as.method_decl.param_count<0 || (uint32_t)node->as.method_decl.param_count!=count ||
+        (count && !node->as.method_decl.params))
+        return source_fail(g->ctx,g->syntax,XR_XIR_BAD_STRUCTURE,"derive constructor parameter names disagree with its signature");
+    SourceValue *names=count?source_recipe_storage(g->ctx,count,sizeof(*names)):NULL;
+    if (count && !names) return false;
+    for (uint32_t p=0;p<count;++p) {
+        if (!source_work(g->ctx,g->syntax)) return false;
+        const XrParamNode *parameter=node->as.method_decl.params[p];
+        if (!parameter || !parameter->name || !*parameter->name)
+            return source_fail(g->ctx,g->syntax,XR_XIR_BAD_STRUCTURE,"derive constructor parameter name is missing");
+        size_t length=source_text_size(g->ctx,parameter->name);
+        if (length>UINT32_MAX)
+            return source_fail(g->ctx,g->syntax,XR_XIR_BUDGET,"derive constructor parameter name is too large");
+        if (!source_info_text(g,(XrXirLiteral){parameter->name,(uint32_t)length},&names[p])) return false;
+    }
+    return source_info_array(g,schema->names,names,count,output);
+}
 static bool source_derive_context(SourceInfoGraph *g,SourceDeriveJob *job,SourceValue *output) {
-    SourceDeriveSchema schema={0};SourceValue fields[4];int64_t constructor;
+    SourceDeriveSchema schema={0};SourceValue fields[5];int64_t constructor;
     return source_derive_schema(g,&schema) && source_derive_requirements(g,job,&schema,&fields[0]) &&
         source_derive_callees(g,job,&schema,&fields[1],&constructor) &&
         source_info_array(g,g->schema.arguments,schema.parameters.values,schema.parameters.count,&fields[2]) &&
-        source_info_integer(g,constructor,&fields[3]) && source_info_group(g,schema.context,fields,4,output);
+        source_info_integer(g,constructor,&fields[3]) &&
+        source_derive_constructor_names(g,job,&schema,&fields[4]) &&
+        source_info_group(g,schema.context,fields,5,output);
 }

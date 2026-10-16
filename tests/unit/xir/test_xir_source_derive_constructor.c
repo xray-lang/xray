@@ -22,7 +22,7 @@ static const char constructor_generator[]=
     "%s"
     "type MethodInfo=(string,i64,i64,i64,i64)\n"
     "type CalleeInfo=(string,string,i64,i64,i64,i64)\n"
-    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64)\n"
+    "type DeriveContext=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64,Array<string>)\n"
     "export fn generate(info:TypeInfo,context:DeriveContext)->Generated {\n"
     " const emptyFunctions:Array<FunctionRow>=[];const emptyParameters:Array<i64>=[]\n"
     " const emptyBlocks:Array<BlockRow>=[];const emptyCode:Array<InstructionRow>=[]\n"
