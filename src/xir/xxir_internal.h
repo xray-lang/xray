@@ -129,9 +129,6 @@ XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts
 /* Only the private decoder calls this on its unpublished complete EOF owner. */
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
     XrXirDiagnostic *diagnostic);
-/* Unpublished fresh Source collector only; independent terminal follows. */
-XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileContext *context,
-    const XrXirModule *source,XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *context,
     const XrXirModule *source,const XrXirEffects *effects);
 

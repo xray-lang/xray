@@ -11,49 +11,59 @@
  *   use checks physical inputs, closed equations and independent outcomes.
  *   Every temporary graph, type substitution and error summary dies here.
  */
-/* This constructor-side retirement changes only allocation bookkeeping.
- * It accepts no Source and changes no semantic input, role, equation or permission.
- * The final independent terminal still rejects any remaining producer pointer. */
-static XrXirStatus effect_source_body_retire(const XrXirCompileContext *work,
-    EffectBodyMaterial *body) {
+/* Drop every borrowed constructor pointer before freeing the backbone's
+ * real scratch. The owning immutable descriptors remain at the same addresses. */
+static XrXirStatus effect_final_retire_body(const XrXirCompileContext *work,EffectBodyMaterial *body) {
     uint32_t depth=0;
     for (;body;body=body->backbone) {
         if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
         if (depth++==3 || !effect_body_material_shape(body) || body->resources!=work->resources)
             return XR_XIR_BAD_STRUCTURE;
-        if (body->terms.remaining) {
-            if (!xir_compile_work(work,sizeof(body->terms.remaining))) return XR_XIR_BUDGET;
-            body->terms.remaining=NULL;
-        }
+        XrXirStatus status=effect_terms_retire(work,&body->terms,body->backbone==NULL);
+        if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
 
-/* Called only after a fresh collector and complete semantic input ownership
- * succeed, while the Source facts are unpublished. No const reader calls this.
- * Ordinary generation is shared only by owners in this same newly owned graph;
- * publication's existing pointer guards and all semantic replay remain intact. */
-XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileContext *work,
-    const XrXirModule *source,XrXirEffects *effects) {
-    if (!xir_effects_context_matches(work,effects,source?source->function_count:0) || !source ||
-        source->stage!=XR_XIR_CHECKED || !source->provenance ||
-        source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !effects->invocations ||
-        !effects->invocations->body || effects->generation || effects->refinement)
-        return XR_XIR_BAD_STRUCTURE;
-    const EffectFinalOutcomes *published=effect_final_outcomes(effects);
-    if (!published) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_source_body_retire(work,effects->invocations->body);
-    EffectContextOwner *owner=published->contexts;
+/* Only the completed private constructor calls this. All real scratch frees
+ * precede the last current-Input comparison and the sole public ownership move. */
+static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *work,XrXirEffects *effects) {
+    if (!effects || !effects->outcomes_owner || effects->root_input || !effects->invocations ||
+        !effects->invocations->body || effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationCertificate *certificate=effects->invocations;
+    XrXirStatus status=effect_terms_retire(work,&certificate->terms,true);
+    if (status==XR_XIR_OK) status=effect_final_retire_body(work,certificate->body);
+    EffectContextOwner *owner=effects->outcomes_work.contexts;
     if (status==XR_XIR_OK && owner) {
         if (!owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
-            owner->ordinary->terms.remaining || owner->dense->terms.remaining || owner->forest->terms.remaining ||
             !owner->forest->invocations || !owner->forest->invocations->body ||
-            !owner->ordinary->uses.generation || owner->dense->uses.generation)
-            return XR_XIR_BAD_STRUCTURE;
-        status=effect_source_body_retire(work,owner->forest->invocations->body);
-        if (status==XR_XIR_OK) status=effect_source_body_retire(work,owner->ordinary->uses.generation);
+            !owner->ordinary->uses.generation || owner->dense->uses.generation) return XR_XIR_BAD_STRUCTURE;
+        certificate=owner->forest->invocations;
+        status=effect_terms_retire(work,&owner->ordinary->terms,true);
+        if (status==XR_XIR_OK) status=effect_terms_retire(work,&owner->dense->terms,true);
+        if (status==XR_XIR_OK) status=effect_terms_retire(work,&owner->forest->terms,true);
+        if (status==XR_XIR_OK) status=effect_terms_retire(work,&certificate->terms,true);
+        if (status==XR_XIR_OK) status=effect_final_retire_body(work,certificate->body);
+        if (status==XR_XIR_OK) status=effect_final_retire_body(work,owner->ordinary->uses.generation);
+        if (status==XR_XIR_OK && (owner->ordinary->resources!=work->resources ||
+            owner->ordinary->uses.resources!=work->resources)) status=XR_XIR_BAD_STRUCTURE;
+        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(owner->ordinary->uses))) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) {
+            effect_ordinary_results_free(owner->ordinary);
+            owner->ordinary->uses=(XrXirEffects){0};
+        }
     }
     return status;
+}
+
+static XrXirStatus effect_source_body_retired(const XrXirCompileContext *work,const EffectBodyMaterial *body) {
+    uint32_t depth=0;
+    for (;body;body=body->backbone) {
+        if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
+        if (depth++==3 || !effect_body_material_shape(body) || body->resources!=work->resources ||
+            !effect_terms_scratch_retired(&body->terms)) return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
 }
 
 static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
@@ -155,6 +165,12 @@ static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
  * owner, queue or copied semantic inventory participates in this proof. */
 static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
+    if (!certificate) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
+    if (!effect_terms_scratch_retired(&certificate->terms)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus retired=effect_source_body_retired(work,certificate->body);
+    if (retired!=XR_XIR_OK) return retired;
+
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->resources!=work->resources || certificate->body->resources!=work->resources ||
         !certificate->final || !certificate->final || !certificate->declared ||
@@ -216,8 +232,13 @@ static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
         normalized=*source;normalized.types=&effect_empty_types;source=&normalized;
     }
     const EffectContextOwner *owner=effect_contexts_read(effects);
-    if (!owner || !owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
+    if (!effect_context_owner_published(work->resources,owner) ||
+        !owner || !owner->ordinary || !owner->dense || !owner->forest || owner->refinement ||
         owner->ordinary->terms.remaining || owner->dense->terms.remaining || owner->forest->terms.remaining)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,21)) return XR_XIR_BUDGET;
+    if (!effect_terms_scratch_retired(&owner->ordinary->terms) ||
+        !effect_terms_scratch_retired(&owner->dense->terms) || !effect_terms_scratch_retired(&owner->forest->terms))
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,2*sizeof(EffectTerms))) return XR_XIR_BUDGET;
     EffectTerms ordinary={.types=owner->ordinary->terms.types,.remaining=work};
@@ -337,8 +358,8 @@ static XrXirStatus effect_source_outcomes(const XrXirCompileContext *work,const 
 
 XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
-    if (!xir_effects_context_matches(work,effects,source?source->function_count:0) || !source ||
-        source->stage!=XR_XIR_CHECKED || !source->provenance ||
+    if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
+        !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !source->provenance ||
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !effects->invocations ||
         effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_source_certificate(work,effects->invocations,effects);

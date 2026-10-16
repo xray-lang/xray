@@ -1751,7 +1751,10 @@ static void conditional_ordinary_environment_keys(void) {
     }
 }
 
+#include "xir_input_seed_run_cases.h"
+
 int main(int argc, char **argv) {
+    input_seed_run_literals();
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
