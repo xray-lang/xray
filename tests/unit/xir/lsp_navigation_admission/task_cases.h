@@ -60,6 +60,7 @@ static void admission_close(NavigationAdmission *f) {
     xlsp_request_id_free(&f->id);xlsp_document_store_free(f->server.doc_table);xlsp_transport_free(f->transport);
     CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes&&!task_live&&!task_bytes);
 }
+#include "worker_cases.h"
 static unsigned admission_rejections(NavigationAdmission *f,unsigned method) {
     XrJsonValue *valid=admission_params(f,15),*value=xlsp_navigation_handle(&f->server,valid,method);CHECK(value);
     xjson_free(value);xjson_free(valid);XlspSourceWorkspace *cache=f->server.source_workspace;CHECK(cache);
@@ -103,7 +104,10 @@ static size_t admission_resources(NavigationAdmission *f,unsigned method,bool fu
     xjson_free(params);return sites;
 }
 static int navigation_admission_main(int argc,char **argv) {
-    CHECK(argc==6||argc==7);unsigned method=(unsigned)strtoul(argv[4],NULL,10);CHECK(method<4);
+    CHECK(argc>=6);unsigned method=(unsigned)strtoul(argv[4],NULL,10);CHECK(method<4);
+    if(!strcmp(argv[5],"--worker")||!strcmp(argv[5],"--worker-chunk")||!strcmp(argv[5],"--worker-axes"))
+        return admission_worker_main(argc,argv,method);
+    CHECK(argc==6||argc==7);
     bool before=!strcmp(argv[5],"--before"),full=!strcmp(argv[5],"--full");CHECK(before||full||!strcmp(argv[5],"--normal"));
     NavigationAdmission f;admission_fixture(&f,argv[1],argv[3]);unsigned checked=0,scenario=15;
     if(before){CHECK(argc==7);scenario=(unsigned)strtoul(argv[6],NULL,10);CHECK(scenario<=8&&((scenario!=5&&scenario!=6)||method==1));}
