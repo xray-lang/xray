@@ -12,6 +12,8 @@
 #include "xir_cell_edge_provider_cases.h"
 #include "xir_cell_edge_original_cases.h"
 #include "xir_cell_edge_growth_cases.h"
+#include "xir_cell_raw_original_cases.h"
+#include "xir_cell_raw_inventory_cases.h"
 
 static void range_row_rejections(const XrXirCompileContext *context,
     const XrXirCellProofBodyRead *read,const XrXirCellProofRunCursor *cursor,uint32_t first) {
@@ -230,7 +232,7 @@ int main(void) {
     CHECK(!memcmp(&row,&sentinel,sizeof(row)));
     xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);rp_balanced(physical);
     CHECK(!rp_live && !rp_live_bytes && !rp_allocation_observer);
-    cell_edge_cases();
+    cell_edge_cases();cell_raw_inventory_cases();
     puts("CELL_RANGE_ROW_AND_SHAPE producer dead, current words, all10 deltas, paired owner/domain/range, EOF, exact/minus1, unchanged failure output, physical0 PASS");
     return 0;
 }
