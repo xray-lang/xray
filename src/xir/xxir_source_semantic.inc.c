@@ -24,6 +24,7 @@ static void source_semantic_free(SourceSemanticEnvironment *environment) {
     xr_compile_resources_free(environment->names);
     xr_compile_resources_free(environment->binding_reads);
     xr_compile_resources_free(environment->binding_writes);
+    xr_compile_resources_free(environment->binding_pushes);
     xr_compile_resources_free(environment->history.modules);
     xr_compile_resources_free(environment->history.functions);
     xr_compile_resources_free(environment->history.slots);
@@ -110,6 +111,9 @@ static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment
         environment->binding_writes=source_semantic_alloc(ctx,ctx->slot_count,sizeof(*environment->binding_writes));
         if(!environment->binding_writes || !source_copy_bytes(ctx,NULL,environment->binding_writes,ctx->binding_writes,
             (size_t)ctx->slot_count*sizeof(*ctx->binding_writes)))goto failed;
+        environment->binding_pushes=source_semantic_alloc(ctx,ctx->slot_count,sizeof(*environment->binding_pushes));
+        if(!environment->binding_pushes || !source_copy_bytes(ctx,NULL,environment->binding_pushes,ctx->binding_pushes,
+            (size_t)ctx->slot_count*sizeof(*ctx->binding_pushes)))goto failed;
     }
     environment->names=source_semantic_alloc(ctx,modules,sizeof(*environment->names));
     environment->symbols=count ? source_semantic_alloc(ctx,count,sizeof(*environment->symbols)) : NULL;

@@ -635,6 +635,9 @@ Cell读取与写入使用实际出生存储；跨池写入的身份查找在原�
 
 .type接收一次解析的单个表达式，在共同Source检查器中求值并调用真实typeName逻辑，返回拥有的String。该临时候选只能中止，Source发布入口也拒绝发布它；旧普通副作用和累计费用保留，可见元数据与it不替换。赋值和Unit表达式同样按真实typeName语义处理，不拼接或渲染源码。CLI调用者已接入真实公共拥有者；原38项以及完整profile、生命周期、资源和安全资格仍须完成，公共观察与查询用例不替代这些退出门。
 
+
+跨输入的可变Array push通过出生Program中的普通已检查操作函数修改其真实Cell；接收方只传已求值一次的精确元素值。这个函数在出生模块内执行SLOT_LOAD/CELL_PLACE/ARRAY_PUSH，不将Cell作为返回值泄出，不直接访问外模块slot，不复制另一个可变存储。普通只读Array访问调用真实出生reader，const写入仍拒绝。操作函数的序号和完整签名来自原Compiler拥有的语义记录及实际Checked接收表，并随其深拥有、收费及销毁；名称观察不授予权限。该接线不代表全部Array/结构路径/ref或额外可调用族已经完成。原REPL夹具迁到现行语法：类字段不写var、构造器写init；空结果由有准确Optional返回类型的匿名函数产生，独立保不显示、it存在及用户绑定为零的预期；无上下文null与旧字段修饰符继续拒绝。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1390,5 +1393,8 @@ Struct field reads first resolve the birth arena and ordinal through the existin
 Visible REPL names and type-display facts are prepared from authentic Source declarations before candidate execution. Only paired publication replaces the public observations. Internal result and function-value slots are excluded from user declarations; the current it has an explicit marker. Root initialization constructs each ordinary function value once in an immutable private slot. Reading uses that slot's real birth reader and does not call the user's function body. Observed birth Source serials, names and type text grant no checking, construction or invocation authority. A type without an admitted display spelling has an absent observation; no replacement name is invented and a valid input is not rejected for that reason.
 
 .type admits one once-parsed expression, evaluates it through the common Source checker and actual typeName logic, and returns an owned String. This temporary candidate can only be aborted; Source publication itself also refuses it. Ordinary old-state effects and cumulative charges remain, while visible metadata and it stay fixed. Assignment and Unit expressions follow actual typeName semantics without source concatenation or rendering. The CLI callers now use the real public owner. The original38 cases and complete profile, lifecycle, resource and safety qualification remain required; public observation/query tests do not discharge those gates.
+
+
+Cross-input mutable Array push changes the actual Cell through an ordinary checked operation function in its birth Program. The receiver supplies only the exact element value evaluated once. That function performs SLOT_LOAD/CELL_PLACE/ARRAY_PUSH within its birth module; it returns no Cell, loads no foreign slot and creates no second mutable store. Ordinary readonly Array access calls the authentic birth reader, and const mutation still rejects. Operation ordinals and complete signatures come from the original Compiler-owned semantic record and actual Checked receiving table; they are deeply owned, metered and destroyed with that record. Display names grant no permission. This wiring does not complete all Array/struct paths, refs or additional callable families. Original REPL fixtures adopt current syntax: class fields omit var and constructors use init. An anonymous function with an exact Optional return context produces the absent result, preserving no display, an it binding and zero user bindings. Context-free null and the old field modifier still reject.
 
 <!-- /xr-spec:en -->

@@ -134,8 +134,11 @@ static bool source_array_read_place(SourceContext *ctx, AstNode *node, SourceNam
     if (!root || (root->kind == SOURCE_LOCAL && !root->mutable))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array read requires a stored root");
     if (!source_query_reference(ctx, node, root, root, XR_XIR_SOURCE_READ)) return false;
-    if (!root->mutable)
+    if(root->kind==SOURCE_SLOT && root->module!=ctx->bodies[ctx->function].module && ctx->history)
+        return source_history_binding_read(ctx,root,place);
+    if (!root->mutable) {
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_SLOT_PLACE, root->type, {0}, {0}, root->index, {0}}, place);
+    }
     SourceValue cell = {0};
     return source_binding_cell(ctx, root, &cell) &&
         source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_PLACE, root->type, {cell.id, 0}, {0}, 0, {0}}, place);
@@ -288,6 +291,14 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
         return source_array_set(ctx, node, access->object, call->arguments[0], call->arguments[1], member, false, value);
     case XR_NATIVE_OPERATION_ARRAY_PUSH: {
         SourceValue place, input;
+        SourceName *root=source_array_root(ctx,access->object);
+        if(root && root->kind==SOURCE_SLOT && root->module!=ctx->bodies[ctx->function].module && ctx->history) {
+            if(!root->mutable)return source_fail(ctx,access->object,XR_XIR_BAD_TYPE,"push requires a mutable Array binding");
+            SourceName saved=*root;XrXirType element=xr_xir_array_element(&ctx->types,saved.type);
+            return source_query_reference(ctx,access->object,root,root,XR_XIR_SOURCE_READ_WRITE) &&
+                source_plan_expression(ctx,call->arguments[0],(SourceExpectedType){element!=XR_XIR_UNIT,element,false,false},&input) &&
+                source_history_binding_push(ctx,&saved,input,value) && source_array_member_reference(ctx,node,member);
+        }
         if (!source_array_receiver(ctx, access->object, NULL, true, &place) ||
             !source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){xr_xir_array_element(&ctx->types, place.type) != XR_XIR_UNIT,xr_xir_array_element(&ctx->types, place.type), false, false}, &input)) return false;
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {place.id, input.id}, {0}, 0, {0}}, value) &&

@@ -7867,6 +7867,9 @@ Visible REPL names and type-display facts are prepared from authentic Source dec
 
 .type admits one once-parsed expression, evaluates it through the common Source checker and actual typeName logic, and returns an owned String. This temporary candidate can only be aborted; Source publication itself also refuses it. Ordinary old-state effects and cumulative charges remain, while visible metadata and it stay fixed. Assignment and Unit expressions follow actual typeName semantics without source concatenation or rendering. The CLI callers now use the real public owner. The original38 cases and complete profile, lifecycle, resource and safety qualification remain required; public observation/query tests do not discharge those gates.
 
+
+Cross-input mutable Array push changes the actual Cell through an ordinary checked operation function in its birth Program. The receiver supplies only the exact element value evaluated once. That function performs SLOT_LOAD/CELL_PLACE/ARRAY_PUSH within its birth module; it returns no Cell, loads no foreign slot and creates no second mutable store. Ordinary readonly Array access calls the authentic birth reader, and const mutation still rejects. Operation ordinals and complete signatures come from the original Compiler-owned semantic record and actual Checked receiving table; they are deeply owned, metered and destroyed with that record. Display names grant no permission. This wiring does not complete all Array/struct paths, refs or additional callable families. Original REPL fixtures adopt current syntax: class fields omit var and constructors use init. An anonymous function with an exact Optional return context produces the absent result, preserving no display, an it binding and zero user bindings. Context-free null and the old field modifier still reject.
+
 ---
 
 ## 18. Error Codes

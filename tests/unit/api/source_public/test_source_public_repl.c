@@ -153,8 +153,10 @@ static void cancellation(void) {
 #include "source_public_repl_rooted.h"
 #include "source_public_repl_file.h"
 #include "source_public_repl_input.h"
+#include "source_public_repl_array_history.h"
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--rooted")){rooted_inputs();rooted_nominals();return 0;}
+    if(argc==2 && !strcmp(argv[1],"--array-history")){array_history();return 0;}
     if(argc==2 && !strcmp(argv[1],"--input")){input_observations();return 0;}
     if(argc==2 && !strcmp(argv[1],"--files")){file_inputs();file_snapshot();return 0;}
     CHECK(argc==1);

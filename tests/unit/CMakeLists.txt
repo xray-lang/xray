@@ -3788,20 +3788,26 @@ set_tests_properties(test_crypto_native_error_abi PROPERTIES
     TIMEOUT 120
 )
 
-# test_repl needs the isolate-profile factory (xr_isolate_profile_*)
-# in addition to xray_core, so build it like test_cli_spec with an
-# explicit source list.
-add_executable(test_repl
-    api/test_repl.c
-    ${CMAKE_SOURCE_DIR}/src/api/xisolate_profile.c
-)
-target_include_directories(test_repl PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/src/api
-)
-target_link_libraries(test_repl PRIVATE xray_core)
+# Original Source semantics use the actual new owner; remaining native-runtime
+# and corrupted legacy authority obligations retain a distinct executable.
+add_executable(test_repl api/test_repl.c)
+target_link_libraries(test_repl PRIVATE xray_source_api)
+target_include_directories(test_repl PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_repl PRIVATE XR_ORIGINAL_REPL_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_repl PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_repl PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_repl PRIVATE -Wall -Wextra -Werror)
+endif()
 add_test(NAME test_repl COMMAND test_repl)
+set_tests_properties(test_repl PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;original")
+add_executable(test_repl_runtime_authority api/test_repl_runtime_authority.c
+    ${CMAKE_SOURCE_DIR}/src/api/xisolate_profile.c)
+target_include_directories(test_repl_runtime_authority PRIVATE ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/api)
+target_link_libraries(test_repl_runtime_authority PRIVATE xray_core)
+add_test(NAME test_repl_runtime_authority COMMAND test_repl_runtime_authority)
 
 # ============================================================================
 # lsp/ — Language Server Protocol (conditional)
