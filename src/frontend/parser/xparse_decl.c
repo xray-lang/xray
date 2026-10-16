@@ -1250,6 +1250,23 @@ bool xr_is_construct_only_type_name(Parser *parser, const char *name) {
     return false;
 }
 
+static bool xr_parse_argument_token_end(Parser *parser,const Token *token,XrNameSpan *out) {
+    if(!token->start||token->length<=0||token->line<=0||token->column<=0) {
+        xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BAD_ARGUMENT);return false;
+    }
+    XrNameSpan end={token->line,token->column};
+    for(int i=0;i<token->length;++i) {
+        char byte=xr_parser_read_byte(parser,token->start+i);if(!xr_parser_healthy(parser))return false;
+        if(byte=='\n') {
+            if(end.line==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return false;}
+            ++end.line;end.column=1;
+        } else {
+            if(end.column==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return false;}
+            ++end.column;
+        }
+    }
+    *out=end;return true;
+}
 XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
                                          XrTypeRef **type_args, int type_count) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -1260,8 +1277,10 @@ XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
     XrNameSpan *boundaries = NULL;
+    XrParseArgumentSyntax *argument_syntax = NULL;
     int arg_count = 0, arg_capacity = 0, access_count = 0, access_capacity = 0;
     int boundary_count = 0, boundary_capacity = 0;
+    int syntax_count = 0, syntax_capacity = 0;
     if (parser->call_syntax_callback) {
         XrNameSpan boundary = {opening.line, opening.column + opening.length};
         XR_PARSE_PUSH(parser, boundaries, boundary_count, boundary_capacity, boundary);
@@ -1269,9 +1288,17 @@ XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
     }
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
+            Token first = parser->current;
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
             AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
             if (!xr_parser_healthy(parser)) return NULL;
+            if (parser->call_syntax_callback && arg && parser->error_count == before_errors) {
+                Token last = parser->previous;
+                XrNameSpan end={0};if(!xr_parse_argument_token_end(parser,&last,&end))return NULL;
+                XrParseArgumentSyntax fact = {arg, {first.line, first.column},end};
+                XR_PARSE_PUSH(parser, argument_syntax, syntax_count, syntax_capacity, fact);
+                if (!xr_parser_healthy(parser)) return NULL;
+            }
             XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
             if (!xr_parser_healthy(parser)) return NULL;
             XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
@@ -1306,9 +1333,9 @@ XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
     call->end_column = closing.column + closing.length;
     if (parser->call_syntax_callback && opening.type == TK_LPAREN && closing.type == TK_RPAREN &&
         parser->error_count == before_errors) {
-        XrParseCallSyntax syntax = {call, callee, {opening.line, opening.column},
-                                    {closing.line, closing.column}, boundaries,
-                                    (size_t)boundary_count};
+        XrParseCallSyntax syntax = {.node=call,.callee=callee,.opening={opening.line, opening.column},
+            .closing={closing.line, closing.column},.boundaries=boundaries,.boundary_count=(size_t)boundary_count,
+            .arguments=argument_syntax,.argument_count=(size_t)syntax_count};
         XrCompileResourceStatus status = parser->call_syntax_callback(parser->call_syntax_data, &syntax);
         if (status != XR_COMPILE_RESOURCE_OK) {
             (void)xr_compile_state_fail(parser->state, status);

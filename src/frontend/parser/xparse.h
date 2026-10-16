@@ -77,11 +77,17 @@ typedef struct XrParseDiagnostics {
  * Boundaries are the position after '(' and after each argument comma, including
  * a trailing comma. Speculative observations require final-AST reachability
  * validation before publication. A failed callback aborts the owning parse. */
+typedef struct XrParseArgumentSyntax {
+    const AstNode *node;
+    XrNameSpan start,end; /* Complete argument tokens, including access markers. */
+} XrParseArgumentSyntax;
 typedef struct XrParseCallSyntax {
     const AstNode *node, *callee;
     XrNameSpan opening, closing;
     const XrNameSpan *boundaries;
     size_t boundary_count;
+    const XrParseArgumentSyntax *arguments;
+    size_t argument_count;
 } XrParseCallSyntax;
 typedef XrCompileResourceStatus (*XrParseCallSyntaxFn)(void *, const XrParseCallSyntax *);
 
