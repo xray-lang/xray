@@ -89,6 +89,11 @@ static void evaluate_normal(void) {
     evaluate_request(adapter,"'i' == 'i'",inner,"true");
     evaluate_request(adapter,"1.25 + 0.5",inner,"1.75");
     evaluate_request(adapter,"[\\\"a\\\",\\\"b\\\"][1] + label",inner,"binner");
+    evaluate_request(adapter,"label.contains(\\\"nn\\\")",inner,"true");
+    evaluate_request(adapter,"label.indexOf(\\\"n\\\",2)",inner,"2");
+    evaluate_request(adapter,"label.endsWith(\\\"er\\\")",inner,"true");
+    evaluate_request(adapter,"label.contains(3)",inner,NULL);
+    evaluate_request(adapter,"label.append(\\\"x\\\")",inner,NULL);
     evaluate_request(adapter,"value // trailing comment",inner,"20");
     const char *rejected[]={"input","missing","1 +","1; print(2)","doubled = 99","print(value)","doubled / 0"};
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) evaluate_request(adapter,rejected[i],inner,NULL);

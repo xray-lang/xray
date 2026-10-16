@@ -11,6 +11,7 @@
 #include "xdap_value.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast_walk.h"
+#include "../../shared/xnative_declaration.h"
 #include <string.h>
 typedef struct ExpressionBinding { const char *name;size_t length;XrXirValue value; } ExpressionBinding;
 typedef struct ExpressionState {
@@ -57,11 +58,38 @@ static bool expression_binding(ExpressionState *state,const char *name) {
     }
     state->status=XR_XIR_UNRESOLVED;return false;
 }
+static bool expression_native_work(void *context,uint64_t units) {
+    return xr_compile_resources_work(context,units)==XR_COMPILE_RESOURCE_OK;
+}
+/* This is syntax admission only. Source still resolves the actual receiver
+ * and proves its declared operation; no callable value or provider is used. */
+static bool expression_call_allowed(const AstNode *node,XrCompileResources *resources,XrXirStatus *status) {
+    const CallExprNode *call=&node->as.call_expr;
+    if (!call->callee || call->callee->type!=AST_MEMBER_ACCESS || !call->callee->as.member_access.name ||
+        call->type_arg_count || call->default_arg_count || call->arg_count<1 || call->arg_count>2 || !call->arguments) {
+        *status=XR_XIR_BAD_TYPE;return false;
+    }
+    const XrNativeTypeDeclaration *type=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
+    XrNativeDeclarationWork work={resources,expression_native_work};const XrNativeMemberDeclaration *member=NULL;
+    XrNativeDeclarationStatus found=xr_native_declaration_find_member(&work,type,call->callee->as.member_access.name,&member);
+    if (found!=XR_NATIVE_DECLARATION_OK) {
+        *status=found==XR_NATIVE_DECLARATION_WORK_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;return false;
+    }
+    if (!member->is_public || !member->is_method || member->is_static || member->receiver!=XR_NATIVE_RECEIVER_READ ||
+        member->operation<XR_NATIVE_OPERATION_STRING_CONTAINS || member->operation>XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF) {
+        *status=XR_XIR_BAD_TYPE;return false;
+    }
+    for (int i=0;i<call->arg_count;++i) {
+        if (!expression_native_work(resources,1)) { *status=XR_XIR_BUDGET;return false; }
+        if (call->arg_accesses && call->arg_accesses[i]!=XR_CALL_ARG_PLAIN) { *status=XR_XIR_BAD_TYPE;return false; }
+    }
+    return true;
+}
 static bool expression_node_allowed(const AstNode *node) {
     return node && (node->type==AST_VARIABLE || node->type==AST_LITERAL_INT || node->type==AST_LITERAL_TRUE || node->type==AST_LITERAL_FALSE ||
         node->type==AST_LITERAL_FLOAT || node->type==AST_LITERAL_RUNE || node->type==AST_LITERAL_STRING || node->type==AST_LITERAL_NULL ||
         node->type==AST_ARRAY_LITERAL || node->type==AST_TUPLE_LITERAL || node->type==AST_INDEX_GET || node->type==AST_MEMBER_ACCESS ||
-        node->type==AST_GROUPING || node->type==AST_TERNARY || node->type==AST_FORCE_UNWRAP || node->type==AST_NULLISH_COALESCE ||
+        node->type==AST_CALL_EXPR || node->type==AST_GROUPING || node->type==AST_TERNARY || node->type==AST_FORCE_UNWRAP || node->type==AST_NULLISH_COALESCE ||
         (node->type>=AST_BINARY_ADD && node->type<=AST_BINARY_OR) ||
         (node->type>=AST_UNARY_NEG && node->type<=AST_UNARY_BNOT));
 }
@@ -71,9 +99,10 @@ static bool expression_visit(AstNode *node,void *context) {
     if (state->depth==128) { state->status=XR_XIR_BUDGET;return false; }
     if (xr_compile_resources_work(state->request->lexical->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
     if (node->type==AST_VARIABLE) return expression_binding(state,node->as.variable.name);
+    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,state->request->lexical->launch->resources,&state->status)) return false;
     if (!expression_node_allowed(node)) { state->status=XR_XIR_BAD_TYPE;return false; }
     if (node->type==AST_LITERAL_FLOAT || node->type==AST_LITERAL_RUNE || node->type==AST_LITERAL_STRING || node->type==AST_LITERAL_NULL ||
-        node->type==AST_ARRAY_LITERAL || node->type==AST_TUPLE_LITERAL || node->type==AST_INDEX_GET || node->type==AST_MEMBER_ACCESS || node->type==AST_FORCE_UNWRAP || node->type==AST_NULLISH_COALESCE) state->runtime=true;
+        node->type==AST_ARRAY_LITERAL || node->type==AST_TUPLE_LITERAL || node->type==AST_INDEX_GET || node->type==AST_MEMBER_ACCESS || node->type==AST_FORCE_UNWRAP || node->type==AST_NULLISH_COALESCE || node->type==AST_CALL_EXPR) state->runtime=true;
     ++state->depth;bool ok=xr_ast_for_each_child(node,expression_visit,state);--state->depth;return ok;
 }
 typedef struct ExpressionSyntax { XrCompileResources *resources;uint32_t depth;XrXirStatus status; } ExpressionSyntax;
@@ -82,6 +111,7 @@ static bool expression_syntax(AstNode *node,void *context) {
     if (!node) return true;
     if (syntax->depth==128 || xr_compile_resources_work(syntax->resources,1)!=XR_COMPILE_RESOURCE_OK) { syntax->status=XR_XIR_BUDGET;return false; }
     if (!expression_node_allowed(node)) { syntax->status=XR_XIR_BAD_TYPE;return false; }
+    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,syntax->resources,&syntax->status)) return false;
     ++syntax->depth;bool ok=xr_ast_for_each_child(node,expression_syntax,syntax);--syntax->depth;return ok;
 }
 XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const char *text,size_t length) {

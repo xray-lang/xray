@@ -125,6 +125,17 @@ static void predicate_logs(void) {
     predicate_run(adapter,"configurationDone");predicate_pump(adapter);CHECK(adapter->terminal && !event_count("stopped") && event_count("output")==5);
     for (uint32_t i=0;i<4;++i) predicate_output(i,"console","\n",1);predicate_close(&fixture);
 }
+static void predicate_read_calls(void) {
+    PredicateFixture fixture=predicate_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;
+    predicate_set(adapter,XR_DAP_CALL_FIXTURE,"{\"line\":4,\"condition\":\"label.contains(\\\"nn\\\") && value == 20\",\"logMessage\":\"match={label.indexOf(\\\"n\\\",2)}\"}",true);
+    char *condition=adapter->source_breakpoints[0].predicate.condition;
+    predicate_set(adapter,XR_DAP_CALL_FIXTURE,"{\"line\":4,\"condition\":\"label.append(\\\"x\\\")\"}",false);
+    CHECK(adapter->source_breakpoints[0].predicate.condition==condition);
+    predicate_run(adapter,"configurationDone");predicate_pump(adapter);
+    CHECK(adapter->terminal && !event_count("stopped") && event_count("output")==2);
+    predicate_output(0,"console","match=2\n",8);predicate_output(1,"stdout","44\n",3);
+    predicate_close(&fixture);
+}
 static void predicate_errors(void) {
     const char *entries[]={"{\"line\":4,\"condition\":\"index\"}","{\"line\":4,\"condition\":\"missing == 0\"}",
         "{\"line\":4,\"logMessage\":\"missing={missing}\"}"};
@@ -195,7 +206,7 @@ static size_t predicate_fault(size_t fail,unsigned mode) {
 }
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
-    predicate_conditions();predicate_logs();predicate_errors();predicate_function_and_next();
+    predicate_conditions();predicate_logs();predicate_read_calls();predicate_errors();predicate_function_and_next();
     size_t sites[3]={predicate_fault(SIZE_MAX,0),predicate_fault(SIZE_MAX,1),predicate_fault(SIZE_MAX,2)};
     for (unsigned mode=0;mode<3;++mode) {
         CHECK(sites[mode]);if (resources) for (size_t i=0;i<sites[mode];++i) predicate_fault(i,mode);

@@ -62,6 +62,13 @@ static void evaluate_data(void) {
         {"units.0",XR_XIR_UNIT,0,NULL,0,false,0},
         {"_dap_observed_0+words[1]",XR_XIR_STRING,0,"shadowb",7,false,0},
         {"[words[1],record.2]",XR_XIR_UNIT,0,NULL,0,true,2},
+        {"record.2.contains(\"s\\0x\")",XR_XIR_BOOL,1,NULL,0,false,0},
+        {"record.2.startsWith(\"s\")",XR_XIR_BOOL,1,NULL,0,false,0},
+        {"record.2.endsWith(\"x\")",XR_XIR_BOOL,1,NULL,0,false,0},
+        {"record.2.indexOf(\"x\")",XR_XIR_I64,2,NULL,0,false,0},
+        {"record.2.lastIndexOf(\"\\0\")",XR_XIR_I64,1,NULL,0,false,0},
+        {"words.contains(\"b\")",XR_XIR_BOOL,1,NULL,0,false,0},
+        {"words.indexOf(\"z\")",XR_XIR_I64,-1,NULL,0,false,0},
         {"true ? empty : empty",XR_XIR_UNIT,0,NULL,0,true,0}
     };
     for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
@@ -105,6 +112,7 @@ static void evaluate_data_failures(bool resources) {
     const EvaluateDataCase cases[]={
         {"words[1]+record.2",XR_XIR_STRING,0,"bs\0x",4,false,0},
         {"[words[1],record.2]",XR_XIR_UNIT,0,NULL,0,true,2},
+        {"record.2.indexOf(\"\\0\")",XR_XIR_I64,1,NULL,0,false,0},
         {"nested! == null",XR_XIR_BOOL,1,NULL,0,false,0}
     };
     for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
