@@ -181,6 +181,7 @@ static void sdk_repl_inspection_cases(const char *stdlib_path) {
 }
 
 #include "source_sdk_repl_input_consumer.inc.c"
+#include "source_sdk_repl_array_consumer.inc.c"
 
 int main(int argc,char **argv) {
     CHECK(argc==4);
@@ -249,5 +250,6 @@ int main(int argc,char **argv) {
     sdk_repl_rooted_cases(argv[1],argv[2]);
     sdk_repl_file_cases(argv[1],argv[3]);
     sdk_repl_snapshot_input_cases(argv[1]);
+    sdk_repl_array_cases(argv[1]);
     puts("Installed owning AST, typed values, persistent state, callable authority and producer death PASS");return 0;
 }
