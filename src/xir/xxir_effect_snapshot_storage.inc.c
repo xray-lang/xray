@@ -220,7 +220,7 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
     const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output) {
     if (!xir_compile_context_valid(work) || !source || !output || *output ||
         (!!source->function_count!=!!source->functions)) return XR_XIR_BAD_STRUCTURE;
-    if (source->function_count>work->limits.functions) return XR_XIR_BUDGET;
+    if (!ordinary && source->function_count>work->limits.functions) return XR_XIR_BUDGET;
     XrXirStatus status=ordinary ? effect_body_ordinary_input_verify(work,source,ordinary) :
         xir_effect_contract_shape_verify(work,source);
     if (status!=XR_XIR_OK) return status;
@@ -433,12 +433,9 @@ static XrXirStatus effect_body_source_types_match(const XrXirCompileContext *wor
 /* Error/source fresh correspondence retains the complete independent body
  * and metadata traversal. Both lifetime adapters use the same sole reader;
  * no pointer identity substitutes for any source field comparison. */
-static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
+static XrXirStatus effect_body_rows_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,const XrXirModule *source) {
-    if (!effect_body_material_shape(body) || body->ordinary_identities) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_source_types_match(work,body,source);
-    if (status==XR_XIR_OK) status=xir_effect_contract_shape_verify(work,source);
-    if (status!=XR_XIR_OK) return status;
+    XrXirStatus status=XR_XIR_OK;
     uint32_t kind=source->provenance?source->provenance->kind:0;
     if (status==XR_XIR_OK && !xir_compile_work(work,1)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK && kind!=body->evidence_kind) status=XR_XIR_BAD_STRUCTURE;
@@ -457,6 +454,14 @@ static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
     }
     if (status==XR_XIR_OK) status=effect_body_metadata_match(work,&body->domain,source);
     return status;
+}
+
+static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,const XrXirModule *source) {
+    if (!effect_body_material_shape(body) || body->ordinary_identities) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_body_source_types_match(work,body,source);
+    if (status==XR_XIR_OK) status=xir_effect_contract_shape_verify(work,source);
+    return status==XR_XIR_OK ? effect_body_rows_match(work,body,source) : status;
 }
 
 /* The canonical empty pool has no descriptor owner to validate. All

@@ -7321,6 +7321,33 @@ This subset (including §17.11 marker templates) does not qualify full member co
 effects, diagnostic provenance, package linking, Checked library publication, installer
 publication or complete source-free standard-library distribution.
 
+Program publication compares the current descriptors and their owned copies
+against independently checked canonical types, declarations, signatures and
+physical layouts after all preparation allocator callbacks have finished. VM
+ownership transfer additionally compares the actual executable body and binding
+wiring to that same input. These final comparisons allocate and release no
+storage. A content digest only detects packet drift; it grants no semantic
+permission. Failure leaves the caller's artifact and code lease unconsumed and
+publishes no Program. This boundary does not authenticate arbitrary native
+callback behavior or replace the remaining owned Final transition.
+
+Preparation copies semantic metadata from the independent canonical input,
+so a caller metadata table invalidated by a preparation callback is never used
+as the source of an owned copy. The final comparison rejects missing storage
+for every nonempty table before traversing it, including module and function
+tables. Restoring the caller's original storage permits a retry on the same
+cumulative ledger; rejection does not refund work or allocation charges.
+
+Before reading either canonical body or Lowered projection storage, current
+Program body correspondence checks the actual live allocation ranges on the
+same cumulative ledger for headers, names, signatures, blocks, instructions,
+operands, compressed records and default records. Each typed read requires its
+alignment and complete range; record counts cannot exceed capacity. These
+checks allocate nothing and charge actual scans. A valid range proves neither
+field correspondence, semantics, historical allocation generation nor a
+complete Final. Current fields still require independent comparison after the
+last preparation callback; rejection preserves inputs and the empty output.
+
 ### 17.11 Definition Checking and Checked Generic Specialization
 
 Ordinary type parameters admit copyable, storable values, excluding unit, views

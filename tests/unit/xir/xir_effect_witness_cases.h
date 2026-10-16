@@ -51,18 +51,19 @@ static void effect_default_witness_poison(const XrXirModule *module, uint32_t ca
     CHECK(!effect_witness_call_matches(&poisoned, caller, w));
 }
 static void effect_witness_paths(const XrXirModule *module, const XrXirEffects *effects) {
-    CHECK(!xr_xir_effects_suspend_witness(NULL, 0));
-    CHECK(!xr_xir_effects_suspend_witness(effects, module->function_count));
+    CHECK(!(xr_xir_effects_read(NULL, 0).status==XR_XIR_OK && xr_xir_effects_read(NULL, 0).suspend_witness.cause!=0));
+    CHECK(!(xr_xir_effects_read(effects, module->function_count).status==XR_XIR_OK && xr_xir_effects_read(effects, module->function_count).suspend_witness.cause!=0));
     for (uint32_t f = 0; f < module->function_count; ++f) {
-        XrXirEffect fact = xr_xir_effects_function(effects, f)->suspend;
-        const XrXirEffectWitness *w = xr_xir_effects_suspend_witness(effects, f);
+        XrXirEffect fact = xr_xir_effects_read(effects, f).control.suspend;
+        XrXirEffectFacts w_read=xr_xir_effects_read(effects, f);
+        const XrXirEffectWitness *w=(w_read.status==XR_XIR_OK && w_read.suspend_witness.cause!=0?&w_read.suspend_witness:NULL);
         if (fact == XR_XIR_EFFECT_NONE) { CHECK(!w); continue; }
         CHECK(w && w->distance < module->function_count);
         uint32_t at = f, steps = w->distance;
         for (;;) {
             CHECK(w->instruction < module->functions[at].instruction_count);
             const XrXirInstruction *op = &module->functions[at].instructions[w->instruction];
-            CHECK(xr_xir_effects_function(effects, at)->suspend == fact);
+            CHECK(xr_xir_effects_read(effects, at).control.suspend == fact);
             CHECK(w->distance == steps);
             if (!steps) {
                 CHECK(w->callee == UINT32_MAX);
@@ -75,7 +76,7 @@ static void effect_witness_paths(const XrXirModule *module, const XrXirEffects *
             CHECK(effect_witness_call_matches(module, at, w));
             effect_default_witness_poison(module, at, w);
             at = w->callee; --steps;
-            w = xr_xir_effects_suspend_witness(effects, at); CHECK(w);
+            w_read=xr_xir_effects_read(effects, at);w=(w_read.status==XR_XIR_OK && w_read.suspend_witness.cause!=0?&w_read.suspend_witness:NULL); CHECK(w);
         }
     }
 }

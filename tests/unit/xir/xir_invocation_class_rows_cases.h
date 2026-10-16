@@ -127,18 +127,21 @@ static void invocation_class_rows_fixture(InvocationClassRowsFixture *f,uint32_t
 static XrXirStatus conditional_class_rows_replay(const XrXirCompileContext *context,
     XrXirEffects *effects) {
     EffectInvocationCertificate *certificate=effects->invocations;
-    EffectInvocationOwner replay=*certificate->equations;
+    EffectInvocationRead replay={0};
+    XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
+    if (opening!=XR_XIR_OK) return opening;
     if (!effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
     replay.work=context;replay.effects=effects;
     replay.declared=certificate->declared;
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
-    return effect_invocation_class_verify_read(&replay,&body);
+    XrXirStatus status=effect_invocation_class_verify_read(&replay,&body);
+    effect_invocation_read_close(&replay);return status;
 }
 
 static void conditional_class_rows_rejections(const XrXirCompileContext *context,
     XrXirEffects *effects,uint32_t node,uint32_t value,uint32_t expected) {
-    EffectInvocationNode *entry=&effects->invocations->equations->nodes[node];uint32_t at=0;
+    EffectInvocationNode *entry=&effects->invocations->final->nodes[node];uint32_t at=0;
     CHECK(effect_invocation_class_find(context,entry,value,&at)==XR_XIR_OK);
     EffectInvocationClassFact saved=entry->classes[at];
     entry->classes[at].mask=expected==1?5:1;entry->classes[at].rank=expected==1?0:1;
@@ -186,10 +189,10 @@ static XrXirStatus conditional_class_rows_case(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) { phase=3;status=conditional_class_rows_replay(context,effects); }
     if (status==XR_XIR_OK && oracle) {
         EffectInvocationCertificate *certificate=effects->invocations;
-        EffectInvocationOwner *owner=certificate->equations;
+        EffectInvocationFinal *owner=certificate->final;
         const uint32_t values[7]={2,9,7,4,9,2,7},masks[7]={1,1,1,5,5,5,5};
         uint32_t selected=owner->roots[3],output=0;
-        CHECK(!owner->body.read.owner && !owner->work && owner->class_enabled);
+        CHECK(owner->nodes[selected].class_count);
         CHECK(xir_effects_class_value(context,effects,selected,3,values[mode],&output)==XR_XIR_OK && output==masks[mode]);
         if (mode==6) {
             output=0;CHECK(xir_effects_class_value(context,effects,selected,3,2,&output)==XR_XIR_OK && output==5);

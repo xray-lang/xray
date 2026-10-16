@@ -169,7 +169,7 @@ static XrXirStatus ordinary_material_owner_operation(const XrXirCompileContext *
             current[0].mask=0;CHECK(original[0].mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
             current[0].mask=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
         }
-        status=effect_invocation_public_gate(context,certificate,2);
+        status=effect_invocation_public_gate(context,certificate);
         forest=owner->forest;owner->forest=NULL;
         effect_context_owner_free(owner);owner=NULL;
         memset(&f,0xCE,sizeof(f));CHECK(basis->references==1 && holder->references==1);
@@ -179,7 +179,7 @@ static XrXirStatus ordinary_material_owner_operation(const XrXirCompileContext *
         if (status==XR_XIR_OK) CHECK(mode==2 ? actual->op==XR_XIR_CELL_READ && actual->args[0]==0 : actual->immediate==42);
         if (status==XR_XIR_OK && mode==2) status=ordinary_material_cell_match(context,holder,true);
         if (status==XR_XIR_OK) status=effect_body_initial_roles_match(context,holder,0);
-        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,certificate,2);
+        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,certificate);
     }
     effect_context_forest_free(forest);effect_context_owner_free(owner);return status;
 }

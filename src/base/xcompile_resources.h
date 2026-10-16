@@ -49,6 +49,16 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_stats(
 /* Charge actual operations before starting them. Failed stages never refund work. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *resources, uint64_t units);
 
+/* Prove a nonempty range lies within one live payload of this ledger without
+ * dereferencing the candidate address or its prefix. Each live allocation
+ * examined consumes one work unit; no allocation or payload access occurs.
+ * Headers, foreign and freed storage do not qualify. Success is a current
+ * extent observation, not a pin, allocation generation or semantic authority;
+ * the caller must exclude
+ * payload mutation, resize and free throughout the subsequent read. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
+    const void *memory, size_t bytes);
+
 /* Check one prospective payload allocation and its specified payload work at
  * this instant, without allocating, charging, or reserving resources. Actual
  * allocators must still perform their own admission and charge exactly once;

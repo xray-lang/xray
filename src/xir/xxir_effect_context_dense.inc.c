@@ -69,7 +69,7 @@ static XrXirStatus effect_dense_parameter(const EffectDenseRequest *request,
     }
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(terms->remaining,3+sizeof(*output))) return XR_XIR_BUDGET;
-    uint32_t kind=request->contexts->uses.contracts[request->selected].parameters[parameter].kind;
+    uint32_t kind=request->contexts->uses.outcomes_work.contracts[request->selected].parameters[parameter].kind;
     *output=callable && actual.present && !actual.fixed && kind==XR_XIR_EFFECT_PARAMETER_VARIABLE ?
         actual.type : declared;
     return XR_XIR_OK;
@@ -87,7 +87,7 @@ static XrXirStatus effect_dense_build(const XrXirCompileContext *context,
         request->execution->terms.remaining->resources!=context->resources ||
         request->execution->terms.status!=XR_XIR_OK ||
         request->execution->terms.types.count<request->contexts->terms.types.count ||
-        request->selected>=request->contexts->count || !request->contexts->uses.contracts ||
+        request->selected>=request->contexts->count || !request->contexts->uses.outcomes_work.contracts ||
         request->caller_index>=request->execution->count ||
         request->caller!=&request->execution->functions[request->caller_index] ||
         request->actual_types!=&request->execution->terms.types || !request->instruction ||
@@ -95,7 +95,7 @@ static XrXirStatus effect_dense_build(const XrXirCompileContext *context,
     const XrXirFunction *target=&request->contexts->functions[request->selected];
     const XrXirFunction *caller=request->caller;
     const XrXirInstruction *op=request->instruction;
-    if (request->contexts->uses.contracts[request->selected].parameter_count!=target->parameter_count ||
+    if (request->contexts->uses.outcomes_work.contracts[request->selected].parameter_count!=target->parameter_count ||
         (uint64_t)caller->parameter_count+caller->instruction_count!=request->value_count ||
         (op->args[1] && !caller->operands) || op->args[0]>caller->operand_count ||
         op->args[1]>caller->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;

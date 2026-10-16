@@ -1,0 +1,5 @@
+interface Measure { measure()->i64 }
+struct Meter implements Measure { value:i64; measure()->i64{return this.value} }
+fn read<T:Measure>(value:T)->i64{return value.measure()}
+fn relay<T:Measure>(value:T)->i64{return read<T>(value)+1}
+export fn referenceAnswer()->i64{return relay<Meter>(Meter{value:41})}
