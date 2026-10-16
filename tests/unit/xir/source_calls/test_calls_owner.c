@@ -31,7 +31,7 @@ static void fixture(CallsFixture *f) {
         f->declarations[i].id=i+1;f->declarations[i].kind=XR_XIR_SOURCE_FUNCTION;
         f->declarations[i].name=i?"g":"f";
         f->declarations[i].range=(XrXirSourceRange){0,1+(int)i*2,4,1+(int)i*2,5};
-        f->names[i]=(XrXirSourceDeclarationSyntax){f->declarations[i].range,XR_XIR_SOURCE_SYNTAX_NAME,0};
+        f->names[i]=(XrXirSourceDeclarationSyntax){.name=f->declarations[i].range,.role=XR_XIR_SOURCE_SYNTAX_NAME};
         f->functions[i]=(XrXirSourceFunctionRange){{0,1+(int)i*2,1,2+(int)i*4,2},true};
     }
     f->selections[0]=(XrXirSourceRange){0,4,3,4,4};

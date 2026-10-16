@@ -44,7 +44,7 @@ static void native_fixture(NativeFixture *f) {
     f->declarations[2]=(XrXirSourceDeclaration){.id=3,.kind=XR_XIR_SOURCE_FUNCTION,.name="main",.range={1,1,4,1,8},
         .type={XR_XIR_UNIT,0,true}};
     f->declarations[3]=(XrXirSourceDeclaration){.id=4,.parent=2,.kind=XR_XIR_SOURCE_PARAMETER,.name="value",.range={0},.type=f->schema};
-    for(uint32_t i=0;i<3;++i)f->names[i]=(XrXirSourceDeclarationSyntax){f->declarations[i].range,XR_XIR_SOURCE_SYNTAX_NAME,0};
+    for(uint32_t i=0;i<3;++i)f->names[i]=(XrXirSourceDeclarationSyntax){.name=f->declarations[i].range,.role=XR_XIR_SOURCE_SYNTAX_NAME};
     f->selection=(XrXirSourceRange){1,4,3,4,7};f->reference=(XrXirSourceReference){f->selection,2,2,XR_XIR_SOURCE_CALL};
     f->functions[2]=(XrXirSourceFunctionRange){{1,1,1,8,2},true};
     f->parameters=xr_malloc(sizeof(*f->parameters));f->flags=xr_malloc(sizeof(*f->flags));CHECK(f->parameters&&f->flags);

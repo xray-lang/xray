@@ -35,7 +35,7 @@ static void fixture(TypeFixture *f) {
     for(uint32_t i=0;i<3;++i){const char *name=i==0?"C":i==1?"S":"I";
         f->declarations[i].id=i+1;f->declarations[i].kind=XR_XIR_SOURCE_TYPE;f->declarations[i].name=name;
         f->declarations[i].range=(XrXirSourceRange){0,1+(int)i*2,7,1+(int)i*2,8};
-        f->names[i]=(XrXirSourceDeclarationSyntax){f->declarations[i].range,XR_XIR_SOURCE_SYNTAX_NAME,0};
+        f->names[i]=(XrXirSourceDeclarationSyntax){.name=f->declarations[i].range,.role=XR_XIR_SOURCE_SYNTAX_NAME};
         f->entries[i]=(XrXirSourceTypeFact){i==0?XR_XIR_SOURCE_TYPE_CLASS:i==1?XR_XIR_SOURCE_TYPE_STRUCT:XR_XIR_SOURCE_TYPE_INTERFACE,
             i==1?1:0,{0,1+(int)i*2,1,2+(int)i*2,2},true};
         if(i<2){f->nominals[i].module=(XrXirLiteral){"module",6};f->nominals[i].name=(XrXirLiteral){name,1};
