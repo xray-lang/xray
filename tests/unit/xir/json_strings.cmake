@@ -29,3 +29,11 @@ foreach(strings_test IN ITEMS test_xir_json_strings test_xir_json_strings_native
     add_test(NAME ${strings_test} COMMAND ${strings_test})
     set_tests_properties(${strings_test} PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;json;library;ownership;execution;abi")
 endforeach()
+foreach(strings_test IN ITEMS test_xir_json_strings_native test_xir_json_strings_mixed)
+    add_test(NAME ${strings_test}_runtime_resources COMMAND ${strings_test} --runtime-resources)
+    set_tests_properties(${strings_test}_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+        LABELS "unit;xir;source;json;ownership;runtime-fault;resources")
+endforeach()
+add_test(NAME test_xir_json_strings_runtime_resources COMMAND test_xir_json_strings_mixed --vm-runtime-resources)
+set_tests_properties(test_xir_json_strings_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;source;json;ownership;runtime-fault;resources")

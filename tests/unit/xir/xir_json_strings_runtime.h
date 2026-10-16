@@ -12,6 +12,13 @@
 #include "xir_runtime_allocations.h"
 #include "xir/xxir_nullable.h"
 #include "xir_json_quote_oracles.h"
+static bool json_strings_faults;
+static size_t json_strings_fault_cases,json_strings_fault_sites;
+typedef struct JsonStringsTrial {
+    const char *input,*expected;
+    size_t input_length,expected_length;
+    bool constant;
+} JsonStringsTrial;
 static XrXirValue json_strings_call(XrXirProgram *program,uint32_t entry,const char *bytes,size_t length) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
     XrXirValue argument={0},result={0};CHECK(xr_xir_string_new(domain,bytes,length,&argument)==XR_XIR_VALUE_OK);
@@ -32,8 +39,54 @@ static void json_strings_expected(const XrXirValue *value,const char *bytes,size
             size==length && !memcmp(text,bytes,length));
     } else CHECK(!payload);
 }
+static void json_strings_trial(XrXirProgram *program,uint32_t entry,const JsonStringsTrial *trial) {
+    XrXirDomain *domain=NULL;XrXirInstance *instance=NULL;XrXirValue argument={0},result={0};
+    XrXirCallStatus status=XR_XIR_CALL_READY;bool driven=false;
+    if(!trial->constant) {
+        XrXirValueStatus made=xr_xir_domain_new(65536,&domain);
+        if(made!=XR_XIR_VALUE_OK) {CHECK(made==XR_XIR_VALUE_OOM && !domain);status=XR_XIR_CALL_OOM;goto done;}
+        made=xr_xir_string_new(domain,trial->input,trial->input_length,&argument);
+        if(made!=XR_XIR_VALUE_OK) {CHECK(made==XR_XIR_VALUE_OOM && !argument.type && !argument.reserved && !argument.payload);status=XR_XIR_CALL_OOM;goto done;}
+    }
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    status=xr_xir_instance_new(program,&config,&instance);if(status==XR_XIR_CALL_OOM){CHECK(!instance);goto done;}
+    CHECK(status==XR_XIR_CALL_READY);
+    status=xr_xir_instance_start(instance,entry,trial->constant?NULL:&argument,trial->constant?0:1);
+    xr_xir_value_drop(&argument);if(domain){xr_xir_domain_drop(domain);domain=NULL;}
+    if(status==XR_XIR_CALL_READY) {
+        status=xr_xir_instance_poll_bounded(instance,4096).outcome.status;driven=status==XR_XIR_CALL_OOM;
+    }
+    if(status==XR_XIR_CALL_RETURNED)CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+    else {
+        CHECK(status==XR_XIR_CALL_OOM);XrXirCallStatus expected=xr_xir_instance_state(instance)==XR_XIR_INSTANCE_FAILED || !driven?
+            XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_OOM;
+        CHECK(xr_xir_instance_take_result(instance,&result)==expected && !result.type && !result.reserved && !result.payload);
+    }
+done:
+    if(instance)CHECK(xr_xir_instance_free(instance)==(driven?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
+    xr_xir_value_drop(&argument);if(domain)xr_xir_domain_drop(domain);
+    CHECK(status==XR_XIR_CALL_RETURNED || (runtime_fail_at!=SIZE_MAX && status==XR_XIR_CALL_OOM));
+    if(status==XR_XIR_CALL_RETURNED) {
+        if(trial->constant)CHECK(result.type==XR_XIR_I64 && !result.reserved && result.payload==42);
+        else json_strings_expected(&result,trial->expected,trial->expected_length);
+    }
+    xr_xir_value_drop(&result);
+}
+static void json_strings_full_faults(XrXirProgram *program,uint32_t entry,const JsonStringsTrial *trial) {
+    size_t held=runtime_live,bytes=runtime_bytes;CHECK(runtime_fail_at==SIZE_MAX);runtime_attempts=0;
+    json_strings_trial(program,entry,trial);size_t sites=runtime_attempts;CHECK(sites && runtime_live==held && runtime_bytes==bytes);
+    for(size_t site=0;site<sites;++site) {
+        runtime_attempts=0;runtime_fail_at=site;json_strings_trial(program,entry,trial);
+        CHECK(runtime_attempts>site && runtime_live==held && runtime_bytes==bytes);
+        runtime_fail_at=SIZE_MAX;json_strings_trial(program,entry,trial);CHECK(runtime_live==held && runtime_bytes==bytes);
+    }
+    ++json_strings_fault_cases;json_strings_fault_sites+=sites;
+}
 static void json_strings_case(XrXirProgram *program,uint32_t entry,const char *input,
     size_t size,const char *expected,size_t length) {
+    if(json_strings_faults) {
+        JsonStringsTrial trial={input,expected,size,length,false};json_strings_full_faults(program,entry,&trial);return;
+    }
     XrXirValue value=json_strings_call(program,entry,input,size);
     json_strings_expected(&value,expected,length);xr_xir_value_drop(&value);
 }
@@ -62,6 +115,11 @@ static void json_strings_oracles(XrXirProgram *program,const uint32_t entries[4]
         "\"\\ud800\\u0041\"","\"\\ud800\\ud800\"","\"\\ud800\\udc0\"","\"\\ud800x\\udc00\""};
     for(unsigned i=0;i<sizeof(rejected)/sizeof(*rejected);++i)
         json_strings_case(program,entries[1],rejected[i],strlen(rejected[i]),NULL,0);
+    if(json_strings_faults) {
+        JsonStringsTrial trial={NULL,NULL,0,0,true};json_strings_full_faults(program,entries[0],&trial);
+        printf("Ordinary JSON token full runtime FI: cases=%zu actual allocation sites=%zu, every ordinal and same Program retry\n",
+            json_strings_fault_cases,json_strings_fault_sites);
+    }
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entries[0],NULL,0)==XR_XIR_CALL_READY);
