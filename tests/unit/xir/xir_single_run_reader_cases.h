@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_single_run_reader_cases.h - Complete small-run values and atomic refusals
+ * xir_single_run_reader_cases.h - Current run values and complete Class membership
  */
 #ifndef XIR_SINGLE_RUN_READER_CASES_H
 #define XIR_SINGLE_RUN_READER_CASES_H
@@ -148,9 +148,78 @@ static void three_run_reader_controls(void) {
         malformed,sites);
 }
 
+/* These literal storage subjects admit no Final or effect permission. The
+ * expected membership comes from independent raw rows and literal outcomes. */
+static XrXirStatus class_scan_membership_case(const XrXirCompileContext *context,
+    uint32_t count,uint32_t mode,bool raw) {
+    CHECK(count && count<=17 && mode<9);
+    InvocationClassRowsFixture domain;invocation_class_rows_fixture(&domain,0);
+    EffectBodyRun runs[17]={0};XrXirInstruction instructions[68]={0};
+    for (uint32_t r=0;r<count;++r) {
+        uint32_t mask=mode<4?mode:0;
+        runs[r]=(EffectBodyRun){.first=4*r,.count=4,.mask=mask,
+            .base={.op=XR_XIR_COPY,.type=XR_XIR_I64}};
+        runs[r].delta[0]=runs[r].delta[1]=1;
+        if (r+1==count && mode==5) runs[r].base.type=(XrXirType)256;
+        if (r+1==count && mode==6) {runs[r].base.type=(XrXirType)255;runs[r].mask=2;}
+        for (uint32_t i=0;i<4;++i) {
+            instructions[4*r+i]=runs[r].base;
+            if (runs[r].mask&1u) instructions[4*r+i].op=(XrXirOp)((uint32_t)XR_XIR_COPY+i);
+            if (runs[r].mask&2u) instructions[4*r+i].type=(XrXirType)((uint32_t)runs[r].base.type+i);
+        }
+    }
+    if (mode==7) --runs[count-1].count;
+    if (mode==8) ++runs[count-1].first;
+    XrXirType parameter=XR_XIR_I64;
+    EffectBodyFunction body={.parameters=&parameter,.parameter_count=1,.instruction_count=4*count,
+        .runs=runs,.run_count=count,.run_capacity=count};
+    EffectBodyMaterial material={.resources=context->resources,.references=1,.functions=&body};
+    material.terms.types=domain.types;
+    material.domain=(XirMetadataDomain){.types=&material.terms.types,.function_count=1};
+    EffectInvocationClassFact fact={.value=1+2*count,.mask=EFFECT_CLASS_KNOWN};
+    EffectInvocationNode node={.body=0,.class_count=mode==4?1u:0u,.classes=mode==4?&fact:NULL};
+    EffectInvocationFinal final={.material=&material,.count=1,.capacity=1,.nodes=&node};
+    EffectInvocationRead read={.work=context,.final=&final};
+    EffectBodyFunctionHead head={.parameters=&parameter,.parameter_count=1,.instruction_count=4*count};
+    XrXirFunction function={.parameters=&parameter,.parameter_count=1,
+        .instructions=instructions,.instruction_count=4*count};
+    XrXirModule module={.functions=&function,.function_count=1,.types=&material.terms.types};
+    EffectInvocationFlow flow={.read=&read,.function=&head,.values=1+4*count};
+    flow.body=raw?effect_body_raw_request(context,&module):effect_body_owned_request(context,&material);
+    EffectInvocationNode saved=node;EffectInvocationClassFact saved_fact=fact;
+    XrXirStatus status=effect_invocation_class_values_match(&flow,100);
+    CHECK(!memcmp(&node,&saved,sizeof(node)) && !memcmp(&fact,&saved_fact,sizeof(fact)));
+    return status;
+}
+
+static void class_scan_membership_controls(void) {
+    const uint32_t counts[7]={1,2,3,4,5,9,17};unsigned cases=0,cuts=0;
+    for (uint32_t c=0;c<7;++c) for (uint32_t mode=0;mode<9;++mode)
+        for (uint32_t raw=0;raw<2;++raw) {
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+            XrCompileResourceStats before=rp_stats(&context);
+            XrXirStatus expected=mode<4 || (raw && mode>=7)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+            CHECK(class_scan_membership_case(&context,counts[c],mode,raw!=0)==expected);
+            uint64_t work=rp_stats(&context).work-before.work;
+            rp_owner_free(&context,before.live_bytes);rp_balanced(physical);++cases;
+            if (mode>=4) continue;
+            for (uint32_t exact=0;exact<2;++exact) {
+                physical=rp_mark();XrCompileResourceLimits limits=rp_caps();
+                CHECK(work && before.work+work<=limits.work);
+                limits.work=before.work+work-(exact?0u:1u);context=rp_owner(limits);
+                before=rp_stats(&context);
+                CHECK(class_scan_membership_case(&context,counts[c],mode,raw!=0)==
+                    (exact?XR_XIR_OK:XR_XIR_BUDGET));
+                rp_owner_free(&context,before.live_bytes);rp_balanced(physical);++cuts;
+            }
+        }
+    printf("Class membership: %u literal raw/owned cases, %u exact/minus work cuts PASS\n",cases,cuts);
+}
+
 static void single_run_reader_controls(void) {
     single_run_base_copy_controls();
     three_run_reader_controls();
+    class_scan_membership_controls();
     EffectBodyRun run={.first=0,.count=8,.mask=(1u<<6)|(1u<<7)|(1u<<8),
         .base={.op=XR_XIR_COPY,.type=XR_XIR_I64,.args={17,23},.targets={31,47},
             .immediate=-11,.type_arguments={0x7ffffff0u,0x80000001u}}};
