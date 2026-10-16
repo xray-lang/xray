@@ -28507,6 +28507,78 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 94
+    },
+    {
+      "id": "complete_cluster_wire_cluster_typed_control_surface",
+      "oracle_id": "complete_cluster_wire_cluster_typed_control_surface",
+      "source": "tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.xr",
+      "source_lf_sha256": "c726d5e2775db521e06274dc6bf7ed86a4ec3489b9489da4ff0215965ae6fca2",
+      "entry": "run",
+      "stdout_utf8": "true\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original entry;independent typed nullable call or cluster byte grammar/HMAC and recomputed rational Phi window. Array displays preserve first32/suffix and complete packet vectors. No sockets/TLS/constant-time/security/scheduler/resources/FI/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/cluster_typed_control_surface.xr",
+        "source_lf_sha256": "c726d5e2775db521e06274dc6bf7ed86a4ec3489b9489da4ff0215965ae6fca2"
+      },
+      "remaining_gates": [
+        "Whole original typed nullable entry or53-output wire body including all59assertions and123detector.record calls through actual VM/C/native;all source bytes unchanged.",
+        "All original sockets/TLS/security/scheduler and compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_cluster_wire_cluster_wire_protocol_pure_direct",
+      "oracle_id": "complete_cluster_wire_cluster_wire_protocol_pure_direct",
+      "source": "tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr",
+      "source_lf_sha256": "1987c57a4d5d4b8ed398e61a3b98544fe200c5b81665671e4af3e7a2f2fe154b",
+      "entry": "run",
+      "stdout_utf8": "[0, 0, 0, 4, 4, 170, 187, 204]\n4\n[170, 187, 204]\ntrue\ntrue\ntrue\ntrue\n[0, 0, 0, 80, 7, 3, 13, 98, 101, 110, 99, 104, 46, 112, 97, 121, 108, 111, 97, 100, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, ...(52 more)]\n3\nbench.payload\n64\n0\n63\ntrue\ntrue\n[0, 0, 0, 33, 1, 6, 10, 110, 111, 100, 101, 45, 97, 108, 112, 104, 97, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, ...(5 more)]\nnode-alpha\n[16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]\n16909060\ntrue\ntrue\n[0, 0, 0, 64, 2, 6, 9, 110, 111, 100, 101, 45, 98, 101, 116, 97, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, ...(36 more)]\nnode-beta\n[32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]\n[128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159]\n168496141\ntrue\ntrue\n[0, 0, 0, 33, 3, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, ...(5 more)]\n[192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223]\ntrue\n[0, 0, 0, 9, 5, 1, 2, 3, 4, 5, 6, 7, 8]\n72623859790382856\ntrue\n[0, 0, 0, 14, 8, 12, 119, 111, 114, 107, 101, 114, 46, 97, 108, 112, 104, 97]\nworker.alpha\ntrue\n[0, 0, 0, 21, 10, 12, 119, 111, 114, 107, 101, 114, 46, 97, 108, 112, 104, 97, 6, 110, 111, 114, 109, 97, 108]\nworker.alpha\nnormal\ntrue\n[222, 177, 211, 78, 112, 65, 67, 174, 167, 103, 211, 72, 30, 103, 148, 119, 237, 216, 38, 11, 128, 19, 186, 9, 95, 142, 114, 104, 110, 215, 15, 176]\ntrue\nfalse\n2\ntrue\ntrue\n100\n22\nfalse\ntrue\ntrue\nfalse\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original entry;independent typed nullable call or cluster byte grammar/HMAC and recomputed rational Phi window. Array displays preserve first32/suffix and complete packet vectors. No sockets/TLS/constant-time/security/scheduler/resources/FI/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/cluster_wire_protocol_pure_direct.xr",
+        "source_lf_sha256": "1987c57a4d5d4b8ed398e61a3b98544fe200c5b81665671e4af3e7a2f2fe154b"
+      },
+      "remaining_gates": [
+        "Whole original typed nullable entry or53-output wire body including all59assertions and123detector.record calls through actual VM/C/native;all source bytes unchanged.",
+        "All original sockets/TLS/security/scheduler and compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 53
     }
   ]
 }
