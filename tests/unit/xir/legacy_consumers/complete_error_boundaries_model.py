@@ -103,6 +103,7 @@ def observations():
         rows[name]=['[Uncaught Panic] E'+str(code).zfill(4)+': '+message]
     rows.update({name:trace['outputs'] for name,trace in map_boundary_traces().items()})
     rows['force_unwrap_error_shape']=null_unwrap_trace()['outputs']
+    rows[_JSON_PATH_NAME]=json_value_path_trace()['outputs']
     if set(rows)!=_NAMES:raise ValueError('Error boundary model lost a whole program')
     return rows
 
@@ -112,11 +113,15 @@ def expected_rows():
         path=Path(name)
         if path.is_absolute() or path.as_posix()!=name or '..' in path.parts or path.parts[0] not in {'tests','spec','stdlib','src'}:raise ValueError('Error boundary input is not delivered')
         if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Error boundary source or authority changed: '+name)
+    original_json=(ROOT/_JSON_PATH_ORIGINAL).read_bytes().replace(b'\r\n',b'\n').decode('utf-8')
+    selected_json=(ROOT/_JSON_PATH_PORT).read_bytes().replace(b'\r\n',b'\n').decode('utf-8')
+    if original_json.count('catch panic(e)')!=5 or original_json.count('print(')!=14 or selected_json!=original_json.replace('catch panic(e)','catch(e)'):
+        raise ValueError('JSON value-channel port changed more than five catch qualifiers')
     reference=map_diagnostic_reference()
     rows=[]
     for name,values in sorted(observations().items()):
         source=_PROGRAMS[name]
-        original_source=_NULL_ORIGINAL if name==_NULL_NAME else source
+        original_source=_JSON_PATH_ORIGINAL if name==_JSON_PATH_NAME else _NULL_ORIGINAL if name==_NULL_NAME else source
         if Path(original_source).stem!=name or source not in _INPUTS:raise ValueError('Error boundary exact source identity changed')
         uncaught=name.startswith('array_index_set_')
         text=''.join((str(v).lower() if type(v) is bool else str(v))+'\n' for v in values)
@@ -132,6 +137,9 @@ def expected_rows():
             rows[-1]['required_semantic_trace']=null_unwrap_trace()
             rows[-1]['diagnostic_acceptance_basis']=null_unwrap_reference()
             rows[-1]['model']='Complete original absent i64 Optional force-unwrap program after frozen panic-channel port;only catch kind and obsolete comment migrated,all expressions and message/code prints retained. Exact canonical fixed4606 message and E0413;no ordinary error/lifetime/FI/provider qualification.'
+        if name==_JSON_PATH_NAME:
+            rows[-1]['required_semantic_trace']=json_value_path_trace()
+            rows[-1]['model']='Whole original concrete bool Map/typed JSON.require program;only five panic catches become ordinary value-error catches per published JSON.PathError. All14print expressions,helper body,JSON literals,typed reads and mutation order retained;6reachable labels derived independently,no error payload invented. No Source/FI/lifetime/provider qualification inferred.'
     return rows
 
 
@@ -304,3 +312,47 @@ def null_unwrap_trace():
         'ordinary_value_error_catch_granted':ordinary_error_caught,'declared_type':'i64?',
         'outer_absence':True,'unwrapped_layers_attempted':1,'catch_kind':'panic',
         'all_three_original_print_expressions_preserved':True,'PanicInfo_lifetime_FI_provider_qualification':'OPEN'}
+
+
+_JSON_PATH_NAME='map_json_concrete_type_check'
+_JSON_PATH_ORIGINAL='tests/diff/cases/semantics/collections/map_json_concrete_type_check.xr'
+_JSON_PATH_PORT='tests/unit/xir/legacy_consumers/fixtures/json_require_value_channel/root.xr'
+_PROGRAMS[_JSON_PATH_NAME]=_JSON_PATH_PORT
+_NAMES=frozenset(set(_NAMES)|{_JSON_PATH_NAME})
+_INPUTS.update({'tests/diff/cases/semantics/collections/map_json_concrete_type_check.xr': 'bea49b5bf2b6e2e3e90218fde59036b384ea1a7e7562245a109c06c8627e0f52', 'tests/unit/xir/legacy_consumers/fixtures/json_require_value_channel/root.xr': 'ceff785f14a7f2a83b2e6b4b399e4a9b1ed7bca7c9cfee6b413116df068cf65d'})
+_REQUIRED_INPUTS += (_JSON_PATH_ORIGINAL,_JSON_PATH_PORT)
+
+
+class JsonPathValueFailure(Exception):
+    """An ordinary failure marker; no unobserved public PathError payload."""
+
+
+def json_require_exact(root,key,schema):
+    from complete_typed_json_model import decode,INVALID
+    if schema not in ('bool','i64') or type(root) is not dict or type(key) is not str:raise ValueError('Unreviewed typed path model domain')
+    if key not in root:raise JsonPathValueFailure()
+    value=decode(root[key],schema)
+    if value is INVALID:raise JsonPathValueFailure()
+    return value
+
+
+def json_value_path_trace():
+    root={'goodBool':True,'badBool':1,'goodInt':7,'badInt':3.5};reads=[];outputs=[];catches=[];state=[];helper_calls=[]
+    def require(key,schema):reads.append((key,schema));return json_require_exact(root,key,schema)
+    def store(key,value):
+        if type(key) is not bool or type(value) is not int:raise ValueError('Concrete Map requires bool and i64')
+        state[:]=[(key,value)]
+    def takes_bool(value):helper_calls.append(value);outputs.append('fn='+str(value).lower())
+    store(require('goodBool','bool'),require('goodInt','i64'));outputs.append('map='+str(state[0][1]))
+    for label in ('map-key','map-value','fn','var','return'):
+        try:
+            if label=='map-key':probe=require('badBool','bool');outputs.append(str(any(key==probe for key,_ in state)).lower());outputs.append('bad-map-key')
+            elif label=='map-value':store(require('goodBool','bool'),require('badInt','i64'));outputs.append('bad-map-value')
+            elif label=='fn':takes_bool(require('badBool','bool'));outputs.append('bad-fn')
+            elif label=='var':value=require('badInt','i64');outputs.append('bad-var='+str(value))
+            else:outputs.append(str(require('badInt','i64')));outputs.append('bad-return')
+        except JsonPathValueFailure:catches.append(label);outputs.append('caught-'+label)
+    return {'outputs':outputs,'typed_path_reads':reads,'ordinary_error_catches':catches,'panic_catches':0,
+        'final_map_entries':state,'takes_bool_body_calls':len(helper_calls),'original_print_expressions':14,
+        'original_helper_bodies_preserved':True,'unobserved_PathError_payload_message_code':'NOT_INVENTED',
+        'actual_Source_error_value_ownership_FI_provider_qualified':False}

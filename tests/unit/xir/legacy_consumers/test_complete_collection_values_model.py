@@ -146,4 +146,34 @@ class CollectionValues(unittest.TestCase):
         self.assertEqual(len(rows),3);self.assertEqual(sum(row['observation_count'] for row in rows),24)
         for row in rows:self.assertEqual(row['source'],row['original_source']);self.assertIn('required_semantic_trace',row)
 
+    def test_complete_type_names_keep_all_ten_operands_and_exact_top_names(self):
+        trace=model.type_names_trace()
+        self.assertEqual(trace['observations'],['i64','f64','bool','null','string','Array','Map','Set','Range','string'])
+        self.assertEqual((trace['original_typeName_calls'],trace['original_print_expressions']),(10,10))
+        self.assertEqual(trace['all_original_operand_values'][5:9],[[1,2,3],{'a':1},[1,2,3],{'start':2,'end':6,'step':1,'inclusive':False}])
+        self.assertFalse(trace['Range_Source_admission_and_result_string_ownership_FI_provider_qualified'])
+
+    def test_type_name_builder_port_preserves_every_other_original_byte(self):
+        original=(model.ROOT/model._TYPE_NAMES_ORIGINAL).read_text();port=(model.ROOT/model._TYPE_NAMES_PORT).read_text()
+        self.assertEqual(model.port_text(model._TYPE_NAMES_NAME,original),port)
+        self.assertEqual(port.replace('var sb = ""','var sb = StringBuilder()'),original)
+        self.assertEqual(port.count('print(typeName('),10)
+
+    def test_type_name_public_reference_rejects_changed_blob_and_unreviewed_operand(self):
+        from pathlib import Path
+        from unittest import mock
+        import json
+        ref=json.loads((model.ROOT/model._TYPE_NAMES_REFERENCE).read_text());name=ref['source_snapshots'][0]['snapshot'];saved=Path.read_bytes
+        def changed(path):return saved(path)+b'\nchanged\n' if path==model.ROOT/name else saved(path)
+        with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.type_name_reference()
+        for shape in (None,0,True,'StringBuilder',('Nullable','i64'),('Map','i64','i64')):
+            with self.subTest(shape=shape),self.assertRaises(ValueError):model.reviewed_type_name(shape)
+        self.assertEqual(model.reviewed_type_name(('Map','string','i64')),'Map')
+
+    def test_type_name_oracle_follows_derived_names_not_product_output(self):
+        from unittest import mock
+        with mock.patch.object(model,'reviewed_type_name',lambda shape:'changed'):
+            row=next(x for x in model.expected_rows() if x['original_source']==model._TYPE_NAMES_ORIGINAL)
+            self.assertEqual(row['expected']['stdout_utf8'],'changed\n'*10)
+
 if __name__=='__main__':unittest.main()

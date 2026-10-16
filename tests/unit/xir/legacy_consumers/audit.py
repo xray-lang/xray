@@ -372,6 +372,11 @@ TARGET_PORT_ARGUMENTS['tests/diff/cases/semantics/collections/array_member_refer
 FROZEN_TARGETS['tests/regression/08_oop/0836_closure_cycle_no_false_positives.xr'] = ('POSITIVE_COMPLETE_ACYCLIC_CLOSURES_AFTER_CLASS_RECEIVER_PORT', 'P10')
 TARGET_PORT_ARGUMENTS['tests/regression/08_oop/0836_closure_cycle_no_false_positives.xr'] = []
 
+FROZEN_TARGETS['tests/diff/cases/semantics/collections/type_names_shared_core.xr'] = ('POSITIVE_COMPLETE_TYPE_NAMES_AFTER_OWNED_STRING_PORT', 'P09')
+TARGET_PORT_ARGUMENTS['tests/diff/cases/semantics/collections/type_names_shared_core.xr'] = []
+FROZEN_TARGETS['tests/diff/cases/semantics/collections/map_json_concrete_type_check.xr'] = ('POSITIVE_COMPLETE_JSON_REQUIRE_VALUE_ERROR_CHANNEL_PORT', 'P12')
+TARGET_PORT_ARGUMENTS['tests/diff/cases/semantics/collections/map_json_concrete_type_check.xr'] = []
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)

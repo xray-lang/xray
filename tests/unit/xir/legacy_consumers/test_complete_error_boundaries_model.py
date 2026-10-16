@@ -192,4 +192,38 @@ class NullUnwrapBoundary(unittest.TestCase):
         self.assertEqual(product['source'],model._NULL_PORT);self.assertEqual(product['preserved_original_identity']['source'],model._NULL_ORIGINAL)
         self.assertEqual(product['stdout_utf8'],row['expected']['stdout_utf8']);self.assertEqual(product['entry'],'run')
 
+    def test_complete_json_require_value_channel_keeps_all_five_failures(self):
+        trace=model.json_value_path_trace()
+        self.assertEqual(trace['outputs'],['map=7','caught-map-key','caught-map-value','caught-fn','caught-var','caught-return'])
+        self.assertEqual(trace['ordinary_error_catches'],['map-key','map-value','fn','var','return'])
+        self.assertEqual(trace['panic_catches'],0);self.assertEqual(trace['final_map_entries'],[(True,7)])
+        self.assertEqual(trace['takes_bool_body_calls'],0);self.assertEqual(trace['original_print_expressions'],14)
+        self.assertEqual(trace['typed_path_reads'],[('goodBool','bool'),('goodInt','i64'),('badBool','bool'),('goodBool','bool'),('badInt','i64'),('badBool','bool'),('badInt','i64'),('badInt','i64')])
+
+    def test_json_require_exact_types_and_ordinary_failure_are_separate_from_panic(self):
+        self.assertEqual(model.json_require_exact({'x':7},'x','i64'),7)
+        self.assertIs(model.json_require_exact({'x':True},'x','bool'),True)
+        for value,schema in ((1,'bool'),(True,'i64'),(3.5,'i64'),(None,'bool')):
+            with self.subTest(value=value),self.assertRaises(model.JsonPathValueFailure):model.json_require_exact({'x':value},'x',schema)
+        self.assertTrue(issubclass(model.JsonPathValueFailure,Exception));self.assertFalse(issubclass(model.NullUnwrapPanic,Exception))
+        with self.assertRaises(model.JsonPathValueFailure):model.json_require_exact({},'x','i64')
+
+    def test_json_require_port_only_changes_five_catch_qualifiers(self):
+        original=(model.ROOT/model._JSON_PATH_ORIGINAL).read_text();port=(model.ROOT/model._JSON_PATH_PORT).read_text()
+        self.assertEqual(original.count('catch panic(e)'),5);self.assertEqual(port.count('catch(e)'),5)
+        self.assertEqual(original.replace('catch panic(e)','catch(e)'),port);self.assertEqual(original.count('print('),14);self.assertEqual(port.count('print('),14)
+        self.assertIn('fn takes_bool(x: bool)',port);self.assertIn('var m: Map<bool, i64> = #{}',port)
+
+    def test_json_require_exact_positive_oracle_has_no_payload_or_rejection_substitute(self):
+        row=next(x for x in model.expected_rows() if x['original_source']==model._JSON_PATH_ORIGINAL)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'map=7\ncaught-map-key\ncaught-map-value\ncaught-fn\ncaught-var\ncaught-return\n','stderr_utf8':''})
+        self.assertEqual(row['observation_count'],6);self.assertEqual(row['required_semantic_trace']['unobserved_PathError_payload_message_code'],'NOT_INVENTED')
+        import hashlib
+        from pathlib import Path
+        from unittest import mock
+        saved=Path.read_bytes;path=model.ROOT/model._JSON_PATH_PORT;changed=saved(path)+b'\nprint(1)\n';pins=dict(model._INPUTS);pins[model._JSON_PATH_PORT]=hashlib.sha256(changed.replace(b'\r\n',b'\n')).hexdigest()
+        def read(pathValue):return changed if pathValue==path else saved(pathValue)
+        with mock.patch.object(model,'_INPUTS',pins),mock.patch.object(Path,'read_bytes',read),self.assertRaisesRegex(ValueError,'more than five catch'):
+            model.expected_rows()
+
 if __name__=='__main__':unittest.main()

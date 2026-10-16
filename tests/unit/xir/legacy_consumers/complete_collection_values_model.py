@@ -324,12 +324,16 @@ def observations():
     key=lambda a,b:(a,b);mapping={key(1,'x'):'one',key(2,'yy'):'two'};mapping[key(1,'x')]='ONE';out=[len(mapping),mapping[key(1,'x')],mapping[key(2,'yy')],key(1,'x') in mapping,key(3,'z') in mapping];removed=mapping.pop(key(2,'yy'),None) is not None;out.extend([removed,len(mapping)]);seen={key(5,'p'),key(5,'p'),key(6,'q')};out.extend([len(seen),key(5,'p') in seen,key(9,'z') in seen]);rows['user_hashable_map_set_key']=out
     rows.update(display_observations())
     rows.update(value_boundary_observations())
+    rows[_TYPE_NAMES_NAME]=type_names_trace()['observations']
     if set(rows)!=_NAMES:raise ValueError('Collection model lost a full source')
     return rows
 
 _PORT_NAMES=frozenset({'stringbuilder_append_shared_core','method_self_return_ownership','stringbuilder_scalar_known_append_shared_core'})
 
 def port_text(name,text):
+    if name==_TYPE_NAMES_NAME:
+        if text.count('var sb = StringBuilder()')!=1:raise ValueError('Whole type-name retirement lost its single constructor')
+        return text.replace('var sb = StringBuilder()','var sb = ""')
     if name not in _PORT_NAMES:raise ValueError('Unreviewed StringBuilder retirement port')
     if name=='method_self_return_ownership':
         transforms=[('var sb = StringBuilder()','var sb = ""',2),('sb.append("hello")','sb += "hello"',1),('sb.append("done")','sb += "done"',1),
@@ -377,5 +381,62 @@ def expected_rows():
         if name in _VALUE_BOUNDARY_PROGRAMS:
             row['required_semantic_trace']=value_boundary_semantic_traces()[name]
             row['model']='Complete unchanged original explicit bool conversions,Range and nullable ToString joins,or all35 iterations/105 mutations with public first32 display and exact remaining suffix. Full underlying values retained;no implicit conditions,physical layout,output ownership,Source,FI,lifetime or provider qualification inferred.'
+    for row in rows:
+        if row['original_source']==_TYPE_NAMES_ORIGINAL:
+            row['required_semantic_trace']=type_names_trace()
+            row['model']='Whole original ten typeName/print calls with all scalar,Array,Map,Set andRange operands preserved;only retired builder becomes owned String. Fixed neutral name labels and Source top-family rules;Range Source admission,string ownership,FI and providers remain unqualified.'
     rows.extend(json_boundary.expected_rows())
     return rows
+
+
+_TYPE_NAMES_NAME='type_names_shared_core'
+_TYPE_NAMES_ORIGINAL='tests/diff/cases/semantics/collections/type_names_shared_core.xr'
+_TYPE_NAMES_PORT='tests/unit/xir/legacy_consumers/fixtures/type_names_owned_string/root.xr'
+_TYPE_NAMES_REFERENCE='tests/unit/xir/legacy_consumers/fixtures/type_names_reference/reference.json'
+_PROGRAMS[_TYPE_NAMES_NAME]=_TYPE_NAMES_ORIGINAL
+_PORTS[_TYPE_NAMES_NAME]=_TYPE_NAMES_PORT
+_NAMES=frozenset(set(_NAMES)|{_TYPE_NAMES_NAME})
+_PORT_NAMES=frozenset(set(_PORT_NAMES)|{_TYPE_NAMES_NAME})
+_INPUTS.update({'tests/diff/cases/semantics/collections/type_names_shared_core.xr': '55aba745cce5ef51de15ee28fbd38f3c78c06f7a4cd6d4657103a5d779372f40', 'tests/unit/xir/legacy_consumers/fixtures/type_names_owned_string/root.xr': '9c9798c5eea11e5bfef550e52134dd7af4b58d6915ada35fbbc98f15b6cd1204', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/reference.json': 'f1377b58bd991f76e6756cec3506a3df173423c2289d1fc6eea2288839bc1adb', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/xr_type_names_core.h.txt': '8a506e6252834b12c27686390502072c2110a2148418c16961e9fb58a856deb1', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/xxir_source_type_name.inc.c.txt': '0109a06b9e09b2968061d9cdd27bdd088b66ee75d159e827773caf3d61bcaa51', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/014-13-built-in-functions.md.txt': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380', 'spec/source/sections/014-13-built-in-functions.md': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380'})
+_REQUIRED_INPUTS += ('tests/diff/cases/semantics/collections/type_names_shared_core.xr', 'tests/unit/xir/legacy_consumers/fixtures/type_names_owned_string/root.xr', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/reference.json', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/xr_type_names_core.h.txt', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/xxir_source_type_name.inc.c.txt', 'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/014-13-built-in-functions.md.txt', 'spec/source/sections/014-13-built-in-functions.md')
+
+
+def type_name_reference():
+    import json,re
+    ref=json.loads((ROOT/_TYPE_NAMES_REFERENCE).read_text(encoding='utf-8'))
+    if ref['fixed_commit']!='460622cf45c82ab0bc93be14d2f0ac3fce21bef6' or ref['Range_value_Source_admission_qualified'] or ref['runtime_output_used_to_author_expectations']:
+        raise ValueError('Type-name reference scope or fixed identity changed')
+    content={}
+    wanted={'src/shared/xr_type_names_core.h','src/xir/xxir_source_type_name.inc.c','spec/source/sections/014-13-built-in-functions.md'}
+    if len(ref['source_snapshots'])!=3 or {x['source'] for x in ref['source_snapshots']}!=wanted:raise ValueError('Type-name reference source set changed')
+    for row in ref['source_snapshots']:
+        if row['snapshot'] not in _INPUTS:raise ValueError('Type-name reference is not delivered')
+        raw=(ROOT/row['snapshot']).read_bytes().replace(b'\r\n',b'\n')
+        if hashlib.sha256(raw).hexdigest()!=row['lf_sha256'] or hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()!=row['git_blob_oid']:
+            raise ValueError('Type-name source snapshot changed')
+        content[row['source']]=raw.decode()
+    macros=dict(re.findall(r'^#define TYPE_NAME_([A-Z0-9_]+) "([^"\n]+)"$',content['src/shared/xr_type_names_core.h'],re.M))
+    wanted={'I64':'i64','F64':'f64','BOOL':'bool','NULL':'null','STRING':'string','ARRAY':'Array','MAP':'Map','SET':'Set','RANGE':'Range'}
+    if any(macros.get(k)!=v for k,v in wanted.items()):raise ValueError('Public type-name labels changed')
+    source=content['src/xir/xxir_source_type_name.inc.c']
+    if 'case XR_XIR_TYPE_MAP:' not in source or 'case XR_XIR_TYPE_SET:' not in source or 'if (!top)' not in source or 'TYPE_NAME_MAP : TYPE_NAME_SET' not in source:
+        raise ValueError('Top-level builtin Map/Set name policy changed')
+    return wanted
+
+
+def reviewed_type_name(shape):
+    names=type_name_reference()
+    scalar={'i64':'I64','f64':'F64','bool':'BOOL','null-literal':'NULL','string':'STRING'}
+    if type(shape) is str and shape in scalar:return names[scalar[shape]]
+    admitted={('Array','i64'):'ARRAY',('Map','string','i64'):'MAP',('Set','i64'):'SET',('Range','i64'):'RANGE'}
+    if type(shape) is tuple and shape in admitted:return names[admitted[shape]]
+    raise ValueError('Unreviewed whole-program type-name operand')
+
+
+def type_names_trace():
+    shapes=['i64','f64','bool','null-literal','string',('Array','i64'),('Map','string','i64'),('Set','i64'),('Range','i64'),'string']
+    values=[0,1.5,True,None,'x',[1,2,3],{'a':1},[1,2,3],{'start':2,'end':6,'step':1,'inclusive':False},'']
+    return {'observations':[reviewed_type_name(shape) for shape in shapes],'original_operand_shapes':shapes,
+        'all_original_operand_values':values,'original_typeName_calls':10,'original_print_expressions':10,
+        'retired_builder_target':'owned empty String','generic_arguments_not_printed_for_top_builtin_families':True,
+        'Range_Source_admission_and_result_string_ownership_FI_provider_qualified':False}

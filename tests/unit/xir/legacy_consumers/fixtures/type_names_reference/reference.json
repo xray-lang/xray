@@ -1,0 +1,27 @@
+{
+  "fixed_commit": "460622cf45c82ab0bc93be14d2f0ac3fce21bef6",
+  "source_snapshots": [
+    {
+      "source": "src/shared/xr_type_names_core.h",
+      "snapshot": "tests/unit/xir/legacy_consumers/fixtures/type_names_reference/xr_type_names_core.h.txt",
+      "git_blob_oid": "fd055080e800fad1ce160158a617b258bb820a59",
+      "lf_sha256": "8a506e6252834b12c27686390502072c2110a2148418c16961e9fb58a856deb1"
+    },
+    {
+      "source": "src/xir/xxir_source_type_name.inc.c",
+      "snapshot": "tests/unit/xir/legacy_consumers/fixtures/type_names_reference/xxir_source_type_name.inc.c.txt",
+      "git_blob_oid": "bbda6b259dca97f835910f02a75a6d949dbce865",
+      "lf_sha256": "0109a06b9e09b2968061d9cdd27bdd088b66ee75d159e827773caf3d61bcaa51"
+    },
+    {
+      "source": "spec/source/sections/014-13-built-in-functions.md",
+      "snapshot": "tests/unit/xir/legacy_consumers/fixtures/type_names_reference/014-13-built-in-functions.md.txt",
+      "git_blob_oid": "925f0dcb73390315c6de20e19c1f259564372160",
+      "lf_sha256": "2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380"
+    }
+  ],
+  "name_reference_only": true,
+  "Range_value_Source_admission_qualified": false,
+  "existing_StringBuilder_retirement_decision": "Owned String;no constructor alias",
+  "runtime_output_used_to_author_expectations": false
+}

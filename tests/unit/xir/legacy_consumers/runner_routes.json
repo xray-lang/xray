@@ -89089,7 +89089,33 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/json_require_value_channel/root.xr",
+        "lf_sha256": "ceff785f14a7f2a83b2e6b4b399e4a9b1ed7bca7c9cfee6b413116df068cf65d",
+        "owner_package": "P12",
+        "qualification": "NOT_RUN",
+        "frozen_basis": "Spec015 JSON.require throws JSON.PathError in the ordinary value-error channel;spec009 separates it from panic. Only five catch qualifiers change. Preserve the complete JSON root,typed require calls,Map mutations,helper body and all14print expressions;no payload spelling invented.",
+        "differential_input_obligation": {
+          "arguments": [],
+          "stdin_hex": "",
+          "arguments_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/json_require_value_channel/root.args",
+            "state": "MISSING"
+          },
+          "stdin_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/json_require_value_channel/root.stdin",
+            "state": "MISSING"
+          },
+          "execution": "NOT_RUN"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_JSON_REQUIRE_VALUE_ERROR_CHANNEL_PORT",
+        "owner_package": "P12",
+        "qualification": "NOT_RUN",
+        "reason": "Spec015 JSON.require throws JSON.PathError in the ordinary value-error channel;spec009 separates it from panic. Only five catch qualifiers change. Preserve the complete JSON root,typed require calls,Map mutations,helper body and all14print expressions;no payload spelling invented."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/map_key_contextual_literal.xr",
@@ -90134,7 +90160,33 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/type_names_owned_string/root.xr",
+        "lf_sha256": "9c9798c5eea11e5bfef550e52134dd7af4b58d6915ada35fbbc98f15b6cd1204",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": "Preserve all10typeName calls and all scalar/container/range operands;only retired StringBuilder construction becomes an owned empty String. Public fixed neutral name registry and Source top-level Map/Set family policy fix exact names;Range Source admission is separately unqualified.",
+        "differential_input_obligation": {
+          "arguments": [],
+          "stdin_hex": "",
+          "arguments_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/type_names_owned_string/root.args",
+            "state": "MISSING"
+          },
+          "stdin_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/type_names_owned_string/root.stdin",
+            "state": "MISSING"
+          },
+          "execution": "NOT_RUN"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_TYPE_NAMES_AFTER_OWNED_STRING_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Preserve all10typeName calls and all scalar/container/range operands;only retired StringBuilder construction becomes an owned empty String. Public fixed neutral name registry and Source top-level Map/Set family policy fix exact names;Range Source admission is separately unqualified."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/value_format_truncation_shared_core.xr",

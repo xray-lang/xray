@@ -32916,6 +32916,64 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 0
+    },
+    {
+      "id": "complete_collection_values_type_names_shared_core",
+      "oracle_id": "complete_collection_values_type_names_shared_core",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/type_names_owned_string/root.xr",
+      "source_lf_sha256": "9c9798c5eea11e5bfef550e52134dd7af4b58d6915ada35fbbc98f15b6cd1204",
+      "entry": "run",
+      "stdout_utf8": "i64\nf64\nbool\nnull\nstring\nArray\nMap\nSet\nRange\nstring\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Whole original ten typeName/print calls with all scalar,Array,Map,Set andRange operands preserved;only retired builder becomes owned String. Fixed neutral name labels and Source top-family rules;Range Source admission,string ownership,FI and providers remain unqualified.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/type_names_shared_core.xr",
+        "source_lf_sha256": "55aba745cce5ef51de15ee28fbd38f3c78c06f7a4cd6d4657103a5d779372f40"
+      },
+      "remaining_gates": [
+        "Preserve all10typeName calls and all scalar/container/range operands;only retired StringBuilder construction becomes an owned empty String. Public fixed neutral name registry and Source top-level Map/Set family policy fix exact names;Range Source admission is separately unqualified.",
+        "Full original execution;legal Source refusal remains failure;all FI/resources/lifetime/physical/provider/safety/mixed obligations remain."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_error_boundaries_map_json_concrete_type_check",
+      "oracle_id": "complete_error_boundaries_map_json_concrete_type_check",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/json_require_value_channel/root.xr",
+      "source_lf_sha256": "ceff785f14a7f2a83b2e6b4b399e4a9b1ed7bca7c9cfee6b413116df068cf65d",
+      "entry": "run",
+      "stdout_utf8": "map=7\ncaught-map-key\ncaught-map-value\ncaught-fn\ncaught-var\ncaught-return\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P12",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Whole original concrete bool Map/typed JSON.require program;only five panic catches become ordinary value-error catches per published JSON.PathError. All14print expressions,helper body,JSON literals,typed reads and mutation order retained;6reachable labels derived independently,no error payload invented. No Source/FI/lifetime/provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/map_json_concrete_type_check.xr",
+        "source_lf_sha256": "bea49b5bf2b6e2e3e90218fde59036b384ea1a7e7562245a109c06c8627e0f52"
+      },
+      "remaining_gates": [
+        "Spec015 JSON.require throws JSON.PathError in the ordinary value-error channel;spec009 separates it from panic. Only five catch qualifiers change. Preserve the complete JSON root,typed require calls,Map mutations,helper body and all14print expressions;no payload spelling invented.",
+        "Full original execution;legal Source refusal remains failure;all FI/resources/lifetime/physical/provider/safety/mixed obligations remain."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
     }
   ]
 }
