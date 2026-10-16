@@ -21,6 +21,8 @@
 #include "xxir_class_origin_internal.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_task_internal.h"
+#include "xxir_generator_internal.h"
+#include "xxir_instance_generator_internal.h"
 #include "xxir_task_result_internal.h"
 #include "xxir_struct.h"
 #include "xxir_output.h"
@@ -110,6 +112,7 @@ static bool function_bound_admitted(const XrXirProgram *program, uint32_t entry,
     const XrXirTypeNode *signature) {
     const XrXirProgramPermissions *permissions = program->permissions;
     if (!signature || !permissions || entry >= program->entry_count ||
+        (program->entries[entry].flags & XR_XIR_ENTRY_GENERATOR) ||
         permissions->function_count != program->entry_count ||
         permissions->slot_count != program->declarations->slot_count) return false;
     const XrXirProgramPermission *permission = &permissions->entries[entry];
@@ -435,6 +438,7 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
         !instance->program->active_modules[d->functions[entry].module] ||
         (!test_entry && !binding && entry != d->entry_function && !d->functions[entry].exported)) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *requested = &instance->program->entries[entry];
+    if (requested->flags & XR_XIR_ENTRY_GENERATOR) return XR_XIR_CALL_BAD_ARGUMENT;
     if (test_entry) {
         const XrXirFunctionIdentity *identity = &d->functions[entry];
         if (identity->module != d->root_module || identity->test_role == XR_XIR_TEST_ROLE_NONE ||
@@ -611,7 +615,6 @@ static XrXirInstance *view_instance(XrXirCallView *view) {
     bool child = false;
     if (!instance->driving || instance_observing(instance) || (instance->stopping && !instance_cleanup_grant(instance)) ||
         !xr_xir_task_executor_view_member(instance->executor, view, &child) ||
-        (!child && view->activation != instance->call) ||
         xr_xir_call_current_entry(view->activation) >= instance->program->entry_count) return NULL;
     return instance;
 }
@@ -641,8 +644,7 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
     bool child = false;
     if (!instance->driving || instance_observing(instance) ||
         (instance->stopping && !instance_cleanup_grant(instance)) ||
-        !xr_xir_task_executor_view_member(instance->executor, view, &child) ||
-        (!child && view->activation != instance->call)) return XR_XIR_CALL_BAD_STATE;
+        !xr_xir_task_executor_view_member(instance->executor, view, &child)) return XR_XIR_CALL_BAD_STATE;
     const XrXirProgram *program = instance->program;
     uint32_t caller = xr_xir_call_current_entry(view->activation);
     if (entry >= program->entry_count || caller > program->entry_count ||
@@ -1232,6 +1234,7 @@ XrXirCallStatus xr_xir_instance_function(XrXirCallView *view,XrXirType type,uint
     return instance_function_create(view,&request,output);
 }
 #include "xxir_instance_function_producer.inc.c"
+#include "xxir_instance_generator.inc.c"
 XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type, uint32_t direct_entry,
     const XrXirValue *arguments, uint32_t count, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

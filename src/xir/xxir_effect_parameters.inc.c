@@ -44,21 +44,14 @@ static void effect_parameters_free(XrXirEffects *effects) {
     effects->formula_terminals=NULL;
     if (!owned_result) xr_compile_resources_free(effects->constant_witnesses);
     effects->constant_witnesses=NULL;effects->result_borrow=NULL;
-    if (!effects->contracts) return;
-    for (uint32_t f = 0; f < effects->count; ++f) {
-        xr_compile_resources_free((void *)effects->contracts[f].parameters);
-        if (!owned_result) xr_compile_resources_free((void *)effects->contracts[f].formula.terms);
-        xr_compile_resources_free((void *)effects->contracts[f].values);
-        xr_compile_resources_free((void *)effects->contracts[f].bindings);
-    }
-    xr_compile_resources_free(effects->contracts);
-    effects->contracts = NULL;
+    effect_contracts_clear(effects->outcomes_work.contracts,effects->count,!owned_result);
+    effects->outcomes_work.contracts=NULL;
 }
 
 XR_FUNC const XrXirFunctionEffectContract *xir_effects_contract(
     const XrXirEffects *effects, uint32_t function) {
-    return effects && effects->contracts && function < effects->count ?
-        &effects->contracts[function] : NULL;
+    const XrXirFunctionEffectContract *contracts=effect_contracts_read(effects);
+    return effects && contracts && function<effects->count?&contracts[function]:NULL;
 }
 
 /* INSTANCE use roles follow the same actual instruction fixed point.
@@ -91,16 +84,16 @@ static XrXirStatus effect_parameters_allocate(const XrXirModule *module,
     if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
     effect_parameters_free(effects);
     effects->generation=material;effects->cells=material->cells;graph->physical_owned=false;
-    effects->contracts = xir_compile_calloc(work, effects->count,
-        sizeof(*effects->contracts), &status);
-    if (!effects->contracts) return status;
+    effects->outcomes_work.contracts = xir_compile_calloc(work, effects->count,
+        sizeof(*effects->outcomes_work.contracts), &status);
+    if (!effects->outcomes_work.contracts) return status;
     for (uint32_t f=0;f<effects->count;++f) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         const EffectBodyFunction *function=&material->functions[f];
         uint32_t count=function->parameter_count;
         status=effect_body_initial_roles_match(work,material,f);
         if (status!=XR_XIR_OK) return status;
-        XrXirFunctionEffectContract *contract=&effects->contracts[f];contract->parameter_count=count;
+        XrXirFunctionEffectContract *contract=&effects->outcomes_work.contracts[f];contract->parameter_count=count;
         if (count) {
             contract->parameters=xir_compile_calloc(work,count,sizeof(*contract->parameters),&status);
             if (!contract->parameters) return status;
@@ -175,7 +168,7 @@ static XrXirStatus effect_parameter_call(EffectParameterFlow *flow,
     if (op->immediate < 0 || (uint64_t)op->immediate >= flow->effects->count)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t target = (uint32_t)op->immediate;
-    const XrXirFunctionEffectContract *callee = &flow->effects->contracts[target];
+    const XrXirFunctionEffectContract *callee = &flow->effects->outcomes_work.contracts[target];
     uint32_t destination = flow->function->parameter_count +
         flow->instruction;
     if (op->args[1] > callee->parameter_count) return XR_XIR_BAD_STRUCTURE;
@@ -216,7 +209,10 @@ static XrXirStatus effect_parameter_opaque(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use) {
     if (xr_xir_op_uses_operand_table(op->op)) return effect_parameter_group(flow, op, use, false);
     uint32_t count = effect_parameter_operands[op->op];
-    if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT;
+    if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT &&
+        !(flow->body.domain.declarations && (flow->body.domain.declarations->functions[flow->function_index].promises & XR_XIR_FUNCTION_GENERATOR));
+    if (op->op==XR_XIR_GENERATOR_YIELD)
+        count=xr_xir_iterator_element(flow->body.domain.types,flow->function->result)!=XR_XIR_UNIT;
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
         count = xr_xir_slot_payload_operands(flow->body.domain.declarations->slots,
             flow->body.domain.declarations->slot_count, op);
@@ -264,9 +260,10 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     }
     case XR_XIR_FUNCTION_WEAKEN:
         return effect_parameter_use(flow, op->args[0], XR_XIR_EFFECT_USE_FIXED, false);
+    case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_RETURN:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_RETURN);
-    case XR_XIR_GO:
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_CHILD);
     case XR_XIR_CALL_REQUIREMENT:
         for (uint32_t a = 0; a < op->args[1]; ++a) {
@@ -380,7 +377,7 @@ static XrXirStatus effect_parameter_function(const XrXirModule *module,
     flow.body=effect_body_owned_request(work,effects->generation);flow.function=&flow.head;
     XrXirStatus status=effect_body_request_head(&flow.body,function,&flow.head);
     if (status!=XR_XIR_OK) return status;
-    flow.parameters = (XrXirEffectParameter *)effects->contracts[function].parameters;
+    flow.parameters = (XrXirEffectParameter *)effects->outcomes_work.contracts[function].parameters;
     bool has_callable = false;
     for (uint32_t p = 0; p < flow.function->parameter_count; ++p) {
         if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
@@ -414,7 +411,7 @@ static XrXirStatus effect_parameter_function(const XrXirModule *module,
 static XrXirStatus effect_parameters_derive(const XrXirModule *module,
     XrXirEffects *effects, EffectGraph *graph, const XrXirCompileContext *work) {
     XrXirStatus status = effect_parameters_allocate(module,effects,graph,work);
-    if (status != XR_XIR_OK || !effects->contracts) return status;
+    if (status != XR_XIR_OK || !effects->outcomes_work.contracts) return status;
     if (!effect_body_variable_roles(effects->generation)) return XR_XIR_OK;
     bool changed = true;
     while (status == XR_XIR_OK && changed) {
@@ -460,11 +457,11 @@ XR_FUNC XrXirStatus xir_effects_parameters_match(const XrXirCompileContext *work
         return XR_XIR_BAD_STRUCTURE;
     if (!module->provenance || module->provenance->kind != XR_XIR_EVIDENCE_TEMPLATE)
         return XR_XIR_OK;
-    if (!effects->contracts || !module->provenance->contracts ||
+    if (!effect_contracts_read(effects) || !module->provenance->contracts ||
         module->provenance->contract_count != effects->count) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f = 0; f < effects->count; ++f) {
         if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
-        const XrXirFunctionEffectContract *derived = &effects->contracts[f];
+        const XrXirFunctionEffectContract *derived = &effect_contracts_read(effects)[f];
         const XrXirFunctionEffectContract *stored = &module->provenance->contracts[f];
         if (derived->parameter_count != stored->parameter_count) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < derived->parameter_count; ++p) {
@@ -494,7 +491,7 @@ XR_FUNC XrXirStatus xir_effects_parameters_match(const XrXirCompileContext *work
                 if (call->op!=XR_XIR_CALL_REQUIREMENT) return XR_XIR_BAD_STRUCTURE;
                 continue;
             }
-            const XrXirFunctionEffectContract *callee = &effects->contracts[call->immediate];
+            const XrXirFunctionEffectContract *callee = &effect_contracts_read(effects)[call->immediate];
             if (binding->parameter >= callee->parameter_count ||
                 callee->parameters[binding->parameter].kind == XR_XIR_EFFECT_PARAMETER_FIXED)
                 return XR_XIR_BAD_TYPE;

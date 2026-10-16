@@ -645,7 +645,7 @@ interface Iterable<T> {
 - `next()` 返回 `T` 而非 `T?`：**耗尽不由返回值表示**。协议是两步的——每次 `next()` / `nth()` 之前必须先由 `hasNext()` 返回 `true`。在 `hasNext()` 为 `false` 后调用 `next()` 属于契约违规：运行时以 `E0432` panic 报告，不返回零值，也不返回 `T` 所禁止的 `null`（§18.3）。
 - `Iterator<T>` 是**一次性**的：耗尽后 `hasNext()` 恒为 `false`，不可重置。需要再次遍历时重新调用 `iterator()` 或重新调用生成器函数。
 - 迭代期间修改集合的行为由该集合定义。内建 `Array<T>` 的 for-in 持有拥有式逻辑值快照，修改或重绑源数组不使该快照失效（§14.7）；其它集合与身份 iterator 的失效规则由各自合同定义。
-- `Iterator<T>` **没有** `close()`：提前放弃一个迭代器不执行任何清理（§3.16.3），这也是生成器体内禁止 `defer` 的原因。
+- `Iterator<T>` 没有 Source `close()` 方法。生命周期关闭会排空已经登记的生成器清理；提前放弃不再执行普通剩余 body（§3.16.3）。
 
 生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
@@ -1896,7 +1896,7 @@ Rules:
 - `next()` returns `T`, not `T?`: **exhaustion is not encoded in the return value**. The protocol is two-step — every `next()` / `nth()` must be preceded by a `hasNext()` that returned `true`. Calling `next()` after `hasNext()` is `false` violates the contract: the runtime reports it as an `E0432` panic rather than returning a zero value or a `null` that `T` forbids (§18.3).
 - `Iterator<T>` is **single-use**: once exhausted, `hasNext()` stays `false` and it cannot be reset. Call `iterator()` again, or call the generator function again, to traverse again.
 - Mutation during iteration follows the collection contract. Built-in `Array<T>` for-in owns a logical value snapshot; mutation or rebinding of the source array does not invalidate that snapshot (§14.7). Other collections and identity iterators define their own invalidation rules.
-- `Iterator<T>` has **no** `close()`: abandoning an iterator early runs no cleanup (§3.16.3), which is why `defer` is rejected inside a generator body.
+- `Iterator<T>` has no Source `close()` method. Lifecycle close drains registered generator cleanup; early abandonment never executes the ordinary remaining body (§3.16.3).
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 

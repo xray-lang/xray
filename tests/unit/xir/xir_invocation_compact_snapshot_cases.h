@@ -223,7 +223,7 @@ static void conditional_compact_null_body(const XrXirCompileContext *context,XrX
         !memcmp(&selection,&sentinel,sizeof(selection)));
     CHECK(effect_invocation_public_gate(context,certificate)==XR_XIR_BAD_STRUCTURE);
     XrXirRootCauseTrace *trace=NULL;
-    CHECK(effect_invocation_public_trace(context,certificate,0,&effects->root[0],&trace)==
+    CHECK(effect_invocation_public_trace(context,certificate,0,&effect_roots_read(effects)->root[0],&trace)==
         XR_XIR_BAD_STRUCTURE && !trace);
     certificate->body=owned;
     CHECK(effect_body_material_shape(owned) && effect_invocation_public_gate(context,certificate)==XR_XIR_OK);

@@ -52,13 +52,13 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
         for (uint32_t f=0;f<summary->count;++f) {
-            const XrXirRootFormula *view=&summary->contracts[f].formula;
+            const XrXirRootFormula *view=&effect_roots_read(summary)->contracts[f].formula;
             const XrXirRootFormula *actual=&borrowed->functions[f].formula;
             CHECK(view->terms==actual->terms && view->term_count==actual->term_count &&
                 view->constant_mask==actual->constant_mask);
         }
         effect_parameters_free(summary);
-        CHECK(!summary->result_borrow && !summary->contracts &&
+        CHECK(!summary->result_borrow && !effect_roots_read(summary)->contracts &&
             !summary->formula_terminals && !summary->constant_witnesses);
         effect_context_owner_free(owner);owner=NULL;
         CHECK(ordinary->references==1 && initial->references==references+1);
@@ -242,9 +242,24 @@ static void initial_ordinary_refresh_controls(void) {
     XrXirStatus status=initial_ordinary_effects(&context,original,&effects);
     if (status!=XR_XIR_OK) fprintf(stderr,"INITIAL_REFRESH_EFFECTS status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && effects);
-    CHECK(effects->contexts && !effects->refinement &&
+    /* A published owner has no constructor refresh capability. Its actual
+     * Final, output records and charged resource state must remain unchanged. */
+    EffectInvocationFinal *published=effects->invocations->final;
+    XrCompileResourceStats before_refresh=rp_stats(&context);
+    RootParameterMark retained=rp_mark();
+    CHECK(xir_effects_context_refresh(&context,original,effects)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats after_refresh=rp_stats(&context);
+    CHECK(!memcmp(&before_refresh,&after_refresh,sizeof(before_refresh)) &&
+        effects->invocations->final==published && effect_outcomes_empty(&effects->outcomes_work));
+    rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
+    /* This actual constructor remains private while Source refines its body.
+     * It is released without publishing facts for a changed Source input. */
+    CHECK(effect_infer_construct(&context,original,NULL,&effects)==XR_XIR_OK && effects &&
+        effects->outcomes_owner && !effects->invocations->final->outcomes);
+
+    CHECK(effect_contexts_read(effects) && !effects->refinement &&
         effects->result_borrow==(&effects->invocations->final->summary) &&
-        effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary));
+        effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary));
     CHECK(effects->invocations && !effects->invocations->body->backbone);
     EffectInvocationCertificate *certificate=effects->invocations,saved_certificate=*certificate;
     EffectBodyMaterial *initial=certificate->body;uint32_t sites[2]={0};
@@ -263,7 +278,7 @@ static void initial_ordinary_refresh_controls(void) {
         initial_ordinary_wide(&context,original->types,narrow[1])};
     for (uint32_t pass=0;pass<2;++pass) for (uint32_t site=0;site<2;++site) {
         EffectBodyMaterial saved=*initial;
-        EffectBodyMaterial *old_ordinary=effects->contexts->ordinary->uses.generation;
+        EffectBodyMaterial *old_ordinary=effect_contexts_read(effects)->ordinary->uses.generation;
         /* Dropping the previous context retires exactly its actual parent
          * edge. The certificate's own edge and every payload remain intact. */
         if (old_ordinary->backbone==initial) { CHECK(saved.references>1);--saved.references; }
@@ -273,10 +288,10 @@ static void initial_ordinary_refresh_controls(void) {
         CHECK(effect_body_source_match(&context,initial,&current)==expected);
         CHECK(xir_effects_context_refresh(&context,&current,effects)==XR_XIR_OK);
         CHECK(effects->invocations==certificate && effects->result_borrow==(&certificate->final->summary) &&
-            effects->contexts->dense->uses.result_borrow==(&effects->contexts->forest->invocations->final->summary) &&
+            effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary) &&
             !memcmp(certificate,&saved_certificate,sizeof(saved_certificate)) &&
             !memcmp(initial,&saved,sizeof(saved)) && !initial->backbone && !initial->overlay);
-        EffectBodyMaterial *fresh=effects->contexts->ordinary->uses.generation;
+        EffectBodyMaterial *fresh=effect_contexts_read(effects)->ordinary->uses.generation;
         CHECK(fresh && fresh!=initial && !fresh->backbone && !fresh->overlay &&
             fresh->cells!=initial->cells && fresh->functions[selected].block_count==0);
         uint32_t mask=UINT32_MAX;

@@ -59,3 +59,13 @@ add_test(NAME test_xir_effect_default_dense
 set_tests_properties(test_xir_effect_default_dense PROPERTIES
     LABELS "unit;xir;ownership;metadata;root-effects;source;default-arguments"
     TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_final_root_trace
+    COMMAND test_xir_root_cause_trace --literals)
+set_tests_properties(test_xir_effect_final_root_trace PROPERTIES
+    LABELS "unit;xir;ownership;metadata;root-effects;final-read;producer-lifetime"
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_control_proof_literals COMMAND test_xir_error_cfg_pending --control-proof-literals)
+add_test(NAME test_xir_effect_source_terminal_callback COMMAND test_xir_error_cfg_pending --source-terminal-callback)
+set_tests_properties(test_xir_effect_control_proof_literals test_xir_effect_source_terminal_callback PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "xir;metadata;ownership;final-input-proof")

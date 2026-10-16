@@ -11,17 +11,32 @@
 #include "xir/xxir_struct.h"
 #include "xir/xxir_array.h"
 #include "xir/xxir_atomic.h"
+#include "xir/xxir_class.h"
+#ifdef XR_TASK_RECURSIVE_CLASS_FIXTURE
+#include "xir_task_recursive_class_expect.h"
+#endif
 static bool constructed_value(const XrXirValue *value,unsigned family) {
     CHECK(!family && xr_xir_value_valid(value));
     const XirObject *object=(const XirObject *)(uintptr_t)value->payload;
     const XrXirTypes *types=xr_xir_compile_type_arena_types(object->arena);
-    CHECK(xr_xir_type_is_struct(types,(XrXirType)value->type));
+    XrXirValueStatus (*get)(const XrXirValue *,uint32_t,XrXirValueAdmission *,XrXirValue *);
+#ifdef XR_TASK_CLASS_FIXTURE
+    CHECK(xr_xir_type_is_class(types,(XrXirType)value->type));get=xr_xir_class_get;
+#else
+    CHECK(xr_xir_type_is_struct(types,(XrXirType)value->type));get=xr_xir_struct_get;
+#endif
     XrXirValueAdmission admission={object->arena,object->domain,NULL,NULL,1000000,16777216};
     XrXirValue array={0},atomic={0},element={0};XrXirFaultDetail fault={0};bool completed=false;
-    XrXirValueStatus status=xr_xir_struct_get(value,0,&admission,&array);
+    XrXirValueStatus status=get(value,0,&admission,&array);
     if (status!=XR_XIR_VALUE_OK) goto failed;
-    status=xr_xir_struct_get(value,1,&admission,&atomic);
+    status=get(value,1,&admission,&atomic);
     if (status!=XR_XIR_VALUE_OK) goto failed;
+#ifdef XR_TASK_CLASS_FIXTURE
+    XrXirValue identity={0};CHECK(xr_xir_value_copy(value,&identity)==XR_XIR_VALUE_OK);
+    CHECK(identity.payload==value->payload);xr_xir_value_drop(&identity);
+    status=xr_xir_class_set(value,0,&array,&admission);
+    if (status!=XR_XIR_VALUE_BAD_ARGUMENT) goto failed;
+#endif
     int64_t length=0;status=xr_xir_array_len(&array,&admission,&length);
     if (status!=XR_XIR_VALUE_OK) goto failed;
     CHECK(length==2);
@@ -38,7 +53,13 @@ static bool constructed_value(const XrXirValue *value,unsigned family) {
         CHECK(loaded.status==XR_XIR_RUN_STEP_LIMIT || loaded.status==XR_XIR_RUN_FRAME_LIMIT ||
             loaded.status==XR_XIR_RUN_OUT_OF_MEMORY || loaded.permission==XR_XIR_CALL_LIMIT);goto done;
     }
-    CHECK(!loaded.continuing && element.type==XR_XIR_I64 && element.payload==42);completed=true;goto done;
+    CHECK(!loaded.continuing && element.type==XR_XIR_I64 && element.payload==42);
+#ifdef XR_TASK_RECURSIVE_CLASS_FIXTURE
+    completed=constructed_recursive_class_value(value,&admission);
+#else
+    completed=true;
+#endif
+    goto done;
 failed:
     CHECK(status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_OOM);
 done:

@@ -74,6 +74,8 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_path_write(const XrXirCallView *view,
     const XrXirValue *value, XrXirFaultDetail *fault, bool append);
 XR_FUNC void *xr_xir_call_budget_allocate(XrXirCallBudget *budget, uint64_t bytes, XrXirCallStatus *status);
 XR_FUNC void xr_xir_call_budget_deallocate(XrXirCallBudget *budget, void *memory, uint64_t bytes);
+XR_FUNC XrXirCallStatus xr_xir_call_generator_new_budgeted(const XrXirCallConfig *config,
+    const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output);
 XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,
     const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output);
 /* A registered language cleanup was physically released before retirement. */
@@ -105,5 +107,11 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
     XrXirCallResult *outcome);
 /* A failed copy terminates only the waiting activation, never the sticky Task. */
 XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
+    XrXirCallStatus reason);
+/* Iterator waits reuse the exact binding/wake/request token representation. */
+XR_FUNC bool xr_xir_call_iterator_wait_token(const XrXirCall *call,XrXirTaskWaitToken *output);
+XR_FUNC XrXirCallStatus xr_xir_call_link_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);
+XR_FUNC XrXirCallStatus xr_xir_call_complete_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);
+XR_FUNC XrXirCallStatus xr_xir_call_fail_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token,
     XrXirCallStatus reason);
 #endif // XXIR_CALL_INTERNAL_H

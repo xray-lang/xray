@@ -10,6 +10,8 @@
 
 static XrXirEffects *pc_outcome_candidate;
 static XrXirInstruction *pc_outcome_row;
+static XrXirRootEffects *pc_outcome_root_allocation;
+static XrXirRootEffectWitness *pc_outcome_root_witness_allocation,*pc_outcome_unknown_witness_allocation;
 static uint32_t pc_outcome_mutation,pc_outcome_callbacks;
 
 static void pc_outcome_late_allocate(void *memory,size_t bytes) {
@@ -22,6 +24,12 @@ static void pc_outcome_late_allocate(void *memory,size_t bytes) {
      * its complete initialization and real ROOT publication. */
     if (!pc_outcome_candidate->invocations) return;
     CHECK(pc_outcome_candidate->invocations->final && !pc_outcome_callbacks);
+    pc_outcome_root_allocation=pc_outcome_candidate->outcomes_work.root;
+    pc_outcome_root_witness_allocation=pc_outcome_candidate->outcomes_work.root_witnesses;
+    pc_outcome_unknown_witness_allocation=pc_outcome_candidate->outcomes_work.unresolved_witnesses;
+    CHECK(pc_outcome_root_allocation && pc_outcome_root_witness_allocation && pc_outcome_unknown_witness_allocation);
+    /* Every receiving field must come from the actual construction records. */
+    memset(pc_outcome_candidate->outcomes_owner,0xA5,sizeof(*pc_outcome_candidate->outcomes_owner));
     pc_allocate_hook=NULL;++pc_outcome_callbacks;
     if (pc_outcome_mutation) pc_outcome_row->type=XR_XIR_BOOL;
 }
@@ -56,6 +64,11 @@ static XrXirStatus pc_outcome_late_operation(const XrXirCompileContext *context,
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     memset(functions,0xCE,sizeof(functions));memset(rows,0xCE,sizeof(rows));
     if (effects) {
+        const EffectFinalOutcomes *owned=effect_final_outcomes(effects);
+        CHECK(owned && owned->root==pc_outcome_root_allocation &&
+            owned->root_witnesses==pc_outcome_root_witness_allocation &&
+            owned->unresolved_witnesses==pc_outcome_unknown_witness_allocation &&
+            effect_outcomes_empty(&effects->outcomes_work));
         pc_empty_golden(effects,0);
         CHECK(xr_xir_effects_read(effects,1).control.suspend==XR_XIR_EFFECT_NONE &&
             xr_xir_effects_read(effects,1).control.throws==XR_XIR_EFFECT_NONE &&
@@ -65,6 +78,8 @@ static XrXirStatus pc_outcome_late_operation(const XrXirCompileContext *context,
             xr_xir_effects_error(effects,2,(XrXirType)EE_ENUM,1));
     }
     xr_xir_compile_effects_free(effects);
+    pc_outcome_root_allocation=NULL;pc_outcome_root_witness_allocation=NULL;
+    pc_outcome_unknown_witness_allocation=NULL;
     CHECK(!pc_allocate_hook && !pc_outcome_candidate && !pc_outcome_row);return status;
 }
 

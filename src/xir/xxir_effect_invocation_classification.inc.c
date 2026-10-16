@@ -46,7 +46,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
     case XR_XIR_ATOMIC_FETCH_SUB: case XR_XIR_ATOMIC_SWAP: case XR_XIR_ATOMIC_COMPARE_EXCHANGE: case XR_XIR_ATOMIC_TOGGLE:
     case XR_XIR_ATOMIC_TO_STRING: case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_CONCAT_STRING: case XR_XIR_OUTPUT: case XR_XIR_WRITE_STREAM: case XR_XIR_PRINT:
-    case XR_XIR_ADD_INT: case XR_XIR_EQ_INT: case XR_XIR_LT_INT: case XR_XIR_SUSPEND:
+    case XR_XIR_ADD_INT: case XR_XIR_EQ_INT: case XR_XIR_LT_INT: case XR_XIR_SUSPEND: case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_JUMP: case XR_XIR_BRANCH: case XR_XIR_RETURN: case XR_XIR_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_LOCAL_WRITE:
@@ -91,7 +91,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     if (!effect_physical_error_empty_opcode(op)) mask|=EFFECT_PHYSICAL_ERROR_ESCAPE;
     if (op==XR_XIR_GO) mask|=EFFECT_PHYSICAL_GO;
     switch (op) {
-    case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_GO: case XR_XIR_CALL_REQUIREMENT:
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
         mask|=EFFECT_PHYSICAL_CONTROL;break;
@@ -109,7 +109,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     case XR_XIR_SLOT_STORE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_SET:
     case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_SET:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_SET: case XR_XIR_ENUM_NEW:
-    case XR_XIR_TUPLE_NEW: case XR_XIR_NULLABLE_SOME:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_NULLABLE_SOME: case XR_XIR_GENERATOR_NEW:
         mask|=EFFECT_PHYSICAL_BARRIER;break;
     default:break;
     }
@@ -127,7 +127,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
-    case XR_XIR_GO: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
     case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_CELL_PROJECT:

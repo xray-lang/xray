@@ -23,8 +23,14 @@ typedef struct XrXirProgramFunctionRef {
     uint32_t entry, captures, instruction, site;
     XrXirType type;
 } XrXirProgramFunctionRef;
+typedef struct XrXirProgramGeneratorSite {
+    uint32_t entry, arguments, instruction;
+    XrXirType type;
+} XrXirProgramGeneratorSite;
+
 typedef struct XrXirProgramPermission {
     uint32_t reference_begin, reference_count;
+    uint32_t generator_begin, generator_count;
     uint32_t root_parameter_begin, root_parameter_count, intrinsic_root;
     bool requires_root, unresolved;
     XrXirStatus worker;
@@ -33,10 +39,11 @@ typedef struct XrXirProgramPermissions {
     uint32_t function_count, slot_count;
     XrXirProgramPermission *entries;
     XrXirProgramFunctionRef *references;
+    XrXirProgramGeneratorSite *generators;
     uint32_t *parameter_offsets;
     uint32_t *root_parameters;
     uint8_t *cell_roles;
-    uint32_t root_parameter_count, reference_count;
+    uint32_t root_parameter_count, reference_count, generator_count;
     struct XrXirEffects *effects;
     XrXirFunctionLayout *layouts;
     XrXirTarget target;

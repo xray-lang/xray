@@ -21,7 +21,7 @@ static XrXirStatus effect_invocation_bound_row(EffectInvocationFlow *flow,
             return XR_XIR_BAD_TYPE;
         if (bound->parameters[a].mode==XR_PARAM_REF) ref=true;
     }
-    if (owner->effects->contracts[target].parameters[parameter].kind!=XR_XIR_EFFECT_PARAMETER_FIXED)
+    if (effect_contracts_read(owner->effects)[target].parameters[parameter].kind!=XR_XIR_EFFECT_PARAMETER_FIXED)
         return XR_XIR_OK;
     uint32_t mask=0;
     XrXirStatus status=effect_invocation_bounds_mask(owner->work,owner->declared,target,parameter,&mask);
@@ -179,7 +179,7 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
             if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
             memcpy(row,actual_row,
                 (size_t)flow->basis.fn_words*sizeof(*row));
-            const XrXirEffectParameter *parameter=&owner->effects->contracts[target].parameters[p];
+            const XrXirEffectParameter *parameter=&effect_contracts_read(owner->effects)[target].parameters[p];
             bool ref=false;
             const XrXirTypeNode *bound=xr_xir_callable_signature(flow->body.domain.types,expected);
             for (uint32_t a=0;a<bound->parameter_count;++a) {
@@ -375,7 +375,7 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
             if (status==XR_XIR_OK) status=effect_invocation_defer(flow,instruction,changed);
         } else {
             uint32_t root_index=owner->final->nodes[flow->node].root;
-            const XrXirEffectParameter *parameter=&owner->effects->contracts[root_index].parameters[p];
+            const XrXirEffectParameter *parameter=&effect_contracts_read(owner->effects)[root_index].parameters[p];
             if (parameter->kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
                 status=effect_invocation_mask(flow,XR_XIR_CALLABLE_ROOT_UNRESOLVED,changed);
             else {
@@ -587,7 +587,7 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
         return signature->flags&XR_XIR_CALLABLE_ROOT_UNRESOLVED?
             effect_invocation_defer(flow,instruction,changed):XR_XIR_OK;
     }
-    case XR_XIR_GO: {
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->body.domain.function_count)
             return XR_XIR_BAD_STRUCTURE;
         uint32_t target=(uint32_t)op->immediate;bool closed=false;EffectBodyFunctionHead head;

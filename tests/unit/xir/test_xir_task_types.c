@@ -121,7 +121,7 @@ static void task_types_reject(void) {
         case 8: f.nodes[0].nominal.declaration = 1; break;
         case 9: f.nodes[0].nominal.arguments = &parameter.type; f.nodes[0].nominal.argument_count = 1; break;
         case 10: f.nodes[0].nominal.fields = &parameter.type; f.nodes[0].nominal.field_count = 1; break;
-        default: f.nodes[0].kind = 9; break;
+        default: f.nodes[0].kind = UINT32_MAX; break;
         }
         out = NULL;
         if (!mutation) {

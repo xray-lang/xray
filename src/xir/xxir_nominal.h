@@ -24,6 +24,9 @@ typedef struct XrXirNominalField {
  * without it is an open root: no declaration may name it as a parent yet, so it
  * executes exactly like a final one and carries no dispatch state. */
 #define XR_XIR_NOMINAL_FINAL 1u
+/* An explicit class promise: every field is immutable after construction and
+ * proves Sendable in its declaration environment. Ordinary classes infer none. */
+#define XR_XIR_NOMINAL_SENDABLE 2u
 
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {

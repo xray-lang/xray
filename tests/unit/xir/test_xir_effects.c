@@ -436,7 +436,7 @@ static void effect_declared_promises(void) {
                 CHECK(lowered->module.declarations->functions[f].promises == XR_XIR_FUNCTION_NO_SUSPEND);
                 effect_artifact_free(decoded); effect_artifact_free(lowered);
             }
-            ids[f].promises = 2;
+            ids[f].promises = UINT32_MAX;
             CHECK(xir_fixture_verify(&effect_context, &built, NULL) == XR_XIR_BAD_STRUCTURE);
             ids[f].promises = 0;
         }

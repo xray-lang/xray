@@ -56,7 +56,7 @@ static XrXirStatus effect_context_forest_node(EffectContextForest *forest,
         sizeof(EffectOrdinaryNode)+sizeof(EffectForestNode)+sizeof(XrXirRootEffects))) return XR_XIR_BUDGET;
     EffectOrdinaryNode origin=contexts->nodes[index];
     const XrXirFunction *function=&contexts->functions[index];
-    const XrXirFunctionEffectContract *contract=&contexts->uses.contracts[index];
+    const XrXirFunctionEffectContract *contract=&contexts->uses.outcomes_work.contracts[index];
     XrXirType *arguments=origin.argument_count ?
         effect_terms_alloc(&forest->terms,origin.argument_count,sizeof(*arguments)) : NULL;
     XrXirType *physical=function->parameter_count ?
@@ -76,7 +76,7 @@ static XrXirStatus effect_context_forest_node(EffectContextForest *forest,
     forest->nodes[index]=(EffectForestNode){.declaration=origin.declaration,.argument_count=origin.argument_count,
         .parameter_count=function->parameter_count,.constant_mask=contract->formula.constant_mask,
         .owner=origin.owner,.arguments=arguments,.physical_types=physical,.parameter_kinds=kinds};
-    forest->facts[index]=contexts->uses.root[index];
+    forest->facts[index]=contexts->uses.outcomes_work.root[index];
     return XR_XIR_OK;
 }
 
@@ -122,7 +122,7 @@ static XrXirStatus effect_context_forest_seal(const XrXirCompileContext *context
     const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectContextForest **output) {
     if (!xir_compile_context_valid(context) || !source || !contexts || !output || *output ||
         contexts->uses.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=contexts->uses.root?XR_XIR_OK:effect_ordinary_roots(context,source,contexts);
+    XrXirStatus status=contexts->uses.outcomes_work.root?XR_XIR_OK:effect_ordinary_roots(context,source,contexts);
     if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,contexts->uses.invocations);
     if (status!=XR_XIR_OK) return status;
     EffectContextForest *forest=xir_compile_calloc(context,1,sizeof(*forest),&status);

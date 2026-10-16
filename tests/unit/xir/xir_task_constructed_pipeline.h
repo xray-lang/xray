@@ -10,6 +10,9 @@
 #ifndef XIR_TASK_CONSTRUCTED_PIPELINE_H
 #define XIR_TASK_CONSTRUCTED_PIPELINE_H
 #include "xir/xxir_types.h"
+#ifdef XR_TASK_CLASS_FIXTURE
+#include "xir_task_class_metadata.h"
+#endif
 #ifdef XR_TASK_STRUCT_FIXTURE
 static const char *constructed_names[]={"structure"};
 #else
@@ -33,6 +36,9 @@ static XrXirArtifact *constructed_lower(const XrXirCompileContext *context,
     CHECK(xr_xir_compile_checked_write(result.checked, &packet, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_source_result_free(&result);
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);
+#ifdef XR_TASK_CLASS_FIXTURE
+    task_class_metadata(context,decoded);
+#endif
     memset(packet.bytes, 0xa5, packet.length); xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); CHECK(xr_xir_compile_artifact_verify(closed, &diagnostic) == XR_XIR_OK);
@@ -45,6 +51,9 @@ static XrXirArtifact *constructed_lower(const XrXirCompileContext *context,
     }
     if (status != XR_XIR_OK) fprintf(stderr, "Task constructed Lowered status=%u function=%u instruction=%u\n", status, diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK && lowered);
+#ifdef XR_TASK_CLASS_FIXTURE
+    task_class_metadata(context,lowered);
+#endif
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
 #ifdef XR_TASK_PARAMETER_FIXTURE
     unsigned workers=0;

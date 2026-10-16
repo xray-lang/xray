@@ -13,7 +13,7 @@ static bool effect_invocation_dispatch_precision(XrXirOp op) {
     return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CALL_DEFAULT ||
         op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_REQUIREMENT || op==XR_XIR_CLEANUP_REGISTER ||
         op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT ||
-        op==XR_XIR_GO || op==XR_XIR_FUNCTION_REF || effect_invocation_cell_terminal(op);
+        op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_FUNCTION_REF || effect_invocation_cell_terminal(op);
 }
 
 /* Raw and mixed callbacks retain their original selected-row reader and
@@ -309,7 +309,7 @@ static XrXirStatus effect_invocation_intrinsics(EffectInvocationWorkspace *owner
  * Every other fixed callable retains its complete declared advertisement. */
 static XrXirStatus effect_invocation_root_input(EffectInvocationWorkspace *owner,
     uint32_t function,uint64_t **output) {
-    if (!output || *output || function>=owner->read.body.domain.function_count || !owner->effects->contracts)
+    if (!output || *output || function>=owner->read.body.domain.function_count || !effect_contracts_read(owner->effects))
         return XR_XIR_BAD_STRUCTURE;
     if (!owner->final.root_spaces || owner->final.root_spaces[function]>=owner->read.body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationBasis basis={0};XrXirStatus status=effect_invocation_basis(&owner->read,owner->final.root_spaces[function],&basis);
@@ -321,8 +321,8 @@ static XrXirStatus effect_invocation_root_input(EffectInvocationWorkspace *owner
     if (words>SIZE_MAX/sizeof(uint64_t)) return XR_XIR_BUDGET;
     uint64_t *input=words ? xir_compile_calloc(owner->read.work,(size_t)words,sizeof(*input),&status) : NULL;
     if (words && !input) return status;
-    if (owner->effects->contracts[function].parameter_count!=body->parameter_count ||
-        (body->parameter_count && (!body->parameters || !owner->effects->contracts[function].parameters))) {
+    if (effect_contracts_read(owner->effects)[function].parameter_count!=body->parameter_count ||
+        (body->parameter_count && (!body->parameters || !effect_contracts_read(owner->effects)[function].parameters))) {
         xr_compile_resources_free(input);return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t p=0;p<body->parameter_count && status==XR_XIR_OK;++p) {
@@ -354,7 +354,7 @@ static XrXirStatus effect_invocation_root_input(EffectInvocationWorkspace *owner
         uint32_t mask=0;
         status=effect_invocation_bounds_mask(owner->read.work,owner->read.declared,function,p,&mask);
         if (status!=XR_XIR_OK) break;
-        const XrXirEffectParameter *parameter=&owner->effects->contracts[function].parameters[p];
+        const XrXirEffectParameter *parameter=&effect_contracts_read(owner->effects)[function].parameters[p];
         if (mask && ((ref && (mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)) ||
             parameter->kind==XR_XIR_EFFECT_PARAMETER_VARIABLE)) {
             uint32_t bit=owner->final.site_count+p;
@@ -469,7 +469,7 @@ static XrXirStatus effect_invocation_local_type(EffectInvocationLocalRead *read,
             arguments=node->nominal.arguments;arity=node->nominal.argument_count;
         } else if (node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_CELL ||
             node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ATOMIC ||
-            node->kind==XR_XIR_TYPE_TASK) {
+            node->kind==XR_XIR_TYPE_TASK || node->kind==XR_XIR_TYPE_ITERATOR) {
             status=effect_invocation_local_type_edge(read,node->element,i,&span);
         } else if (node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
             if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
@@ -810,7 +810,7 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
     const EffectInvocationDeclaredBounds *declared,EffectInvocationWorkspace **output) {
     if (!output || *output || !graph || !effects ||
         !effect_body_request_owned_matches(work,body_request,graph->material) ||
-        !xir_effects_context_matches(work,effects,body_request->domain.function_count) || !effects->contracts ||
+        !xir_effects_context_matches(work,effects,body_request->domain.function_count) || !effect_contracts_read(effects) ||
         !declared || declared!=graph->material->declared || declared->resources!=work->resources ||
         declared->count!=body_request->domain.function_count || !declared->functions ||
         graph->physical!=graph->material->physical || !graph->material->cells)

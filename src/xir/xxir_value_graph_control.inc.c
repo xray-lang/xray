@@ -98,6 +98,10 @@ static void graph_object_release_locked(XirObject *object, XirObject **pending) 
     if (xr_xir_reference_release(&object->references)) {
         graph_object_unlink(object);
         object->release_next = *pending; *pending = object;
+    } else if(object->kind==XR_XIR_TYPE_ITERATOR &&
+        atomic_load_explicit(&object->references,memory_order_relaxed)==1) {
+        /* The executor lease survives until its iterative cancellation drain. */
+        atomic_store_explicit(&((XirGenerator *)object)->orphaned,true,memory_order_release);
     }
 }
 XR_FUNC void xr_xir_domain_close(XrXirDomain *domain) {
