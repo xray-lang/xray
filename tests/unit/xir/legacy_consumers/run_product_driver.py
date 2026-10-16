@@ -88,7 +88,7 @@ def main() -> int:
                                          'extended_named_bindings.json', 'structured_named_models.json',
                                          'independent_complete_models.py', 'complete_program_bindings.json',
                                          'complete_numeric_model.py', 'complete_text_range_model.py',
-                                         'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_borrowed_views_model.py', 'complete_collection_protocols_model.py', 'complete_structural_inputs_model.py', 'structural_inputs_bindings.json', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'complete_ffi_memory_model.py', 'complete_task_regression_model.py', 'complete_memory_primitives_model.py', 'complete_pure_library_boundaries_model.py', 'complete_websocket_protocol_model.py', 'complete_cluster_wire_model.py', 'complete_simd_vectors_model.py', 'complete_coordination_model.py', 'complete_filesystem_io_model.py', 'complete_structural_calls_model.py', 'complete_parallel_workload_model.py', 'complete_byte_pod_model.py', 'complete_generic_program_model.py', 'complete_traversal_model.py', 'fixed_product_inputs.py', 'task_rejection_model.py', 'run_source_rejection_driver.py')]
+                                         'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_borrowed_views_model.py', 'complete_collection_protocols_model.py', 'complete_structural_inputs_model.py', 'structural_inputs_bindings.json', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'complete_ffi_memory_model.py', 'complete_task_regression_model.py', 'complete_memory_primitives_model.py', 'complete_pure_library_boundaries_model.py', 'complete_websocket_protocol_model.py', 'complete_cluster_wire_model.py', 'complete_simd_vectors_model.py', 'complete_coordination_model.py', 'complete_filesystem_io_model.py', 'complete_structural_calls_model.py', 'complete_parallel_workload_model.py', 'complete_byte_pod_model.py', 'complete_generic_program_model.py', 'complete_traversal_model.py', 'fixed_product_inputs.py', 'fixed_source_rejection_owner.py', 'task_rejection_model.py', 'run_source_rejection_driver.py')]
     model_digests = {path.name:sha(path.read_bytes()) for path in model_paths}
     oracles = {row['id']:row for row in json.loads(oracle_bytes)['cases']}
     for row in (independent_scalar_models.expected_rows() + independent_behavior_models.expected_rows()
@@ -207,13 +207,8 @@ def main() -> int:
                 if (case['id'] != bound['id'] or case['oracle_id'] != bound['id'] or case['source'] != bound['source']
                         or case['source_lf_sha256'] != bound['source_lf_sha256']):
                     raise ValueError('Formal rejection entry lost its exact controlled source')
-                if product_inputs:
-                    row = {'id':bound['id'], 'routes':{},
-                           'status':'FAIL_MISSING_FIXED_PRODUCT_SOURCE_REJECTION_OWNER',
-                           'reason':'The current rejection owner binds its own source tree and cannot qualify an external product closure.'}
-                else:
-                    row = run_source_rejection_driver.run_group(binary,args.compiler,args.source_rejection_owner,
-                        args.source_rejection_manifest,output/('rejection-'+sha(case['id'].encode())[:16]))
+                row = run_source_rejection_driver.run_group(binary,args.compiler,args.source_rejection_owner,
+                    args.source_rejection_manifest,output/('rejection-'+sha(case['id'].encode())[:16]),product_inputs=product_inputs)
                 results.append(row);save();print(case['id']+': '+row['status'],flush=True);continue
             oracle = oracles[case['oracle_id']]
             independent_complete_models.require_target(oracle, version.get('target'))

@@ -23,17 +23,17 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e
  'tests/lib/xraytest/__init__.py': '39d234cb4da7097df911c0a99fdfabe7fcc829beeefc536ab1108503217b640d',
  'tests/lib/xraytest/platform.py': 'c03df3dc8b3381586b2d8832edde82cc5bcdaa6c745bf291e6d7826f338bce53',
  'tests/lib/xraytest/proc.py': '9418f1b80e3c14f85bea25d8a25753423333914da7435a0c3a66d963581dd1f5',
- 'tests/unit/xir/legacy_consumers/build_source_rejection_owner.py': '98ee4e3d8cfb5f91e50c17568e73e59f5f70b128e2c0e7489419735dbe643bdf',
+ 'tests/unit/xir/legacy_consumers/build_source_rejection_owner.py': 'd256154dd986b1811435360ea39db6dd429ef823027ac37964cee03bfdc77505',
  'tests/unit/xir/legacy_consumers/fixtures/source_rejection_controls/direct_class.xr': '36a881ed7694d823946f159e01bdb539571bb5f9d34a261716e53d3dd161a12e',
  'tests/unit/xir/legacy_consumers/fixtures/source_rejection_controls/go_i64.xr': 'a2aab9569362f06c064851cf5390a243c9ded84855fa7b2547addf761bcced9b',
  'tests/unit/xir/legacy_consumers/fixtures/task_nonsendable_class_result/root.xr': '68952e6c3b9d277b1e6fcb47c5f98e0657638f89fdcc00bdb0843d1c7b2549f7',
- 'tests/unit/xir/legacy_consumers/run_full_diff_driver.py': '85da5000ea3d651e1aab2977556fca389e5b7e2466c0bfac7289fa88b11132f3',
- 'tests/unit/xir/legacy_consumers/run_product_driver.py': '508744ae18913a5e6fea8666e5c13c2c0c508027815caf564a2f15e6820bb188',
- 'tests/unit/xir/legacy_consumers/run_source_rejection_driver.py': '9999cc0c0f5f35ad13356bee5eb5c24458c86eec286841f200ea9b93c6b6cbf2',
- 'tests/unit/xir/legacy_consumers/run_source_rejection_faults.py': '2272a42d06ccd50de7435906f07b124252c36de31798ee1dc38e2707a4467acf',
+ 'tests/unit/xir/legacy_consumers/run_full_diff_driver.py': 'bbaf3de9b634eb9ce53c4c9e8dae231eadb1fbfbfade1b5a45de148036359046',
+ 'tests/unit/xir/legacy_consumers/run_product_driver.py': 'c3376d7844770e2b124d390f696099b04107b4ca1ee388f37b76ec4c43e8aee5',
+ 'tests/unit/xir/legacy_consumers/run_source_rejection_driver.py': '48c15ece6c20f6cdceb29ccbc04e49e32a74eb30e0f12d7edd11d236308eb1d3',
+ 'tests/unit/xir/legacy_consumers/run_source_rejection_faults.py': '671b105dff7584067d799b9df5955766d81580bd87efe996dae03a4e45abf00d',
  'tests/unit/xir/legacy_consumers/source_rejection_owner/CMakeLists.txt': '64042a2db0abc88fc8a678bc0bec777d8c86fe9aaca65d999cf86dcbfe50f025',
- 'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_faults.c': 'c18b77522fb20e13aaa814b1407cc39ac381ddcdaffc34126fd4c6dc374fe2bf',
- 'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_owner.c': '0907f4f5fa054bd0e0b139d1962558018ad3dc7ce822b923a951f3571123f367',
+ 'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_faults.c': '24a43b0852c8a461d71cb754f51950d23b8fbacd2845fbcf6341b7c3285bbaf4',
+ 'tests/unit/xir/legacy_consumers/source_rejection_owner/source_rejection_owner.c': '6ee80b8f6ec209c35dace65abf01eb65810bb3e9e875356f979dc30ae18ee669',
  'tests/unit/xir/legacy_consumers/test_owned_process_tree.py': '65ac2e9ed33bc8542ac84dfd466b94e8c37425e04834b8ad5e691d6055145272',
  'tests/unit/xir/legacy_consumers/test_source_rejection_fault_review.py': '63f63ce2294f9088e33b845e2f9f19d2e801baec81464465bddcdaafbec4d977',
  'tests/unit/xir/legacy_consumers/test_source_rejection_model.py': '440722be5661c4f394092032715a7c4008dcc40a1c4accaa193cdcfe3faa62b3',
@@ -158,3 +158,11 @@ def validate_report(report, identities):
     baseline = report.get('ledger_baseline')
     if type(baseline) is not int or baseline < 0 or report.get('ledger_final') != baseline:
         raise ValueError('SDK rejection owner did not restore its actual ledger baseline')
+
+# Current consumer changes bind separately from the preserved compiler authorities.
+_INPUTS["tests/unit/xir/legacy_consumers/fixed_source_rejection_owner.py"]="3a0f08834e64d315e4211abccc63e5c442b36c123fe1a276bacee164cb412764"
+_INPUTS["tests/unit/xir/legacy_consumers/test_fixed_source_rejection_owner.py"]="4f16e1771462696ac416d8afe2a856e149d3c0deff162e0b8a60519d5a315471"
+_REQUIRED_INPUTS=_REQUIRED_INPUTS+("tests/unit/xir/legacy_consumers/fixed_source_rejection_owner.py","tests/unit/xir/legacy_consumers/test_fixed_source_rejection_owner.py",)
+
+_INPUTS["tests/unit/xir/legacy_consumers/fixed_product_inputs.py"]="21111beaceed24e020bbf78f945911b3a71c5012bdf587b4e5330477af410197"
+_REQUIRED_INPUTS=_REQUIRED_INPUTS+("tests/unit/xir/legacy_consumers/fixed_product_inputs.py",)

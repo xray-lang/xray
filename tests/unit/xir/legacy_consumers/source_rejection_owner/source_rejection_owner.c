@@ -11,7 +11,7 @@
  *   A rejected Task result needs successful same-class and scalar worker controls.
  *   Type proofs use an authentic SOURCE packet after its original product dies.
  */
-#include "api/xsource_compile.h"
+#include "app/cli/xcli_canonical_source.h"
 #include "xir/xxir_constraint_proof.h"
 #include "xir/xxir_types.h"
 #include <stdio.h>
@@ -75,24 +75,24 @@ static bool positive_owner(const XrXirCompileContext *context, XrXirSourceProduc
 
 static bool source_case(const XrXirCompileContext *context, const char *path,
     const char *stdlib, unsigned ordinal, CaseEvidence *evidence) {
-    XrSourceCompileRequest request = {0};
+    XrCliCompileSourceRequest request = {0};
     request.context = context; request.absolute_entry_path = path; request.absolute_stdlib_path = stdlib;
-    request.manifest_limits = xr_source_compile_default_manifest_limits();
+    request.manifest_limits = xr_cli_compile_default_manifest_limits();
     request.target = (XrXirTarget){XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    XrSourceCompileDiagnostic diagnostic = {0};
+    XrCliCompileSourceDiagnostic diagnostic = {0};
     XrXirSourceProduct *product = NULL;
-    XrSourceCompileStatus status = xr_source_compile_build(&request, &product, &diagnostic);
+    XrCliCompileSourceStatus status = xr_cli_compile_source_build(&request, &product, &diagnostic);
     evidence->status = (unsigned)status; evidence->public_stage = (unsigned)diagnostic.stage;
     evidence->check_stage = (unsigned)diagnostic.source.stage;
     evidence->check_status = (unsigned)diagnostic.source.status;
     evidence->source_status = (unsigned)diagnostic.source.source.status;
     evidence->product_published = product != NULL;
-    bool ok = ordinal == 0 ? status == XR_SOURCE_COMPILE_REJECTED && !product &&
-        diagnostic.stage == XR_SOURCE_COMPILE_PRODUCT && diagnostic.source.stage == XR_XIR_SOURCE_PRODUCT_CHECK &&
+    bool ok = ordinal == 0 ? status == XR_CLI_COMPILE_SOURCE_REJECTED && !product &&
+        diagnostic.stage == XR_CLI_COMPILE_SOURCE_PRODUCT && diagnostic.source.stage == XR_XIR_SOURCE_PRODUCT_CHECK &&
         diagnostic.source.status == XR_XIR_BAD_TYPE && diagnostic.source.source.status == XR_XIR_BAD_TYPE :
-        status == XR_SOURCE_COMPILE_OK && positive_owner(context, &product, ordinal, evidence);
+        status == XR_CLI_COMPILE_SOURCE_OK && positive_owner(context, &product, ordinal, evidence);
     xr_xir_compile_source_product_free(product);
-    xr_source_compile_diagnostic_free(&diagnostic);
+    xr_cli_compile_source_diagnostic_free(&diagnostic);
     evidence->qualified = ok;
     return ok;
 }
@@ -114,7 +114,7 @@ static void report_case(const CaseEvidence *evidence, unsigned ordinal) {
 int main(int argc, char **argv) {
     if (argc != 5) { fputs("Expected negative, direct-class, scalar-worker and stdlib paths.\n", stderr); return 2; }
     XrXirCompileContext context = {0}; context.limits = xr_xir_compile_default_limits();
-    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
     if (xr_compile_resources_new(&limits, &context.resources) != XR_COMPILE_RESOURCE_OK) return 2;
     XrCompileResourceStats before = {0}, after = {0};
     bool ok = xr_compile_resources_stats(context.resources, &before) == XR_COMPILE_RESOURCE_OK;

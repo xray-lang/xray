@@ -55,9 +55,9 @@ def main():
         if digest(raw.replace(b'\r\n',b'\n')) != task_rejection_model._INPUTS[name]:
             raise ValueError('SDK fault source changed')
         path=output/('input'+str(index)+'.xr');path.write_bytes(raw);physical.append(path)
-    environment=dict(os.environ,XRAY_STDLIB_PATH=str(ROOT/'stdlib'),NO_COLOR='1',PYTHONUTF8='1')
+    environment=dict(os.environ,XRAY_STDLIB_PATH=binding['stdlib_path'],NO_COLOR='1',PYTHONUTF8='1')
     def invoke(label, extra):
-        command=[str(fault),*map(str,physical),str(ROOT/'stdlib'),*extra]
+        command=[str(fault),*map(str,physical),binding['stdlib_path'],*extra]
         observed=proc.run(command,cwd=output,env=environment,timeout=max(.001,deadline-time.monotonic()))
         stdout,stderr,timed_out=observed.stdout,observed.stderr,observed.timed_out
         (output/(label+'.stdout')).write_bytes(stdout);(output/(label+'.stderr')).write_bytes(stderr)

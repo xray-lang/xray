@@ -11,41 +11,12 @@ from xraytest import proc
 digest = lambda data: hashlib.sha256(data).hexdigest()
 
 
-def checked_owner(binary, owner, manifest_path):
-    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-    version = json.loads(subprocess.check_output([str(binary),'--version','--json'], text=True, timeout=30))
-    head = subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'], text=True).strip()
-    if (manifest.get('schema') != 2 or manifest.get('source_root') != str(ROOT.resolve())
-            or manifest.get('code_head') != head or manifest.get('cli_version') != version
-            or version['commit'] != head or version['dirty']
-            or subprocess.check_output(['git','-C',str(ROOT),'status','--porcelain'],text=True).strip()
-            or Path(manifest['cli_binary']).resolve() != binary.resolve()
-            or Path(manifest['owner_binary']).resolve() != owner.resolve()
-            or manifest.get('cli_sha256') != digest(binary.read_bytes())
-            or manifest.get('owner_sha256') != digest(owner.read_bytes())):
-        raise ValueError('SDK rejection owner is not bound to this exact fresh public product')
-    names = set(task_rejection_model._INPUTS) | {PREFIX+'task_rejection_model.py', PREFIX+'build_source_rejection_owner.py'}
-    if set(manifest.get('inputs', {})) != names:
-        raise ValueError('SDK rejection owner lost a compiler or consumer input')
-    for name, value in manifest['inputs'].items():
-        if digest((ROOT/name).read_bytes()) != value:
-            raise ValueError('SDK rejection compiler or consumer input changed: '+name)
-    archives = manifest.get('producer_archives', {})
-    if (len(archives) != 15 or any(not Path(name).resolve().is_relative_to(binary.parent.resolve())
-                                  for name in archives)):
-        raise ValueError('SDK rejection owner lost its exact product archives')
-    if any(digest(Path(name).read_bytes()) != value for name,value in archives.items()):
-        raise ValueError('SDK rejection producer archive changed')
-    archive_manifest = Path(manifest['archive_manifest'])
-    if digest(archive_manifest.read_bytes()) != manifest['archive_manifest_sha256']:
-        raise ValueError('SDK rejection archive manifest changed')
-    faults=Path(manifest['fault_owner_binary']).resolve(strict=True)
-    if faults.parent != owner.resolve().parent or manifest['fault_owner_sha256'] != digest(faults.read_bytes()):
-        raise ValueError('SDK complete compiler fault owner changed or belongs to another build')
-    return manifest
+def checked_owner(binary, owner, manifest_path, product_inputs=None):
+    from fixed_source_rejection_owner import FixedSourceOwner
+    return FixedSourceOwner(binary,owner,manifest_path,product_inputs).verify()
 
 
-def run_group(binary, compiler, owner, manifest_path, output, timeout=60):
+def run_group(binary, compiler, owner, manifest_path, output, timeout=60, product_inputs=None):
     oracle = task_rejection_model.expected()
     output = Path(output); output.mkdir(parents=True, exist_ok=False)
     result = {'id':oracle['id'], 'oracle_id':oracle['id'], 'source':oracle['source'],
@@ -58,7 +29,7 @@ def run_group(binary, compiler, owner, manifest_path, output, timeout=60):
         return result
     binary = Path(binary).resolve(strict=True); owner = Path(owner).resolve(strict=True)
     compiler = Path(compiler).resolve(strict=True); manifest_path = Path(manifest_path).resolve(strict=True)
-    manifest_before = manifest_path.read_bytes(); binding = checked_owner(binary, owner, manifest_path)
+    manifest_before = manifest_path.read_bytes(); binding = checked_owner(binary, owner, manifest_path,product_inputs)
     files = [oracle['source'], *(item['source'] for item in oracle['controls'])]
     physical = []
     for i,name in enumerate(files):
@@ -68,7 +39,7 @@ def run_group(binary, compiler, owner, manifest_path, output, timeout=60):
         path.write_bytes(raw); physical.append(path)
     result['physical_sources'] = [{'identity':name, 'physical':str(path), 'sha256':digest(path.read_bytes())}
                                   for name,path in zip(files,physical)]
-    environment = dict(os.environ,XRAY_STDLIB_PATH=str(ROOT/'stdlib'),NO_COLOR='1',PYTHONUTF8='1')
+    environment = dict(os.environ,XRAY_STDLIB_PATH=binding['stdlib_path'],NO_COLOR='1',PYTHONUTF8='1')
     def invoke(label,command):
         begun = time.monotonic(); observed = proc.run(command,cwd=output,env=environment,timeout=timeout)
         (output/(label+'.stdout')).write_bytes(observed.stdout); (output/(label+'.stderr')).write_bytes(observed.stderr)
@@ -76,7 +47,7 @@ def run_group(binary, compiler, owner, manifest_path, output, timeout=60):
             'timed_out':observed.timed_out,'seconds':time.monotonic()-begun,
             'stdout_hex':observed.stdout.hex(),'stderr_hex':observed.stderr.hex()})
         return observed
-    observed = invoke('sdk-owner',[owner,*physical,ROOT/'stdlib'])
+    observed = invoke('sdk-owner',[owner,*physical,Path(binding['stdlib_path'])])
     report = None
     if observed.returncode == 0 and not observed.timed_out and not observed.stderr:
         try:
@@ -114,7 +85,7 @@ def run_group(binary, compiler, owner, manifest_path, output, timeout=60):
             native_hash = digest(native.read_bytes()); native_ok = matches(invoke('control'+str(i)+'-native',[native]))
             native_ok = native_ok and native_hash == digest(native.read_bytes())
         result['routes']['control'+str(i)+'-VM-C-native'] = 'PASS' if matches(vm) and projection and native_ok else 'FAIL_COMPLETE_CONTROL'
-    if (manifest_before != manifest_path.read_bytes() or checked_owner(binary,owner,manifest_path) != binding
+    if (manifest_before != manifest_path.read_bytes() or checked_owner(binary,owner,manifest_path,product_inputs) != binding
             or task_rejection_model.expected() != oracle):
         raise ValueError('SDK rejection inputs changed during qualification')
     result['owner_manifest_sha256'] = digest(manifest_before)

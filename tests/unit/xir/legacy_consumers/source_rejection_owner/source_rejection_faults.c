@@ -10,7 +10,7 @@
  *   The real consumer main runs with the production compiler allocator observed.
  *   API wrappers record actual failures and never change their results.
  */
-#include "api/xsource_compile.h"
+#include "app/cli/xcli_canonical_source.h"
 #include "xir/xxir_constraint_proof.h"
 #include "xir/xxir_types.h"
 #include "base/xmalloc.h"
@@ -31,7 +31,7 @@ static XrXirStatus observe_xir(XrXirStatus status) {
 }
 
 static XrCompileResourceLimits consumer_limits(void) {
-    return override_limits ? supplied_limits : xr_source_compile_default_resource_limits();
+    return override_limits ? supplied_limits : xr_cli_compile_default_resource_limits();
 }
 
 static XrCompileResourceStatus observed_new(const XrCompileResourceLimits *limits, XrCompileResources **out) {
@@ -52,13 +52,13 @@ static XrCompileResourceStatus observed_statistics(const XrCompileResources *res
     return status;
 }
 
-static XrSourceCompileStatus observed_build(const XrSourceCompileRequest *request,
-    XrXirSourceProduct **out, XrSourceCompileDiagnostic *diagnostic) {
+static XrCliCompileSourceStatus observed_build(const XrCliCompileSourceRequest *request,
+    XrXirSourceProduct **out, XrCliCompileSourceDiagnostic *diagnostic) {
     XrXirSourceProduct *before = *out;
-    XrSourceCompileStatus status = xr_source_compile_build(request, out, diagnostic);
-    CHECK(status == XR_SOURCE_COMPILE_OK || *out == before);
-    observed_oom |= status == XR_SOURCE_COMPILE_OUT_OF_MEMORY;
-    observed_budget |= status == XR_SOURCE_COMPILE_BUDGET;
+    XrCliCompileSourceStatus status = xr_cli_compile_source_build(request, out, diagnostic);
+    CHECK(status == XR_CLI_COMPILE_SOURCE_OK || *out == before);
+    observed_oom |= status == XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY;
+    observed_budget |= status == XR_CLI_COMPILE_SOURCE_BUDGET;
     return status;
 }
 
@@ -90,10 +90,10 @@ static XrXirStatus observed_markers(const XrXirCompileContext *context,
 
 /* Only the consumer's repeated report is muted, not compiler calls or results. */
 static int muted_consumer_report(const char *format, ...) { (void)format; return 0; }
-#define xr_source_compile_default_resource_limits consumer_limits
+#define xr_cli_compile_default_resource_limits consumer_limits
 #define xr_compile_resources_new observed_new
 #define xr_compile_resources_stats observed_statistics
-#define xr_source_compile_build observed_build
+#define xr_cli_compile_source_build observed_build
 #define xr_xir_compile_source_product_verify observed_verify
 #define xr_xir_compile_source_product_public_admit observed_admit
 #define xr_xir_compile_checked_read observed_read
@@ -104,10 +104,10 @@ static int muted_consumer_report(const char *format, ...) { (void)format; return
 #include "source_rejection_owner.c"
 #undef printf
 #undef main
-#undef xr_source_compile_default_resource_limits
+#undef xr_cli_compile_default_resource_limits
 #undef xr_compile_resources_new
 #undef xr_compile_resources_stats
-#undef xr_source_compile_build
+#undef xr_cli_compile_source_build
 #undef xr_xir_compile_source_product_verify
 #undef xr_xir_compile_source_product_public_admit
 #undef xr_xir_compile_checked_read
@@ -144,7 +144,7 @@ static void resource_axes(char **argv, const FaultRun *baseline) {
     uint64_t values[3] = {baseline->stats.allocated_bytes, baseline->stats.peak_bytes, baseline->stats.work};
     for (unsigned axis = 0; axis < 3; ++axis) for (unsigned below = 0; below < 2; ++below) {
         CHECK(values[axis] > 1);
-        XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+        XrCompileResourceLimits limits = xr_cli_compile_default_resource_limits();
         uint64_t *limit = axis == 0 ? &limits.allocated_bytes : axis == 1 ? &limits.live_bytes : &limits.work;
         *limit = values[axis] - below;
         FaultRun result = run_owner(argv, SIZE_MAX, &limits);
