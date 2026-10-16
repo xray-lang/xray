@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 30u
+#define XR_XIR_CALL_ABI_VERSION 31u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -49,7 +49,9 @@ typedef enum XrXirActionKind {
     XR_XIR_ACTION_TIMER,
     /* value borrows the true Task handle until the driver retains its wait lease. */
     XR_XIR_ACTION_AWAIT_TASK,
-    XR_XIR_ACTION_GENERATOR_YIELD
+    XR_XIR_ACTION_GENERATOR_YIELD,
+    /* callee selects a cached probe or one owned element transfer. */
+    XR_XIR_ACTION_AWAIT_ITERATOR
 } XrXirActionKind;
 /* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
 #define XR_XIR_ACTION_PROTECTED 1u
@@ -171,7 +173,8 @@ static inline bool xr_xir_time_provider_valid(const XrXirTimeProvider *provider)
 }
 /* A suspension asks its host for nothing (YIELD) or for a duration (TIMER). The
  * request is published only for the exact pending wake token. */
-typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK } XrXirWaitKind;
+typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK,
+    XR_XIR_WAIT_ITERATOR_HAS_NEXT, XR_XIR_WAIT_ITERATOR_NEXT } XrXirWaitKind;
 #define XR_XIR_TIMER_MAX_MS UINT64_C(86400000)
 typedef struct XrXirWaitRequest {
     uint32_t kind, reserved;

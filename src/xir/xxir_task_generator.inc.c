@@ -20,7 +20,7 @@ XR_FUNC bool xr_xir_generator_storage_valid(const XirGenerator *generator) {
     if(!node || node->kind!=XR_XIR_TYPE_ITERATOR || node->parameter_span) return false;
     XirGeneratorState state=atomic_load_explicit(&generator->state,memory_order_acquire);
     if(state==XIR_GENERATOR_PREPARING)
-        return !generator->generation && !generator->identity && !generator->executor && !generator->call &&
+        return !generator->generation && !generator->identity && !generator->executor && !generator->call && !generator->consumer &&
             xr_xir_call_result_empty(&generator->outcome);
     if(state==XIR_GENERATOR_PARKED || state==XIR_GENERATOR_RUNNING)
         return generator->generation && generator->identity;
@@ -107,6 +107,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_generator(XrXirTaskExecutor *execut
     XrXirCallStatus status=generator_core_new(executor,view,type,request,output);
     xr_xir_value_graph_end();return status;
 }
+static void generator_core_complete_consumer(XrXirTaskExecutor *executor,XirGenerator *generator);
 static void generator_core_finish(XrXirTaskExecutor *executor,XirGenerator *generator) {
     xr_xir_value_graph_begin();XrXirCallResult outcome={0};
     XrXirCallStatus status=xr_xir_call_take_outcome(generator->call,&outcome);
@@ -128,6 +129,7 @@ static void generator_core_finish(XrXirTaskExecutor *executor,XirGenerator *gene
     generator->active_next=generator->active_previous=NULL;generator->executor=NULL;
     xr_xir_call_result_move(&outcome,&generator->outcome);
     atomic_store_explicit(&generator->state,XIR_GENERATOR_TERMINAL,memory_order_release);
+    generator_core_complete_consumer(executor,generator);
     XrXirValue lease=generator_core_value(generator);xr_xir_value_drop(&lease);xr_xir_value_graph_end();
 }
 static void generator_core_cancel(XrXirTaskExecutor *executor,XirGenerator *generator) {

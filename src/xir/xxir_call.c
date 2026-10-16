@@ -19,6 +19,7 @@
 #include "xxir_call_observer_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_task_internal.h"
+#include "xxir_generator_internal.h"
 #include "xxir_type_arena.h"
 #include "xxir_types.h"
 #include "xxir_panic.h"
@@ -788,7 +789,7 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
 static void accept_action(XrXirCall *call, XrXirAction action) {
     bool panic = fault_panics(&action);
     uint32_t allowed = action.kind == XR_XIR_ACTION_CALL ? XR_XIR_ACTION_PROTECTED | XR_XIR_ACTION_CLEANUP :
-        action.kind == XR_XIR_ACTION_AWAIT_TASK ? XR_XIR_ACTION_PROTECTED :
+        (action.kind == XR_XIR_ACTION_AWAIT_TASK || action.kind == XR_XIR_ACTION_AWAIT_ITERATOR) ? XR_XIR_ACTION_PROTECTED :
         action.kind == XR_XIR_ACTION_LEAVE ? XR_XIR_ACTION_LEAVE_ERROR | XR_XIR_ACTION_LEAVE_PANIC : 0;
     if ((panic ? !xr_xir_call_panic_payload((XrXirCallStatus) action.value.payload, &action.panic) :
          !xr_xir_panic_empty(&action.panic)) ||
@@ -807,7 +808,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_CALL) {
         accept_child_action(call, action); return;
     }
-    if (action.callee || action.arguments || action.argument_count) {
+    if ((action.callee && action.kind!=XR_XIR_ACTION_AWAIT_ITERATOR) || action.arguments || action.argument_count) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
@@ -845,6 +846,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         else request_execution_failure(call, reason);
         return;
     }
+    if(action.kind==XR_XIR_ACTION_AWAIT_ITERATOR) {accept_iterator_wait(call,action);return;}
     if (action.kind == XR_XIR_ACTION_AWAIT_TASK) {
         const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
         const XrXirTypeNode *type = xr_xir_type_node(types, (XrXirType)action.value.type);
@@ -1049,7 +1051,7 @@ XrXirCallStatus xr_xir_call_resume(XrXirCall *call, uint64_t wake) {
     if (call->driving || call_observing(call))
         return XR_XIR_CALL_BUSY;
     if (call->result.status != XR_XIR_CALL_SUSPENDED || !wake || wake != call->result.wake ||
-        call->wait.kind == XR_XIR_WAIT_TASK)
+        (call->wait.kind == XR_XIR_WAIT_TASK || iterator_wait_kind(call->wait.kind)))
         return XR_XIR_CALL_BAD_STATE;
     call->result = call_result(XR_XIR_CALL_READY);
     call->wait = (XrXirWaitRequest) {0};
@@ -1096,7 +1098,14 @@ static bool task_wait_token_matches(const XrXirCall *call, const XrXirTaskWaitTo
         call->wait.subject == wait->subject && call->wait.generation == wait->generation &&
         call->wait.ticket == wait->ticket && call->waiting_task.type;
 }
-static void unlink_task_wait(XrXirCall *call) {
+static void unlink_task_wait(XrXirCall *call,bool abandon) {
+    if(call->wait_linked && (call->wait.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || call->wait.kind==XR_XIR_WAIT_ITERATOR_NEXT)) {
+        XirGenerator *generator=(XirGenerator *)(uintptr_t)call->waiting_task.payload;
+        XR_CHECK(generator && generator->consumer==call,"iterator waiter belongs to its exact producer");
+        generator->consumer=NULL;call->wait_linked=false;
+        if(abandon) atomic_store_explicit(&generator->orphaned,true,memory_order_release);
+        return;
+    }
     if (!call->wait_linked) return;
     XR_CHECK(call->waiting_task.type && call->wait.kind == XR_XIR_WAIT_TASK,
         "a linked waiter owns its target until unlink completes");
@@ -1130,6 +1139,24 @@ XR_FUNC XrXirCallStatus xr_xir_call_link_task_wait(XrXirCall *call, const XrXirT
     task->waiter_tail = call; call->wait_linked = true;
     return XR_XIR_CALL_SUSPENDED;
 }
+static XrXirCallStatus complete_owned_wait(XrXirCall *call,XrXirCallResult *outcome) {
+    bool propagate = outcome->status == XR_XIR_CALL_CANCELLED ||
+        (xr_xir_call_panic_status(outcome->status) && !call->top->protected_call);
+    call->top->protected_call = false;
+    xr_xir_value_drop(&call->waiting_task);
+    call->wait = (XrXirWaitRequest){0}; call->result = call_result(XR_XIR_CALL_READY);
+    if (propagate) request_exit(call, outcome, false);
+    else if (outcome->status != XR_XIR_CALL_RETURNED && outcome->status != XR_XIR_CALL_THROWN &&
+        !xr_xir_call_panic_status(outcome->status)) {
+        XrXirCallStatus reason = outcome->status;
+        xr_xir_call_result_drop(outcome);
+        request_execution_failure(call, reason);
+    } else {
+        xr_xir_call_result_drop(&call->top->inbox);
+        xr_xir_call_result_move(outcome, &call->top->inbox);
+    }
+    return XR_XIR_CALL_READY;
+}
 XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
     XrXirCallResult *outcome) {
     if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1152,23 +1179,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
         task->outcome.panic.message.type != outcome->panic.message.type ||
         task->outcome.panic.message.reserved != outcome->panic.message.reserved ||
         task->outcome.panic.message.payload != outcome->panic.message.payload) return XR_XIR_CALL_BAD_STATE;
-    unlink_task_wait(call);
-    bool propagate = outcome->status == XR_XIR_CALL_CANCELLED ||
-        (xr_xir_call_panic_status(outcome->status) && !call->top->protected_call);
-    call->top->protected_call = false;
-    xr_xir_value_drop(&call->waiting_task);
-    call->wait = (XrXirWaitRequest){0}; call->result = call_result(XR_XIR_CALL_READY);
-    if (propagate) request_exit(call, outcome, false);
-    else if (outcome->status != XR_XIR_CALL_RETURNED && outcome->status != XR_XIR_CALL_THROWN &&
-        !xr_xir_call_panic_status(outcome->status)) {
-        XrXirCallStatus reason = outcome->status;
-        xr_xir_call_result_drop(outcome);
-        request_execution_failure(call, reason);
-    } else {
-        xr_xir_call_result_drop(&call->top->inbox);
-        xr_xir_call_result_move(outcome, &call->top->inbox);
-    }
-    return XR_XIR_CALL_READY;
+    unlink_task_wait(call,false);
+    return complete_owned_wait(call,outcome);
 }
 XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
     XrXirCallStatus reason) {
@@ -1178,11 +1190,13 @@ XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirT
     if (!task_wait_token_matches(call, token) || (reason != XR_XIR_CALL_OOM && reason != XR_XIR_CALL_LIMIT &&
         reason != XR_XIR_CALL_BAD_STATE && reason != XR_XIR_CALL_BAD_ARGUMENT && reason != XR_XIR_CALL_UNSUPPORTED))
         return XR_XIR_CALL_BAD_STATE;
-    unlink_task_wait(call); xr_xir_value_drop(&call->waiting_task);
+    unlink_task_wait(call,true); xr_xir_value_drop(&call->waiting_task);
     call->wait = (XrXirWaitRequest){0}; call->result = call_result(XR_XIR_CALL_READY);
     request_execution_failure(call, reason);
     return XR_XIR_CALL_READY;
 }
+
+#include "xxir_call_iterator_wait.inc.c"
 
 XrXirCallStatus xr_xir_call_wait_request(const XrXirCall *call, uint64_t wake, XrXirWaitRequest *output) {
     if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -1216,7 +1230,7 @@ XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
         return XR_XIR_CALL_BAD_STATE;
     call->cancel_requested = true;
     if (call->result.status == XR_XIR_CALL_SUSPENDED || call->result.status == XR_XIR_CALL_YIELDED) {
-        unlink_task_wait(call);
+        unlink_task_wait(call,true);
         xr_xir_value_drop(&call->waiting_task);
         xr_xir_call_result_drop(&call->result);
         call->result = call_result(XR_XIR_CALL_READY);
@@ -1239,7 +1253,7 @@ XrXirCallStatus xr_xir_call_free(XrXirCall *call) {
         if (status == XR_XIR_CALL_CANCELLED) status = XR_XIR_CALL_READY;
     }
     call->driving = true;
-    unlink_task_wait(call);
+    unlink_task_wait(call,true);
     xr_xir_value_drop(&call->waiting_task);
     xr_xir_call_result_drop(&call->result);
     xr_xir_compile_type_arena_drop((XrXirTypeArena *) call->config.admission.arena);

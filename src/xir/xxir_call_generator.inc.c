@@ -64,3 +64,40 @@ XR_FUNC XrXirCallStatus xr_xir_call_generator_take(XrXirCall *call,XrXirValue *o
     *output=call->result.value;call->result=call_result(XR_XIR_CALL_READY);
     return XR_XIR_CALL_YIELDED;
 }
+
+static bool iterator_wait_kind(uint32_t kind) {
+    return kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || kind==XR_XIR_WAIT_ITERATOR_NEXT;
+}
+static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
+    const XrXirTypeNode *type=xr_xir_type_node(
+        xr_xir_compile_type_arena_types(call->config.admission.arena),(XrXirType)action.value.type);
+    if(!iterator_wait_kind(action.callee) || action.arguments || action.argument_count ||
+        !call->executor_owner || !call->executor_generation || !call->executor_ticket ||
+        !type || type->kind!=XR_XIR_TYPE_ITERATOR ||
+        !xr_xir_value_argument(&action.value,call->config.admission.arena,(XrXirType)action.value.type) ||
+        call->next_wake==UINT64_MAX) {abort_frames(call,XR_XIR_CALL_BAD_STATE);return;}
+    if(cleanup_active(call)) {
+        XrXirCallResult result=call_result(XR_XIR_CALL_DEFER_ASYNC);
+        result.panic.detail.code=XR_XIR_PANIC_DEFER_ASYNC;request_exit(call,&result,false);return;
+    }
+    const XirGenerator *generator=(const XirGenerator *)(uintptr_t)action.value.payload;
+    XirGeneratorState state=atomic_load_explicit(&generator->state,memory_order_acquire);
+    if(generator->object.domain!=call->config.admission.domain ||
+        generator->generation!=call->executor_generation || !generator->identity ||
+        generator->identity==call->executor_ticket ||
+        (state!=XIR_GENERATOR_TERMINAL && generator->executor!=call->executor_owner)) {
+        abort_frames(call,XR_XIR_CALL_BAD_STATE);return;
+    }
+    XrXirValue prepared={0};XrXirValueStatus copied=xr_xir_value_copy(&action.value,&prepared);
+    if(copied!=XR_XIR_VALUE_OK) {
+        if(copied==XR_XIR_VALUE_OOM || copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT)
+            request_execution_failure(call,copied==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT);
+        else abort_frames(call,XR_XIR_CALL_BAD_STATE);
+        return;
+    }
+    if(call->cancel_requested) {xr_xir_value_drop(&prepared);request_exit_status(call,XR_XIR_CALL_CANCELLED);return;}
+    XR_CHECK(!call->waiting_task.type,"one activation owns one pending execution dependency");
+    call->waiting_task=prepared;call->top->protected_call=(action.flags & XR_XIR_ACTION_PROTECTED)!=0;
+    call->result=call_result(XR_XIR_CALL_SUSPENDED);call->result.wake=++call->next_wake;
+    call->wait=(XrXirWaitRequest){action.callee,0,0,generator,generator->generation,generator->identity};
+}

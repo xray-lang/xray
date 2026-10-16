@@ -20,6 +20,7 @@ typedef struct XirGenerator {
     XrXirCallResult outcome;
     XrXirCallAccounting accounting;
     XrXirCall *call;
+    XrXirCall *consumer;
     XrXirTaskExecutor *executor;
     struct XirGenerator *active_next, *active_previous;
     XirTaskActivation activation;

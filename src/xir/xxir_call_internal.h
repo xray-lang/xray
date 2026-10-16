@@ -108,4 +108,10 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
 /* A failed copy terminates only the waiting activation, never the sticky Task. */
 XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
     XrXirCallStatus reason);
+/* Iterator waits reuse the exact binding/wake/request token representation. */
+XR_FUNC bool xr_xir_call_iterator_wait_token(const XrXirCall *call,XrXirTaskWaitToken *output);
+XR_FUNC XrXirCallStatus xr_xir_call_link_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);
+XR_FUNC XrXirCallStatus xr_xir_call_complete_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);
+XR_FUNC XrXirCallStatus xr_xir_call_fail_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token,
+    XrXirCallStatus reason);
 #endif // XXIR_CALL_INTERNAL_H

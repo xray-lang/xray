@@ -887,12 +887,13 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             continue;
         }
         XrXirType expected = op->type;
-        if (op->op == XR_XIR_TASK_AWAIT) {
+        if (op->op == XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT) {
             expected = xr_xir_operand_type(function, op->args[0]);
             const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
-            if (!task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+            if (!task || task->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
+                return XR_XIR_BAD_TYPE;
             XrXirType result = task->element;
-            if (context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_supported(context->module->types, result))
+            if (op->op==XR_XIR_TASK_AWAIT && context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_supported(context->module->types, result))
                 return XR_XIR_UNSUPPORTED;
         }
         if (op->op == XR_XIR_NULLABLE_SOME)

@@ -7,7 +7,7 @@
  * xxir_source_iterator_type.inc.c - Governed Iterator type identity and declaration use
  *
  * KEY CONCEPT:
- *   An Iterator descriptor grants type identity without a constructor or method authority.
+ *   A governed signature grants only its corresponding canonical pull operation.
  */
 static bool source_native_iterator_declaration(SourceContext *ctx) {
     if (ctx->iterator_declaration) return true;
@@ -56,4 +56,33 @@ static bool source_native_iterator_type(SourceContext *ctx, XrTypeRef *ref, XrXi
     if (!ok || !source_iterator_type(ctx, element, type)) return false;
     XrXirSourceRange range = {ctx->module, ref->line, ref->column, ref->line, ref->column};
     return source_query_target_reference(ctx, range, ctx->iterator_declaration, XR_XIR_SOURCE_TYPE_USE);
+}
+static const XrNativeMemberDeclaration *source_iterator_member(SourceContext *ctx,AstNode *node,const char *name) {
+    if(!source_native_iterator_declaration(ctx)) return NULL;
+    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ITERATOR);
+    const XrNativeMemberDeclaration *member=source_native_member(ctx,native,name);
+    if(!source_work(ctx,node)) return NULL;
+    if(!member || !member->is_public || !member->is_method || member->is_static || !member->lowered ||
+        member->parameter_count || (member->operation!=XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT &&
+        member->operation!=XR_NATIVE_OPERATION_ITERATOR_NEXT)) {
+        source_fail(ctx,node,XR_XIR_BAD_TYPE,"Iterator member has no admitted pull-operation contract");return NULL;
+    }
+    return member;
+}
+static bool source_iterator_member_reference(SourceContext *ctx,AstNode *node,const XrNativeMemberDeclaration *member) {
+    uint32_t index=member->operation==XR_NATIVE_OPERATION_ITERATOR_NEXT;
+    if(!ctx->iterator_members[index]) {
+        SourceName symbol={0};symbol.name=source_owned_text(ctx,member->name);if(!symbol.name) return false;
+        XrXirSourceRange range={ctx->iterator_module,(int)member->line,(int)member->column,
+            (int)member->line,(int)(member->column+source_text_size(ctx,member->name))};
+        if(!source_query_declare(ctx,&symbol,XR_XIR_SOURCE_MEMBER,ctx->iterator_declaration,range)) return false;
+        ctx->iterator_members[index]=symbol.declaration;
+        char *signature=(char *)source_owned_text(ctx,member->signature);if(!signature) return false;
+        XrXirSourceDeclaration *record=(XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration-1];
+        record->native_identity=member->id;record->signature=signature;record->exported=true;
+        record->generic_parent=ctx->iterator_declaration;record->generic_parent_count=1;
+        record->type=index ? (XrXirSourceType){(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,ctx->iterator_declaration,true} :
+            (XrXirSourceType){XR_XIR_BOOL,0,true};
+    }
+    return source_query_target_token_reference(ctx,node,ctx->iterator_members[index],XR_XIR_SOURCE_CALL);
 }

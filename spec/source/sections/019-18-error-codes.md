@@ -90,8 +90,8 @@ order: 019
 | `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用（`Slice<T>` 视图或 `ref` / 原始指针）存活期间使 owner 失效 |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、闭包捕获、跨执行边界） |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
-| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 生成器体内抵达调度器挂起点（`await` / `select` / `scope` / `Coro.yield()` / 阻塞句柄方法 / 可挂起调用），或证据不完整（经未解析函数值调用）——见 §3.16.2 |
-| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 生成器体内使用 `defer`；提前放弃的生成器不再恢复，该清理可能永不执行——见 §3.16.3 |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 旧分析器的生成器调度禁令；当前 Checked 生成器按 §3.16.2 的独立 frame/消费者等待规则及 §17.39 的实际准入边界检查 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 旧分析器的生成器 defer 禁令；当前 Checked 生成器已由 §3.16.3 的登记清理和关闭规则替代，不使用此禁令 |
 | `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | 错误可从 `defer` cleanup 块逃逸（见 §8.3.1） |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |
@@ -270,8 +270,8 @@ order: 019
 | `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | owner invalidated while a borrow (`Slice<T>` view, `ref`, or raw pointer) is live |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, closure capture, execution boundary) |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
-| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
-| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | Legacy analyzer prohibition on generator defer; current Checked generators use the registered-cleanup and close rules of §3.16.3 instead |
 | `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | an error can escape a `defer` cleanup block (see §8.3.1) |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |

@@ -5,7 +5,7 @@ import argparse, hashlib, importlib.util, json, struct
 def words(*items):
     return struct.pack('<' + 'I' * len(items), *items)
 
-def packet(kind=11, element=2, second=3, contract=85, second_kind=11):
+def packet(kind=11, element=2, second=3, contract=86, second_kind=11):
     name = b'iteratorTypes'
     function = words(len(name)) + name + words(2, 256, 257, 0)
     function += words(1, 0, 1, 0, 0)

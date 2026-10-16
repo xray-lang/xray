@@ -2394,33 +2394,23 @@ yield expr                  // produce one generator value and suspend
 
 Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
 
-#### 3.16.1 The two suspensions are different semantics
+#### 3.16.1 Production and scheduling suspension
 
-`yield expr` and `Coro.yield()` share a word root but are **not the same kind of suspension**. They differ in every property a caller can observe:
+yield expr delivers one owned element and parks the producer; yield () delivers a real Unit element rather than EOS. Coro.yield() produces no element and returns the activation to its executor queue. Neither keeps a suspended call on the host C stack.
 
-| | `yield expr` | `Coro.yield()` |
-|---|---|---|
-| Transfer target | symmetric transfer back to the iterator driving the generator | asymmetric yield to the scheduler |
-| Can migrate OS threads | no | yes (work stealing) |
-| Is a cancellation checkpoint | **no** | yes (§10.5) |
-| Propagates to the caller | **no** — driving a generator does not suspend the driver's own frame | yes, along call edges |
-| Effect contract | rejected by `no_suspend`, accepted by `no_reschedule` | rejected by both |
+hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.6). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
 
-`xray verify` therefore treats suspension as two independent dimensions: `no_reschedule` asserts "never reaches the scheduler, is not a cancellation point, cannot migrate threads", and `no_suspend` is the stronger "control never leaves this frame". A pure generator satisfies the first but not the second; **a function that merely drives a generator satisfies both**.
+#### 3.16.2 Generator waits and one consumer
 
-#### 3.16.2 A generator body must not reach the scheduler
+A producer owns an independent frame driven by its original Instance executor. Actual I/O or Timer waits suspend the current consumption; temporary absence of an element never means EOS. One Iterator admits one driver at a time. Reentry, self-driving, second drivers and cancellation arbitration authenticate the actual owner, activation, generation and one-shot wake; backends are never recursively driven.
 
-A generator frame is resumed by whoever drives it, never by the scheduler. A generator function body therefore **must not contain any scheduler suspension point**: `await`, `select`, a `scope` block, `Coro.yield()`, the blocking channel methods, `time.sleep()`, or a call to any function that may suspend. Violations report `E0385`.
+See §17.39 for implemented Source types, operations, borrowed-environment and platform limits. This grants no implementation claim for unadmitted await/select/Channel or parallel platform paths.
 
-The rule is an **effect rule, not a syntactic one**: it composes through the §8 effect product, so calling a function that awaits internally is rejected the same way. Incomplete evidence **fails closed** — a generator that calls through an unresolved function value (such as a function-typed parameter) is rejected, because that target may suspend. This matches the boundary rules for `sys.Thread.spawn` bodies and parallel callbacks.
+#### 3.16.3 Early abandonment and registered cleanup
 
-> The restriction is a deliberate scope decision, not an implementation gap: generators in this version are pull-driven iterators, not async streams.
+Early exit or dropping an Iterator never resumes the producer's ordinary remaining body, but must close it and run every registered, unfinished cleanup exactly once. Consumer cancellation and producer failure use the same exit driver. Final external drop only publishes a close request; the original executor drains it iteratively. Instance close drains before code retirement, and drop callbacks never recursively execute a backend.
 
-#### 3.16.3 An abandoned generator runs no further code
-
-When `for-in` leaves early through `break` / `return` / a thrown error, or the iterator is discarded, the generator frame is **not resumed** and the rest of its body never executes. Reclamation timing is not part of the observable semantic contract (§16.8).
-
-A generator body therefore **must not use `defer`** (`E0386`). `defer` is the language's only deterministic cleanup mechanism, and here it might never run; a cleanup that may not run is more dangerous than no cleanup. When cleanup is required, the caller owns the resource and passes it in.
+Generators allow defer with ordinary registration, exit order and the prohibition on asynchronous cleanup. An unstarted producer has registered nothing, so close must not invent defer execution. Physical memory release does not prove language cleanup. Iterator adds no Source close() method; lifecycle and cancellation drive internal close.
 
 ---
 
@@ -3427,7 +3417,7 @@ Rules:
 - `next()` returns `T`, not `T?`: **exhaustion is not encoded in the return value**. The protocol is two-step — every `next()` / `nth()` must be preceded by a `hasNext()` that returned `true`. Calling `next()` after `hasNext()` is `false` violates the contract: the runtime reports it as an `E0432` panic rather than returning a zero value or a `null` that `T` forbids (§18.3).
 - `Iterator<T>` is **single-use**: once exhausted, `hasNext()` stays `false` and it cannot be reset. Call `iterator()` again, or call the generator function again, to traverse again.
 - Mutation during iteration follows the collection contract. Built-in `Array<T>` for-in owns a logical value snapshot; mutation or rebinding of the source array does not invalidate that snapshot (§14.7). Other collections and identity iterators define their own invalidation rules.
-- `Iterator<T>` has **no** `close()`: abandoning an iterator early runs no cleanup (§3.16.3), which is why `defer` is rejected inside a generator body.
+- `Iterator<T>` has no Source `close()` method. Lifecycle close drains registered generator cleanup; early abandonment never executes the ordinary remaining body (§3.16.3).
 
 A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
 
@@ -7744,11 +7734,15 @@ Source Iterator<T> binds the complete stdlib/types/iterator.xr declaration and i
 
 An Iterator<T> function with real yields acquires the Generator role from its own lexical body. The old analyzer is_generator flag grants no role, and nested function yields do not belong to an outer body. The role uses an independent GENERATOR bit in the existing FunctionIdentity. NoSuspend obligations inspect only their own bit. A synthetic defer helper never inherits its enclosing Generator role. Canonical GENERATOR_YIELD has Unit instruction type and an optional operand matching the actual Iterator element; Unit elements have no SSA payload. The declared result remains Iterator while normal body RETURN completes with Unit, so production differs from end of sequence. The qualified body subset covers real Source, independent Checked decode, specialization/Lowered, VM and execution of actual generated native C, including separate Coro.yield() scheduling and yield () production.
 
-The role and operation enter through an atomic Checked semantic85 cutover. Wire28 and Call30/Program30 layouts remain unchanged. Owned Iterator storage uses Value26; the complete retired Value24 Domain prefix rejects before accessing new storage fields. Complete semantic73, semantic74 and semantic84 packets reject at the header without allocation. Independent named-field models derive complete new Generator packets and precise role, element, Unit-payload, ref-parameter and reserved-bit refusals without using product writer output as expectations. A generator entry requires a closed Iterator result and transfers each produced owner through the common Call YIELDED state; normal completion returns Unit. Taking production readies the same frame without allocating a wake. Only actual scheduling suspension owns a wake; ordinary outcome take, Task completion and resume cannot consume a produced value. Cancellation releases any untaken owner.
+The role and operation enter through an atomic Checked semantic86 cutover. Wire28 and Program30 remain unchanged. Call31 admits the Iterator demand action and its two internal wait kinds; Value27 admits private single-consumer storage. Common Call/Instance layouts remain unchanged. Complete retired Value24/26 Domain prefixes reject before accessing new fields. Complete semantic73, semantic74, semantic84 and semantic85 packets reject at the header without allocation. Independent named-field models derive complete new Generator packets and precise role, element, Unit-payload, ref-parameter and reserved-bit refusals without using product writer output as expectations. A generator entry requires a closed Iterator result and transfers each produced owner through the common Call YIELDED state; normal completion returns Unit. Taking production readies the same frame without allocating a wake. Only actual scheduling suspension owns a wake; ordinary outcome take, Task completion and resume cannot consume a produced value. Cancellation releases any untaken owner.
 
 A direct Source call to a real generator declaration becomes GENERATOR_NEW177; ordinary CALL/FUNCTION_REF/GO operations still cannot execute its body. Creation uses the authenticated current view and the sealed Program caller/instruction site to select the complete callee, result and argument count. The same latent certificate and independent provenance receiving preserve specialization identity; creation executes no body and inherits neither its immediate suspension nor its language errors. Each Iterator owns an independent nonmoving Call frame on the original Instance executor and budget. A parked producer does not block an ordinary root return. Releasing the last external owner only publishes a close signal; the common FIFO executor drains cancellation and cleanup iteratively. Instance close drains active producers before retiring code. Terminal Iterators retain only type Arena and Domain storage. An unstarted producer has not registered its defer, so close must not invent cleanup execution. No common Call/Instance fields are added.
 
-These canonical type, body, authenticated factory and driver inputs grant no complete Generator or consumer-method qualification. Ordinary CALL/FUNCTION_REF/GO targeting a generator still rejects, and Program sealing authenticates the generator entry flag against the verified declaration and owned body proof. Ordinary Instance.start and ordinary Function binding reject generator bodies before initialization. A low-level host driving verified VM/generated-C entries does not replace authenticated factory operations. Closures, consumption of started producer carriers, hasNext/next/close/for-in, hidden environments/internal views, GC/final code leases, errors/cancellation/cleanup and complete bidirectional mixed execution remain open. Scheduling WAIT_YIELD is not generator output. This slice completes neither Generator nor Channel.
+Source hasNext()/next() bind native identity8 from the complete governed declaration; identities6/7 remain reserved for the fixed Map/Set input. They produce ITERATOR_HAS_NEXT178 and ITERATOR_NEXT179: Unit control instructions with one actual Iterator operand and dedicated normal/error successors. INVOKE_RESULT receives bool or the element; Unit has no SSA payload. Both operations MAY_SUSPEND. Factory values carry latent producer Error facts, which consumption reads without making creation immediately throw. One Iterator admits only one bound consumer at a time; self, reentry and second drivers reject without changing the original wait.
+
+The consumer retains an owned lease in its existing Call wait slot. The wake authenticates executor, activation, generation and ticket. hasNext preserves a cached yield; repeated probes do not advance production. next transfers its cached owner exactly once. Demand without a cache only queues the independent producer on the common FIFO executor; a callback never recursively drives a backend. Coro.yield schedules without producing an element or EOS. Terminal delivery follows all producer cleanup. Normal exhaustion or close makes hasNext false and next report the established E0432 panic. Actual producer Error/panic remains observable on later consumption. Consumer cancellation unlinks and requests producer close; final external drop and Instance close use the same drain.
+
+These are development inputs for canonical types, bodies, factories and hasNext/next, not qualification of complete Generators or Channels. Program receiving still checks actual roles and its owned body proof; ordinary Instance.start/Function binding reject direct generator bodies. Low-level drivers never replace the authenticated factory. The current subset covers real VM/native and both mixed producer/consumer directions, started cleanup, multiple activations and root replacement. nth/for-in, hidden environments and internal views, complete wait races/cancellation/GC/code leases, all original FI/budget/safety and platform matrices remain open. No Source close() method is added.
 
 ---
 
@@ -7836,8 +7830,8 @@ These canonical type, body, authenticated factory and driver inputs grant no com
 | `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | owner invalidated while a borrow (`Slice<T>` view, `ref`, or raw pointer) is live |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, closure capture, execution boundary) |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
-| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
-| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | Legacy analyzer prohibition on generator defer; current Checked generators use the registered-cleanup and close rules of §3.16.3 instead |
 | `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | an error can escape a `defer` cleanup block (see §8.3.1) |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |

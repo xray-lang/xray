@@ -12,13 +12,14 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
         if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
         if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_INVOKE_DEFAULT ||
-            op->op == XR_XIR_TASK_AWAIT) {
-            XrXirType result = op->op == XR_XIR_TASK_AWAIT ?
+            (op->op == XR_XIR_TASK_AWAIT || op->op == XR_XIR_ITERATOR_HAS_NEXT || op->op == XR_XIR_ITERATOR_NEXT)) {
+            XrXirType result = (op->op == XR_XIR_TASK_AWAIT || op->op == XR_XIR_ITERATOR_HAS_NEXT || op->op == XR_XIR_ITERATOR_NEXT) ?
                 task_await_result(context->module, function, op) : op->type;
-            if (op->op == XR_XIR_TASK_AWAIT) {
+            if ((op->op == XR_XIR_TASK_AWAIT || op->op == XR_XIR_ITERATOR_HAS_NEXT || op->op == XR_XIR_ITERATOR_NEXT)) {
                 const XrXirTypeNode *task = xr_xir_type_node(context->module->types,
                     xr_xir_operand_type(function, op->args[0]));
-                if (!task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+                if (!task || task->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
+                    return XR_XIR_BAD_TYPE;
             }
             if (op->targets[0] == op->targets[1]) return XR_XIR_BAD_STRUCTURE;
             for (uint32_t edge = 0; edge < 2; ++edge) {
@@ -43,7 +44,7 @@ static XrXirStatus invoke_edges(const Graph *graph, const XrXirFunction *functio
             const XrXirInstruction *call = &function->instructions[op->immediate];
             if (!block || function->blocks[block].first != i ||
                 (call->op != XR_XIR_INVOKE && call->op != XR_XIR_INVOKE_INDIRECT && call->op != XR_XIR_INVOKE_DEFAULT &&
-                    call->op != XR_XIR_TASK_AWAIT) ||
+                    call->op != XR_XIR_TASK_AWAIT && call->op != XR_XIR_ITERATOR_HAS_NEXT && call->op != XR_XIR_ITERATOR_NEXT) ||
                 call->targets[op->op == XR_XIR_INVOKE_ERROR ? 1 : 0] != block)
                 return XR_XIR_BAD_STRUCTURE;
         }

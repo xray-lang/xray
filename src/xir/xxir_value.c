@@ -102,8 +102,8 @@ _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8
 static void class_observation_dispose(XrXirDomain *domain);
 /* The immutable prefix is readable before any generation-specific field.
  * Its fifth byte excludes both supported old atomic-bool representations. */
-static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x1a,0x00,0x00,0x01};
-_Static_assert(XR_XIR_VALUE_ABI_VERSION==26,"domain identity matches its physical value generation");
+static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x1b,0x00,0x00,0x01};
+_Static_assert(XR_XIR_VALUE_ABI_VERSION==27,"domain identity matches its physical value generation");
 _Static_assert(offsetof(XrXirDomain, identity) == 0 && sizeof(atomic_bool) == 1 &&
     sizeof(_Atomic(uint32_t)) == 4, "domain identity rejects the complete retired prefix");
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain) {

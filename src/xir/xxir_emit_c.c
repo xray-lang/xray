@@ -548,7 +548,9 @@ static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
 static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index) {
     if (!emit_work(buffer, 1)) return;
-    XrXirType expected = xr_xir_task_element(buffer->types, xr_xir_operand_type(function, op->args[0]));
+    XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
+    XrXirType expected=op->op==XR_XIR_TASK_AWAIT ? xr_xir_task_element(buffer->types,receiver) :
+        op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : xr_xir_iterator_element(buffer->types,receiver);
     uint32_t normal = function->blocks[op->targets[0]].first;
     uint32_t error = function->blocks[op->targets[1]].first;
     bool discard = function->instructions[normal].op == XR_XIR_INVOKE_DISCARD;
@@ -567,10 +569,13 @@ static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
         if (emit_has_cleanup(buffer, function)) EMIT_U_SHAPE(buffer, et_c1b53604735e1cf4, " state->panic_frontier = %uu;\n", " state->panic_frontier = ", "u;\n",
             function->blocks[function->blocks[block].panic].frontier);
     }
-    EMIT_FORMAT(buffer, et_68f2567966206496, " state->waiting = true; state->destination = %uu; state->expected = %uu;\n"
-        " return (XrXirAction) {XR_XIR_ACTION_AWAIT_TASK, 0, NULL, 0,\n"
+    EMIT_FORMAT(buffer, et_844689fb37535891, " state->waiting = true; state->destination = %uu; state->expected = %uu;\n"
+        " return (XrXirAction) {%s, %uu, NULL, 0,\n"
         " {%uu, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, %s};\n",
-        destination, (uint32_t) expected, (uint32_t) xr_xir_operand_type(function, op->args[0]),
+        destination, (uint32_t) expected,
+        op->op==XR_XIR_TASK_AWAIT ? "XR_XIR_ACTION_AWAIT_TASK" : "XR_XIR_ACTION_AWAIT_ITERATOR",
+        op->op==XR_XIR_TASK_AWAIT ? 0u : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT : XR_XIR_WAIT_ITERATOR_NEXT,
+        (uint32_t) xr_xir_operand_type(function, op->args[0]),
         layout->offsets[op->args[0]], protected_wait ? "XR_XIR_ACTION_PROTECTED" : "0u");
 }
 
@@ -995,7 +1000,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_GO:
         emit_resume_go(buffer, function, op, layout, destination);
         return;
-    case XR_XIR_TASK_AWAIT:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT:
         emit_resume_await(buffer, function, op, layout, index);
         return;
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:

@@ -546,7 +546,7 @@ def render_task_identity(root):
 
 
 def render_iterator_identity(root):
-    """Bind the complete pull-iterator declaration without member recipes."""
+    """Bind the complete declaration and its compiler-owned pull recipes."""
     source = (root / 'stdlib/types/iterator.xr').read_text(encoding='utf-8').replace('\r\n', '\n')
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     binding = re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("Iterator",\s*1,\s*XR_TINSTANCE,\s*GENERIC_1\)', prelude)
@@ -580,20 +580,26 @@ def render_iterator_identity(root):
                     'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower()]) + '},')
             output.append('};')
         lowered = number > 1 and source.splitlines()[number - 2].strip() == '// @lowered'
+        if name in ('hasNext', 'next') and not lowered:
+            raise ValueError('Iterator pull operation requires its exact lowered signature')
         facts.append((index, number, raw, name, signature, parameters, result, result_text, lowered))
     output.append('static const XrNativeMemberDeclaration xr_native_iterator_members[] = {')
     for index, number, raw, name, signature, parameters, result, result_text, lowered in facts:
         params = f'xr_native_iterator_parameters_{index}' if parameters else 'NULL'
+        operation = {'hasNext': 'ITERATOR_HAS_NEXT', 'next': 'ITERATOR_NEXT'}.get(name, 'NONE')
         output.append('    {' + ', '.join([str(index + 1), c_string(name), c_string(signature),
             c_string(result_text), str(number), str(len(raw[:raw.index(name)].encode('utf-8')) + 1),
             'XR_NATIVE_RECEIVER_READ', 'false', 'true', str(lowered).lower(), 'true',
-            'XR_NATIVE_OPERATION_NONE', 'XR_NATIVE_ALLOCATION_UNKNOWN', '""',
-            'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN', params, str(len(parameters)),
+            'XR_NATIVE_OPERATION_' + operation,
+            'XR_NATIVE_ALLOCATION_MAY_HEAP' if operation != 'NONE' else 'XR_NATIVE_ALLOCATION_UNKNOWN',
+            '"IteratorExhausted"' if name == 'next' else '""',
+            'XR_NATIVE_RESULT_OWNERSHIP_OWNED' if operation != 'NONE' else 'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN',
+            params, str(len(parameters)),
             'XR_NATIVE_TERM_' + simple_term(result, 'T')]) + '},')
     number, raw = rows[0]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
     output += ['};', 'static const XrNativeTypeDeclaration xr_native_iterator = {',
-        '    6, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1,',
+        '    8, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1,',
         '    "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
         f'    {number}, {len(raw[:raw.index("Iterator")].encode("utf-8")) + 1}, xr_native_iterator_members, 5', '};']

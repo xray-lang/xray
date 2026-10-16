@@ -148,7 +148,7 @@ int main(int argc,char **argv) {
         {"fn bad(it: Iterator<i64,string>) {}\nfn main() {}",XR_XIR_BAD_TYPE},
         {"fn bad<Iterator>(it: Iterator<i64>) {}\nfn main() {}",XR_XIR_BAD_STRUCTURE},
         {"const Iterator=1\nfn bad(it: Iterator<i64>) {}\nfn main() {}",XR_XIR_BAD_TYPE},
-        {"fn bad(it: Iterator<i64>) -> i64 { return it.next() }\nfn main() {}",XR_XIR_BAD_TYPE},
+        {"fn bad(it: Iterator<i64>) -> i64 { return it.next(1) }\nfn main() {}",XR_XIR_BAD_TYPE},
         {"fn bad(it: Task<Iterator<i64>>) {}\nfn main() {}",XR_XIR_BAD_TYPE}};
     for (uint32_t i=0;i<sizeof(bad)/sizeof(*bad);++i)
         CHECK(iterator_source_run(bad[i].text,false,iterator_source_caps(),NULL,false)==bad[i].expected);

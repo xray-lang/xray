@@ -24,6 +24,7 @@ static size_t xr_xir_panic_message_format_graph_operation(XrXirFaultDetail detai
             detail.index, detail.length);
         break;
     case XR_XIR_PANIC_MATCH: written = snprintf(buffer, capacity, "non-exhaustive match"); break;
+    case XR_XIR_PANIC_ITERATOR_EXHAUSTED: written = snprintf(buffer, capacity, "iterator is exhausted"); break;
     case XR_XIR_PANIC_NULL_UNWRAP: written = snprintf(buffer, capacity, "cannot unwrap a null value"); break;
     default: return 0;
     }

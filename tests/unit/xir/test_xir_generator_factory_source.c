@@ -21,18 +21,36 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_fixture_owner.h"
 #include "xir_generator_factory_cases.h"
+#include "xir_generator_factory86_golden.h"
 #include "xir_generator_factory85_golden.h"
 _Static_assert(XR_XIR_GENERATOR_NEW==177 && XR_XIR_TYPE_ITERATOR==11,"independent factory protocol ordinals");
 static void factory_packet_models(const XrXirCompileContext *context) {
+    const struct {const uint8_t *bytes;size_t length;} previous85[]={
+        {factory85_i64,sizeof(factory85_i64)},
+        {factory85_unit,sizeof(factory85_unit)},
+        {factory85_no_suspend,sizeof(factory85_no_suspend)},
+        {factory85_ordinary_target,sizeof(factory85_ordinary_target)},
+        {factory85_scalar_result,sizeof(factory85_scalar_result)},
+        {factory85_argument_count,sizeof(factory85_argument_count)},
+        {factory85_targets,sizeof(factory85_targets)},
+        {factory85_yield_in_factory,sizeof(factory85_yield_in_factory)}};
+    for(unsigned i=0;i<sizeof(previous85)/sizeof(previous85[0]);++i) {
+        XrCompileResourceStats before={0},after={0};
+        CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+        XrXirArtifact *decoded=NULL;
+        CHECK(xr_xir_compile_checked_read(context,previous85[i].bytes,previous85[i].length,&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
+        CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+        CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
+    }
     const struct {const uint8_t *bytes;size_t length;XrXirStatus expected;} cases[]={
-        {factory85_i64,sizeof(factory85_i64),XR_XIR_OK},
-        {factory85_unit,sizeof(factory85_unit),XR_XIR_OK},
-        {factory85_no_suspend,sizeof(factory85_no_suspend),XR_XIR_OK},
-        {factory85_ordinary_target,sizeof(factory85_ordinary_target),XR_XIR_BAD_TYPE},
-        {factory85_scalar_result,sizeof(factory85_scalar_result),XR_XIR_BAD_TYPE},
-        {factory85_argument_count,sizeof(factory85_argument_count),XR_XIR_BAD_STRUCTURE},
-        {factory85_targets,sizeof(factory85_targets),XR_XIR_BAD_STRUCTURE},
-        {factory85_yield_in_factory,sizeof(factory85_yield_in_factory),XR_XIR_BAD_TYPE}};
+        {factory86_i64,sizeof(factory86_i64),XR_XIR_OK},
+        {factory86_unit,sizeof(factory86_unit),XR_XIR_OK},
+        {factory86_no_suspend,sizeof(factory86_no_suspend),XR_XIR_OK},
+        {factory86_ordinary_target,sizeof(factory86_ordinary_target),XR_XIR_BAD_TYPE},
+        {factory86_scalar_result,sizeof(factory86_scalar_result),XR_XIR_BAD_TYPE},
+        {factory86_argument_count,sizeof(factory86_argument_count),XR_XIR_BAD_STRUCTURE},
+        {factory86_targets,sizeof(factory86_targets),XR_XIR_BAD_STRUCTURE},
+        {factory86_yield_in_factory,sizeof(factory86_yield_in_factory),XR_XIR_BAD_TYPE}};
     for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         XrXirArtifact *decoded=NULL;XrXirStatus status=xr_xir_compile_checked_read(context,cases[i].bytes,cases[i].length,&decoded,NULL);
         if(status!=cases[i].expected) fprintf(stderr,"Factory packet%u status%u expected%u\n",i,status,cases[i].expected);

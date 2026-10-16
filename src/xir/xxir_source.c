@@ -259,7 +259,7 @@ typedef struct SourceContext {
     uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t task_module, task_declaration;
-    uint32_t iterator_module, iterator_declaration;
+    uint32_t iterator_module, iterator_declaration, iterator_members[2];
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
@@ -1146,6 +1146,7 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
         source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
 }
 #include "xxir_source_task_call.inc.c"
+#include "xxir_source_iterator_call.inc.c"
 static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType result_context, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     if (call->arg_count < 0 || call->arg_count > 65536 || call->type_arg_count < 0 ||
@@ -1250,6 +1251,9 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 }
             }
             if (!expression(ctx, member->object, &receiver)) return false;
+            const XrXirTypeNode *iterator=xr_xir_type_node(&ctx->types,receiver.type);
+            if (iterator && iterator->kind==XR_XIR_TYPE_ITERATOR)
+                return source_iterator_call(ctx,node,receiver,value);
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
             if (xr_xir_type_is_atomic(&ctx->types,receiver.type))
