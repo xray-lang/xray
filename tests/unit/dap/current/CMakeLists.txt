@@ -22,6 +22,18 @@ add_test(NAME test_xir_effect_record_sharing_resources COMMAND test_xir_effect_r
 set_tests_properties(test_xir_effect_record_sharing PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;compiler")
 set_tests_properties(test_xir_effect_record_sharing_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;compiler;resources;fault-injection")
 
+add_executable(test_xir_source_quiescent_storage test_source_quiescent_storage.c)
+target_link_libraries(test_xir_source_quiescent_storage PRIVATE xray_xir_source xray_xir_vm)
+if(MSVC)
+    target_compile_options(test_xir_source_quiescent_storage PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_xir_source_quiescent_storage PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_quiescent_storage COMMAND test_xir_source_quiescent_storage)
+add_test(NAME test_xir_source_quiescent_storage_resources COMMAND test_xir_source_quiescent_storage --resources)
+set_tests_properties(test_xir_source_quiescent_storage PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;metadata")
+set_tests_properties(test_xir_source_quiescent_storage_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;metadata;resources;fault-injection")
+
 add_executable(test_dap_current_debug test_current_debug.c)
 target_link_libraries(test_dap_current_debug PRIVATE xray_dap_current xray_xir_source)
 if(MSVC)
