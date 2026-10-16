@@ -15,19 +15,21 @@ def frames():
         [1,0,1,0,16,8,0,0,0,0xffffffff],
         [2,0,2,8,16,8,0,0,0,0,0xffffffff],
     ]
-    words=[1,1,24,29,30,2,3,1]+sum(functions,[])
-    assert len(words)==43
-    layout=b'xray:xir-lowered-layout:v1'+struct.pack('<43I',*words)
-    result={'xir_source_product_identity.h':{
-        'layout_current24_preimage':layout,
-        'product_layout_value24_digest':hashlib.sha256(layout).digest(),
-    }}
+    layouts={}
+    for value,call,program in ((24,29,30),(29,33,34)):
+        words=[1,1,value,call,program,2,3,1]+sum(functions,[])
+        assert len(words)==43
+        layout=b'xray:xir-lowered-layout:v1'+struct.pack('<43I',*words)
+        layouts[f'layout_current{value}_preimage']=layout
+        layouts[f'product_layout_value{value}_digest']=hashlib.sha256(layout).digest()
+    result={'xir_source_product_identity.h':layouts}
     policies={}
     for prefix in ('linked','original'):
         text=(prefix+'_source').encode('ascii')
-        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,73,24,29,30,len(text))+text
-        policies[prefix+'_policy_value24_preimage']=frame
-        policies[prefix+'_policy_value24']=hashlib.sha256(frame).digest()
+        for semantic,value,call,program in ((73,24,29,30),(76,29,33,34)):
+            frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,semantic,value,call,program,len(text))+text
+            policies[prefix+f'_policy_value{value}_preimage']=frame
+            policies[prefix+f'_policy_value{value}']=hashlib.sha256(frame).digest()
     result['xir_native_projection_expectations.h']=policies
     return result
 
@@ -50,7 +52,7 @@ def main():
                 assert actual==expected,(filename,name,actual.hex(),expected.hex())
         if args.write:
             path.write_text(source,encoding='utf-8')
-    print('Independent SourceProduct layout/policy preimages: PASS (Value24/Call29/Program30)')
+    print('Independent current Value29/Call33/Program34 and retained Value24/Call29/Program30 layout/policy preimages: PASS')
 
 if __name__=='__main__':
     main()
