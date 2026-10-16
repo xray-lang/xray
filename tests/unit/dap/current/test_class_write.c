@@ -202,6 +202,8 @@ static size_t class_observer_fault(size_t fail) {
         CHECK(status==XR_XIR_OK && adapter->value_count==refs+1);
         CHECK(adapter->values[refs].origin.path.count==1);XrJsonValue *reply=last_response("variables",true);xjson_free(reply);
     } else {
+        if (status!=XR_XIR_OUT_OF_MEMORY || sites<=fail || adapter->value_count!=refs)
+            fprintf(stderr,"Class type fault site=%zu/%zu status=%d refs=%u/%u\n",fail,sites,(int)status,adapter->value_count,refs);
         CHECK(status==XR_XIR_OUT_OF_MEMORY && sites>fail && adapter->value_count==refs);
         CHECK(adapter->next_handle>=next && adapter->next_handle-next<=1 && !capture.count);
         CHECK(!memcmp(existing,adapter->values,(size_t)refs*sizeof(*existing)));

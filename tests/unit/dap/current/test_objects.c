@@ -12,6 +12,18 @@
 #include "app/dap/xdap_dispatch_internal.h"
 #include "xir/xxir_types.h"
 #include "xir/xxir_type_arena.h"
+/* Keep fixture parsing allocations outside the adapter fault scope. The
+ * complete response and sequence are checked after injection ends. */
+static XrXirStatus objects_record(void *context,const char *bytes,size_t length) {
+    Capture *out=context;CHECK(out->count<128 && length<sizeof(out->messages[0].bytes));
+    Message *message=&out->messages[out->count++];memcpy(message->bytes,bytes,length);message->bytes[length]=0;
+    message->size=length;++out->seq;
+    if (out->reentry) {
+        CHECK(xdap_adapter_free(out->adapter)==XR_XIR_CALL_BUSY);
+        CHECK(xdap_adapter_request(out->adapter,"{}",2)==XR_XIR_BAD_STRUCTURE);
+    }
+    return XR_XIR_OK;
+}
 static XdapAdapter *objects_setup(XrCompileResources **ledger,XrXirDomain **domain,XrCompileResourceStats *baseline) {
     memset(&capture,0,sizeof(capture));XrCompileResourceLimits limits={67108864,8388608,128000000};
     CHECK(xr_compile_resources_new(&limits,ledger)==XR_COMPILE_RESOURCE_OK);
@@ -84,6 +96,7 @@ static size_t objects_capture_fi(size_t point) {
     xdap_current_result_drop(&result);objects_dispose(adapter,ledger,domain,baseline);return sites;
 }
 static void objects_children_fi(XdapAdapter *adapter,uint64_t handle) {
+    adapter->config.write=objects_record;
     char message[256];snprintf(message,sizeof(message),
         "{\"seq\":12,\"type\":\"request\",\"command\":\"variables\",\"arguments\":{\"variablesReference\":%llu}}",(unsigned long long)handle);
     size_t sites=0;uint32_t before_refs=adapter->value_count;XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;
@@ -103,13 +116,14 @@ static void objects_children_fi(XdapAdapter *adapter,uint64_t handle) {
             request(adapter,message);
         }
         CHECK(adapter->snapshot==snapshot && adapter->stop_epoch==epoch);
-        XrJsonValue *reply=last_response("variables",true);CHECK(xjson_array_len(xjson_get_array(xjson_get_object(reply,"body"),"variables"))==5);xjson_free(reply);
+        XrJsonValue *reply=last_response("variables",true);CHECK(xjson_get_int(reply,"seq")==capture.seq);CHECK(xjson_array_len(xjson_get_array(xjson_get_object(reply,"body"),"variables"))==5);xjson_free(reply);
         while (adapter->value_count>before_refs) {
             xdap_value_ref_drop(&adapter->values[--adapter->value_count]);
         }
         CHECK(xr_xir_domain_budget_stats(adapter->config.observer_metadata).metadata_live==metadata.metadata_live);
         CHECK(xr_xir_domain_stats(adapter->config.observer_metadata).live_bytes==values.live_bytes);
     }
+    adapter->config.write=capture_message;
     printf("Object child response full FI: %zu allocation sites, original ledgers/rollback/epoch PASS\n",sites);
 }
 int main(int argc,char **argv) {

@@ -12,6 +12,10 @@
 #include "xdap_expression.h"
 #include <stdio.h>
 #include <string.h>
+static XrXirStatus inspect_observation_status(XrXirValueStatus status) {
+    return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
+        status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+}
 static XrXirStatus inspect_finish(XdapAdapter *s,const XdapRequest *r,XdapJsonWriter *body) {
     XrXirStatus status=xdap_dispatch_response(s,r,true,body,NULL);xdap_json_writer_free(body);return status;
 }
@@ -58,7 +62,7 @@ static XrXirStatus inspect_threads(XdapAdapter *s,const XdapRequest *r) {
         XrXirValueStatus status=xdap_current_threads(s->launch->control,ids,65,&count);
         if (status==XR_XIR_VALUE_UNSUPPORTED)
             return xdap_dispatch_response(s,r,false,NULL,"Complete thread observation requires admitted VM ingress");
-        if (status!=XR_XIR_VALUE_OK) return status==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        if (status!=XR_XIR_VALUE_OK) return inspect_observation_status(status);
     }
     XdapJsonWriter body=xdap_json_writer(s->resources,s->config.message_limit);
     XDAP_TEXT(&body,"{\"threads\":[");
@@ -81,7 +85,7 @@ static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {
     for (uint32_t i=0;i<s->depth;++i) {
         XrXirVmDebugFrameInfo info={0};XrXirValue name={0};
         XrXirValueStatus observed=xr_xir_vm_debug_snapshot_frame(s->snapshot,i,&info,&name);
-        if (observed!=XR_XIR_VALUE_OK) { body.status=observed==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;break; }
+        if (observed!=XR_XIR_VALUE_OK) { body.status=inspect_observation_status(observed);break; }
         if (info.thread!=thread) { xr_xir_value_drop(&name);continue; }
         if (total++<start || (levels && shown>=levels)) { xr_xir_value_drop(&name);continue; }
         const char *text=NULL;size_t length=0;
@@ -175,7 +179,7 @@ static bool inspect_variable(XdapAdapter *s,XdapJsonWriter *body,const char *nam
     if (s->variable_types) {
         XdapValueView view={value,s->config.observer_metadata,s->snapshot,frame};XdapTypeText type={0};
         XrXirValueStatus formatted=xdap_value_type_text(&view,&type);
-        if (formatted!=XR_XIR_VALUE_OK) { body->status=formatted==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;return false; }
+        if (formatted!=XR_XIR_VALUE_OK) { body->status=inspect_observation_status(formatted);return false; }
         XDAP_TEXT(body,",\"type\":");xdap_json_quote(body,type.bytes,type.length);
     }
     XDAP_TEXT(body,",\"variablesReference\":");xdap_json_unsigned(body,handle);
@@ -360,7 +364,7 @@ static XrXirStatus inspect_evaluate(XdapAdapter *s,const XdapRequest *r) {
     if (s->variable_types && body.status==XR_XIR_OK) {
         XdapValueView view={&value,s->config.observer_metadata,s->snapshot,frame};XdapTypeText type={0};
         XrXirValueStatus formatted=xdap_value_type_text(&view,&type);
-        if (formatted!=XR_XIR_VALUE_OK) body.status=formatted==XR_XIR_VALUE_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
+        if (formatted!=XR_XIR_VALUE_OK) body.status=inspect_observation_status(formatted);
         else { XDAP_TEXT(&body,",\"type\":");xdap_json_quote(&body,type.bytes,type.length); }
     }
     XDAP_TEXT(&body,",\"variablesReference\":");xdap_json_unsigned(&body,reference);
