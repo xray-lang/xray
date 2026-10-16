@@ -58,6 +58,8 @@ def main():
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fragment = 'source_sdk_repl_write_consumer.inc.c'
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
+    fragment = 'source_sdk_repl_hosted_consumer.inc.c'
+    (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fixtures = out/'fixtures'
     fixtures.mkdir()
     for name in ('source_public_repl_rooted', 'source_public_repl_file'):
@@ -81,6 +83,7 @@ def main():
                 b'Installed Array history: exact birth push, argument once, const refusal, panic effect, shadow and owned snapshot PASS\n'
                 b'Installed Class history control: independent later field read PASS\n'
                 b'Installed typed binding writes: birth authority, scalar/String/Unit/Array/struct/Class, foreign refusal, busy and owned survivor PASS\n'
+                b'Installed hosted lifecycle: explicit owners, child and root yields, busy drop, defaults reset and owned survivors PASS\n'
                 b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n')
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
@@ -140,6 +143,11 @@ def main():
                    write_preserves_bindings_and_it=True, write_pending_and_callback_BUSY=True,
                    write_foreign_composite_refused_after_producer_death=True,
                    written_NUL_UTF8_survives_all_producers=True,
+                   simultaneous_REPL_owners=True, child_then_root_yield=True,
+                   second_owner_dies_before_first_resumes=True,
+                   callback_drop_BUSY_preserves_pointer_and_event=True,
+                   call_options_reinit_and_bad_size_preserve_outputs=True,
+                   owned_results_survive_both_owners=True,
                    manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
                    scope='Source embedding host consumers; not Target AOT/mixed or complete FI/safety qualification',
                    production_release=False)
