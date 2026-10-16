@@ -856,6 +856,8 @@ native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/
 
 紧凑哈希字段的拥有式载体读取须恢复子对象的实际arena/type，不将局部类型序号贴到另一个出生池的对象。哈希图遍历使用真实对象所保留的arena；存储准备沿同一已检查目标类型及原Domain、work、scratch和失败责任。此身份接收不代表完整Map/Set普通库方法、union、匿名记录、视图或普通Iterable已完成，完整资源、取消、安全及provider资格仍独立要求。
 
+读取或修改已接收Map/Set时，先在调用方类型池认证完整容器身份，再用实际出生池中的key/value类型解释探测、解包、COW克隆及写回。place保留调用方静态预期，payload恢复真实载体；不能把静态序号写入旧对象头。新字段按已认证身份匹配，可引用接收池新建的等价构造值。局部请求保留原Domain、函数gate/context，只向原请求回写实际消耗的work和释放后的scratch；失败保原根、快照与输出。该行为不扩大普通Source成员准入或函数执行权限。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1822,5 +1824,7 @@ Native declaration IDs and XIR type kinds occupy separate namespaces. Array/stri
 The current unified identity is Checked schema32/semantic79, Value25, Call29 and Program34. Map records carry exact key/value edges, and Set records carry their exact element edge. Ordinary declarations retain authentic rest, exported constants and existing per-frame birth authority. Complete old31/78 declaration packets, old28/75 hash packets and both SDK preimages remain rejection evidence. There is no old reader, alias or version-guessing admission path. Independent models traverse all fields and recursive origins. Missing declaration fields in retired Nullable fixtures are reconstructed from named facts without refreshing expectations from the product writer.
 
 Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
+
+Reading or mutating a received Map/Set first authenticates the complete container identity in the caller arena, then interprets keys and values in the actual birth arena for probing, unpacking, COW cloning and publication. Places retain the caller static expectation while payload recovery preserves the actual carrier; a static ordinal never rewrites an old object header. Prepared fields match authenticated identities and may contain equivalent constructed values newly allocated in the receiving arena. Local requests retain the original Domain and function gate/context, returning only consumed work and released scratch to the original request. Failure preserves roots, snapshots and outputs. This behavior does not expand ordinary Source member admission or callable execution authority.
 
 <!-- /xr-spec:en -->

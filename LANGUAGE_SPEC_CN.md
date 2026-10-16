@@ -7921,6 +7921,8 @@ native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/
 
 紧凑哈希字段的拥有式载体读取须恢复子对象的实际arena/type，不将局部类型序号贴到另一个出生池的对象。哈希图遍历使用真实对象所保留的arena；存储准备沿同一已检查目标类型及原Domain、work、scratch和失败责任。此身份接收不代表完整Map/Set普通库方法、union、匿名记录、视图或普通Iterable已完成，完整资源、取消、安全及provider资格仍独立要求。
 
+读取或修改已接收Map/Set时，先在调用方类型池认证完整容器身份，再用实际出生池中的key/value类型解释探测、解包、COW克隆及写回。place保留调用方静态预期，payload恢复真实载体；不能把静态序号写入旧对象头。新字段按已认证身份匹配，可引用接收池新建的等价构造值。局部请求保留原Domain、函数gate/context，只向原请求回写实际消耗的work和释放后的scratch；失败保原根、快照与输出。该行为不扩大普通Source成员准入或函数执行权限。
+
 ---
 
 ## 18. 错误码 (Error Codes)

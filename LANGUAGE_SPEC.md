@@ -8084,6 +8084,8 @@ The current unified identity is Checked schema32/semantic79, Value25, Call29 and
 
 Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
 
+Reading or mutating a received Map/Set first authenticates the complete container identity in the caller arena, then interprets keys and values in the actual birth arena for probing, unpacking, COW cloning and publication. Places retain the caller static expectation while payload recovery preserves the actual carrier; a static ordinal never rewrites an old object header. Prepared fields match authenticated identities and may contain equivalent constructed values newly allocated in the receiving arena. Local requests retain the original Domain and function gate/context, returning only consumed work and released scratch to the original request. Failure preserves roots, snapshots and outputs. This behavior does not expand ordinary Source member admission or callable execution authority.
+
 ---
 
 ## 18. Error Codes

@@ -89,14 +89,20 @@ static XrXirValueStatus hash_upsert(const XrXirValuePlace *place, const XrXirVal
 XR_FUNC XrXirValueStatus xr_xir_map_set(const XrXirValuePlace *place, const XrXirValue *key,
     const XrXirValue *value, XrXirValueAdmission *admission) {
     if (!value || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local = {0}; XrXirValuePlace storage = {0};
+    XrXirValueStatus status = hash_place_admission(place, XR_XIR_TYPE_MAP, admission, &local, &storage);
+    if (status != XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_upsert(place, key, value, admission);
-    xr_xir_value_graph_end(); return status;
+    status = hash_upsert(&storage, key, value, &local);
+    xr_xir_value_graph_end(); return storage_admission_end(admission, &local, status);
 }
 XR_FUNC XrXirValueStatus xr_xir_set_add(const XrXirValuePlace *place, const XrXirValue *element,
     XrXirValueAdmission *admission) {
     if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local = {0}; XrXirValuePlace storage = {0};
+    XrXirValueStatus status = hash_place_admission(place, XR_XIR_TYPE_SET, admission, &local, &storage);
+    if (status != XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_upsert(place, element, NULL, admission);
-    xr_xir_value_graph_end(); return status;
+    status = hash_upsert(&storage, element, NULL, &local);
+    xr_xir_value_graph_end(); return storage_admission_end(admission, &local, status);
 }

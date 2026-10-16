@@ -73,9 +73,12 @@ static XrXirValueStatus hash_delete(const XrXirValuePlace *place, const XrXirVal
 XR_FUNC XrXirValueStatus xr_xir_hash_delete(const XrXirValuePlace *place, const XrXirValue *key,
     XrXirValueAdmission *admission, bool *removed) {
     if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local = {0}; XrXirValuePlace storage = {0};
+    XrXirValueStatus status = hash_place_admission(place, 0, admission, &local, &storage);
+    if (status != XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_delete(place, key, admission, removed);
-    xr_xir_value_graph_end(); return status;
+    status = hash_delete(&storage, key, &local, removed);
+    xr_xir_value_graph_end(); return storage_admission_end(admission, &local, status);
 }
 static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmission *admission) {
     XrXirValue current = {0}; XirHash *map = NULL;
@@ -100,7 +103,10 @@ static XrXirValueStatus hash_clear(const XrXirValuePlace *place, XrXirValueAdmis
 }
 XR_FUNC XrXirValueStatus xr_xir_hash_clear(const XrXirValuePlace *place, XrXirValueAdmission *admission) {
     if (!hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local = {0}; XrXirValuePlace storage = {0};
+    XrXirValueStatus status = hash_place_admission(place, 0, admission, &local, &storage);
+    if (status != XR_XIR_VALUE_OK) return status;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = hash_clear(place, admission);
-    xr_xir_value_graph_end(); return status;
+    status = hash_clear(&storage, &local);
+    xr_xir_value_graph_end(); return storage_admission_end(admission, &local, status);
 }

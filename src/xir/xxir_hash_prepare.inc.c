@@ -108,10 +108,25 @@ static XrXirValueStatus hash_place_current(const XrXirValuePlace *place, uint32_
     memcpy(&current->payload, place->payload, sizeof(current->payload));
     return hash_admit(current, kind, admission, map);
 }
+/* A place carries the caller's expected type; its payload keeps the actual
+ * owner coordinate. Authenticate that correspondence before using storage. */
+static XrXirValueStatus hash_place_admission(const XrXirValuePlace *place, uint32_t kind,
+    XrXirValueAdmission *admission, XrXirValueAdmission *local, XrXirValuePlace *storage) {
+    if (!place || !place->payload || !hash_admission_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena), place->type);
+    if (!node || (kind ? node->kind != kind :
+        (node->kind != XR_XIR_TYPE_MAP && node->kind != XR_XIR_TYPE_SET))) return XR_XIR_VALUE_BAD_ARGUMENT;
+    int64_t payload; memcpy(&payload, place->payload, sizeof(payload));
+    XrXirValue value = {0};
+    if (!xr_xir_value_from_payload(admission->arena, place->type, payload, &value)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status = storage_admission_begin(&value, admission, local);
+    if (status == XR_XIR_VALUE_OK) *storage = (XrXirValuePlace){(XrXirType)value.type, place->payload};
+    return status;
+}
 static XrXirValueStatus hash_prepare_field(StoragePrepared *prepared, const XrXirValue *value,
     XrXirType type, XrXirValueAdmission *admission) {
     XrXirLayout layout = {0};
-    if (!value || value->type != (uint32_t)type ||
+    if (!xr_xir_value_argument(value, admission->arena, type) ||
         !xr_xir_compile_type_arena_layout(admission->arena, type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
     return storage_prepared_begin(prepared, type, value, layout.size, admission);
 }

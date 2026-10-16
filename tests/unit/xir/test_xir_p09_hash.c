@@ -156,6 +156,7 @@ static void hash_string_cases(XrXirValueAdmission *admission) {
 }
 #include "p09_hash_faults.h"
 #include "p09_hash_graph.h"
+#include "p09_hash_receiving_faults.h"
 int main(int argc, char **argv) {
     XrXirTypeArena *arena = hash_test_arena(); XrXirDomain *domain = NULL;
     CHECK(xr_xir_domain_new(1048576, &domain) == XR_XIR_VALUE_OK);
@@ -165,6 +166,7 @@ int main(int argc, char **argv) {
     xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
     CHECK(!live && !value_compile_live && !value_compile_bytes);
     hash_graph_cases();
+    hash_receiving_faults();
     puts("Map/Set dense probe/delete, shared snapshots, IEEE keys, full bytes and final physical0 PASS");
     return 0;
 }
