@@ -74,7 +74,7 @@ static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CALLABLE ||
         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
-        node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) &&
+        node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR) &&
         node->parameter_span <= parameters;
 }
 static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,

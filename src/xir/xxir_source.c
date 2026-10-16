@@ -259,6 +259,7 @@ typedef struct SourceContext {
     uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t task_module, task_declaration;
+    uint32_t iterator_module, iterator_declaration;
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
@@ -559,6 +560,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
 #include "xxir_source_native.inc.c"
 #include "xxir_source_atomic.inc.c"
 #include "xxir_source_task_type.inc.c"
+#include "xxir_source_iterator_type.inc.c"
 #include "xxir_source_ordering.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
@@ -705,6 +707,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
             return source_native_atomic_type(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Task"))
             return source_native_task_type(ctx,ref,type);
+        if (ref->name && source_text_same(ctx,NULL,ref->name,"Iterator"))
+            return source_native_iterator_type(ctx,ref,type);
         if (ref->name && source_native_find(ctx,ref->name))
             return source_native_array_type(ctx, ref, type);
         return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);

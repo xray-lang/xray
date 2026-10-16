@@ -7573,6 +7573,14 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+### 17.39 Iterator 规范描述符开发切片
+
+Iterator使用唯一Type池中的元素描述符kind9。参数数组、result、flags及nominal字段均为空，parameter_span等于元素的真实span；元素可为Unit或已准入普通类型，内部Cell、未知类型及自身/前向边拒绝。同元素描述符不得重复。Checked沿现有kind/span/element字段编码，独立重读、克隆、定义上下文、普通泛型替换/推断、访问与Lowered验证仍检查真实元素。协议版本只由§17.6定义，本切片不增加公开Value/Call/Program字段或布局。
+
+Source的Iterator<T>类型拼写绑定stdlib/types/iterator.xr及prelude唯一注册；共同生成器拥有完整声明、真实位置及源码指纹，不以同名用户声明或接收上下文制造原生权限。泛型元素没有额外Sendable要求；隐藏frame可能保存非Sendable环境，因此元素Sendable不构成Iterator的Sendable证明，Task<Iterator<T>>仍拒绝。
+
+这只是规范类型和Source注解的开发切片；类型身份、拥有式元数据及布局不授予构造或方法recipe。真实generator产值、hasNext/next/close、独立frame、借用/取消/cleanup及VM/AOT/mixed执行继续单独实施和验收。调度WAIT_YIELD不是Generator产值；仅有类型管线通过不构成生成器或Channel完成。
+
 ---
 
 ## 18. 错误码 (Error Codes)

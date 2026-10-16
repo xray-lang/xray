@@ -7736,6 +7736,14 @@ Prepared ordinary reference refinement records owned INFERRED/FIXED value identi
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
 
+### 17.39 Canonical Iterator descriptor development slice
+
+Iterator has one element descriptor, kind9, in the sole Type pool. Parameters, result, flags and nominal fields are empty; parameter_span equals the actual element span. Unit and admitted ordinary elements are allowed; internal Cell, unknown types and self/forward edges reject. Equal element descriptors cannot be duplicated. Checked uses the existing kind/span/element fields. Independent decode, cloning, definition contexts, ordinary substitution/inference, access and Lowered verification still inspect the actual element. Protocol revisions are defined only by §17.6; this slice adds no public Value/Call/Program fields or layouts.
+
+Source Iterator<T> binds the complete stdlib/types/iterator.xr declaration and its unique prelude registration. The shared generator owns real locations and source fingerprints; same-name user declarations and receiving contexts grant no native authority. The element gains no additional Sendable requirement. A hidden frame may retain a nonSendable environment, so a Sendable element never proves Iterator Sendable; Task<Iterator<T>> still rejects.
+
+This is a development slice for canonical types and Source annotations. Type identity, owned metadata and layout grant no constructor or member recipe. Real generator values, hasNext/next/close, independent frames, borrowing, cancellation, cleanup and VM/AOT/mixed execution require separate implementation and qualification. Scheduling WAIT_YIELD is not generator output. Type-pipeline success alone completes neither Generator nor Channel.
+
 ---
 
 ## 18. Error Codes

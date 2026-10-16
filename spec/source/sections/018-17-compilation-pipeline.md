@@ -528,6 +528,14 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+### 17.39 Iterator 规范描述符开发切片
+
+Iterator使用唯一Type池中的元素描述符kind9。参数数组、result、flags及nominal字段均为空，parameter_span等于元素的真实span；元素可为Unit或已准入普通类型，内部Cell、未知类型及自身/前向边拒绝。同元素描述符不得重复。Checked沿现有kind/span/element字段编码，独立重读、克隆、定义上下文、普通泛型替换/推断、访问与Lowered验证仍检查真实元素。协议版本只由§17.6定义，本切片不增加公开Value/Call/Program字段或布局。
+
+Source的Iterator<T>类型拼写绑定stdlib/types/iterator.xr及prelude唯一注册；共同生成器拥有完整声明、真实位置及源码指纹，不以同名用户声明或接收上下文制造原生权限。泛型元素没有额外Sendable要求；隐藏frame可能保存非Sendable环境，因此元素Sendable不构成Iterator的Sendable证明，Task<Iterator<T>>仍拒绝。
+
+这只是规范类型和Source注解的开发切片；类型身份、拥有式元数据及布局不授予构造或方法recipe。真实generator产值、hasNext/next/close、独立frame、借用/取消/cleanup及VM/AOT/mixed执行继续单独实施和验收。调度WAIT_YIELD不是Generator产值；仅有类型管线通过不构成生成器或Channel完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1166,5 +1174,13 @@ This flags meaning uses the sole Checked semantic70; schema25 retains its existi
 Prepared ordinary reference refinement records owned INFERRED/FIXED value identities before region recipes are released. Ordinary direct references and closure sites close against authentic targets on the existing effects owner. Explicit callable parameters, annotations, results and conversion contexts remain fixed upper bounds; equal provisional UNKNOWN identities do not erase a boundary. A private COPY preserves it and becomes the sole ordinary FUNCTION_WEAKEN when closed identities differ. Private structure/SSA/constraint/access preparation publishes no Checked. The common complete Checker verifies all effects and permissions on both construction memory and its independent owned copy before publishing only that copy.
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
+
+### 17.39 Canonical Iterator descriptor development slice
+
+Iterator has one element descriptor, kind9, in the sole Type pool. Parameters, result, flags and nominal fields are empty; parameter_span equals the actual element span. Unit and admitted ordinary elements are allowed; internal Cell, unknown types and self/forward edges reject. Equal element descriptors cannot be duplicated. Checked uses the existing kind/span/element fields. Independent decode, cloning, definition contexts, ordinary substitution/inference, access and Lowered verification still inspect the actual element. Protocol revisions are defined only by §17.6; this slice adds no public Value/Call/Program fields or layouts.
+
+Source Iterator<T> binds the complete stdlib/types/iterator.xr declaration and its unique prelude registration. The shared generator owns real locations and source fingerprints; same-name user declarations and receiving contexts grant no native authority. The element gains no additional Sendable requirement. A hidden frame may retain a nonSendable environment, so a Sendable element never proves Iterator Sendable; Task<Iterator<T>> still rejects.
+
+This is a development slice for canonical types and Source annotations. Type identity, owned metadata and layout grant no constructor or member recipe. Real generator values, hasNext/next/close, independent frames, borrowing, cancellation, cleanup and VM/AOT/mixed execution require separate implementation and qualification. Scheduling WAIT_YIELD is not generator output. Type-pipeline success alone completes neither Generator nor Channel.
 
 <!-- /xr-spec:en -->
