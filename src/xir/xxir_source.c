@@ -1137,8 +1137,10 @@ static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *bi
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirInstruction call_op={XR_XIR_CALL,prepared.result,{0},{0},target->index,{0}};
     AstNode *reference=node->type==AST_CALL_EXPR?node->as.call_expr.callee:node;
+    uint32_t reference_before=ctx->query.reference_count;
     return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&call_op) &&
         source_query_reference(ctx,reference,binding,target,XR_XIR_SOURCE_CALL) &&
+        source_direct_call_signature(ctx,node,target->index,&prepared,reference_before) &&
         source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
 }
 #include "xxir_source_task_call.inc.c"
@@ -1294,8 +1296,10 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         SourceDirectArguments prepared = {0};
         if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
         XrXirInstruction call_op = {XR_XIR_CALL,prepared.result,{0},{0},target->index,{0}};
+        uint32_t reference_before=ctx->query.reference_count;
         return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&call_op) &&
             source_query_reference(ctx,callee,binding,target,XR_XIR_SOURCE_CALL) &&
+            source_direct_call_signature(ctx,node,target->index,&prepared,reference_before) &&
             source_recipe_group(ctx,call_op,prepared.values,prepared.count,value);
     }
     XrXirTypeNode signature = {0};

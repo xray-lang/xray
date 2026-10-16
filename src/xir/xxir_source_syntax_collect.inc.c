@@ -67,9 +67,9 @@ static bool source_query_call(SourceContext *ctx,uint32_t reference,XrXirSourceR
     if(ctx->function>=ctx->function_count)return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source call body is invalid");
     uint32_t declaration=ctx->bodies[ctx->function].declaration;
     bool known=range.line>0&&range.column>0&&range.end_line==range.line&&range.end_column>range.column;
-    XrXirSourceCall call={reference,source_query_callable(ctx,declaration)?declaration:0,
-        known?range:(XrXirSourceRange){range.module,0,0,0,0},
-        ctx->function<ctx->module_count&&ctx->function==ctx->module,known};
+    XrXirSourceCall call={.reference=reference,.caller=source_query_callable(ctx,declaration)?declaration:0,
+        .range=known?range:(XrXirSourceRange){range.module,0,0,0,0},
+        .module_initializer=ctx->function<ctx->module_count&&ctx->function==ctx->module,.selection_known=known};
     XrXirSourceCall *facts=source_query_append(ctx,ctx->calls.items,&ctx->calls.count,
         &ctx->call_capacity,sizeof(*facts));
     if(!facts)return false;ctx->calls.items=facts;

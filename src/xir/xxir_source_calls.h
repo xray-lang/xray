@@ -9,6 +9,20 @@
 #ifndef XXIR_SOURCE_CALLS_H
 #define XXIR_SOURCE_CALLS_H
 #include "xxir_source_query.h"
+/* Display facts after the canonical direct-call inference and conversion pass.
+ * Parameters include the real receiver prefix and have their display Cell layer
+ * removed. Generic owners are the caller's actual declaration identities.
+ * These observations neither construct nor authorize executable calls. */
+typedef struct XrXirSourceCallSignature {
+    const XrXirSourceType *parameters;
+    uint32_t parameter_count,receiver_count;
+    XrXirSourceType result;
+    bool known;
+    /* Exact caller-scope names, indexed by the canonical type parameter ordinal.
+     * Closed signatures keep this vector and its owner absent. */
+    const char *const *type_parameters;
+    uint32_t type_parameter_count, type_parameter_owner;
+} XrXirSourceCallSignature;
 /* A selected CALL reference retains its exact reference ordinal. An indirect
  * source invocation has UINT32_MAX instead; it grants no guessed target.
  * caller is the actual source declaration of the body, zero for implicit or
@@ -19,6 +33,7 @@ typedef struct XrXirSourceCall {
     uint32_t reference, caller;
     XrXirSourceRange range;
     bool module_initializer, selection_known;
+    XrXirSourceCallSignature signature;
 } XrXirSourceCall;
 typedef struct XrXirSourceFunctionRange {
     XrXirSourceRange range;

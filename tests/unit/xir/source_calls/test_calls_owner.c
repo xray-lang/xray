@@ -38,9 +38,9 @@ static void fixture(CallsFixture *f) {
     f->selections[1]=(XrXirSourceRange){0,4,9,4,10};
     f->selections[2]=(XrXirSourceRange){0,7,1,7,2};
     for(uint32_t i=0;i<3;++i)f->references[i]=(XrXirSourceReference){f->selections[i],i==2?2u:1u,i==2?2u:1u,i?XR_XIR_SOURCE_CALL:XR_XIR_SOURCE_READ};
-    f->items[0]=(XrXirSourceCall){1,2,f->selections[1],false,true};
-    f->items[1]=(XrXirSourceCall){UINT32_MAX,2,{0,5,3,5,4},false,true};
-    f->items[2]=(XrXirSourceCall){2,0,f->selections[2],true,true};
+    f->items[0]=(XrXirSourceCall){.reference=1,.caller=2,.range=f->selections[1],.selection_known=true};
+    f->items[1]=(XrXirSourceCall){.reference=UINT32_MAX,.caller=2,.range={0,5,3,5,4},.selection_known=true};
+    f->items[2]=(XrXirSourceCall){.reference=2,.range=f->selections[2],.module_initializer=true,.selection_known=true};
     f->view.complete=true;f->view.modules=&f->module;f->view.module_count=1;
     f->view.declarations=f->declarations;f->view.declaration_count=2;f->view.references=f->references;f->view.reference_count=3;
     f->syntax=(XrXirSourceSyntaxView){f->names,2,f->selections,3,NULL,0};
