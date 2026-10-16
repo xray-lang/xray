@@ -25,15 +25,23 @@ static XrXirStatus effect_invocation_class_fact_match(const EffectInvocationRead
     return XR_XIR_OK;
 }
 
+/* Each actual type is reread from this operation's complete physical copy.
+ * Classification and every source/rank proof still run for each value. */
 static XrXirStatus effect_invocation_class_body_match(EffectInvocationFlow *flow,
-    uint64_t limit) {
+    uint64_t limit,const XrXirFunction *physical) {
     const EffectInvocationRead *owner=flow->read;
     const EffectInvocationNode *node=&owner->final->nodes[flow->node];
     uint32_t at=0;
     for (uint32_t v=0;v<flow->values;++v) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         XrXirType actual_type=0;
-        XrXirStatus type_status=effect_invocation_flow_type(flow,v,&actual_type);
+        XrXirStatus type_status=XR_XIR_OK;
+        if (physical) {
+            if ((uint64_t)physical->parameter_count+physical->instruction_count!=flow->values)
+                type_status=XR_XIR_BAD_STRUCTURE;
+            else if (!xir_compile_work(owner->work,4+sizeof(actual_type))) type_status=XR_XIR_BUDGET;
+            else actual_type=xr_xir_operand_type(physical,v);
+        } else type_status=effect_invocation_flow_type(flow,v,&actual_type);
         if (type_status!=XR_XIR_OK) return type_status;
         bool is_class=xr_xir_type_is_class(flow->body.domain.types,actual_type);
         if (!is_class) {
@@ -123,7 +131,8 @@ static XrXirStatus effect_invocation_class_verify_read(const EffectInvocationRea
     }
     if (enabled!=owner->class_enabled) return XR_XIR_BAD_STRUCTURE;
     if (!enabled) return XR_XIR_OK;
-    uint64_t limit=0;XrXirStatus status=effect_invocation_class_cells_match(owner,request);
+    EffectCellReplayRows rows={0};uint64_t limit=0;
+    XrXirStatus status=effect_invocation_class_cells_begin(owner,request,&rows);
     if (status==XR_XIR_OK)
         status=effect_invocation_class_rank_limit_count(owner,request->domain.function_count,&limit);
     for (uint32_t f=0;status==XR_XIR_OK && f<request->domain.function_count;++f)
@@ -137,11 +146,11 @@ static XrXirStatus effect_invocation_class_verify_read(const EffectInvocationRea
         }
         EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX,.precision=true};
         status=effect_invocation_origins_read(&flow,request);
-        if (status==XR_XIR_OK) status=effect_invocation_class_body_match(&flow,limit);
+        if (status==XR_XIR_OK) status=effect_invocation_class_body_match(&flow,limit,rows.functions?&rows.functions[node->body]:NULL);
         if (status==XR_XIR_OK) status=effect_invocation_class_terminals_match(&flow);
         xr_compile_resources_free(flow.memory);
     }
-    return status;
+    effect_cell_replay_rows_free(&rows);return status;
 }
 
 static XrXirStatus effect_invocation_class_verify(EffectInvocationWorkspace *owner) {

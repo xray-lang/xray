@@ -11,9 +11,17 @@
  *   its complete proof. The private rows and borrowed metadata expire together;
  *   no permission or comparison result survives this read-only operation.
  */
-static XrXirStatus effect_invocation_class_cells_materialized(const EffectInvocationRead *owner,
-    const EffectBodyRequest *body) {
-    const XrXirCompileContext *work=owner->work;
+typedef struct EffectCellReplayRows {
+    XrXirModule module;
+    XrXirFunction *functions;
+} EffectCellReplayRows;
+
+static XrXirStatus effect_cell_replay_rows_create(const XrXirCompileContext *work,
+    const EffectBodyRequest *body,EffectCellReplayRows *output) {
+    if (!xir_compile_context_valid(work) || !body || !output || output->functions ||
+        output->module.functions || output->module.function_count ||
+        !effect_body_request_sequence_owned(body) || body->read.owner!=work) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,2*sizeof(*output))) return XR_XIR_BUDGET;
     XrXirStatus status=effect_body_request_sequence_binding(body);
     uint32_t count=body->domain.function_count;
     if (status!=XR_XIR_OK) return status;
@@ -44,9 +52,11 @@ static XrXirStatus effect_invocation_class_cells_materialized(const EffectInvoca
         }
         if (status==XR_XIR_OK) status=effect_body_request_sequence_finish(body,f,&cursor);
     }
-    if (status==XR_XIR_OK) {
-        status=xir_cell_provenance_module_matches(work,owner->final->cells,&view,NULL);
-    }
-    for (uint32_t f=0;f<count;++f) xr_compile_resources_free((void *)functions[f].instructions);
-    xr_compile_resources_free(functions);return status;
+    output->module=view;output->functions=functions;return status;
+}
+
+static void effect_cell_replay_rows_free(EffectCellReplayRows *rows) {
+    for (uint32_t f=0;f<rows->module.function_count;++f)
+        xr_compile_resources_free((void *)rows->functions[f].instructions);
+    xr_compile_resources_free(rows->functions);
 }
