@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import uuid
@@ -46,19 +47,64 @@ def main():
     for key in ("input", "binary", "config"):
         environment[f"XRAY_ALLOCATION_{key.upper()}_SHA256"] = identity[f"{key}_sha256"]
 
-    def native(arguments):
+    def native_record(arguments):
         result = subprocess.run([str(exe), *arguments, identity["nonce"]], cwd=build,
                                 env=environment, stdin=subprocess.DEVNULL, capture_output=True,
                                 timeout=driver.remaining(deadline), close_fds=True,
                                 creationflags=subprocess.CREATE_NO_WINDOW)
-        driver.checked(result.returncode == 0 and not result.stderr, "Actual native control fixture failed")
+        driver.checked(result.returncode == 0, "Actual native control fixture failed")
+        return result
+
+    def native(arguments):
+        result = native_record(arguments)
+        driver.checked(not result.stderr, "Unexpected native control diagnostics")
         return result.stdout
 
     census_raw = native(["--allocation-census"])
     census, _, _ = driver.parse_report(census_raw, identity, "census", 0, 1)
     sample = native(["--allocation-shard", "0", "67", "normal"])
     driver.parse_report(sample, identity, "normal", 0, 67, census)
+    resources = native_record(["--allocation-shard", "0", "67", "aggregate"])
+    _, resource_end, resource_ids, source_ledgers = driver.parse_native_report(
+        resources.stdout, resources.stderr, identity, "aggregate", 0, 67, census)
+    driver.checked(resource_ids == [0] and resource_end["remaining_resources"] == 1 and
+                   len(source_ledgers) == 7, "Original remaining resources were not consumed")
+    other = native_record(["--allocation-shard", "1", "67", "aggregate"])
+    driver.parse_native_report(other.stdout, other.stderr, identity, "aggregate", 1, 67, census)
     rejected = []
+
+    def reject_diagnostics(name, raw, stdout=resources.stdout, mode="aggregate", index=0, workers=67):
+        try:
+            driver.parse_native_report(stdout, raw, identity, mode, index, workers, census)
+        except (RuntimeError, ValueError, UnicodeError):
+            rejected.append("diagnostics-" + name)
+        else:
+            raise RuntimeError("Invalid actual diagnostics accepted: " + name)
+
+    resource_lines = resources.stderr.splitlines(keepends=True)
+    for name, raw in [
+        ("missing", b""), ("truncated", resources.stderr[:-1]),
+        ("missing-row", b"".join(resource_lines[1:])),
+        ("additional-row", resources.stderr + resource_lines[0]),
+        ("asan", resources.stderr + b"ERROR: AddressSanitizer: heap-use-after-free\n"),
+        ("ubsan", resources.stderr + b"runtime error: signed integer overflow\n"),
+        ("asan-row", b"ERROR: AddressSanitizer: heap-use-after-free\n" + b"".join(resource_lines[1:])),
+        ("ubsan-row", b"runtime error: signed integer overflow\n" + b"".join(resource_lines[1:])),
+        ("assertion", resources.stderr + b"allocation check failed\n"),
+        ("extra-byte", resources.stderr + b"x"),
+        ("non-ascii", resources.stderr + b"\xff"),
+        ("work-bound", re.sub(rb"work=[0-9]+", b"work=128000001", resources.stderr, count=1)),
+        ("allocated-bound", re.sub(rb"allocated=[0-9]+", b"allocated=67108865", resources.stderr, count=1)),
+        ("peak-bound", re.sub(rb"peak=[0-9]+", b"peak=8388609",
+                             re.sub(rb"allocated=[0-9]+", b"allocated=8388609", resources.stderr, count=1), count=1)),
+        ("live-bound", re.sub(rb"live=[0-9]+", b"live=18446744073709551615", resources.stderr, count=1)),
+        ("negative", re.sub(rb"work=[0-9]+", b"work=-1", resources.stderr, count=1)),
+        ("leading-zero", resources.stderr.replace(b"work=", b"work=0", 1)),
+        ("foreign-prefix", resources.stderr.replace(b"source fixture compiler ledger:", b"foreign compiler ledger:", 1)),
+    ]:
+        reject_diagnostics(name, raw)
+    reject_diagnostics("normal-role", resources.stderr, sample, "normal")
+    reject_diagnostics("other-aggregate-worker", resources.stderr, other.stdout, "aggregate", 1)
 
     def reject(name, raw, **changes):
         arguments = {"identity": identity, "mode": "normal", "index": 0, "workers": 67, "census": census}
@@ -134,6 +180,9 @@ def main():
     driver.checked(not reports_root.is_relative_to(source) and not reports_root.is_relative_to(build),
                    "Control outputs must be outside Source and Build")
     reports_root.mkdir(parents=True, exist_ok=False)
+    for name, record in [("resources-worker", resources), ("other-worker", other)]:
+        (reports_root / (name + ".stdout.log")).write_bytes(record.stdout)
+        (reports_root / (name + ".stderr.log")).write_bytes(record.stderr)
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel.OpenProcess.restype = wintypes.HANDLE
@@ -189,6 +238,9 @@ def main():
                    "Actual inputs changed during driver controls")
     driver.checked(driver.job_processes(job) == 1, "Native control descendants did not drain")
     result = {"result": "PASS", "report_rejections": rejected, "real_report_mutations": True,
+              "remaining_resources": {"actual_case_ids": resource_ids,
+                  "remaining_resources": resource_end["remaining_resources"],
+                  "source_fixture_ledgers": source_ledgers, "raw_diagnostics_retained": True},
               "parent_death": control, "source_and_configuration_unchanged": True,
               "native_drain_active_processes": 1, "seconds": time.monotonic() - STARTED,
               "full_fault_qualification": False}

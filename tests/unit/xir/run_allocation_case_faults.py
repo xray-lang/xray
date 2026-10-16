@@ -36,6 +36,9 @@ CASE = re.compile(r"FI map ([A-Za-z_]+) scalar([0-9]+) mode([0-9]+): whole=([0-9
                   r"compiler=\[0,([0-9]+)\) runtime=\[([0-9]+),([0-9]+)\) local=\[0,([0-9]+)\)")
 TOTAL = re.compile(r"FI map total: cases=([0-9]+) original_ordinals=([0-9]+) compiler=([0-9]+) "
                    r"runtime=([0-9]+) bridge=([0-9]+) axes=([0-9]+)")
+SOURCE_LEDGER = re.compile(rb"source fixture compiler ledger: work=(0|[1-9][0-9]*) "
+                           rb"allocated=(0|[1-9][0-9]*) peak=(0|[1-9][0-9]*) "
+                           rb"live=(0|[1-9][0-9]*)\r?\n")
 
 
 def checked(condition, message):
@@ -215,6 +218,35 @@ def parse_report(raw, identity, mode, index, workers, census=None):
     return rows, end, ids
 
 
+def parse_native_stderr(raw, mode, index):
+    checked(mode in {"census", "normal", "producer", "aggregate", "matrix"} and
+            type(index) is int and 0 <= index < 67, "Invalid diagnostic consumer")
+    checked(len(raw) <= 2048, "Oversized native diagnostics")
+    if mode != "aggregate" or index != 0:
+        checked(not raw, "Unexpected native diagnostics")
+        return []
+    # The seven original source fixtures report their sole bounded ledger here.
+    # Match complete records so sanitizer or assertion output cannot be hidden.
+    lines = raw.splitlines(keepends=True)
+    checked(len(lines) == 7, "Missing or additional source fixture ledgers")
+    ledgers = []
+    for line in lines:
+        match = SOURCE_LEDGER.fullmatch(line)
+        checked(match, "Unexpected native diagnostics")
+        work, allocated, peak, live = map(int, match.groups())
+        checked(0 < work <= 128000000 and 0 < peak <= 8 * 1024 * 1024 and
+                0 <= live <= peak <= allocated <= 64 * 1024 * 1024,
+                "Source fixture ledger exceeds its original finite bounds")
+        ledgers.append({"work": work, "allocated": allocated, "peak": peak, "live": live})
+    return ledgers
+
+
+def parse_native_report(raw, stderr, identity, mode, index, workers, census=None):
+    ledgers = parse_native_stderr(stderr, mode, index)
+    rows, end, ids = parse_report(raw, identity, mode, index, workers, census)
+    return rows, end, ids, ledgers
+
+
 def job_processes(job):
     class Accounting(ctypes.Structure):
         _fields_ = [("user", ctypes.c_longlong), ("kernel", ctypes.c_longlong),
@@ -330,11 +362,14 @@ def main():
     def report(name, mode, index, workers, census=None):
         remaining(deadline)
         stdout, stderr = out / (name + ".stdout.log"), out / (name + ".stderr.log")
-        checked(stderr.is_file() and stderr.stat().st_size == 0, f"Unexpected native diagnostics: {stderr}")
+        checked(stderr.is_file() and stderr.stat().st_size <= 2048, f"Missing or oversized native diagnostics: {stderr}")
         checked(stdout.is_file() and stdout.stat().st_size <= 2 * 1024 * 1024, "Missing or oversized native output")
-        result = parse_report(stdout.read_bytes(), identity, mode, index, workers, census)
+        rows, end, ids, ledgers = parse_native_report(stdout.read_bytes(), stderr.read_bytes(),
+                                                     identity, mode, index, workers, census)
+        if ledgers:
+            manifest.setdefault("source_fixture_ledgers", {})[name] = ledgers
         remaining(deadline)
-        return result
+        return rows, end, ids
 
     try:
         if os.name == "nt":
