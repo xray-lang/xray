@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from fixed_product_inputs import FixedProductInputs
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import importlib.util
@@ -66,6 +67,7 @@ def sha(data: bytes) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary',type=Path,required=True)
+    parser.add_argument('--product-inputs',type=Path)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--compiler',type=Path,required=True)
     parser.add_argument('--jobs',type=int,default=2)
@@ -75,6 +77,7 @@ def main() -> int:
     if not 1 <= args.jobs <= 2:
         raise ValueError('full original differential lane permits one or two workers')
     binary = args.binary.resolve(strict=True)
+    product_inputs = FixedProductInputs(args.product_inputs, args.binary) if args.product_inputs else None
     compiler = args.compiler.resolve(strict=True)
     args.output.mkdir(parents=True,exist_ok=True)
     output = Path(tempfile.mkdtemp(prefix='diff-',dir=args.output.resolve()))
@@ -98,8 +101,10 @@ def main() -> int:
     if identity.returncode or identity.stderr or identity.timed_out:
         raise ValueError('fresh public CLI identity query failed')
     version = json.loads(identity.stdout)
+    if product_inputs:
+        product_inputs.require_version(version)
     image_sha = sha(binary.read_bytes())
-    environment = dict(os.environ,XRAY_STDLIB_PATH=str(ROOT/'stdlib'),NO_COLOR='1')
+    environment = dict(os.environ,XRAY_STDLIB_PATH=str(product_inputs.stdlib if product_inputs else ROOT/'stdlib'),NO_COLOR='1')
     preserved = json.loads((HERE/'oracles.json').read_text(encoding='utf-8'))['cases']
     audit.validate_oracles({'cases': preserved})
     route_data = json.loads(manifest_bytes)
@@ -109,7 +114,7 @@ def main() -> int:
                    'independent_scalar_models.py', 'independent_scalar_bindings.json',
                    'independent_complete_models.py', 'complete_program_bindings.json',
                    'complete_numeric_model.py', 'complete_text_range_model.py',
-                   'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_borrowed_views_model.py', 'complete_collection_protocols_model.py', 'complete_structural_inputs_model.py', 'structural_inputs_bindings.json', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'complete_ffi_memory_model.py', 'complete_task_regression_model.py', 'complete_memory_primitives_model.py', 'complete_pure_library_boundaries_model.py', 'complete_websocket_protocol_model.py', 'complete_cluster_wire_model.py', 'complete_simd_vectors_model.py', 'complete_coordination_model.py', 'complete_filesystem_io_model.py', 'complete_structural_calls_model.py', 'complete_parallel_workload_model.py', 'complete_byte_pod_model.py', 'complete_generic_program_model.py', 'task_rejection_model.py', 'run_source_rejection_driver.py', 'complete_target_selection.py',
+                   'complete_ownership_model.py', 'complete_library_model.py', 'complete_channel_model.py', 'complete_resource_model.py', 'complete_typed_json_model.py', 'complete_module_model.py', 'complete_exception_model.py', 'complete_aggregate_model.py', 'complete_http_framing_model.py', 'complete_http_policy_model.py', 'complete_text_formats_model.py', 'complete_scalar_events_model.py', 'complete_async_events_model.py', 'complete_error_boundaries_model.py', 'complete_calendar_paths_model.py', 'complete_collection_values_model.py', 'complete_borrowed_views_model.py', 'complete_collection_protocols_model.py', 'complete_structural_inputs_model.py', 'structural_inputs_bindings.json', 'complete_cleanup_generator_model.py', 'complete_callable_model.py', 'complete_ffi_memory_model.py', 'complete_task_regression_model.py', 'complete_memory_primitives_model.py', 'complete_pure_library_boundaries_model.py', 'complete_websocket_protocol_model.py', 'complete_cluster_wire_model.py', 'complete_simd_vectors_model.py', 'complete_coordination_model.py', 'complete_filesystem_io_model.py', 'complete_structural_calls_model.py', 'complete_parallel_workload_model.py', 'complete_byte_pod_model.py', 'complete_generic_program_model.py', 'fixed_product_inputs.py', 'task_rejection_model.py', 'run_source_rejection_driver.py', 'complete_target_selection.py',
                    'audit.py', 'oracles.json', 'run_full_diff_driver.py')
     model_hashes = {name:sha((HERE/name).read_bytes()) for name in model_names}
     selections = {row['case_id']: complete_target_selection.select(row, ROOT, runner) for row in rows}
@@ -141,8 +146,12 @@ def main() -> int:
         directory = output/Path(row['case_id']).relative_to('tests')
         directory.mkdir(parents=True,exist_ok=False)
         if rejection_by_source.get(row['case_id']):
-            result = run_source_rejection_driver.run_group(binary,compiler,args.source_rejection_owner,
-                args.source_rejection_manifest,directory/'checked-rejection',timeout=30)
+            if product_inputs:
+                result = {'status':'FAIL_MISSING_FIXED_PRODUCT_SOURCE_REJECTION_OWNER', 'routes':{},
+                          'reason':'The current rejection owner binds its own source tree and cannot qualify an external product closure.'}
+            else:
+                result = run_source_rejection_driver.run_group(binary,compiler,args.source_rejection_owner,
+                    args.source_rejection_manifest,directory/'checked-rejection',timeout=30)
             result.update(case_id=row['case_id'],selection=selected,owners=row['producer_packages'],
                           original_entries=row['original_runner_entries'],arguments=argv,stdin_hex=stdin.hex())
             if complete_target_selection.select(row,ROOT,runner) != selected:
@@ -203,6 +212,7 @@ def main() -> int:
         for result in pool.map(run,rows):
             records.append(result)
             summary={'version':version,'binary_sha256':image_sha,'manifest_sha256':sha(manifest_bytes),
+                     'product_inputs':product_inputs.evidence() if product_inputs else None,
                      'independent_model_sha256':model_hashes,
                      'independent_original_sources':independent_original_sources,
                      'independent_canonical_sources':independent_canonical_sources,
@@ -214,6 +224,8 @@ def main() -> int:
                      'parity_is_qualification':False,'production_release':False}
             (output/'result.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
             if len(records)%25==0:print(f'{len(records)}/{len(rows)} original input identities recorded',flush=True)
+    if product_inputs:
+        product_inputs.verify()
     if sha(binary.read_bytes())!=image_sha:raise ValueError('public image changed during full original execution')
     if any(sha((HERE/name).read_bytes()) != digest for name,digest in model_hashes.items()):
         raise ValueError('independent original run model changed during execution')
