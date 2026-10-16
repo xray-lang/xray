@@ -198,7 +198,10 @@ static void import_faults(const char *kind,bool prefix) {
     xr_xir_value_drop(&input);xr_xir_compile_artifact_free(origin);xr_compile_resources_release(producer.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
 }
-int main(int argc,char **argv) {
+#ifndef XR_IMPORT_MAIN
+#define XR_IMPORT_MAIN main
+#endif
+int XR_IMPORT_MAIN(int argc,char **argv) {
     if (argc==3 && (!strcmp(argv[2],"--prefix") || !strcmp(argv[2],"--faults"))) {
         import_faults(argv[1],!strcmp(argv[2],"--prefix"));return 0;
     }

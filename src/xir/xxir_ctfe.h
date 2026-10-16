@@ -60,12 +60,12 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_type_admit(const XrXirCompileContext
     const XrXirTypes *types, XrXirType type);
 
 /* Borrowed input owners must remain live for this synchronous call. The selected
- * ordinary function has scalar/String inputs and admitted data or Unit results,
+ * ordinary function has admitted closed data inputs and data or Unit results,
  * frame-owned locals and private Cells of admitted value families. Immutable
  * Tuples and Nullable values can be constructed/projected and exported by logical
  * active field-byte sum and canonical discriminants; Unit fields occupy zero
- * output bytes. Nullable unwrap of None returns NULL_UNWRAP. External composite parameters
- * require bounded cross-arena receiving and currently reject. Private storage
+ * output bytes. Nullable unwrap of None returns NULL_UNWRAP. External composites
+ * receive independent bounded snapshots after complete cross-arena type matching. Private storage
  * remains inside the bounded admitted opcode graph. Local
  * writes produce Unit without a result slot. Every call repeats full artifact
  * verification on its original compiler ledger; root/effect flags never grant
@@ -92,7 +92,7 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
  * UTF-8 bytes. Comparison/search use ordinary Unicode index and byte-order rules,
  * prepay scan/table work and report NUMERIC_RANGE on invalid starts. Immutable
  * Tuple/Nullable/Array and admitted struct/enum exports retain their actual type
- * arena and active fields. External Cell/Function/composite arguments, Function
+ * arena and active fields. External Cell/Function and other identity arguments, Function
  * exports remain unadmitted. Internal PanicInfo values originate only at real
  * panic handlers; code/message use ordinary immutable Value operations. Panic
  * propagates through applicable cleanup to the actual caller's handler. An

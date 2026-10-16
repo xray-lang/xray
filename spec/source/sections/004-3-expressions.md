@@ -147,7 +147,7 @@ fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
 
-块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。当前Source站点要求关闭的类型环境，开放泛型源作用域中的comptime明确拒绝；本执行入口可接收已完成普通特化的关闭Lowered函数。
+块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。泛型源作用域可以包含自身完全关闭、无运行期捕获的comptime thunk；外围类型参数保留原lexical含义，不能用于尚未关闭的指令或调用类型实参。依赖外围类型实参、需要逐关闭实例结果的comptime仍明确拒绝，不能复用一个站点结果冒充该能力；见17.71。本执行入口可接收已完成普通特化的关闭Lowered函数。
 
 ```xray
 fn noop() {}
@@ -865,7 +865,7 @@ fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
 
-Ordinary block locals, assignments, conditions and loops retain ordinary Source checking. A trailing expression statement produces the block value; an empty block or a block ending in an ordinary statement produces Unit. Return cannot jump from a comptime block into its enclosing function or substitute for its trailing expression. A block does not implicitly capture enclosing runtime locals or parameters. Current Source sites require a closed type environment and explicitly reject comptime in open generic source scopes; the execution entry may receive a closed Lowered function after ordinary specialization.
+Ordinary block locals, assignments, conditions and loops retain ordinary Source checking. A trailing expression statement produces the block value; an empty block or a block ending in an ordinary statement produces Unit. Return cannot jump from a comptime block into its enclosing function or substitute for its trailing expression. A block does not implicitly capture enclosing runtime locals or parameters. A generic source scope may contain a completely closed comptime thunk with no runtime capture. Enclosing type parameters retain their lexical meaning and cannot enter open instruction or call-argument types. Expressions depending on those type arguments and requiring per-instance results remain explicitly refused; one site result cannot represent that capability. See17.71. The execution entry may receive a closed Lowered function after ordinary specialization.
 
 ```xray
 fn noop() {}

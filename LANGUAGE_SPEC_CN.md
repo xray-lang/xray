@@ -1824,7 +1824,7 @@ fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
 export fn run()->i64 { return comptime fact(6) }
 ```
 
-块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。当前Source站点要求关闭的类型环境，开放泛型源作用域中的comptime明确拒绝；本执行入口可接收已完成普通特化的关闭Lowered函数。
+块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。泛型源作用域可以包含自身完全关闭、无运行期捕获的comptime thunk；外围类型参数保留原lexical含义，不能用于尚未关闭的指令或调用类型实参。依赖外围类型实参、需要逐关闭实例结果的comptime仍明确拒绝，不能复用一个站点结果冒充该能力；见17.71。本执行入口可接收已完成普通特化的关闭Lowered函数。
 
 ```xray
 fn noop() {}
@@ -7704,7 +7704,7 @@ Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；�
 
 ### 17.54 编译期helper的真实lexical声明权限
 
-普通成员内的comptime helper与普通嵌套函数沿相同规则继承真实lexical nominal owner，并使用既有MEMBER_HELPER身份。它不捕获运行期参数/局部状态，不授予调用者其他声明的权限，也不因helper名或结果类型伪造owner。嵌套comptime继续继承实际外层helper的声明上下文；开放泛型等原拒绝边界保持。
+普通成员内的comptime helper与普通嵌套函数沿相同规则继承真实lexical nominal owner，并使用既有MEMBER_HELPER身份。它不捕获运行期参数/局部状态，不授予调用者其他声明的权限，也不因helper名或结果类型伪造owner。嵌套comptime继续继承实际外层helper的声明上下文；开放类型相关的comptime仍按17.71明确拒绝。
 
 Checked特化及完整Lowered接收之后，helper查找须匹配模块、唯一名称、零参数、关闭结果类型、真实nominal owner及member kind，并拒绝cleanup身份变化，不能假定所有helper都是无owner的顶层函数。观察与比较先付原累计work，任何错配失败保全已有结果和临时owner。
 
@@ -7898,7 +7898,17 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 执行前完成全部实参快照，再进入同一Lowered evaluator。类型复验与展开使用原compiler work/allocated/live额度；实际接收栈、固定bookkeeping、临时字段向量、扩容时新旧共存及Value观察scratch共同受原剩余frame约束。所有分配、扫描、复制、临时retain和实际节点访问先收费，失败保全空结果、原实参与全部可释放前缀，不退累计work/allocated。不同nominal或关闭类型不匹配返回BAD_ARGUMENT，未准入身份返回NOT_SUPPORTED；原预算、frame、step、output、OOM与Value限制的错误映射继续适用，不能通过语言catch或运行期fallback绕过。
 
-这里是对既有拥有式数据的复制，不是从类型描述取得私有成员、构造、调用或loan权限。Source独立重放仍要求17.67的真实声明owner和精确materializer边；Source开放泛型comptime不因此获准。输出逻辑大小只计最终发布结果，输入接收仍支付原完整内存与work。保留128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出；不改变Value/Call/Instance/SourceContext布局、schema、opcode或构造接口2，不新增evaluator、native执行或持久结果缓存。完整逐点FI、same-owner重试、所有边界/寿命、provider和正式安全资格仍须绑定实际固定输入取得；正常或首末点通过不能替代它们。
+这里是对既有拥有式数据的复制，不是从类型描述取得私有成员、构造、调用或loan权限。Source独立重放仍要求17.67的真实声明owner和精确materializer边；泛型源作用域中的闭合thunk按17.71办理。输出逻辑大小只计最终发布结果，输入接收仍支付原完整内存与work。保留128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出；不改变Value/Call/Instance/SourceContext布局、schema、opcode或构造接口2，不新增evaluator、native执行或持久结果缓存。完整逐点FI、same-owner重试、所有边界/寿命、provider和正式安全资格仍须绑定实际固定输入取得；正常或首末点通过不能替代它们。
+
+### 17.71 泛型lexical作用域中的关闭comptime thunk
+
+外围函数或方法具有泛型参数，不再单凭这个事实拒绝comptime；外围已经发生普通泛型调用而拥有类型实参表，也不构成拒绝理由。thunk仍是无运行期实参的真实普通函数，经过完整Built检查、普通特化及复验、Lowered和同一个有界CTFE，再由独立Source owner重放完整检查。它只能引用已经关闭的类型和调用目标，例如在泛型函数中计算固定标量、拥有式Tuple/Array或显式关闭的普通泛型调用。
+
+类型名继续沿实际外围lexical上下文解析，包括泛型参数对同名全局类型的遮蔽；不通过清空类型作用域把开放类型误解成另一声明。真实nominal owner和MEMBER_HELPER规则保持。thunk不继承外围运行期参数、局部变量或this；无权从类型描述、helper名称或关闭结果推导额外访问权限。封装后的真实指令类型和完整调用类型实参表逐项付原ledger work检查，含开放类型参数的条目在执行前拒绝；checker及完整可达闭包准入继续复验，不以该前置检查替代。
+
+本机制不实现依赖外围类型实参的逐实例comptime。需要在不同关闭T下产生Array<T>、T?或不同结果的表达式仍明确拒绝；一个语法站点的单一Value不能代表多个特化结果。普通泛型继续定义处按约束检查，不能在实例化时重解释AST、借宿主执行或保留运行期fallback。完整开放泛型执行仍是未闭合责任，不得因这里的上下文无关正例宣称完成。
+
+每次Source构造、关闭性扫描、CTFE及独立接收共同消费同一原compiler ledger；失败不退work/累计分配，输出和可释放前缀保持。原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth、policy2/8MiB输出和原错误映射不变。共同Value的scratch LIMIT仍沿既有映射报告CTFE BUDGET；frame直接拒绝可报告FRAME_LIMIT。正常、预算边界和首末故障控制不替代完整逐分配FI、provider、正式安全或整包资格；公共布局、schema、opcode及构造接口2保持。
 
 ---
 

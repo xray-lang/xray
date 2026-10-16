@@ -664,7 +664,7 @@ Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；�
 
 ### 17.54 编译期helper的真实lexical声明权限
 
-普通成员内的comptime helper与普通嵌套函数沿相同规则继承真实lexical nominal owner，并使用既有MEMBER_HELPER身份。它不捕获运行期参数/局部状态，不授予调用者其他声明的权限，也不因helper名或结果类型伪造owner。嵌套comptime继续继承实际外层helper的声明上下文；开放泛型等原拒绝边界保持。
+普通成员内的comptime helper与普通嵌套函数沿相同规则继承真实lexical nominal owner，并使用既有MEMBER_HELPER身份。它不捕获运行期参数/局部状态，不授予调用者其他声明的权限，也不因helper名或结果类型伪造owner。嵌套comptime继续继承实际外层helper的声明上下文；开放类型相关的comptime仍按17.71明确拒绝。
 
 Checked特化及完整Lowered接收之后，helper查找须匹配模块、唯一名称、零参数、关闭结果类型、真实nominal owner及member kind，并拒绝cleanup身份变化，不能假定所有helper都是无owner的顶层函数。观察与比较先付原累计work，任何错配失败保全已有结果和临时owner。
 
@@ -858,7 +858,17 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 执行前完成全部实参快照，再进入同一Lowered evaluator。类型复验与展开使用原compiler work/allocated/live额度；实际接收栈、固定bookkeeping、临时字段向量、扩容时新旧共存及Value观察scratch共同受原剩余frame约束。所有分配、扫描、复制、临时retain和实际节点访问先收费，失败保全空结果、原实参与全部可释放前缀，不退累计work/allocated。不同nominal或关闭类型不匹配返回BAD_ARGUMENT，未准入身份返回NOT_SUPPORTED；原预算、frame、step、output、OOM与Value限制的错误映射继续适用，不能通过语言catch或运行期fallback绕过。
 
-这里是对既有拥有式数据的复制，不是从类型描述取得私有成员、构造、调用或loan权限。Source独立重放仍要求17.67的真实声明owner和精确materializer边；Source开放泛型comptime不因此获准。输出逻辑大小只计最终发布结果，输入接收仍支付原完整内存与work。保留128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出；不改变Value/Call/Instance/SourceContext布局、schema、opcode或构造接口2，不新增evaluator、native执行或持久结果缓存。完整逐点FI、same-owner重试、所有边界/寿命、provider和正式安全资格仍须绑定实际固定输入取得；正常或首末点通过不能替代它们。
+这里是对既有拥有式数据的复制，不是从类型描述取得私有成员、构造、调用或loan权限。Source独立重放仍要求17.67的真实声明owner和精确materializer边；泛型源作用域中的闭合thunk按17.71办理。输出逻辑大小只计最终发布结果，输入接收仍支付原完整内存与work。保留128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出；不改变Value/Call/Instance/SourceContext布局、schema、opcode或构造接口2，不新增evaluator、native执行或持久结果缓存。完整逐点FI、same-owner重试、所有边界/寿命、provider和正式安全资格仍须绑定实际固定输入取得；正常或首末点通过不能替代它们。
+
+### 17.71 泛型lexical作用域中的关闭comptime thunk
+
+外围函数或方法具有泛型参数，不再单凭这个事实拒绝comptime；外围已经发生普通泛型调用而拥有类型实参表，也不构成拒绝理由。thunk仍是无运行期实参的真实普通函数，经过完整Built检查、普通特化及复验、Lowered和同一个有界CTFE，再由独立Source owner重放完整检查。它只能引用已经关闭的类型和调用目标，例如在泛型函数中计算固定标量、拥有式Tuple/Array或显式关闭的普通泛型调用。
+
+类型名继续沿实际外围lexical上下文解析，包括泛型参数对同名全局类型的遮蔽；不通过清空类型作用域把开放类型误解成另一声明。真实nominal owner和MEMBER_HELPER规则保持。thunk不继承外围运行期参数、局部变量或this；无权从类型描述、helper名称或关闭结果推导额外访问权限。封装后的真实指令类型和完整调用类型实参表逐项付原ledger work检查，含开放类型参数的条目在执行前拒绝；checker及完整可达闭包准入继续复验，不以该前置检查替代。
+
+本机制不实现依赖外围类型实参的逐实例comptime。需要在不同关闭T下产生Array<T>、T?或不同结果的表达式仍明确拒绝；一个语法站点的单一Value不能代表多个特化结果。普通泛型继续定义处按约束检查，不能在实例化时重解释AST、借宿主执行或保留运行期fallback。完整开放泛型执行仍是未闭合责任，不得因这里的上下文无关正例宣称完成。
+
+每次Source构造、关闭性扫描、CTFE及独立接收共同消费同一原compiler ledger；失败不退work/累计分配，输出和可释放前缀保持。原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth、policy2/8MiB输出和原错误映射不变。共同Value的scratch LIMIT仍沿既有映射报告CTFE BUDGET；frame直接拒绝可报告FRAME_LIMIT。正常、预算边界和首末故障控制不替代完整逐分配FI、provider、正式安全或整包资格；公共布局、schema、opcode及构造接口2保持。
 
 <!-- /xr-spec:cn -->
 
@@ -1656,7 +1666,7 @@ Physical OOM and work/step/frame/output refusal preserve empty output and borrow
 
 ### 17.54 Authentic lexical declaration access for compiler helpers
 
-A comptime helper inside an ordinary member inherits the actual lexical nominal owner by the same rule as an ordinary nested function and uses existing MEMBER_HELPER identity. It captures no runtime parameters/local state, grants callers no access to another declaration, and derives no owner from a helper name or result type. Nested comptime inherits the actual enclosing helper's declaration context; existing open-generic and other refusal boundaries remain.
+A comptime helper inside an ordinary member inherits the actual lexical nominal owner by the same rule as an ordinary nested function and uses existing MEMBER_HELPER identity. It captures no runtime parameters/local state, grants callers no access to another declaration, and derives no owner from a helper name or result type. Nested comptime inherits the actual enclosing helper's declaration context; comptime depending on open types remains explicitly refused under17.71.
 
 After Checked specialization and complete Lowered receiving, helper lookup matches module, unique name, zero parameters, closed result type, actual nominal owner and member kind, rejecting changed cleanup identity. It must not assume all helpers are ownerless top-level functions. Observation and comparison prepay the original cumulative work; mismatch preserves existing results and releases temporary owners.
 
@@ -1850,6 +1860,16 @@ Every actual active data node is copied into this invocation's genuine compiler 
 
 All argument snapshots complete before execution enters the same Lowered evaluator. Type verification/expansion uses original compiler work/allocated/live quotas. Actual receiving stacks, fixed bookkeeping, temporary field vectors, simultaneous old/new growth and Value observation scratch share the original remaining frame allowance. Allocation, scans, copies, temporary retains and actual visits pay before work. Failure preserves empty output, original arguments and every releasable prefix without refunding cumulative work/allocated. Different nominal or closed-type identities return BAD_ARGUMENT; unadmitted identities return NOT_SUPPORTED. Existing budget/frame/step/output/OOM and Value-limit mappings remain, with no language catch or runtime fallback bypass.
 
-This copies existing owned data; type descriptions confer no private member, construction, call or loan permission. Independent Source replay still requires17.67's genuine declaration owner and exact materializer edges. Open-generic Source comptime gains no admission. Logical output counts only the final published result while receiving pays complete input memory/work. Original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB output remain. Value/Call/Instance/SourceContext layouts, schema, opcodes and construction interface2 remain unchanged, without another evaluator, native execution or persistent result cache. Complete physical FI, same-owner retry, all boundaries/lifetimes, provider and formal safety still require actual fixed-input evidence; normal or first/last controls cannot substitute for them.
+This copies existing owned data; type descriptions confer no private member, construction, call or loan permission. Independent Source replay still requires17.67's genuine declaration owner and exact materializer edges. Closed thunks in generic source scopes follow17.71. Logical output counts only the final published result while receiving pays complete input memory/work. Original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB output remain. Value/Call/Instance/SourceContext layouts, schema, opcodes and construction interface2 remain unchanged, without another evaluator, native execution or persistent result cache. Complete physical FI, same-owner retry, all boundaries/lifetimes, provider and formal safety still require actual fixed-input evidence; normal or first/last controls cannot substitute for them.
+
+### 17.71 Closed comptime thunks in generic lexical scopes
+
+A generic enclosing function or method no longer causes rejection by itself. An enclosing ordinary generic call and its type-argument table likewise do not prohibit comptime. The thunk remains an authentic ordinary zero-runtime-argument function, passing complete Built checking, ordinary specialization and verification, Lowered and the sole bounded CTFE, followed by complete replay under an independent Source owner. It may use only already closed types and call targets, such as fixed scalars, owned Tuple/Array results or explicitly closed ordinary generic calls inside a generic function.
+
+Type names retain the actual enclosing lexical context, including a generic parameter shadowing a same-named global type. Clearing a type scope cannot reinterpret an open type as another declaration. Authentic nominal owner and MEMBER_HELPER rules remain. A thunk inherits no enclosing runtime parameter, local or this, and derives no additional access from type descriptions, helper names or closed results. The sealed actual instruction types and entire call type-argument table pay original-ledger work for individual closedness checks; open entries refuse before execution. The ordinary checker and complete reachable-closure admission still reverify independently.
+
+This mechanism does not implement per-instance comptime depending on enclosing type arguments. Expressions producing Array<T>, T? or different results for different closed T remain explicitly refused. One syntax site's single Value cannot represent multiple specialization results. Ordinary generics remain checked against constraints at definition; instantiation cannot reinterpret AST, execute host code or retain a runtime fallback. Complete open-generic execution remains unfinished and cannot be claimed from these context-independent positive examples.
+
+Every Source construction, closedness scan, CTFE and independent receiving shares the original compiler ledger. Failures refund neither work nor cumulative allocation and preserve output and releasable prefixes. Original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth,policy2/8MiB output and error mappings remain. Common Value scratch LIMIT keeps its existing CTFE BUDGET mapping; direct frame refusal may report FRAME_LIMIT. Normal, budget-boundary and first/last controls substitute for neither complete allocation FI, provider, formal safety nor whole-package qualification. Public layouts, schema, opcodes and construction interface2 remain unchanged.
 
 <!-- /xr-spec:en -->

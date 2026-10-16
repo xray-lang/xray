@@ -69,13 +69,28 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *site,SourceExpected
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
     ctx->returned=true;return finish_body(ctx);
 }
+static bool source_comptime_closed_body(SourceContext *ctx,AstNode *node,uint32_t function) {
+    const XrXirFunction *body=&ctx->functions[function];
+    const XrXirGeneric *generic=&ctx->generics[function];
+    for (uint32_t i=0;i<body->instruction_count;++i) {
+        if (!source_work_units(ctx,node,2)) return false;
+        if (xr_xir_type_span(&ctx->types,body->instructions[i].type))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime body requires closed instruction types");
+    }
+    for (uint32_t t=0;t<generic->argument_count;++t) {
+        if (!source_work_units(ctx,node,2)) return false;
+        if (xr_xir_type_span(&ctx->types,generic->arguments[t]))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime body requires closed call type arguments");
+    }
+    return true;
+}
 static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpectedType expected,uint32_t *output) {
     uint32_t outer=ctx->function;
-    if (ctx->generics[outer].parameter_count || ctx->generics[outer].argument_count || ctx->bodies[outer].type_parameter_count)
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime in an open generic scope is not supported");
     if (ctx->function_count>=ctx->function_capacity || ctx->comptime_count>=ctx->comptime_capacity)
         return source_fail(ctx,node,XR_XIR_BUDGET,"comptime function inventory exhausted");
-    if (!source_work_units(ctx,node,3*sizeof(SourceComptimeScope)+sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity)+sizeof(SourceName)+4*sizeof(uint32_t)+sizeof(AstNode *)+sizeof(XrXirSourceType))) return false;
+    uint64_t lexical_bytes=sizeof(ctx->bodies[outer].type_owner)+sizeof(ctx->bodies[outer].generic_owner)+
+        sizeof(ctx->bodies[outer].type_parameters)+sizeof(ctx->bodies[outer].type_parameter_count);
+    if (!source_work_units(ctx,node,3*sizeof(SourceComptimeScope)+sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity)+sizeof(SourceName)+4*sizeof(uint32_t)+sizeof(AstNode *)+sizeof(XrXirSourceType)+lexical_bytes)) return false;
     SourceComptimeScope saved=source_comptime_scope(ctx);
     uint32_t f=ctx->function_count++;
     char *name=source_alloc(ctx,32,1);
@@ -88,14 +103,22 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     ctx->identities[f]=(XrXirFunctionIdentity){.module=ctx->module,.nominal_owner=nominal,
         .method_kind=nominal?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER};
     ctx->bodies[f].node=node;ctx->bodies[f].module=ctx->module;
+    /* Lexical type names keep their original meaning, including shadowing.
+     * The helper itself has no open parameters; every emitted type must close
+     * before the ordinary checker and evaluator can receive it. */
+    ctx->bodies[f].type_owner=ctx->bodies[outer].type_owner;
+    ctx->bodies[f].generic_owner=ctx->bodies[outer].generic_owner;
+    ctx->bodies[f].type_parameters=ctx->bodies[outer].type_parameters;
+    ctx->bodies[f].type_parameter_count=ctx->bodies[outer].type_parameter_count;
     ctx->function=f;ctx->locals=ctx->scope=NULL;ctx->facts=NULL;ctx->epochs=NULL;
-    ctx->loop=NULL;ctx->type_scope=(SourceTypeScope){0};ctx->active_expression=NULL;ctx->effect_argument=NULL;
+    ctx->loop=NULL;ctx->type_scope=saved.types;ctx->active_expression=NULL;ctx->effect_argument=NULL;
     ctx->returned=false;ctx->flow_alternatives=0;
     SourceName declaration={.name=name,.node=node};
     bool ok=source_query_declare(ctx,&declaration,XR_XIR_SOURCE_FUNCTION,ctx->bodies[outer].declaration,source_query_range(ctx,node,NULL));
     ctx->bodies[f].declaration=declaration.declaration;
     if (ok) ok=source_query_syntax_role(ctx,declaration.declaration,XR_XIR_SOURCE_SYNTAX_CLOSURE,0);
     if (ok) ok=source_comptime_body(ctx,node,expected);
+    if (ok) ok=source_comptime_closed_body(ctx,node,f);
     if (ok) ((XrXirSourceDeclaration *)ctx->query.declarations)[declaration.declaration-1].type=source_query_type(ctx,ctx->functions[f].result);
     source_comptime_restore(ctx,&saved);
     if (ok) *output=f;
