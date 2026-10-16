@@ -12,6 +12,7 @@
 #ifndef XSOURCE_COMPILER_H
 #define XSOURCE_COMPILER_H
 #include "xsource_compile.h"
+#include "../xir/xxir_source_generation.h"
 
 typedef struct XrSourceCompiler XrSourceCompiler;
 typedef struct XrSourceCompilerConfig {
@@ -43,6 +44,11 @@ XR_FUNC const XrXirCompileContext *xr_source_compiler_context(const XrSourceComp
 XR_FUNC XrCompilerSession *xr_source_compiler_session(const XrSourceCompiler *);
 XR_FUNC XrCompileState *xr_source_compiler_state(const XrSourceCompiler *);
 XR_FUNC XrCompileResources *xr_source_compiler_resources(const XrSourceCompiler *);
+/* Borrows this compiler's actual Catalog, locator and cumulative context.
+ * The compiler must outlive the generation owner; namespace is copied by that
+ * owner's ordinary admission. This observation creates no parser or ledger. */
+XR_FUNC XrSourceCompileStatus xr_source_compiler_generation_config(const XrSourceCompiler *,
+    const char *namespace_id, XrXirSourceGenerationConfig *output);
 XR_FUNC XrSourceCompileStatus xr_source_compiler_build_file(XrSourceCompiler *, const char *absolute_path,
     XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic);
 /* Rooted text derives exact project/script authority and supports ordinary
