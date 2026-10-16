@@ -587,6 +587,9 @@ set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;executi
 
 
 target_link_libraries(test_xir_source_query PRIVATE xray_xir_source xray_xir_vm)
+add_test(NAME test_xir_source_class_definitions COMMAND test_xir_source_query --class-definitions)
+set_tests_properties(test_xir_source_class_definitions PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;ownership;metadata;class")
 add_test(NAME test_xir_source_core_syntax COMMAND test_xir_source_query --core-syntax)
 set_tests_properties(test_xir_source_core_syntax PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;ownership;metadata")

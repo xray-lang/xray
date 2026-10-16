@@ -964,7 +964,8 @@ static void query_next_scope(XrXirSourceRequest *request, XrCompilerSession **se
     request->session = *session;
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--interface-name-spans") || !strcmp(argv[1], "--core-syntax"))));
+    CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--interface-name-spans") ||
+        !strcmp(argv[1], "--core-syntax") || !strcmp(argv[1], "--class-definitions"))));
     stage_context = stage_context_default(); generic_storage_cases();
     nominal_query_boundary(&stage_context);
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -979,11 +980,12 @@ int main(int argc, char **argv) {
     XrXirSourceRequest request = {session, root, &authority, &stage_context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     if (argc == 2) {
         if (!strcmp(argv[1], "--core-syntax")) source_core_syntax_facts(&request);
+        else if (!strcmp(argv[1], "--class-definitions")) source_class_definition_cases(&request);
         else source_interface_name_spans(&request);
         xr_compile_session_free(session);
         CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);
         stage_contexts_free();
-        puts("Owned syntax facts survive producer destruction with complete module and declaration identities");
+        puts("Selected Source admission and owned query facts PASS");
         return 0;
     }
     query_next_scope(&request, &session);
