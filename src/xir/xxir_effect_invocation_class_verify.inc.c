@@ -76,13 +76,13 @@ static XrXirStatus effect_invocation_class_root_match(const EffectInvocationRead
     if (selected>=owner->final->count || owner->final->nodes[selected].body!=function ||
         owner->final->nodes[selected].root!=owner->final->root_spaces[function]) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->final->nodes[selected];
-    EffectBodyFunctionHead body_head={0},root_head={0};
+    EffectBodyFunctionParameters body_head={0};EffectBodyFunctionDimensions root_head={0};
     if (!xir_compile_work(owner->work,sizeof(*request))) return XR_XIR_BUDGET;
     EffectInvocationFlow flow={.read=owner,.node=selected,.body=*request};
-    XrXirStatus status=effect_body_request_head(request,function,&body_head);
-    if (status==XR_XIR_OK) status=effect_body_request_head(request,node->root,&root_head);
+    XrXirStatus status=effect_body_request_parameters(request,function,&body_head);
+    if (status==XR_XIR_OK) status=effect_body_request_dimensions(request,node->root,&root_head);
     if (status!=XR_XIR_OK) return status;
-    const EffectBodyFunctionHead *body=&body_head;
+    const EffectBodyFunctionParameters *body=&body_head;
     status=effect_invocation_basis_parameters(owner,root_head.parameter_count,&flow.basis);
     if (status!=XR_XIR_OK) return status;
     if (node->parameter_count!=body->parameter_count || (body->parameter_count && !body->parameters) ||

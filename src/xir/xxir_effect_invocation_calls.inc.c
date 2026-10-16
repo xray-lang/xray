@@ -359,10 +359,10 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
     if (opaque_present) {
         any=true;status=effect_invocation_mask(flow,mask,changed);
     }
-    EffectBodyFunctionHead root_head={0};
-    status=effect_invocation_flow_head(flow,owner->final->nodes[flow->node].root,&root_head);
+    EffectBodyFunctionParameters root_head={0};
+    status=effect_body_request_parameters(&flow->body,owner->final->nodes[flow->node].root,&root_head);
     if (status!=XR_XIR_OK) return status;
-    const EffectBodyFunctionHead *root=&root_head;
+    const EffectBodyFunctionParameters *root=&root_head;
     for (uint32_t p=0;p<flow->basis.parameters && status==XR_XIR_OK;++p) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         uint32_t bit=owner->final->site_count+p;

@@ -326,9 +326,9 @@ static XrXirStatus effect_invocation_producer_actual_read(const EffectInvocation
     const EffectInvocationNode *caller=&owner->final->nodes[edge->caller],*target=&owner->final->nodes[edge->target];
     if (caller->body>=request->domain.function_count || target->body>=request->domain.function_count ||
         caller->root!=target->root) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionHead caller_head={0},target_head={0};
+    EffectBodyFunctionHead caller_head={0};EffectBodyFunctionDimensions target_head={0};
     XrXirStatus status=effect_body_request_head(request,caller->body,&caller_head);
-    if (status==XR_XIR_OK) status=effect_body_request_head(request,target->body,&target_head);
+    if (status==XR_XIR_OK) status=effect_body_request_dimensions(request,target->body,&target_head);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunctionHead *function=&caller_head;
     if (edge->instruction>=function->instruction_count ||
