@@ -140,13 +140,13 @@ XR_FUNC XrXirStatus xlsp_source_index_store_find(XlspSourceIndexStore *store,con
     }
     if(!fallback.symbol)return XR_XIR_UNRESOLVED;*out=fallback;return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xlsp_source_index_store_visit(XlspSourceIndexStore *store,XlspIndexVisitor visitor,void *context) {
-    if(!store||!visitor)return XR_XIR_BAD_STRUCTURE;
+XR_FUNC XrXirStatus xlsp_source_index_store_visit(const XlspSourceIndexStore *store,XrCompileResources *resources,XlspIndexVisitor visitor,void *context) {
+    if(!store||!resources||!visitor)return XR_XIR_BAD_STRUCTURE;
     for(size_t i=0;i<store->count;++i) {
-        XrXirStatus status=store_work(store,sizeof(StoredIndex));if(status!=XR_XIR_OK)return status;
+        XrXirStatus status=store_status(xr_compile_resources_work(resources,sizeof(StoredIndex)));if(status!=XR_XIR_OK)return status;
         size_t count=0;const XlspSourceIndexSymbol *items=xlsp_source_index_symbols(store->files[i].owner,&count);
         for(size_t j=0;j<count;++j) {
-            status=store_work(store,sizeof(*items));if(status!=XR_XIR_OK)return status;
+            status=store_status(xr_compile_resources_work(resources,sizeof(*items)));if(status!=XR_XIR_OK)return status;
             XlspIndexedSymbol view={xlsp_source_index_uri(store->files[i].owner),items+j,xlsp_source_index_version(store->files[i].owner)};
             status=visitor(&view,context);if(status!=XR_XIR_OK)return status;
         }

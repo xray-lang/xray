@@ -100,6 +100,7 @@ target_compile_features(xray_lsp_source_hierarchy PUBLIC c_std_11)
 add_library(xray_lsp_hierarchy_handlers STATIC ../app/lsp/xlsp_hierarchy_handlers.c ../app/lsp/xlsp_source_scope.c
     ../app/lsp/xlsp_hierarchy_request.c ../app/lsp/xlsp_source_params.c ../app/lsp/xlsp_source_selection.c
     ../app/lsp/xlsp_source_format.c ../app/lsp/xlsp_source_on_type.c
+    ../app/lsp/xlsp_workspace_symbols.c ../app/lsp/xlsp_source_index_store.c
     ../app/lsp/xlsp_source_links.c ../app/lsp/xlsp_source_imports.c
     ../app/lsp/xlsp_source_binding_lenses.c
     ../app/lsp/xlsp_ignore.c ../app/lsp/xlsp_index_scan.c ../app/lsp/xlsp_index_pool.c ../app/lsp/xlsp_source_index.c)

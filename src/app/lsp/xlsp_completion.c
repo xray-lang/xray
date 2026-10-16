@@ -547,7 +547,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
     // (Approach A: closed files are shallow-indexed, not fully analyzed).
     if (doc && server && server->source_index) {
         ShallowCompletionCtx sctx = {.items = items, .seen = seen, .doc_uri = doc->uri, .added = 0};
-        XrXirStatus status=xlsp_source_index_store_visit(server->source_index,shallow_completion_collect,&sctx);
+        XrXirStatus status=xlsp_source_index_store_visit(server->source_index,server->index_resources,shallow_completion_collect,&sctx);
         if(status!=XR_XIR_OK){if(seen)xr_hashmap_owned_free(seen);xjson_free(items);server->source_failure.stage=2;server->source_failure.status=(unsigned)status;return NULL;}
     }
 

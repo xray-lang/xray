@@ -29,6 +29,7 @@ XR_FUNC XrXirStatus xlsp_source_index_store_remove(XlspSourceIndexStore *,const 
  * The caller converts filesystem paths to URIs before invoking this operation. */
 XR_FUNC XrXirStatus xlsp_source_index_store_remove_prefix(XlspSourceIndexStore *,const char *);
 XR_FUNC XrXirStatus xlsp_source_index_store_find(XlspSourceIndexStore *,const char *,XlspIndexedSymbol *);
-XR_FUNC XrXirStatus xlsp_source_index_store_visit(XlspSourceIndexStore *,XlspIndexVisitor,void *);
+/* Visiting immutable views charges the receiving query ledger exclusively. */
+XR_FUNC XrXirStatus xlsp_source_index_store_visit(const XlspSourceIndexStore *,XrCompileResources *,XlspIndexVisitor,void *);
 XR_FUNC size_t xlsp_source_index_store_count(const XlspSourceIndexStore *);
 #endif // XLSP_SOURCE_INDEX_STORE_H

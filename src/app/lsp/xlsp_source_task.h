@@ -25,5 +25,6 @@
 // Mode 17 folds canonical syntax; mode 18 selects UTF-16 text ranges; mode 19
 // produces canonical document symbols. Each owns only its selected document.
 // Modes 20/21 format or indent that document using captured options and settings.
+// Mode 22 matches independently owned syntax-index display facts and versions.
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *, const XlspRequestId *, XrJsonValue *, unsigned mode);
 #endif // XLSP_SOURCE_TASK_H

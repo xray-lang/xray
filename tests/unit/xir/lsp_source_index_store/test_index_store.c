@@ -49,8 +49,8 @@ static XrXirStatus store_trace(XrCompileResourceLimits limits,XrCompileResourceS
     CHECK(original.symbol&&original.symbol->exported&&!strcmp(original.uri,"file:///E:/scope/b.xr")&&original.version==12);
     CHECK(original.symbol->selection.start.character==10&&original.symbol->selection.end.character==16);
     {
-        size_t count=0;status=xlsp_source_index_store_visit(store,store_visit,&count);if(status!=XR_XIR_OK)goto done;CHECK(count==3);
-        count=0;XrXirStatus rejected=xlsp_source_index_store_visit(store,store_reject_visit,&count);
+        size_t count=0;status=xlsp_source_index_store_visit(store,resources,store_visit,&count);if(status!=XR_XIR_OK)goto done;CHECK(count==3);
+        count=0;XrXirStatus rejected=xlsp_source_index_store_visit(store,resources,store_reject_visit,&count);
         if(rejected==XR_XIR_BUDGET){status=rejected;goto done;}CHECK(rejected==XR_XIR_BAD_STRUCTURE&&count==1);
     }
     {
@@ -93,7 +93,8 @@ static void store_bad_arguments(void) {
     CHECK(xlsp_source_index_store_replace(store,&empty)==XR_XIR_BAD_STRUCTURE&&!empty);
     CHECK(xlsp_source_index_store_remove_prefix(store,"")==XR_XIR_BAD_STRUCTURE);
     CHECK(xlsp_source_index_store_find(store,NULL,&view)==XR_XIR_BAD_STRUCTURE&&!view.symbol);
-    CHECK(xlsp_source_index_store_visit(store,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xlsp_source_index_store_visit(store,resources,NULL,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xlsp_source_index_store_visit(store,NULL,store_visit,NULL)==XR_XIR_BAD_STRUCTURE);
     xlsp_source_index_store_free(store);xr_compile_resources_release(resources);CHECK(!runtime_live&&!runtime_bytes);
 }
 int main(int argc,char **argv) {

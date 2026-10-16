@@ -1,3 +1,6 @@
+if(TARGET test_lsp_source_index_store)
+    return()
+endif()
 add_executable(test_lsp_source_index_store "${CMAKE_CURRENT_LIST_DIR}/test_index_store.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_index.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_index_store.c")
