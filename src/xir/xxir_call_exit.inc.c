@@ -11,6 +11,7 @@
  *   survives cleanup failures and later cancellation.
  */
 static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
+    clear_channel_wait(call);
     CallFrame *frame = call->top;
     if (result->status == XR_XIR_CALL_CANCELLED && call->abort_reason != XR_XIR_CALL_READY) {
         xr_xir_call_result_drop(result);

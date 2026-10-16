@@ -67,7 +67,8 @@ static void nominal_variants_free(const XrXirNominalVariant *variants, uint32_t 
     for (uint32_t i = 0; variants && i < count; ++i) xr_compile_resources_free((void *) variants[i].name.bytes);
     xr_compile_resources_free((void *) variants);
 }
-static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t parameters) {
+static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t parameters, bool unit_payload) {
+    if (type==XR_XIR_UNIT) return unit_payload;
     if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING ||
         type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO) return true;
     uint32_t id = (uint32_t) type;
@@ -75,7 +76,8 @@ static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t
         return id - XR_XIR_TYPE_PARAMETER_BASE < parameters;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CALLABLE ||
-        node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC) &&
+        node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
+        node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL) &&
         node->parameter_span <= parameters;
 }
 static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
@@ -95,6 +97,12 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
         NULL,d->field_count,d->kind,d->variants,d->variant_count,d->flags,d->native};
     status = nominal_native_verify(b, &native_identity);
     if (status != XR_XIR_OK) return status;
+    if (d->native.native_id==XR_NATIVE_DECLARATION_RECV) {
+        if (d->fields[0].type!=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE || d->constraints[0].markers ||
+            d->constraints[0].interface_count) return XR_XIR_BAD_TYPE;
+        status=nominal_native_name(b,d->fields[0].name,"value");
+        if (status!=XR_XIR_OK) return status;
+    }
     status = nominal_variants(d->kind, d->variants, d->variant_count, d->field_count, b);
     if (status != XR_XIR_OK) return status;
     for (uint32_t p = 0; p < d->parameter_count; ++p) {
@@ -113,7 +121,7 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
             visibility == (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) return XR_XIR_BAD_STRUCTURE;
         status = nominal_name(field->name, b);
         if (status != XR_XIR_OK) return status;
-        if (!nominal_field_type(types, field->type, d->parameter_count)) return XR_XIR_BAD_TYPE;
+        if (!nominal_field_type(types, field->type, d->parameter_count,d->native.native_id==XR_NATIVE_DECLARATION_RECV && !f)) return XR_XIR_BAD_TYPE;
         status = xr_xir_compile_type_expression_shape(b, types, field->type, d->parameter_count);
         if (status != XR_XIR_OK) return status;
         uint32_t begin = 0;
@@ -271,9 +279,11 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileCon
             const XrXirNominalIdentity *identity = &types->nominals->identities[node->nominal.declaration];
             if (node->nominal.argument_count != identity->arity || node->nominal.field_count != identity->field_count)
                 return XR_XIR_BAD_TYPE;
+            if (identity->native.native_id==XR_NATIVE_DECLARATION_RECV &&
+                node->nominal.fields[0]!=node->nominal.arguments[0]) return XR_XIR_BAD_TYPE;
             for (uint32_t f = 0; f < node->nominal.field_count; ++f) {
                 if (!nominal_charge(budget, 0, 1)) return XR_XIR_BUDGET;
-                if (!nominal_field_type(types, node->nominal.fields[f], 0)) return XR_XIR_BAD_TYPE;
+                if (!nominal_field_type(types, node->nominal.fields[f], 0,identity->native.native_id==XR_NATIVE_DECLARATION_RECV && !f)) return XR_XIR_BAD_TYPE;
             }
             continue;
         }
@@ -281,7 +291,7 @@ static XrXirStatus nominal_nodes_verify(const XrXirTypes *types, XrXirCompileCon
         if (node->nominal.argument_count != d->parameter_count) return XR_XIR_BAD_TYPE;
         if (node->nominal.field_count && node->nominal.field_count != d->field_count) return XR_XIR_BAD_TYPE;
         for (uint32_t f = 0; f < node->nominal.field_count; ++f) {
-            if (!nominal_field_type(types, node->nominal.fields[f], node->parameter_span)) return XR_XIR_BAD_TYPE;
+            if (!nominal_field_type(types, node->nominal.fields[f], node->parameter_span,d->native.native_id==XR_NATIVE_DECLARATION_RECV && !f)) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xr_xir_compile_type_substitution_matches(budget, types, node->nominal.arguments, node->nominal.argument_count, d->fields[f].type, node->nominal.fields[f]);
             if (status != XR_XIR_OK) return status;
         }

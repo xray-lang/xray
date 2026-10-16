@@ -94,7 +94,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
             for (uint32_t p = 0; p < node->parameter_count && status == XR_XIR_OK; ++p)
                 status = type_access_edge(types, node->parameters[p].type, i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
-                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK)
+                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL)
             status = type_access_edge(types, node->element, i, pending, remaining);
         else status = XR_XIR_BAD_TYPE;
     }

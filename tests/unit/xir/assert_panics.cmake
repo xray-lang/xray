@@ -43,6 +43,9 @@ add_test(NAME test_xir_assert_panics_wire_vector COMMAND ${XRAY_PYTHON}
 add_test(NAME test_xir_assert_panics_current_wire_vector COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_construction72_vectors.py
         --source-root ${CMAKE_SOURCE_DIR} --output-root ${CMAKE_SOURCE_DIR})
+add_test(NAME test_xir_assert_panics_current_core_vector COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_assert_panics_current_vector.py)
+set_tests_properties(test_xir_assert_panics_current_core_vector PROPERTIES LABELS "unit;xir;execution;ownership;abi;assertion")
 add_test(NAME test_xir_binder_wire_vectors COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_binder56_migration.py)
 set_tests_properties(test_xir_assert_panics test_xir_assert_panics_allocations test_xir_assert_panics_native

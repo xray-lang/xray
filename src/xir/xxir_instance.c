@@ -478,7 +478,7 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
     config.byte_limit = instance->config.call_limit; config.poll_limit = instance->config.poll_limit;
     config.depth_limit = instance->config.depth_limit;
     config.accounting = &instance->accounting[(instance->epoch + 1) % 2];
-    config.output = instance->config.output; config.admission = *admission;
+    config.output = instance->config.output; config.admission = *admission; config.time = instance->config.time;
     XrXirCall *replacement = NULL;
     XrXirCallRequest request = {root, owned, count, instance_cell_role, instance->program};
     status = xr_xir_call_new_budgeted(&config, &request, &instance->budget, &replacement);

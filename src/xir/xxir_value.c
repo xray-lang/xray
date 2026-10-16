@@ -27,6 +27,10 @@
 #include "xxir_tuple.h"
 #include "xxir_float.h"
 #include "xxir_atomic.h"
+#include "xxir_channel.h"
+#include "xxir_channel_watch_internal.h"
+#include "xxir_channel_rendezvous_internal.h"
+#include "../shared/xr_channel_buffer.h"
 #include "xxir_task_internal.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -54,6 +58,54 @@ typedef struct XirAtomic {
     _Atomic(uint64_t) bits;
     XrXirType element;
 } XirAtomic;
+struct XrXirChannelWatch {
+    _Atomic(uint32_t) references,state;
+    XrXirDomain *domain;
+    /* owned: this value belongs only to the unique external watch owner.
+     * Queue references own the node storage, never this external value root. */
+    XrXirValue owner_channel;
+    struct XrXirChannelWatch *previous,*next;
+    bool linked;
+};
+struct XrXirChannelSendWait {
+    _Atomic(uint32_t) references,state;
+    XrXirDomain *domain;
+    XrXirValue owner_channel,message;
+    struct XrXirChannelSendWait *previous,*next,*release_next;
+    bool linked;
+};
+struct XrXirChannelRecvWait {
+    _Atomic(uint32_t) references,state;
+    XrXirDomain *domain;
+    XrXirValue owner_channel,closed,result;
+    XirNominalValue *reservation;
+    struct XrXirChannelRecvWait *previous,*next,*release_next;
+    bool linked,raw,taken;
+};
+typedef struct XirChannel {
+    XirObject object;
+    atomic_bool locked, closed;
+    XrChannelBufferState buffer;
+    XrXirType element;
+    size_t allocation_bytes;
+    uint64_t sequence;
+    XrXirChannelWatch *watch_head,*watch_tail;
+    uint32_t watch_count;
+    XrXirChannelSendWait *send_head,*send_tail;
+    uint32_t send_count;
+    XrXirChannelRecvWait *recv_head,*recv_tail;
+    uint32_t recv_count;
+} XirChannel;
+static void channel_watch_dispose_queue(XirChannel *channel);
+static void channel_send_wait_dispose_queue(XirChannel *channel);
+static void channel_recv_wait_dispose_queue(XirChannel *channel);
+_Static_assert(_Alignof(XirChannel) >= _Alignof(XrXirValue), "channel tail aligns owned values");
+static XrXirValue *channel_slots(XirChannel *channel) { return (XrXirValue *)(channel + 1); }
+static bool channel_header_valid(const XirChannel *channel) {
+    uint64_t bytes = sizeof(*channel) + (uint64_t)channel->buffer.capacity * sizeof(XrXirValue);
+    return bytes <= SIZE_MAX && channel->allocation_bytes == bytes;
+}
+
 typedef struct XirFunction {
     XirObject object;
     XrXirFunctionBinding binding;
@@ -101,7 +153,7 @@ _Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8
 static void class_observation_dispose(XrXirDomain *domain);
 /* The immutable prefix is readable before any generation-specific field.
  * Its fifth byte excludes both supported old atomic-bool representations. */
-static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x18,0x00,0x00,0x01};
+static const unsigned char domain_identity[8] = {0x58,0x52,0x44,0x4d,0x1d,0x00,0x00,0x01};
 _Static_assert(offsetof(XrXirDomain, identity) == 0 && sizeof(atomic_bool) == 1 &&
     sizeof(_Atomic(uint32_t)) == 4, "domain identity rejects the complete retired prefix");
 XR_FUNC bool xr_xir_domain_current(const XrXirDomain *domain) {
@@ -186,7 +238,7 @@ static bool value_object_kind_known(uint32_t kind) {
     return !kind || kind == XIR_OBJECT_CLASS || kind == XIR_OBJECT_CELL ||
         kind == XIR_OBJECT_FUNCTION || kind == XR_XIR_TYPE_ARRAY ||
         kind == XR_XIR_TYPE_NOMINAL || kind == XR_XIR_TYPE_NULLABLE ||
-        kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK;
+        kind == XR_XIR_TYPE_TUPLE || kind == XR_XIR_TYPE_ATOMIC || kind == XR_XIR_TYPE_TASK || kind == XR_XIR_TYPE_CHANNEL;
 }
 static bool value_header_valid(const XrXirValue *value) {
     if (!value || value->reserved) return false;
@@ -224,7 +276,8 @@ static bool value_header_valid(const XrXirValue *value) {
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
          node->kind == XR_XIR_TYPE_TASK ||
-         node->kind == XR_XIR_TYPE_TASK ||
+         (node->kind == XR_XIR_TYPE_CHANNEL && ((XirChannel *)object)->element ==
+          xr_xir_channel_element(xr_xir_compile_type_arena_types(object->arena), type)) ||
          (node->kind == XR_XIR_TYPE_ATOMIC && ((XirAtomic *)object)->element ==
           xr_xir_atomic_element(xr_xir_compile_type_arena_types(object->arena), type)));
 }
@@ -240,6 +293,7 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
         return true;
     }
     if (object->kind == XR_XIR_TYPE_TASK) return xr_xir_task_storage_valid((const XirTask *)object);
+    if (object->kind == XR_XIR_TYPE_CHANNEL) return channel_header_valid((const XirChannel *)object);
     if (object->kind == XR_XIR_TYPE_TUPLE) {
         const XirTuple *tuple=(const XirTuple *)object;
         const XrXirTypeNode *node=xr_xir_tuple_signature(xr_xir_compile_type_arena_types(object->arena),object->type);
@@ -698,6 +752,18 @@ static void release_pending(XirObject *pending) {
             XirString *string = (XirString *) object;
             xr_xir_domain_deallocate(domain, string->bytes, string->capacity);
             xr_xir_domain_deallocate(domain, string, sizeof(*string));
+        } else if (object->kind == XR_XIR_TYPE_CHANNEL) {
+            XirChannel *channel = (XirChannel *)object;
+            XR_CHECK(channel_header_valid(channel) && xr_channel_buffer_valid(&channel->buffer),
+                "channel release retains its exact initialized FIFO");
+            for (uint32_t i = 0; !object->graph_dead && i < channel->buffer.count; ++i) {
+                uint32_t slot = xr_channel_buffer_slot(&channel->buffer, i);
+                queue_release(&channel_slots(channel)[slot], &pending);
+            }
+            channel_watch_dispose_queue(channel);
+            channel_send_wait_dispose_queue(channel);
+            channel_recv_wait_dispose_queue(channel);
+            xr_xir_domain_deallocate(domain, channel, channel->allocation_bytes);
         } else if (object->kind == XR_XIR_TYPE_ATOMIC) {
             xr_xir_domain_deallocate(domain, object, sizeof(XirAtomic));
         } else if (object->kind == XR_XIR_TYPE_TASK) {
@@ -1084,6 +1150,7 @@ static bool admission_owner(const XrXirValueAdmission *admission,
 #include "xxir_nullable_value.inc.c"
 #include "xxir_tuple_value.inc.c"
 #include "xxir_atomic_value.inc.c"
+#include "xxir_channel_value.inc.c"
 static XrXirValueStatus xr_xir_function_new_graph_operation(XrXirDomain *domain, XrXirTypeArena *arena,
     XrXirType type,const XirFunctionConstruction *construction,XrXirValue *output) {
     const XrXirFunctionBinding *binding=construction?construction->binding:NULL;

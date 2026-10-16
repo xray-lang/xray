@@ -249,6 +249,10 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: case XR_XIR_CALL_REQUIREMENT:
         return effect_root_callable(request,facts,required,unresolved,work);
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
+    case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:
+    case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
+    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
+    case XR_XIR_CHANNEL_NEW: case XR_XIR_CHANNEL_CAPACITY: case XR_XIR_CHANNEL_IS_CLOSED: case XR_XIR_CHANNEL_CLOSE:
     case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD: case XR_XIR_ATOMIC_STORE:
     case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
     case XR_XIR_ATOMIC_FETCH_SUB: case XR_XIR_ATOMIC_SWAP: case XR_XIR_ATOMIC_COMPARE_EXCHANGE:

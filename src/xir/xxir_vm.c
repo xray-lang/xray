@@ -19,6 +19,7 @@
 #include "xxir_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
+#include "xxir_channel.h"
 #include "xxir_task.h"
 #include "xxir_compile_memory.h"
 #include "xxir_equal.h"
@@ -168,6 +169,7 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
     return receiver;
 }
 #include "xxir_vm_atomic.inc.c"
+#include "xxir_vm_channel.inc.c"
 #include "xxir_vm_path.inc.c"
 static XrXirRunStatus vm_array_capacity_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
@@ -293,8 +295,11 @@ static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
     if (op->op == XR_XIR_STRUCT_NEW || op->op == XR_XIR_ENUM_NEW) {
         for (uint32_t i = 0; i < op->args[1]; ++i)
             state->arguments[i] = vm_value_operand(run, run->function->operands[op->args[0] + i]);
+        bool unit_payload=op->op==XR_XIR_ENUM_NEW && !op->immediate && xr_xir_nominal_native_recv(run->module->types,op->type,XR_XIR_UNIT);
+        XrXirValue unit={0};
         status = op->op == XR_XIR_ENUM_NEW ?
-            xr_xir_enum_new(op->type, (uint32_t) op->immediate, op->args[1] ? state->arguments : NULL, op->args[1], admission, &output) :
+            xr_xir_enum_new(op->type, (uint32_t) op->immediate, unit_payload ? &unit : op->args[1] ? state->arguments : NULL,
+                unit_payload ? 1u : op->args[1], admission, &output) :
             xr_xir_struct_new(op->type, op->args[1] ? state->arguments : NULL, op->args[1], admission, &output);
     } else {
         XrXirValue receiver = vm_value_operand(run, op->args[0]);
@@ -312,7 +317,7 @@ static XrXirRunStatus vm_nominal_step(ScalarRun *run, VmState *state,
     }
     if (status != XR_XIR_VALUE_OK) return value_run_status(status);
     if (xr_xir_type_is_owned(run->module->types, op->type)) xr_xir_owned_slot_move(run->frame, destination, &output);
-    else xr_xir_scalar_store(run->frame, destination, output.payload);
+    else if (op->type!=XR_XIR_UNIT) xr_xir_scalar_store(run->frame, destination, output.payload);
     return XR_XIR_RUN_OK;
 }
 
@@ -564,6 +569,8 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         state->instruction = next;
         return vm_class_step(run, state, op, run->layout->offsets[result_id]);
     }
+    if (xr_xir_op_is_channel(op->op))
+        return vm_channel_step(run,state,op,run->layout->offsets[result_id],action);
     if (xr_xir_op_is_atomic(op->op))
         return vm_atomic_step(run, state, op, run->layout->offsets[result_id], action);
     if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
@@ -981,7 +988,7 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
     for (uint32_t i = 0; i < body->instruction_count; ++i)
         if ((body->instructions[i].op >= XR_XIR_CONST_STRING &&
             body->instructions[i].op <= XR_XIR_SLOT_STORE) ||
-            xr_xir_op_is_atomic(body->instructions[i].op) || body->instructions[i].op==XR_XIR_SLOT_GROUP_INIT) return XR_XIR_RUN_BAD_ARTIFACT;
+            xr_xir_op_is_channel(body->instructions[i].op) || xr_xir_op_is_atomic(body->instructions[i].op) || body->instructions[i].op==XR_XIR_SLOT_GROUP_INIT) return XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, function);
     void *frame = NULL;
     XrXirRunStatus status = xr_xir_scalar_frame_begin(context, layout->frame_bytes, &frame);

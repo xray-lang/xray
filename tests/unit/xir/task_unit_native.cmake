@@ -19,7 +19,8 @@ add_custom_command(OUTPUT ${TASK_UNIT_NATIVE_CS} "${TASK_UNIT_NATIVE_GENERATED_D
     DEPENDS test_xir_task_unit_native_producer ${TASK_UNIT_NATIVE_FIXTURES} VERBATIM)
 add_executable(test_xir_task_unit_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_task_unit_native.c"
     ${TASK_UNIT_NATIVE_CS} "${TASK_UNIT_NATIVE_GENERATED_DIR}/task_unit_generated.h"
-    "${PROJECT_SOURCE_DIR}/src/base/xsha256.c" "${PROJECT_SOURCE_DIR}/src/shared/xnative_declaration.c")
+    "${PROJECT_SOURCE_DIR}/src/base/xsha256.c" "${PROJECT_SOURCE_DIR}/src/shared/xnative_declaration.c"
+    "${PROJECT_SOURCE_DIR}/src/xir/xxir_scalar_core.c")
 target_include_directories(test_xir_task_unit_native PRIVATE ${XRAY_COMMON_INCLUDES}
     "${CMAKE_CURRENT_LIST_DIR}" "${TASK_UNIT_NATIVE_GENERATED_DIR}")
 if(WIN32)

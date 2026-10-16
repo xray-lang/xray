@@ -173,9 +173,16 @@ static bool source_enum_construct(SourceContext *ctx, AstNode *node, SourceEnumS
         }
         if (!source_query_target_reference(ctx,range,ctx->nominal_members[selected->owner->index][variant.field_begin+at],XR_XIR_SOURCE_READ)) return false;
     }
+    uint32_t operands=(uint32_t)count;
+    if (count==1 && fields[0].type==XR_XIR_UNIT) {
+        if (!source_work_units(ctx,node,40)) return false;
+        if (!xr_xir_nominal_native_recv(&ctx->types,selected->type,XR_XIR_UNIT))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Unit payload requires the governed Recv value variant");
+        operands=0;
+    }
     return source_query_reference(ctx,selected->path,selected->binding,selected->owner,XR_XIR_SOURCE_TYPE_USE) &&
         source_query_target_token_reference(ctx,node,ctx->nominal_variants[selected->owner->index][selected->variant],XR_XIR_SOURCE_READ) &&
-        source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ENUM_NEW,selected->type,{0},{0},selected->variant, {0}},fields,(uint32_t)count,value);
+        source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ENUM_NEW,selected->type,{0},{0},selected->variant, {0}},operands ? fields : NULL,operands,value);
 }
 static bool source_enum_literal(SourceContext *ctx, AstNode *node, SourceValue *value) {
     EnumConstructNode *literal = &node->as.enum_construct; SourceEnumSelection selected = {0};

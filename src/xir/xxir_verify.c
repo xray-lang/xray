@@ -272,7 +272,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
             !xr_xir_type_is_nominal(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
-        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ) && op->type == XR_XIR_UNIT) &&
+        (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_ENUM_GET || op->op==XR_XIR_CHANNEL_RECV_OR) && op->type == XR_XIR_UNIT) &&
             !xr_xir_type_in_context(module, caller_id, op->type)) ||
         (rule->result == RULE_SCALAR && !scalar(op->type)))
         return XR_XIR_BAD_TYPE;
@@ -806,6 +806,7 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
 #include "xxir_tuple_verify.inc.c"
 #include "xxir_atomic_verify.inc.c"
 
+#include "xxir_channel_verify.inc.c"
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -826,6 +827,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if(status!=XR_XIR_OK)return status;
             }
             if(payload!=op->args[1])return XR_XIR_BAD_STRUCTURE;
+            continue;
+        }
+        if (xr_xir_op_is_channel(op->op)) {
+            XrXirStatus status=channel_uses(graph,function,context,i);
+            if (status!=XR_XIR_OK) return status;
             continue;
         }
         if (xr_xir_op_is_atomic(op->op)) {

@@ -14,6 +14,7 @@
 #include "xxir_call.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_effect_contract_internal.h"
+#include "xxir_channel_rendezvous_internal.h"
 typedef struct XrXirCallObserver XrXirCallObserver;
 typedef struct XrXirCallBudget {
     uint64_t byte_limit, requested_limit, requested_bytes, live_bytes, peak_bytes, allocations, frees;
@@ -106,4 +107,26 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
 /* A failed copy terminates only the waiting activation, never the sticky Task. */
 XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
     XrXirCallStatus reason);
+/* Only the active callback may stage a watch. SUSPENDED requires returning an
+ * empty AWAIT_CHANNEL action; READY observed a changed frontier, BUSY a held lock.
+ * No view, frame, or admission callback is borrowed by the notification node. */
+XR_FUNC XrXirCallStatus xr_xir_call_watch_channel(XrXirCallView *view,
+    const XrXirValue *channel, uint64_t sequence);
+/* Allocation-free after payload publication. SUSPENDED moves the unique owner
+ * into the Call and requires an empty AWAIT_CHANNEL action. Completion delivers
+ * an I64 SendWaitState inbox. READY leaves an already completed owner untouched. */
+XR_FUNC XrXirCallStatus xr_xir_call_wait_channel_send(XrXirCallView *view,XrXirChannelSendWait **owner);
+/* SUSPENDED moves the unique receive owner with no allocation. Completion
+ * moves its actual native Recv<T> into the current frame's owned inbox.
+ * READY preserves an already completed owner for immediate local take. */
+XR_FUNC XrXirCallStatus xr_xir_call_wait_channel_recv(XrXirCallView *view,XrXirChannelRecvWait **owner);
+/* Move one actual returned inbox owner into canonical Unit storage. The exact
+ * active view and expected closed type must match; failure preserves both.
+ * Moving an acknowledged Channel result allocates nothing and retains nothing. */
+XR_FUNC XrXirCallStatus xr_xir_call_take_inbox(XrXirCallView *view,XrXirType expected,XrXirValue *output);
+XR_FUNC bool xr_xir_call_channel_waiting(const XrXirCall *call);
+XR_FUNC bool xr_xir_call_channel_ready(const XrXirCall *call);
+/* Executor accounting failure removes only its exact activation's owned watch. */
+XR_FUNC XrXirCallStatus xr_xir_call_fail_channel_wait(XrXirCall *call,
+    const XrXirExecutorBinding *binding, XrXirCallStatus reason);
 #endif // XXIR_CALL_INTERNAL_H

@@ -68,6 +68,17 @@ static void *runtime_calloc(size_t count, size_t bytes) {
 static bool force_unsupported;
 static unsigned capability_probes, unsupported_probe;
 static size_t bits_initializations;
+static bool channel_lock_free(_Atomic(bool) *cell) { return atomic_is_lock_free(cell); }
+static bool channel_lock_cas(_Atomic(bool) *cell, bool *expected, bool desired,
+    memory_order success, memory_order failure) {
+    CHECK(failure != memory_order_release && failure != memory_order_acq_rel);
+    return atomic_compare_exchange_strong_explicit(cell,expected,desired,success,failure);
+}
+static bool class_origin_cas(_Atomic(uint32_t) *cell, uint32_t *expected, uint32_t desired,
+    memory_order success, memory_order failure) {
+    CHECK(failure != memory_order_release && failure != memory_order_acq_rel);
+    return atomic_compare_exchange_strong_explicit(cell,expected,desired,success,failure);
+}
 static bool lock_free32(_Atomic(uint32_t) *cell) {
     ++capability_probes; return !force_unsupported && capability_probes != unsupported_probe && atomic_is_lock_free(cell);
 }
@@ -94,10 +105,10 @@ static bool core_cell_cas(_Atomic(uint64_t) *cell, uint64_t *expected, uint64_t 
 }
 #undef atomic_is_lock_free
 #define atomic_is_lock_free(cell) _Generic((cell), \
-    _Atomic(uint32_t) *: lock_free32, _Atomic(uint64_t) *: lock_free64)(cell)
+    _Atomic(bool) *: channel_lock_free, _Atomic(uint32_t) *: lock_free32, _Atomic(uint64_t) *: lock_free64)(cell)
 #undef atomic_compare_exchange_strong_explicit
 #define atomic_compare_exchange_strong_explicit(cell, expected, desired, success, failure) \
-    core_cell_cas(cell, expected, desired, success, failure)
+    _Generic((cell), _Atomic(bool) *: channel_lock_cas, _Atomic(uint32_t) *: class_origin_cas, default: core_cell_cas)(cell, expected, desired, success, failure)
 #undef atomic_init
 #define atomic_init(cell, value) _Generic((cell), _Atomic(bool) *: core_init_bool, \
     _Atomic(uint32_t) *: core_init32, _Atomic(uint64_t) *: core_init64)(cell, value)

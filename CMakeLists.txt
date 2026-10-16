@@ -1977,7 +1977,11 @@ foreach(XR_SYNC_PART atomic_compat semantic_owner_ids_gen sync_core)
     list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_SYNC_OUTPUT})
 endforeach()
 foreach(XR_CHANNEL_PART buffer storage)
-    set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_channel_${XR_CHANNEL_PART}.h)
+    if(XR_CHANNEL_PART STREQUAL "buffer")
+        set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_channel_buffer.h)
+    else()
+        set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_channel_${XR_CHANNEL_PART}.h)
+    endif()
     set(XR_CHANNEL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_channel_${XR_CHANNEL_PART}_embedded.inc.c)
     add_custom_command(OUTPUT ${XR_CHANNEL_OUTPUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated

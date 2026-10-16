@@ -26,7 +26,7 @@ static void panics_resource(const char *directory,const char *path) {
     XrXirSourceResult source=panics_source(directory,path,
         "export fn limit(){assertPanics(fn()->string{return \"owned\"})}\n"
         "export fn cancelled(){assertPanics(fn()->string{defer{const owned=\"cleanup\"};Coro.yield();return \"unreached\"})}\n",true);
-    panics_snapshot_owned(&source);XrXirArtifact *lowered=panics_lower(&source);
+    panics_snapshot_owned(&source);XrXirArtifact *lowered=panics_lower(&source,false);
     uint32_t limited=panics_find(xr_xir_compile_artifact_module(lowered),"limit");
     uint32_t cancelled=panics_find(xr_xir_compile_artifact_module(lowered),"cancelled");
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
