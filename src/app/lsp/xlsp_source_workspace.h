@@ -15,7 +15,7 @@ XR_FUNC void xlsp_source_workspace_failure_free(XlspSourceWorkspaceFailure *);
 XR_FUNC XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *,
     const XlspSourceDocument *,size_t,XlspSourceWorkspace **,unsigned *stage,XlspSourceWorkspaceFailure *);
 XR_FUNC void xlsp_source_workspace_free(XlspSourceWorkspace *);
-/* mode 0 definition, 1 references, 2 document highlights, 3 typed hover. JSON owns all text. */
+/* mode 0 definition, 1 references, 2 document highlights, 3 typed hover, 4 signature help. JSON owns all text. */
 XR_FUNC XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *,
     const char *,size_t,XrLspPosition,unsigned,bool,XrJsonValue **);
 XR_FUNC XrXirStatus xlsp_source_workspace_tokens(XlspSourceWorkspace *,const char *,size_t,

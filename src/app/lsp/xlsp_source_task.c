@@ -49,7 +49,7 @@ static void source_task_complete(void *data, void *result) {
 
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *server, const XlspRequestId *id,
                                            XrJsonValue *params, unsigned mode) {
-    if (!server || !xlsp_request_id_valid(id) || mode > 14) return XR_XIR_BAD_STRUCTURE;
+    if (!server || !xlsp_request_id_valid(id) || mode > 15) return XR_XIR_BAD_STRUCTURE;
     if (!server->async || !server->initialized || server->shutdown_received || server->exit_received)
         return XR_XIR_BAD_STAGE;
     if (server->source_revision == UINT64_MAX) return XR_XIR_BUDGET;
@@ -59,7 +59,8 @@ XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *server, const XlspReque
     source->server = server; source->revision = server->source_revision;
     XrXirStatus status = XR_XIR_OUT_OF_MEMORY;
     if (xlsp_request_id_clone(id, &source->id) != XLSP_PROTOCOL_OK) goto failed;
-    status = mode < 4 ? xlsp_navigation_capture(server, params, mode, &source->request) :
+    status = (mode < 4 || mode == 15) ?
+        xlsp_navigation_capture(server, params, mode == 15 ? 4u : mode, &source->request) :
         xlsp_hierarchy_request_capture(server, params, mode >= 10 ? 0u : mode < 7 ? mode - 4 : mode - 7,
             mode == 14 ? XLSP_SOURCE_DOCUMENT_LINKS :
                 mode >= 11 ? (XlspSourceScopeQueryKind)(XLSP_SOURCE_SEMANTIC_FULL+mode-11) :

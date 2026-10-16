@@ -103,7 +103,7 @@ static void rejected(XrLspServer *server, const XlspRequestId *id, XrJsonValue *
 static void check_admission(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params) {
     XlspRequestId invalid = {0}, missing = {.kind = XLSP_ID_NUMBER, .as.number = 42};
     rejected(server, &invalid, params, 0, XR_XIR_BAD_STRUCTURE);
-    rejected(server, id, params, 15, XR_XIR_BAD_STRUCTURE);
+    rejected(server, id, params, 16, XR_XIR_BAD_STRUCTURE);
     rejected(server, &missing, params, 0, XR_XIR_BAD_STAGE);
     server->initialized = false; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->initialized = true;
     server->shutdown_received = true; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->shutdown_received = false;
@@ -212,7 +212,13 @@ static int run(int argc, char **argv) {
 #ifdef XLSP_NAVIGATION_ADMISSION
 #include "../lsp_navigation_admission/task_cases.h"
 #endif
+#ifdef XLSP_SIGNATURE_TASK
+#include "../lsp_signature_task/task_cases.h"
+#endif
 static int dispatch_run(int argc, char **argv) {
+#ifdef XLSP_SIGNATURE_TASK
+    if(argc>=3&&!strcmp(argv[2],"--signature"))return signature_main(argc,argv);
+#endif
 #ifdef XLSP_NAVIGATION_ADMISSION
     if(argc>=3&&!strcmp(argv[2],"--nav-admission"))return navigation_admission_main(argc,argv);
 #endif

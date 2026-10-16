@@ -25,6 +25,8 @@ XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *,XrJsonValue *,unsigned
 XR_FUNC XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc,
                                              XrLspPosition pos);
 
+XR_FUNC XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *,XrLspPosition);
+
 // Find references (cross-file, scope-aware)
 XR_FUNC XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc,
                                              XrLspPosition pos, bool include_declaration);

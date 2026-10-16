@@ -263,22 +263,7 @@ XrJsonValue *xlsp_handle_td_code_lens(XrLspServer *server,XrJsonValue *params) {
     return xlsp_code_lens_handle(server,params);
 }
 
-XrJsonValue *xlsp_handle_td_signature_help(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    XrJsonValue *position = xjson_get_object(params, "position");
-    if (!textDocument || !position)
-        return xjson_new_null();
 
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc)
-        return xjson_new_null();
-
-    XrLspPosition pos = {.line = (uint32_t) xjson_get_int(position, "line"),
-                         .character = (uint32_t) xjson_get_int(position, "character")};
-
-    return xlsp_analyze_signature_help(doc, pos);
-}
 
 _Static_assert(XLSP_TOKEN_FUNCTION==12 && XLSP_TOKEN_PARAMETER==7 && XLSP_TOKEN_MODIFIER==16 && XLSP_TOKEN_COUNT==22, "semantic legend order");
 _Static_assert(XLSP_MOD_DECLARATION==1 && XLSP_MOD_DEFINITION==2 && XLSP_MOD_READONLY==4 && XLSP_MOD_MODIFICATION==64, "semantic modifier bits");

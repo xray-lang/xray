@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "xlsp_navigation.h"
+#include "xlsp_handlers_textdoc.h"
 #include "xlsp_server.h"
 #include "xlsp_source_workspace.h"
 #include "xlsp_source_request.h"
@@ -48,7 +49,7 @@ static XrXirStatus navigation_length(XrCompileResources *r,const char *text,size
     }
 }
 XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *server,XrJsonValue *params,unsigned mode,XlspSourceRequest **out) {
-    if(!server||!out||*out||mode>3)return XR_XIR_BAD_STRUCTURE;
+    if(!server||!out||*out||mode>4)return XR_XIR_BAD_STRUCTURE;
     server->source_failure.stage=8;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     XrJsonValue *document=xjson_get_object(params,"textDocument"),*position=xjson_get_object(params,"position");
     XrJsonValue *uri=xjson_get(document,"uri"),*line=xjson_get(position,"line"),*column=xjson_get(position,"character");
@@ -96,7 +97,7 @@ static XrJsonValue *navigation_request(XrLspServer *server,XrLspDocument *doc,
     if(!server)return NULL;
     server->source_failure.stage=1;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     if(!doc||doc->server!=server||!server->doc_table||server->doc_table->doc_count<=0||
-        server->doc_table->bucket_count<=0||!server->doc_table->buckets||mode>3)return NULL;
+        server->doc_table->bucket_count<=0||!server->doc_table->buckets||mode>4)return NULL;
     XrCompileResources *resources=NULL;XlspSourceDocument *documents=NULL;
     XlspSourceWorkspace *fresh=NULL;XrJsonValue *result=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&navigation_limits,&resources);
@@ -152,7 +153,7 @@ XrJsonValue *xlsp_code_lens_handle(XrLspServer *server,XrJsonValue *params) {
 XrJsonValue *xlsp_navigation_handle(XrLspServer *server,XrJsonValue *params,unsigned mode) {
     if(!server)return NULL;
     server->source_failure.stage=8;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
-    if(mode>3)return NULL;
+    if(mode>4)return NULL;
     XrJsonValue *document=xjson_get_object(params,"textDocument"),*position=xjson_get_object(params,"position");
     XrJsonValue *uri=xjson_get(document,"uri"),*line=xjson_get(position,"line"),*character=xjson_get(position,"character");
     if(!uri||uri->type!=XR_JSON_STRING||!uri->as.string||memchr(uri->as.string,0,uri->string_len)||
@@ -173,4 +174,12 @@ XrJsonValue *xlsp_semantic_handle(XrLspServer *server,XrJsonValue *params,unsign
     server->source_failure.stage=11;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     if(mode>2)return NULL;
     return xlsp_source_scope_query(server,params,0,(XlspSourceScopeQueryKind)(XLSP_SOURCE_SEMANTIC_FULL+mode));
+}
+
+XR_FUNC XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc,XrLspPosition position) {
+    return navigation_request(doc?doc->server:NULL,doc,position,4,false,NULL);
+}
+
+XR_FUNC XrJsonValue *xlsp_handle_td_signature_help(XrLspServer *server,XrJsonValue *params) {
+    return xlsp_navigation_handle(server,params,4);
 }

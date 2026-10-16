@@ -58,6 +58,9 @@ XR_FUNC XrXirStatus xlsp_source_snapshot_contains(const XlspSourceSnapshot *,
     const char *,size_t,bool *);
 /* Shared strict Source-byte to LSP UTF-16 conversion; text is bounded. */
 XR_FUNC XrXirStatus xlsp_source_position(XrCompileResources *,const char *,size_t,int,int,XrLspPosition *);
+typedef struct XlspSourceCursor {int line,column;size_t offset;} XlspSourceCursor;
+/* Inverse strict UTF-16 conversion; failure leaves the cursor untouched. */
+XR_FUNC XrXirStatus xlsp_source_cursor(XrCompileResources *,const char *,size_t,XrLspPosition,XlspSourceCursor *);
 /* Complete owned plain-text rendering of available Checked declaration facts.
  * The returned allocation pins the original ledger and survives snapshot death.
  * No invented generic names/docs/enum payload expressions; missing facts return

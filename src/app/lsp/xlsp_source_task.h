@@ -19,5 +19,6 @@
 // Modes 11-13 produce semantic full/delta/range; successful terminal output
 // commits full/delta cache proposals exclusively on the dispatch thread.
 // Mode 14 resolves document links from captured texts and project authority.
+// Mode 15 produces signature help from parser boundaries and Checked Source.
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *, const XlspRequestId *, XrJsonValue *, unsigned mode);
 #endif // XLSP_SOURCE_TASK_H

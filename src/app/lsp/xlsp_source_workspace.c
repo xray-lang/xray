@@ -1,5 +1,6 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "xlsp_source_workspace.h"
+#include "xlsp_source_signature.h"
 #include "../../api/xsource_paths.h"
 #include "../../api/xsource_authority.h"
 #include "../../xir/xxir_stdlib_internal.h"
@@ -110,6 +111,10 @@ done:
 XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *w,const char *uri,size_t length,
     XrLspPosition position,unsigned mode,bool include_declaration,XrJsonValue **out) {
     if(!w)return XR_XIR_BAD_STRUCTURE;
+    if(mode==4) {
+        XlspSourceSignatureRequest request={w->context.resources,w->session,w->snapshots,w->count,uri,length,position};
+        return xlsp_source_signature_many_json(&request,out);
+    }
     if(mode==3)return xlsp_source_hover_many_json(w->context.resources,w->snapshots,w->count,uri,length,position,out);
     return xlsp_source_navigation_many_json(w->context.resources,w->snapshots,w->count,
         uri,length,position,mode,include_declaration,out);

@@ -1,5 +1,6 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #include "xlsp_source_query.h"
+#include "xlsp_source_signature.h"
 #include "../../module/xmodule_overlay.h"
 #include "../../shared/xr_utf8_core.h"
 #include <limits.h>
@@ -503,6 +504,18 @@ XrXirStatus xlsp_source_position(XrCompileResources *resources,const char *text,
     return status;
 }
 
+XR_FUNC XrXirStatus xlsp_source_cursor(XrCompileResources *resources,const char *text,size_t length,
+    XrLspPosition position,XlspSourceCursor *out) {
+    if(!resources||!text||length==SIZE_MAX||!out)return XR_XIR_BAD_STRUCTURE;
+    XlspSourceSnapshot s={0};s.resources=resources;
+    LspSourceText d={0};d.text=(char *)text;d.length=length;
+    XlspSourceCursor cursor={0};
+    XrXirStatus status=lsp_position_at(&s,&d,true,&position,&cursor.line,&cursor.column,&cursor.offset);
+    if(status==XR_XIR_OK)*out=cursor;
+    return status;
+}
+
 #include "xlsp_source_hover_impl.h"
+#include "xlsp_source_signature_query.inc.c"
 
 #include "xlsp_source_semantic_impl.h"

@@ -3,8 +3,18 @@
 #include "../../toolchain/xcompiler_arena_backing.h"
 #include "../../base/xarena.h"
 #include "../../frontend/parser/xast_nodes.h"
+#include "../../frontend/parser/xast_walk.h"
 #include <limits.h>
 #include <string.h>
+typedef struct XlspSyntaxCallRecord {
+    uintptr_t address;
+    uint32_t node_id;
+    AstNodeType type;
+    XrNameSpan start,end,closing,selection,selection_end;
+    XrNameSpan *boundaries;
+    size_t boundary_count,argument_count;
+    bool has_callee,live;
+} XlspSyntaxCallRecord;
 struct XlspSyntaxSnapshot {
     XrCompileState *state; /* Retained by the opened embedded arena. */
     XrArena arena;
@@ -14,7 +24,11 @@ struct XlspSyntaxSnapshot {
     AstNode *ast;
     XlspSyntaxDiagnostic *diagnostics,*last;
     XrParseStatus status;
+    XlspSyntaxCallRecord *calls;
+    size_t call_count,call_capacity;
 };
+static XrCompileResourceStatus syntax_call_observe(void *,const XrParseCallSyntax *);
+static XrCompileResourceStatus syntax_calls_finalize(XlspSyntaxSnapshot *);
 static XrParseStatus syntax_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_PARSE_OK:
         status==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:
@@ -22,6 +36,8 @@ static XrParseStatus syntax_status(XrCompileResourceStatus status) {
 }
 void xlsp_source_syntax_free(XlspSyntaxSnapshot *s) {
     if(!s)return;
+    for(size_t i=0;i<s->call_count;++i)xr_compile_state_free(s->calls[i].boundaries);
+    xr_compile_state_free(s->calls);
     XlspSyntaxDiagnostic *item=s->diagnostics;
     while(item){XlspSyntaxDiagnostic *next=(XlspSyntaxDiagnostic *)item->next;xr_compile_state_free((char *)item->message);xr_compile_state_free(item);item=next;}
     xr_arena_destroy(&s->arena);xr_compile_state_free(s->uri);xr_compile_state_free(s->text);xr_compile_state_free(s);
@@ -67,8 +83,13 @@ XrParseStatus xlsp_source_syntax_build(XrCompilerSession *session,const XlspSour
     Parser parser={0};status=xr_compile_parser_open(&parser,session,s->text,s->uri,&s->arena);
     if(status!=XR_PARSE_OK)goto done;
     xr_parser_set_error_callback(&parser,syntax_diagnostic,s,100);
+    xr_parser_set_call_syntax_callback(&parser,syntax_call_observe,s);
     status=xr_compile_parse_recoverable(&parser,&s->ast);
     xr_compile_parser_close(&parser);
+    if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED) {
+        XrCompileResourceStatus finalized=syntax_calls_finalize(s);
+        if(finalized!=XR_COMPILE_RESOURCE_OK)status=syntax_status(finalized);
+    }
     if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED){s->status=status;*out=s;s=NULL;}
 done:
     xlsp_source_syntax_free(s);return status;
@@ -184,3 +205,4 @@ XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *s,XrJsonVa
 }
 
 #include "xlsp_source_outline_impl.h"
+#include "xlsp_source_call_syntax.inc.c"

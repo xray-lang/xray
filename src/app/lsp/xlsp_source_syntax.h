@@ -20,6 +20,17 @@ XR_FUNC const XlspSyntaxDiagnostic *xlsp_source_syntax_diagnostics(const XlspSyn
 XR_FUNC XrParseStatus xlsp_source_syntax_status(const XlspSyntaxSnapshot *);
 XR_FUNC XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *,XrJsonValue **);
 XR_FUNC XrXirStatus xlsp_source_syntax_diagnostics_json(const XlspSyntaxSnapshot *,XrJsonValue **);
+/* Exact parser-owned argument interval, excluding delimiters. The closing
+ * delimiter position is selectable; the position after it is outside the call.
+ * The innermost reachable completed call wins. A trailing comma can select an
+ * argument beyond argument_count. These facts confer no semantic type authority.
+ * All positions are strict UTF-16; failure preserves the complete output. */
+typedef struct XlspSourceCallSyntax {
+    XrLspRange arguments,callee;
+    size_t active_argument,argument_count;
+    bool has_callee;
+} XlspSourceCallSyntax;
+XR_FUNC XrXirStatus xlsp_source_syntax_call(const XlspSyntaxSnapshot *,XrLspPosition,XlspSourceCallSyntax *);
 /* Owned outline is a syntactic projection, independent of semantic success.
  * Name/span facts come exclusively from this modern parser owner. Output and
  * every name survive syntax/Session/input death. Parent UINT32_MAX means root. */

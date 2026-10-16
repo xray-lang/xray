@@ -28,7 +28,7 @@ XR_FUNC void xlsp_source_request_free(XlspSourceRequest *request) {
 }
 XR_FUNC XrXirStatus xlsp_source_request_new(const XlspSourceRequestInput *input,XlspSourceRequest **out) {
     if(!input||!input->context||!input->context->resources||!input->documents||!input->count||
-        input->entry>=input->count||input->mode>3||!out||*out)return XR_XIR_BAD_STRUCTURE;
+        input->entry>=input->count||input->mode>4||!out||*out)return XR_XIR_BAD_STRUCTURE;
     if(input->count>SIZE_MAX/sizeof(XlspSourceDocument)||input->count>SIZE_MAX/sizeof(XlspSourceBuffer *))return XR_XIR_BUDGET;
     XrCompileResources *resources=input->context->resources;XlspSourceRequest *request=NULL;
     XrXirStatus status=request_resource(xr_compile_resources_calloc(resources,1,sizeof(*request),(void **)&request));
