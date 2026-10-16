@@ -33,7 +33,7 @@ static void slot_scope_checks(SourceFixtureOwner *owner) {
         {"birth",5,NULL,0,0,0},{"current",7,&dependency,1,1,1}};
     XrXirFunctionIdentity identities[3]={{0}};
     identities[1].module=identities[2].module=1;identities[2].exported=1;
-    XrXirSlot slot={0,XR_XIR_I64,0};
+    XrXirSlot slot={.module=0,.type=XR_XIR_I64,.mutable=0,.exported=0,.name=0};
     XrXirDeclarations declarations={modules,2,identities,&slot,1,NULL,0,1,2,NULL};
     XrXirModule built={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirConstruction *construction=NULL;XrXirArtifact *checked=NULL;
