@@ -374,7 +374,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
 static void conditional_compact_dimensions(const XrXirCompileContext *context,
     const EffectBodyRequest *request) {
     const uint32_t parameters[4]={0,2,1,0},instructions[4]={5,2,2,3};
-    conditional_head_result_literals(context,request);
+    conditional_head_result_literals(context,request);conditional_head_parameter_literals(context,request);
     for (uint32_t f=0;f<4;++f) {
         EffectBodyFunctionDimensions dimensions={77,78};
         CHECK(effect_body_request_dimensions(request,f,&dimensions)==XR_XIR_OK &&
@@ -406,6 +406,10 @@ static void conditional_compact_dimension_damage(const XrXirCompileContext *cont
         else function->run_count=0;
         EffectBodyFunctionDimensions dimensions={77,78};EffectBodyFunctionHead head={0};
         XrXirType result=XR_XIR_BOOL;XrCompileResourceStats before=rp_stats(context);
+        EffectBodyFunctionParameters formals={(const XrXirType *)(uintptr_t)1,77};
+        CHECK(effect_body_request_parameters(&request,0,&formals)==XR_XIR_BAD_STRUCTURE &&
+            formals.parameters==(const XrXirType *)(uintptr_t)1 && formals.parameter_count==77 &&
+            rp_stats(context).work==before.work);
         CHECK(effect_body_request_result(&request,0,&result)==XR_XIR_BAD_STRUCTURE && result==XR_XIR_BOOL &&
             rp_stats(context).work==before.work && rp_stats(context).allocation_count==before.allocation_count);
         CHECK(effect_body_request_dimensions(&request,0,&dimensions)==XR_XIR_BAD_STRUCTURE &&

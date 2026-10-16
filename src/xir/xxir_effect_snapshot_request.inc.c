@@ -27,6 +27,13 @@ typedef struct EffectBodyFunctionDimensions {
     uint32_t parameter_count,instruction_count;
 } EffectBodyFunctionDimensions;
 
+/* The list is borrowed for this current replay, with the same complete
+ * physical storage preconditions as a full function head. */
+typedef struct EffectBodyFunctionParameters {
+    const XrXirType *parameters;
+    uint32_t parameter_count;
+} EffectBodyFunctionParameters;
+
 typedef struct EffectBodyInstructionShape {
     XrXirOp op;
     XrXirType type;
@@ -37,7 +44,7 @@ struct EffectBodyRequest {
     XirMetadataDomain domain;
     EffectBodyRead read;
     const void *owner;
-    XrXirStatus (*head)(const EffectBodyRequest *,uint32_t,EffectBodyFunctionHead *,EffectBodyFunctionDimensions *,XrXirType *);
+    XrXirStatus (*head)(const EffectBodyRequest *,uint32_t,EffectBodyFunctionHead *,EffectBodyFunctionDimensions *,XrXirType *,EffectBodyFunctionParameters *);
     XrXirStatus (*instruction)(const EffectBodyRequest *,uint32_t,uint32_t,
         XrXirInstruction *,const XrXirInstruction **,EffectBodyInstructionFields *);
     XrXirStatus (*type)(const EffectBodyRequest *,uint32_t,uint32_t,XrXirType *);
@@ -45,12 +52,16 @@ struct EffectBodyRequest {
 };
 
 static XrXirStatus effect_body_raw_head(const EffectBodyRequest *request,uint32_t f,
-    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,XrXirType *result) {
+    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,XrXirType *result,EffectBodyFunctionParameters *formals) {
     const XrXirModule *module=request->owner;
-    if (!module || ((output!=NULL)+(dimensions!=NULL)+(result!=NULL)!=1) ||
+    if (!module || ((output!=NULL)+(dimensions!=NULL)+(result!=NULL)+(formals!=NULL)!=1) ||
         f>=module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *a=&module->functions[f];
+    if (formals) {
+        if (!effect_body_read_work(&request->read,11+sizeof(*formals))) return XR_XIR_BUDGET;
+        *formals=(EffectBodyFunctionParameters){a->parameters,a->parameter_count};return XR_XIR_OK;
+    }
     if (result) {
         if (!effect_body_read_work(&request->read,11+sizeof(*result))) return XR_XIR_BUDGET;
         *result=a->result;return XR_XIR_OK;
@@ -102,9 +113,9 @@ static XrXirStatus effect_body_raw_shape(const EffectBodyRequest *request,uint32
     *output=(EffectBodyInstructionShape){opcode,type};return XR_XIR_OK;
 }
 static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint32_t f,
-    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,XrXirType *result) {
+    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,XrXirType *result,EffectBodyFunctionParameters *formals) {
     const EffectBodyMaterial *material=request->owner;
-    if (!effect_body_material_shape(material) || ((output!=NULL)+(dimensions!=NULL)+(result!=NULL)!=1) ||
+    if (!effect_body_material_shape(material) || ((output!=NULL)+(dimensions!=NULL)+(result!=NULL)+(formals!=NULL)!=1) ||
         f>=effect_body_count(material))
         return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *a=&material->functions[f];
@@ -112,6 +123,10 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
         (a->block_count && !a->blocks) || (a->operand_count && !a->operands) ||
         (a->instruction_count && (!a->runs || !a->run_count)) ||
         a->run_count>a->run_capacity) return XR_XIR_BAD_STRUCTURE;
+    if (formals) {
+        if (!effect_body_read_work(&request->read,11+sizeof(*formals))) return XR_XIR_BUDGET;
+        *formals=(EffectBodyFunctionParameters){a->parameters,a->parameter_count};return XR_XIR_OK;
+    }
     if (result) {
         if (!effect_body_read_work(&request->read,11+sizeof(*result))) return XR_XIR_BUDGET;
         *result=a->result;return XR_XIR_OK;
@@ -197,13 +212,13 @@ static inline XrXirStatus effect_body_request_head(const EffectBodyRequest *requ
     uint32_t f,EffectBodyFunctionHead *output) {
     if (!request || !request->owner || !request->head || !request->domain.types ||
         !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    return request->head(request,f,output,NULL,NULL);
+    return request->head(request,f,output,NULL,NULL,NULL);
 }
 static inline XrXirStatus effect_body_request_dimensions(const EffectBodyRequest *request,
     uint32_t f,EffectBodyFunctionDimensions *output) {
     if (!request || !request->owner || !request->head || !request->domain.types ||
         !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    return request->head(request,f,NULL,output,NULL);
+    return request->head(request,f,NULL,output,NULL,NULL);
 }
 /* Result classifiers use the same current callback and full storage guards.
  * No name, block or operand head is copied for this one scalar result. */
@@ -211,7 +226,13 @@ static inline XrXirStatus effect_body_request_result(const EffectBodyRequest *re
     uint32_t f,XrXirType *output) {
     if (!request || !request->owner || !request->head || !request->domain.types ||
         !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    return request->head(request,f,NULL,NULL,output);
+    return request->head(request,f,NULL,NULL,output,NULL);
+}
+static inline XrXirStatus effect_body_request_parameters(const EffectBodyRequest *request,
+    uint32_t f,EffectBodyFunctionParameters *output) {
+    if (!request || !request->owner || !request->head || !request->domain.types ||
+        !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    return request->head(request,f,NULL,NULL,NULL,output);
 }
 static inline XrXirStatus effect_body_request_instruction(const EffectBodyRequest *request,
     uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {

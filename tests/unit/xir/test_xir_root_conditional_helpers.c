@@ -1756,7 +1756,7 @@ static void conditional_ordinary_environment_keys(void) {
 int main(int argc, char **argv) {
     if (argc==2 && !strcmp(argv[1],"--head-result-literals")) {
         conditional_compact_literals();conditional_generation_literals();conditional_owned_error_literals();
-        puts("current result literals, producer death, complete head damage and delegated refusal passed");return 0;
+        puts("current result and parameter literals, producer death, complete head damage and delegated refusal passed");return 0;
     }
     input_seed_run_literals();
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
