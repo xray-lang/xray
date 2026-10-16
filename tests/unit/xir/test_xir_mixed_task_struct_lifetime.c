@@ -180,6 +180,7 @@ static void task_struct_graph(unsigned backend, unsigned order) {
         backend, order, graph.witness[0].root_providers, graph.witness[0].worker_providers,
         (unsigned long long)cost.allocated_bytes, (unsigned long long)cost.peak_bytes, (unsigned long long)cost.work);
 }
+#ifndef XR_TASK_STRUCT_CONTROL_MAIN
 int main(int argc, char **argv) {
     CHECK(argc == 2); (void)task_late_graph;
     static const char *const names[] = {"0", "1", "vm", "native"}; unsigned backend = 0;
@@ -188,3 +189,4 @@ int main(int argc, char **argv) {
     for (unsigned order = 0; order < 2; ++order) task_struct_graph(backend, order);
     return 0;
 }
+#endif

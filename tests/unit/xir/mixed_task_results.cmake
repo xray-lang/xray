@@ -296,3 +296,20 @@ foreach(task_struct_backend IN ITEMS 0 1 vm native)
     set_tests_properties(test_xir_mixed_task_struct_lifetime_${task_struct_backend} PROPERTIES
         TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;task;struct;ownership;generated-c;lifecycle;atomic;cow")
 endforeach()
+
+
+add_executable(test_xir_mixed_task_struct_control xir/test_xir_mixed_task_struct_control.c "${XIR_MIXED_TASK_STRUCT_C}")
+target_link_libraries(test_xir_mixed_task_struct_control PRIVATE xray_xir_vm xray_xir_scalar)
+target_compile_definitions(test_xir_mixed_task_struct_control PRIVATE XR_MIXED_TASK_RESULT_MODULES=3)
+set_target_properties(test_xir_mixed_task_struct_control PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_task_struct_control PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_task_struct_control PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(task_struct_control_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_task_struct_control_${task_struct_control_backend}
+        COMMAND test_xir_mixed_task_struct_control ${task_struct_control_backend})
+    set_tests_properties(test_xir_mixed_task_struct_control_${task_struct_control_backend} PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;struct;ownership;generated-c;lifecycle;atomic;cow;cancel;prefix")
+endforeach()
