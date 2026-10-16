@@ -77,11 +77,18 @@ def projection(root: Path) -> str:
              "        i = i + 1", "    }"]
     for name, prop in aliases:
         lines.append(f'    if (normalized == "{name.lower()}") {{ return {properties[prop]} }}')
-    lines += ["    return -1", "}", "", "fn rxUnicodeRanges(property: i64) -> Array<i64> {"]
-    for name, ordinal in properties.items():
-        values = ",".join(str(value) for pair in tables[name] for value in pair)
-        lines.append(f"    if (property == {ordinal}) {{ return [{values}] }}")
-    lines += ["    return []", "}", "", "fn rxUnicodeHasProperty(cp: i64, property: i64) -> bool {",
+    offsets, endpoints = [len(properties) + 1], []
+    for name in sorted(properties, key=properties.get):
+        endpoints.extend(value for pair in tables[name] for value in pair)
+        offsets.append(len(properties) + 1 + len(endpoints))
+    values = ",".join(map(str, offsets + endpoints))
+    lines += ["    return -1", "}", "", "fn rxUnicodeRangeData() -> Array<i64> {",
+              f"    return [{values}]", "}", "", "fn rxUnicodeRanges(property: i64) -> Array<i64> {",
+              f"    if (property < 1 || property > {len(properties)}) {{ return [] }}",
+              "    var data = rxUnicodeRangeData()", "    var result: Array<i64> = []",
+              "    var i = data[property - 1]", "    var end = data[property]",
+              "    while (i < end) { result.push(data[i]); i = i + 1 }", "    return result",
+              "}", "", "fn rxUnicodeHasProperty(cp: i64, property: i64) -> bool {",
               "    if (cp < 0 || cp > 1114111 || (cp >= 55296 && cp <= 57343)) { return false }",
               "    var ranges = rxUnicodeRanges(property)", "    var lo = 0", "    var hi = len(ranges) / 2",
               "    while (lo < hi) {", "        var mid = lo + (hi - lo) / 2",
