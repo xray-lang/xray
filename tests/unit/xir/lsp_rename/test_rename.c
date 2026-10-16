@@ -124,12 +124,14 @@ static int enum_required(const char *uri) {
     XrJsonValue *edits=xjson_get_array(xjson_array_get(documents,0),"edits");CHECK(edits&&edits->as.array.count==3);
     xjson_free(result);CHECK(!lsp_json_live&&!lsp_json_bytes);return 0;
 }
+#include "synthetic_probe.h"
 #include "rename_resources.h"
 static int run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
     int resource=rename_resource_command(argc,argv);if(resource>=0)return resource;
     CHECK(argc==5);
     if(!strcmp(argv[4],"--enum-required"))return enum_required(argv[1]);
+    if(!strcmp(argv[4],"--synthetic-required"))return synthetic_probe(argv[1]);
     CHECK(!strcmp(argv[4],"--normal"));
     for(unsigned mode=0;mode<8;++mode){
         XrCompileResourceStats stats={0};runtime_attempts=0;runtime_fail_at=SIZE_MAX;

@@ -28,3 +28,6 @@ set_tests_properties(test_lsp_source_rename_resource_probe PROPERTIES TIMEOUT 30
 add_test(NAME test_lsp_source_rename_normal COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_rename.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib" --normal)
 set_tests_properties(test_lsp_source_rename_normal PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;lsp;source;ownership")
+add_test(NAME test_lsp_source_rename_synthetic_required COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_synthetic.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib")
+set_tests_properties(test_lsp_source_rename_synthetic_required PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;required;ownership")
