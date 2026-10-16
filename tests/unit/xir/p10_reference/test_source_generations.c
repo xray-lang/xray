@@ -12,6 +12,7 @@
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
 #include "xir/xxir_types.h"
+#include "xir/xxir_internal.h"
 #include "module/xmodule_fingerprint.h"
 #include "frontend/parser/xast.h"
 #include <stdio.h>
@@ -82,6 +83,17 @@ static void binding_frame_limits(void) {
     const char *text="export fn answer()->i64{return 42}";
     uint64_t serial=prepare(wide,text);XrXirSourceGenerationView view={0};
     CHECK(xr_xir_compile_source_generation_view(wide,serial,&view)==XR_XIR_OK);
+    XrXirCheckedPacket rebuilt={0},independent={0};XrXirArtifact *closed=NULL;
+    CHECK(xir_compile_specialized_packet(NULL,&rebuilt)==XR_XIR_BAD_STRUCTURE && !rebuilt.bytes && !rebuilt.length);
+    CHECK(xir_compile_specialized_packet(view.result->checked,&rebuilt)==XR_XIR_OK);
+    CHECK(xr_xir_compile_specialize(view.result->checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_write(closed,&independent,NULL)==XR_XIR_OK);
+    CHECK(rebuilt.length==independent.length && !memcmp(rebuilt.bytes,independent.bytes,rebuilt.length));
+    const void *saved=rebuilt.bytes;size_t length=rebuilt.length;
+    CHECK(xir_compile_specialized_packet(view.result->checked,&rebuilt)==XR_XIR_BAD_STRUCTURE &&
+        rebuilt.bytes==saved && rebuilt.length==length);
+    xr_xir_compile_checked_packet_free(&rebuilt);xr_xir_compile_checked_packet_free(&independent);
+    xr_xir_compile_artifact_free(closed);
     uint32_t entry=0;XrXirProgram *sealed=program(&view,"answer",&entry);
     for (unsigned frame=7;frame<=8;++frame) {
         config.context.limits.frame_bytes=frame;
@@ -188,11 +200,12 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
     const XrXirNominalDeclaration *item=&module->types->nominals->declarations[definition.ordinal];
     CHECK(item->field_count==1 && (value_kind==5 ? xr_xir_type_is_array(module->types,item->fields[0].type) &&
         xr_xir_array_element(module->types,item->fields[0].type)==XR_XIR_I64 :
+        value_kind==7 ? xr_xir_type_is_struct(module->types,item->fields[0].type) :
         item->fields[0].type==(value_kind==6 ? XR_XIR_STRING : XR_XIR_I64)));
     if (has_value) {
         CHECK(xr_xir_compile_source_generation_definition(owner,serial,"value",&definition)==XR_XIR_OK);
         XrXirType element=mutable_value ? xr_xir_cell_element(module->types,definition.stored_type) : definition.stored_type;
-        CHECK(value_kind==4 || value_kind==5 || value_kind==6 ? xr_xir_type_is_class(module->types,element) :
+        CHECK(value_kind==4 || value_kind==5 || value_kind==6 || value_kind==7 ? xr_xir_type_is_class(module->types,element) :
             value_kind==2 || value_kind==3 ? xr_xir_type_is_array(module->types,element) &&
             xr_xir_array_element(module->types,element)==XR_XIR_I64 : element==XR_XIR_I64);
         CHECK(definition.kind==XR_XIR_SOURCE_DEFINITION_BINDING && definition.mutable==mutable_value &&
@@ -218,7 +231,7 @@ static void definition_checks(XrXirSourceGenerations *owner,uint64_t serial,
         !memcmp(&definition,&sentinel,sizeof(definition)));
 }
 static void class_ref_coordinates(XrXirSourceGenerations *owner,uint64_t first,
-    const XrXirSourceGenerationView *current) {
+    const XrXirSourceGenerationView *current,bool inline_leaf) {
     XrXirSourceGenerationView birth={0};
     CHECK(xr_xir_compile_source_generation_view(owner,first,&birth)==XR_XIR_OK);
     const XrXirModule *modules[]={xr_xir_compile_artifact_module(birth.result->checked),
@@ -231,22 +244,32 @@ static void class_ref_coordinates(XrXirSourceGenerations *owner,uint64_t first,
             XrXirType element=xr_xir_cell_element(types,slot->type);
             if (slot->mutable && xr_xir_type_is_class(types,element)) classes[m]=element;
         }
+        const XrXirTypeNode *object=xr_xir_type_node(types,classes[m]);
+        CHECK(object && object->nominal.field_count==1);
+        XrXirType leaf=inline_leaf ? object->nominal.fields[0] : XR_XIR_STRING;
+        if (inline_leaf) {
+            const XrXirTypeNode *record=xr_xir_type_node(types,leaf);
+            CHECK(xr_xir_type_is_struct(types,leaf) && record && record->nominal.field_count==1 &&
+                record->nominal.fields[0]==XR_XIR_I64);
+        }
         for (uint32_t t=0;t<types->count;++t)
-            string_cells[m]|=types->nodes[t].kind==XR_XIR_TYPE_CELL && types->nodes[t].element==XR_XIR_STRING;
+            string_cells[m]|=types->nodes[t].kind==XR_XIR_TYPE_CELL && types->nodes[t].element==leaf;
     }
-    printf("CLASS_REF_COORDINATES birth=%u current=%u birth_string_cell=%u current_string_cell=%u\n",
+    printf(inline_leaf ? "CLASS_INLINE_REF_COORDINATES birth=%u current=%u birth_leaf_cell=%u current_leaf_cell=%u\n" :
+        "CLASS_REF_COORDINATES birth=%u current=%u birth_string_cell=%u current_string_cell=%u\n",
         (unsigned)classes[0],(unsigned)classes[1],(unsigned)string_cells[0],(unsigned)string_cells[1]);
     CHECK(classes[0]!=XR_XIR_UNIT && classes[1]!=XR_XIR_UNIT && classes[0]!=classes[1] && !string_cells[0] && string_cells[1]);
 }
 static int history_check(const char *mode) {
     bool definition_cell=!strcmp(mode,"--definitions-cell");
     bool class_ref=!strcmp(mode,"--history-class-ref");
+    bool class_inline_ref=!strcmp(mode,"--history-class-inline-ref");
     bool class_array=!strcmp(mode,"--history-class-array");
-    bool class_value=class_ref || class_array || !strcmp(mode,"--history-class");
+    bool class_value=class_inline_ref || class_ref || class_array || !strcmp(mode,"--history-class");
     bool array_const=!strcmp(mode,"--history-array-const");
     bool array_value=array_const || !strcmp(mode,"--history-array");
     bool mutating=class_value || (array_value && !array_const) || !strcmp(mode,"--history-cell-write");
-    unsigned storage_kind=class_ref ? 6u : class_array ? 5u : class_value ? 4u : array_const ? 3u : array_value ? 2u : mutating ? 1u : 0u;
+    unsigned storage_kind=class_inline_ref ? 7u : class_ref ? 6u : class_array ? 5u : class_value ? 4u : array_const ? 3u : array_value ? 2u : mutating ? 1u : 0u;
     bool definitions=definition_cell || !strcmp(mode,"--definitions") || !strcmp(mode,"--definitions-comptime") || !strcmp(mode,"--definitions-import");
     bool folded=!strcmp(mode,"--definitions-comptime");
     bool imported=!strcmp(mode,"--definitions-import");
@@ -255,7 +278,7 @@ static int history_check(const char *mode) {
     history_native_case=(cell || array_value) && !definition_cell;history_native_kind=storage_kind;
 #endif
     bool stateful=!strcmp(mode,"--history-stateful") || cell || array_value;
-    const char *next=class_ref ? source_history_cell_input(2,storage_kind) : definition_cell ? NULL : !strcmp(mode,"--history-function") ?
+    const char *next=class_ref || class_inline_ref ? source_history_cell_input(2,storage_kind) : definition_cell ? NULL : !strcmp(mode,"--history-function") ?
         "export fn answer()->i64{return old()+1}" : !strcmp(mode,"--history-generic") ?
         "export fn answer()->i64{return identity<i64>(42)}" : !strcmp(mode,"--history-type") ?
         "export fn answer()->i64{const item=Item{value:42};return item.value}" : stateful ?
@@ -298,7 +321,7 @@ static int history_check(const char *mode) {
     definition_checks(owner,first,&view,folded || stateful,cell,storage_kind);
     if (next && status==XR_XIR_OK) {
         CHECK(serial>first && xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK && view.parent==first);
-        if (class_ref) class_ref_coordinates(owner,first,&view);
+        if (class_ref || class_inline_ref) class_ref_coordinates(owner,first,&view,class_inline_ref);
         const XrXirDeclarations *declarations=xr_xir_compile_artifact_module(view.result->checked)->declarations;
         uint32_t root=declarations->root_module,scope=declarations->modules[root].lexical_scope;
         CHECK(scope && scope-1!=root && xr_xir_module_same_scope(declarations,root,scope-1));

@@ -31,7 +31,7 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
 set_tests_properties(test_xir_p10_source_generations PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source")
-foreach(fact IN ITEMS function generic type stateful cell cell-write array array-const class class-array class-ref)
+foreach(fact IN ITEMS function generic type stateful cell cell-write array array-const class class-array class-ref class-inline-ref)
     string(REPLACE "-" "_" suffix "${fact}")
     add_test(NAME test_xir_p10_source_history_${suffix}
         COMMAND test_xir_p10_source_generations --history-${fact})
@@ -52,7 +52,7 @@ set_target_properties(source_history_native_producer PROPERTIES C_STANDARD 11 C_
 set(history_native_dir "${CMAKE_CURRENT_BINARY_DIR}/source_history_native")
 set(history_native_header "${history_native_dir}/source_history_native_generated.h")
 set(history_native_sources)
-foreach(history_mode IN ITEMS read write array array_const class class_array class_ref)
+foreach(history_mode IN ITEMS read write array array_const class class_array class_ref class_inline_ref)
     foreach(history_generation RANGE 1 4)
         list(APPEND history_native_sources "${history_native_dir}/source_history_${history_mode}_${history_generation}.c")
     endforeach()
@@ -92,7 +92,7 @@ foreach(history_backend IN ITEMS native vm_native native_vm)
     else()
         target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
     endif()
-    foreach(history_kind IN ITEMS cell cell-write array array-const class class-array class-ref)
+    foreach(history_kind IN ITEMS cell cell-write array array-const class class-array class-ref class-inline-ref)
         string(REPLACE "-" "_" history_suffix "${history_kind}")
         add_test(NAME test_xir_p10_source_history_${history_suffix}_${history_backend}
             COMMAND ${history_target} --history-${history_kind})
@@ -129,6 +129,18 @@ foreach(ref_mode IN ITEMS abort publish)
     set_tests_properties(test_xir_p10_source_birth_storage_class_ref_${ref_mode}_fi PROPERTIES
         TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
 endforeach()
+foreach(ref_mode IN ITEMS abort publish)
+    if(ref_mode STREQUAL "abort")
+        set(ref_ordinal 16)
+    else()
+        set(ref_ordinal 17)
+    endif()
+    add_test(NAME test_xir_p10_source_birth_storage_class_inline_ref_${ref_mode}_fi
+        COMMAND test_xir_p10_source_birth_storage_resources --mode ${ref_ordinal})
+    set_tests_properties(test_xir_p10_source_birth_storage_class_inline_ref_${ref_mode}_fi PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;source;generation;ownership;fault-injection;resource-control")
+endforeach()
+
 target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source xray_xir_vm)
 set_target_properties(test_xir_p10_source_generation_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
@@ -490,7 +502,8 @@ add_test(NAME test_xir_p10_source_generation_history_baseline
 set_tests_properties(test_xir_p10_source_generation_history_baseline PROPERTIES
     TIMEOUT 30 LABELS "unit;xir;p10;generation;ownership;resource-control;history-accept")
 foreach(storage_kind IN ITEMS array array-const class-first class-abort class-publish
-    class-array-first class-array-abort class-array-publish class-ref-first class-ref-abort class-ref-publish)
+    class-array-first class-array-abort class-array-publish class-ref-first class-ref-abort class-ref-publish
+    class-inline-ref-first class-inline-ref-abort class-inline-ref-publish)
     string(REPLACE "-" "_" storage_suffix "${storage_kind}")
     add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_resources
         COMMAND test_xir_p10_source_generation_resources --program-${storage_kind})

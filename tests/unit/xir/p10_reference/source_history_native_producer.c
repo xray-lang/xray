@@ -17,8 +17,8 @@
 #include "../xir_source_fixture_owner.h"
 #include "source_history_cell_fixture.h"
 static const char *history_mode_name(unsigned kind) {
-    static const char *const names[]={"read","write","array","array_const","class","class_array","class_ref"};
-    CHECK(kind<7);return names[kind];
+    static const char *const names[]={"read","write","array","array_const","class","class_array","class_ref","class_inline_ref"};
+    CHECK(kind<8);return names[kind];
 }
 static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group) {
     unsigned *calls=context;
@@ -26,7 +26,7 @@ static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group
     ++*calls;return XR_XIR_OUTPUT_OK;
 }
 static void produce_mode(const char *directory,FILE *header,unsigned kind) {
-    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==6;
+    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==6 || kind==7;
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,"history-check-test",NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;
@@ -94,13 +94,13 @@ int main(int argc,char **argv) {
     CHECK(argc==2);char path[4096];int n=snprintf(path,sizeof(path),"%s/source_history_native_generated.h",argv[1]);
     CHECK(n>0 && (size_t)n<sizeof(path));FILE *header=fopen(path,"wb");CHECK(header);
     CHECK(fputs("#ifndef SOURCE_HISTORY_NATIVE_GENERATED_H\n#define SOURCE_HISTORY_NATIVE_GENERATED_H\n#include \"xir/xxir_program.h\"\n",header)>=0);
-    for (unsigned mode=0;mode<7;++mode) produce_mode(argv[1],header,mode);
-    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[7][4]={\n",header)>=0);
-    for (unsigned mode=0;mode<7;++mode) {
+    for (unsigned mode=0;mode<8;++mode) produce_mode(argv[1],header,mode);
+    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[8][4]={\n",header)>=0);
+    for (unsigned mode=0;mode<8;++mode) {
         CHECK(fputs("{",header)>=0);
         for (unsigned generation=1;generation<=4;++generation)
             CHECK(fprintf(header,"%s&source_history_%s_%u_program",generation==1 ? "" : ",",history_mode_name(mode),generation)>0);
-        CHECK(fputs(mode==6 ? "}\n" : "},\n",header)>=0);
+        CHECK(fputs(mode==7 ? "}\n" : "},\n",header)>=0);
     }
     CHECK(fputs("};\n#endif\n",header)>=0 && !fclose(header));
     return 0;
