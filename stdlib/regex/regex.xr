@@ -6,9 +6,9 @@
 // and dynamic construction cannot acquire separate representations or flag
 // parsers.
 //
-// Only two native leaves remain. __unicodePropId and __unicodeHasProp query
-// the runtime's canonical Unicode property tables; they contain no regex
-// object, cache, parser or matching policy.
+// Unicode property queries are ordinary private functions projected from
+// the canonical property tables. Their exact data and bodies travel with
+// this module through checking, compile-time evaluation and runtime calls.
 //
 // Layout of the compiled program image, the AST and every constant below is
 // fixed by analysis/r3-6-5-regex-xray-design.md.
@@ -224,7 +224,7 @@ fn rxSlice(t: RxAst, lo: i64, to: i64) -> string {
         b.push(t.src[i])
         i = i + 1
     }
-    return string.fromUtf8(b[:])!
+    return rxOwnedUtf8(b)
 }
 
 // ---------- predefined classes (REF-regex-semantics.md §3, byte-exact) ----------
@@ -386,7 +386,7 @@ fn rxParseEscape(t: RxAst) -> i64 {
         }
         var name = rxSlice(t, nameStart, t.meta[RXM_POS])
         t.meta[RXM_POS] = t.meta[RXM_POS] + 1
-        var propId = __unicodePropId(name)
+        var propId = rxUnicodePropertyId(name)
         if (propId < 0) {
             return rxFail(t, RXE_BAD_ESCAPE, nameStart, "unknown unicode property '" + name + "'")
         }
@@ -667,7 +667,7 @@ fn rxAstDump(t: RxAst, n: i64) -> string {
     var op = t.op[n]
     if (op == AN_LITERAL) {
         var ch = t.a[n]
-        if (ch >= 32 && ch < 127) { return "'" + chr(ch)! + "'" }
+        if (ch >= 32 && ch < 127) { return "'" + string(rune(ch)) + "'" }
         return "LIT(${ch})"
     }
     if (op == AN_EMPTY) { return "EMPTY" }
@@ -1223,7 +1223,7 @@ fn rxDecodeUtf8(text: Array<u8>, i: i64) -> i64 {
         var c2 = text[i + 2] as i64
         if ((c1 & 192) != 128 || (c2 & 192) != 128) { return -1 }
         var cp2 = ((b0 & 15) << 12) | ((c1 & 63) << 6) | (c2 & 63)
-        if (cp2 < 2048) { return -1 }
+        if (cp2 < 2048 || (cp2 >= 55296 && cp2 <= 57343)) { return -1 }
         return (cp2 << 8) | 3
     }
     if (b0 < 245) {
@@ -1237,6 +1237,20 @@ fn rxDecodeUtf8(text: Array<u8>, i: i64) -> i64 {
         return (cp3 << 8) | 4
     }
     return -1
+}
+
+// The same strict decoder supplies owned text reconstruction. A malformed
+// internal range cannot become a replacement scalar or escape as partial text.
+fn rxOwnedUtf8(bytes: Array<u8>) -> string {
+    var out = ""
+    var i = 0
+    while (i < len(bytes)) {
+        var decoded = rxDecodeUtf8(bytes, i)
+        assert(decoded >= 0)
+        out = out + string(rune(decoded >> 8))
+        i = i + (decoded & 255)
+    }
+    return out
 }
 
 // Return the first byte boundary after the scalar starting at `pos`. Empty
@@ -1464,7 +1478,7 @@ fn rxSearch(prog: Array<i64>, text: Array<u8>, at: i64, anchored: bool,
                         var ub = prog[PH_UNI_BASE]
                         var propId = prog[ub + arg * UNI_STRIDE]
                         var negd = prog[ub + arg * UNI_STRIDE + 1]
-                        var has = __unicodeHasProp(cp2, propId)
+                        var has = rxUnicodeHasProperty(cp2, propId)
                         if (negd == 1) { has = !has }
                         if (has) {
                             adv = 1
@@ -1526,7 +1540,7 @@ fn rxBytesToStr(text: Array<u8>, lo: i64, hi: i64) -> string {
         b.push(text[i])
         i = i + 1
     }
-    return string.fromUtf8(b[:])!
+    return rxOwnedUtf8(b)
 }
 
 fn rxTest(prog: Array<i64>, s: string) -> bool {
@@ -1725,7 +1739,7 @@ fn rxReplace(prog: Array<i64>, s: string, repl: string, all: bool) -> string {
         buf.b.push(text[k])
         k = k + 1
     }
-    return string.fromUtf8(buf.b[:])!
+    return rxOwnedUtf8(buf.b)
 }
 
 // Mine 7 (FIXED): the C split silently truncated at 256 parts and dropped the
@@ -1782,7 +1796,7 @@ fn rxEscape(s: string) -> string {
         outb.push(text[i])
         i = i + 1
     }
-    return string.fromUtf8(outb[:])!
+    return rxOwnedUtf8(outb)
 }
 
 // Normalise a limit argument the way xr_regex_core_limit_arg does
@@ -1976,3 +1990,88 @@ export fn split(pattern: Regex, s: string, limit: i64 = -1) -> Array<string> {
 }
 
 export fn escape(s: string) -> string { return rxEscape(s) }
+
+// BEGIN GENERATED UNICODE PROPERTY QUERIES
+// Generated from the canonical Unicode property enum, ranges and aliases.
+// The Source module carries these ordinary bodies and their exact profile.
+// Canonical input SHA-256: 767b45e1ba25d0a41c1bbc5bec2c091bd56dcd3ff22fe5a87c17dc2e0b53c0c7
+fn rxUnicodePropertyId(name: string) -> i64 {
+    if (len(name) == 0 || len(name) > 16) { return -1 }
+    var bytes = name.copyBytes()
+    var normalized = ""
+    var i = 0
+    while (i < len(bytes)) {
+        var value = bytes[i] as i64
+        if (value > 127) { return -1 }
+        if (value >= 65 && value <= 90) { value = value + 32 }
+        normalized = normalized + string(rune(value))
+        i = i + 1
+    }
+    if (normalized == "l") { return 1 }
+    if (normalized == "letter") { return 1 }
+    if (normalized == "lu") { return 2 }
+    if (normalized == "uppercase_letter") { return 2 }
+    if (normalized == "ll") { return 3 }
+    if (normalized == "lowercase_letter") { return 3 }
+    if (normalized == "n") { return 4 }
+    if (normalized == "number") { return 4 }
+    if (normalized == "nd") { return 5 }
+    if (normalized == "decimal_number") { return 5 }
+    if (normalized == "p") { return 6 }
+    if (normalized == "punctuation") { return 6 }
+    if (normalized == "s") { return 7 }
+    if (normalized == "symbol") { return 7 }
+    if (normalized == "z") { return 8 }
+    if (normalized == "separator") { return 8 }
+    if (normalized == "c") { return 9 }
+    if (normalized == "other") { return 9 }
+    if (normalized == "han") { return 10 }
+    if (normalized == "hiragana") { return 11 }
+    if (normalized == "katakana") { return 12 }
+    if (normalized == "latin") { return 13 }
+    if (normalized == "greek") { return 14 }
+    if (normalized == "cyrillic") { return 15 }
+    if (normalized == "arabic") { return 16 }
+    if (normalized == "hebrew") { return 17 }
+    if (normalized == "ascii") { return 18 }
+    if (normalized == "any") { return 19 }
+    return -1
+}
+
+fn rxUnicodeRanges(property: i64) -> Array<i64> {
+    if (property == 1) { return [65,90,97,122,192,214,216,246,248,255,256,383,384,591,880,1023,1024,1279,1424,1535,1536,1791,12352,12447,12448,12543,19968,40959,44032,55215] }
+    if (property == 2) { return [65,90,192,214,216,222,256,256,913,937,1040,1071] }
+    if (property == 3) { return [97,122,223,246,248,255,945,969,1072,1103] }
+    if (property == 4) { return [48,57,1632,1641,1776,1785,2406,2415,2534,2543,2662,2671,65296,65305] }
+    if (property == 5) { return [48,57,1632,1641,1776,1785,65296,65305] }
+    if (property == 6) { return [33,47,58,64,91,96,123,126,161,191,8192,8303,12288,12351,65281,65295] }
+    if (property == 7) { return [36,36,43,43,60,62,94,94,96,96,124,124,126,126,162,169,8592,8703,8704,8959,8960,9215,9632,9727,9728,9983,9984,10175,127744,129535] }
+    if (property == 8) { return [32,32,160,160,5760,5760,8192,8202,8232,8233,8239,8239,8287,8287,12288,12288] }
+    if (property == 9) { return [0,31,127,159,55296,57343,65520,65535] }
+    if (property == 10) { return [13312,19903,19968,40959,63744,64255,131072,173791,173824,177983,177984,178207,178208,183983,183984,191471,196608,201551] }
+    if (property == 11) { return [12352,12447,110593,110879] }
+    if (property == 12) { return [12448,12543,12784,12799,65381,65439] }
+    if (property == 13) { return [65,90,97,122,192,214,216,246,248,255,256,383,384,591,7680,7935,11360,11391,42784,43007,65313,65338,65345,65370] }
+    if (property == 14) { return [880,1023,7936,8191] }
+    if (property == 15) { return [1024,1279,1280,1327,11744,11775,42560,42655] }
+    if (property == 16) { return [1536,1791,1872,1919,2208,2303,64336,65023,65136,65279] }
+    if (property == 17) { return [1424,1535,64285,64335] }
+    if (property == 18) { return [0,127] }
+    if (property == 19) { return [0,1114111] }
+    return []
+}
+
+fn rxUnicodeHasProperty(cp: i64, property: i64) -> bool {
+    if (cp < 0 || cp > 1114111 || (cp >= 55296 && cp <= 57343)) { return false }
+    var ranges = rxUnicodeRanges(property)
+    var lo = 0
+    var hi = len(ranges) / 2
+    while (lo < hi) {
+        var mid = lo + (hi - lo) / 2
+        if (cp < ranges[mid * 2]) { hi = mid }
+        else if (cp > ranges[mid * 2 + 1]) { lo = mid + 1 }
+        else { return true }
+    }
+    return false
+}
+// END GENERATED UNICODE PROPERTY QUERIES

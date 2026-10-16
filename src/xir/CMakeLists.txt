@@ -34,6 +34,17 @@ else()
     target_sources(xray_xir_source PRIVATE ../os/unix/fs_unix.c ../os/unix/dir_unix.c ../os/unix/file_read_unix.c ../os/unix/proc_self_unix.c)
 endif()
 add_dependencies(xray_xir_source gen-stdlib-embedded-sources)
+
+set(XIR_REGEX_UNICODE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/generated/regex_unicode_projection.check")
+add_custom_command(OUTPUT ${XIR_REGEX_UNICODE_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND ${XRAY_PYTHON} "${PROJECT_SOURCE_DIR}/scripts/gen_regex_unicode_projection.py" --root "${PROJECT_SOURCE_DIR}" --check
+    COMMAND ${CMAKE_COMMAND} -E touch ${XIR_REGEX_UNICODE_STAMP}
+    DEPENDS "${PROJECT_SOURCE_DIR}/scripts/gen_regex_unicode_projection.py" "${PROJECT_SOURCE_DIR}/src/base/xunicode.c"
+        "${PROJECT_SOURCE_DIR}/src/base/xunicode.h" "${PROJECT_SOURCE_DIR}/stdlib/regex/regex.xr"
+    VERBATIM)
+add_custom_target(check-regex-unicode-projection DEPENDS ${XIR_REGEX_UNICODE_STAMP})
+add_dependencies(gen-stdlib-embedded-sources check-regex-unicode-projection)
 target_include_directories(xray_xir_source PRIVATE "${CMAKE_BINARY_DIR}/generated")
 set(XIR_CORE_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_core_declarations_source.inc.c)
 add_custom_command(OUTPUT ${XIR_CORE_SOURCE}
