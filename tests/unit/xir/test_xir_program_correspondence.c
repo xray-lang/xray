@@ -33,6 +33,12 @@ static void correspondence_callback(bool allocation) {
         ((XrXirDeclarations *)module->declarations)->modules=NULL;
     if (probe_attack==6)
         ((XrXirDeclarations *)module->declarations)->functions=NULL;
+    if (probe_attack==7)
+        ((XrXirFunction *)module->functions)[1].name=(const char *)(uintptr_t)1;
+    if (probe_attack==8)
+        ((XrXirFunction *)module->functions)[1].blocks=(const XrXirBlock *)(uintptr_t)1;
+    if (probe_attack==9)
+        ((XrXirFunction *)module->functions)[1].instructions=(const XrXirInstruction *)(uintptr_t)1;
     probe_injected=true;
 }
 static void correspondence_free(void *memory) {
@@ -186,12 +192,14 @@ static void callback_refusal(const XrXirCompileContext *context,unsigned attack,
     artifact=constant_program(context,42);
     XrXirArtifact *original=artifact;
     XrXirModule *module=(XrXirModule *)xr_xir_compile_artifact_module(artifact);
+    XrXirFunction saved_function=module->functions[1];
     uint32_t frame=artifact->layouts[1].frame_bytes;
     probe_artifact=artifact;probe_at=frees-1;probe_calls=0;probe_injected=false;probe_armed=true;
     program=NULL;
     XrXirStatus status=xr_xir_compile_vm_program_take(&artifact,&program);
     probe_armed=false;
     CHECK(probe_injected && status==XR_XIR_BAD_STRUCTURE && !program && artifact==original);
+    ((XrXirFunction *)module->functions)[1]=saved_function;
     ((XrXirInstruction *)module->functions[1].instructions)[0].immediate=42;
     artifact->layouts[1].frame_bytes=frame;
     ((XrXirFunctionIdentity *)module->declarations->functions)[1].test_timeout_seconds=0;
@@ -304,6 +312,10 @@ int main(void) {
     normal(&context,42,false);normal(&context,43,true);body_refusal(&context);joint_refusal(&context);
     metadata_storage_refusal(&context);
     for(unsigned attack=0;attack<4;++attack) {
+        callback_refusal(&context,attack,false);
+        callback_refusal(&context,attack,true);
+    }
+    for(unsigned attack=7;attack<10;++attack) {
         callback_refusal(&context,attack,false);
         callback_refusal(&context,attack,true);
     }

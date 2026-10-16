@@ -1,0 +1,16 @@
+add_executable(test_xir_program_input_storage "${CMAKE_CURRENT_LIST_DIR}/test_xir_program_input_storage.c")
+target_include_directories(test_xir_program_input_storage PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_LIST_DIR}")
+target_link_libraries(test_xir_program_input_storage PRIVATE xray_xir_vm)
+target_compile_features(test_xir_program_input_storage PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_xir_program_input_storage PRIVATE /W4 /WX /utf-8)
+endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_xir_program_input_storage PRIVATE /experimental:c11atomics)
+endif()
+foreach(storage_case RANGE 0 19)
+    add_test(NAME test_xir_program_input_storage_${storage_case}
+        COMMAND test_xir_program_input_storage ${storage_case})
+    set_tests_properties(test_xir_program_input_storage_${storage_case} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;program;ownership;storage;correspondence")
+endforeach()

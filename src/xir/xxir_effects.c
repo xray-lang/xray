@@ -950,23 +950,23 @@ XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *con
     return effect_body_source_match(context,effects->invocations->body,source);
 }
 
+#include "xxir_effect_program_storage.inc.c"
+
 XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects) {
-    if (!xir_compile_context_valid(context) || !source || source->stage!=XR_XIR_LOWERED ||
-        !effects || effects->resources!=context->resources || effects->count!=source->function_count ||
-        !effects->invocations || effects->invocations->resources!=context->resources ||
-        !effect_body_material_shape(effects->invocations->body) ||
-        effects->invocations->body->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyMaterial *body=effects->invocations->body;
+    if (!xir_compile_context_valid(context) || !source || !effects) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *body = NULL;
+    XrXirStatus status = effect_program_input_storage(context, effects, &body);
+    if (status == XR_XIR_OK) status = effect_program_projection_storage(context, source);
+    if (status != XR_XIR_OK) return status;
+    if (effects->count != source->function_count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
     if (body->stage!=source->stage || body->linkage_kind!=source->linkage_kind ||
         !source->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirTypes *types=source->types ? source->types : &effect_empty_types;
-    XrXirStatus status=effect_lowered_snapshot_match(context,body->domain.types,types);
+    status=effect_lowered_snapshot_match(context,body->domain.types,types);
     return status==XR_XIR_OK ? effect_body_rows_match(context,body,source) : status;
 }
-
-#include "xxir_effect_program_storage.inc.c"
 
 XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
     const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations) {
@@ -992,7 +992,8 @@ XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContex
     if (status!=XR_XIR_OK) return status;
     if (function>=effects->count || (parameter_count && !parameters)) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *body=&input->functions[function];
-    status = effect_program_range(context, body->parameters, body->parameter_count, sizeof(*body->parameters));
+    status = effect_program_range(context, body->parameters, body->parameter_count,
+        sizeof(*body->parameters), _Alignof(XrXirType));
     if (status != XR_XIR_OK) return status;
     if (!xir_compile_work(context,(uint64_t)parameter_count+2)) return XR_XIR_BUDGET;
     if (parameter_count!=body->parameter_count || result!=body->result) return XR_XIR_BAD_STRUCTURE;

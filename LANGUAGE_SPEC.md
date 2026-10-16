@@ -7338,6 +7338,16 @@ for every nonempty table before traversing it, including module and function
 tables. Restoring the caller's original storage permits a retry on the same
 cumulative ledger; rejection does not refund work or allocation charges.
 
+Before reading either canonical body or Lowered projection storage, current
+Program body correspondence checks the actual live allocation ranges on the
+same cumulative ledger for headers, names, signatures, blocks, instructions,
+operands, compressed records and default records. Each typed read requires its
+alignment and complete range; record counts cannot exceed capacity. These
+checks allocate nothing and charge actual scans. A valid range proves neither
+field correspondence, semantics, historical allocation generation nor a
+complete Final. Current fields still require independent comparison after the
+last preparation callback; rejection preserves inputs and the empty output.
+
 ### 17.11 Definition Checking and Checked Generic Specialization
 
 Ordinary type parameters admit copyable, storable values, excluding unit, views
