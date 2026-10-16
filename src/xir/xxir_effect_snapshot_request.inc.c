@@ -106,8 +106,7 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
     const EffectBodyFunction *a=&material->functions[f];
     if ((a->name_length && !a->name) || (a->parameter_count && !a->parameters) ||
         (a->block_count && !a->blocks) || (a->operand_count && !a->operands) ||
-        (a->instruction_count && (!a->runs || !a->run_count)) ||
-        a->run_count>a->run_capacity) return XR_XIR_BAD_STRUCTURE;
+        !effect_body_function_storage_shape(a)) return XR_XIR_BAD_STRUCTURE;
     if (dimensions) {
         if (!effect_body_read_work(&request->read,11+sizeof(*dimensions))) return XR_XIR_BUDGET;
         *dimensions=(EffectBodyFunctionDimensions){a->parameter_count,a->instruction_count};return XR_XIR_OK;
@@ -249,9 +248,7 @@ static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequ
     if (status!=XR_XIR_OK) return status;
     const EffectBodyMaterial *material=request->owner;
     if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
-    const EffectBodyRun *ref=NULL;
-    status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
-    if (status==XR_XIR_OK) status=effect_body_instruction_ref_value(&request->read,ref,i,storage);
+    status=effect_body_instruction_cursor_get(&request->read,&material->functions[f],i,cursor,storage);
     if (status!=XR_XIR_OK) return status;
     if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=storage;return XR_XIR_OK;
@@ -271,6 +268,15 @@ static XrXirStatus effect_body_request_sequence_finish(const EffectBodyRequest *
     const EffectBodyMaterial *material=request->owner;
     const EffectBodyFunction *function=&material->functions[f];
     if (!effect_body_read_work(&request->read,7)) return XR_XIR_BUDGET;
+
+    if (function->literals) {
+        if (!effect_body_function_storage_shape(function) || cursor->run+1!=function->instruction_count ||
+            cursor->last!=function->instruction_count-1 || cursor->first!=cursor->last) return XR_XIR_BAD_STRUCTURE;
+        uint32_t i=cursor->last;
+        if (!effect_body_read_work(&request->read,4+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        XrXirOp opcode=function->literals[i].op;
+        return opcode>XR_XIR_INVALID && opcode<XR_XIR_OP_COUNT?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    }
     if (!function->instruction_count)
         return !function->run_count && !function->run_capacity && !function->runs &&
             !cursor->first && !cursor->run && cursor->last==UINT32_MAX?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;

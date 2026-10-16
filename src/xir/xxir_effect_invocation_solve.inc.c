@@ -85,13 +85,14 @@ static XrXirStatus effect_invocation_dispatch_constant(EffectInvocationFlow *flo
  * never initialize an unused 40-byte row or scan the rest of their body. */
 static XrXirStatus effect_invocation_dispatch_range(EffectInvocationFlow *flow,
     uint32_t start,bool *changed) {
+    EffectBodyRun dense_range_storage;
     const EffectInvocationRead *owner=flow->read;
     const EffectBodyFunction *body=&owner->final->material->functions[owner->final->nodes[flow->node].body];
     if (start>=flow->physical->count) return XR_XIR_BAD_STRUCTURE;
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=start;
     if (!xir_compile_work(owner->work,8+sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
     for (uint32_t run=0;run<body->run_count;++run) {
-        const EffectBodyRun *ref;XrXirStatus status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
+        const EffectBodyRun *ref;XrXirStatus status=effect_body_range_take(&flow->body.read,body,&cursor,&ref,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         if (!ref->mask) {
@@ -580,8 +581,7 @@ static XrXirStatus effect_invocation_local_head(const XrXirCompileContext *work,
     if (!xir_compile_work(work,11+sizeof(*empty))) return XR_XIR_BUDGET;
     if ((head->name_length && !head->name) || (head->parameter_count && !head->parameters) ||
         (head->operand_count && !head->operands) || (head->block_count && !head->blocks) ||
-        head->run_count>head->run_capacity || head->run_capacity>head->instruction_count ||
-        !!head->runs!=!!head->run_capacity || !!head->run_count!=!!head->instruction_count)
+        !effect_body_function_storage_shape(head))
         return XR_XIR_BAD_STRUCTURE;
     *empty=true;
     /* A formal relation needs the ordinary complete binding algorithm. This
@@ -604,6 +604,7 @@ static XrXirStatus effect_invocation_local_head(const XrXirCompileContext *work,
  * No callback, retained verdict or permission flag separates its two parts. */
 static XrXirStatus effect_invocation_local_input_body(EffectInvocationLocalRead *read,
     uint32_t f,EffectInvocationLocalInput *output,bool *empty) {
+    EffectBodyRun dense_range_storage;
     const XrXirCompileContext *work=read->work;const EffectBodyMaterial *body=read->body;
     const EffectBodyFunction *head=&body->functions[f];
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
@@ -627,7 +628,7 @@ static XrXirStatus effect_invocation_local_input_body(EffectInvocationLocalRead 
     EffectBodyRead body_read=effect_body_compile_read(work);EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     for (uint32_t r=0;r<head->run_count;++r) {
         const EffectBodyRun *run=NULL;
-        XrXirStatus status=effect_body_range_ref(&body_read,head,&cursor,&run);
+        XrXirStatus status=effect_body_range_take(&body_read,head,&cursor,&run,&dense_range_storage);
         if (status==XR_XIR_OK) status=effect_invocation_local_run(read,f,run,output,empty);
         if (status!=XR_XIR_OK || !*empty) return status;
     }

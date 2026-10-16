@@ -23,6 +23,32 @@ static uint32_t effect_body_source_word(const XrXirInstruction *op,uint32_t word
     }
 }
 
+
+static bool effect_body_function_storage_shape(const EffectBodyFunction *body) {
+    if (!body) return false;
+    if (body->literals) return body->instruction_count && !body->runs &&
+        body->run_count==body->instruction_count && body->run_capacity==body->instruction_count;
+    return body->run_count<=body->run_capacity && body->run_capacity<=body->instruction_count &&
+        !!body->runs==!!body->run_capacity && !!body->run_count==!!body->instruction_count;
+}
+static XrXirStatus effect_body_literal_get(const EffectBodyRead *read,
+    const EffectBodyFunction *body,uint32_t i,XrXirInstruction *output) {
+    if (!read || !output || !effect_body_function_storage_shape(body) || !body->literals ||
+        i>=body->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,4+sizeof(*output))) return XR_XIR_BUDGET;
+    const XrXirInstruction *op=&body->literals[i];
+    if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    *output=*op;return XR_XIR_OK;
+}
+static XrXirStatus effect_body_literal_words(const EffectBodyRead *read,
+    const EffectBodyFunction *body,uint32_t i,uint32_t *words) {
+    if (!words) return XR_XIR_BAD_STRUCTURE;
+    XrXirInstruction value;XrXirStatus status=effect_body_literal_get(read,body,i,&value);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(read,EFFECT_BODY_WORDS*(1+sizeof(*words)))) return XR_XIR_BUDGET;
+    for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) words[w]=effect_body_source_word(&value,w);
+    return XR_XIR_OK;
+}
 /* Unused capacity is never read or traversed. A failed growth retains the
  * previous allocation so the unique material destructor can release it. */
 static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
@@ -399,6 +425,23 @@ static XrXirStatus effect_body_range_ref(const EffectBodyRead *read,
     cursor->first=ref->first+ref->count;++cursor->run;*output=ref;return XR_XIR_OK;
 }
 
+/* A literal range borrows this caller's stack descriptor until its next
+ * request. Inactive deltas are never initialized, copied or inspected. */
+static XrXirStatus effect_body_range_take(const EffectBodyRead *read,
+    const EffectBodyFunction *function,EffectBodyRecordCursor *cursor,const EffectBodyRun **output,EffectBodyRun *storage) {
+    if (function && function->literals) {
+        if (!read || !output || !storage || !cursor || !effect_body_function_storage_shape(function) ||
+            cursor->run!=cursor->first || cursor->first>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        uint32_t i=cursor->first;
+        if (!effect_body_read_work(read,5+3*sizeof(uint32_t)+sizeof(storage->base)+sizeof(*output))) return XR_XIR_BUDGET;
+        const XrXirInstruction *op=&function->literals[i];
+        if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        storage->first=i;storage->count=1;storage->mask=0;storage->base=*op;
+        ++cursor->first;++cursor->run;*output=storage;return XR_XIR_OK;
+    }
+    return effect_body_range_ref(read,function,cursor,output);
+}
+
 static XrXirStatus effect_body_record_cursor_ref(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
     const EffectBodyRun **output) {
@@ -475,6 +518,8 @@ static XrXirStatus effect_body_instruction_ref_words(const EffectBodyRead *read,
 
 static XrXirStatus effect_body_instruction_words_get(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,uint32_t *words) {
+    if (function && function->literals) return effect_body_literal_words(read,function,instruction,words);
+
     if (!words) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_record_ref(read,function,instruction,&ref);
@@ -553,6 +598,8 @@ static inline XrXirStatus effect_body_instruction_words_publish(const EffectBody
 
 static XrXirStatus effect_body_instruction_get(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,XrXirInstruction *output) {
+    if (function && function->literals) return effect_body_literal_get(read,function,instruction,output);
+
     if (!output) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_record_ref(read,function,instruction,&ref);
@@ -572,6 +619,16 @@ static XrXirStatus effect_body_instruction_fields_get(const EffectBodyRead *read
 
 static XrXirStatus effect_body_instruction_cursor_words(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,uint32_t *words) {
+
+    if (function && function->literals) {
+        if (!cursor || cursor->first>instruction || (cursor->last!=UINT32_MAX && instruction<cursor->last) ||
+            (cursor->last==UINT32_MAX && (cursor->run || cursor->first))) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,4+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        XrXirStatus status=effect_body_literal_words(read,function,instruction,words);
+        if (status==XR_XIR_OK) {cursor->first=instruction;cursor->run=instruction;cursor->last=instruction;}
+        return status;
+    }
+
     if (!words) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_record_cursor_ref(read,function,instruction,cursor,&ref);
@@ -593,6 +650,16 @@ static inline XrXirStatus effect_body_instruction_cursor_fields(const EffectBody
 static inline XrXirStatus effect_body_instruction_cursor_get(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,EffectBodyRecordCursor *cursor,
     XrXirInstruction *output) {
+
+    if (function && function->literals) {
+        if (!cursor || cursor->first>instruction || (cursor->last!=UINT32_MAX && instruction<cursor->last) ||
+            (cursor->last==UINT32_MAX && (cursor->run || cursor->first))) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,4+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        XrXirStatus status=effect_body_literal_get(read,function,instruction,output);
+        if (status==XR_XIR_OK) {cursor->first=instruction;cursor->run=instruction;cursor->last=instruction;}
+        return status;
+    }
+
     if (!output) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_record_cursor_ref(read,function,instruction,cursor,&ref);
@@ -601,6 +668,16 @@ static inline XrXirStatus effect_body_instruction_cursor_get(const EffectBodyRea
 
 static XrXirStatus effect_body_operand_type(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t value,XrXirType *output) {
+
+    if (function && function->literals && value>=function->parameter_count) {
+        if (!output || !effect_body_function_storage_shape(function) ||
+            value-function->parameter_count>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,4+sizeof(*output)+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        const XrXirInstruction *op=&function->literals[value-function->parameter_count];
+        if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        *output=op->type;return XR_XIR_OK;
+    }
+
     if (!function || !output || value>=(uint64_t)function->parameter_count+function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     if (value<function->parameter_count) {
@@ -618,6 +695,16 @@ static XrXirStatus effect_body_operand_type(const EffectBodyRead *read,
 
 static XrXirStatus effect_body_instruction_op(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,XrXirOp *output) {
+
+    if (function && function->literals) {
+        if (!output || !effect_body_function_storage_shape(function) || instruction>=function->instruction_count)
+            return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,4+sizeof(*output))) return XR_XIR_BUDGET;
+        XrXirOp opcode=function->literals[instruction].op;
+        if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        *output=opcode;return XR_XIR_OK;
+    }
+
     if (!output) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref;
     if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
@@ -634,6 +721,16 @@ static XrXirStatus effect_body_instruction_op(const EffectBodyRead *read,
  * two actual fields requested by a classifier. It never builds a full row. */
 static XrXirStatus effect_body_instruction_shape_words(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,uint32_t *opcode,uint32_t *type) {
+
+    if (function && function->literals) {
+        if (!opcode || !type || !effect_body_function_storage_shape(function) || instruction>=function->instruction_count)
+            return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,4+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        const XrXirInstruction *op=&function->literals[instruction];
+        if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        *opcode=(uint32_t)op->op;*type=op->type;return XR_XIR_OK;
+    }
+
     if (!opcode || !type) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyRun *ref;uint32_t operation=XR_XIR_INVALID,physical_type=XR_XIR_UNIT;
     if (!effect_body_read_work(read,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
@@ -691,6 +788,26 @@ static XrXirStatus effect_body_column_match(const EffectBodyRead *read,
  * validates every run boundary and all words, even unused instruction words. */
 static XrXirStatus effect_body_records_compare(const EffectBodyRead *read,
     const EffectBodyFunction *function,const XrXirFunction *source,bool *same) {
+
+    if (function && function->literals) {
+        if (!source || !effect_body_function_storage_shape(function) ||
+            function->instruction_count!=source->instruction_count || !source->instructions) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t i=0;i<function->instruction_count;++i) {
+            if (!effect_body_read_work(read,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+            if (function->literals[i].op<=XR_XIR_INVALID || function->literals[i].op>=XR_XIR_OP_COUNT)
+                return XR_XIR_BAD_STRUCTURE;
+            for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+                if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+                if (effect_body_source_word(&function->literals[i],w)!=effect_body_source_word(&source->instructions[i],w)) {
+                    if (!same) return XR_XIR_BAD_STRUCTURE;
+                    if (!effect_body_read_work(read,sizeof(*same))) return XR_XIR_BUDGET;
+                    *same=false;
+                }
+            }
+        }
+        return XR_XIR_OK;
+    }
+
     if (!function || !source || (source->instruction_count && !source->instructions) ||
         function->run_count>function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (function->instruction_count!=source->instruction_count) {

@@ -179,3 +179,8 @@ add_test(NAME test_xir_root_conditional_canonical_run_storage
     COMMAND test_xir_root_conditional_helpers --canonical-run-storage)
 set_tests_properties(test_xir_root_conditional_canonical_run_storage PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_effect_literal_body_storage
+    COMMAND test_xir_root_conditional_helpers --literal-body)
+set_tests_properties(test_xir_effect_literal_body_storage PROPERTIES
+    LABELS "unit;xir;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)

@@ -83,6 +83,19 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
     if (!effect_body_material_shape(body) || body->resources!=work->resources || f>=effect_body_count(body) ||
         cursor->function!=f) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *function=&body->functions[f];
+
+    if (function->literals) {
+        if (!effect_body_function_storage_shape(function) || count || first!=function->instruction_count ||
+            cursor->next>first || cursor->run!=cursor->next) return XR_XIR_BAD_STRUCTURE;
+        XrXirCellProofSpanCursor current=*cursor;
+        for (uint32_t i=current.next;i<first;++i) {
+            if (!xir_compile_work(work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+            XrXirOp opcode=function->literals[i].op;
+            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        }
+        if (!xir_compile_work(work,sizeof(*cursor))) return XR_XIR_BUDGET;
+        current.next=first;current.run=first;*cursor=current;return XR_XIR_OK;
+    }
     if (first>function->instruction_count || count>function->instruction_count-first ||
         (!count && first!=function->instruction_count) || cursor->next>first ||
         cursor->run>function->run_count || function->run_count>function->instruction_count ||
@@ -131,6 +144,7 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
  * Every run decodes all ten first-row words through the sole physical reader. */
 static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     const XrXirCellProofBodyRead *read,XrXirCellProofRunCursor *cursor,XrXirCellProofRun *output) {
+    EffectBodyRun dense_range_storage;
     if (!xir_compile_context_valid(work) || !read || !cursor || !output || read->resources!=work->resources ||
         read->head!=effect_cell_body_head || read->instruction!=effect_cell_body_instruction ||
         read->type!=effect_cell_body_type || read->shape!=effect_cell_body_shape ||
@@ -152,7 +166,7 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (!xir_compile_work(work,18+sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
     EffectBodyRecordCursor position={cursor->next,cursor->run,UINT32_MAX};
     const EffectBodyRun *ref;
-    XrXirStatus status=effect_body_range_ref(&adapter->request.read,function,&position,&ref);
+    XrXirStatus status=effect_body_range_take(&adapter->request.read,function,&position,&ref,&dense_range_storage);
     if (status!=XR_XIR_OK) return status;
     status=effect_body_instruction_ref_prepare(&adapter->request.read,ref,ref->first);
     if (status!=XR_XIR_OK) return status;

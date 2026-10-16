@@ -323,6 +323,7 @@ static XrXirStatus error_membership_row(ErrorFlow *flow,uint32_t value,
 }
 
 static XrXirStatus error_membership(ErrorFlow *flow,ErrorMembership *membership) {
+    EffectBodyRun dense_range_storage;
     bool owned=flow->body.instruction==effect_body_owned_instruction;
     uint32_t prefix=owned?flow->function->parameter_count:flow->values;
     for (uint32_t value=0;value<prefix;++value) {
@@ -339,7 +340,7 @@ static XrXirStatus error_membership(ErrorFlow *flow,ErrorMembership *membership)
     for (uint32_t run=0;run<function->run_count;++run) {
         if (!xir_compile_work(flow->remaining,1+sizeof(run))) return XR_XIR_BUDGET;
         const EffectBodyRun *ref;
-        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        status=effect_body_range_take(&flow->body.read,function,&cursor,&ref,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
             EffectBodyInstructionFields fields;
@@ -738,6 +739,7 @@ static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
 
 static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
     const uint8_t *zero_copy,ErrorBlockRead *row) {
+    EffectBodyRun dense_range_storage;
     const XrXirBlock *block=&flow->function->blocks[b];
     if (flow->body.instruction!=effect_body_owned_instruction) {
         for (uint32_t i=block->first;i<block->first+block->count;++i) {
@@ -758,7 +760,7 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
     while (cursor.first<end) {
         if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
         const EffectBodyRun *ref;
-        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        status=effect_body_range_take(&flow->body.read,function,&cursor,&ref,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,1+sizeof(row->constant)+sizeof(row->decoded)))

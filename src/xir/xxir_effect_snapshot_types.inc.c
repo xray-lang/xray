@@ -61,6 +61,9 @@ typedef struct EffectBodyFunction {
     uint32_t operand_count;
     EffectBodyRun *runs;
     uint32_t run_count,run_capacity;
+    /* Exactly one layout owns the physical rows. Literal rows live in the
+     * material's receiving terms; each ordinal is one bounded range. */
+    const XrXirInstruction *literals;
     /* Concrete initial roles follow the constructor's real evidence proof. */
     const uint8_t *initial_roles;
 } EffectBodyFunction;

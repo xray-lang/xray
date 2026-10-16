@@ -1752,7 +1752,10 @@ static void conditional_ordinary_environment_keys(void) {
     }
 }
 
+#include "xir_literal_body_cases.h"
+
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--literal-body")) { literal_body_cases();return 0; }
     if (argc==2 && !strcmp(argv[1],"--replay-storage-values")) {
         invocation_replay_scratch_literals();invocation_replay_scratch_owners();
         CHECK(!rp_live && !rp_live_bytes);puts("Nested replay, clean reuse and request/ledger isolation PASS");return 0;

@@ -538,6 +538,7 @@ static bool effect_invocation_origins_unused(const EffectInvocationFlow *flow,
  * actual constant opcode/type fields share an early-return classification;
  * every active physical transfer enters the unchanged complete handler. */
 static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
+    EffectBodyRun dense_range_storage;
     const EffectInvocationRead *owner=flow->read;
     if (flow->body.instruction!=effect_body_owned_instruction ||
         flow->body.head!=effect_body_owned_head || flow->body.type!=effect_body_owned_type ||
@@ -580,7 +581,7 @@ static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
     for (uint32_t run=0;run<body->run_count;++run) {
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
         if (!xir_compile_work(owner->work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
-        XrXirStatus status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
+        XrXirStatus status=effect_body_range_take(&flow->body.read,body,&cursor,&ref,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         bool constant=!(ref->mask&UINT32_C(3)),unused=false;
         if (!xir_compile_work(owner->work,sizeof(constant)+sizeof(unused))) return XR_XIR_BUDGET;

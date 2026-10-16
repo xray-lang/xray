@@ -213,6 +213,54 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
     return status;
 }
 
+
+/* Small functions retain run storage. Four affine rows also choose that
+ * layout. Selection compares all ten fields without interpreting their
+ * types or opcode meanings; every selected row is then copied completely. */
+static XrXirStatus effect_body_literal_layout(const XrXirCompileContext *work,
+    const XrXirFunction *source,bool *literal) {
+    if (!xir_compile_context_valid(work) || !source || !literal ||
+        (source->instruction_count && !source->instructions)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,3+sizeof(*literal))) return XR_XIR_BUDGET;
+    *literal=false;
+    if (source->instruction_count<32) return XR_XIR_OK;
+    unsigned consecutive=0;
+    for (uint32_t i=2;i<source->instruction_count;++i) {
+        if (!xir_compile_work(work,8+sizeof(unsigned)+sizeof(bool))) return XR_XIR_BUDGET;
+        bool affine=true;
+        for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+            if (!xir_compile_work(work,15)) return XR_XIR_BUDGET;
+            uint32_t first=effect_body_source_word(&source->instructions[i-2],w);
+            uint32_t second=effect_body_source_word(&source->instructions[i-1],w);
+            if (effect_body_source_word(&source->instructions[i],w)!=second+(second-first)) {affine=false;break;}
+        }
+        consecutive=affine?consecutive+1:0;
+        if (consecutive==2) return XR_XIR_OK;
+    }
+    if (!xir_compile_work(work,sizeof(*literal))) return XR_XIR_BUDGET;
+    *literal=true;return XR_XIR_OK;
+}
+static XrXirStatus effect_body_material_records(EffectBodyWriter *writer,
+    const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyWriteSink *sink) {
+    if (!writer || !xir_compile_context_valid(writer->work) || !writer->material ||
+        writer->material->resources!=writer->work->resources || !source || !target || !sink ||
+        !sink->owner || !sink->row || !sink->span || source->instruction_count!=target->instruction_count ||
+        target->runs || target->run_count || target->run_capacity || target->literals ||
+        (source->instruction_count && !source->instructions)) return XR_XIR_BAD_STRUCTURE;
+    bool literal=false;XrXirStatus status=effect_body_literal_layout(writer->work,source,&literal);
+    if (status!=XR_XIR_OK || !literal) return status==XR_XIR_OK?effect_body_records_write(writer->work,source,target,sink):status;
+    target->literals=effect_body_copy(&writer->material->terms,source->instructions,source->instruction_count,sizeof(*source->instructions));
+    if (writer->material->terms.status!=XR_XIR_OK) return writer->material->terms.status;
+    if (!xir_compile_work(writer->work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    target->run_count=target->run_capacity=target->instruction_count;
+    for (uint32_t i=0;i<source->instruction_count;++i) {
+        if (!xir_compile_work(writer->work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        XrXirOp opcode=target->literals[i].op;
+        if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        status=sink->row(sink->owner,i,&source->instructions[i]);if (status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
 /* Constructor verifies actual TEMPLATE/INSTANCE evidence before any concrete
  * role product. No provenance alias or verified flag survives as admission. */
 static XrXirStatus effect_body_material_generation_input(const XrXirCompileContext *work,
@@ -327,7 +375,7 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         }
         EffectBodyWriter writer={work,source,body,cells,advertisements,f};EffectBodyWriteSink sink={&writer,effect_body_writer_row,effect_body_writer_span};
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink.span))) status=XR_XIR_BUDGET;
-        if (status==XR_XIR_OK) status=effect_body_records_write(work,&source->functions[f],function,&sink);
+        if (status==XR_XIR_OK) status=effect_body_material_records(&writer,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
     }
     if (status==XR_XIR_OK) status=xir_cell_proof_builder_finish(&cells,&body->cells);
@@ -551,6 +599,7 @@ static XrXirStatus effect_body_physical_run(const XrXirCompileContext *work,
  * runs are independently classified from the current sole owned input. */
 static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
     const EffectPhysicalDomain *domain,const EffectBodyMaterial *material) {
+    EffectBodyRun dense_range_storage;
     if (!xir_compile_context_valid(work) || !effect_body_material_shape(material) || !domain ||
         domain->resources!=work->resources || material->resources!=work->resources ||
         domain->count!=effect_body_count(material) || (domain->count && !domain->functions))
@@ -566,9 +615,7 @@ static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
             physical->rows>physical->values || physical->classes>physical->values ||
             physical->count>physical->capacity || physical->capacity>physical->values ||
             !!physical->records!=!!physical->capacity || (body->parameter_count && !body->parameters) ||
-            body->run_count>body->run_capacity || body->run_capacity>body->instruction_count ||
-            body->run_count>body->instruction_count ||
-            !!body->run_count!=!!body->instruction_count || !!body->runs!=!!body->run_capacity)
+            !effect_body_function_storage_shape(body))
             return XR_XIR_BAD_STRUCTURE;
         EffectBodyPhysicalReplay state={0};EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
         for (uint32_t p=0;p<body->parameter_count;++p) {
@@ -582,7 +629,7 @@ static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
         for (uint32_t r=0;r<body->run_count;++r) {
             const EffectBodyRun *run=NULL;
             if (!xir_compile_work(work,sizeof(run)+1)) return XR_XIR_BUDGET;
-            XrXirStatus status=effect_body_range_ref(&read,body,&cursor,&run);
+            XrXirStatus status=effect_body_range_take(&read,body,&cursor,&run,&dense_range_storage);
             if (status==XR_XIR_OK) status=effect_body_physical_run(work,material,f,physical,run,&state);
             if (status!=XR_XIR_OK) return status;
         }

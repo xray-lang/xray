@@ -492,6 +492,7 @@ typedef struct EffectGraphDependencyCounts {
 static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *remaining,
     XrXirEffects *effects,const EffectGraph *graph,uint32_t f,bool symbolic,
     EffectGraphDependencyCounts *counts) {
+    EffectBodyRun dense_range_storage;
     EffectBodyRequest request=effect_body_owned_request(remaining,graph->material);
     EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_body_request_dimensions(&request,f,&head);
     if (status!=XR_XIR_OK) return status;
@@ -509,7 +510,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     }
     for (uint32_t run=0;run<owned->run_count;++run) {
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
-        status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
+        status=effect_body_range_take(&request.read,owned,&cursor,&ref,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         if (!(ref->mask&UINT32_C(1))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
@@ -549,6 +550,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
 
 static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirEffects *effects,
     EffectGraph *graph, XrXirCompileContext *remaining) {
+    EffectBodyRun dense_range_storage;
     if (!xir_compile_context_valid(remaining) || !module || !effects || !graph ||
         effects->resources!=remaining->resources || effects->count!=module->function_count ||
         !effects->outcomes_work.functions || !effects->outcomes_work.task_creation || !effect_body_material_shape(graph->material) ||
@@ -607,7 +609,7 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
         for (uint32_t run=0;run<owned->run_count;++run) {
             const EffectBodyRun *ref;XrXirInstruction constant={0};bool decoded=false;
             if (!xir_compile_work(remaining,sizeof(constant)+sizeof(decoded))) return XR_XIR_BUDGET;
-            status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
+            status=effect_body_range_take(&request.read,owned,&cursor,&ref,&dense_range_storage);
             if (status!=XR_XIR_OK) return status;
             while (r<physical->count && physical->records[r].value-function->parameter_count<ref->first+ref->count) {
                 if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;

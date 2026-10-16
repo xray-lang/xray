@@ -176,8 +176,7 @@ static XrXirStatus effect_body_result_head(const XrXirCompileContext *work,
     const EffectBodyFunction *head=&material->functions[function];
     if ((head->name_length && !head->name) || (head->parameter_count && !head->parameters) ||
         (head->block_count && !head->blocks) || (head->operand_count && !head->operands) ||
-        (head->instruction_count && (!head->runs || !head->run_count)) ||
-        head->run_count>head->run_capacity) return XR_XIR_BAD_STRUCTURE;
+        !effect_body_function_storage_shape(head)) return XR_XIR_BAD_STRUCTURE;
     return xir_compile_work(work,11)?XR_XIR_OK:XR_XIR_BUDGET;
 }
 
