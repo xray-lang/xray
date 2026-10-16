@@ -82,6 +82,26 @@ _PORTS = {'method_self_return_ownership': 'tests/unit/xir/legacy_consumers/fixtu
 _NAMES=frozenset({'array_member_scalar_target','array_push_scalar_target','array_literal_index_target','array_join_shared_core',
  'array_sort_shared_core','stringbuilder_append_shared_core','method_self_return_ownership','user_hashable_map_set_key','stringbuilder_scalar_known_append_shared_core'})
 
+_DISPLAY_PROGRAMS = {
+ "container_print": "tests/diff/cases/semantics/collections/container_print.xr",
+ "slice_value_to_string": "tests/diff/cases/semantics/slice/slice_value_to_string.xr",
+ "function_value_to_string": "tests/diff/cases/semantics/function_value_to_string.xr",
+ "json_forin_shared_core": "tests/diff/cases/semantics/collections/json_forin_shared_core.xr"
+}
+_DISPLAY_INPUTS = {
+ "tests/diff/cases/semantics/collections/container_print.xr": "5e19e9fd45001241b2d7fc4187990bf5c9d76ca52937e9ce1d2933cd2b2f7f91",
+ "tests/diff/cases/semantics/slice/slice_value_to_string.xr": "206e1da48c5d9f6d6a9960cd58370e7ead00f9652f465426b0cc1b58be2b2f03",
+ "tests/diff/cases/semantics/function_value_to_string.xr": "94b8631cc3c534662f0ae7441b6c6f79efe7e702dde98b7f807e908f8da29bf5",
+ "tests/diff/cases/semantics/collections/json_forin_shared_core.xr": "4757b926dd2da91d6bac3c5dfb61599596cdcc589b1f7fe6906acf6ad775afbf",
+ "src/runtime/value/xvalue_format.c": "aa47cbf6f46222719eb0595cf031eb7f90379cc11799dd74564b19dbb3650863",
+ "src/aot/xrt_arith.h": "fe850e610049b8b1bed6d8cce152742314fabd0b7110a8edfdd3a8323f5d3a2c",
+ "stdlib/types/json.xr": "9b4904f85a13bea98b04c616185183f921ed09761bde1cb48d751784fef48161"
+}
+_PROGRAMS.update(_DISPLAY_PROGRAMS)
+_NAMES=_NAMES|frozenset(_DISPLAY_PROGRAMS)
+_INPUTS.update(_DISPLAY_INPUTS)
+_REQUIRED_INPUTS+=tuple(_DISPLAY_INPUTS)
+
 class Array:
     def __init__(self,items):self.items=copy.deepcopy(list(items))
     def reverse(self):self.items.reverse();return Array(self.items)
@@ -101,6 +121,89 @@ def render(value):
         if math.isinf(value):return '-inf' if value<0 else 'inf'
         return str(value)
     raise ValueError('This reviewed trace only renders explicit scalar observations')
+
+class DisplayMap:
+    """Insertion order and key/value association, independent of hash storage."""
+    def __init__(self,pairs=()):
+        self.pairs=[]
+        for key,value in pairs:self.put(key,value)
+    def put(self,key,value):
+        for index,(old,_) in enumerate(self.pairs):
+            if type(old) is type(key) and old==key:
+                self.pairs[index]=(key,value);return
+        self.pairs.append((key,value))
+    def keys(self):return [key for key,_ in self.pairs]
+    def values(self):return [value for _,value in self.pairs]
+    def entries(self):return list(self.pairs)
+
+class DisplaySet:
+    def __init__(self,values):
+        self.values=[]
+        for value in values:
+            if not any(type(old) is type(value) and old==value for old in self.values):self.values.append(value)
+
+class BorrowedDisplaySlice:
+    """Logical typed range over its owner; this is not a physical lifetime proof."""
+    def __init__(self,owner,start,end):
+        if not isinstance(owner,Array) or type(start) is not int or type(end) is not int or not 0<=start<=end<=len(owner.items):raise ValueError('Invalid borrowed display range')
+        self.owner,self.start,self.end=owner,start,end
+    def items(self):return self.owner.items[self.start:self.end]
+    def __len__(self):return self.end-self.start
+
+class DisplayCallable:
+    def __init__(self,debug_name,body):self.debug_name,self.body,self.calls=debug_name,body,0
+    def apply(self,value):self.calls+=1;return self.body(value)
+
+class JsonDisplayScalar:
+    """Only the two selected scalar arms used by the complete JSON program."""
+    def __init__(self,value):
+        if type(value) not in {str,int}:raise ValueError('Unreviewed JSON scalar arm')
+        self.value=value
+    def string(self):return render(self.value)
+
+def display(value,nested=False):
+    if isinstance(value,DisplayCallable):return '<fn>'
+    if isinstance(value,BorrowedDisplaySlice):value=value.items()
+    if isinstance(value,Array):value=value.items
+    if isinstance(value,list):return '['+', '.join(display(item,True) for item in value)+']'
+    if isinstance(value,tuple):return '('+', '.join(display(item,True) for item in value)+(',' if len(value)==1 else '')+')'
+    if isinstance(value,DisplayMap):return '#{'+', '.join(display(k,True)+': '+display(v,True) for k,v in value.entries())+'}'
+    if isinstance(value,DisplaySet):return '#['+', '.join(display(item,True) for item in value.values)+']'
+    if type(value) is str:return '"'+value+'"' if nested else value
+    return render(value)
+
+def json_iteration_scores(mapping,expected):
+    keys=pairs=0
+    for key in mapping.keys():
+        if key in expected:keys+=expected[key][0]
+    for key,value in mapping.entries():
+        if key in expected and value.string()==expected[key][1]:pairs+=expected[key][0]
+    return keys,pairs
+
+def display_observations():
+    container=[Array([1,2,3]),Array([1.5,0.1,100.0]),Array(['a','b','c']),Array([[1,2],[3,4]]),Array([True,False,True]),
+     (1,'x',2.5),(42,),Array([10,20,30]),Array([['x'],['y','z']]),DisplayMap([(1,10),(2,20),(3,30)]),DisplaySet([1,2,3]),
+     DisplayMap([('a',1),('b',2)]),DisplayMap([(1,Array([1,2])),(2,Array([3,4]))]),DisplayMap(),DisplaySet(['x','y'])]
+    rows={'container_print':[display(value) for value in container]}
+    ints,names=Array([10,20,30,40]),Array(['ab','cd','ef'])
+    view,nview=BorrowedDisplaySlice(ints,1,3),BorrowedDisplaySlice(names,0,2)
+    empty,whole=BorrowedDisplaySlice(ints,2,2),BorrowedDisplaySlice(ints,0,4)
+    rendered,nrendered=display(view),display(nview)
+    describe=lambda value:len(value)
+    rows['slice_value_to_string']=[display(view),rendered,nrendered,display(empty),display(whole),'v='+rendered,'n='+nrendered,len(rendered.encode('utf-8')),len(nrendered.encode('utf-8')),describe(view)]
+    named,lambda_=DisplayCallable('helper',lambda n:n+1),DisplayCallable('',lambda n:n*2)
+    apply=lambda fn,n:fn.apply(n)
+    rows['function_value_to_string']=[display(named),display(named),display(lambda_),display(lambda_),len(display(named)),len(display(lambda_)),'f='+display(named),apply(named,4),apply(lambda_,4),display(named)==display(lambda_)]
+    import json
+    parsed=json.loads('{"name":"Alice","age":30}',object_pairs_hook=list)
+    obj=DisplayMap((key,JsonDisplayScalar(value)) for key,value in parsed)
+    dyn=DisplayMap();dyn.put('msg',JsonDisplayScalar('hello world'));dyn.put('key',JsonDisplayScalar('a&b'))
+    static_keys,static_pairs=json_iteration_scores(obj,{'name':(1,'Alice'),'age':(10,'30')})
+    dynamic_keys,dynamic_pairs=json_iteration_scores(dyn,{'msg':(1,'hello world'),'key':(10,'a&b')})
+    rows['json_forin_shared_core']=['static keys='+str(static_keys),'static pairs='+str(static_pairs),'dynamic keys='+str(dynamic_keys),'dynamic pairs='+str(dynamic_pairs),
+     'keys length='+str(len(dyn.keys())),'values length='+str(len(dyn.values())),'entries length='+str(len(dyn.entries()))]
+    if set(rows)!=set(_DISPLAY_PROGRAMS) or sum(map(len,rows.values()))!=42:raise ValueError('Lost complete display observations')
+    return rows
 
 def member_trace():
     counts=Array([1,2,3]);counts.items.append(4);counts.items.insert(0,0)
@@ -138,6 +241,7 @@ def observations():
     pieces=['[',True,'|',False,'|','中','|','A','|',None,']'];rows['stringbuilder_scalar_known_append_shared_core']=[''.join(render(v) for v in pieces)]
     # A key's declared equality compares both fields; its hash is only a bucket hint.
     key=lambda a,b:(a,b);mapping={key(1,'x'):'one',key(2,'yy'):'two'};mapping[key(1,'x')]='ONE';out=[len(mapping),mapping[key(1,'x')],mapping[key(2,'yy')],key(1,'x') in mapping,key(3,'z') in mapping];removed=mapping.pop(key(2,'yy'),None) is not None;out.extend([removed,len(mapping)]);seen={key(5,'p'),key(5,'p'),key(6,'q')};out.extend([len(seen),key(5,'p') in seen,key(9,'z') in seen]);rows['user_hashable_map_set_key']=out
+    rows.update(display_observations())
     if set(rows)!=_NAMES:raise ValueError('Collection model lost a full source')
     return rows
 
@@ -183,4 +287,7 @@ def expected_rows():
          'expected':{'exit_code':0,'stdout_utf8':''.join(render(v)+'\n' for v in values),'stderr_utf8':''},
          'model':'Complete original source; independent scalar/ordered container operations,Array and string logical copies,sign comparator/NaN last/UTF8 ordering;no RC/physical/generated-C/fullFI qualification.',
          'observation_count':len(values)})
+    for row in rows:
+        if row['original_source'] in _DISPLAY_PROGRAMS.values():
+            row['model']='Complete unchanged original; independent recursive container display,insertion order,singleton tuple comma,typed Slice range,callable name-free display plus actual calls,and selected JSON scalar/key/value association. No physical lifetime,Source,generated-C,FI,safety or provider qualification.'
     return rows

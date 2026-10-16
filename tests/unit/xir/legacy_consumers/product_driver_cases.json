@@ -30949,6 +30949,143 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 6
+    },
+    {
+      "id": "complete_collection_values_container_print",
+      "oracle_id": "complete_collection_values_container_print",
+      "source": "tests/diff/cases/semantics/collections/container_print.xr",
+      "source_lf_sha256": "5e19e9fd45001241b2d7fc4187990bf5c9d76ca52937e9ce1d2933cd2b2f7f91",
+      "entry": "run",
+      "stdout_utf8": "[1, 2, 3]\n[1.5, 0.1, 100.0]\n[\"a\", \"b\", \"c\"]\n[[1, 2], [3, 4]]\n[true, false, true]\n(1, \"x\", 2.5)\n(42,)\n[10, 20, 30]\n[[\"x\"], [\"y\", \"z\"]]\n#{1: 10, 2: 20, 3: 30}\n#[1, 2, 3]\n#{\"a\": 1, \"b\": 2}\n#{1: [1, 2], 2: [3, 4]}\n#{}\n#[\"x\", \"y\"]\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original; independent recursive container display,insertion order,singleton tuple comma,typed Slice range,callable name-free display plus actual calls,and selected JSON scalar/key/value association. No physical lifetime,Source,generated-C,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/container_print.xr",
+        "source_lf_sha256": "5e19e9fd45001241b2d7fc4187990bf5c9d76ca52937e9ce1d2933cd2b2f7f91"
+      },
+      "remaining_gates": [
+        "Complete recursive containers,typed Slice conversions and call,callable display and both real calls,JSON parseObject/dynamic insertion and key/pair iteration retained.",
+        "All42 original observations;actual VM/C/native,physical Slice lifetime and all original FI/resource/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 15
+    },
+    {
+      "id": "complete_collection_values_function_value_to_string",
+      "oracle_id": "complete_collection_values_function_value_to_string",
+      "source": "tests/diff/cases/semantics/function_value_to_string.xr",
+      "source_lf_sha256": "94b8631cc3c534662f0ae7441b6c6f79efe7e702dde98b7f807e908f8da29bf5",
+      "entry": "run",
+      "stdout_utf8": "<fn>\n<fn>\n<fn>\n<fn>\n4\n4\nf=<fn>\n5\n8\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original; independent recursive container display,insertion order,singleton tuple comma,typed Slice range,callable name-free display plus actual calls,and selected JSON scalar/key/value association. No physical lifetime,Source,generated-C,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/function_value_to_string.xr",
+        "source_lf_sha256": "94b8631cc3c534662f0ae7441b6c6f79efe7e702dde98b7f807e908f8da29bf5"
+      },
+      "remaining_gates": [
+        "Complete recursive containers,typed Slice conversions and call,callable display and both real calls,JSON parseObject/dynamic insertion and key/pair iteration retained.",
+        "All42 original observations;actual VM/C/native,physical Slice lifetime and all original FI/resource/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_collection_values_json_forin_shared_core",
+      "oracle_id": "complete_collection_values_json_forin_shared_core",
+      "source": "tests/diff/cases/semantics/collections/json_forin_shared_core.xr",
+      "source_lf_sha256": "4757b926dd2da91d6bac3c5dfb61599596cdcc589b1f7fe6906acf6ad775afbf",
+      "entry": "run",
+      "stdout_utf8": "static keys=11\nstatic pairs=11\ndynamic keys=11\ndynamic pairs=11\nkeys length=2\nvalues length=2\nentries length=2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original; independent recursive container display,insertion order,singleton tuple comma,typed Slice range,callable name-free display plus actual calls,and selected JSON scalar/key/value association. No physical lifetime,Source,generated-C,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/json_forin_shared_core.xr",
+        "source_lf_sha256": "4757b926dd2da91d6bac3c5dfb61599596cdcc589b1f7fe6906acf6ad775afbf"
+      },
+      "remaining_gates": [
+        "Complete recursive containers,typed Slice conversions and call,callable display and both real calls,JSON parseObject/dynamic insertion and key/pair iteration retained.",
+        "All42 original observations;actual VM/C/native,physical Slice lifetime and all original FI/resource/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 7
+    },
+    {
+      "id": "complete_collection_values_slice_value_to_string",
+      "oracle_id": "complete_collection_values_slice_value_to_string",
+      "source": "tests/diff/cases/semantics/slice/slice_value_to_string.xr",
+      "source_lf_sha256": "206e1da48c5d9f6d6a9960cd58370e7ead00f9652f465426b0cc1b58be2b2f03",
+      "entry": "run",
+      "stdout_utf8": "[20, 30]\n[20, 30]\n[\"ab\", \"cd\"]\n[]\n[10, 20, 30, 40]\nv=[20, 30]\nn=[\"ab\", \"cd\"]\n8\n12\n2\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original; independent recursive container display,insertion order,singleton tuple comma,typed Slice range,callable name-free display plus actual calls,and selected JSON scalar/key/value association. No physical lifetime,Source,generated-C,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/slice/slice_value_to_string.xr",
+        "source_lf_sha256": "206e1da48c5d9f6d6a9960cd58370e7ead00f9652f465426b0cc1b58be2b2f03"
+      },
+      "remaining_gates": [
+        "Complete recursive containers,typed Slice conversions and call,callable display and both real calls,JSON parseObject/dynamic insertion and key/pair iteration retained.",
+        "All42 original observations;actual VM/C/native,physical Slice lifetime and all original FI/resource/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
     }
   ]
 }
