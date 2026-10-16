@@ -51,6 +51,7 @@
 #include "xir_error_owned_material_cases.h"
 #include "xir_cell_owned_run_cases.h"
 #include "xir_cell_materialized_replay_cases.h"
+#include "xir_class_physical_replay_cases.h"
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
 
@@ -1754,6 +1755,9 @@ static void conditional_ordinary_environment_keys(void) {
 
 #include "xir_reference_root_operation_cases.h"
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--class-physical-replay")) {
+        conditional_class_physical_tests();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--cell-materialized-replay")) {
         conditional_materialized_replay_tests();conditional_class_cell_literals();
         CHECK(!rp_live && !rp_live_bytes);return 0;
