@@ -57,10 +57,11 @@ static XrXirStatus expression_data_argument(ExpressionData *data,const XrXirValu
     if (data->count==data->capacity) {
         uint32_t capacity=data->capacity ? data->capacity*2 : 8;
         if (capacity<data->capacity || capacity>context->limits.parameters) capacity=context->limits.parameters;
-        if (capacity<=data->count || capacity>SIZE_MAX/sizeof(*data->arguments)) return XR_XIR_BUDGET;
+        uint64_t bytes=(uint64_t)capacity*sizeof(*data->arguments);
+        if (capacity<=data->count || bytes>SIZE_MAX) return XR_XIR_BUDGET;
         void *memory=data->arguments;
         XrXirStatus status=expression_data_status(xr_compile_resources_resize(context->resources,
-            &memory,(size_t)capacity*sizeof(*data->arguments)));
+            &memory,(size_t)bytes));
         if (status!=XR_XIR_OK) return status;
         data->arguments=memory;data->capacity=capacity;
     }
