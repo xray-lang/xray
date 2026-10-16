@@ -134,10 +134,17 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_preimage
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
+#define current_sdk_kat_preimage previous78_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous78_sdk_kat_file_digest
+#define current_sdk_kat_digest previous78_sdk_kat_digest
+#include "sdk_previous78_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
 
 static void sdk_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==78 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==79 &&
         XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 && XR_XIR_PROGRAM_ABI_VERSION==33,
         "SDK known bytes require the independently framed public contract");
     uint8_t old_hash[32];xr_sha256(sdk_kat_preimage,sizeof(sdk_kat_preimage),old_hash);
@@ -156,7 +163,7 @@ static void sdk_known_bytes(void) {
     _Static_assert(sizeof(previous69_sdk_kat_preimage)==3098,"complete previous69 SDK preimage");
     xr_sha256(previous69_sdk_kat_preimage,sizeof(previous69_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous69_sdk_kat_digest,32));
-    _Static_assert(sizeof(previous70_sdk_kat_preimage)==3098 && sizeof(current_sdk_kat_preimage)==3338,
+    _Static_assert(sizeof(previous70_sdk_kat_preimage)==3098 && sizeof(current_sdk_kat_preimage)==3444,
         "complete current and previous70 SDK preimages");
     xr_sha256(previous70_sdk_kat_preimage,sizeof(previous70_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous70_sdk_kat_digest,32));
@@ -183,7 +190,7 @@ static void sdk_known_bytes(void) {
     _Static_assert(sizeof(previous73_sdk_kat_preimage)==3186,"complete previous73 SDK preimage");
     xr_sha256(previous73_sdk_kat_preimage,sizeof(previous73_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous73_sdk_kat_digest,32));
-    CHECK(previous73_sdk_kat_preimage[semantic_offset]==73 && current_sdk_kat_preimage[semantic_offset]==78);
+    CHECK(previous73_sdk_kat_preimage[semantic_offset]==73 && current_sdk_kat_preimage[semantic_offset]==79);
     CHECK(memcmp(previous73_sdk_kat_digest,current_sdk_kat_digest,32));
     _Static_assert(sizeof(previous75_sdk_kat_preimage)==3186 && sizeof(previous76_sdk_kat_preimage)==3186,
         "complete retired SDK preimages");
@@ -200,7 +207,11 @@ static void sdk_known_bytes(void) {
     xr_sha256(previous77_sdk_kat_preimage,sizeof(previous77_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous77_sdk_kat_digest,32));
     CHECK(previous77_sdk_kat_preimage[wire_offset]==30 && previous77_sdk_kat_preimage[semantic_offset]==77);
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,31,78,24,29,33,1,1,1,11,2,0,1,0,3,1,1};
+    _Static_assert(sizeof(previous78_sdk_kat_preimage)==3338,"complete retired math SDK preimage");
+    xr_sha256(previous78_sdk_kat_preimage,sizeof(previous78_sdk_kat_preimage),old_hash);
+    CHECK(!memcmp(old_hash,previous78_sdk_kat_digest,32));
+    CHECK(previous78_sdk_kat_preimage[wire_offset]==31 && previous78_sdk_kat_preimage[semantic_offset]==78);
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,31,79,24,29,33,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";
@@ -210,9 +221,9 @@ static void sdk_known_bytes(void) {
     XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
     CHECK(sdk_identity(&json,&manifest) && !memcmp(manifest.digest,current_sdk_kat_digest,32));
     uint64_t work=sdk_stats(resources).work;
-    const uint64_t encoded_integers=4*(17+3+1+2*(sizeof(sdk_abi_fields)/sizeof(sdk_abi_fields[0]))+1+1+1+1+1)+8;
+    const uint64_t encoded_integers=4*(17+3+1+2*(sizeof(sdk_abi_fields)/sizeof(sdk_abi_fields[0]))+1+1+1+1+1+1)+8;
     const uint64_t scanned_strings=sizeof("x86_64-windows-msvc")+sizeof("xray:xir-runtime-abi-measurements:v1")+
-        sizeof("xray:xir-runtime-recipe:windows-x86_64-hosted:v1")+sizeof("lib/test.lib")+sizeof("kernel32");
+        sizeof("xray:xir-runtime-recipe:windows-x86_64-hosted:v1")+sizeof("lib/test.lib")+sizeof("kernel32")+sizeof("bcrypt");
     CHECK(work==1+sizeof(current_sdk_kat_preimage)+encoded_integers+scanned_strings+2);
     /* Historical digests belong to their complete independently checked ABI
      * tables; the current identity encoder only emits the current table.
@@ -258,7 +269,7 @@ static void sdk_known_bytes(void) {
     CHECK(after75.allocation_count==before75.allocation_count && after75.allocated_bytes==before75.allocated_bytes &&
         after75.live_bytes==before75.live_bytes);
     memcpy(manifest.prefix,prefix,sizeof(prefix));
-    const uint32_t crossed[][2]={{1,25},{1,26},{1,27},{1,28},{1,29},{2,70},{2,71},{2,72},{2,74},{2,76},{3,22},{3,23},{4,28},{5,29},{5,30},{5,31}};
+    const uint32_t crossed[][2]={{1,25},{1,26},{1,27},{1,28},{1,29},{2,70},{2,71},{2,72},{2,74},{2,76},{2,77},{2,78},{3,22},{3,23},{4,28},{5,29},{5,30},{5,31},{5,32}};
     for (uint32_t prior=0;prior<sizeof(crossed)/sizeof(crossed[0]);++prior) {
         uint32_t field=crossed[prior][0];manifest.prefix[field]=crossed[prior][1];
         json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);

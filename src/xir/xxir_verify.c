@@ -16,6 +16,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_math_ir.h"
 #include "xxir_compile_memory.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
@@ -301,6 +302,10 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (!xr_xir_float_constant_payload_valid(op->type, op->immediate)) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM) {
         if (op->immediate != 1 && op->immediate != 2) return XR_XIR_BAD_STRUCTURE;
+    } else if (xr_xir_math_opcode(op->op)) {
+        XrXirMathSignature signature;
+        if (!xr_xir_math_ir_signature(op->op,op->immediate,&signature)) return XR_XIR_BAD_STRUCTURE;
+        if (op->type!=signature.result) return XR_XIR_BAD_TYPE;
     } else if (op->op == XR_XIR_CLOCK_NANOS) {
         if (op->immediate < XR_XIR_CLOCK_REALTIME || op->immediate > XR_XIR_CLOCK_MONOTONIC)
             return XR_XIR_BAD_STRUCTURE;
@@ -934,6 +939,11 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
             expected = context->module->declarations->slots[op->immediate].type;
         if (op->op == XR_XIR_TIMER_AFTER_MS || op->op == XR_XIR_RANGE_CHECK) expected = XR_XIR_I64;
+        if (xr_xir_math_opcode(op->op)) {
+            XrXirMathSignature signature;
+            if (!xr_xir_math_ir_signature(op->op,op->immediate,&signature)) return XR_XIR_BAD_STRUCTURE;
+            expected=signature.parameter;
+        }
         if (op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP) {
             expected = xr_xir_operand_type(function, op->args[0]);
             if (!xr_xir_type_is_nullable(context->module->types, expected) ||

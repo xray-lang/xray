@@ -4,7 +4,7 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=78, value_abi=24, call_abi=29, wire=31, program_abi=33):
+def current_preimage(rows, semantic=79, value_abi=24, call_abi=29, wire=31, program_abi=33):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -23,7 +23,8 @@ def current_preimage(rows, semantic=78, value_abi=24, call_abi=29, wire=31, prog
     image+=b''.join(struct.pack('<II',row['id'],row['value']) for row in rows)
     file_digest=hashlib.sha256(b'hi').digest()
     image+=word(1)+text('lib/test.lib')+word(5)+struct.pack('<Q',2)+file_digest
-    image+=word(1)+text('kernel32')
+    libraries=('kernel32','bcrypt') if semantic>=79 else ('kernel32',)
+    image+=word(len(libraries))+b''.join(text(name) for name in libraries)
     return image,file_digest,hashlib.sha256(image).digest()
 
 def main():
@@ -32,8 +33,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix='xir-current-sdk-kat-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    assert len(rows)==381 and len({row['id'] for row in rows})==381
+    assert len(rows)==393 and len({row['id'] for row in rows})==393
     current_rows=rows
+    rows=[row for row in rows if not 4800<=row['id']<4812]
+    assert len(rows)==381
     rows=[row for row in rows if row['id'] not in range(4700,4712)]
     assert len(rows)==369
     slot_ids=set(range(4600,4607))
@@ -89,14 +92,21 @@ def main():
     for name,data in (('current_sdk_kat_preimage',previous77_image),('current_sdk_kat_file_digest',previous77_file),('current_sdk_kat_digest',previous77_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous77_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired77 SDK KAT changed'
+    previous78_rows=[row for row in current_rows if not 4800<=row['id']<4812]
+    previous78_image,previous78_file,previous78_digest=current_preimage(previous78_rows,78)
+    previous78_text=Path(__file__).with_name('sdk_previous78_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',previous78_image),('current_sdk_kat_file_digest',previous78_file),('current_sdk_kat_digest',previous78_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous78_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired78 SDK KAT changed'
+    assert len(previous78_image)==3338 and previous78_digest.hex()=='4d830bbd2dad7ee99294dc967d23e48f0ad1d19c721a8629413ef6711d150c82'
     image,file_digest,digest=current_preimage(current_rows)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
-    old_current_image,_,_=current_preimage(old_rows)
+    old_current_image,_,_=current_preimage(old_rows,78)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(31,78,24,29,33)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(31,79,24,29,33)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3338 and len(previous76_image)==3186 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3444 and len(previous76_image)==3186 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest)):

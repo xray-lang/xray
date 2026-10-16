@@ -132,6 +132,12 @@ static void emit_numeric_step(CBuffer *buffer, const XrXirFunction *function,
         EMIT_FORMAT(buffer, et_73dce3cd63374733, "    XrXirRunStatus numeric_status = xr_xir_number_convert("
             "(XrXirType) %uu, (XrXirType) %uu, "
             "xr_xir_scalar_load(%s, %uu), &temporary);\n", (uint32_t) input, (uint32_t) op->type, frame, left);
+    } else if (op->op==XR_XIR_MATH_UNARY_F64 || op->op==XR_XIR_MATH_BINARY_F64 || op->op==XR_XIR_MATH_UNARY_I64) {
+        append(buffer,"    XrXirRunStatus numeric_status = xr_xir_math_evaluate(%uu, xr_xir_scalar_load(%s, %uu), ",
+            (uint32_t)op->immediate,frame,left);
+        if (op->op==XR_XIR_MATH_BINARY_F64) append(buffer,"xr_xir_scalar_load(%s, %uu)",frame,layout->offsets[op->args[1]]);
+        else EMIT_LITERAL(buffer,"INT64_C(0)");
+        EMIT_LITERAL(buffer,", &temporary);\n");
     } else if (op->op == XR_XIR_NEG_FLOAT) {
         EMIT_FORMAT(buffer, et_2c529b49406bd67e, "    XrXirRunStatus numeric_status = xr_xir_float_negative((XrXirType) %uu, "
             "xr_xir_scalar_load(%s, %uu), &temporary);\n", (uint32_t) input, frame, left);
@@ -279,6 +285,7 @@ static void emit_instruction(CBuffer *buffer, const XrXirFunction *function,
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
     case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
     case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64: case XR_XIR_MATH_UNARY_I64:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
@@ -360,7 +367,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     if (module->declarations) for (uint32_t f = 0; f < module->function_count && emit_work(&buffer, 1); ++f)
         if (module->declarations->functions[f].cleanup_owner) return XR_XIR_BAD_STAGE;
     emit_checked_identity(&buffer);
-    append(&buffer, "#include \"xir/xxir_float.h\"\n#include \"xir/xxir_tuple.h\"\n"
+    append(&buffer, "#include \"xir/xxir_float.h\"\n#include \"xir/xxir_math.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_VALUE_ABI_VERSION == %uu, \"XIR scalar ABI\");\n"
            "_Static_assert(sizeof(XrXirValue) == 16, \"XIR boundary size\");\n"
@@ -881,6 +888,19 @@ static void emit_time_step(CBuffer *buffer, const XrXirFunction *function,
         " if (time_status != XR_XIR_CALL_READY) goto invalid;\n"
         " xr_xir_scalar_store(state->frame, %uu, reading); }\n", destination);
 }
+static void emit_random_step(CBuffer *buffer,const XrXirFunction *function,
+    const XrXirFunctionLayout *layout,uint32_t index) {
+    const XrXirInstruction *op=&function->instructions[index];
+    EMIT_LITERAL(buffer," { int64_t random_value = 0;\n XrXirRunStatus random_status = xr_xir_call_math_random(view, ");
+    append(buffer,"%uu, ",(uint32_t)op->immediate);
+    if (op->op==XR_XIR_RANDOM_I64)
+        append(buffer,"xr_xir_scalar_load(state->frame, %uu), xr_xir_scalar_load(state->frame, %uu)",
+            layout->offsets[op->args[0]],layout->offsets[op->args[1]]);
+    else EMIT_LITERAL(buffer,"INT64_C(0), INT64_C(0)");
+    EMIT_LITERAL(buffer,", &random_value);\n if (random_status != XR_XIR_RUN_OK) ");
+    emit_fault_return(buffer,function,layout,index,"xr_xir_call_fault(random_status)");
+    append(buffer,"\n xr_xir_scalar_store(state->frame, %uu, random_value); }\n",layout->offsets[function->parameter_count+index]);
+}
 static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                             const XrXirFunction *function, const XrXirFunctionLayout *layout,
                             uint32_t index) {
@@ -981,6 +1001,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
     case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
     case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64: case XR_XIR_MATH_UNARY_I64:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
@@ -1027,6 +1048,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         EMIT_FORMAT(buffer, et_cfbbb6c5fd275aba, " return (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, "
             "{XR_XIR_I64, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, 0};\n", layout->offsets[op->args[0]]);
         return;
+    case XR_XIR_RANDOM_F64: case XR_XIR_RANDOM_I64:
+        emit_random_step(buffer,function,layout,index);
+        break;
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
         emit_time_step(buffer, function, layout, index);
         break;
@@ -1624,11 +1648,11 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
-    EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+    EMIT_FORMAT(buffer, et_f4aa1dd22452154c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
-           "#include \"xir/xxir_task.h\"\n"
+           "#include \"xir/xxir_task.h\"\n#include \"xir/xxir_math_runtime.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
            "_Static_assert(XR_XIR_CALL_ABI_VERSION == %uu, \"XIR call ABI\");\n"

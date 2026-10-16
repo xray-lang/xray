@@ -23,6 +23,7 @@
 #include "xxir_equal.h"
 #include "xxir_nullable.h"
 #include "xxir_float.h"
+#include "xxir_math_runtime.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_instance_value.h"
@@ -657,6 +658,16 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         *action = (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, {XR_XIR_I64, 0,
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])}, {0}, 0};
         break;
+    case XR_XIR_RANDOM_F64: case XR_XIR_RANDOM_I64: {
+        int64_t minimum=0,maximum=0;
+        if (op->op==XR_XIR_RANDOM_I64) {
+            minimum=xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]);
+            maximum=xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[1]]);
+        }
+        XrXirRunStatus status=xr_xir_call_math_random(run->view,(uint32_t)op->immediate,minimum,maximum,&value);
+        if (status!=XR_XIR_RUN_OK) return status;
+        break;
+    }
     case XR_XIR_CLOCK_NANOS:
     case XR_XIR_UTC_OFFSET_AT: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -978,6 +989,7 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
             body->instructions[i].op == XR_XIR_INVOKE_INDIRECT || body->instructions[i].op == XR_XIR_SUSPEND ||
             body->instructions[i].op == XR_XIR_TIMER_AFTER_MS || body->instructions[i].op == XR_XIR_CLOCK_NANOS ||
             body->instructions[i].op == XR_XIR_UTC_OFFSET_AT ||
+            body->instructions[i].op == XR_XIR_RANDOM_F64 || body->instructions[i].op == XR_XIR_RANDOM_I64 ||
             body->instructions[i].op == XR_XIR_THROW || body->instructions[i].op == XR_XIR_MATCH_FAIL ||
             body->instructions[i].op == XR_XIR_ASSERT_CONDITION || body->instructions[i].op == XR_XIR_EQUAL ||
             body->instructions[i].op == XR_XIR_PANIC_CATCH ||

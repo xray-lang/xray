@@ -63,13 +63,20 @@ def build(root: Path, output: Path, compiler: str, crt: str, jobs: int) -> None:
            'if(CMAKE_C_COMPILER_ID STREQUAL "Clang")',
            '  if(MSVC)','    add_compile_options(/clang:-ffp-contract=off)',
            '  else()','    add_compile_options(-ffp-contract=off)','  endif()','endif()',
+           'if(MSVC)',
+           '  set_source_files_properties(src/xir/xxir_math.c PROPERTIES COMPILE_OPTIONS "/fp:strict")',
+           'elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")',
+           '  set_source_files_properties(src/xir/xxir_math.c PROPERTIES COMPILE_OPTIONS "-ffp-model=strict")',
+           'elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")',
+           '  set_source_files_properties(src/xir/xxir_math.c PROPERTIES COMPILE_OPTIONS "-frounding-math;-ftrapping-math;-ffp-contract=off")',
+           'endif()',
            'include_directories(src include generated)',
            'set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lib")',
            'file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/compiler-id.txt" "${CMAKE_C_COMPILER_ID}")']
     for name,sources in derived['archive_source_groups'].items():
         lines.append('add_library('+name+' STATIC '+' '.join(sources)+')')
     lines+=['add_executable(abi_probe abi_probe.c)',
-            'target_link_libraries(abi_probe PRIVATE '+' '.join(derived['archive_source_groups'])+' kernel32)']
+            'target_link_libraries(abi_probe PRIVATE '+' '.join(derived['archive_source_groups'])+' kernel32 bcrypt)']
     (output/'CMakeLists.txt').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     builddir=output/'build'
     subprocess.run(['cmake','-S',str(output),'-B',str(builddir),'-G','Ninja',
@@ -93,7 +100,7 @@ def build(root: Path, output: Path, compiler: str, crt: str, jobs: int) -> None:
                   build_provider=provider,abi_recipe_version=1,closure_recipe_version=1,
                   target_triple='x86_64-windows-msvc',abi_recipe='xray:xir-runtime-abi-measurements:v1',
                   closure_recipe='xray:xir-runtime-recipe:windows-x86_64-hosted:v1',
-                  abi_measurements=measured,files=[],system_libraries=['kernel32'])
+                  abi_measurements=measured,files=[],system_libraries=['kernel32','bcrypt'])
     for row in derived['files']:
         data=(output/row['path']).read_bytes()
         manifest['files'].append(dict(**row,length=len(data),sha256=hashlib.sha256(data).hexdigest()))

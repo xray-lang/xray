@@ -80,6 +80,8 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_OWNED_LOCAL_WRITE: *work = 2; return true;
     case XR_XIR_LOCAL_UNINIT: *work = 1; return true;
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64:
+    case XR_XIR_MATH_UNARY_I64: *work=1024;return true;
     case XR_XIR_NEG_FLOAT: *work = 2; return true;
     case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT:
     case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT: case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT:

@@ -76,7 +76,7 @@ static const uint8_t sizing_empty_golden[220] = {
 #include "checked_sizing71_golden.h"
 #include "checked_sizing72_golden.h"
 #include "checked_sizing73_golden.h"
-#include "checked_sizing78_golden.h"
+#include "checked_sizing79_golden.h"
 static void sizing_historical_rejections(void) {
     const uint8_t *const vectors[] = {sizing_golden,sizing_embedded_golden,sizing_empty_golden,sizing64_golden,sizing64_embedded_golden,sizing64_empty_golden,sizing65_golden,sizing65_embedded_golden,sizing65_empty_golden,sizing71_golden,sizing71_embedded_golden,sizing71_empty_golden,sizing72_golden,sizing72_embedded_golden,sizing72_empty_golden,sizing73_golden,sizing73_embedded_golden,sizing73_empty_golden,retired_sizing74_golden,retired_sizing74_embedded_golden,retired_sizing74_empty_golden};
     const size_t lengths[] = {sizeof(sizing_golden),sizeof(sizing_embedded_golden),sizeof(sizing_empty_golden),sizeof(sizing64_golden),sizeof(sizing64_embedded_golden),sizeof(sizing64_empty_golden),sizeof(sizing65_golden),sizeof(sizing65_embedded_golden),sizeof(sizing65_empty_golden),sizeof(sizing71_golden),sizeof(sizing71_embedded_golden),sizeof(sizing71_empty_golden),sizeof(sizing72_golden),sizeof(sizing72_embedded_golden),sizeof(sizing72_empty_golden),sizeof(sizing73_golden),sizeof(sizing73_embedded_golden),sizeof(sizing73_empty_golden),sizeof(retired_sizing74_golden),sizeof(retired_sizing74_embedded_golden),sizeof(retired_sizing74_empty_golden)};
@@ -193,9 +193,9 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {
         CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 224 : 228));
-        if (!variant) CHECK(!memcmp(packet.bytes,sizing78_golden,sizeof(sizing78_golden)));
-        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing78_embedded_golden,sizeof(sizing78_embedded_golden)));
-        else CHECK(!memcmp(packet.bytes,sizing78_empty_golden,sizeof(sizing78_empty_golden)));
+        if (!variant) CHECK(!memcmp(packet.bytes,sizing79_golden,sizeof(sizing79_golden)));
+        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing79_embedded_golden,sizeof(sizing79_embedded_golden)));
+        else CHECK(!memcmp(packet.bytes,sizing79_empty_golden,sizeof(sizing79_empty_golden)));
         xr_xir_compile_checked_packet_free(&packet);
     }
     xr_xir_compile_construction_free(artifact.construction);
@@ -262,8 +262,8 @@ static void sizing_public_golden(void) {
     XrXirArtifact *checked = NULL, *decoded = NULL; XrXirCheckedPacket packet = {0};
     CHECK(xir_fixture_check(&context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(sizing78_golden) && !memcmp(packet.bytes,sizing78_golden,sizeof(sizing78_golden)));
-    CHECK(xr_xir_compile_checked_read(&context,sizing78_golden,sizeof(sizing78_golden),&decoded,NULL) == XR_XIR_OK);
+    CHECK(packet.length == sizeof(sizing79_golden) && !memcmp(packet.bytes,sizing79_golden,sizeof(sizing79_golden)));
+    CHECK(xr_xir_compile_checked_read(&context,sizing79_golden,sizeof(sizing79_golden),&decoded,NULL) == XR_XIR_OK);
     CHECK(decoded->module.functions[0].instructions[0].immediate == 42);
     xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_checked_packet_free(&packet); CHECK(live_count == 1);

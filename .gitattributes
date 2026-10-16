@@ -69,3 +69,17 @@ tests/unit/xir/xir_checked_scalar77_golden.h text eol=lf
 tests/unit/xir/xir_error_marker77_golden.h text eol=lf
 tests/unit/xir/xir_generic_method77_golden.h text eol=lf
 tests/unit/xir/xir_rune77_golden.h text eol=lf
+
+# Retained semantic78 inputs keep their authenticated original LF bytes.
+tests/unit/xir/compile_owner/checked_sizing78_golden.h text eol=lf
+tests/unit/xir/root_construction78_goldens.h text eol=lf
+tests/unit/xir/unit_values/unit78_wire_golden.h text eol=lf
+tests/unit/xir/xir_assert_panics78_golden.h text eol=lf
+tests/unit/xir/xir_checked_range78_golden.h text eol=lf
+tests/unit/xir/xir_checked_scalar78_golden.h text eol=lf
+tests/unit/xir/xir_error_marker78_golden.h text eol=lf
+tests/unit/xir/xir_generic_method78_golden.h text eol=lf
+tests/unit/xir/xir_rune78_golden.h text eol=lf
+tests/unit/xir/sdk_previous78_identity_golden.h text eol=lf
+tests/unit/xir/export_constants/retired78_wire.h text eol=lf
+tests/unit/xir/rest_declarations/retired78_wire.h text eol=lf

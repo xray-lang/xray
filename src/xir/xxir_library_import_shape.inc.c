@@ -28,10 +28,18 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_THROW:
     case XR_XIR_RETURN:
     case XR_XIR_CONST_INT:
+    case XR_XIR_CONST_FLOAT:
+    case XR_XIR_CONVERT_NUMBER:
+    case XR_XIR_NEG_FLOAT:
+    case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
+    case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
     case XR_XIR_ADD_INT:
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONCAT_STRING:
     case XR_XIR_WRITE_STREAM:
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64: case XR_XIR_MATH_UNARY_I64:
+    case XR_XIR_RANDOM_F64: case XR_XIR_RANDOM_I64:
     case XR_XIR_CLOCK_NANOS:
     case XR_XIR_UTC_OFFSET_AT:
     case XR_XIR_TIMER_AFTER_MS:
@@ -100,7 +108,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     }
 }
 static bool library_catalog_builtin(XrXirType type) {
-    return type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING;
+    return type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_F64;
 }
 /* Common verification validates access, ownership and every recursive type first.
  * Import admits only the ordinary value families whose full type and body
@@ -170,7 +178,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
     return XR_XIR_OK;
 }
 static bool library_catalog_type(const XrXirModule *module, const XrXirGeneric *generic, XrXirType type) {
-    if (type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_BOOL) return true;
+    if (library_catalog_builtin(type)) return true;
     if (xr_xir_type_node(module->types,type)) return true;
     uint32_t ordinal = (uint32_t)type - XR_XIR_TYPE_PARAMETER_BASE;
     return generic && (uint32_t)type >= XR_XIR_TYPE_PARAMETER_BASE &&

@@ -4594,3 +4594,4 @@ add_subdirectory(xir/unit_values)
 add_subdirectory(xir/export_constants)
 
 add_subdirectory(xir/rest_declarations)
+add_subdirectory(xir/math_library)

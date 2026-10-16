@@ -826,9 +826,29 @@ Unit空值本身不分配，结构接收、完整复验和参数元数据仍计�
 
 Source与Owned Library从同一声明恢复名称、类型、可见性和槽编号；名称字节随已有literal克隆和接收重定位。导入读取生成真实SLOT_LOAD。Unit读取仍执行槽发布与初始化检查，然后通过普通空Tuple构造取得逻辑值。跨模块读取必须有直接导入且目标为导出const；写入、place、初始化、Domain、worker及root权限不因可见性扩大。
 
-slot线格式现在为五个u32，当前共同协议为schema30/semantic77与Program32；Value24和Call29不变。实际C布局为20字节、4字节对齐，exported/name偏移为12/16；SDK同时认证这些布局测量。精确匹配、效果与来源证明以及跨代存储接收均核对新增事实；接收时名称按实际拥有字节对应，不以重定位后的literal编号相等替代名称检查。旧schema29/semantic76及Program31直接拒绝。
+slot线格式包含五个u32，当前共同协议由§17.6的唯一实现常量定义。实际C布局为20字节、4字节对齐，exported/name偏移为12/16；SDK同时认证这些布局测量。精确匹配、效果与来源证明以及跨代存储接收均核对新增事实；接收时名称按实际拥有字节对应，不以重定位后的literal编号相等替代名称检查。旧slot布局及非现行完整包直接拒绝。
 
 源码和Catalog消费者须分别保留拥有式证据：销毁producer、输入packet及库源码后，已接收常量仍可读取；新字段从独立完整字段模型编码，并对重算摘要的可见性、名称及权限篡改实施拒绝。导出const接点不开放库私有var，也不证明完整标准库、所有类型、编译期执行或完整资源与安全资格；相应整消费者门禁保持。
+
+### 17.70 真实rest声明与固定物理调用
+
+普通函数至多有一个末尾READ rest参数，声明元素类型为T，体内参数的实际类型为Array<T>。调用者按普通求值顺序取得固定参数和尾随实参，再构造一个拥有式Array传入同一固定物理参数槽；零个尾随实参也构造合法空Array。spread沿普通参数读取、元素类型及预算规则展开，不使用另一调用ABI或变长C参数。
+
+FunctionIdentity保存规范的variadic事实，函数值的rest位必须与真实声明、最后参数和签名一致。精确匹配、Root和no-suspend推导、弱化与join、实例化、来源证明、克隆及拥有式Library接收均保留并复验该事实；名称或相同局部类型编号不能代替身份。Checked包和Program封存使用§17.6的现行协议，旧完整格式直接拒绝；既有Value和可恢复Call物理布局不因rest改变。
+
+Source、VM、编译期执行及生成C消费同一实际Array与完整Lowered声明。参数求值、Array构造及接收沿原累计ledger收费，失败释放已取得的拥有值且不发布部分调用。源码、packet、producer及其ledger销毁后的独立拥有消费者、全部物理故障点和三轴预算须分别验证。rest不授予尚未准入的类型、效果、库私有var或完整标准库资格。
+
+### 17.71 共同Math数值与有界熵
+
+math公开模块的函数和常量沿普通Checked库声明、初始化、导入及封存规则发布。私有底层入口只能由实际stdlib身份、math命名空间与math/math.xr逻辑路径共同认证；普通词法声明优先，用户文件的相同名称或路径不取得该权限。query从实际core.def声明投影拥有式名称、参数、签名、位置与源指纹；显示用native身份不是可导入导出声明。
+
+固定selector表定义纯一元f64、二元f64、一元f64到i64，以及两个熵操作。Checker核对操作类别、selector、参数、结果及所有保留字段，Library只接收明确准入的标量操作。VM、CTFE和生成C共用一个数值核；只在完整确定性闭包准入后允许纯Math，random及randomInt即使边界相等也不得进入CTFE。
+
+纯Math在隔离的默认宿主浮点环境中按最近舍入计算，随后恢复调用者的舍入、异常状态和errno；不能让调用者的非正规数flush设置改变语言结果。宿主环境建立或恢复失败返回HOST_ERROR且不发布数值。输入和结果沿共同binary64规范化，NaN规范化；floor、ceil、round、trunc结果经共同受检整数转换，超出i64范围拒绝且输出不变。超越函数使用所选provider的标准数学实现；有限参考向量的ULP验收不构成所有输入、所有平台或所有libm版本的位相同保证。
+
+运行期熵只能通过当前真实活跃CallView取得系统随机字节，每次拒绝采样尝试先付原activation work；伪造或复制view拒绝。共同无偏算法产生[0,1)的f64或含端点的i64区间，倒置边界交换，相等整数边界不取熵。回调失败或预算耗尽立即终止，不以固定值、另一随机源或无界重试替代，失败输出保持不变。原step/frame/depth、累计work、分配和live限额继续有效。
+
+Checked语义及SDK身份使用§17.6的唯一现行协议，Math引入前的旧完整包及SDK身份须由真实消费者早拒。独立数值、重算摘要攻击、来源销毁、VM/native双向混合、实际SDK链接、完整故障和安全门分别保留。公开math接入不开放库私有var，也不自动完成其他标准库或跨平台发布资格。
 
 <!-- /xr-spec:cn -->
 
@@ -1767,8 +1787,28 @@ Module export const declarations use real immutable slots and preserve ordinary 
 
 Source and Owned Library receiving recover names, types, visibility and slot ordinals from the same declarations. Name bytes follow existing literal cloning and receiving relocation. Imported reads emit real SLOT_LOAD instructions. A Unit read still checks publication and initialization before constructing its logical value through the ordinary empty Tuple. Cross-module reads require a direct import and an exported immutable target. Visibility grants no additional write, place, initialization, Domain, worker or root permission.
 
-The slot wire record now contains five u32 fields. The current common identity is schema30/semantic77 and Program32; Value24 and Call29 remain unchanged. The actual C layout is20 bytes with alignment4 and exported/name offsets12/16, also authenticated by SDK layout measurements. Exact matching, effect and provenance proofs, and generation storage receiving compare the added facts. Receiving compares actual owned name bytes rather than requiring relocated literal ordinals to match. Old schema29/semantic76 and Program31 reject directly.
+The slot wire record contains five u32 fields; section17.6 defines the sole current protocol constants. The actual C layout is20 bytes with alignment4 and exported/name offsets12/16, also authenticated by SDK layout measurements. Exact matching, effect and provenance proofs, and generation storage receiving compare the added facts. Receiving compares actual owned name bytes rather than requiring relocated literal ordinals to match. Old slot layouts and noncurrent complete packets reject directly.
 
 Source and Catalog consumers retain separate ownership evidence: received constants remain readable after destroying the producer, input packet and library source. Independent complete field models encode the new fields, and rehashed visibility, name and permission attacks reject. This declaration boundary opens no private library variables and does not qualify the complete standard library, every type, compiler execution or complete resource and safety gates. Those whole-consumer obligations remain.
+
+### 17.70 Real Rest Declarations and Fixed Physical Calls
+
+An ordinary function has at most one trailing READ rest parameter. Its declared element type is T and its actual body parameter is Array<T>. The caller evaluates fixed and trailing arguments in ordinary order, then constructs one owned Array for the same fixed physical parameter slot. No trailing arguments still produce a valid empty Array. Spread follows ordinary argument reading, element typing and budget rules, without another call ABI or C variadic parameters.
+
+FunctionIdentity retains a canonical variadic fact. A callable's rest bit must agree with the actual declaration, last parameter and signature. Exact matching, Root and no-suspend inference, weakening and joins, specialization, provenance, cloning and owned Library receiving preserve and reverify this fact. Names or equal local type numbers cannot establish identity. Checked packets and sealed Programs use the current protocols from section17.6 and reject old complete layouts directly. Rest does not change the existing physical Value or resumable Call layouts.
+
+Source, VM, compiler evaluation and generated C consume the same actual Array and complete Lowered declaration. Argument evaluation, Array construction and receiving charge the original cumulative ledger. Failure releases acquired values and publishes no partial call. Independent owned consumers after source, packet, producer and ledger caller death, every physical fault point and all three budget axes require separate verification. Rest grants no unadmitted types, effects, private library variables or complete standard-library qualification.
+
+### 17.71 Common Math Values and Bounded Entropy
+
+The public math module publishes its functions and constants through ordinary Checked library declarations, initialization, imports and sealing. Private primitive authority requires the actual stdlib identity, math namespace and math/math.xr logical path together. Ordinary lexical declarations take precedence; matching user names or paths grant no authority. Queries project owned names, parameters, signatures, source locations and a source fingerprint from actual core.def declarations. A display native identity is not an importable exported declaration.
+
+A fixed selector table defines pure unary f64, binary f64, unary f64-to-i64 and two entropy operations. The Checker validates operation class, selector, parameters, result and every reserved field. Libraries admit only explicit scalar operations. VM, CTFE and generated C share one numeric kernel. Pure Math requires complete deterministic closure admission; random and randomInt cannot enter CTFE even when their bounds are equal.
+
+Pure Math computes with nearest rounding in an isolated default host floating environment, then restores caller rounding, exception state and errno. Caller denormal flush settings cannot change a language result. Failure to establish or restore the host environment returns HOST_ERROR without publishing a value. Inputs and results use common canonical binary64 conversion, including canonical NaNs. Floor, ceil, round and trunc use the common checked integer conversion; results outside i64 reject without changing output. Transcendentals use the selected provider's standard math implementation. ULP checks over finite reference vectors do not guarantee identical bits for every input, platform or libm version.
+
+Runtime entropy obtains system random bytes only through the actual active CallView. Every rejection-sampling attempt first charges the original activation work; forged or copied views reject. The common unbiased algorithm produces f64 in [0,1) or i64 in an inclusive interval, swaps reversed bounds and draws no entropy for equal integer bounds. Callback failure or budget exhaustion terminates immediately, without a fixed fallback, another random source or unbounded retries, and preserves output. Original step, frame, depth, cumulative work, allocation and live limits remain.
+
+Checked semantics and SDK identity use the sole current protocols from section17.6. Actual consumers must reject old complete pre-Math packets and SDK identities early. Independent numeric references, rehashed attacks, source destruction, both VM/native mixed directions, actual SDK linking, complete fault and safety gates remain distinct obligations. Public math admission opens no private library variables and does not qualify other standard libraries or cross-platform publication.
 
 <!-- /xr-spec:en -->

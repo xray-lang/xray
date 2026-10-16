@@ -23,7 +23,7 @@ def model():
     callable=64+len(body);body+=word(1,0,1,256,0,2,18)
     body+=word(1,0,1,256,0,2,2)
     body+=word(0,0,0)
-    head=b'XRCHK\0\0\0'+word(31,78,2,0)+struct.pack('<Q',len(body))
+    head=b'XRCHK\0\0\0'+word(31,79,2,0)+struct.pack('<Q',len(body))
     return head+hashlib.sha256(head+body).digest()+body,dict(ENTRY=entry,IDENTITY=identity,ARRAY=array,CALLABLE=callable)
 
 def main():

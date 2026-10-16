@@ -182,10 +182,10 @@ static void real_once(char **argv) {
         CHECK(owner && xtc_xir_local_toolchain_resources(owner)==r);
         const XtcXirLocalToolchainView *view=xtc_xir_local_toolchain_view(owner);
         const XrXirRuntimeSdk *sdk=xtc_xir_local_toolchain_sdk(owner);
-        CHECK(view->library_count==5 && xr_xir_runtime_sdk_resources(sdk)==r);
-        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==29);
+        CHECK(view->library_count==6 && xr_xir_runtime_sdk_resources(sdk)==r);
+        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==33);
         printf("compiler=%s\nlinker=%s\nworkspace=%s\nsdk=%s\n",view->compiler,view->linker,view->workspace_parent,xr_xir_runtime_sdk_root(sdk));
-        for(unsigned i=0;i<5;++i) { CHECK(view->libraries[i].path); printf("library%u=%s\n",i,view->libraries[i].path); }
+        for(unsigned i=0;i<6;++i) { CHECK(view->libraries[i].path); printf("library%u=%s\n",i,view->libraries[i].path); }
     } else CHECK(!owner);
     xtc_xir_local_toolchain_free(owner); CHECK(!live);
     printf("initial_handles=%lu final_handles=%lu allocations=%zu total=%zu peak=%zu work=%llu physical_heap=0\n",

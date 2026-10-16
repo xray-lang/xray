@@ -1047,6 +1047,7 @@ static bool source_literal_append(SourceContext *ctx, AstNode *node, const char 
     size_t length, uint32_t *literal);
 #include "xxir_source_integer_methods.inc.c"
 #include "xxir_source_scalar_methods.inc.c"
+#include "xxir_source_math.inc.c"
 static bool source_constructor_receiver(SourceContext *ctx, AstNode *node);
 static bool source_constructor_field(SourceContext *ctx, AstNode *node, const char *name, SourceValue *value, AstNode *incoming);
 static bool source_constructor_place(SourceContext *ctx, AstNode *member, SourceValue *place);
@@ -1179,6 +1180,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_atomic_inferred_construct(ctx,node,result_context,value);
             print = source_text_same(ctx, NULL, name, "print"); stream = stream_primitive(ctx, name);
             host_time = host_time_primitive(ctx, name);
+            const SourceMathDeclaration *math=source_math_primitive(ctx,name);
+            if (math) return source_math_call(ctx,node,math,value);
         }
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {

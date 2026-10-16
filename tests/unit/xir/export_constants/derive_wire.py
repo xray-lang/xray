@@ -21,7 +21,7 @@ def model():
     literal_at=64+len(body)
     body+=blob(b'answer')+blob(b'secret')+word(0)
     body+=word(0,0,0,0,0,0,0)
-    head=b'XRCHK\0\0\0'+word(31,78,2,0)+struct.pack('<Q',len(body))
+    head=b'XRCHK\0\0\0'+word(31,79,2,0)+struct.pack('<Q',len(body))
     return head+hashlib.sha256(head+body).digest()+body,dict(SLOT=slot_at,DECL=decl_at,READ=read_at,LITERAL=literal_at)
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--write',action='store_true');args=parser.parse_args()

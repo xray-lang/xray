@@ -30,7 +30,7 @@ def compile_source(args,sdk,source,object_file,program_symbol=None):
 
 def link(args,executable,objects,libraries):
     checked([args.linker,'/nologo','/incremental:no','/out:'+str(executable),*objects,*libraries,
-             'kernel32.lib','/defaultlib:MSVCRT','/defaultlib:OLDNAMES'])
+             'kernel32.lib','bcrypt.lib','/defaultlib:MSVCRT','/defaultlib:OLDNAMES'])
 
 
 def main():

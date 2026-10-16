@@ -11,6 +11,7 @@
  */
 #include "xxir_scalar_core.h"
 #include "xxir_float.h"
+#include "xxir_math.h"
 #include "xxir_types.h"
 static XrXirRunStatus core_value_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_OK) return XR_XIR_RUN_OK;
@@ -174,6 +175,14 @@ XR_FUNC XrXirRunStatus xir_scalar_core_step(XirScalarCoreRun *run,uint32_t *curs
     int64_t value=0;
     switch (op->op) {
     case XR_XIR_CONST_RUNE:case XR_XIR_CONST_BOOL:case XR_XIR_CONST_FLOAT:case XR_XIR_CONST_INT:value=op->immediate;break;
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64: case XR_XIR_MATH_UNARY_I64: {
+        int64_t left=xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]);
+        int64_t right=op->op==XR_XIR_MATH_BINARY_F64 ?
+            xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[1]]) : 0;
+        XrXirRunStatus status=xr_xir_math_evaluate((uint32_t)op->immediate,left,right,&value);
+        if (status!=XR_XIR_RUN_OK) return status;
+        break;
+    }
     case XR_XIR_EQUAL: {
         XrXirType type=xr_xir_operand_type(run->function,op->args[0]);
         if (op->type!=XR_XIR_BOOL || xr_xir_operand_type(run->function,op->args[1])!=type ||

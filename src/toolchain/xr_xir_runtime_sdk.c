@@ -15,6 +15,7 @@
 #include "../xir/xxir_nominal.h"
 #include "../xir/xxir_checked.h"
 #include "../xir/xxir_output.h"
+#include "../xir/xxir_math.h"
 #include "../shared/xr_error_core.h"
 #include "../execution/xr_xir_host_execution.h"
 #include "../base/xsha256.h"

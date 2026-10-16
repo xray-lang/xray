@@ -336,6 +336,7 @@ static uint64_t state_offset(void) {
     return (sizeof(CallFrame) + alignment - 1) / alignment * alignment;
 }
 #include "xxir_call_cell_loans.inc.c"
+#include "xxir_call_math.inc.c"
 #include "xxir_call_class_access.inc.c"
 
 typedef struct CallFramePreparation {

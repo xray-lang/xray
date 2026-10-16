@@ -10,9 +10,19 @@ target_link_libraries(xray_xir_admission PUBLIC xray_xir_declarations)
 target_include_directories(xray_xir_admission PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir PUBLIC xray_xir_admission)
 target_include_directories(xray_xir PUBLIC ${PROJECT_SOURCE_DIR}/src)
-add_library(xray_xir_scalar STATIC xxir_scalar.c xxir_scalar_core.c xxir_float.c xxir_value.c xxir_type_arena.c xxir_call.c xxir_task.c xxir_task_budget.c xxir_program.c xxir_instance.c xxir_output.c xxir_format.c)
+add_library(xray_xir_scalar STATIC xxir_scalar.c xxir_scalar_core.c xxir_float.c xxir_math.c xxir_value.c xxir_type_arena.c xxir_call.c xxir_task.c xxir_task_budget.c xxir_program.c xxir_instance.c xxir_output.c xxir_format.c)
+if(MSVC)
+    set_source_files_properties(xxir_math.c PROPERTIES COMPILE_OPTIONS "/fp:strict")
+elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    set_source_files_properties(xxir_math.c PROPERTIES COMPILE_OPTIONS "-ffp-model=strict")
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(xxir_math.c PROPERTIES COMPILE_OPTIONS "-frounding-math;-ftrapping-math;-ffp-contract=off")
+endif()
+if(NOT WIN32)
+    target_link_libraries(xray_xir_scalar PUBLIC m)
+endif()
 target_include_directories(xray_xir_scalar PUBLIC ${PROJECT_SOURCE_DIR}/src)
-target_link_libraries(xray_xir_scalar PUBLIC xray_xir_admission)
+target_link_libraries(xray_xir_scalar PUBLIC xray_xir_admission xray_native_provider_runtime)
 add_library(xray_xir_ctfe STATIC xxir_ctfe.c)
 target_include_directories(xray_xir_ctfe PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_ctfe PUBLIC xray_xir_scalar)
@@ -43,6 +53,19 @@ add_custom_command(OUTPUT ${XIR_CORE_SOURCE}
     VERBATIM)
 add_custom_target(gen-xir-core-source DEPENDS ${XIR_CORE_SOURCE})
 add_dependencies(xray_xir_source gen-xir-core-source)
+set(XIR_MATH_DECLARATIONS ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_math_declarations.inc.c)
+file(GLOB XIR_MATH_DEFINITION_INPUTS CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/stdlib/defs/*.def)
+add_custom_command(OUTPUT ${XIR_MATH_DECLARATIONS}
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/gen_xir_math_declarations.py
+        --root ${PROJECT_SOURCE_DIR} --output ${XIR_MATH_DECLARATIONS}
+    DEPENDS ${PROJECT_SOURCE_DIR}/scripts/gen_xir_math_declarations.py
+        ${PROJECT_SOURCE_DIR}/scripts/gen_native_declarations.py ${PROJECT_SOURCE_DIR}/scripts/stdlib_manifest.py
+        ${PROJECT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py
+        ${PROJECT_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py ${XIR_MATH_DEFINITION_INPUTS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/xxir_math.def
+    VERBATIM)
+add_custom_target(gen-xir-math-declarations DEPENDS ${XIR_MATH_DECLARATIONS})
+add_dependencies(xray_xir_source gen-xir-math-declarations)
 target_include_directories(xray_xir_source PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(xray_xir_source PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(xray_xir_source PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe xray_compiler_parser)
