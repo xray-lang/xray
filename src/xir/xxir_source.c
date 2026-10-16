@@ -534,8 +534,10 @@ static bool source_query_reference(SourceContext *ctx, AstNode *node, SourceName
     if (!records) return false;
     ctx->query.references = records;
     XrXirSourceReference *record = &records[ctx->query.reference_count - 1];
-    *record = (XrXirSourceReference) {source_query_range(ctx, node, NULL), binding->declaration, target->declaration, access};
-    return source_query_syntax_reference(ctx, source_query_token_range(ctx, node));
+    XrXirSourceRange selection=source_query_token_range(ctx,node);
+    *record = (XrXirSourceReference) {node && node->type==AST_VARIABLE ? selection : source_query_range(ctx,node,NULL),
+        binding->declaration,target->declaration,access};
+    return source_query_syntax_reference(ctx,selection);
 }
 static bool source_query_expression(SourceContext *ctx, AstNode *node, XrXirType type) {
     XrXirSourceExpression *records = source_query_append(ctx, ctx->query.expressions,
@@ -1853,7 +1855,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     }
     symbol->kind = SOURCE_LOCAL; symbol->index = value.id; symbol->type = value.type;
     symbol->module = ctx->module; symbol->mutable = false; symbol->construction = false; symbol->inferred = true;
-    if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
+    if (!symbol->declaration && !source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
         source_query_range(ctx, node, symbol->name))) return false;
     source_query_binding_type(ctx, symbol);
     return true;
@@ -1874,6 +1876,8 @@ static bool source_block_functions(SourceContext *ctx, AstNode *block) {
         *symbol = (SourceName){ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_PENDING, UINT32_MAX,
             ctx->module, XR_XIR_UNIT, false, false, 0, false, false,0,0};
         ctx->locals = symbol;
+        if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,
+            source_query_range(ctx,node,symbol->name))) return false;
     }
     return true;
 }

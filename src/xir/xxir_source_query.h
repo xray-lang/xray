@@ -33,6 +33,9 @@ typedef struct XrXirSourceRange {
 #define XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT 2u
 #define XR_XIR_SOURCE_DEBUG_UNIT 1u
 #define XR_XIR_SOURCE_DEBUG_CELL 2u
+/* A reserved nested-function name shadows lookup before initialization. It has
+ * no runtime value ordinal and never grants observation or write authority. */
+#define XR_XIR_SOURCE_DEBUG_UNAVAILABLE 4u
 typedef struct XrXirSourceDebugBinding {
     uint32_t declaration, value, parent, flags;
 } XrXirSourceDebugBinding;

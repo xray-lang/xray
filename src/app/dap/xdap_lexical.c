@@ -44,6 +44,7 @@ XR_FUNC XrXirValueStatus xdap_lexical_read(const XdapLexicalView *view,uint32_t 
     if (!text) return XR_XIR_VALUE_BAD_ARGUMENT;
     size_t bytes=strlen(text);
     if (xr_compile_resources_work(view->launch->resources,(uint64_t)bytes+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
+    if (binding->flags & XR_XIR_SOURCE_DEBUG_UNAVAILABLE) return XR_XIR_VALUE_UNSUPPORTED;
     XrXirValueStatus status=XR_XIR_VALUE_OK;
     if (!(binding->flags & XR_XIR_SOURCE_DEBUG_UNIT))
         status=binding->flags & XR_XIR_SOURCE_DEBUG_CELL ?

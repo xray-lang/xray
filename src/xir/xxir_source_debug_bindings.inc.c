@@ -10,7 +10,8 @@ static bool source_debug_environment(SourceContext *ctx,uint32_t *output) {
     uint32_t count=0,parent=0;
     for (SourceName *name=ctx->locals;name;name=name->next) {
         if (!source_work_units(ctx,NULL,sizeof(*name))) return false;
-        if (!source_local_name(name) || !name->declaration || !source_name_ready(name)) continue;
+        if ((!source_local_name(name) || !source_name_ready(name)) && name->kind!=SOURCE_PENDING) continue;
+        if (!name->declaration) continue;
         if (count==ctx->debug_name_capacity) {
             if (count>UINT32_MAX/2) return source_fail(ctx,NULL,XR_XIR_BUDGET,"source debug scope exhausted");
             uint32_t capacity=count ? count*2 : 16;
@@ -24,10 +25,11 @@ static bool source_debug_environment(SourceContext *ctx,uint32_t *output) {
     while (count) {
         if (!source_work_units(ctx,NULL,sizeof(XrXirSourceDebugBinding))) return false;
         SourceName *name=ctx->debug_names[--count];
-        uint32_t flags=name->kind==SOURCE_UNIT_LOCAL ? XR_XIR_SOURCE_DEBUG_UNIT :
+        uint32_t flags=name->kind==SOURCE_PENDING ? XR_XIR_SOURCE_DEBUG_UNAVAILABLE :
+            name->kind==SOURCE_UNIT_LOCAL ? XR_XIR_SOURCE_DEBUG_UNIT :
             name->mutable && !name->construction ? XR_XIR_SOURCE_DEBUG_CELL : 0;
         XrXirSourceDebugBinding binding={name->declaration,
-            flags & XR_XIR_SOURCE_DEBUG_UNIT ? UINT32_MAX : name->index,parent,flags};
+            flags & (XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_UNAVAILABLE) ? UINT32_MAX : name->index,parent,flags};
         uint32_t cached=name->debug_binding;
         if (name->debug_function==ctx->function && cached && cached<=body->debug_binding_count) {
             const XrXirSourceDebugBinding *previous=&body->debug_bindings[cached-1];

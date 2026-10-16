@@ -29,6 +29,10 @@ static bool expression_intrinsic_visible(ExpressionState *state,const char *name
         const XrXirSourceDeclaration *declaration=&view->source->declarations[i];
         if (declaration->range.module!=query_module || declaration->kind==XR_XIR_SOURCE_INTRINSIC ||
             !declaration->name || strncmp(declaration->name,name,bytes)) continue;
+        /* Current locals, including reserved names, have exact live bindings.
+         * Ancestor declarations remain conservative when captures are absent. */
+        if (view->function->declaration && declaration->parent==view->function->declaration &&
+            (declaration->kind==XR_XIR_SOURCE_BINDING || declaration->kind==XR_XIR_SOURCE_PARAMETER)) continue;
         uint32_t scope=view->function->declaration;
         for (uint32_t depth=0;;++depth) {
             if (xr_compile_resources_work(resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }

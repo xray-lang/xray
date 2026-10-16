@@ -651,3 +651,13 @@ add_test(NAME test_dap_wrapper_rebind_root_resources COMMAND test_dap_wrapper_re
 add_test(NAME test_dap_wrapper_rebind_child_resources COMMAND test_dap_wrapper_rebind --child --resources)
 set_tests_properties(test_dap_wrapper_rebind_root test_dap_wrapper_rebind_child test_dap_wrapper_rebind_root_resources test_dap_wrapper_rebind_child_resources
     PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;resources;fault-injection")
+
+add_test(NAME test_dap_lexical_visibility COMMAND test_dap_evaluate --visibility)
+add_test(NAME test_dap_lexical_visibility_resources COMMAND test_dap_evaluate --visibility-resources)
+set_tests_properties(test_dap_lexical_visibility test_dap_lexical_visibility_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;scope;fault-injection")
+
+add_test(NAME test_dap_lexical_visibility_source_resources COMMAND test_dap_evaluate --visibility-source-resources)
+set_tests_properties(test_dap_lexical_visibility_source_resources PROPERTIES TIMEOUT 1800 COST 120 LABELS "dap;source;ownership;scope;fault-injection")
+
+add_test(NAME test_xir_source_text_facts COMMAND $<TARGET_FILE:test_xir_source_text> --facts)
+set_tests_properties(test_xir_source_text_facts PROPERTIES TIMEOUT 120 LABELS "dap;source;metadata;ownership")

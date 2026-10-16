@@ -46,9 +46,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
             if (!query_work(&copy,1)) return copy.status;
             const XrXirSourceDebugBinding *binding=&function->bindings[b];
             if (!binding->declaration || binding->declaration>snapshot->view.declaration_count || binding->parent>b ||
-                (binding->flags & ~(XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_CELL)) ||
-                binding->flags==(XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_CELL) ||
-                ((binding->flags & XR_XIR_SOURCE_DEBUG_UNIT) ? binding->value!=UINT32_MAX :
+                (binding->flags & ~(XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_CELL|XR_XIR_SOURCE_DEBUG_UNAVAILABLE)) ||
+                (binding->flags && (binding->flags & (binding->flags-1))) ||
+                ((binding->flags & XR_XIR_SOURCE_DEBUG_UNAVAILABLE) &&
+                 snapshot->view.declarations[binding->declaration-1].kind!=XR_XIR_SOURCE_BINDING) ||
+                ((binding->flags & (XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_UNAVAILABLE)) ? binding->value!=UINT32_MAX :
                  (uint64_t)binding->value>=(uint64_t)function->parameter_count+function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
         }
         if (!function->points) continue;

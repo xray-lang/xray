@@ -29,6 +29,10 @@ static void evaluate_intrinsic_scopes(void) {
         {"const len:i64=9\nfn probe()->i64 {return 7}\nprint(probe())\n",
          NULL,"9","7\n"},
         {"fn other()->i64 {const len:i64=9;return len}\nfn probe()->i64 {return 7}\nprint(probe())\n",
+         "2",NULL,"7\n"},
+        {"fn probe()->i64 {const value:i64=7;if (value==99) {const len:i64=9};return value}\nprint(probe())\n",
+         "2",NULL,"7\n"},
+        {"fn probe()->i64 {const value:i64=7;if (value==99) {fn len(value:Array<i64>)->i64 {print(\"BAD\");return 99}};return value}\nprint(probe())\n",
          "2",NULL,"7\n"}
     };
     for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {

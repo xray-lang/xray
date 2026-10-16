@@ -143,13 +143,19 @@ static size_t evaluate_fault(size_t fail) {
 }
 #include "test_evaluate_data.inc.c"
 #include "test_evaluate_intrinsic.inc.c"
+#include "test_evaluate_visibility.inc.c"
 #ifndef XDAP_EVALUATE_MAIN
 #define XDAP_EVALUATE_MAIN main
 #endif
 int XDAP_EVALUATE_MAIN(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");
+    bool visibility_source_resources=argc==2 && !strcmp(argv[1],"--visibility-source-resources");
+    bool visibility_resources=argc==2 && !strcmp(argv[1],"--visibility-resources");
+    bool visibility=visibility_resources || (argc==2 && !strcmp(argv[1],"--visibility"));
     bool managed_resources=argc==2 && !strcmp(argv[1],"--managed-resources");
-    bool managed=managed_resources || (argc==2 && !strcmp(argv[1],"--managed"));CHECK(argc==1 || resources || managed);
+    bool managed=managed_resources || (argc==2 && !strcmp(argv[1],"--managed"));CHECK(argc==1 || resources || managed || visibility || visibility_source_resources);
+    if (visibility_source_resources) { evaluate_visibility_source_failures(true);return 0; }
+    if (visibility) { evaluate_visibility(visibility_resources);evaluate_visibility_source_failures(false);return 0; }
     if (managed) { evaluate_data();evaluate_data_failures(managed_resources);puts("Source data expressions, exact bits/NUL/nested Nullable and producer disposal PASS");return 0; }
     evaluate_normal();evaluate_intrinsic_scopes();size_t sites=evaluate_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) evaluate_fault(i);
