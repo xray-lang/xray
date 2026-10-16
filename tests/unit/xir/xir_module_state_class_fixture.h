@@ -20,7 +20,7 @@ typedef struct StateClassFixture {
     XrXirInstruction root[25],empty,main[2],ctor[3],replace[3],helper[3];
     uint32_t root_operands[8],ctor_operand,base,diamond[2];
     XrXirBlock blocks[5];XrXirFunction functions[8];XrXirFunctionIdentity identities[8];
-    XrXirSourceModule modules[4];XrXirSlot slots[4];XrXirLiteral literal;
+    XrXirSourceModule modules[4];XrXirSlot slots[4];XrXirLiteral literals[2];
     XrXirNominalField field;XrXirNominalDeclaration nominal;XrXirNominalTable nominals;
     XrXirType field_type,class_type,cell_type;XrXirTypeNode nodes[2];XrXirTypes types;
     XrXirDeclarations declarations;XrXirModule module;
@@ -38,10 +38,11 @@ static void state_class_fixture(StateClassFixture *f,uint32_t scenario,uint32_t 
     f->empty=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     f->main[0]=(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},41,{0}};
     f->main[1]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
-    f->ctor[0]=(XrXirInstruction){XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0,{0}};
+    /* Distinct old bytes prevent short-string sharing with the replacement. */
+    f->ctor[0]=(XrXirInstruction){XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},1,{0}};
     f->ctor[1]=(XrXirInstruction){XR_XIR_CLASS_NEW,f->class_type,{0,1},{0},0,{0}};
     f->ctor[2]=(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{1},{0},0,{0}};
-    f->replace[0]=f->ctor[0];
+    f->replace[0]=(XrXirInstruction){XR_XIR_CONST_STRING,XR_XIR_STRING,{0},{0},0,{0}};
     f->replace[1]=(XrXirInstruction){XR_XIR_CLASS_SET,XR_XIR_UNIT,{0,1},{0},0,{0}};
     f->replace[2]=f->empty;
     f->helper[0]=(XrXirInstruction){XR_XIR_CLASS_GET,XR_XIR_STRING,{0},{0},0,{0}};
@@ -90,8 +91,8 @@ static void state_class_fixture(StateClassFixture *f,uint32_t scenario,uint32_t 
     f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3, 0};
     /* The rejected initializer belongs to base; its Cell slots belong to left. */
     for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected==1?1:rejected==2?0:3,rejected==2?f->class_type:f->cell_type,rejected==2?0:1};
-    f->literal=(XrXirLiteral){"x",1};
-    f->declarations=(XrXirDeclarations){f->modules,4,f->identities,f->slots,4,&f->literal,1,3,4,NULL};
+    f->literals[0]=(XrXirLiteral){"x",1};f->literals[1]=(XrXirLiteral){"old",3};
+    f->declarations=(XrXirDeclarations){f->modules,4,f->identities,f->slots,4,f->literals,2,3,4,NULL};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,8,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};
 }
 static XrXirStatus state_class_build(const XrXirCompileContext *context,uint32_t scenario,
