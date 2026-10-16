@@ -44,7 +44,11 @@ static void view_types_rules(const XrXirCompileContext *c) {
     ViewTypes f;view_types_init(&f);uint32_t output=77;
     CHECK(xr_xir_compile_types_structure_verify(c,&f.types)==XR_XIR_OK);
     XrXirTypeArena *arena=NULL;uint64_t live_before=stats(c).live_bytes;
-    CHECK(xr_xir_compile_type_arena_new(c,&f.types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
+    CHECK(xr_xir_compile_type_arena_new(c,&f.types,&arena)==XR_XIR_VALUE_OK && arena);
+    CHECK(xr_xir_compile_type_arena_has_borrowed(arena));
+    CHECK(xr_xir_compile_type_arena_borrowed(arena,view_type(3))==3);
+    CHECK(!xr_xir_compile_type_arena_borrowed(arena,view_type(6)));
+    xr_xir_compile_type_arena_drop(arena);
     CHECK(stats(c).live_bytes==live_before);
     CHECK(xr_xir_compile_view_type_flags(c,&f.types,view_type(3),&output)==XR_XIR_OK && output==3);
     CHECK(xr_xir_compile_view_type_flags(c,&f.types,view_type(6),&output)==XR_XIR_OK && !output);

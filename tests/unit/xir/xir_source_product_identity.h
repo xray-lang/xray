@@ -9,7 +9,7 @@
  */
 #ifndef PRODUCT_IDENTITY_GATES_H
 #define PRODUCT_IDENTITY_GATES_H
-#include "xir_hash84_identity.h"
+#include "xir_view_value26_identity.h"
 static const uint8_t product_layout_value21_digest[]={0x53,0x25,0xdf,0xf6,0x6e,0xbc,0x0d,0xb5,0x0f,0x20,0xdd,0xa2,0xed,0x30,0xb0,0x02,0xe4,0xb6,0xfb,0xbd,0xac,0x04,0xc9,0x5a,0x58,0x89,0xd7,0x55,0x40,0x7a,0x78,0x9a};
 
 static const uint8_t product_layout_value22_digest[]={
@@ -124,7 +124,7 @@ static void product_layout_vector(void) {
         XrXirStatus status=source_product_layout_digest(lowered,&facts,digest);
         if (bound==2) CHECK(status==XR_XIR_BUDGET && !memcmp(digest,saved,32));
         else {
-            CHECK(status==XR_XIR_OK && !memcmp(digest,product_layout_value25_digest,32));
+            CHECK(status==XR_XIR_OK && !memcmp(digest,product_layout_value26_digest,32));
             CHECK(memcmp(digest,product_layout_value24_digest,32));
             CHECK(memcmp(digest,product_layout_value21_digest,32) && memcmp(digest,product_layout_value22_digest,32));
             CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
@@ -141,10 +141,10 @@ static void product_layout_vector(void) {
             xr_sha256(layout_previous21_preimage,sizeof(layout_previous21_preimage),historical);
             xr_sha256(layout_current22_preimage,sizeof(layout_current22_preimage),current);
             CHECK(!memcmp(historical,product_layout_value21_digest,32) && !memcmp(current,product_layout_value22_digest,32));
-            xr_sha256(layout_current25_preimage,sizeof(layout_current25_preimage),current);
-            CHECK(!memcmp(current,product_layout_value25_digest,32));
-            _Static_assert(XR_XIR_VALUE_ABI_VERSION==25u && XR_XIR_CALL_ABI_VERSION==29u && XR_XIR_PROGRAM_ABI_VERSION==30u,"owned Domain layout identity");
-            for(unsigned previous=21;previous<25;++previous) {
+            xr_sha256(layout_current26_preimage,sizeof(layout_current26_preimage),current);
+            CHECK(!memcmp(current,product_layout_value26_digest,32));
+            _Static_assert(XR_XIR_VALUE_ABI_VERSION==26u && XR_XIR_CALL_ABI_VERSION==29u && XR_XIR_PROGRAM_ABI_VERSION==30u,"owned Domain layout identity");
+            for(unsigned previous=21;previous<26;++previous) {
                 facts.target.abi_version=previous;
                 memset(digest,0x5a,sizeof(digest));memcpy(saved,digest,sizeof(saved));
                 CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);

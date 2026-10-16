@@ -126,6 +126,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (domain_sensitive) *domain_sensitive = false;
     if (!admission || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (xr_xir_compile_type_arena_borrowed(admission->arena,type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValueAdmissionStack stack = {0}; XrXirValue current = *value;
     StorageSpan span = {0}; bool inlined = false, tuple_field=false;
     XrXirValueStatus status = XR_XIR_VALUE_OK;

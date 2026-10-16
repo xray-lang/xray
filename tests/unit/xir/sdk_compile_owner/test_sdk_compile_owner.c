@@ -99,7 +99,7 @@ static char *input(const char *path,size_t *length) {
 static XrXirRuntimeSdk *admit(const XrXirRuntimeSdkRequest *request) {
     XrXirRuntimeSdk *sdk=NULL;CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK);
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
-    CHECK(facts->value_abi==25 && facts->call_abi==29 && facts->program_abi==30 && facts->crt==2);
+    CHECK(facts->value_abi==26 && facts->call_abi==29 && facts->program_abi==30 && facts->crt==2);
     const char *resource_library=NULL;
     CHECK(xr_xir_runtime_sdk_file(sdk,"lib/xray_compile_resources.lib",&resource_library)==XR_XIR_SDK_OK && resource_library);
     return sdk;

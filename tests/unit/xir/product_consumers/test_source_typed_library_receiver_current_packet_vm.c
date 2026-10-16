@@ -63,7 +63,7 @@ _Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 84u, "
 #if defined(XR_SOURCE_TYPED_LIBRARY_PACKET_WRITER)
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
 #endif
-_Static_assert(XR_XIR_VALUE_ABI_VERSION == 25u && XR_XIR_CALL_ABI_VERSION == 29u &&
+_Static_assert(XR_XIR_VALUE_ABI_VERSION == 26u && XR_XIR_CALL_ABI_VERSION == 29u &&
     XR_XIR_PROGRAM_ABI_VERSION == 30u, "Formal public runtime identity");
 
 typedef struct ReceiverRoles {

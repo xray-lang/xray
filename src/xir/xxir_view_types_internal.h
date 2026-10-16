@@ -15,6 +15,10 @@
 
 #define XR_XIR_VIEW_SHARED 1u
 #define XR_XIR_VIEW_MUTABLE 2u
+/* The admitted ascending descriptor DAG is shared by compiler and arena caches.
+ * The owned packed table uses the caller's finite metadata ledger. */
+XR_FUNC XrXirStatus xir_compile_view_flags_new(const XrXirCompileContext *context,
+    const XrXirTypes *types, uint8_t **output);
 
 /* Requires an admitted descriptor pool. Tuple and Optional preserve every
  * borrowed leaf; an owned callable's signature is not its capture storage.

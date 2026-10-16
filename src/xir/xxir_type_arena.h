@@ -25,6 +25,8 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
 XR_FUNC bool xr_xir_compile_type_arena_retain(XrXirTypeArena *arena);
 XR_FUNC void xr_xir_compile_type_arena_drop(XrXirTypeArena *arena);
 XR_FUNC const XrXirTypes *xr_xir_compile_type_arena_types(const XrXirTypeArena *arena);
+XR_FUNC uint32_t xr_xir_compile_type_arena_borrowed(const XrXirTypeArena *arena, XrXirType type);
+XR_FUNC bool xr_xir_compile_type_arena_has_borrowed(const XrXirTypeArena *arena);
 /* Borrowed immutable storage metadata; valid until the arena's last release. */
 XR_FUNC const XrXirStorageLayout *xr_xir_compile_type_arena_storage(const XrXirTypeArena *arena,
     XrXirType type);

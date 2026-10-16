@@ -495,6 +495,8 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
         return XR_XIR_CALL_BAD_ABI;
     if (config->admission.domain && !xr_xir_domain_current(config->admission.domain))
         return XR_XIR_CALL_BAD_ARGUMENT;
+    /* Metadata and physical view handles never supply an execution proof. */
+    if (xr_xir_compile_type_arena_has_borrowed(config->admission.arena)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_output_provider_valid(&config->output)) return XR_XIR_CALL_BAD_ABI;
     if (!config->entries || !config->entry_count || config->entry_count > 65536 ||
         !config->accounting || config->accounting->live_bytes || config->accounting->depth ||

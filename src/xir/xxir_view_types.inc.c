@@ -52,6 +52,11 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) *output=flags;else xr_compile_resources_free(flags);
     return status;
 }
+XR_FUNC XrXirStatus xir_compile_view_flags_new(const XrXirCompileContext *context,
+    const XrXirTypes *types,uint8_t **output) {
+    if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
+    return view_flags_build(context,types,output);
+}
 
 static XrXirStatus view_return_candidate(const XrXirCompileContext *context,
     const XrXirTypes *types,const uint8_t *flags,const XrXirTypeNode *node,uint32_t *output) {

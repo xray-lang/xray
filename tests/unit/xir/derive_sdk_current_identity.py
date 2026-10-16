@@ -4,7 +4,7 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=84, value_abi=25, call_abi=29, wire=28, program_abi=30):
+def current_preimage(rows, semantic=84, value_abi=26, call_abi=29, wire=28, program_abi=30):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -75,48 +75,53 @@ def main():
     for name,data in (('current_sdk_kat_preimage',previous74_image),('current_sdk_kat_file_digest',previous74_file),('current_sdk_kat_digest',previous74_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous74_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired74 SDK KAT changed'
-    previous75_image,previous75_file,previous75_digest=current_preimage(previous_rows,75)
+    previous75_image,previous75_file,previous75_digest=current_preimage(previous_rows,75,25)
     previous75_text=Path(__file__).with_name('sdk_previous75_identity_golden.h').read_text(encoding='utf-8')
     for name,data in (('current_sdk_kat_preimage',previous75_image),('current_sdk_kat_file_digest',previous75_file),('current_sdk_kat_digest',previous75_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous75_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired75 SDK KAT changed'
-    previous76_image,previous76_file,previous76_digest=current_preimage(rows,76)
+    previous76_image,previous76_file,previous76_digest=current_preimage(rows,76,25)
     previous76_text=Path(__file__).with_name('sdk_previous76_identity_golden.h').read_text(encoding='utf-8')
     for name,data in (('current_sdk_kat_preimage',previous76_image),('current_sdk_kat_file_digest',previous76_file),('current_sdk_kat_digest',previous76_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous76_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired76 SDK KAT changed'
-    previous77_image,previous77_file,previous77_digest=current_preimage(rows,77)
+    previous77_image,previous77_file,previous77_digest=current_preimage(rows,77,25)
     previous77_text=Path(__file__).with_name('sdk_previous77_identity_golden.h').read_text(encoding='utf-8')
     for name,data in (('current_sdk_kat_preimage',previous77_image),('current_sdk_kat_file_digest',previous77_file),('current_sdk_kat_digest',previous77_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous77_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired77 SDK KAT changed'
-    previous78_image,previous78_file,previous78_digest=current_preimage(rows,78)
+    previous78_image,previous78_file,previous78_digest=current_preimage(rows,78,25)
     previous78_text=Path(__file__).with_name('sdk_previous78_identity_golden.h').read_text(encoding='utf-8')
     for name,data in (('current_sdk_kat_preimage',previous78_image),('current_sdk_kat_file_digest',previous78_file),('current_sdk_kat_digest',previous78_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous78_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired78 SDK KAT changed'
-    previous79_image,previous79_file,previous79_digest=current_preimage(rows,79)
+    previous79_image,previous79_file,previous79_digest=current_preimage(rows,79,25)
     previous79_text=Path(__file__).with_name('sdk_previous79_identity_golden.h').read_text(encoding='utf-8')
     for name,data in (('current_sdk_kat_preimage',previous79_image),('current_sdk_kat_file_digest',previous79_file),('current_sdk_kat_digest',previous79_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous79_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired79 SDK KAT changed'
-    previous80_image,previous80_file,previous80_digest=current_preimage(rows,80)
+    previous80_image,previous80_file,previous80_digest=current_preimage(rows,80,25)
     previous80_text=Path(__file__).with_name('sdk_previous80_identity_golden.h').read_text(encoding='utf-8')
     for name,data in (('current_sdk_kat_preimage',previous80_image),('current_sdk_kat_file_digest',previous80_file),('current_sdk_kat_digest',previous80_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous80_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired80 SDK KAT changed'
     for retired_semantic in (81,82,83):
-        retired_image,retired_file,retired_digest=current_preimage(rows,retired_semantic)
+        retired_image,retired_file,retired_digest=current_preimage(rows,retired_semantic,25)
         retired_text=Path(__file__).with_name('sdk_previous'+str(retired_semantic)+'_identity_golden.h').read_text(encoding='utf-8')
         for name,data in (('current_sdk_kat_preimage',retired_image),('current_sdk_kat_file_digest',retired_file),('current_sdk_kat_digest',retired_digest)):
             match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',retired_text,re.S)
             assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired SDK field model changed'
+    value25_previous_image,value25_previous_file,value25_previous_digest=current_preimage(rows,84,25)
+    value25_previous_text=Path(__file__).with_name('sdk_previous_value25_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',value25_previous_image),('current_sdk_kat_file_digest',value25_previous_file),('current_sdk_kat_digest',value25_previous_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',value25_previous_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired Value25 SDK KAT changed'
     image,file_digest,digest=current_preimage(rows)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
-    old_current_image,_,_=current_preimage(old_rows,75)
+    old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(28,84,25,29,30)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(28,84,26,29,30)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     assert len(image)==3258 and len(previous75_image)==3186 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest

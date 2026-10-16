@@ -45,6 +45,10 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
     GraphEdgeBudget *budget) {
     if (!graph_edge_work(budget)) return false;
     if (object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC) return true;
+    if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
+        XirView *view=(XirView *)object;
+        return graph_direct_edge(&view->storage.root,visit,context) && graph_direct_edge(&view->parent,visit,context);
+    }
     if (object->type == XR_XIR_PANIC_INFO)
         return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context);
     if (object->kind == XIR_OBJECT_CELL) {

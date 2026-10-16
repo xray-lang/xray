@@ -43,7 +43,11 @@ int main(void) {
     const XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.types=owned};
     CHECK(xir_compile_view_return_origins_verified(&c,&module,NULL)==XR_XIR_OK);
     XrXirTypeArena *arena=NULL;
-    CHECK(xr_xir_compile_type_arena_new(&c,owned,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
+    CHECK(xr_xir_compile_type_arena_new(&c,owned,&arena)==XR_XIR_VALUE_OK && arena);
+    CHECK(xr_xir_compile_type_arena_has_borrowed(arena));
+    CHECK(xr_xir_compile_type_arena_borrowed(arena,(XrXirType)258)==3);
+    CHECK(!xr_xir_compile_type_arena_borrowed(arena,(XrXirType)259));
+    xr_xir_compile_type_arena_drop(arena);
     xr_xir_compile_types_free(owned);
     CHECK(xr_compile_resources_stats(c.resources,&final)==XR_COMPILE_RESOURCE_OK && final.live_bytes==initial.live_bytes);
     xr_compile_resources_release(c.resources);puts("view-types-sdk-ok");return 0;
