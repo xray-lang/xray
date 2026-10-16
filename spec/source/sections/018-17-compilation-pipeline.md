@@ -870,6 +870,14 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 每次Source构造、关闭性扫描、CTFE及独立接收共同消费同一原compiler ledger；失败不退work/累计分配，输出和可释放前缀保持。原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth、policy2/8MiB输出和原错误映射不变。共同Value的scratch LIMIT仍沿既有映射报告CTFE BUDGET；frame直接拒绝可报告FRAME_LIMIT。正常、预算边界和首末故障控制不替代完整逐分配FI、provider、正式安全或整包资格；公共布局、schema、opcode及构造接口2保持。
 
+### 17.72 保留真实泛型定义的关闭实例结果
+
+编译器内部的关闭实例结果所有者接收真实Checked产物、函数序号、显式target及原有限CTFE限制。该函数必须具有普通特化产生的INSTANCE证据、真实原定义与完整非空类型替换，并且没有运行期参数；非泛型函数和需要运行期实参的函数不能借此入口取得实例结果。每次工厂调用都独立写出并接收完整Checked字节，再由同一原compiler ledger执行普通Lowered与唯一CTFE；不接收调用者提供的结果、PASS提示或另一个预算owner，也不缓存结果。
+
+所有者同时保留独立拥有的关闭Checked、Lowered、真实原泛型定义/替换以及拥有式Value；它们可以长于原Source、packet、输入Artifact与ledger调用者的寿命。借用视图发布前完整验证当前拥有的两份产物，并重新写出当前Checked字节，与Lowered实际来源packet逐字对应。相同签名或结果类型、另一合法替换、摘要或先前验证成功都不能代替当前输入对应。观察仅标识真实来源，不授予构造、成员、私有调用、loan或指令改写权限；调用者必须在整个借用期间保活且排除修改。
+
+所有准备、复制、完整复验与观察先付同一原ledger费用，失败保全空输出、不退work或累计分配；最终释放不分配。原work/allocated/live、steps/frame/depth/output上限、错误映射、Value/SourceContext布局、schema、opcode与构造接口保持。本入口只完成关闭实例执行结果的拥有和对应边界；依赖类型实参的逐实例Source comptime接回仍未实现，17.71的拒绝边界不变。完整逐分配故障、原owner重试、精确边界、正式安全与provider资格必须分别绑定实际固定输入，不由小门或此接口的存在推导。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1871,5 +1879,13 @@ Type names retain the actual enclosing lexical context, including a generic para
 This mechanism does not implement per-instance comptime depending on enclosing type arguments. Expressions producing Array<T>, T? or different results for different closed T remain explicitly refused. One syntax site's single Value cannot represent multiple specialization results. Ordinary generics remain checked against constraints at definition; instantiation cannot reinterpret AST, execute host code or retain a runtime fallback. Complete open-generic execution remains unfinished and cannot be claimed from these context-independent positive examples.
 
 Every Source construction, closedness scan, CTFE and independent receiving shares the original compiler ledger. Failures refund neither work nor cumulative allocation and preserve output and releasable prefixes. Original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth,policy2/8MiB output and error mappings remain. Common Value scratch LIMIT keeps its existing CTFE BUDGET mapping; direct frame refusal may report FRAME_LIMIT. Normal, budget-boundary and first/last controls substitute for neither complete allocation FI, provider, formal safety nor whole-package qualification. Public layouts, schema, opcodes and construction interface2 remain unchanged.
+
+### 17.72 Closed instance results retaining genuine generic definitions
+
+The compiler-internal closed-instance owner receives an authentic Checked artifact, function ordinal, explicit target and original finite CTFE limits. The function must carry ordinary-specialization INSTANCE evidence with its genuine original definition and complete nonempty type substitution, without runtime parameters. Nongeneric functions and functions needing runtime arguments cannot obtain instance results through this entry. Every factory independently writes and receives complete Checked bytes, then performs ordinary lowering and the sole CTFE on the same original compiler ledger. It accepts no caller-provided result, PASS hint or alternate budget owner, and caches no results.
+
+The owner retains independently owned closed Checked and Lowered artifacts, the genuine original generic definition/substitution, and an owning Value. They may outlive the original Source, packet, input artifact and ledger caller. Before publishing a borrowed view, it completely verifies both current owned artifacts and writes current Checked bytes again, requiring exact byte correspondence with the Lowered artifact's actual source packet. Equal signatures or result types, another valid substitution, a digest or earlier verification success cannot replace current input correspondence. Observation identifies genuine origins without granting construction, member, private-call, loan or instruction-rewrite authority. Callers must keep the owner alive and exclude mutation throughout each borrow.
+
+Preparation, copying, complete verification and observation prepay the same original ledger. Failure preserves empty outputs without refunding work or cumulative allocation; final destruction allocates nothing. Original work/allocated/live, steps/frame/depth/output ceilings, error mappings, Value/SourceContext layouts, schema, opcodes and construction interface remain. This entry establishes ownership and correspondence for closed-instance execution results only. Receiving type-dependent per-instance Source comptime remains unimplemented, preserving17.71's refusal boundary. Complete physical fault injection, original-owner retries, exact bounds, formal safety and provider qualification each require their actual fixed-input evidence; neither small gates nor this interface's existence implies them.
 
 <!-- /xr-spec:en -->

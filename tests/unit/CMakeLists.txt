@@ -4578,3 +4578,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 
 add_subdirectory(xir/p11_recursive_data)
 add_subdirectory(xir/p11_import)
+add_subdirectory(xir/p11_ctfe_instance)

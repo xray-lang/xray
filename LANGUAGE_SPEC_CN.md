@@ -7910,6 +7910,14 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 每次Source构造、关闭性扫描、CTFE及独立接收共同消费同一原compiler ledger；失败不退work/累计分配，输出和可释放前缀保持。原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth、policy2/8MiB输出和原错误映射不变。共同Value的scratch LIMIT仍沿既有映射报告CTFE BUDGET；frame直接拒绝可报告FRAME_LIMIT。正常、预算边界和首末故障控制不替代完整逐分配FI、provider、正式安全或整包资格；公共布局、schema、opcode及构造接口2保持。
 
+### 17.72 保留真实泛型定义的关闭实例结果
+
+编译器内部的关闭实例结果所有者接收真实Checked产物、函数序号、显式target及原有限CTFE限制。该函数必须具有普通特化产生的INSTANCE证据、真实原定义与完整非空类型替换，并且没有运行期参数；非泛型函数和需要运行期实参的函数不能借此入口取得实例结果。每次工厂调用都独立写出并接收完整Checked字节，再由同一原compiler ledger执行普通Lowered与唯一CTFE；不接收调用者提供的结果、PASS提示或另一个预算owner，也不缓存结果。
+
+所有者同时保留独立拥有的关闭Checked、Lowered、真实原泛型定义/替换以及拥有式Value；它们可以长于原Source、packet、输入Artifact与ledger调用者的寿命。借用视图发布前完整验证当前拥有的两份产物，并重新写出当前Checked字节，与Lowered实际来源packet逐字对应。相同签名或结果类型、另一合法替换、摘要或先前验证成功都不能代替当前输入对应。观察仅标识真实来源，不授予构造、成员、私有调用、loan或指令改写权限；调用者必须在整个借用期间保活且排除修改。
+
+所有准备、复制、完整复验与观察先付同一原ledger费用，失败保全空输出、不退work或累计分配；最终释放不分配。原work/allocated/live、steps/frame/depth/output上限、错误映射、Value/SourceContext布局、schema、opcode与构造接口保持。本入口只完成关闭实例执行结果的拥有和对应边界；依赖类型实参的逐实例Source comptime接回仍未实现，17.71的拒绝边界不变。完整逐分配故障、原owner重试、精确边界、正式安全与provider资格必须分别绑定实际固定输入，不由小门或此接口的存在推导。
+
 ---
 
 ## 18. 错误码 (Error Codes)

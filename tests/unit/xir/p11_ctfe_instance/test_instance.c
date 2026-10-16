@@ -1,0 +1,146 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_instance.c - Real closed substitutions survive their Source producers
+ *
+ * KEY CONCEPT:
+ *   Each result owns the verified definition and freshly evaluated value.
+ *   Failure and retry retain one original finite compiler owner.
+ */
+#define XR_IMPORT_MAIN import_original_main
+#include "../p11_import/test_import.c"
+#include "xir/xxir_ctfe_instance_internal.h"
+#include "xir/xxir_nullable.h"
+#include "instance_foreign.h"
+
+static XrXirStatus instance_source_operation(XrXirCompileContext *context,XrXirArtifact **output,const char *kind) {
+    static const char text[]=
+        "fn array<T>()->Array<T>{return []}\nfn optional<T>()->T?{return null}\n"
+        "fn tuple<T>()->(T?,Array<T>){return (null,[])}\n"
+        "struct Box<T>{private value:T?;static empty()->Box<T>{return Box<T>{value:null}}}\n"
+        "fn scalar<T>()->i64{return 42}\nfn unit<T>(){}\nfn identity<T>(value:T)->T{return value}\n"
+        "export fn run()->i64{const a=array<i8>();const b=array<string>();const c=optional<i8>();const d=optional<string>();"
+        "const e=tuple<i8>();const f=tuple<string>();const g=Box<i8>.empty();const h=Box<string>.empty();"
+        "unit<i8>();unit<string>();return scalar<i8>()+scalar<string>()-identity<i64>(42)}\n";
+    XrCompilerSession *session=NULL;XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
+    if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+        created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"instance-constant",NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    XrXirStatus status=!strcmp(kind,"foreign")?instance_foreign_source(&request,&source,&diagnostic):
+        xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
+    if (status!=XR_XIR_OK && status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY)
+        fprintf(stderr,"Instance Source=%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
+    xr_compile_session_free(session);XrXirCheckedPacket packet={0};
+    if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(source.checked,&packet,NULL);
+    xr_xir_compile_source_result_free(&source);XrXirArtifact *received=NULL;
+    if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL);
+    if (packet.bytes) memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
+    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(received,output,NULL);
+    xr_xir_compile_artifact_free(received);return status;
+}
+static XrXirArtifact *instance_source(XrXirCompileContext *context,const char *kind) {
+    XrXirArtifact *output=NULL;CHECK(instance_source_operation(context,&output,kind)==XR_XIR_OK && output);return output;
+}
+static uint32_t instance_named(const XrXirArtifact *artifact,const char *prefix,unsigned ordinal) {
+    const XrXirModule *module=&artifact->module;size_t length=strlen(prefix);
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *body=&module->functions[f];
+        if (body->name_length>length && !memcmp(body->name,prefix,length) && body->name[length]=='$') {
+            if (!ordinal) return f;--ordinal;
+        }
+    }
+    CHECK(false);return 0;
+}
+static XirCtfeInstanceRequest instance_request(const XrXirArtifact *artifact,uint32_t function) {
+    return (XirCtfeInstanceRequest){artifact,function,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        {XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES},XR_XIR_CTFE_MAX_CALL_DEPTH};
+}
+static void instance_normal(const char *kind,unsigned ordinal) {
+    XrXirCompileContext context;context_new(&context);XrXirArtifact *closed=instance_source(&context,kind);
+    uint32_t f=instance_named(closed,kind,ordinal);XirCtfeInstanceRequest request=instance_request(closed,f);
+    XirCtfeInstanceResult *owner=NULL;CHECK(xr_xir_compile_ctfe_instance(&request,&owner)==XR_XIR_CTFE_OK && owner);
+    XirCtfeInstanceView view={0};CHECK(xr_xir_compile_ctfe_instance_view(owner,&view)==XR_XIR_CTFE_OK);
+    CHECK(view.checked!=closed && view.definition!=closed->module.provenance->source && view.instance_function==f);
+    CHECK(view.checked->context.resources==context.resources && view.lowered->context.resources==context.resources);
+    CHECK(view.definition_function==view.checked->module.provenance->origins[f].function);
+    CHECK(view.definition->module.generics[view.definition_function].parameter_count==1);
+    if (!strcmp(kind,"foreign")) instance_foreign_edges(view.checked);
+    XrXirType argument=view.checked->module.provenance->origins[f].arguments[0];
+    CHECK(argument==XR_XIR_I8 || argument==XR_XIR_STRING);
+    if (!strcmp(kind,"scalar") || !strcmp(kind,"foreign")) CHECK(view.value->type==XR_XIR_I64 && view.value->payload==42);
+    if (!strcmp(kind,"unit")) CHECK(!view.value->type && !view.value->reserved && !view.value->payload);
+    XrXirValue retained={0};CHECK(xr_xir_value_copy(view.value,&retained)==XR_XIR_VALUE_OK);
+    xr_xir_compile_artifact_free(closed);xr_compile_resources_release(context.resources);
+    view=(XirCtfeInstanceView){0};CHECK(xr_xir_compile_ctfe_instance_view(owner,&view)==XR_XIR_CTFE_OK);
+    CHECK(view.definition && view.value && xr_xir_compile_artifact_verify(view.checked,NULL)==XR_XIR_OK);
+    xr_xir_compile_ctfe_instance_free(owner);CHECK(xr_xir_value_valid(&retained));
+    size_t attempts=source_fixture_compile_attempts;source_fixture_compile_fail_at=attempts;
+    xr_xir_value_drop(&retained);CHECK(source_fixture_compile_attempts==attempts);
+    source_fixture_compile_fail_at=SIZE_MAX;CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+    fprintf(stderr,"instance %s[%u] argument=%u original definition/source dead last-owner physical0\n",kind,ordinal,argument);
+}
+static void instance_limits(void) {
+    XrXirCompileContext context;context_new(&context);XrXirArtifact *closed=instance_source(&context,"scalar");
+    uint32_t f=instance_named(closed,"scalar",0);XirCtfeInstanceRequest original=instance_request(closed,f);
+    XirCtfeInstanceResult *invalid=NULL;XirCtfeInstanceRequest malformed=original;
+    CHECK(xr_xir_compile_ctfe_instance(NULL,&invalid)==XR_XIR_CTFE_BAD_ARGUMENT && !invalid);
+    CHECK(xr_xir_compile_ctfe_instance(&original,NULL)==XR_XIR_CTFE_BAD_ARGUMENT);
+    malformed.limits.steps=XR_XIR_CTFE_MAX_STEPS+1;
+    CHECK(xr_xir_compile_ctfe_instance(&malformed,&invalid)==XR_XIR_CTFE_BAD_ARGUMENT && !invalid);
+    malformed=original;malformed.limits.frame_bytes=XR_XIR_CTFE_MAX_FRAME_BYTES+1;
+    CHECK(xr_xir_compile_ctfe_instance(&malformed,&invalid)==XR_XIR_CTFE_BAD_ARGUMENT && !invalid);
+    malformed=original;malformed.limits.output_bytes=XR_XIR_CTFE_MAX_OUTPUT_BYTES+1;
+    CHECK(xr_xir_compile_ctfe_instance(&malformed,&invalid)==XR_XIR_CTFE_BAD_ARGUMENT && !invalid);
+    malformed=original;malformed.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH+1;
+    CHECK(xr_xir_compile_ctfe_instance(&malformed,&invalid)==XR_XIR_CTFE_BAD_ARGUMENT && !invalid);
+    malformed=original;malformed.target.abi_version=XR_XIR_VALUE_ABI_VERSION+1;
+    CHECK(xr_xir_compile_ctfe_instance(&malformed,&invalid)==XR_XIR_CTFE_PROFILE && !invalid);
+    for (unsigned axis=0;axis<4;++axis) {
+        XirCtfeInstanceRequest request=original;
+        if (!axis) request.limits.steps=0;else if (axis==1) request.limits.frame_bytes=0;
+        else if (axis==2) request.limits.output_bytes=0;else request.call_depth=0;
+        XrXirCtfeStatus expected=!axis?XR_XIR_CTFE_STEP_LIMIT:axis==1?XR_XIR_CTFE_FRAME_LIMIT:
+            axis==2?XR_XIR_CTFE_OUTPUT_LIMIT:XR_XIR_CTFE_DEPTH_LIMIT;
+        XirCtfeInstanceResult *result=NULL;XrCompileResourceStats before=stats(&context);
+        CHECK(xr_xir_compile_ctfe_instance(&request,&result)==expected && !result);
+        CHECK(stats(&context).live_bytes==before.live_bytes);
+        CHECK(xr_xir_compile_ctfe_instance(&request,&result)==expected && !result);
+        CHECK(xr_xir_compile_ctfe_instance(&original,&result)==XR_XIR_CTFE_OK);
+        xr_xir_compile_ctfe_instance_free(result);CHECK(stats(&context).live_bytes==before.live_bytes);
+    }
+    XirCtfeInstanceResult *result=NULL;XirCtfeInstanceRequest unsupported=instance_request(closed,instance_named(closed,"identity",0));
+    CHECK(xr_xir_compile_ctfe_instance(&unsupported,&result)==XR_XIR_CTFE_NOT_SUPPORTED && !result);
+    unsupported=instance_request(closed,named(&closed->module,"run"));
+    CHECK(xr_xir_compile_ctfe_instance(&unsupported,&result)==XR_XIR_CTFE_NOT_SUPPORTED && !result);
+    XirCtfeInstanceResult *held=NULL;CHECK(xr_xir_compile_ctfe_instance(&original,&held)==XR_XIR_CTFE_OK);
+    XrCompileResourceStats used=stats(&context);CHECK(xr_compile_resources_work(context.resources,caps.work-used.work)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_ctfe_instance(&original,&result)==XR_XIR_CTFE_BUDGET && !result);
+    CHECK(xr_xir_compile_ctfe_instance(&original,&result)==XR_XIR_CTFE_BUDGET && !result);
+    XirCtfeInstanceView unavailable={0};
+    CHECK(xr_xir_compile_ctfe_instance_view(held,&unavailable)==XR_XIR_CTFE_BUDGET && !unavailable.checked && !unavailable.value);
+    CHECK(xr_xir_compile_ctfe_instance_view(held,&unavailable)==XR_XIR_CTFE_BUDGET && !unavailable.checked && !unavailable.value);
+    size_t attempts=source_fixture_compile_attempts;xr_xir_compile_ctfe_instance_free(held);
+    CHECK(source_fixture_compile_attempts==attempts);
+    xr_xir_compile_artifact_free(closed);xr_compile_resources_release(context.resources);
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+}
+#include "instance_resources.h"
+int main(int argc,char **argv) {
+    CHECK(argc>=2 && argc<=4);
+    if (!strcmp(argv[1],"limits")) { CHECK(argc==2);instance_limits();return 0; }
+    if (!strcmp(argv[1],"tamper")) { CHECK(argc==2);instance_tamper();return 0; }
+    CHECK(argc>=3);unsigned ordinal=(unsigned)strtoul(argv[2],NULL,10);CHECK(ordinal<2);
+    CHECK(!strcmp(argv[1],"array") || !strcmp(argv[1],"optional") || !strcmp(argv[1],"tuple") ||
+        !strcmp(argv[1],"empty") || !strcmp(argv[1],"scalar") || !strcmp(argv[1],"unit") || !strcmp(argv[1],"foreign"));
+    if (argc==4) {
+        CHECK(!strcmp(argv[3],"--prefix") || !strcmp(argv[3],"--faults") || !strcmp(argv[3],"--bounds"));
+        if (!strcmp(argv[3],"--bounds")) instance_bounds(argv[1],ordinal);
+        else instance_faults(argv[1],ordinal,!strcmp(argv[3],"--prefix"));
+    } else instance_normal(argv[1],ordinal);
+    return 0;
+}
