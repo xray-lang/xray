@@ -27,8 +27,13 @@ XR_FUNC XrXirStatus xr_xir_compile_view_type_flags(const XrXirCompileContext *co
  * An ordinary result has the canonical UINT32_MAX candidate. */
 XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirType callable, uint32_t *output);
+/* Requires complete ordinary function structure, type and SSA checks. Replays
+ * actual signatures, capture bindings and every returned borrowed leaf.
+ * This proves input provenance only, never moves, liveness or access authority. */
+XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileContext *context,
+    const XrXirModule *module, XrXirDiagnostic *diagnostic);
 /* Requires a structurally and semantically admitted module. No executable
  * borrowed value is admitted without independent CFG proof. */
 XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *context,
-    const XrXirModule *module);
+    const XrXirModule *module, XrXirDiagnostic *diagnostic);
 #endif // XXIR_VIEW_TYPES_INTERNAL_H

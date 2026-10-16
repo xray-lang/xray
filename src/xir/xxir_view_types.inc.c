@@ -124,16 +124,23 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
     xr_compile_resources_free(flags);return status;
 }
 
+#include "xxir_view_origins.inc.c"
+
 XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *context,
-    const XrXirModule *module) {
+    const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
     uint8_t *flags=NULL;
     XrXirStatus status=view_flags_build(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
+    status=view_origins_verify(context,module,flags,diagnostic);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];
         if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
-        if (view_flags_at(module->types,flags,body->result)) {status=XR_XIR_BAD_TYPE;break;}
+        if (view_flags_at(module->types,flags,body->result)) {
+            status=XR_XIR_BAD_TYPE;
+            if (diagnostic) *diagnostic=(XrXirDiagnostic){status,f,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+            break;
+        }
         for (uint32_t p=0;p<body->parameter_count && status==XR_XIR_OK;++p) {
             if (!xir_compile_work(context,1)) status=XR_XIR_BUDGET;
             else if (view_flags_at(module->types,flags,body->parameters[p])) status=XR_XIR_BAD_TYPE;

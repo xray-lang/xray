@@ -35,6 +35,13 @@ int main(void) {
     CHECK(xr_xir_compile_types_structure_verify(&c,owned)==XR_XIR_OK);
     CHECK(xr_xir_compile_view_type_flags(&c,owned,(XrXirType)258,&value)==XR_XIR_OK && value==3);
     CHECK(xr_xir_compile_view_return_candidate(&c,owned,(XrXirType)259,&value)==XR_XIR_OK && !value);
+    const XrXirType input=(XrXirType)257;
+    const XrXirInstruction returned={.op=XR_XIR_RETURN,.args={0,0}};
+    const XrXirBlock block={.count=1};
+    const XrXirFunction function={.name="sdkOrigin",.name_length=9,.parameters=&input,.parameter_count=1,
+        .result=input,.blocks=&block,.block_count=1,.instructions=&returned,.instruction_count=1};
+    const XrXirModule module={.stage=XR_XIR_BUILT,.functions=&function,.function_count=1,.types=owned};
+    CHECK(xir_compile_view_return_origins_verified(&c,&module,NULL)==XR_XIR_OK);
     XrXirTypeArena *arena=NULL;
     CHECK(xr_xir_compile_type_arena_new(&c,owned,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
     xr_xir_compile_types_free(owned);

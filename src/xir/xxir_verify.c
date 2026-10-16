@@ -1246,7 +1246,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     }
     xr_compile_resources_free(context.graph_storage);
     context.graph_storage = NULL; context.graph_capacity = 0;
-    if (status == XR_XIR_OK) status = xir_compile_view_module_boundary(&context.remaining,module);
+    if (status == XR_XIR_OK) status = xir_compile_view_module_boundary(&context.remaining,module,&context.location);
     if (status == XR_XIR_OK) {
         XrXirCellProvenance *cell_proof = NULL;
         status = xr_xir_compile_cell_provenance_verified(&context.remaining, module, &cell_proof, &context.location);
