@@ -1,0 +1,8 @@
+import "./worker" as library
+
+export fn run()->Task<i64> {
+    const task:Task<i64> = go library.work()
+    const answer = await task
+    print(answer)
+    return task
+}
