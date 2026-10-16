@@ -4623,3 +4623,5 @@ include(xir/lsp_parameter_task/CMakeLists.txt)
 include(xir/lsp_envelope/CMakeLists.txt)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_document_notification/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_diagnostic_queue/CMakeLists.txt")

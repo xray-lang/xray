@@ -158,30 +158,34 @@ XR_FUNC XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri) {
 }
 
 XR_FUNC void xlsp_schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
-    if (!server->config.diagnostics_enabled)
-        return;
-
+    if (!server || server->exit_received || !server->config.diagnostics_enabled) return;
+    int count = server->pending_diag_count, capacity = server->pending_diag_capacity;
+    if (!doc || doc->server != server || count < 0 || capacity < count ||
+        (capacity == 0) != (server->pending_diag == NULL) ||
+        (doc->diag_pending && !count)) goto failed;
     uint64_t now = xr_time_monotonic_ms();
-    doc->last_change_time = now;
-    int debounce_ms = server->config.diagnostic_debounce_ms > 0
-                          ? server->config.diagnostic_debounce_ms
-                          : 300;
-    doc->diagnostic_deadline = now + (uint64_t) debounce_ms;
-
-    // O(1) dedup via per-document flag
-    if (doc->diag_pending)
-        return;
-
-    // Grow queue if needed
-    if (server->pending_diag_count >= server->pending_diag_capacity) {
-        int new_cap = server->pending_diag_capacity ? server->pending_diag_capacity * 2 : 16;
-        XrLspDocument **tmp =
-            xr_realloc(server->pending_diag, (size_t) new_cap * sizeof(XrLspDocument *));
-        if (!tmp)
-            return;
-        server->pending_diag = tmp;
-        server->pending_diag_capacity = new_cap;
+    uint64_t delay = (uint64_t)(server->config.diagnostic_debounce_ms > 0 ?
+        server->config.diagnostic_debounce_ms : 300);
+    if (delay > UINT64_MAX - now) goto failed;
+    if (!doc->diag_pending) {
+        if (count == INT_MAX) goto failed;
+        if (count == capacity) {
+            int next = !capacity ? 16 : capacity > INT_MAX / 2 ? INT_MAX : capacity * 2;
+            if ((size_t)next > SIZE_MAX / sizeof(*server->pending_diag)) goto failed;
+            XrLspDocument **grown = xr_realloc(server->pending_diag, (size_t)next * sizeof(*grown));
+            if (!grown) goto failed;
+            server->pending_diag = grown; server->pending_diag_capacity = next;
+        }
+        server->pending_diag[count] = doc; server->pending_diag_count = count + 1;
+        doc->diag_pending = true;
     }
-    server->pending_diag[server->pending_diag_count++] = doc;
-    doc->diag_pending = true;
+    /* Queue ownership is established before publishing the debounce state.
+     * Repeated changes retain the same queue entry without allocating. */
+    doc->last_change_time = now; doc->diagnostic_deadline = now + delay;
+    return;
+failed:
+    /* The editor transaction may already be committed. Stop instead of
+     * silently losing its diagnostic work or retaining a partial queue item. */
+    server->exit_received = true;
+    lsp_log("Diagnostic scheduling failed; stopping server");
 }
