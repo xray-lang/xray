@@ -11,13 +11,13 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_vm.h"
-#include "xir/xxir_nullable.h"
+#include "xir/xxir_emit_c.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
-#include "xir_source_compile_owner.h"
-#include "xir_runtime_allocations.h"
+#include "xir_source_derivation_json_decode_runtime.h"
 #include "xir_generated_schema.h"
 #include "xir_source_derivation_json_decode_source.h"
 static XrXirCompileContext decode_context(void) {
@@ -48,50 +48,41 @@ static uint32_t decode_entry(const XrXirModule *module,const char *name) {
         !memcmp(module->functions[f].name,name,strlen(name))){CHECK(found==UINT32_MAX);found=f;}
     CHECK(found!=UINT32_MAX);return found;
 }
-static XrXirValue decode_call(XrXirProgram *program,uint32_t entry,const char *text,size_t length) {
-    XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
-    XrXirValue argument={0},result={0};CHECK(xr_xir_string_new(domain,text,length,&argument)==XR_XIR_VALUE_OK);
-    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_start(instance,entry,&argument,1)==XR_XIR_CALL_READY);xr_xir_value_drop(&argument);xr_xir_domain_drop(domain);
-    CHECK(xr_xir_instance_poll_bounded(instance,4096).outcome.status==XR_XIR_CALL_RETURNED);
-    CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);return result;
-}
-static void decode_expected(const XrXirValue *value,bool expected,int64_t number) {
-    bool some=false;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(value,&some,&payload) && some==expected);
-    if(some)CHECK(payload && payload->type==XR_XIR_I64 && !payload->reserved && payload->payload==number);else CHECK(!payload);
-}
-static void decode_execute(const XrXirCompileContext *context,XrXirSourceResult *user) {
+static XrXirValue decode_execute(const XrXirCompileContext *context,XrXirSourceResult *user,const char *emit,const char *packet_path) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(user->checked,&packet,NULL)==XR_XIR_OK);
+    if(packet_path){FILE *file=fopen(packet_path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));}
     xr_xir_compile_source_result_free(user);XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(received,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(received);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
-    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t main=decode_entry(module,"main"),decode=decode_entry(module,"decode");
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
-    const struct {const char *text;bool some;int64_t number;} cases[]={
-        {"0",true,0},{"-0",true,0},{"42",true,42},{"-7",true,0},{"9223372036854775807",true,INT64_MAX},
-        {"-9223372036854775808",true,0},{"9223372036854775808",false,0},{"-9223372036854775809",false,0},
-        {"0.0",false,0},{"1e0",false,0},{"01",false,0},{"-01",false,0},{"+1",false,0},{"",false,0},
-        {"null",false,0},{"true",false,0},{" 1",false,0},{"1 ",false,0},{"\"1\"",false,0}};
-    for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);++i) {
-        XrXirValue value=decode_call(program,decode,cases[i].text,strlen(cases[i].text));
-        decode_expected(&value,cases[i].some,cases[i].number);xr_xir_value_drop(&value);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    uint32_t entries[5]={decode_entry(module,"main"),decode_entry(module,"decode"),decode_entry(module,"decodeJSON"),decode_entry(module,"jsonInteger"),UINT32_MAX};
+    for(uint32_t f=0;f<module->function_count;++f)if(module->declarations->functions[f].method_kind==XR_XIR_CONSTRUCTOR) {
+        CHECK(entries[4]==UINT32_MAX);entries[4]=f;
     }
-    const char nul[]={'1',0,'2'};XrXirValue value=decode_call(program,decode,nul,sizeof(nul));decode_expected(&value,false,0);xr_xir_value_drop(&value);
-    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
-    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_start(instance,main,NULL,0)==XR_XIR_CALL_READY);
-    CHECK(xr_xir_instance_poll_bounded(instance,4096).outcome.status==XR_XIR_CALL_RETURNED);
-    CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED && value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
-    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);value=decode_call(program,decode,"42",2);
-    xr_xir_compile_program_drop(program);decode_expected(&value,true,42);xr_xir_value_drop(&value);
-    puts("Ordinary derived JSON integer decoder:20 independent cases, exact init clamp/None/comptime42, input Domain and Program death");
+    CHECK(entries[4]!=UINT32_MAX);
+    if(emit) {
+        XrXirCSource source={0};XrXirStatus status=xr_xir_compile_emit_c(lowered,"fixture_json_decode",8388608,&source);
+        XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(context->resources,&spent)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"JSON decode emit status%u allocated=%llu peak=%llu work=%llu\n",(unsigned)status,
+            (unsigned long long)spent.allocated_bytes,(unsigned long long)spent.peak_bytes,(unsigned long long)spent.work);
+        CHECK(status==XR_XIR_OK && !strstr(source.text,"xr_json_"));
+        for(size_t i=0;i<source.length;++i)if(source.text[i]=='(') {
+            size_t next=i+1;while(next<source.length && isspace((unsigned char)source.text[next]))++next;
+            CHECK(next==source.length || source.text[next]!='{');
+        }
+        FILE *file=fopen(emit,"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length);
+        CHECK(fprintf(file,"\nconst uint32_t fixture_json_decode_selection[5]={%uu,%uu,%uu,%uu,%uu};\n",entries[0],entries[1],entries[2],entries[3],entries[4])>0 && !fclose(file));
+        xr_xir_compile_c_source_free(&source);
+    }
+    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+    decode_oracles(program,entries);XrXirValue value=decode_call(program,entries[1],"42",2);
+    xr_xir_compile_program_drop(program);return value;
 }
-int main(void) {
+int main(int argc,char **argv) {
+    bool emit=argc==4 && !strcmp(argv[1],"--emit-native");CHECK(argc==1 || emit);
     XrXirCompileContext producer_context=decode_context();char text[18000];
     int n=snprintf(text,sizeof(text),json_decode_generator,generated_schema_source,XR_XIR_I64,XR_XIR_STRING,XR_XIR_TYPE_NULLABLE,
         XR_XIR_CALL,XR_XIR_NULLABLE_IS_SOME,XR_XIR_BRANCH,XR_XIR_NULLABLE_UNWRAP,XR_XIR_NULLABLE_SOME,XR_XIR_NULLABLE_NONE,XR_XIR_RETURN,XR_XIR_BOOL+1,XR_XIR_I64+1);
@@ -111,8 +102,14 @@ int main(void) {
         n=snprintf(text,sizeof(text),json_decode_user,authorized?",construct:true":"");CHECK(n>0 && n<(int)sizeof(text));
         XrXirSourceResult user={0};decode_source(&context,text,XR_XIR_PROGRAM,catalog,&user,authorized?XR_XIR_OK:XR_XIR_BAD_STRUCTURE);
         memset(text,0xa5,sizeof(text));xr_xir_compile_library_catalog_free(catalog);
-        if(authorized)decode_execute(&context,&user);else xr_xir_compile_source_result_free(&user);
+        XrXirValue retained={0};
+        if(authorized)retained=decode_execute(&context,&user,emit?argv[2]:NULL,emit?argv[3]:NULL);
+        else xr_xir_compile_source_result_free(&user);
+        XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(context.resources,&spent)==XR_COMPILE_RESOURCE_OK);
+        if(authorized)printf("JSON decode complete pipeline allocated=%llu peak=%llu work=%llu\n",
+            (unsigned long long)spent.allocated_bytes,(unsigned long long)spent.peak_bytes,(unsigned long long)spent.work);
         xr_compile_resources_release(context.resources);
+        if(authorized){decode_expected(&retained,true,42);xr_xir_value_drop(&retained);}
     }
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_release(transport.resources);
     CHECK(!runtime_live && !runtime_bytes && !source_fixture_compile_live && !source_fixture_compile_bytes);
