@@ -31,6 +31,33 @@ typedef struct XlspSourceCallSyntax {
     bool has_callee;
 } XlspSourceCallSyntax;
 XR_FUNC XrXirStatus xlsp_source_syntax_call(const XlspSyntaxSnapshot *,XrLspPosition,XlspSourceCallSyntax *);
+typedef struct XlspSourceArgumentSyntax {
+    XrLspRange range,variable;
+    bool has_variable;
+} XlspSourceArgumentSyntax;
+typedef struct XlspSourceArgumentCall {
+    XlspSourceCallSyntax call;
+    const XlspSourceArgumentSyntax *arguments;
+} XlspSourceArgumentCall;
+typedef struct XlspSourceCallArguments XlspSourceCallArguments;
+typedef struct XlspSourceCallArgumentsView {
+    XrCompileResources *resources;
+    const char *uri;
+    size_t uri_length,source_length;
+    int64_t version;
+    XrFingerprint fingerprint;
+    const XlspSourceArgumentCall *calls;
+    size_t count;
+} XlspSourceCallArgumentsView;
+/* Independently owned numeric facts for reachable completed calls. Complete
+ * argument token ranges include explicit markers and parentheses. A variable
+ * selection identifies an actual variable AST node, never guessed source text.
+ * Canonical content identity binds facts to the exact document and version.
+ * The owner pins the original ledger after syntax/Session/input death.
+ * Failure preserves output and does not reset the original resource ledger. */
+XR_FUNC XrXirStatus xlsp_source_syntax_arguments(const XlspSyntaxSnapshot *,XlspSourceCallArguments **);
+XR_FUNC const XlspSourceCallArgumentsView *xlsp_source_call_arguments_view(const XlspSourceCallArguments *);
+XR_FUNC void xlsp_source_call_arguments_free(XlspSourceCallArguments *);
 /* Owned outline is a syntactic projection, independent of semantic success.
  * Name/span facts come exclusively from this modern parser owner. Output and
  * every name survive syntax/Session/input death. Parent UINT32_MAX means root. */

@@ -42,6 +42,46 @@ static XrCompileResourceStatus syntax_call_selection(XlspSyntaxSnapshot *s,
     return XR_COMPILE_RESOURCE_OK;
 }
 
+static XrCompileResourceStatus syntax_call_arguments_observe(XlspSyntaxSnapshot *s,const XrParseCallSyntax *syntax,
+    XlspSyntaxCallRecord *record) {
+    if(syntax->argument_count!=record->argument_count||!!syntax->arguments!=!!syntax->argument_count||
+        syntax->argument_count>SIZE_MAX/sizeof(*record->arguments))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    if(!record->argument_count)return XR_COMPILE_RESOURCE_OK;
+    XrCompileResourceStatus status=xr_compile_state_calloc(s->state,record->argument_count,
+        sizeof(*record->arguments),(void **)&record->arguments);
+    if(status!=XR_COMPILE_RESOURCE_OK)return status;
+    const AstNode *node=syntax->node;
+    AstNode *const *nodes=node->type==AST_CALL_EXPR?node->as.call_expr.arguments:node->as.new_expr.arguments;
+    if(!nodes)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    for(size_t i=0;i<record->argument_count;++i) {
+        status=xr_compile_state_work(s->state,sizeof(*record->arguments));if(status!=XR_COMPILE_RESOURCE_OK)return status;
+        const XrParseArgumentSyntax *input=&syntax->arguments[i];const AstNode *argument=input->node;
+        if(!argument||nodes[i]!=argument||input->start.line<=0||input->start.column<=0||
+            input->end.line<=0||input->end.column<=0||syntax_call_compare_position(input->start,input->end)>=0||
+            syntax_call_compare_position(record->boundaries[0],input->start)>0||
+            syntax_call_compare_position(input->end,record->closing)>0||
+            (i&&syntax_call_compare_position(record->arguments[i-1].end,input->start)>0))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+        XlspSyntaxArgumentRecord *fact=&record->arguments[i];
+        fact->address=(uintptr_t)argument;fact->node_id=argument->node_id;fact->type=argument->type;
+        fact->start=input->start;fact->end=input->end;
+        if(argument->type==AST_VARIABLE) {
+            const char *name=argument->as.variable.name;if(!name)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+            if(argument->line<=0||argument->column<=0)continue;
+            size_t length=0;
+            for(;;++length) {
+                status=xr_compile_state_work(s->state,1);if(status!=XR_COMPILE_RESOURCE_OK)return status;
+                if(!name[length])break;
+                if(length>=(size_t)(INT_MAX-argument->column))return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+            }
+            fact->has_variable=true;fact->variable=(XrNameSpan){argument->line,argument->column};
+            fact->variable_end=(XrNameSpan){argument->line,argument->column+(int)length};
+            if(!length||syntax_call_compare_position(fact->variable,fact->start)<0||
+                syntax_call_compare_position(fact->variable_end,fact->end)>0)return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+        }
+    }
+    return XR_COMPILE_RESOURCE_OK;
+}
+
 static XrCompileResourceStatus syntax_call_observe(void *context,const XrParseCallSyntax *syntax) {
     XlspSyntaxSnapshot *s=context;
     if(!s||!syntax||!syntax->node||!syntax->boundaries||!syntax->boundary_count||
@@ -70,9 +110,10 @@ static XrCompileResourceStatus syntax_call_observe(void *context,const XrParseCa
     status=xr_compile_state_alloc(s->state,bytes,(void **)&record.boundaries);
     if(status!=XR_COMPILE_RESOURCE_OK)return status;
     status=xr_compile_state_copy(s->state,record.boundaries,syntax->boundaries,bytes);
+    if(status==XR_COMPILE_RESOURCE_OK)status=syntax_call_arguments_observe(s,syntax,&record);
     if(status==XR_COMPILE_RESOURCE_OK)status=xr_compile_state_work(s->state,sizeof(record));
     if(status==XR_COMPILE_RESOURCE_OK)s->calls[s->call_count++]=record;
-    else xr_compile_state_free(record.boundaries);
+    else {xr_compile_state_free(record.boundaries);xr_compile_state_free(record.arguments);}
     return status;
 }
 
@@ -120,6 +161,15 @@ static XrCompileResourceStatus syntax_call_mark(XlspSyntaxSnapshot *s,const AstN
         if(arguments<0||record->argument_count!=(size_t)arguments||
             record->start.line!=node->line||record->start.column!=node->column||
             record->end.line!=node->end_line||record->end.column!=node->end_column)continue;
+        AstNode *const *values=node->type==AST_CALL_EXPR?node->as.call_expr.arguments:node->as.new_expr.arguments;
+        bool same=true;
+        for(size_t p=0;p<record->argument_count;++p) {
+            status=xr_compile_state_work(s->state,sizeof(*record->arguments));if(status!=XR_COMPILE_RESOURCE_OK)return status;
+            const XlspSyntaxArgumentRecord *argument=&record->arguments[p];
+            if(!values||!values[p]||argument->address!=(uintptr_t)values[p]||argument->node_id!=values[p]->node_id||
+                argument->type!=values[p]->type){same=false;break;}
+        }
+        if(!same)continue;
         XlspSyntaxCallRecord current={0};
         if(node->type==AST_CALL_EXPR) {
             status=syntax_call_selection(s,node->as.call_expr.callee,&current);

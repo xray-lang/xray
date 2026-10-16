@@ -6,12 +6,20 @@
 #include "../../frontend/parser/xast_walk.h"
 #include <limits.h>
 #include <string.h>
+typedef struct XlspSyntaxArgumentRecord {
+    uintptr_t address;
+    uint32_t node_id;
+    AstNodeType type;
+    XrNameSpan start,end,variable,variable_end;
+    bool has_variable;
+} XlspSyntaxArgumentRecord;
 typedef struct XlspSyntaxCallRecord {
     uintptr_t address;
     uint32_t node_id;
     AstNodeType type;
     XrNameSpan start,end,closing,selection,selection_end;
     XrNameSpan *boundaries;
+    XlspSyntaxArgumentRecord *arguments;
     size_t boundary_count,argument_count;
     bool has_callee,live;
 } XlspSyntaxCallRecord;
@@ -36,7 +44,9 @@ static XrParseStatus syntax_status(XrCompileResourceStatus status) {
 }
 void xlsp_source_syntax_free(XlspSyntaxSnapshot *s) {
     if(!s)return;
-    for(size_t i=0;i<s->call_count;++i)xr_compile_state_free(s->calls[i].boundaries);
+    for(size_t i=0;i<s->call_count;++i) {
+        xr_compile_state_free(s->calls[i].boundaries);xr_compile_state_free(s->calls[i].arguments);
+    }
     xr_compile_state_free(s->calls);
     XlspSyntaxDiagnostic *item=s->diagnostics;
     while(item){XlspSyntaxDiagnostic *next=(XlspSyntaxDiagnostic *)item->next;xr_compile_state_free((char *)item->message);xr_compile_state_free(item);item=next;}
@@ -206,3 +216,4 @@ XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *s,XrJsonVa
 
 #include "xlsp_source_outline_impl.h"
 #include "xlsp_source_call_syntax.inc.c"
+#include "xlsp_source_argument_syntax.inc.c"

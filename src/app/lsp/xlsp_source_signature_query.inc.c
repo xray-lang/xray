@@ -96,10 +96,11 @@ static XrXirStatus signature_target(const XlspSourceSnapshot *s,const XrXirSourc
     if(declaration->range.module>=view->module_count)return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceQueryModule *module=&view->modules[declaration->range.module];
     XrXirSourceRange range=syntax->declarations[declaration->id-1].name;
-    if(!module->identity||!module->path||range.line<=0||range.column<=0||range.end_line!=range.line||range.end_column<=range.column)
+    if(!module->identity||(!module->path&&declaration->kind!=XR_XIR_SOURCE_INTRINSIC)||
+        range.line<=0||range.column<=0||range.end_line!=range.line||range.end_column<=range.column)
         return XR_XIR_UNRESOLVED;
     LspHoverBuilder identity={s,NULL,0,0,XR_XIR_OK},path={s,NULL,0,0,XR_XIR_OK};
-    hover_text(&identity,module->identity);hover_text(&path,module->path);
+    hover_text(&identity,module->identity);if(module->path)hover_text(&path,module->path);
     result->target_identity=(XlspSourceHover){identity.text,identity.length};
     result->target_path=(XlspSourceHover){path.text,path.length};
     if(identity.status!=XR_XIR_OK)return identity.status;if(path.status!=XR_XIR_OK)return path.status;
