@@ -385,6 +385,8 @@ GET及索引读返回独立拥有的元素，并保留索引求值前选定的�
 
 assert、assertEqual及assertPanics的已检查调用观察保留INTRINSIC声明族，不伪装普通函数。附件接收这些已知签名前，核对治理的稳定ID、名称、参数数、Unit结果及泛型参数数、真实名称位置，以及唯一内建源码的memory模块身份和带域及长度边界的内容指纹。来源检查复用模块身份和指纹算法，资源失败保持附件未发布，不重置接收账本。查询事实不建立内建执行绑定，也不为memory来源虚构文件URI。
 
+源码声明显示事实还独立拥有定义作用域中的真实有序泛型名称，包括方法和闭包的实际外层前缀；缺失名称保持明确不可用，不从类型参数序号合成名称。接收端校验名称向量、参数数与声明族，并深复制全部字符串，附件失败保持原快照和资源账本。只有带初始化器且没有显式类型注解的变量或常量声明可带推导绑定标记。只读类型提示使用该标记、Checked 类型及真实名称位置，按严格 UTF-16 的半开区间筛选，拥有完整未截断标签；它不重新推导，也不建立函数效果证明或宣告公开 inlay handler 的完整资格。
+
 
 
 此子集的Windows源码VM、native、混合条目及Checked重载按独立预期验证两模块字符串程序，输出为`red\nblue\n2\ngreen\nblue\ngreen\n3\n`；实例隔离、结果寿命、初始化越界粘滞与分配失败物理释放另有断言。输出golden不替代OOM、retain、工作预算或全量sanitizer门。完整批次资格仍要求受影响目标重建、回归、合同和sanitizer门；本节不声明这些完整门或macOS已通过。
@@ -1026,6 +1028,8 @@ Admitted Array calls also retain the actual instantiated owner, checked and conv
 An open Array<T> native declaration schema belongs only to the owned query type pool. After successful Checked construction, query projection preserves the complete executable type-ID prefix and either reuses an existing canonical open node or appends a separate query node. Declaration schemas never enter the executable pool. Array recipe temporaries retain the declared type bound of the checked receiver element rather than becoming new user inference variables. This boundary grants no execution, construction, Final or effect authority.
 
 Checked observations for assert, assertEqual and assertPanics retain the INTRINSIC declaration family rather than impersonating ordinary functions. Before accepting their known signatures, attachment checks governed stable IDs, names, arity, Unit result, generic arity, actual name locations, and the unique builtin source memory-module identity and domain- and length-framed content fingerprint. Origin checks reuse the module identity and fingerprint algorithms. Resource failure leaves attachment unpublished without resetting the receiving ledger. Query facts establish no intrinsic execution binding and invent no file URI for memory provenance.
+
+Declaration display facts also independently own the actual ordered generic names in the definition scope, including a method or closure's real enclosing prefix. Missing names remain explicitly unavailable and are never synthesized from parameter ordinals. Attachment validates vector shape, arity and declaration family, deeply copies every string and preserves the original snapshot and resource ledger on failure. Only variable or constant declarations with an initializer and no explicit type annotation carry the inferred-binding flag. Readonly type hints use this flag, Checked types and actual name positions, select a strict UTF-16 half-open range and own complete untruncated labels. They do not repeat inference, establish function-effect proofs or qualify the complete public inlay handler.
 
 
 

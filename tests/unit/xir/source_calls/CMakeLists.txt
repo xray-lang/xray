@@ -102,3 +102,21 @@ add_test(NAME test_source_display_facts_owner COMMAND test_source_display_facts_
 add_test(NAME test_source_display_facts_owner_resources COMMAND test_source_display_facts_owner --resources)
 set_tests_properties(test_source_display_facts_owner PROPERTIES TIMEOUT 30 LABELS "unit;source;ownership;metadata")
 set_tests_properties(test_source_display_facts_owner_resources PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;source;ownership;allocation")
+
+add_executable(test_lsp_source_type_hints "${CMAKE_CURRENT_LIST_DIR}/test_type_hints.c")
+target_link_libraries(test_lsp_source_type_hints PRIVATE xray_lsp_source_workspace)
+target_include_directories(test_lsp_source_type_hints PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+if(WIN32)
+    target_link_libraries(test_lsp_source_type_hints PRIVATE bcrypt ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(test_lsp_source_type_hints PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_source_type_hints PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_lsp_source_type_hints COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_type_hints.py" "$<TARGET_FILE:test_lsp_source_type_hints>" "${PROJECT_SOURCE_DIR}/stdlib")
+add_test(NAME test_lsp_source_type_hints_resources COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_type_hints.py" "$<TARGET_FILE:test_lsp_source_type_hints>" "${PROJECT_SOURCE_DIR}/stdlib" --resources)
+set_tests_properties(test_lsp_source_type_hints PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership;metadata")
+set_tests_properties(test_lsp_source_type_hints_resources PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;ownership;allocation")

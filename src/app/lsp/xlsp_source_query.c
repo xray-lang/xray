@@ -520,3 +520,4 @@ XR_FUNC XrXirStatus xlsp_source_cursor(XrCompileResources *resources,const char 
 #include "xlsp_source_signature_query.inc.c"
 
 #include "xlsp_source_semantic_impl.h"
+#include "xlsp_source_inlay_query.inc.c"

@@ -151,7 +151,12 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
     xr_compile_resources_free(stack);
 }
 static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source) {
-    hover_type_named(b,v,source,NULL,0,0);
+    const XrXirSourceSyntaxView *syntax=xr_xir_compile_source_snapshot_syntax(b->snapshot->query);
+    if(source.generic_owner) {
+        if(!syntax||source.generic_owner>syntax->declaration_count){b->status=XR_XIR_UNRESOLVED;return;}
+        const XrXirSourceDeclarationSyntax *owner=&syntax->declarations[source.generic_owner-1];
+        hover_type_named(b,v,source,owner->type_parameters,owner->type_parameter_count,source.generic_owner);
+    } else hover_type_named(b,v,source,NULL,0,0);
 }
 static void hover_qualified_name(LspHoverBuilder *b,const XrXirSourceView *v,const XrXirSourceDeclaration *d) {
     /* A member's actual immediate owner supplies the qualifier. Do not invent
