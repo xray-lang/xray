@@ -146,9 +146,10 @@ static void threads_case(uint32_t mode,bool resources) {
     threads_close(&fixture);
 }
 #include "test_threads_pause.inc.c"
+#include "test_threads_termination.inc.c"
 int main(int argc,char **argv) {
     bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
-    xr_test_suppress_dialogs();threads_case(0,resources);threads_case(1,false);threads_case(2,false);
+    xr_test_suppress_dialogs();threads_termination(resources);threads_case(0,resources);threads_case(1,false);threads_case(2,false);
     size_t sites=threads_pause_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t point=0;point<sites;++point) threads_pause_fault(point);
     else { threads_pause_fault(0);if (sites>1) threads_pause_fault(sites-1); }

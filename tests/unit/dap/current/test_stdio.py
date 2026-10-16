@@ -274,6 +274,11 @@ def original_wire():
             frames=client.send('stackTrace',{'threadId':stopped['body']['threadId']})['body']['stackFrames']
             assert frames and all(frame['id']>0 for frame in frames)
             retired_frames=[frame['id'] for frame in frames]
+            for policy in (False,None,1,'true'):
+                refused=client.send('disconnect',{'terminateDebuggee':policy})
+                assert not refused['success'],refused
+                retained=client.send('stackTrace',{'threadId':stopped['body']['threadId']})
+                assert retained['success'] and retained['body']['stackFrames']==frames,retained
             if args.scenario!='stop-on-entry':
                 expected=next(stop for stop in case['stops'] if stop['marker']==marker)
                 assert frames[0]['name']==expected['function'] and frames[0]['line']==line

@@ -314,14 +314,29 @@ static XrXirStatus dispatch_control(XdapAdapter *s,const XdapRequest *r,const ch
     status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);return status;
 }
 static XrXirStatus dispatch_terminate(XdapAdapter *s,const XdapRequest *r,bool disconnect) {
+    if (disconnect) {
+        uint32_t terminate=0;XrXirStatus status=xdap_dispatch_argument(r,"terminateDebuggee",&terminate);
+        if (status!=XR_XIR_OK) return status;
+        if (terminate && r->document.nodes[terminate].kind!=XDAP_JSON_BOOL)
+            return xdap_dispatch_response(s,r,false,NULL,"Invalid terminateDebuggee policy");
+        /* The adapter still owns every target and its output context. Detach
+         * needs an independent owner before this control connection can close. */
+        if (terminate && !r->document.nodes[terminate].boolean && s->launch && !s->terminal)
+            return xdap_dispatch_response(s,r,false,NULL,"Detached execution has no independent owner");
+    }
+    XdapJsonWriter response={0};XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
+    if (status!=XR_XIR_OK) return status;
     if (s->launch && !s->terminal) {
         XrXirCallStatus cancelled=xdap_current_stop(s->launch->control);
-        if (cancelled==XR_XIR_CALL_BUSY) return xdap_dispatch_response(s,r,false,NULL,"Target is busy");
+        if (cancelled==XR_XIR_CALL_BUSY) {
+            xdap_json_writer_free(&response);return xdap_dispatch_response(s,r,false,NULL,"Target is busy");
+        }
         xdap_dispatch_clear_stop(s);s->running=true;s->wait_wake=0;
-        if (cancelled!=XR_XIR_CALL_READY && cancelled!=XR_XIR_CALL_CANCELLED)
-            return xdap_dispatch_response(s,r,false,NULL,"Target cleanup failed");
+        if (cancelled!=XR_XIR_CALL_READY && cancelled!=XR_XIR_CALL_CANCELLED) {
+            xdap_json_writer_free(&response);return xdap_dispatch_response(s,r,false,NULL,"Target cleanup failed");
+        }
     }
-    XrXirStatus status=xdap_dispatch_response(s,r,true,NULL,NULL);
+    status=xdap_dispatch_send_prepared(s,&response);xdap_json_writer_free(&response);
     if (disconnect && status==XR_XIR_OK) s->closed=true;
     return status;
 }
