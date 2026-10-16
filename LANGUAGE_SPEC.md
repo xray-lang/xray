@@ -6219,6 +6219,8 @@ These global functions and built-in constructor/static functions are usable with
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
 
+`f64` text parsing uses the same exact integer conversion kernel as decimal literals, rounding once to binary64 with nearest / ties-to-even. Gradual underflow preserves negative zero; a syntactically valid decimal magnitude that overflows produces signed infinity. The grammar still rejects `inf` / `nan` spellings, independently of libc, locale, or the host floating-point rounding environment. Surrounding ASCII whitespace and the runtime text grammar without underscores are checked separately; literal digit separators do not extend the text grammar.
+
 ### 13.3 Type Checking
 
 | Function / expression | Signature | Description |

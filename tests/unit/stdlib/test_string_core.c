@@ -424,8 +424,7 @@ TEST(string_parse_float64) {
     ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_FLOAT_EQ(parsed.value, 0.001, 0.0000001);
 
-    /* Exactly representable inputs must come back bit-exact, not merely close:
-     * this is the fast path that keeps the result correctly rounded. */
+    /* Exactly representable inputs must come back bit-exact, not merely close. */
     parsed = xr_string_parse_float64("1.5e3", 5);
     ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_TRUE(parsed.value == 1500.0);
@@ -450,7 +449,9 @@ TEST(string_parse_float64) {
 
     parsed = xr_string_parse_float64("1e400", 5);
     ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
-    ASSERT_TRUE(parsed.value == xr_string_parse_infinity());
+    uint64_t infinity_bits = 0;
+    memcpy(&infinity_bits, &parsed.value, sizeof(infinity_bits));
+    ASSERT_TRUE(infinity_bits == UINT64_C(0x7ff0000000000000));
 
     ASSERT_EQ_INT(xr_string_parse_float64("\t", 1).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
     ASSERT_EQ_INT(xr_string_parse_float64("", 0).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
