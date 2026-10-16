@@ -29,7 +29,7 @@ if(WIN32)
     add_test(NAME source_sdk_repl_inspect_samples COMMAND test_source_sdk_faults --repl-inspect-samples)
     set_tests_properties(source_sdk_repl_inspect_probe source_sdk_repl_inspect_budget source_sdk_repl_inspect_samples
         PROPERTIES TIMEOUT 120 LABELS "unit;api;source;sdk;ownership;repl;inspection;budget")
-    foreach(input_kind IN ITEMS rooted file array)
+    foreach(input_kind IN ITEMS rooted file array write)
         add_test(NAME source_sdk_repl_${input_kind}_faults COMMAND test_source_sdk_faults --repl-${input_kind})
         set_tests_properties(source_sdk_repl_${input_kind}_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
             LABELS "unit;api;source;sdk;ownership;repl;compiler-faults;runtime-faults;${input_kind}")

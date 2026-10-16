@@ -56,6 +56,8 @@ def main():
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fragment = 'source_sdk_repl_array_consumer.inc.c'
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
+    fragment = 'source_sdk_repl_write_consumer.inc.c'
+    (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fixtures = out/'fixtures'
     fixtures.mkdir()
     for name in ('source_public_repl_rooted', 'source_public_repl_file'):
@@ -77,6 +79,8 @@ def main():
                 b'Installed FILE REPL: real imports, repeated births, absent/directory/config refusals and owned survivors PASS\n'
                 b'Installed input and snapshot: exact lexer span, pending exclusion, removed file and producer death PASS\n'
                 b'Installed Array history: exact birth push, argument once, const refusal, panic effect, shadow and owned snapshot PASS\n'
+                b'Installed Class history control: independent later field read PASS\n'
+                b'Installed typed binding writes: birth authority, scalar/String/Unit/Array/struct/Class, foreign refusal, busy and owned survivor PASS\n'
                 b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n')
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
@@ -125,13 +129,17 @@ def main():
     summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++20'],
                    published_headers=sorted(headers), exact_NUL_UTF8=True, independent_persistent_instances=True,
                    foreign_callable_refused=True, all_producers_dead=True, owned_tuple_child=True, attacks=attacks,
-                   public_REPL_functions=13, borrowed_binding_facts=True, type_query_actual_side_effects=True,
+                   public_REPL_functions=14, borrowed_binding_facts=True, type_query_actual_side_effects=True,
                    type_query_preserves_it=True, type_result_survives_owner=True,
                    rooted_real_imports_and_project_authority=True, repeated_real_path_births=True,
                    FILE_snapshot_after_unlink=True, real_lexer_exact_span=True,
                    actual_array_birth_mutation=True, array_argument_evaluated_once=True,
                    array_const_refused=True, failed_input_old_array_effect_preserved=True,
                    old_array_snapshot_survives_shadow_and_owner_death=True,
+                   independent_class_history_control=True, actual_typed_birth_writes=True,
+                   write_preserves_bindings_and_it=True, write_pending_and_callback_BUSY=True,
+                   write_foreign_composite_refused_after_producer_death=True,
+                   written_NUL_UTF8_survives_all_producers=True,
                    manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
                    scope='Source embedding host consumers; not Target AOT/mixed or complete FI/safety qualification',
                    production_release=False)

@@ -36,8 +36,9 @@ static void integer(const XrSourceValue *value,int64_t expected) {
 }
 typedef struct SdkReplTrace {
     XrSourceRepl *owner;
+    const XrSourceValue *write_value;
     char bytes[64];
-    size_t count;
+    size_t count, write_callbacks;
 } SdkReplTrace;
 static XrSourceWriteStatus sdk_repl_output(void *context,XrSourceOutputStream stream,const char *bytes,size_t count) {
     SdkReplTrace *trace=(SdkReplTrace *)context;
@@ -48,6 +49,10 @@ static XrSourceWriteStatus sdk_repl_output(void *context,XrSourceOutputStream st
     XrSourceInputState state=XR_SOURCE_INPUT_INCOMPLETE;
     CHECK(xray_source_repl_check_input(trace->owner,"42",2,&state)==XR_SOURCE_BUSY && state==XR_SOURCE_INPUT_INCOMPLETE);
     CHECK(xray_source_repl_begin_file(trace->owner,"missing.xr",NULL)==XR_SOURCE_BUSY);
+    if(trace->write_value) {
+        CHECK(xray_source_repl_write(trace->owner,"value",trace->write_value)==XR_SOURCE_BUSY);
+        ++trace->write_callbacks;
+    }
     memcpy(trace->bytes+trace->count,bytes,count);trace->count+=count;return XR_SOURCE_WRITE_OK;
 }
 static XrSourceStatus sdk_repl_begin(XrSourceRepl *owner,const char *source,XrSourceDiagnostic **diagnostic) {
@@ -182,6 +187,7 @@ static void sdk_repl_inspection_cases(const char *stdlib_path) {
 
 #include "source_sdk_repl_input_consumer.inc.c"
 #include "source_sdk_repl_array_consumer.inc.c"
+#include "source_sdk_repl_write_consumer.inc.c"
 
 int main(int argc,char **argv) {
     CHECK(argc==4);
@@ -251,5 +257,6 @@ int main(int argc,char **argv) {
     sdk_repl_file_cases(argv[1],argv[3]);
     sdk_repl_snapshot_input_cases(argv[1]);
     sdk_repl_array_cases(argv[1]);
+    sdk_repl_write_cases(argv[1]);
     puts("Installed owning AST, typed values, persistent state, callable authority and producer death PASS");return 0;
 }
