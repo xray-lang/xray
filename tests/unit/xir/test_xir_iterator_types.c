@@ -20,6 +20,7 @@
 #include "tuple_owner_observer.h"
 #include "xir_iterator_types_golden.h"
 #include "xir_iterator_types_previous73_golden.h"
+#include "xir_iterator_types_previous74_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 
 typedef struct IteratorFixture {
@@ -83,7 +84,14 @@ static void iterator_rejections(void) {
         CHECK(xr_xir_compile_checked_read(&c,previous73[old],sizeof(iterator_types_previous73_golden),&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
         CHECK(attempts==before_attempts && stats(&c).allocated_bytes==before.allocated_bytes && stats(&c).live_bytes==baseline);
     }
-    for (uint32_t mutation=0;mutation<14;++mutation) {
+    const uint8_t *previous74[]={iterator_types_previous74_golden,iterator_types_previous74_unit,
+        iterator_types_previous74_cycle,iterator_types_previous74_unknown,iterator_types_previous74_duplicate};
+    for (uint32_t old=0;old<5;++old) {
+        XrXirArtifact *output=NULL;size_t before_attempts=attempts;XrCompileResourceStats before=stats(&c);
+        CHECK(xr_xir_compile_checked_read(&c,previous74[old],sizeof(iterator_types_previous74_golden),&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
+        CHECK(attempts==before_attempts && stats(&c).allocated_bytes==before.allocated_bytes && stats(&c).live_bytes==baseline);
+    }
+    for (uint32_t mutation=0;mutation<16;++mutation) {
         IteratorFixture f; iterator_fixture(&f,false); XrXirCallableParameter p={XR_XIR_I64,0};
         XrXirStatus expected=XR_XIR_BAD_STRUCTURE;
         switch (mutation) {
@@ -101,9 +109,17 @@ static void iterator_rejections(void) {
         case 11:f.nodes[1].element=XR_XIR_I64;break;
         case 12:f.nodes[0].kind=XR_XIR_TYPE_CELL;f.nodes[0].element=XR_XIR_I64;
             f.nodes[1].element=(XrXirType)256;expected=XR_XIR_BAD_TYPE;break;
+        case 14:f.nodes[0].kind=9;expected=XR_XIR_BAD_TYPE;break;
+        case 15:f.nodes[0].kind=10;expected=XR_XIR_BAD_TYPE;break;
         default:f.nodes[1].kind=XR_XIR_TYPE_TASK;f.nodes[1].element=(XrXirType)256;expected=XR_XIR_BAD_TYPE;break;
         }
         XrXirArtifact *out=NULL; CHECK(xir_fixture_check(&c,&f.module,&out,NULL)==expected && !out);
+        CHECK(stats(&c).live_bytes==baseline);
+    }
+    for(uint32_t reserved=153;reserved<=175;++reserved) {
+        IteratorFixture f;iterator_fixture(&f,false);f.instruction.op=(XrXirOp)reserved;
+        XrXirArtifact *out=NULL;
+        CHECK(xir_fixture_check(&c,&f.module,&out,NULL)==XR_XIR_BAD_STAGE && !out);
         CHECK(stats(&c).live_bytes==baseline);
     }
     const uint8_t *bad[]={iterator_types_cycle,iterator_types_unknown,iterator_types_duplicate};

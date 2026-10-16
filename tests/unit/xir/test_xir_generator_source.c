@@ -24,8 +24,10 @@
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "xir_source_fixture_owner.h"
+#include "xir_generator84_golden.h"
 #include "xir_generator74_golden.h"
-_Static_assert(XR_XIR_GENERATOR_YIELD==153,"independent Generator opcode ordinal");
+_Static_assert(XR_XIR_TYPE_ITERATOR==11,"Iterator excludes Map and Set descriptor ordinals");
+_Static_assert(XR_XIR_GENERATOR_YIELD==176,"independent Generator opcode ordinal");
 _Static_assert(XR_XIR_PROGRAM==0 && XR_XIR_LIBRARY==1,"independent packet linkage ordinals");
 static const char source_text[]=
     "export fn numbers() -> Iterator<i64> {\n yield 11\n Coro.yield()\n yield 22\n }\n"
@@ -62,18 +64,41 @@ static void vm_pull(const XrXirArtifact *lowered,uint32_t function,XrXirTypeAren
     CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees);
 }
 static void packet_models(const XrXirCompileContext *context) {
+    const struct {const uint8_t *bytes;size_t length;} previous[]={
+        {generator74_i64,sizeof(generator74_i64)},
+        {generator74_unit,sizeof(generator74_unit)},
+        {generator74_no_role,sizeof(generator74_no_role)},
+        {generator74_scalar_result,sizeof(generator74_scalar_result)},
+        {generator74_wrong_value,sizeof(generator74_wrong_value)},
+        {generator74_return_arg,sizeof(generator74_return_arg)},
+        {generator74_no_suspend,sizeof(generator74_no_suspend)},
+        {generator74_ref_parameter,sizeof(generator74_ref_parameter)},
+        {generator74_unit_arg,sizeof(generator74_unit_arg)},
+        {generator74_unknown_role,sizeof(generator74_unknown_role)},
+        {generator74_initializer_role,sizeof(generator74_initializer_role)},
+        {generator74_entry_role,sizeof(generator74_entry_role)}};
+    for(unsigned i=0;i<sizeof(previous)/sizeof(previous[0]);++i) {
+        XrCompileResourceStats before={0},after={0};
+        CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+        XrXirArtifact *decoded=NULL;
+        CHECK(xr_xir_compile_checked_read(context,previous[i].bytes,previous[i].length,&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
+        CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+        CHECK(after.allocated_bytes==before.allocated_bytes && after.allocation_count==before.allocation_count && after.live_bytes==before.live_bytes);
+    }
     const struct {const uint8_t *bytes;size_t length;XrXirStatus expected;} cases[]={
-        {generator74_i64,sizeof(generator74_i64),XR_XIR_OK},{generator74_unit,sizeof(generator74_unit),XR_XIR_OK},
-        {generator74_no_role,sizeof(generator74_no_role),XR_XIR_BAD_TYPE},
-        {generator74_scalar_result,sizeof(generator74_scalar_result),XR_XIR_BAD_TYPE},
-        {generator74_wrong_value,sizeof(generator74_wrong_value),XR_XIR_BAD_TYPE},
-        {generator74_return_arg,sizeof(generator74_return_arg),XR_XIR_BAD_STRUCTURE},
-        {generator74_no_suspend,sizeof(generator74_no_suspend),XR_XIR_BAD_STRUCTURE},
-        {generator74_ref_parameter,sizeof(generator74_ref_parameter),XR_XIR_BAD_TYPE},
-        {generator74_unit_arg,sizeof(generator74_unit_arg),XR_XIR_BAD_STRUCTURE},
-        {generator74_unknown_role,sizeof(generator74_unknown_role),XR_XIR_BAD_STRUCTURE},
-        {generator74_initializer_role,sizeof(generator74_initializer_role),XR_XIR_BAD_STRUCTURE},
-        {generator74_entry_role,sizeof(generator74_entry_role),XR_XIR_BAD_STRUCTURE}};
+        {generator84_i64,sizeof(generator84_i64),XR_XIR_OK},{generator84_unit,sizeof(generator84_unit),XR_XIR_OK},
+        {generator84_no_role,sizeof(generator84_no_role),XR_XIR_BAD_TYPE},
+        {generator84_scalar_result,sizeof(generator84_scalar_result),XR_XIR_BAD_TYPE},
+        {generator84_wrong_value,sizeof(generator84_wrong_value),XR_XIR_BAD_TYPE},
+        {generator84_return_arg,sizeof(generator84_return_arg),XR_XIR_BAD_STRUCTURE},
+        {generator84_no_suspend,sizeof(generator84_no_suspend),XR_XIR_BAD_STRUCTURE},
+        {generator84_ref_parameter,sizeof(generator84_ref_parameter),XR_XIR_BAD_TYPE},
+        {generator84_unit_arg,sizeof(generator84_unit_arg),XR_XIR_BAD_STRUCTURE},
+        {generator84_unknown_role,sizeof(generator84_unknown_role),XR_XIR_BAD_STRUCTURE},
+        {generator84_initializer_role,sizeof(generator84_initializer_role),XR_XIR_BAD_STRUCTURE},
+        {generator84_entry_role,sizeof(generator84_entry_role),XR_XIR_BAD_STRUCTURE},
+        {generator84_reserved_map,sizeof(generator84_reserved_map),XR_XIR_BAD_TYPE},
+        {generator84_reserved_set,sizeof(generator84_reserved_set),XR_XIR_BAD_TYPE}};
     for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         XrXirArtifact *decoded=NULL;XrXirStatus status=xr_xir_compile_checked_read(context,cases[i].bytes,cases[i].length,&decoded,NULL);
         if(status!=cases[i].expected) fprintf(stderr,"Independent packet%u status%u expected%u\n",i,status,cases[i].expected);
