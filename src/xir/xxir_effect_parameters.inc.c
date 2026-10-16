@@ -119,11 +119,6 @@ static XrXirStatus effect_parameter_type(EffectParameterFlow *flow,uint32_t valu
     return effect_body_request_type(&flow->body,flow->function_index,value,type);
 }
 
-static XrXirStatus effect_parameter_operation(EffectParameterFlow *flow,uint32_t instruction,
-    XrXirInstruction *storage,const XrXirInstruction **output) {
-    return effect_body_request_instruction(&flow->body,flow->function_index,instruction,storage,output);
-}
-
 static XrXirStatus effect_parameter_join(EffectParameterFlow *flow,
     uint32_t destination, uint32_t source) {
     if (destination >= flow->values || source >= flow->values) return XR_XIR_BAD_STRUCTURE;
@@ -353,19 +348,25 @@ static XrXirStatus effect_parameter_rows(EffectParameterFlow *flow, EffectGraph 
             flow->parameters[p].uses = 0;
         }
     }
-    if (flow->formula_phase) for (uint32_t i = 0; i < flow->function->instruction_count; ++i) {
-        if (!xir_compile_work(flow->work, 2)) return XR_XIR_BUDGET;
-        XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        XrXirStatus status=effect_parameter_operation(flow,i,&storage,&op);
-        if (status!=XR_XIR_OK) return status;
-        const XrXirTypeNode *signature = xr_xir_callable_signature(flow->body.domain.types,op->type);
-        bool transfer = op->op == XR_XIR_COPY || op->op == XR_XIR_PHI ||
-            op->op == XR_XIR_LOCAL_NEW || op->op == XR_XIR_LOCAL_READ ||
-            op->op == XR_XIR_SCALAR_COPY || op->op == XR_XIR_OWNED_RETAIN ||
-            op->op == XR_XIR_SCALAR_LOCAL_NEW || op->op == XR_XIR_SCALAR_LOCAL_READ ||
-            op->op == XR_XIR_OWNED_LOCAL_NEW || op->op == XR_XIR_OWNED_LOCAL_READ;
-        flow->masks[flow->function->parameter_count + i] = signature && !transfer && op->op != XR_XIR_FUNCTION_REF ?
-            signature->flags & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED) : 0;
+    if (flow->formula_phase) {
+        EffectBodyRecordCursor cursor;
+        XrXirStatus scan=effect_body_request_sequence_begin(&flow->body,&cursor);
+        if (scan!=XR_XIR_OK) return scan;
+        for (uint32_t i = 0; i < flow->function->instruction_count; ++i) {
+            if (!xir_compile_work(flow->work, 2)) return XR_XIR_BUDGET;
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            XrXirStatus status=effect_body_request_sequence_instruction(
+                &flow->body,flow->function_index,i,&cursor,&storage,&op);
+            if (status!=XR_XIR_OK) return status;
+            const XrXirTypeNode *signature = xr_xir_callable_signature(flow->body.domain.types,op->type);
+            bool transfer = op->op == XR_XIR_COPY || op->op == XR_XIR_PHI ||
+                op->op == XR_XIR_LOCAL_NEW || op->op == XR_XIR_LOCAL_READ ||
+                op->op == XR_XIR_SCALAR_COPY || op->op == XR_XIR_OWNED_RETAIN ||
+                op->op == XR_XIR_SCALAR_LOCAL_NEW || op->op == XR_XIR_SCALAR_LOCAL_READ ||
+                op->op == XR_XIR_OWNED_LOCAL_NEW || op->op == XR_XIR_OWNED_LOCAL_READ;
+            flow->masks[flow->function->parameter_count + i] = signature && !transfer && op->op != XR_XIR_FUNCTION_REF ?
+                signature->flags & (XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED) : 0;
+        }
     }
     return XR_XIR_OK;
 }
@@ -391,9 +392,12 @@ static XrXirStatus effect_parameter_function(const XrXirModule *module,
     flow.changed = true;
     while (status == XR_XIR_OK && flow.changed) {
         flow.changed = false;
+        EffectBodyRecordCursor cursor;
+        status=effect_body_request_sequence_begin(&flow.body,&cursor);
         for (uint32_t i=0;status==XR_XIR_OK && i<flow.function->instruction_count;++i) {
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            flow.instruction=i;status=effect_parameter_operation(&flow,i,&storage,&op);
+            flow.instruction=i;
+            status=effect_body_request_sequence_instruction(&flow.body,function,i,&cursor,&storage,&op);
             if (status==XR_XIR_OK) status=effect_parameter_instruction(&flow,op);
         }
     }

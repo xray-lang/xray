@@ -753,6 +753,10 @@ static bool cell_proof_prepare_edges(CellProofBuild *build) {
     build->counting_edges = false;
     if (!counted) return false;
     build->edge_capacity = build->edge_count; build->edge_count = 0;
+    /* The complete first walk already validated the rows and seeded origins.
+     * With no actual edges there is no adjacency to append. The ordinary
+     * solver and final sink validation still consume this current proof. */
+    if (!build->edge_capacity) return cell_proof_work(build,1);
     size_t bytes = 0;
     if (!cell_proof_edge_storage_bytes(build->edge_capacity,&bytes))
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);

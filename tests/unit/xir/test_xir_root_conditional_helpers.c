@@ -1741,7 +1741,10 @@ static void conditional_ordinary_environment_keys(void) {
     }
 }
 
+#include "xir_input_seed_run_cases.h"
+
 int main(int argc, char **argv) {
+    input_seed_run_literals();
     if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-resources")) {
         conditional_nonroot_seed_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

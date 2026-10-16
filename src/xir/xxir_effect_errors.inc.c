@@ -715,6 +715,27 @@ static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
     }
     if (status!=XR_XIR_OK) return status;
     if (copied_zero) return error_instruction_begin(flow,i);
+    /* A nonterminal integer constant has no Error transfer and no active
+     * result row. Re-read its actual opcode and type after the panic edge;
+     * unused words remain obligations of complete physical correspondence.
+     * The final row is always decoded for the block's terminal consumer. */
+    if (ref && i+1<block->first+block->count && !(ref->mask&UINT32_C(3))) {
+        if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+        uint32_t opcode=XR_XIR_INVALID;
+        status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
+        if (status!=XR_XIR_OK) return status;
+        if (opcode==XR_XIR_CONST_INT) {
+            uint32_t type=XR_XIR_UNIT;
+            status=effect_body_run_word(&flow->body.read,ref,i,1,&type);
+            if (status!=XR_XIR_OK) return status;
+            if (type==XR_XIR_I64) {
+                if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+                if (!flow->slots || flow->slots[flow->function->parameter_count+i]!=UINT32_MAX)
+                    return XR_XIR_BAD_STRUCTURE;
+                return error_instruction_begin(flow,i);
+            }
+        }
+    }
     if (ref) {
         if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
         if (!row->constant || !row->decoded) {
