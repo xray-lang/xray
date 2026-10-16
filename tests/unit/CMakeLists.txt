@@ -4589,3 +4589,4 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_map_key_path.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_source_borrow.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_read_loan.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_types.cmake)

@@ -91,15 +91,15 @@ static XrXirStatus task_go_pipeline(const XrXirCompileContext *c) {
             xr_xir_effects_task_creation(effects, 4) == XR_XIR_EFFECT_NONE);
         status = xr_xir_compile_checked_write(checked, &packet, NULL);
         if (status == XR_XIR_OK) {
-            CHECK(packet.length == sizeof(task_go83_golden));
-            for (size_t i = 64; i < packet.length; ++i) if (packet.bytes[i] != task_go83_golden[i]) {
+            CHECK(packet.length == sizeof(task_go84_golden));
+            for (size_t i = 64; i < packet.length; ++i) if (packet.bytes[i] != task_go84_golden[i]) {
                 fprintf(stderr, "GO named packet mismatch offset%zu actual%u expected%u\n",
-                    i, packet.bytes[i], task_go83_golden[i]); break;
+                    i, packet.bytes[i], task_go84_golden[i]); break;
             }
-            CHECK(!memcmp(packet.bytes, task_go83_golden, packet.length));
+            CHECK(!memcmp(packet.bytes, task_go84_golden, packet.length));
         }
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_go83_golden, sizeof(task_go83_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_go84_golden, sizeof(task_go84_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_specialize(decoded, &specialized, NULL);
     if (status == XR_XIR_OK) {
         memset(f.worker, 0xcc, sizeof(f.worker)); memset(f.root, 0xcc, sizeof(f.root));
@@ -349,12 +349,12 @@ static void task_go_axes(void) {
 }
 static void task_go_packets(void) {
     XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
-    const uint8_t *bad[] = {task_go83_scalar_go, task_go83_initializer_target,
-        task_go83_await_place, task_go83_go_target, task_go83_await_binding,
-        task_go83_mutable_worker, task_go83_cleanup_helper};
-    const size_t lengths[] = {sizeof(task_go83_scalar_go), sizeof(task_go83_initializer_target),
-        sizeof(task_go83_await_place), sizeof(task_go83_go_target), sizeof(task_go83_await_binding),
-        sizeof(task_go83_mutable_worker), sizeof(task_go83_cleanup_helper)};
+    const uint8_t *bad[] = {task_go84_scalar_go, task_go84_initializer_target,
+        task_go84_await_place, task_go84_go_target, task_go84_await_binding,
+        task_go84_mutable_worker, task_go84_cleanup_helper};
+    const size_t lengths[] = {sizeof(task_go84_scalar_go), sizeof(task_go84_initializer_target),
+        sizeof(task_go84_await_place), sizeof(task_go84_go_target), sizeof(task_go84_await_binding),
+        sizeof(task_go84_mutable_worker), sizeof(task_go84_cleanup_helper)};
     const uint8_t *historical[] = {task_go66_scalar_go, task_go66_initializer_target,
         task_go66_await_place, task_go66_go_target, task_go66_await_binding,
         task_go66_mutable_worker, task_go66_cleanup_helper};

@@ -8,12 +8,12 @@
  */
 #ifndef P09_HASH_FOREACH_PACKETS_H
 #define P09_HASH_FOREACH_PACKETS_H
-#include "xir_hash_position83_golden.h"
+#include "xir_hash_position84_golden.h"
 #include "xir_map_membership80_golden.h"
-_Static_assert(XR_XIR_OP_COUNT==176 && XR_XIR_CHECKED_CONTRACT==83,"hash positional identity");
+_Static_assert(XR_XIR_OP_COUNT==176 && XR_XIR_CHECKED_CONTRACT==84,"hash positional identity");
 static void foreach_packets(const XrXirCompileContext *context) {
-    const uint8_t *valid[]={hash_position83_map_key,hash_position83_map_value,hash_position83_set_key};
-    const size_t lengths[]={sizeof(hash_position83_map_key),sizeof(hash_position83_map_value),sizeof(hash_position83_set_key)};
+    const uint8_t *valid[]={hash_position84_map_key,hash_position84_map_value,hash_position84_set_key};
+    const size_t lengths[]={sizeof(hash_position84_map_key),sizeof(hash_position84_map_value),sizeof(hash_position84_set_key)};
     for(unsigned i=0;i<3;++i) {
         XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
         CHECK(xr_xir_compile_checked_read(context,valid[i],lengths[i],&artifact,NULL)==XR_XIR_OK);
@@ -21,10 +21,10 @@ static void foreach_packets(const XrXirCompileContext *context) {
         CHECK(packet.length==lengths[i] && !memcmp(packet.bytes,valid[i],packet.length));
         xr_xir_compile_artifact_free(artifact);xr_xir_compile_checked_packet_free(&packet);
     }
-    const uint8_t *bad[]={hash_position83_bad_key_receiver,hash_position83_bad_value_receiver,
-        hash_position83_bad_key_result,hash_position83_bad_value_result,hash_position83_bad_index,hash_position83_bad_key_proof};
-    const size_t sizes[]={sizeof(hash_position83_bad_key_receiver),sizeof(hash_position83_bad_value_receiver),
-        sizeof(hash_position83_bad_key_result),sizeof(hash_position83_bad_value_result),sizeof(hash_position83_bad_index),sizeof(hash_position83_bad_key_proof)};
+    const uint8_t *bad[]={hash_position84_bad_key_receiver,hash_position84_bad_value_receiver,
+        hash_position84_bad_key_result,hash_position84_bad_value_result,hash_position84_bad_index,hash_position84_bad_key_proof};
+    const size_t sizes[]={sizeof(hash_position84_bad_key_receiver),sizeof(hash_position84_bad_value_receiver),
+        sizeof(hash_position84_bad_key_result),sizeof(hash_position84_bad_value_result),sizeof(hash_position84_bad_index),sizeof(hash_position84_bad_key_proof)};
     for(unsigned i=0;i<6;++i) {XrXirArtifact *artifact=NULL;
         CHECK(xr_xir_compile_checked_read(context,bad[i],sizes[i],&artifact,NULL)==XR_XIR_BAD_TYPE && !artifact);}
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);

@@ -8,15 +8,15 @@
  */
 #ifndef P09_SET_ALGEBRA_PACKETS_H
 #define P09_SET_ALGEBRA_PACKETS_H
-#include "xir_set_algebra83_golden.h"
+#include "xir_set_algebra84_golden.h"
 #include "xir_hash_projection78_golden.h"
 _Static_assert(XR_XIR_SET_UNION == 167 && XR_XIR_SET_IS_SUPERSET == 172 &&
-    XR_XIR_OP_COUNT == 176 && XR_XIR_CHECKED_CONTRACT == 83, "binary Set wire identities");
+    XR_XIR_OP_COUNT == 176 && XR_XIR_CHECKED_CONTRACT == 84, "binary Set wire identities");
 static void algebra_packets(const XrXirCompileContext *context) {
-    const uint8_t *valid[] = {set_algebra83_union, set_algebra83_intersection, set_algebra83_difference,
-        set_algebra83_symmetric_difference, set_algebra83_is_subset, set_algebra83_is_superset};
-    const size_t sizes[] = {sizeof(set_algebra83_union), sizeof(set_algebra83_intersection), sizeof(set_algebra83_difference),
-        sizeof(set_algebra83_symmetric_difference), sizeof(set_algebra83_is_subset), sizeof(set_algebra83_is_superset)};
+    const uint8_t *valid[] = {set_algebra84_union, set_algebra84_intersection, set_algebra84_difference,
+        set_algebra84_symmetric_difference, set_algebra84_is_subset, set_algebra84_is_superset};
+    const size_t sizes[] = {sizeof(set_algebra84_union), sizeof(set_algebra84_intersection), sizeof(set_algebra84_difference),
+        sizeof(set_algebra84_symmetric_difference), sizeof(set_algebra84_is_subset), sizeof(set_algebra84_is_superset)};
     for (uint32_t i = 0; i < 6; ++i) {
         XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
         CHECK(xr_xir_compile_checked_read(context, valid[i], sizes[i], &artifact, NULL) == XR_XIR_OK);
@@ -24,10 +24,10 @@ static void algebra_packets(const XrXirCompileContext *context) {
         CHECK(packet.length == sizes[i] && !memcmp(packet.bytes, valid[i], sizes[i]));
         xr_xir_compile_artifact_free(artifact); xr_xir_compile_checked_packet_free(&packet);
     }
-    const uint8_t *invalid[] = {set_algebra83_bad_receiver, set_algebra83_bad_other_kind, set_algebra83_bad_other_element,
-        set_algebra83_bad_set_result, set_algebra83_bad_relation_result, set_algebra83_bad_hashable};
-    const size_t bad_sizes[] = {sizeof(set_algebra83_bad_receiver), sizeof(set_algebra83_bad_other_kind), sizeof(set_algebra83_bad_other_element),
-        sizeof(set_algebra83_bad_set_result), sizeof(set_algebra83_bad_relation_result), sizeof(set_algebra83_bad_hashable)};
+    const uint8_t *invalid[] = {set_algebra84_bad_receiver, set_algebra84_bad_other_kind, set_algebra84_bad_other_element,
+        set_algebra84_bad_set_result, set_algebra84_bad_relation_result, set_algebra84_bad_hashable};
+    const size_t bad_sizes[] = {sizeof(set_algebra84_bad_receiver), sizeof(set_algebra84_bad_other_kind), sizeof(set_algebra84_bad_other_element),
+        sizeof(set_algebra84_bad_set_result), sizeof(set_algebra84_bad_relation_result), sizeof(set_algebra84_bad_hashable)};
     for (uint32_t i = 0; i < 6; ++i) {
         XrXirArtifact *artifact = NULL;
         CHECK(xr_xir_compile_checked_read(context, invalid[i], bad_sizes[i], &artifact, NULL) == XR_XIR_BAD_TYPE && !artifact);

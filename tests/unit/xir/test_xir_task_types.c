@@ -34,10 +34,10 @@
 #include "xir_task_unit69_golden.h"
 #include "xir_task_unit70_golden.h"
 #include "xir_task_unit72_golden.h"
-#include "xir_task_types83_golden.h"
-#include "xir_task_go83_golden.h"
-#include "xir_task_unit83_golden.h"
-#include "xir_task_map_kind83_golden.h"
+#include "xir_task_types84_golden.h"
+#include "xir_task_go84_golden.h"
+#include "xir_task_unit84_golden.h"
+#include "xir_task_map_kind84_golden.h"
 #include "xir_atomic_types65_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 #include "task_outcome_sendable_cases.h"
@@ -66,14 +66,14 @@ static XrXirStatus task_types_pipeline(const XrXirCompileContext *c) {
     XrXirStatus status = xir_fixture_check(c, &f.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, NULL);
     if (status == XR_XIR_OK) {
-        if (packet.length != sizeof(task_types83_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types83_golden));
-        for (size_t i = 64; i < packet.length && i < sizeof(task_types83_golden); ++i)
-            if (packet.bytes[i] != task_types83_golden[i]) {
-                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types83_golden[i]); break;
+        if (packet.length != sizeof(task_types84_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types84_golden));
+        for (size_t i = 64; i < packet.length && i < sizeof(task_types84_golden); ++i)
+            if (packet.bytes[i] != task_types84_golden[i]) {
+                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types84_golden[i]); break;
             }
-        CHECK(packet.length == sizeof(task_types83_golden) && !memcmp(packet.bytes, task_types83_golden, packet.length));
+        CHECK(packet.length == sizeof(task_types84_golden) && !memcmp(packet.bytes, task_types84_golden, packet.length));
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types83_golden, sizeof(task_types83_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types84_golden, sizeof(task_types84_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, xr_xir_compile_artifact_module(decoded)->types, &clone);
     if (status == XR_XIR_OK) {
         CHECK(clone->nodes != f.nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK &&
@@ -133,8 +133,8 @@ static void task_types_reject(void) {
             XrXirCheckedPacket packet = {0};
             CHECK(xir_fixture_check(&c, &f.module, &out, NULL) == XR_XIR_OK && out);
             CHECK(xr_xir_compile_checked_write(out, &packet, NULL) == XR_XIR_OK);
-            const uint8_t *expected_packet=mutation==11?task_map_kind83_golden:task_unit83_golden;
-            size_t expected_length=mutation==11?sizeof(task_map_kind83_golden):sizeof(task_unit83_golden);
+            const uint8_t *expected_packet=mutation==11?task_map_kind84_golden:task_unit84_golden;
+            size_t expected_length=mutation==11?sizeof(task_map_kind84_golden):sizeof(task_unit84_golden);
             CHECK(packet.length==expected_length && !memcmp(packet.bytes,expected_packet,packet.length));
             xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(out);
         } else {

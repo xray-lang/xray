@@ -12,7 +12,7 @@
 #include "base/xsha256.h"
 
 /* Independent complete prior and current policy frames. */
-#include "xir_hash83_identity.h"
+#include "xir_hash84_identity.h"
 static const uint8_t linked_policy71_preimage[71]={
     0x78,0x72,0x61,0x79,0x3a,0x78,0x69,0x72,0x2d,0x63,0x31,0x31,
     0x2d,0x63,0x6f,0x64,0x65,0x67,0x65,0x6e,0x2d,0x70,0x6f,0x6c,
@@ -143,6 +143,7 @@ static const uint8_t original_policy73[] = {
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy75 : original_policy75,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy81 : original_policy81,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy82 : original_policy82,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy83 : original_policy83,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value24 : original_policy_value24,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy73 : original_policy73,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy72 : original_policy72,32));

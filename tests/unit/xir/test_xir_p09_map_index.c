@@ -15,18 +15,18 @@
 #include "p09_map_index_input.h"
 #include "xir_runtime_allocations.h"
 #include "p09_map_index_program.h"
-#include "xir_map_index83_golden.h"
+#include "xir_map_index84_golden.h"
 #include "xir_hash_members76_golden.h"
-_Static_assert(XR_XIR_MAP_INDEX == 163 && XR_XIR_OP_COUNT == 176 && XR_XIR_CHECKED_CONTRACT == 83,
+_Static_assert(XR_XIR_MAP_INDEX == 163 && XR_XIR_OP_COUNT == 176 && XR_XIR_CHECKED_CONTRACT == 84,
     "required Map lookup has its own admitted wire identity");
 static void index_packet(const XrXirCompileContext *context) {
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_checked_read(context, map_index83_golden, sizeof(map_index83_golden), &artifact, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context, map_index84_golden, sizeof(map_index84_golden), &artifact, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(artifact, &packet, NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(map_index83_golden) && !memcmp(packet.bytes, map_index83_golden, packet.length));
+    CHECK(packet.length == sizeof(map_index84_golden) && !memcmp(packet.bytes, map_index84_golden, packet.length));
     xr_xir_compile_artifact_free(artifact); xr_xir_compile_checked_packet_free(&packet);
-    const uint8_t *invalid[] = {map_index83_bad_result, map_index83_bad_key};
-    const size_t lengths[] = {sizeof(map_index83_bad_result), sizeof(map_index83_bad_key)};
+    const uint8_t *invalid[] = {map_index84_bad_result, map_index84_bad_key};
+    const size_t lengths[] = {sizeof(map_index84_bad_result), sizeof(map_index84_bad_key)};
     for (uint32_t i = 0; i < 2; ++i) {
         artifact = NULL;
         CHECK(xr_xir_compile_checked_read(context, invalid[i], lengths[i], &artifact, NULL) == XR_XIR_BAD_TYPE && !artifact);

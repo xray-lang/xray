@@ -8,17 +8,17 @@
  */
 #ifndef P09_MAP_MEMBERSHIP_PACKETS_H
 #define P09_MAP_MEMBERSHIP_PACKETS_H
-#include "xir_map_membership83_golden.h"
+#include "xir_map_membership84_golden.h"
 #include "xir_set_algebra79_golden.h"
-_Static_assert(XR_XIR_OP_COUNT==176 && XR_XIR_CHECKED_CONTRACT==83,"value membership identity");
+_Static_assert(XR_XIR_OP_COUNT==176 && XR_XIR_CHECKED_CONTRACT==84,"value membership identity");
 static void membership_packets(const XrXirCompileContext *context) {
     XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
-    CHECK(xr_xir_compile_checked_read(context,map_membership83_valid,sizeof(map_membership83_valid),&artifact,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,map_membership84_valid,sizeof(map_membership84_valid),&artifact,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(map_membership83_valid) && !memcmp(packet.bytes,map_membership83_valid,packet.length));
+    CHECK(packet.length==sizeof(map_membership84_valid) && !memcmp(packet.bytes,map_membership84_valid,packet.length));
     xr_xir_compile_artifact_free(artifact);xr_xir_compile_checked_packet_free(&packet);
-    const uint8_t *bad[]={map_membership83_bad_receiver,map_membership83_bad_value_width,map_membership83_bad_result,map_membership83_bad_equal,map_membership83_bad_key_proof};
-    const size_t sizes[]={sizeof(map_membership83_bad_receiver),sizeof(map_membership83_bad_value_width),sizeof(map_membership83_bad_result),sizeof(map_membership83_bad_equal),sizeof(map_membership83_bad_key_proof)};
+    const uint8_t *bad[]={map_membership84_bad_receiver,map_membership84_bad_value_width,map_membership84_bad_result,map_membership84_bad_equal,map_membership84_bad_key_proof};
+    const size_t sizes[]={sizeof(map_membership84_bad_receiver),sizeof(map_membership84_bad_value_width),sizeof(map_membership84_bad_result),sizeof(map_membership84_bad_equal),sizeof(map_membership84_bad_key_proof)};
     for(unsigned i=0;i<5;++i) {artifact=NULL;CHECK(xr_xir_compile_checked_read(context,bad[i],sizes[i],&artifact,NULL)==XR_XIR_BAD_TYPE && !artifact);}
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
     for(unsigned occupied=0;occupied<2;++occupied) {

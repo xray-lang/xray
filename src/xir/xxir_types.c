@@ -13,6 +13,7 @@
 #include "xxir_task_shapes.h"
 #include "xxir_map.h"
 #include "xxir_type_match_internal.h"
+#include "xxir_view_types_internal.h"
 #include "xxir_compile_memory.h"
 
 XR_FUNC XrXirCompileLimits xr_xir_compile_default_limits(void) {
@@ -167,7 +168,8 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-                  node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET));
+                  node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
+                  node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE));
 }
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -206,7 +208,8 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-         node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET);
+         node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
+         node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE);
 }
 static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -264,7 +267,8 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             if (component > span) span = component;
         }
     } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
-               node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) {
+               node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK ||
+               node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE) {
         if (node->parameters || node->parameter_count || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;
         const XrXirTypeNode *element = xr_xir_type_node(types, node->element);
@@ -341,6 +345,7 @@ static XrXirStatus type_unique(const XrXirTypes *types, uint32_t index, const Xr
     }
     return XR_XIR_OK;
 }
+#include "xxir_view_types.inc.c"
 XrXirStatus xr_xir_compile_type_descriptors_verify(const XrXirCompileContext *compile_context, const XrXirTypes *types) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
@@ -357,7 +362,8 @@ XrXirStatus xr_xir_compile_type_descriptors_verify(const XrXirCompileContext *co
         if (status == XR_XIR_OK) status = type_unique(types, i, remaining);
         if (status != XR_XIR_OK) return status;
     }
-    XrXirStatus status = nominal_table_verify(types->nominals, types, remaining);
+    XrXirStatus status = view_types_verify(remaining, types);
+    if (status == XR_XIR_OK) status = nominal_table_verify(types->nominals, types, remaining);
     if (status == XR_XIR_OK) status = nominal_nodes_verify(types, remaining);
     if (status == XR_XIR_OK) status = nominal_layout_verify(types, remaining);
     return status;

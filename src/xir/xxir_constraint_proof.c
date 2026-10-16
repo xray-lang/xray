@@ -15,6 +15,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
+#include "xxir_view_types_internal.h"
 #include "xxir_key.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_implementation.h"
@@ -163,8 +164,13 @@ XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compi
         if (app->argument_count != table->declarations[app->declaration].parameter_count) return XR_XIR_BAD_TYPE;
         if (!constraint_charge(budget, (uint64_t)app->argument_count * sizeof(*app->arguments), app->argument_count))
             return XR_XIR_BUDGET;
-        for (uint32_t a = 0; a < app->argument_count; ++a)
+        for (uint32_t a = 0; a < app->argument_count; ++a) {
             if (!constraint_argument_shape(types, app->arguments[a], count)) return XR_XIR_BAD_TYPE;
+            uint32_t borrowed=0;
+            XrXirStatus status=xr_xir_compile_view_type_flags(budget,types,app->arguments[a],&borrowed);
+            if (status!=XR_XIR_OK) return status;
+            if (borrowed) return XR_XIR_BAD_TYPE;
+        }
     }
     return XR_XIR_OK;
 }
@@ -331,6 +337,10 @@ static XrXirStatus proof_arguments(ConstraintProof *proof, const XirMetadataDoma
     for (uint32_t a = 0; a < count; ++a) {
         if (!constraint_argument_shape(proof->environment.types,arguments[a],proof->environment.parameter_count))
             return XR_XIR_BAD_TYPE;
+        uint32_t borrowed=0;
+        status=xr_xir_compile_view_type_flags(proof->budget,proof->environment.types,arguments[a],&borrowed);
+        if (status!=XR_XIR_OK) return status;
+        if (borrowed) return XR_XIR_BAD_TYPE;
         ConstraintObligation task = {0}; task.declaration_domain = declaration_domain;
         task.requirement = *constraint_fact(&formal,a); task.arguments = arguments;
         task.argument_count = count; task.subject = arguments[a];
@@ -375,7 +385,8 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
         if (status == XR_XIR_OK) status = proof_type_edge(proof, index, node->element);
         if (status == XR_XIR_OK && node->kind == XR_XIR_TYPE_MAP)
             status = proof_type_edge(proof, index, node->result);
-    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE)
+    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE ||
+               node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE)
         status = proof_type_edge(proof,index,node->element);
     else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
@@ -543,7 +554,12 @@ static XrXirStatus proof_prepare_arguments(ConstraintProof *proof,
         else if (result && use->arguments[a] == XR_XIR_UNIT) continue;
         else if (!constraint_argument_shape(proof->environment.types,use->arguments[a],proof->environment.parameter_count))
             status = XR_XIR_BAD_TYPE;
-        else status = proof_type(proof,use->arguments[a]);
+        else {
+            uint32_t borrowed=0;
+            status=xr_xir_compile_view_type_flags(proof->budget,proof->environment.types,use->arguments[a],&borrowed);
+            if (status==XR_XIR_OK && borrowed) status=XR_XIR_BAD_TYPE;
+            if (status==XR_XIR_OK) status = proof_type(proof,use->arguments[a]);
+        }
     }
     return status;
 }

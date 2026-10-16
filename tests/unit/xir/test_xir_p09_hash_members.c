@@ -14,16 +14,16 @@
 #include "xir/xxir_types.h"
 #include "p09_hash_members_source.h"
 #include "p09_hash_members_program.h"
-#include "xir_hash_members83_golden.h"
+#include "xir_hash_members84_golden.h"
 #include "xir_hash75_golden.h"
 _Static_assert(XR_XIR_MAP_NEW == 154 && XR_XIR_LOCAL_NEW == 34 &&
     XR_XIR_MAP_SET == 159 && XR_XIR_MAP_GET == 156, "independent hash wire ordinals");
 static void members_packet(const XrXirCompileContext *context) {
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
-    CHECK(xr_xir_compile_checked_read(context, hash_members83_golden,
-        sizeof(hash_members83_golden), &artifact, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context, hash_members84_golden,
+        sizeof(hash_members84_golden), &artifact, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(artifact, &packet, NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(hash_members83_golden) && !memcmp(packet.bytes, hash_members83_golden, packet.length));
+    CHECK(packet.length == sizeof(hash_members84_golden) && !memcmp(packet.bytes, hash_members84_golden, packet.length));
     xr_xir_compile_artifact_free(artifact); xr_xir_compile_checked_packet_free(&packet);
     XrCompileResourceStats before = {0}, after = {0};
     CHECK(xr_compile_resources_stats(context->resources, &before) == XR_COMPILE_RESOURCE_OK);

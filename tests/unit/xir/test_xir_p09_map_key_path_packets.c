@@ -13,9 +13,9 @@
 #include "xir_source_fixture_owner.h"
 #include "xir/xxir_checked.h"
 #include "xir_map_key_path82_golden.h"
-#include "xir_map_key_path83_golden.h"
+#include "xir_map_key_path84_golden.h"
 #include "p09_hash_retired82_packet_table.h"
-#include "p09_hash_current83_packet_table.h"
+#include "p09_hash_current84_packet_table.h"
 
 typedef struct KeyPacketCase {
     const char *name;
@@ -23,9 +23,9 @@ typedef struct KeyPacketCase {
     size_t length;
     XrXirStatus expected;
 } KeyPacketCase;
-#define PACKET_CASE(name,status) {#name,map_key_path83_##name,sizeof(map_key_path83_##name),status}
+#define PACKET_CASE(name,status) {#name,map_key_path84_##name,sizeof(map_key_path84_##name),status}
 int main(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==83 && XR_XIR_OP_COUNT==176,"typed key path identity");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==84 && XR_XIR_OP_COUNT==176,"typed key path identity");
     SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
     const KeyPacketCase cases[]={
         PACKET_CASE(path_i64,XR_XIR_OK),PACKET_CASE(path_string,XR_XIR_OK),
@@ -46,9 +46,9 @@ int main(void) {
             xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(artifact);
         }
     }
-    _Static_assert(sizeof(current_hash83_packets)/sizeof(current_hash83_packets[0])==60,"complete field sample count");
+    _Static_assert(sizeof(current_hash84_packets)/sizeof(current_hash84_packets[0])==60,"complete field sample count");
     for(unsigned i=0;i<60;++i) {
-        const CurrentHashPacket *row=&current_hash83_packets[i];
+        const CurrentHashPacket *row=&current_hash84_packets[i];
         XrCompileResourceStats baseline={0},after={0};
         CHECK(xr_compile_resources_stats(owner.context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
         XrXirArtifact *artifact=NULL;

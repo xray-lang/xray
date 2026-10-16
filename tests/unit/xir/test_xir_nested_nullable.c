@@ -25,7 +25,7 @@
 #include "xir_nested_nullable64_golden.h"
 #include "xir_nested_nullable65_golden.h"
 #include "xir_nested_nullable72_golden.h"
-#include "xir_nested_nullable83_golden.h"
+#include "xir_nested_nullable84_golden.h"
 #include "xir_nested_nullable_cases.h"
 #include "xir_nested_nullable_value_cases.h"
 static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
@@ -34,8 +34,8 @@ static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xir_fixture_check(context, &nested_built, &checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
-    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(nested_nullable83_golden) &&
-        !memcmp(packet.bytes,nested_nullable83_golden,packet.length));
+    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(nested_nullable84_golden) &&
+        !memcmp(packet.bytes,nested_nullable84_golden,packet.length));
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);}
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
@@ -105,8 +105,8 @@ int main(int argc,char **argv) {
     XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;
     CHECK(xir_fixture_check(&owner.context, &nested_built, &checked, NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(nested_nullable83_golden) && !memcmp(packet.bytes,nested_nullable83_golden,packet.length));
-    CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable83_golden,sizeof(nested_nullable83_golden),&read,NULL)==XR_XIR_OK);
+    CHECK(packet.length==sizeof(nested_nullable84_golden) && !memcmp(packet.bytes,nested_nullable84_golden,packet.length));
+    CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable84_golden,sizeof(nested_nullable84_golden),&read,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);

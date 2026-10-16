@@ -54,6 +54,9 @@ static XrXirValueStatus arena_pool_walk(const XrXirCompileContext *context,
         if (!arena_nominal_work(&cursor, 1)) break;
         const XrXirTypeNode *source = &types->nodes[i];
         if (source->parameter_span) return XR_XIR_VALUE_BAD_ARGUMENT;
+        /* Borrowed descriptors alone establish no executable storage or lifetime. */
+        if (source->kind==XR_XIR_TYPE_SLICE || source->kind==XR_XIR_TYPE_MUT_SLICE)
+            return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirCallableParameter *parameters = arena_nominal_span(&cursor, source->parameter_count,
             sizeof(*parameters), _Alignof(XrXirCallableParameter));
         uint64_t parameter_bytes = (uint64_t)source->parameter_count * sizeof(*parameters);

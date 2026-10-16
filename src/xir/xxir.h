@@ -165,7 +165,9 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_ATOMIC = 7,
     XR_XIR_TYPE_TASK = 8,
     XR_XIR_TYPE_MAP = 9,
-    XR_XIR_TYPE_SET = 10
+    XR_XIR_TYPE_SET = 10,
+    XR_XIR_TYPE_SLICE = 11,
+    XR_XIR_TYPE_MUT_SLICE = 12
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;
