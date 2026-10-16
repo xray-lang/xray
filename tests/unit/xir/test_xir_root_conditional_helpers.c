@@ -21,6 +21,7 @@
 #include "xir_root_conditional_raw_fixture.h"
 #include "xir_construction_fixture.h"
 #include "xir_invocation_core_cases.h"
+#include "xir_invocation_node_key_cases.h"
 #include "xir_invocation_rotation_cases.h"
 #include "xir_invocation_deferred_cases.h"
 #include "xir_invocation_lowered_context_cases.h"
@@ -1742,6 +1743,9 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--invocation-node-keys")) {
+        invocation_node_key_literals();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-resources")) {
         conditional_nonroot_seed_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

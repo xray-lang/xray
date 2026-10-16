@@ -90,7 +90,8 @@ static XrXirStatus effect_invocation_class_rank_limit(EffectInvocationWorkspace 
 static XrXirStatus effect_invocation_class_rank_current(EffectInvocationWorkspace *owner,
     uint32_t functions,uint64_t *output) {
     if (!owner || !output || !owner->final.physical ||
-        owner->final.physical->count!=functions || owner->class_rank_nodes>owner->final.count ||
+        owner->final.physical->count!=functions || (functions && !owner->final.physical->functions) ||
+        owner->class_rank_nodes>owner->final.count ||
         (owner->final.count && !owner->final.nodes)) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,5)) return XR_XIR_BUDGET;
     uint64_t maximum=owner->class_rank_limit;

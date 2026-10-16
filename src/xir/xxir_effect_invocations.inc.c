@@ -151,6 +151,8 @@ typedef struct EffectInvocationWorkspace {
     EffectFinalFunctions *prepared_result;
     uint32_t *edge_index;
     size_t edge_index_capacity;
+    uint32_t *node_index;
+    size_t node_index_capacity;
     uint32_t *consumers;
     EffectInvocationState *states;
     uint32_t maximum;

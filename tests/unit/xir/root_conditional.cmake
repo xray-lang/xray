@@ -43,6 +43,10 @@ foreach(_root_conditional_gate helpers source)
 endforeach()
 
 # These literals remain reachable before the complete helper cost gate.
+add_test(NAME test_xir_root_conditional_node_keys
+    COMMAND test_xir_root_conditional_helpers --invocation-node-keys)
+set_tests_properties(test_xir_root_conditional_node_keys PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
 add_test(NAME test_xir_root_conditional_class_rows
     COMMAND test_xir_root_conditional_helpers --class-rows)
 set_tests_properties(test_xir_root_conditional_class_rows PROPERTIES
