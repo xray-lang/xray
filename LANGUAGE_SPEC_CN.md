@@ -7847,6 +7847,8 @@ export fn run()->i64 {
 
 Source 在真实声明、字段和签名建立后、普通用户 body 构造前建立并独立验证定义策略，再执行生成器。当前闭合目标首族从完整 Checked 依赖取得 g 及其私有帮助函数；依赖源码移除后仍能处理未来用户类型。启动代码只使用真实依赖 body 和真实结果 thunk，经普通 Built 全检、专用化、Checked 身份、Lowered 与唯一 CTFE；i64 Program 入口真实调用 thunk 并读取结果版本字段。未检查用户 body 不进入假 Checked 模块，也不以空 body 解开生成次序。
 
+完整 Checked 包可包含当前用户未选择的模块。Source 只为真实解析图中的已选模块导入声明、接口、函数及关联的构造、实现和派生事实；其余声明及依赖它们的类型节点保持缺席映射。实际使用的类型、协议、成员 owner、函数和策略必须在同一所选闭包完整映射，缺失时拒绝，不隐式增加模块初始化边。只从包中导入 g 不导入另一模块的目标名字或旧定义策略；本地 derive 独立建立自己的真实策略和 grant。原 Catalog 对完整输入包的验证仍先发生，最终完整 Built 检查和原累计费用保持。
+
 生成器是普通 `fn(TypeInfo, DeriveContext)->Generated`。TypeInfo 沿17.65的逻辑图；在派生上下文中，目标私有字段只在显式 DESCRIBE 集合内出现，嵌套类型不会继承目标模块的全部私有可见性。目标事实查询和 g 的 recipe 发射可在不同 canonical 池上，但必须共享原 ledger，跨池只传逻辑引用。
 
 DeriveContext 为 `(Array<MethodInfo>, Array<CalleeInfo>, Array<i64> parameters, i64 constructor, Array<string> constructorParameterNames)`。MethodInfo 为 `(string name,i64 resultType,i64 parameterBegin,i64 parameterCount,i64 ownParameterCount)`；CalleeInfo 为 `(string module,string name,i64 index,i64 parameterBegin,i64 parameterCount,i64 resultType)`。参数区间引用唯一平面表，类型引用都指向同一 TypeInfo 图。callee index 对应接收方选择的普通可见 public 函数及显式授权的唯一 init；未授权构造时 constructor=-1 且名称数组为空。有授权时，名称从该初始化器的当前真实定义按参数声明顺序复制，数量必须等于其实际参数数；缺少定义、身份或计数不一致时拒绝，不推测字段顺序或名称。旧四元组生成器类型拒绝，不提供兼容路径。名称是拥有式普通描述值，不扩大字段读写、调用或构造权限；g 的私有帮助函数参与编译期计算，不因此成为生成 body 的私有运行期调用许可。

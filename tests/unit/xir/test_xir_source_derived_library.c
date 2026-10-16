@@ -238,6 +238,7 @@ static int library_normal(const char *emit,const char *packet_path) {
 int main(int argc,char **argv) {
     if(argc==1)return library_normal(NULL,NULL);
     if(argc==2 && !strcmp(argv[1],"--import-controls"))return library_import_controls();
+    if(argc==2 && !strcmp(argv[1],"--generator-only"))return library_generator_only();
     if(argc==4 && !strcmp(argv[1],"--emit-native"))return library_normal(argv[2],argv[3]);
     return library_resource_main(argc,argv);
 }
