@@ -155,10 +155,10 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         const XrXirCallEntry *entry = &spec->entries[i];
-        uint32_t flags = 0;
+        uint32_t flags = xr_xir_function_is_generator(module,i) ? XR_XIR_ENTRY_GENERATOR : 0;
         if (cleanup) for (uint32_t child = 0; child < module->function_count; ++child) {
             if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
-            if (module->declarations->functions[child].cleanup_owner == i + 1) flags = XR_XIR_ENTRY_EXIT;
+            if (module->declarations->functions[child].cleanup_owner == i + 1) flags |= XR_XIR_ENTRY_EXIT;
         }
         MATCH(entry->flags, flags);
         MATCH(entry->cleanup_owner, module->declarations->functions[i].cleanup_owner);

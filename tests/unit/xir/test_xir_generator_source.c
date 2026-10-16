@@ -28,7 +28,7 @@
 _Static_assert(XR_XIR_GENERATOR_YIELD==153,"independent Generator opcode ordinal");
 _Static_assert(XR_XIR_PROGRAM==0 && XR_XIR_LIBRARY==1,"independent packet linkage ordinals");
 static const char source_text[]=
-    "fn numbers() -> Iterator<i64> {\n yield 11\n Coro.yield()\n yield 22\n }\n"
+    "export fn numbers() -> Iterator<i64> {\n yield 11\n Coro.yield()\n yield 22\n }\n"
     "fn units() -> Iterator<()> { yield ()\n yield ()\n }\n"
     "fn identity(it: Iterator<i64>) -> Iterator<i64> { return it }\n"
     "fn main() {}\n";
@@ -135,7 +135,17 @@ int main(int argc,char **argv) {
     CHECK(c.text && c.length && !strstr(c.text,"({"));
     if(argc==2) {FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(c.text,1,c.length,file)==c.length);CHECK(!fclose(file));}
     xr_xir_compile_c_source_free(&c);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);
-    xr_xir_compile_artifact_free(lowered);
+    uint32_t program_entry=m->declarations->entry_function;XrXirProgram *program=NULL;
+    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start(instance,numbers,NULL,0)==XR_XIR_CALL_BAD_ARGUMENT &&
+        xr_xir_instance_state(instance)==XR_XIR_INSTANCE_NEW);
+    CHECK(xr_xir_instance_start(instance,program_entry,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,1000000).outcome.status==XR_XIR_CALL_RETURNED);
+    XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(result.type==XR_XIR_I64 && !result.payload);xr_xir_value_drop(&result);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
     reject_source(&owner.context,"fn bad()->i64 {yield 1}\nfn main(){}\n");
     reject_source(&owner.context,"fn bad()->Iterator<i64> {yield true}\nfn main(){}\n");
     reject_source(&owner.context,"fn bad()->Iterator<i64> {yield 1\nreturn 2}\nfn main(){}\n");

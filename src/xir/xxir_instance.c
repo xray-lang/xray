@@ -110,6 +110,7 @@ static bool function_bound_admitted(const XrXirProgram *program, uint32_t entry,
     const XrXirTypeNode *signature) {
     const XrXirProgramPermissions *permissions = program->permissions;
     if (!signature || !permissions || entry >= program->entry_count ||
+        (program->entries[entry].flags & XR_XIR_ENTRY_GENERATOR) ||
         permissions->function_count != program->entry_count ||
         permissions->slot_count != program->declarations->slot_count) return false;
     const XrXirProgramPermission *permission = &permissions->entries[entry];
@@ -435,6 +436,7 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
         !instance->program->active_modules[d->functions[entry].module] ||
         (!test_entry && !binding && entry != d->entry_function && !d->functions[entry].exported)) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *requested = &instance->program->entries[entry];
+    if (requested->flags & XR_XIR_ENTRY_GENERATOR) return XR_XIR_CALL_BAD_ARGUMENT;
     if (test_entry) {
         const XrXirFunctionIdentity *identity = &d->functions[entry];
         if (identity->module != d->root_module || identity->test_role == XR_XIR_TEST_ROLE_NONE ||
