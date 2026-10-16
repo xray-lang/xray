@@ -1,0 +1,111 @@
+"""Exercise owning public API through moved SDK-only files and real C/C++ hosts."""
+from pathlib import Path
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--build', type=Path, required=True)
+    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--compiler', required=True)
+    parser.add_argument('--secondary-compiler')
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parents[3]
+    build, parent = args.build.resolve(), args.output.resolve()
+    assert parent.is_relative_to(build) and parent != build
+    parent.mkdir(parents=True, exist_ok=True)
+    out = Path(tempfile.mkdtemp(prefix='owned-sdk-', dir=parent))
+    records = []
+    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
+
+    def run(name, argv, okay=True):
+        result = subprocess.run(list(map(str, argv)), cwd=out, env=environment,
+                                capture_output=True, timeout=120)
+        (out/(name+'.stdout')).write_bytes(result.stdout)
+        (out/(name+'.stderr')).write_bytes(result.stderr)
+        records.append(dict(name=name, argv=list(map(str, argv)), exit_code=result.returncode))
+        (out/'commands.json').write_text(json.dumps(records, indent=2)+'\n', encoding='utf-8')
+        assert (result.returncode == 0) == okay, (name, result.returncode, result.stdout, result.stderr)
+        return result.stdout
+
+    original, moved = out/'original', out/'moved'
+    run('install', ['cmake', '--install', build, '--component', 'XraySDK', '--prefix', original])
+    assert original.resolve().is_relative_to(out) and moved.resolve().is_relative_to(out) and not moved.exists()
+    original.rename(moved)
+    sdk = moved/'lib/xray/source-sdk'
+    manifest = json.loads((sdk/'source_sdk_manifest.json').read_text(encoding='utf-8'))
+    headers = {'xray_source.h', 'xray_export.h', 'xray_source_ast.h',
+               'xray_source_value.h', 'xray_source_entry.h', 'xray_source_instance.h'}
+    assert manifest['api_version'] == 2 and manifest['crt'] == 'MD' and manifest['sanitizers'] == 0
+    assert len(manifest['archives']) == 15
+    assert {Path(r['path']).name for r in manifest['files'] if r['path'].startswith('include/')} == headers
+    for row in manifest['files']:
+        data = (sdk/row['path']).read_bytes()
+        assert len(data) == row['length'] and hashlib.sha256(data).hexdigest() == row['sha256']
+    assert not (moved/'bin/xray.exe').exists() and not any(p.suffix == '.xr' for p in moved.rglob('*'))
+    source = out/'consumer.c'
+    source.write_bytes((root/'tests/unit/xir/source_sdk_owned_consumer.c').read_bytes())
+    empty = out/'empty-stdlib'
+    empty.mkdir()
+    compilers = [Path(shutil.which(args.compiler) or args.compiler).resolve()]
+    if args.secondary_compiler:
+        secondary = Path(shutil.which(args.secondary_compiler) or args.secondary_compiler).resolve()
+        if not secondary.samefile(compilers[0]):
+            compilers.append(secondary)
+    expected = b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n'
+    for index, compiler in enumerate(compilers):
+        for language in ('c', 'cpp'):
+            label = f'provider{index}-{language}'
+            obj, exe = out/(label+'.obj'), out/(label+'.exe')
+            if 'clang' in compiler.name.lower() and 'clang-cl' not in compiler.name.lower():
+                command = [compiler, '--target=x86_64-windows-msvc', '-x', 'c++' if language == 'cpp' else 'c',
+                           '-std=c++20' if language == 'cpp' else '-std=c11', '-O2', '-Wall', '-Wextra',
+                           '-Werror', '-pedantic-errors', '-fms-runtime-lib=dll', '-I'+str(sdk/'include'),
+                           '-c', source, '-o', obj]
+            else:
+                command = [compiler, '/nologo', '/TP' if language == 'cpp' else '/TC',
+                           '/std:c++20' if language == 'cpp' else '/std:c11', '/utf-8', '/MD', '/O2',
+                           '/W4', '/WX', '/I'+str(sdk/'include'), '/c', source, '/Fo'+str(obj)]
+            run(label+'-compile', command)
+            run(label+'-link', ['link', '/nologo', '/incremental:no', '/out:'+str(exe), obj,
+                              *[sdk/p for p in manifest['archives']], 'kernel32.lib',
+                              '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
+            assert run(label+'-run', [exe, empty]).replace(b'\r\n', b'\n') == expected
+    probe = out/'config-probe'
+    probe.mkdir()
+    (probe/'CMakeLists.txt').write_text('cmake_minimum_required(VERSION 3.20)\n'
+        'project(OwnedSdkIntegrity C)\nfind_package(XraySource CONFIG REQUIRED)\n', encoding='utf-8')
+    attacks = []
+    for index, name in enumerate(sorted(headers - {'xray_source.h', 'xray_export.h'})):
+        path = sdk/'include'/name
+        saved = path.read_bytes()
+        for mode in ('missing', 'changed'):
+            if mode == 'missing':
+                path.unlink()
+            else:
+                changed = bytearray(saved)
+                changed[len(changed)//2] ^= 1
+                path.write_bytes(changed)
+            label = f'header-{index}-{mode}'
+            run(label, ['cmake', '-S', probe, '-B', out/label, '-G', 'Ninja',
+                        '-DCMAKE_C_COMPILER='+str(compilers[0]), '-DCMAKE_PREFIX_PATH='+str(moved)], False)
+            path.write_bytes(saved)
+            attacks.append(label)
+    summary = dict(status='PASS', sdk_only=True, providers=list(map(str, compilers)), languages=['C11', 'C++20'],
+                   published_headers=sorted(headers), exact_NUL_UTF8=True, independent_persistent_instances=True,
+                   foreign_callable_refused=True, all_producers_dead=True, owned_tuple_child=True, attacks=attacks,
+                   manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
+                   scope='Source embedding host consumers; not Target AOT/mixed or complete FI/safety qualification',
+                   production_release=False)
+    (out/'summary.json').write_text(json.dumps(summary, indent=2)+'\n', encoding='utf-8')
+    print(json.dumps(summary))
+
+
+if __name__ == '__main__':
+    main()

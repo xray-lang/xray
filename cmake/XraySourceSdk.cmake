@@ -65,6 +65,13 @@ endforeach()
 string(APPEND source_sdk_inputs "]}\n")
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/source-sdk-inputs.json" CONTENT "${source_sdk_inputs}")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(source_sdk_header_names xray_source.h xray_export.h xray_source_ast.h xray_source_value.h xray_source_entry.h xray_source_instance.h)
+set(source_sdk_header_inputs)
+set(source_sdk_header_outputs)
+foreach(name IN LISTS source_sdk_header_names)
+    list(APPEND source_sdk_header_inputs "${PROJECT_SOURCE_DIR}/include/${name}")
+    list(APPEND source_sdk_header_outputs "${source_sdk_root}/include/${name}")
+endforeach()
 add_custom_command(OUTPUT "${source_sdk_root}/source_sdk_manifest.json"
     COMMAND ${XRAY_PYTHON} -B "${PROJECT_SOURCE_DIR}/scripts/build_source_sdk.py"
         --root "${PROJECT_SOURCE_DIR}" --build "${CMAKE_BINARY_DIR}"
@@ -72,7 +79,7 @@ add_custom_command(OUTPUT "${source_sdk_root}/source_sdk_manifest.json"
         --provider "${CMAKE_C_COMPILER_ID}" --profile "${CMAKE_BUILD_TYPE}"
     DEPENDS ${source_sdk_archive_targets} "${CMAKE_BINARY_DIR}/source-sdk-inputs.json"
         "${PROJECT_SOURCE_DIR}/scripts/build_source_sdk.py"
-        "${PROJECT_SOURCE_DIR}/include/xray_source.h" "${PROJECT_SOURCE_DIR}/include/xray_export.h"
+        ${source_sdk_header_inputs}
         "${PROJECT_SOURCE_DIR}/cmake/XraySourceConfig.cmake.in"
     VERBATIM)
 add_custom_target(source-sdk-bundle ALL DEPENDS "${source_sdk_root}/source_sdk_manifest.json")
@@ -81,7 +88,7 @@ foreach(target IN LISTS source_sdk_targets)
     install(FILES "${source_sdk_root}/lib/${target}${CMAKE_STATIC_LIBRARY_SUFFIX}"
         DESTINATION lib/xray/source-sdk/lib COMPONENT XraySDK)
 endforeach()
-install(FILES "${source_sdk_root}/include/xray_source.h" "${source_sdk_root}/include/xray_export.h"
+install(FILES ${source_sdk_header_outputs}
     DESTINATION lib/xray/source-sdk/include COMPONENT XraySDK)
 install(FILES "${source_sdk_root}/source_sdk_manifest.json" "${source_sdk_root}/source_sdk_recipe.json"
     DESTINATION lib/xray/source-sdk COMPONENT XraySDK)

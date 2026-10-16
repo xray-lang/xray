@@ -25,4 +25,16 @@ if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_SANITIZERS AND NOT ENABLE_UBSAN
         --output "${CMAKE_CURRENT_BINARY_DIR}/source-sdk-installed")
     set_tests_properties(source_sdk_installed PROPERTIES
         TIMEOUT 300 RUN_SERIAL TRUE COST 30 LABELS "unit;api;source;sdk;install;ownership")
+    set(source_sdk_owned_secondary)
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND XIR_INVOCATION_MSVC)
+        list(APPEND source_sdk_owned_secondary --secondary-compiler "${XIR_INVOCATION_MSVC}")
+    elseif(XIR_CLI_CLANG)
+        list(APPEND source_sdk_owned_secondary --secondary-compiler "${XIR_CLI_CLANG}")
+    endif()
+    add_test(NAME source_sdk_owned_installed COMMAND ${XRAY_PYTHON} -B
+        "${CMAKE_CURRENT_LIST_DIR}/source_sdk_owned.py"
+        --build "${CMAKE_BINARY_DIR}" --compiler "${CMAKE_C_COMPILER}"
+        --output "${CMAKE_CURRENT_BINARY_DIR}/source-sdk-owned" ${source_sdk_owned_secondary})
+    set_tests_properties(source_sdk_owned_installed PROPERTIES
+        TIMEOUT 300 RUN_SERIAL TRUE COST 30 LABELS "unit;api;source;sdk;install;ownership;values")
 endif()

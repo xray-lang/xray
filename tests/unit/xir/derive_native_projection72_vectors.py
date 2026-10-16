@@ -82,7 +82,13 @@ def main():
         frame=DOMAIN+struct.pack('<7I',1,29,75,24,29,31,len(prefix))+prefix
         assert literal(header,role+'_policy_value24_preimage')==frame
         assert literal(header,role+'_policy_value24')==hashlib.sha256(frame).digest()
-    print(json.dumps({'status':'INDEPENDENT_CURRENT28_74_FULL_FRAMES_PASS',
+    for role in ('linked','original'):
+        prefix=(role+'_source').encode('ascii')
+        previous=DOMAIN+struct.pack('<7I',1,28,73,24,29,30,len(prefix))+prefix
+        assert literal(header,role+'_policy_program30_preimage')==previous
+        assert literal(header,role+'_policy_program30')==hashlib.sha256(previous).digest()
+    assert 'CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_program30 : original_policy_program30,32));' in header
+    print(json.dumps({'status':'INDEPENDENT_CURRENT29_75_VALUE24_PROGRAM31_FULL_FRAMES_PASS',
                       'records':records, 'current_macro_authority_checked':True,
                       'all_prior_runtime_negative_responsibilities_retained':True,
                       'product_output_used_as_oracle':False}, indent=2))
