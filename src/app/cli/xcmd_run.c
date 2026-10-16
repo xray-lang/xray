@@ -97,7 +97,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         result = source_exit(status);
     } else {
         XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
-            xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+            xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
         status = xr_source_compile_build(&request, &product, &diagnostic);
         if (status != XR_SOURCE_COMPILE_OK) {
             result = report_source_failure(&diagnostic);

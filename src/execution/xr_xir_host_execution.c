@@ -16,6 +16,25 @@
 #include "xr_xir_host_time.h"
 #include "../base/xmalloc.h"
 
+XR_FUNC XrXirTarget xr_xir_host_target(void) {
+#if defined(XR_ARCH_X86_64)
+    return (XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+#else
+    return (XrXirTarget){0};
+#endif
+}
+XR_FUNC XrXirCallStatus xr_xir_host_config_init(XrXirInstanceConfig *config,size_t size) {
+    if(!config)return XR_XIR_CALL_BAD_ARGUMENT;
+    if(size!=sizeof(*config))return XR_XIR_CALL_BAD_ABI;
+    if(!xr_xir_host_target().architecture)return XR_XIR_CALL_UNSUPPORTED;
+    XrXirInstanceConfig prepared={0};
+    XrXirCallStatus status=xr_xir_instance_config_init(&prepared,sizeof(prepared));
+    if(status==XR_XIR_CALL_READY) {
+        xr_xir_host_time_provider(&prepared.time);*config=prepared;
+    }
+    return status;
+}
+
 struct XrXirHostCall {
     XrXirInstance *instance;
     XrXirHostInstance *owner;

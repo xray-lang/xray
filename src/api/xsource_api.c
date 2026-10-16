@@ -166,7 +166,7 @@ XRAY_API XrSourceStatus xray_source_compiler_new(const XrSourceCompilerOptions *
     if(!stdlib){status=api_compile(xr_source_stdlib_path(resources,&selected,NULL));stdlib=selected.path;}
     if(status==XR_SOURCE_OK) {
         XrSourceCompilerConfig config={{resources,xr_xir_compile_default_limits()},
-            {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},stdlib,xr_source_compile_default_manifest_limits()};
+            xr_xir_host_target(),stdlib,xr_source_compile_default_manifest_limits()};
         status=api_compile(xr_source_compiler_new(&config,output,NULL));
     }
     xr_source_stdlib_path_free(&selected);xr_compile_resources_release(resources);return status;
@@ -234,7 +234,7 @@ XRAY_API void xray_source_diagnostic_free(XrSourceDiagnostic *diagnostic) {
 }
 XRAY_API XrSourceStatus xray_source_call_options_init(XrSourceCallOptions *options,size_t size) {
     if(!options || size!=sizeof(*options))return XR_SOURCE_BAD_ARGUMENT;
-    XrXirInstanceConfig config;XrXirCallStatus status=xr_xir_instance_config_init(&config,sizeof(config));
+    XrXirInstanceConfig config;XrXirCallStatus status=xr_xir_host_config_init(&config,sizeof(config));
     if(status!=XR_XIR_CALL_READY)return api_call(status);
     *options=(XrSourceCallOptions){XRAY_SOURCE_API_VERSION,sizeof(*options),config.metadata_limit,config.value_limit,
         config.call_limit,config.poll_limit,config.work_limit,config.depth_limit,1048576,NULL,NULL};return XR_SOURCE_OK;
@@ -245,13 +245,13 @@ static XrSourceStatus api_options_admit(const XrSourceCallOptions *options) {
 }
 static XrSourceStatus api_config(const XrSourceCallOptions *options,XrSourceCall *call,XrXirInstanceConfig *config) {
     XrSourceStatus admitted=api_options_admit(options);if(admitted!=XR_SOURCE_OK)return admitted;
-    XrXirCallStatus made=xr_xir_instance_config_init(config,sizeof(*config));if(made!=XR_XIR_CALL_READY)return api_call(made);
+    XrXirCallStatus made=xr_xir_host_config_init(config,sizeof(*config));if(made!=XR_XIR_CALL_READY)return api_call(made);
     config->metadata_limit=options->metadata_limit-sizeof(*call);config->value_limit=options->value_limit;
     config->call_limit=options->call_limit;config->poll_limit=options->poll_limit;config->work_limit=options->work_limit;config->depth_limit=options->depth_limit;
     call->write=options->write?options->write:api_stdio;call->context=options->context;
     call->sink=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,api_output,call,options->output_byte_limit};
     config->output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&call->sink};
-    xr_xir_host_time_provider(&config->time);return XR_SOURCE_OK;
+    return XR_SOURCE_OK;
 }
 static XrSourceStatus api_program_code(XrSourceProgram *program) {
     if(!program)return XR_SOURCE_BAD_ARGUMENT;

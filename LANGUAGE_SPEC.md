@@ -7787,6 +7787,10 @@ Public C writes borrow an authentic Value and execute the latest published mutab
 
 Class field reads and immediate loans also retain authentic birth carriers. The VM admits against the current checked operand type, and value storage uses the original exact type receiving table to access the real owner arena. Existing Class loan, module storage, worker and field permissions remain authoritative. Historical Cell and Class carrier ordinals are not current-pool ordinals; no retagging or shape-based permission occurs.
 
+Hosted products share the native Lowered target and Instance defaults. Initialization resets every trace/provider context and installs the real system time provider; callers then explicitly choose output and budget overrides. The Compiler stores its admitted target and the REPL reuses that value. Target/ABI observations and old profile names grant no permission: the real Catalog, Checked owner, sealed Program and Instance still decide admission. A missing target or wrong Value ABI rejects before Compiler construction without spending resources, and an invalid configuration prefix preserves output.
+
+Public interactive operations always select their explicit owner instead of a thread's last-created VM. Concurrently live owners retain separate Compiler ledgers, Domains, executors, callback contexts and terminal lifetimes. A synchronous root with ordinary Array allocation uses the executor's authentic inline root Call without creating a child Task; go creates a real same-owner child and FIFO entry. Child yields are scheduled by the shared executor. An actual external root yield resumes only with its observed epoch/wake. Destroying one owner does not alter another owner's pending child; owned read values and results survive both. These entry checks do not replace complete worker/ref/Task, resource or safety qualification.
+
 ---
 
 ## 18. Error Codes

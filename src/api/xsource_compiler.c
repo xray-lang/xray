@@ -153,6 +153,9 @@ XR_FUNC XrCompileState *xr_source_compiler_state(const XrSourceCompiler *compile
 XR_FUNC XrCompileResources *xr_source_compiler_resources(const XrSourceCompiler *compiler) {
     return compiler ? compiler->context.resources : NULL;
 }
+XR_FUNC XrXirTarget xr_source_compiler_target(const XrSourceCompiler *compiler) {
+    return compiler ? compiler->target : (XrXirTarget){0};
+}
 XR_FUNC XrSourceCompileStatus xr_source_compiler_generation_config(const XrSourceCompiler *compiler,
     const char *namespace_id,XrXirSourceGenerationConfig *output) {
     if(!compiler || !namespace_id || !output)return XR_SOURCE_COMPILE_BAD_ARGUMENT;

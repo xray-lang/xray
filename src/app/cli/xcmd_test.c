@@ -452,7 +452,7 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
         goto release;
     }
     XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
-        xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+        xr_source_compile_default_manifest_limits(), xr_xir_host_target(), NULL};
     status = xr_source_compile_build(&request, &product, &diagnostic);
     if (status != XR_SOURCE_COMPILE_OK) {
         xr_source_compile_diagnostic_format(&diagnostic, error, sizeof(error));
@@ -486,14 +486,13 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
         goto release;
     }
     XrXirInstanceConfig instance_config;
-    if (xr_xir_instance_config_init(&instance_config, sizeof(instance_config)) !=
+    if (xr_xir_host_config_init(&instance_config, sizeof(instance_config)) !=
         XR_XIR_CALL_READY) {
         fail_file(result, "cannot initialize execution configuration");
         goto release;
     }
     /* The wall-clock deadline bounds a test; the embedding poll cap does not apply. */
     instance_config.poll_limit = UINT64_MAX;
-    xr_xir_host_time_provider(&instance_config.time);
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, test_output_bytes, NULL,
                             instance_config.value_limit};
     instance_config.output =

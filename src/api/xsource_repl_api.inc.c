@@ -46,7 +46,7 @@ XRAY_API XrSourceStatus xray_source_repl_new(const XrSourceCompilerOptions *comp
     XrSourceSubmissionConfig config={0};config.state=state;
     if(status==XR_SOURCE_OK)status=api_compile(xr_source_compiler_generation_config(compiler,
         owner->namespace_id,&config.source));
-    config.target=(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    config.target=xr_source_compiler_target(compiler);
     if(status==XR_SOURCE_OK)status=api_config(runtime_options,&owner->sink,&config.runtime);
     if(status==XR_SOURCE_OK)status=xr_source_submission_new(&config,&owner->submission);
     if(status==XR_SOURCE_OK)*output=owner;
