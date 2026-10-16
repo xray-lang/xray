@@ -1,6 +1,7 @@
 """Whole collection programs under logical copy semantics, not physical ownership proof."""
 from pathlib import Path
 import copy,hashlib,math
+import complete_json_boundary_model as json_boundary
 
 ROOT=Path(__file__).resolve().parents[4]
 _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
@@ -101,6 +102,10 @@ _PROGRAMS.update(_DISPLAY_PROGRAMS)
 _NAMES=_NAMES|frozenset(_DISPLAY_PROGRAMS)
 _INPUTS.update(_DISPLAY_INPUTS)
 _REQUIRED_INPUTS+=tuple(_DISPLAY_INPUTS)
+
+_JSON_BOUNDARY_INPUT='tests/unit/xir/legacy_consumers/complete_json_boundary_model.py'
+_INPUTS[_JSON_BOUNDARY_INPUT]='17012d55f7022726163e2c2057371b0ceaa52631886c99d13d6f2d7cf5245ae0'
+_REQUIRED_INPUTS+=(_JSON_BOUNDARY_INPUT,)
 
 class Array:
     def __init__(self,items):self.items=copy.deepcopy(list(items))
@@ -290,4 +295,5 @@ def expected_rows():
     for row in rows:
         if row['original_source'] in _DISPLAY_PROGRAMS.values():
             row['model']='Complete unchanged original; independent recursive container display,insertion order,singleton tuple comma,typed Slice range,callable name-free display plus actual calls,and selected JSON scalar/key/value association. No physical lifetime,Source,generated-C,FI,safety or provider qualification.'
+    rows.extend(json_boundary.expected_rows())
     return rows

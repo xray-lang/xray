@@ -62,15 +62,24 @@ class JSONBoundaryTraces(unittest.TestCase):
         self.assertEqual(len(rows),2);self.assertEqual(sum(row['observation_count'] for row in rows),30)
         self.assertTrue(all(row['source']==row['original_source'] and 'required_semantic_trace' in row for row in rows))
 
-    def test_both_real_drivers_register_and_hash_the_new_model(self):
-        import ast
+    def test_existing_collection_factory_binds_new_inputs_in_both_real_drivers(self):
+        import ast,hashlib
+        import complete_collection_values_model as collections
         directory=model.ROOT/'tests/unit/xir/legacy_consumers'
         for name in ('run_product_driver.py','run_full_diff_driver.py'):
             source=(directory/name).read_text(encoding='utf-8');tree=ast.parse(source)
-            self.assertTrue(any(isinstance(node,ast.Import) and any(alias.name=='complete_json_boundary_model' for alias in node.names) for node in ast.walk(tree)))
-            self.assertTrue(any(isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and isinstance(node.func.value,ast.Name) and node.func.value.id=='complete_json_boundary_model' and node.func.attr=='expected_rows' for node in ast.walk(tree)))
-            self.assertIn('complete_json_boundary_model.py',[node.value for node in ast.walk(tree) if isinstance(node,ast.Constant) and isinstance(node.value,str)])
-        self.assertIn("'complete_json_boundary_model_sha256':model_digests['complete_json_boundary_model.py']",(directory/'run_product_driver.py').read_text(encoding='utf-8'))
+            self.assertTrue(any(isinstance(node,ast.Import) and any(alias.name=='complete_collection_values_model' for alias in node.names) for node in ast.walk(tree)))
+            self.assertTrue(any(isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and isinstance(node.func.value,ast.Name) and node.func.value.id=='complete_collection_values_model' and node.func.attr=='expected_rows' for node in ast.walk(tree)))
+            self.assertIn('complete_collection_values_model.py',[node.value for node in ast.walk(tree) if isinstance(node,ast.Constant) and isinstance(node.value,str)])
+        source=directory/'complete_json_boundary_model.py';self.assertEqual(collections._INPUTS[collections._JSON_BOUNDARY_INPUT],hashlib.sha256(source.read_bytes().replace(b'\r\n',b'\n')).hexdigest())
+        rows=collections.expected_rows();identities=[row['id'] for row in rows]
+        for row in model.expected_rows():self.assertEqual(identities.count(row['id']),1);self.assertIn(row,rows)
         self.assertIn('legacy_consumer_complete_json_boundary_model_controls',(directory/'CMakeLists.txt').read_text(encoding='utf-8'))
+
+    def test_real_rejection_context_still_validates_every_frozen_input(self):
+        import task_rejection_model as rejection
+        required=rejection.expected();self.assertEqual(required['id'],rejection.IDENTITY)
+        self.assertEqual(len(required['controls']),2)
+        self.assertTrue(all(row['expected']['stdout_utf8']=='42\n' for row in required['controls']))
 
 if __name__=='__main__':unittest.main()
