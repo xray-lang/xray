@@ -23,6 +23,52 @@ static XrXirStatus literal_body_sink_row(void *owner,uint32_t i,const XrXirInstr
 static XrXirStatus literal_body_sink_span(void *owner,uint32_t first,uint32_t count) {
     LiteralBodySink *sink=owner;CHECK(first==sink->next && count);sink->next+=count;return XR_XIR_OK;
 }
+static XrXirStatus literal_body_spans(const XrXirCompileContext *context,
+    EffectBodyMaterial *material,bool boundaries) {
+    EffectCellBodyAdapter adapter;XrXirCellProofBodyRead read;
+    XrXirStatus status=effect_cell_body_owned(context,material,&adapter,&read);
+    if (status!=XR_XIR_OK) return status;
+    XrXirCellProofRunCursor range={0},range_before=range;XrXirCellProofRun actual;
+    memset(&actual,0xA5,sizeof(actual));XrXirCellProofRun actual_before=actual;
+    status=read.range(context,&read,&range,&actual);
+    if (status!=XR_XIR_OK) {
+        CHECK(!memcmp(&range,&range_before,sizeof(range)) && !memcmp(&actual,&actual_before,sizeof(actual)));
+        return status;
+    }
+    CHECK(actual.first==0 && actual.count==1 && actual.varying==0 && actual.operation.op==XR_XIR_CONST_INT);
+    XrXirCellProofSpanCursor cursor={.shape={XR_XIR_RETURN,XR_XIR_F64}},before=cursor;
+    status=read.span(context,read.owner,0,actual.first,actual.count,&cursor);
+    if (status!=XR_XIR_OK) {
+        CHECK(!memcmp(&cursor,&before,sizeof(cursor)));
+        if (status!=XR_XIR_BUDGET) fprintf(stderr,"LITERAL_BODY_SPAN first%u count%u status%u\n",actual.first,actual.count,status);
+        return status;
+    }
+    CHECK(cursor.next==1 && cursor.run==1 && cursor.shape.op==XR_XIR_CONST_INT && cursor.shape.type==XR_XIR_I64);
+    before=cursor;status=read.span(context,read.owner,0,LITERAL_BODY_COUNT,0,&cursor);
+    if (status!=XR_XIR_OK) {CHECK(!memcmp(&cursor,&before,sizeof(cursor)));return status;}
+    CHECK(cursor.next==LITERAL_BODY_COUNT && cursor.run==LITERAL_BODY_COUNT);
+    if (boundaries) {
+        cursor=before=(XrXirCellProofSpanCursor){.shape={XR_XIR_RETURN,XR_XIR_F64}};
+        CHECK(read.span(context,read.owner,0,0,2,&cursor)==XR_XIR_BAD_TYPE && !memcmp(&cursor,&before,sizeof(cursor)));
+        CHECK(read.span(context,read.owner,0,LITERAL_BODY_COUNT,1,&cursor)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&cursor,&before,sizeof(cursor)));
+        XrXirInstruction *rows=(XrXirInstruction *)material->functions[0].literals;
+        XrXirOp saved=rows[5].op;rows[5].op=XR_XIR_INVALID;
+        CHECK(read.span(context,read.owner,0,LITERAL_BODY_COUNT,0,&cursor)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&cursor,&before,sizeof(cursor)));rows[5].op=saved;
+        uint32_t saved_count=material->functions[0].run_count;--material->functions[0].run_count;
+        CHECK(read.span(context,read.owner,0,0,1,&cursor)==XR_XIR_BAD_STRUCTURE &&
+            !memcmp(&cursor,&before,sizeof(cursor)));material->functions[0].run_count=saved_count;
+        XrXirType saved_type=rows[0].type;rows[0].type=XR_XIR_F64;
+        CHECK(read.span(context,read.owner,0,0,1,&cursor)==XR_XIR_OK && cursor.shape.type==XR_XIR_F64);
+        rows[0].type=saved_type;cursor=(XrXirCellProofSpanCursor){0};
+        CHECK(read.span(context,read.owner,0,0,1,&cursor)==XR_XIR_OK && cursor.shape.type==saved_type);
+        cursor=(XrXirCellProofSpanCursor){0};
+        cursor.run=1;before=cursor;
+        CHECK(read.span(context,read.owner,0,0,1,&cursor)==XR_XIR_BAD_STRUCTURE && !memcmp(&cursor,&before,sizeof(cursor)));
+    }
+    return XR_XIR_OK;
+}
 /* Unused words deliberately make these storage inputs unsuitable as program
  * admission. Independent field literals establish copying and decoding only. */
 static XrXirStatus literal_body_roundtrip(const XrXirCompileContext *context,bool literal,bool boundaries) {
@@ -42,6 +88,7 @@ static XrXirStatus literal_body_roundtrip(const XrXirCompileContext *context,boo
         !function.literals && function.runs && function.run_count==1);
     EffectBodyRead read=effect_body_compile_read(context);
     status=effect_body_records_match(&read,&function,&source);if (status!=XR_XIR_OK) goto done;
+    if (literal) {status=literal_body_spans(context,&material,boundaries);if (status!=XR_XIR_OK) goto done;}
     EffectBodyRequest request=effect_body_owned_request(context,&material);EffectBodyRecordCursor cursor;
     status=effect_body_request_sequence_begin(&request,&cursor);if (status!=XR_XIR_OK) goto done;
     size_t reader_allocations=rp_stats(context).allocation_count;
@@ -109,6 +156,7 @@ static void literal_body_checked(void) {
     CHECK(effect_body_source_match(&context,material,owned)==XR_XIR_BAD_STRUCTURE);
     literal[4].type_arguments[1]=0;CHECK(effect_body_source_match(&context,material,owned)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);memset(rows,0xCE,sizeof(rows));
+    CHECK(literal_body_spans(&context,material,true)==XR_XIR_OK);
     EffectBodyRead read=effect_body_compile_read(&context);
     for (uint32_t i=0;i<LITERAL_BODY_COUNT;++i) {
         XrXirInstruction op;

@@ -69,6 +69,29 @@ static XrXirStatus effect_cell_body_shape(const XrXirCompileContext *work,const 
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(XrXirCellProofInstructionShape){shape.op,shape.type};return XR_XIR_OK;
 }
+/* A literal row is one canonical physical range. The prefix cursor observes
+ * every skipped opcode before publishing a requested row or the complete EOF. */
+static XrXirStatus effect_cell_body_literal_span(const XrXirCompileContext *work,
+    const EffectBodyFunction *function,uint32_t first,uint32_t count,XrXirCellProofSpanCursor *cursor) {
+    if (!effect_body_function_storage_shape(function) || !function->literals ||
+        first>function->instruction_count || count>function->instruction_count-first ||
+        (!count && first!=function->instruction_count) || cursor->next>first ||
+        cursor->run!=cursor->next) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,14+sizeof(*cursor))) return XR_XIR_BUDGET;
+    if (count>1) return XR_XIR_BAD_TYPE;
+    XrXirCellProofSpanCursor current=*cursor;
+    for (uint32_t i=current.next;i<first+count;++i) {
+        if (!xir_compile_work(work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        const XrXirInstruction *op=&function->literals[i];
+        if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        if (count && i==first) {
+            if (!xir_compile_work(work,2+sizeof(current.shape))) return XR_XIR_BUDGET;
+            current.shape=(XrXirCellProofInstructionShape){op->op,op->type};
+        }
+    }
+    if (!xir_compile_work(work,2*sizeof(uint32_t)+sizeof(*cursor))) return XR_XIR_BUDGET;
+    current.next=first+count;current.run=current.next;*cursor=current;return XR_XIR_OK;
+}
 /* A prefix is an unfinished inventory, never a complete body proof. Count
  * zero is the independent end request: every row, run and stream word must
  * then agree with the complete owned head, including the last EOF boundary. */
@@ -84,18 +107,7 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
         cursor->function!=f) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *function=&body->functions[f];
 
-    if (function->literals) {
-        if (!effect_body_function_storage_shape(function) || count || first!=function->instruction_count ||
-            cursor->next>first || cursor->run!=cursor->next) return XR_XIR_BAD_STRUCTURE;
-        XrXirCellProofSpanCursor current=*cursor;
-        for (uint32_t i=current.next;i<first;++i) {
-            if (!xir_compile_work(work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
-            XrXirOp opcode=function->literals[i].op;
-            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-        }
-        if (!xir_compile_work(work,sizeof(*cursor))) return XR_XIR_BUDGET;
-        current.next=first;current.run=first;*cursor=current;return XR_XIR_OK;
-    }
+    if (function->literals) return effect_cell_body_literal_span(work,function,first,count,cursor);
     if (first>function->instruction_count || count>function->instruction_count-first ||
         (!count && first!=function->instruction_count) || cursor->next>first ||
         cursor->run>function->run_count || function->run_count>function->instruction_count ||
