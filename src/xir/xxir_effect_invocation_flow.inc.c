@@ -20,6 +20,7 @@ typedef struct EffectInvocationFlow {
     uint64_t *fixed,*certified;
     XrXirType *types;
     XrXirInstruction *instructions;
+    uint32_t *write_heads,*write_next;
     void *memory;
     bool changed,precision,types_ready;
 } EffectInvocationFlow;
@@ -94,8 +95,11 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     uint64_t instruction_offset=(type_offset+type_bytes+7)&~UINT64_C(7);
     uint64_t instruction_bytes=owned?(uint64_t)function->instruction_count*sizeof(XrXirInstruction):0;
     if (instruction_bytes>SIZE_MAX-instruction_offset) return XR_XIR_BUDGET;
+    uint64_t write_offset=instruction_offset+instruction_bytes;
+    uint64_t write_bytes=owned?(values+function->instruction_count)*sizeof(uint32_t):0;
+    if (write_bytes>SIZE_MAX-write_offset) return XR_XIR_BUDGET;
     if (!xir_compile_work(flow->owner->work,8+2*sizeof(void *))) return XR_XIR_BUDGET;
-    size_t bytes=(size_t)(instruction_offset+instruction_bytes);
+    size_t bytes=(size_t)(write_offset+write_bytes);
     XrXirStatus status=XR_XIR_OK;flow->physical=physical;
     flow->memory=bytes?xir_compile_alloc(flow->owner->work,bytes,&status):NULL;
     if (bytes && !flow->memory) return status;
@@ -107,6 +111,8 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     flow->certified=flag_words?flow->fixed+(size_t)flag_words:NULL;
     flow->types=type_bytes?(XrXirType *)((uint8_t *)flow->memory+(size_t)type_offset):NULL;
     flow->instructions=instruction_bytes?(XrXirInstruction *)((uint8_t *)flow->memory+(size_t)instruction_offset):NULL;
+    flow->write_heads=owned && values?(uint32_t *)((uint8_t *)flow->memory+(size_t)write_offset):NULL;
+    flow->write_next=owned && function->instruction_count?flow->write_heads+(size_t)values:NULL;
     if (words) memset(flow->rows,0,(size_t)words*sizeof(*flow->rows));
     if (flag_words) memset(flow->fixed,0,(size_t)flag_words*2*sizeof(uint64_t));
     if (physical->rows) {

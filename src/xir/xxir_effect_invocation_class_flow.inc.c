@@ -167,6 +167,29 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
 
 static XrXirStatus effect_invocation_class_writes(EffectInvocationFlow *flow,
     uint32_t source,EffectInvocationClassSources *sources) {
+    if (flow->types_ready && effect_body_request_sequence_owned(&flow->body)) {
+        XrXirStatus status=effect_body_request_sequence_binding(&flow->body);
+        if (status!=XR_XIR_OK) return status;
+        if (flow->body.owner!=flow->owner->final.material || source>=flow->values ||
+            !flow->write_heads || (flow->function->instruction_count && !flow->write_next))
+            return XR_XIR_BAD_STRUCTURE;
+        uint32_t previous=UINT32_MAX;
+        for(uint32_t i=flow->write_heads[source];i!=UINT32_MAX;i=flow->write_next[i]) {
+            if (i>=flow->function->instruction_count || (previous!=UINT32_MAX && i<=previous))
+                return XR_XIR_BAD_STRUCTURE;
+            if (!xir_compile_work(flow->owner->work,3+sizeof(previous))) return XR_XIR_BUDGET;
+            XrXirInstruction storage;const XrXirInstruction *write=NULL;
+            status=effect_invocation_flow_instruction(flow,i,&storage,&write);
+            if(status!=XR_XIR_OK) return status;
+            if((write->op!=XR_XIR_LOCAL_WRITE && write->op!=XR_XIR_SCALAR_LOCAL_WRITE &&
+                write->op!=XR_XIR_OWNED_LOCAL_WRITE) || write->args[0]!=source)
+                return XR_XIR_BAD_STRUCTURE;
+            status=effect_invocation_class_source(flow,write->args[1],sources);
+            if(status!=XR_XIR_OK) return status;
+            previous=i;
+        }
+        return XR_XIR_OK;
+    }
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_3;const XrXirInstruction *write=NULL;

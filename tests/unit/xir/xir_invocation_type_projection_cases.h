@@ -57,9 +57,9 @@ static void invocation_type_projection_literals(void) {
     EffectInvocationNode node={.body=0};
     EffectInvocationWorkspace owner={.work=&context,.final={.material=&material,.nodes=&node,.count=1}};
     EffectBodyFunctionHead head={.parameters=expected,.parameter_count=2,.instruction_count=8};
-    XrXirType projected[10]={0};XrXirInstruction projected_ops[8]={0};
+    XrXirType projected[10]={0};XrXirInstruction projected_ops[8]={0};uint32_t heads[10],next[8];
     EffectInvocationFlow flow={.owner=&owner,.function=&head,.values=10,.types=projected,.instructions=projected_ops,
-        .body=effect_body_owned_request(&context,&material)};
+        .write_heads=heads,.write_next=next,.body=effect_body_owned_request(&context,&material)};
     CHECK(effect_invocation_flow_types(&flow)==XR_XIR_OK && flow.types_ready);
     for(uint32_t i=0;i<8;++i){XrXirInstruction storage;const XrXirInstruction *row=NULL;
         CHECK(effect_invocation_flow_instruction(&flow,i,&storage,&row)==XR_XIR_OK && row==&projected_ops[i] &&
