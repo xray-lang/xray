@@ -9,6 +9,7 @@
 #include "xxir_layout_input_internal.h"
 #include "xxir_effect_program_final_storage.inc.c"
 #include "xxir_effect_program_outcome_current.inc.c"
+#include "xxir_effect_program_error_leaf_current.inc.c"
 
 static XrXirStatus effect_program_layout_head(const XrXirCompileContext *work,
     const void *owner,uint32_t function,XirInputFunctionHead *output) {
@@ -105,6 +106,7 @@ XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *
     bool empty=false;
     if (status==XR_XIR_OK) status=effect_error_empty_current(work,effects,&empty);
     if (status==XR_XIR_OK) status=effect_program_error_projection(work,effects);
+    if (status==XR_XIR_OK && !empty) status=effect_program_error_leaves_current(work,effects);
     return status;
 }
 

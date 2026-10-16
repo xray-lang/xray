@@ -2,7 +2,7 @@
 #define main storage_fixture_entry
 #include "test_xir_program_input_storage.c"
 #undef main
-#include "xir/xxir_program_input_internal.h"
+#include "xir/xxir_program_internal.h"
 
 static unsigned receive_decodes;
 static XrXirStatus observed_packet_decode(const XrXirCompileContext *context,
@@ -14,6 +14,15 @@ static XrXirStatus observed_packet_decode(const XrXirCompileContext *context,
 #define xr_xir_compile_checked_read_lower observed_packet_decode
 #include "xir/xxir_program_input.c"
 #undef xr_xir_compile_checked_read_lower
+
+static void received_declarations_owner(const XrXirProgram *program) {
+    const XrXirTypes *types=NULL;
+    const XrXirDeclarations *declarations=NULL;
+    CHECK(program->permissions->input && program->permissions->input->artifact);
+    CHECK(xir_effects_program_metadata(&program->context,program->permissions->effects,
+        &types,&declarations)==XR_XIR_OK);
+    CHECK(program->declarations==declarations);
+}
 
 extern const XrXirProgramSpec owned_native_program;
 int main(void) {
@@ -28,7 +37,7 @@ int main(void) {
     XrXirProgram *program=NULL;
     CHECK(receive_decodes==0);
     CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && !artifact);
-    CHECK(receive_decodes==0);result42(program);xr_xir_compile_program_drop(program);program=NULL;
+    CHECK(receive_decodes==0);received_declarations_owner(program);result42(program);xr_xir_compile_program_drop(program);program=NULL;
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==baseline.live_bytes);
 
@@ -50,7 +59,7 @@ int main(void) {
     CHECK(xr_xir_compile_program_seal(&context,&spec,&program)==XR_XIR_OK && program);
     CHECK(receive_decodes==1);
     xr_compile_resources_free(packet);memset(identity,0,sizeof(identity));memset(&spec,0,sizeof(spec));
-    result42(program);xr_xir_compile_program_drop(program);
+    received_declarations_owner(program);result42(program);xr_xir_compile_program_drop(program);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes==baseline.live_bytes);
     xr_compile_resources_release(context.resources);

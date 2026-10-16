@@ -52,7 +52,8 @@ struct XrXirProgram {
     XrXirCompileContext context;
     XrXirCallEntry *entries;
     uint32_t entry_count;
-    XrXirDeclarations *declarations;
+    /* The received Input owns this immutable view until Program retirement. */
+    const XrXirDeclarations *declarations;
     uint32_t *order;
     uint32_t initialization_count;
     uint8_t *active_modules;

@@ -7266,7 +7266,10 @@ of `XrXirProgramPacket`; one boundary decode enters the same owning receiver.
 Packets carry no caller-supplied layout authority. Reception independently
 checks current semantics, bodies, declarations, layouts and wiring before
 transferring the Input, entry table and code lease. Failure preserves caller
-inputs and publishes no Program. Internal packet destruction before reception
+inputs and publishes no Program. The Program uses the immutable declarations
+owned by its transferred canonical Input without a second deep clone. Failed
+Program disposal leaves caller-owned Input declarations live. The runtime type
+arena keeps its independent ownership for escaping values. Internal packet destruction before reception
 and external packet/spec destruction afterwards cannot invalidate a successful
 Program. Old Program ABIs and the old Proof/getter interface reject without an
 adapter path.
@@ -7278,7 +7281,10 @@ rows and both public throws/task_errors projections must match that solution.
 This check allocates and releases nothing, charges actual reads, and rejects a
 joint forgery of a row and its two projections. Inputs with real error seeds,
 precise indirect calls or general generic bindings retain the separate complete
-current Error verification obligation. An owning carrier does not qualify the
+current Error verification obligation. Even when another function has a real Error seed,
+a complete leaf without calls or deferred cleanup independently proves its Error row and
+both public projections empty from current Input; this local check grants no authority to
+other functions. An owning carrier does not qualify the
 general Final proof, retirement of every construction Workspace, or complete
 fault, resource and safety gates.
 

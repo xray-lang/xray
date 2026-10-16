@@ -95,3 +95,10 @@ foreach(input_header_attack RANGE 0 3)
         COMMAND test_xir_program_owned_callbacks input-header-${input_header_attack})
     set_tests_properties(test_xir_program_owned_input_header_${input_header_attack} PROPERTIES TIMEOUT 60)
 endforeach()
+
+foreach(seeded_callback seeded-untyped-free seeded-untyped-alloc seeded-unknown-free seeded-unknown-alloc seed-erase-free seed-erase-alloc)
+    add_test(NAME test_xir_program_owned_callback_${seeded_callback}
+        COMMAND test_xir_program_owned_callbacks ${seeded_callback})
+    set_tests_properties(test_xir_program_owned_callback_${seeded_callback} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;program;ownership;current-error")
+endforeach()

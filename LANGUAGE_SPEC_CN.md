@@ -7183,13 +7183,14 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 `XrXirProgramPacket` 的 bytes、length、identity，边界解码一次后进入同一拥有型接收核；
 packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
 成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
+Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
 内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
 旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。
 
 末次准备回调后的 Error 检查，若从完整当前 Input 证明所有操作只有空逃逸传递和
 内部直接调用，则其最小解必须全空，包括无种子递归调用环；当前 Error 行及
 throws/task_errors 公开投影须同时匹配。此检查不分配或释放，按真实读取收费，
-拒绝联合伪造行与两个公开字段。含真实错误种子、精确间接调用或一般泛型绑定的
+拒绝联合伪造行与两个公开字段。即使其他函数有真实Error种子，完整无调用且无deferred cleanup的叶子函数仍须从当前Input独立证明Error行及两个公开投影全空；此局部检查不为其他函数授予权限。含真实错误种子、精确间接调用或一般泛型绑定的
 完整当前 Error V 仍有独立责任；拥有型载体不代表一般 Final 证明、全部构造
 Workspace 退役或完整故障/资源/安全资格已经完成。
 

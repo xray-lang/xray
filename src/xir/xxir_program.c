@@ -89,7 +89,6 @@ static void program_dispose(XrXirProgram *program) {
         xr_compile_resources_free((void *)program->entries[i].parameters);
     xr_compile_resources_free(program->entries);
     xr_xir_compile_type_arena_drop(program->arena);
-    xr_xir_compile_declarations_free(program->declarations);
     xr_compile_resources_free(program->order);
     xr_compile_resources_free(program->active_modules);
     xr_compile_resources_free(program->module_slots);
@@ -156,7 +155,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     const XrXirDeclarations *declarations = NULL;
     status = xir_effects_program_metadata(context, permissions->effects, &types, &declarations);
     if (status != XR_XIR_OK) { xir_program_permissions_free(permissions); return status; }
-    /* Preparation copies canonical semantic storage. The physical callback
+    /* The received Input owns canonical semantic storage. The physical callback
      * wiring remains borrowed until the final current-descriptor comparison. */
     for (uint32_t i = 0; i < types->count; ++i) {
         if (!xir_compile_work(context, 1)) { xir_program_permissions_free(permissions); return XR_XIR_BUDGET; }
@@ -195,8 +194,9 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
         }
         program->types = xr_xir_compile_type_arena_types(program->arena);
     }
-    status = xr_xir_compile_declarations_clone(context, declarations, program->entry_count, &program->declarations);
-    if (status != XR_XIR_OK) goto failed;
+    /* The received Input owns these immutable declarations for the complete
+     * Program lifetime, including every Instance and retained code lease. */
+    program->declarations = declarations;
     status = program_execution_order(program);
     if (status != XR_XIR_OK) goto failed;
     for (uint32_t i = 0; i < program->declarations->slot_count; ++i) {
@@ -206,7 +206,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     XrXirProgramSpec owned={XR_XIR_PROGRAM_ABI_VERSION,permissions->target,
         program->entries,program->entry_count,program->declarations,{0},program->types,{0}};
     /* Every preparation callback has finished. The independently checked
-     * canonical fields also prove the copied descriptors' structural shape. */
+     * canonical fields also prove the runtime descriptors' structural shape. */
     if (*output || spec->code.owner!=code.owner || spec->code.release!=code.release ||
         *input!=original_input || spec->packet.bytes!=packet.bytes || spec->packet.length!=packet.length ||
         spec->packet.identity!=packet.identity) {

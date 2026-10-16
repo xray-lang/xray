@@ -17,7 +17,7 @@ static void final_restore(void);
 static bool probe_armed, probe_injected, probe_allocations;
 static size_t probe_calls, probe_at=SIZE_MAX;
 static unsigned probe_attack;
-static bool probe_seedless_cycle;
+static bool probe_seedless_cycle,probe_error_seed;
 static XrXirArtifact *probe_artifact;
 static void correspondence_callback(bool allocation) {
     if (!probe_armed || allocation!=probe_allocations) return;
@@ -77,52 +77,59 @@ static void *correspondence_allocate(size_t bytes) {
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 
+#include "xir_error_fixture.h"
 static XrXirRootEffects saved_final_root,saved_final_facts;
 static XrXirFunctionEffects saved_final_control;
 static XrXirStatus saved_final_task_errors;
 static uint32_t saved_summary_mask,saved_public_mask;
 static uint64_t saved_error_row;
 static void final_callback(unsigned attack) {
+    uint32_t function=probe_attack==17?2:1;
     XrXirEffects *effects=probe_artifact->program_final;
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
     EffectFinalFunctions *summary=&effects->invocations->final->summary;
-    CHECK(final && attack>=10 && attack<=16);
-    saved_final_root=final->root[1];saved_final_facts=summary->facts[1];
-    saved_final_control=final->functions[1];saved_final_task_errors=final->task_errors[1];
-    saved_summary_mask=summary->functions[1].formula.constant_mask;
-    saved_public_mask=final->contracts[1].formula.constant_mask;
-    CHECK(final->atom_count==0 && final->words==1);
-    saved_error_row=final->errors[1];
-    if (attack==10) final->root[1].requires_root=!final->root[1].requires_root;
+    CHECK(final && attack>=10 && attack<=17);
+    saved_final_root=final->root[function];saved_final_facts=summary->facts[function];
+    saved_final_control=final->functions[function];saved_final_task_errors=final->task_errors[function];
+    saved_summary_mask=summary->functions[function].formula.constant_mask;
+    saved_public_mask=final->contracts[function].formula.constant_mask;
+    CHECK(final->words==1);
+    CHECK(probe_error_seed?(final->atom_count==2 && final->errors[2]):final->atom_count==0);
+    saved_error_row=final->errors[function];
+    if (attack==10) final->root[function].requires_root=!final->root[function].requires_root;
     if (attack==11) {
-        final->root[1].requires_root=true;summary->facts[1].requires_root=true;
-        final->contracts[1].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
-        summary->functions[1].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
+        final->root[function].requires_root=true;summary->facts[function].requires_root=true;
+        final->contracts[function].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
+        summary->functions[function].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
     }
-    if (attack==12) final->functions[1].suspend=XR_XIR_EFFECT_MAY;
-    if (attack==13) final->task_errors[1]=XR_XIR_BAD_TYPE;
-    if (attack==14) final->functions[1].throws=XR_XIR_EFFECT_MAY;
+    if (attack==12) final->functions[function].suspend=XR_XIR_EFFECT_MAY;
+    if (attack==13) final->task_errors[function]=XR_XIR_BAD_TYPE;
+    if (attack==14) final->functions[function].throws=XR_XIR_EFFECT_MAY;
     if (attack==15) {
-        final->errors[1]|=UINT64_C(2);
-        final->functions[1].throws=XR_XIR_EFFECT_MAY;
-        final->task_errors[1]=XR_XIR_BAD_TYPE;
+        final->errors[function]|=UINT64_C(2);
+        final->functions[function].throws=XR_XIR_EFFECT_MAY;
+        final->task_errors[function]=XR_XIR_BAD_TYPE;
+    }
+    if(attack==17) {
+        final->errors[2]=0;final->functions[2].throws=XR_XIR_EFFECT_NONE;final->task_errors[2]=XR_XIR_OK;
     }
     if (attack==16) {
-        final->errors[1]|=UINT64_C(1);
-        final->functions[1].throws=XR_XIR_EFFECT_UNKNOWN;
-        final->task_errors[1]=XR_XIR_BAD_TYPE;
+        final->errors[function]|=UINT64_C(1);
+        final->functions[function].throws=XR_XIR_EFFECT_UNKNOWN;
+        final->task_errors[function]=XR_XIR_BAD_TYPE;
     }
 }
 static void final_restore(void) {
     if (probe_attack<10) return;
+    uint32_t function=probe_attack==17?2:1;
     XrXirEffects *effects=probe_artifact->program_final;
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
     EffectFinalFunctions *summary=&effects->invocations->final->summary;
-    final->root[1]=saved_final_root;summary->facts[1]=saved_final_facts;
-    final->functions[1]=saved_final_control;final->task_errors[1]=saved_final_task_errors;
-    summary->functions[1].formula.constant_mask=saved_summary_mask;
-    final->contracts[1].formula.constant_mask=saved_public_mask;
-    final->errors[1]=saved_error_row;
+    final->root[function]=saved_final_root;summary->facts[function]=saved_final_facts;
+    final->functions[function]=saved_final_control;final->task_errors[function]=saved_final_task_errors;
+    summary->functions[function].formula.constant_mask=saved_summary_mask;
+    final->contracts[function].formula.constant_mask=saved_public_mask;
+    final->errors[function]=saved_error_row;
 }
 
 static XrXirArtifact *program_variant(const XrXirCompileContext *context, int64_t value, bool varied) {
@@ -137,7 +144,7 @@ static XrXirArtifact *program_variant(const XrXirCompileContext *context, int64_
     const XrXirInstruction cycle_a[]={{.op=XR_XIR_CALL,.immediate=3},{.op=XR_XIR_RETURN}};
     const XrXirInstruction cycle_b[]={{.op=XR_XIR_CALL,.immediate=2},{.op=XR_XIR_RETURN}};
     const XrXirBlock blocks[] = {{0, 1, 0, 0}, {0, instructions, 0, 0},{0,2,0,0}};
-    const XrXirFunction functions[] = {
+    XrXirFunction functions[] = {
         {"init", 4, NULL, 0, XR_XIR_UNIT, blocks, 1, &init, 1, NULL, 0},
         {"main", 4, NULL, 0, XR_XIR_I64, blocks + 1, 1, body, instructions, NULL, 0},
         {"left",4,NULL,0,XR_XIR_UNIT,blocks+2,1,cycle_a,2,NULL,0},
@@ -151,8 +158,17 @@ static XrXirArtifact *program_variant(const XrXirCompileContext *context, int64_
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0}
     };
     const XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 1, NULL};
-    const XrXirModule module = {XR_XIR_BUILT, functions, probe_seedless_cycle?4:2,
-        &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    ErrorFixture seed;error_fixture_init(&seed,false);
+    seed.declaration.module=(XrXirLiteral){"root",4};
+    const XrXirInstruction thrower[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7},
+        {.op=XR_XIR_ENUM_NEW,.type=(XrXirType)256,.args={0,1}},
+        {.op=XR_XIR_THROW,.args={1}}};
+    const XrXirBlock throw_block={0,3,0,0};const uint32_t throw_operand=0;
+    if(probe_error_seed)
+        functions[2]=(XrXirFunction){"seed",4,NULL,0,XR_XIR_UNIT,&throw_block,1,thrower,3,&throw_operand,1};
+    const XrXirModule module = {XR_XIR_BUILT, functions, probe_seedless_cycle?4:probe_error_seed?3:2,
+        &declarations, NULL, probe_error_seed?&seed.types:NULL, NULL, XR_XIR_PROGRAM, NULL};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     XrXirArtifact *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);
@@ -238,7 +254,7 @@ static void joint_refusal(const XrXirCompileContext *context) {
     puts("Two valid bodies/layouts/declarations jointly spliced into unchanged proof rejected");
 }
 
-static void callback_refusal(const XrXirCompileContext *context,unsigned attack,bool allocation) {
+static bool callback_refusal(const XrXirCompileContext *context,unsigned attack,bool allocation) {
     probe_allocations=allocation;
     XrXirArtifact *artifact=constant_program(context,42);
     probe_artifact=artifact;probe_attack=attack;probe_at=SIZE_MAX;
@@ -261,7 +277,14 @@ static void callback_refusal(const XrXirCompileContext *context,unsigned attack,
     probe_armed=false;
     fprintf(stderr,"Final callback attack%u allocation%u ordinal%zu status%u artifact%p program%p\n",
         attack,allocation,frees-1,status,(void *)artifact,(void *)program);
-    CHECK(probe_injected && status==XR_XIR_BAD_STRUCTURE && !program && artifact==original);
+    CHECK(probe_injected);
+    if(probe_error_seed && status==XR_XIR_OK && program && !artifact) {
+        final_restore();
+        CHECK(execute(program)==42);xr_xir_compile_program_drop(program);
+        fprintf(stderr,"Wrongly accepted seeded Error attack%u allocation%u; expected BAD_STRUCTURE; restored42\n",attack,allocation);
+        return false;
+    }
+    CHECK(status==XR_XIR_BAD_STRUCTURE && !program && artifact==original);
     final_restore();
     ((XrXirFunction *)module->functions)[1]=saved_function;
     ((XrXirInstruction *)module->functions[1].instructions)[0].immediate=42;
@@ -272,6 +295,7 @@ static void callback_refusal(const XrXirCompileContext *context,unsigned attack,
     xr_xir_compile_program_drop(program);
     printf("last %s mutation attack=%u ordinal=%zu rejected; same-owner recovery returns42\n",
         allocation ? "allocation" : "free",attack,frees-1);
+    return true;
 }
 
 static void seal_callback_refusal(const XrXirCompileContext *context,bool allocation,unsigned attack) {
@@ -414,6 +438,19 @@ int main(int argc,char **argv) {
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    if(argc==2 && (!strncmp(argv[1],"seeded-",7) || !strncmp(argv[1],"seed-erase-",11))) {
+        const char *cases[]={"seeded-untyped-free","seeded-untyped-alloc",
+            "seeded-unknown-free","seeded-unknown-alloc","seed-erase-free","seed-erase-alloc"};
+        unsigned selected=0;
+        for(;selected<6 && strcmp(argv[1],cases[selected]);++selected) {}
+        CHECK(selected<6);probe_error_seed=true;
+        bool refused=callback_refusal(&context,15+selected/2,(selected&1)!=0);
+        CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK &&
+            after.live_bytes==before.live_bytes);
+        xr_compile_resources_release(context.resources);
+        printf("seeded callback case%u live baseline recovered; independent refusal=%u\n",selected,refused);
+        CHECK(refused);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"seedless-cycle")) {
         probe_seedless_cycle=true;
         normal(&context,42,false);
