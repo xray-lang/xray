@@ -29009,6 +29009,294 @@
         "Real WorkQueue shard/order/block/wake/close and ResultGroup batch/counter/atomic behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
       ],
       "independent_observation_count": 0
+    },
+    {
+      "id": "complete_filesystem_io_io_binary_file_boundary_direct",
+      "oracle_id": "complete_filesystem_io_io_binary_file_boundary_direct",
+      "source": "tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr",
+      "source_lf_sha256": "eb85afac2fea84e1efffb014e111bba870a5efeef3821fe3e6e8ba9d562c4965",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\n256\n0\n1\n127\n128\n255\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr",
+        "source_lf_sha256": "eb85afac2fea84e1efffb014e111bba870a5efeef3821fe3e6e8ba9d562c4965"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_filesystem_io_io_chmod_shared_core",
+      "oracle_id": "complete_filesystem_io_io_chmod_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/io_chmod_shared_core.xr",
+      "source_lf_sha256": "20cfda4a5db9bfce27e70c45abddcba3e03e7348f56bed20307fa56e51c8d50d",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_chmod_shared_core.xr",
+        "source_lf_sha256": "20cfda4a5db9bfce27e70c45abddcba3e03e7348f56bed20307fa56e51c8d50d"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 8
+    },
+    {
+      "id": "complete_filesystem_io_io_path_result_shared_core",
+      "oracle_id": "complete_filesystem_io_io_path_result_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/io_path_result_shared_core.xr",
+      "source_lf_sha256": "13276f95c33f1ef1e3e2c5c8b96548efa46a7f0857d05502c09d7edb860f9d08",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_path_result_shared_core.xr",
+        "source_lf_sha256": "13276f95c33f1ef1e3e2c5c8b96548efa46a7f0857d05502c09d7edb860f9d08"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 14
+    },
+    {
+      "id": "complete_filesystem_io_io_read_dir_shared_core",
+      "oracle_id": "complete_filesystem_io_io_read_dir_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/io_read_dir_shared_core.xr",
+      "source_lf_sha256": "3a974f9cf3dbb8e5459d1d3ea0dbdf867e774564f05e4789ba7ad51598f557ea",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n0\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_read_dir_shared_core.xr",
+        "source_lf_sha256": "3a974f9cf3dbb8e5459d1d3ea0dbdf867e774564f05e4789ba7ad51598f557ea"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 15
+    },
+    {
+      "id": "complete_filesystem_io_io_remove_all_shared_core",
+      "oracle_id": "complete_filesystem_io_io_remove_all_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/io_remove_all_shared_core.xr",
+      "source_lf_sha256": "c40f2c73028132e2fc9a56c3f48ac489583b69e4b47e9b623add649affc425b9",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_remove_all_shared_core.xr",
+        "source_lf_sha256": "c40f2c73028132e2fc9a56c3f48ac489583b69e4b47e9b623add649affc425b9"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_filesystem_io_io_system_direct",
+      "oracle_id": "complete_filesystem_io_io_system_direct",
+      "source": "tests/diff/cases/semantics/stdlib/io_system_direct.xr",
+      "source_lf_sha256": "fbaf3939a10e4dda586e3209ec1a09f5cff7722e966cbc1b57390026d7ea9930",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n5\ntrue\ntrue\n2\nhello\nworld\ntrue\n1\nalpha\ntrue\n3\na\ntrue\nb\ntrue\n3\n65\n0\n255\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_system_direct.xr",
+        "source_lf_sha256": "fbaf3939a10e4dda586e3209ec1a09f5cff7722e966cbc1b57390026d7ea9930"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 61
+    },
+    {
+      "id": "complete_filesystem_io_io_touch_shared_core",
+      "oracle_id": "complete_filesystem_io_io_touch_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/io_touch_shared_core.xr",
+      "source_lf_sha256": "c77026ac0b940981808bddea29f05f9aad810701060f5e2b7e3f79c2c9e3f81f",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\n0\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_touch_shared_core.xr",
+        "source_lf_sha256": "c77026ac0b940981808bddea29f05f9aad810701060f5e2b7e3f79c2c9e3f81f"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
+    },
+    {
+      "id": "complete_filesystem_io_io_write_shared_core",
+      "oracle_id": "complete_filesystem_io_io_write_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/io_write_shared_core.xr",
+      "source_lf_sha256": "d24e3e6db981e1f72609d0484dd837925786dcd39b14411ccee3113d0a040126",
+      "entry": "run",
+      "stdout_utf8": "true\n0\ntrue\ntrue\ntrue\ntrue\ntrue\n4\n65\n0\n10\n255\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original filesystem body;independent symbolic byte/tree/line/hash/cwd/cleanup expectations,all128reopens retained. Symbolic metadata is not host measurement;Windows plain-CRT readonly deletion conflict remains open. No actual I/O/descriptor release/permissions/clock/atomicity/FI/resource/lifetime/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_write_shared_core.xr",
+        "source_lf_sha256": "d24e3e6db981e1f72609d0484dd837925786dcd39b14411ccee3113d0a040126"
+      },
+      "remaining_gates": [
+        "Whole original8filesystem bodies/141observations,all256binarybytes/128directoryreopens/line boundaries/cwd restoration/recursive cleanup and original platform/symlink branches retained.",
+        "Actual filesystem permissions/clock/descriptor closure/symlink/no-follow/atomic publication and Windows VM-vs-legacy-AOT readonly removal gap;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 13
     }
   ]
 }
