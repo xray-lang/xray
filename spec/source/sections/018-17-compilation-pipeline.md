@@ -832,13 +832,13 @@ Array含拥有结构、结构含动态Array及有限递归数据均按实际活�
 
 所有操作仍使用原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出。完整物理故障逐点覆盖实际分配分母；每个trial内失败与retry使用同一原拥有者。先独立测量完整操作需求，再按已消费前缀核剩余额度：足够则要求完整成功且费用一致，不足则要求BUDGET、空输出/live恢复和再次同owner拒绝，不为强求第二次成功复制账本、退款或调高额度。首末点、census和exact/minus-one不是完整FI资格。
 
-本扩展不改变公共Value/Call/Instance/SourceContext布局、schema或opcode；没有新evaluator、宿主执行或持久缓存。外部复合参数/foreign跨arena接收及活动身份字段常量导出仍拒绝；内部身份子图的data-Cell后代投影按17.69接收。完整资源、真实provider和正式安全门须绑定其实际输入取得证据，普通样本通过不构成整包或生产资格。
+本扩展不改变公共Value/Call/Instance/SourceContext布局、schema或opcode；没有新evaluator、宿主执行或持久缓存。外部关闭纯数据参数与foreign跨arena接收按17.70办理；活动身份字段常量导出仍拒绝，内部身份子图的data-Cell后代投影按17.69接收。完整资源、真实provider和正式安全门须绑定其实际输入取得证据，普通样本通过不构成整包或生产资格。
 
 ### 17.69 身份别名的有界接收储备与真实frame占用
 
 内部Array/struct与Class根的后代ref可以包含实际Class、Function捕获及私有Cell。初始完整接收沿既有拥有型遍历观察真实可变Class/Cell句柄，按实际出现次数收集身份键。已准入carrier的相等性只标识同一对象，不授予字段、构造、调用或loan权限。登记表仅保留这些真实身份的拥有引用；不保存整个根Value快照、字段地址或隐含根访问。非活动Nullable/enum分支不制造身份，普通声明和所有实际可达函数仍独立准入。
 
-本节的真实别名预算规则取代17.62–17.66对活动后代身份的初始投影拒绝限制；外部复合参数、身份常量导出、模块状态和未知调用的拒绝继续生效。初始root接收费用与每个descriptor的真实selector跨度单独保存。实际路径使共同Value接收再次访问完整根时，先按其实际selector次数付费；类型图边数不能代替路径次数。子loan共享稳定的原始预算拥有记录，各descriptor与live接收费用仍独立检查。
+本节的真实别名预算规则取代17.62–17.66对活动后代身份的初始投影拒绝限制；外部纯数据参数按17.70接收；外部身份实参、身份常量导出、模块状态和未知调用的拒绝继续生效。初始root接收费用与每个descriptor的真实selector跨度单独保存。实际路径使共同Value接收再次访问完整根时，先按其实际selector次数付费；类型图边数不能代替路径次数。子loan共享稳定的原始预算拥有记录，各descriptor与live接收费用仍独立检查。
 
 每次Class、Cell或路径写入在共同Value变更之前完整接收incoming值，并收集它实际包含的身份及次数。先按目标canonical Class/Cell身份在所有真实活跃loan中查找已登记的出现次数；按该次数乘以incoming接收实收费的四倍，单调扩大相关接收储备。新的嵌套身份以同样出现次数加入原始登记表。只有该原始拥有记录维护身份表，父子loan不能重复登记同一拥有表。每次查找、扫描、复制、计数和扩容先付原账本work；算术溢出或无法支付立即拒绝，失败可留下保守储备但不退款或执行实际写入。
 
@@ -847,6 +847,18 @@ Array含拥有结构、结构含动态Array及有限递归数据均按实际活�
 写入仍运行原目标Cell/Class回边检查、真实prepare/commit/abort/release协议和完整Value接收；身份登记不替代权限、闭包、所有权或循环检查。新Class插入后的后续别名增长、同一Class在多个字段出现、真实捕获Cell、嵌套重借用、旧COW快照及错误/panic cleanup组合都由相同规则约束。完整步骤/深度/frame/output边界、同owner耗尽、物理故障逐点和最后拥有者寿命需要各自实际证据。
 
 本机制保持128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出。公共Value/Call/Instance/SourceContext布局、schema和opcode不变；唯一Lowered evaluator、共同数值核及独立Source重放保持。局部参考通过不授予完整FI、provider、正式安全或P11整包资格。
+
+### 17.70 外部关闭数据实参的独立有界接收
+
+leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的关闭纯数据实参：标量、String、Tuple、Nullable、Array及struct/enum。顶层Unit仍不是实参。整个声明类型族必须获准，不能凭当前不活动的分支夹带Class、Function、Cell、Error、PanicInfo、Task、Atomic或其他身份/资源。所有可达函数、target、Checked身份和权限仍完整复验。本节取代前述各节对全部外部复合实参统一拒绝的临时限制，不扩张未获准值族。
+
+接收者先按原compiler ledger支付64 work，只观察源carrier的真实固定header并同步借用它实际保活的TypeArena；这一步不扫描尚未付费的字段。随后完整检查关闭数据类型。不同池的本地type ID或nominal ordinal没有共同含义：接收按真实限定module/name、种类、泛型实参、所有字段的名称/权限标志/关闭类型、enum分支名称与范围、native身份及源码指纹逐项核对。暂存类型对的有界工作表在本次作业原ledger分配、查询和释放；递归类型引用不跳过剩余声明字段，也不把类型相等当构造或执行授权。普通特化匹配器要求共享nominal声明身份，不能把该前提移用于任意foreign池。
+
+每个实际活动数据节点都复制到本次调用的真实compiler Domain和目标TypeArena。String按完整UTF-8字节复制；Array逐元素接收并保留capacity，不能把变量长度向量直接当固定frame字段数组。Nullable/enum仅复制当前活动载荷，同时保留完整类型准入；Tuple包含真实Unit字段。源Value在同步接收期间保持存活，返回metadata和字段借用不进入结果。源对象真实引用计数/寿命检查继续成立，临时保活的work和inline快照分配明确向当前接收者原ledger收费；源ledger即使已经耗尽也不被扣费或重置。最终快照不依赖源Domain、源Artifact或其调用者ledger引用存活。
+
+执行前完成全部实参快照，再进入同一Lowered evaluator。类型复验与展开使用原compiler work/allocated/live额度；实际接收栈、固定bookkeeping、临时字段向量、扩容时新旧共存及Value观察scratch共同受原剩余frame约束。所有分配、扫描、复制、临时retain和实际节点访问先收费，失败保全空结果、原实参与全部可释放前缀，不退累计work/allocated。不同nominal或关闭类型不匹配返回BAD_ARGUMENT，未准入身份返回NOT_SUPPORTED；原预算、frame、step、output、OOM与Value限制的错误映射继续适用，不能通过语言catch或运行期fallback绕过。
+
+这里是对既有拥有式数据的复制，不是从类型描述取得私有成员、构造、调用或loan权限。Source独立重放仍要求17.67的真实声明owner和精确materializer边；Source开放泛型comptime不因此获准。输出逻辑大小只计最终发布结果，输入接收仍支付原完整内存与work。保留128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出；不改变Value/Call/Instance/SourceContext布局、schema、opcode或构造接口2，不新增evaluator、native执行或持久结果缓存。完整逐点FI、same-owner重试、所有边界/寿命、provider和正式安全资格仍须绑定实际固定输入取得；正常或首末点通过不能替代它们。
 
 <!-- /xr-spec:cn -->
 
@@ -1812,13 +1824,13 @@ The immutable selector count of a real Cell projection is observed only on its e
 
 Every operation retains the original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB logical output. Complete physical FI covers the actual allocation denominator; failure and retry within each trial use the same original owner. Independently measured complete-operation requirements classify the already-charged remaining quota: sufficient quota requires full success with equal charges; insufficient quota requires BUDGET, empty output/live restoration and another same-owner refusal. No ledger copy, refund or raised quota forces a second success. Census, first/last points and exact/minus-one checks do not establish complete FI qualification.
 
-This extension changes no public Value/Call/Instance/SourceContext layout, schema or opcode and introduces no evaluator, host execution or persistent cache. External composite parameters, foreign cross-arena receiving and constant exports containing active identity fields retain their refusals; internal data-Cell descendant projections through identity subgraphs follow17.69. Complete resources, real provider and formal safety gates need evidence bound to their actual inputs; ordinary examples establish neither whole-package nor production qualification.
+This extension changes no public Value/Call/Instance/SourceContext layout, schema or opcode and introduces no evaluator, host execution or persistent cache. External closed-data parameters and foreign cross-arena receiving follow17.70; constant exports containing active identity fields remain refused; internal data-Cell descendant projections through identity subgraphs follow17.69. Complete resources, real provider and formal safety gates need evidence bound to their actual inputs; ordinary examples establish neither whole-package nor production qualification.
 
 ### 17.69 Bounded identity-alias receiving and actual frame occupancy
 
 Descendant refs on internal Array/struct and Class roots may contain authentic Class, Function captures and private Cells. Initial complete receiving follows the existing owning traversal to observe actual mutable Class/Cell handles and records their occurrence multiplicities. Equality of already admitted carriers names an object without granting member, construction, call or loan permission. The table retains only authentic identity leases, never a whole-root Value snapshot, field address or hidden root access. Inactive Nullable/enum branches manufacture no identity, while ordinary declarations and every actually reachable function retain independent admission.
 
-These actual-alias budget rules replace the initial active-descendant identity refusals in17.62–17.66; external composite parameters, identity constant exports, module state and unknown calls retain their refusals. Initial complete-root receiving work and each descriptor's actual selector span remain separate. Before a common Value path revisits the complete root, its actual selector count prepays receiving; type-graph edge count cannot substitute for path count. Child loans share a stable original budget-owning record, while descriptors and live receiving charges remain independently checked.
+These actual-alias budget rules replace the initial active-descendant identity refusals in17.62–17.66; external closed-data parameters follow17.70, while external identity arguments, identity constant exports, module state and unknown calls remain refused. Initial complete-root receiving work and each descriptor's actual selector span remain separate. Before a common Value path revisits the complete root, its actual selector count prepays receiving; type-graph edge count cannot substitute for path count. Child loans share a stable original budget-owning record, while descriptors and live receiving charges remain independently checked.
 
 Every Class, Cell or path mutation completely receives its incoming value and collects actual identities and multiplicities before common Value mutation. Its canonical Class/Cell identity is matched against recorded occurrences in all authentic live loans. That count times four times incoming admission's actual work monotonically extends the related receiving reserve. Newly nested identities join the original table with the same occurrence factor. Only that original owning record maintains the identity table; parent/child loans cannot register the same owning table twice. Every lookup, scan, copy, count and growth prepays original-ledger work. Arithmetic overflow or unpaid work refuses immediately; failure may leave a conservative reserve without refund or actual mutation.
 
@@ -1827,5 +1839,17 @@ Identity keys own real leases, preventing destruction and address reuse from tre
 Mutations retain original destination Cell/Class backedge checks, authentic prepare/commit/abort/release and complete Value receiving. Identity registration replaces no authority, closure, ownership or cycle check. Later alias growth after inserting a new Class, repeated Class fields, genuine captured Cells, nested reborrows, old COW snapshots and Error/panic cleanup combinations use the same rule. Complete steps/depth/frame/output boundaries, same-owner exhaustion, every physical fault point and last-owner lifetime require their own actual evidence.
 
 The mechanism retains128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB output. Public Value/Call/Instance/SourceContext layouts, schema and opcodes remain unchanged. The sole Lowered evaluator, common numeric kernel and independent Source replay remain. Scoped reference success establishes no complete FI, provider, formal safety or whole-P11 qualification.
+
+### 17.70 Independent bounded receiving of external closed-data arguments
+
+The leaf/calls CTFE entries may receive closed pure-data arguments already owning authentic Values and immutable TypeArenas: scalars, String, Tuple, Nullable, Array and struct/enum. Top-level Unit remains no argument. Admission covers the entire declared family; an inactive branch cannot smuggle Class, Function, Cell, Error, PanicInfo, Task, Atomic or other identities/resources. Every reachable function, target, Checked identity and permission still undergoes complete verification. This section replaces earlier blanket external-composite refusals without admitting unsupported families.
+
+The receiver first pays64 work on the original compiler ledger to inspect only the source carrier's authentic fixed header and synchronously borrow its actually retained TypeArena, without scanning unpaid fields. Complete closed-data type admission follows. Local type IDs and nominal ordinals have no shared meaning across pools: matching compares qualified module/name, kind, generic arguments, every field's name/permission flags/closed type, enum member names/ranges, and native identity/source fingerprint. A bounded temporary type-pair worklist allocates, scans and releases on this job's original ledger. Recursive references do not skip remaining declared fields, and type equality grants no construction or execution authority. The ordinary substitution matcher requires shared nominal declaration identities; that precondition cannot be transferred to arbitrary foreign pools.
+
+Every actual active data node is copied into this invocation's genuine compiler Domain and target TypeArena. Strings copy complete UTF-8 bytes. Arrays receive children incrementally while preserving capacity; variable length cannot become a fixed-frame field vector. Nullable/enum copy only their active payload while retaining complete type admission, and Tuples preserve real Unit fields. Source Values remain live throughout synchronous receiving; borrowed metadata/field addresses never enter results. Authentic source reference counters and lifetime checks remain intact. Temporary retain work and inline snapshot allocation explicitly bill the current receiver's original ledger, leaving even an exhausted source ledger neither charged nor reset. The completed snapshot does not depend on the source Domain, Artifact or caller's ledger reference remaining alive.
+
+All argument snapshots complete before execution enters the same Lowered evaluator. Type verification/expansion uses original compiler work/allocated/live quotas. Actual receiving stacks, fixed bookkeeping, temporary field vectors, simultaneous old/new growth and Value observation scratch share the original remaining frame allowance. Allocation, scans, copies, temporary retains and actual visits pay before work. Failure preserves empty output, original arguments and every releasable prefix without refunding cumulative work/allocated. Different nominal or closed-type identities return BAD_ARGUMENT; unadmitted identities return NOT_SUPPORTED. Existing budget/frame/step/output/OOM and Value-limit mappings remain, with no language catch or runtime fallback bypass.
+
+This copies existing owned data; type descriptions confer no private member, construction, call or loan permission. Independent Source replay still requires17.67's genuine declaration owner and exact materializer edges. Open-generic Source comptime gains no admission. Logical output counts only the final published result while receiving pays complete input memory/work. Original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth and policy2/8MiB output remain. Value/Call/Instance/SourceContext layouts, schema, opcodes and construction interface2 remain unchanged, without another evaluator, native execution or persistent result cache. Complete physical FI, same-owner retry, all boundaries/lifetimes, provider and formal safety still require actual fixed-input evidence; normal or first/last controls cannot substitute for them.
 
 <!-- /xr-spec:en -->
