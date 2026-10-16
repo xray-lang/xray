@@ -1,0 +1,5 @@
+import "./worker" as library
+
+export fn run(mode: i64) -> fn(i64) -> i64 {
+    return library.make(mode)
+}

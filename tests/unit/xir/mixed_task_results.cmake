@@ -352,3 +352,31 @@ if(MSVC)
 else()
     target_compile_options(test_xir_mixed_missing_families PRIVATE -Wall -Wextra -Werror)
 endif()
+
+add_executable(test_xir_mixed_cell_cycle_producer xir/test_xir_mixed_cell_cycle_producer.c)
+target_link_libraries(test_xir_mixed_cell_cycle_producer PRIVATE xray_xir_source xray_xir_cgen)
+target_compile_definitions(test_xir_mixed_cell_cycle_producer PRIVATE
+    XR_CELL_CYCLE_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_cell_cycles")
+set(XIR_MIXED_CELL_CYCLE_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_mixed_cell_cycles.c")
+add_custom_command(OUTPUT "${XIR_MIXED_CELL_CYCLE_C}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_mixed_cell_cycle_producer> "${XIR_MIXED_CELL_CYCLE_C}"
+    DEPENDS test_xir_mixed_cell_cycle_producer
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_cell_cycles/root.xr"
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_cell_cycles/worker.xr"
+    VERBATIM)
+add_executable(test_xir_mixed_cell_cycles xir/test_xir_mixed_cell_cycles.c "${XIR_MIXED_CELL_CYCLE_C}")
+target_link_libraries(test_xir_mixed_cell_cycles PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(cell_cycle_target IN ITEMS test_xir_mixed_cell_cycle_producer test_xir_mixed_cell_cycles)
+    set_target_properties(${cell_cycle_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${cell_cycle_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${cell_cycle_target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endforeach()
+foreach(cell_cycle_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_cell_cycles_${cell_cycle_backend} COMMAND test_xir_mixed_cell_cycles ${cell_cycle_backend})
+    set_tests_properties(test_xir_mixed_cell_cycles_${cell_cycle_backend} PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;closure;cell;cycle")
+endforeach()
