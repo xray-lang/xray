@@ -49,12 +49,21 @@ with tempfile.TemporaryDirectory(prefix="preferences-中-", dir=parent) as direc
     state = run("two-targets-list", ["list"])
     assert {row["target"] for row in state["preferences"]} == {"native", "aarch64-windows-msvc"}
     original = config.read_bytes()
+    native = run("native-filtered-list", ["list", "--target", "native"])
+    assert native["preferences"] == [dict(target="native", provider="msvc", compiler=compiler, zig=None)]
+    other = run("other-filtered-list", ["list", "--target", "aarch64-windows-msvc"])
+    assert other["preferences"] == [dict(target="aarch64-windows-msvc", provider="host", compiler=None, zig=None)]
+    assert run("empty-filtered-list", ["list", "--target", "x86_64-linux-gnu"])["preferences"] == []
+    assert config.read_bytes() == original
     for name, arguments in (
         ("unknown-provider", ["use", "--target", "native", "invented"]),
         ("missing-target", ["use", "msvc"]),
         ("provider-path-mismatch", ["use", "--target", "native", "zig", "--cc", compiler]),
         ("reset-path-rejected", ["reset", "--cc", compiler]),
-        ("list-target-rejected", ["list", "--target", "native"]),
+        ("list-invalid-target-rejected", ["list", "--target", "not-a-real-target"]),
+        ("list-probe-provider-rejected", ["list", "--provider", "msvc"]),
+        ("list-probe-profile-rejected", ["list", "--profile", "release"]),
+        ("list-probe-refresh-rejected", ["list", "--refresh"]),
         ("config-path-extra-rejected", ["config-path", "extra"]),
     ):
         run(name, arguments, expected=2)
@@ -86,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix="preferences-中-", dir=parent) as direc
         assert set(pool.map(update, ("native", "aarch64-windows-msvc"))) == {"native", "aarch64-windows-msvc"}
     state = run("concurrent-updates-retained", ["list"])
     assert {row["target"] for row in state["preferences"]} == {"native", "aarch64-windows-msvc"}
-    assert not state["allowFallback"] and not state["preferExternalNative"] and not state["autoProbe"]
+    assert state["policy"] == dict(allowFallback=False, preferExternalNative=False, autoProbe=False)
     run("final-reset", ["reset"])
     assert not config.exists()
 print(json.dumps(dict(status="PASS", commands=len(records) + 2, concurrent_writers=2,
