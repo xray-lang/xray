@@ -12,6 +12,7 @@
 #include "xxir_source.h"
 #include "xxir_ctfe.h"
 #include "xxir_source_instance_internal.h"
+#include "xxir_source_comptime_instances_internal.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
 #include "xxir_operand_roles.h"
@@ -2944,4 +2945,5 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 #include "xxir_core_source.inc.c"
 #include "xxir_source_comptime_pipeline.inc.c"
 #include "xxir_source_instance_pipeline.inc.c"
+#include "xxir_source_comptime_instances.inc.c"
 #include "xxir_source_input.inc.c"

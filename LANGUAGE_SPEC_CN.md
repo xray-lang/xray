@@ -7938,6 +7938,14 @@ leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的
 
 17.73的Source实例接收使用此批次拥有者，共享独立接收产物，仍为每个真实替换分别执行和写出常量配方，完整普通Checker、权限和泛型witness证据保持。公开ABI、schema、opcode、预算和未完成comptime语法/Library边界不变。实际物理分配减少后须重测完整新分母，保留旧固定输入证据；首末故障点不等于完整FI，原门与时限不缩减。
 
+### 17.75 真实泛型 comptime 调用的内部执行接点
+
+Source对依赖词法类型实参的comptime表达式生成真实普通泛型helper，继承原定义的符号binder、约束、模块及名义owner，并在真实调用上显式记录有序类型实参。完全关闭的helper仍不携带无用binder。符号结果只进入普通Built检查；只有普通特化关闭后的真实类型、完整可达闭包和限额通过后才能进入唯一CTFE，不按实例重解释AST。
+
+内部执行入口自动收集本次Program图中实际形成的泛型comptime调用，无调用者函数序号、外池类型ID、Value或PASS。每项保留当前原定义/原调用指令与关闭caller/callee/指令坐标，经17.74拥有批次独立接收和执行。视图完整复验当前产物及实际来源packet，再逐项核真实调用和全部有序替换，最后原子发布。Checked与Lowered的类型ID各属自己的池；类型关系按完整结构检查，不能直接比较外池ordinal。结果与原定义在AST、session及生产者死亡后仍保活，最终释放不分配。
+
+这些结果是编译器内部的站点执行数据，不发布含未绑定comptime的Source程序。公共Source入口在逐实例常量替换尚未接通时继续编译失败；Library未来实例与无当前Source节点的站点也没有由此获得权限。全部收费来自原有限ledger，原steps/frame/output/depth和work/allocated/live不变。完整语法接回、规范站点/结果绑定、独立packet、完整FI与正式安全仍须各自完成，不以此准备接点关闭C0/C1。
+
 ---
 
 ## 18. 错误码 (Error Codes)

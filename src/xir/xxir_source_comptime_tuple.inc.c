@@ -15,6 +15,8 @@
 #include "xxir_array.h"
 #include "xxir_type_arena.h"
 static bool source_comptime_result_type(SourceContext *ctx,AstNode *node,XrXirType type) {
+    if (ctx->generics[ctx->function].parameter_count && xr_xir_type_span(&ctx->types,type))
+        return true;
     XrXirCtfeStatus status=xr_xir_compile_ctfe_type_admit(&ctx->compile,&ctx->types,type);
     if (status==XR_XIR_CTFE_OK) return true;
     if (status==XR_XIR_CTFE_BUDGET || status==XR_XIR_CTFE_OUT_OF_MEMORY)

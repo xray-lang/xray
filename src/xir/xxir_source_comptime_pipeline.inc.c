@@ -55,6 +55,13 @@ static bool source_comptime_helper(SourceContext *ctx,const XrXirArtifact *lower
 }
 static bool source_comptime_evaluate_library(SourceContext *ctx,const XrXirArtifact *checked);
 static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *checked) {
+    for (const SourceComptimeSite *site=ctx->comptime_sites;site;site=site->next) {
+        if (!source_work_units(ctx,site->syntax,2)) return false;
+        if (ctx->generics[site->helper].parameter_count) {
+            ctx->module=site->module;
+            return source_fail(ctx,site->syntax,XR_XIR_BAD_TYPE,"comptime requires per-instance Source result binding");
+        }
+    }
     if (ctx->linkage_kind==XR_XIR_LIBRARY) return source_comptime_evaluate_library(ctx,checked);
     AstNode *entry=ctx->comptime_sites ? ctx->comptime_sites->syntax : NULL;
     if (ctx->comptime_sites) ctx->module=ctx->comptime_sites->module;

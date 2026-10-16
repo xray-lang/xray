@@ -8,7 +8,7 @@
  *
  * KEY CONCEPT:
  *   A provisional call is real Built code. Only a later independently checked
- *   scalar or Unit result can replace it through the ordinary Source recipe writer.
+ *   typed literal result can replace it through the ordinary Source recipe writer.
  */
 struct SourceComptimeSite {
     SourceComptimeSite *next;
@@ -69,18 +69,18 @@ static bool source_comptime_body(SourceContext *ctx,AstNode *site,SourceExpected
     if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.type==XR_XIR_UNIT?0:value.id,0},{0},0,{0}},NULL)) return false;
     ctx->returned=true;return finish_body(ctx);
 }
-static bool source_comptime_closed_body(SourceContext *ctx,AstNode *node,uint32_t function) {
+static bool source_comptime_open_body(SourceContext *ctx,AstNode *node,uint32_t function,bool *open) {
     const XrXirFunction *body=&ctx->functions[function];
     const XrXirGeneric *generic=&ctx->generics[function];
+    if (!source_work_units(ctx,node,2)) return false;
+    *open=xr_xir_type_span(&ctx->types,body->result)!=0;
     for (uint32_t i=0;i<body->instruction_count;++i) {
         if (!source_work_units(ctx,node,2)) return false;
-        if (xr_xir_type_span(&ctx->types,body->instructions[i].type))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime body requires closed instruction types");
+        if (xr_xir_type_span(&ctx->types,body->instructions[i].type)) *open=true;
     }
     for (uint32_t t=0;t<generic->argument_count;++t) {
         if (!source_work_units(ctx,node,2)) return false;
-        if (xr_xir_type_span(&ctx->types,generic->arguments[t]))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"comptime body requires closed call type arguments");
+        if (xr_xir_type_span(&ctx->types,generic->arguments[t])) *open=true;
     }
     return true;
 }
@@ -103,13 +103,15 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     ctx->identities[f]=(XrXirFunctionIdentity){.module=ctx->module,.nominal_owner=nominal,
         .method_kind=nominal?XR_XIR_MEMBER_HELPER:XR_XIR_NON_MEMBER};
     ctx->bodies[f].node=node;ctx->bodies[f].module=ctx->module;
-    /* Lexical type names keep their original meaning, including shadowing.
-     * The helper itself has no open parameters; every emitted type must close
-     * before the ordinary checker and evaluator can receive it. */
+    /* A genuine lexical helper inherits the declaration's symbolic binders.
+     * Ordinary specialization closes them before any evaluator admission. */
     ctx->bodies[f].type_owner=ctx->bodies[outer].type_owner;
     ctx->bodies[f].generic_owner=ctx->bodies[outer].generic_owner;
     ctx->bodies[f].type_parameters=ctx->bodies[outer].type_parameters;
     ctx->bodies[f].type_parameter_count=ctx->bodies[outer].type_parameter_count;
+    if (!source_work_units(ctx,node,2*sizeof(XrXirGeneric))) return false;
+    ctx->generics[f]=(XrXirGeneric){ctx->generics[outer].constraints,ctx->generics[outer].parameter_count,
+        NULL,0,ctx->generics[outer].parameter_kinds};
     ctx->function=f;ctx->locals=ctx->scope=NULL;ctx->facts=NULL;ctx->epochs=NULL;
     ctx->loop=NULL;ctx->type_scope=saved.types;ctx->active_expression=NULL;ctx->effect_argument=NULL;
     ctx->returned=false;ctx->flow_alternatives=0;
@@ -118,8 +120,17 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     ctx->bodies[f].declaration=declaration.declaration;
     if (ok) ok=source_query_syntax_role(ctx,declaration.declaration,XR_XIR_SOURCE_SYNTAX_CLOSURE,0);
     if (ok) ok=source_comptime_body(ctx,node,expected);
-    if (ok) ok=source_comptime_closed_body(ctx,node,f);
-    if (ok) ((XrXirSourceDeclaration *)ctx->query.declarations)[declaration.declaration-1].type=source_query_type(ctx,ctx->functions[f].result);
+    bool open=false;
+    if (ok) ok=source_comptime_open_body(ctx,node,f,&open);
+    if (ok && !open) {
+        ctx->generics[f].constraints=NULL;ctx->generics[f].parameter_count=0;ctx->generics[f].parameter_kinds=NULL;
+    }
+    if (ok) {
+        XrXirSourceDeclaration *query=&((XrXirSourceDeclaration *)ctx->query.declarations)[declaration.declaration-1];
+        query->type=source_query_type(ctx,ctx->functions[f].result);
+        query->generic_parameter_count=ctx->generics[f].parameter_count;
+        query->generic_constraints=ctx->generics[f].constraints;query->type_parameter_kinds=ctx->generics[f].parameter_kinds;
+    }
     source_comptime_restore(ctx,&saved);
     if (ok) *output=f;
     return ok;
@@ -143,8 +154,18 @@ static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceEx
     if (!site || !source_work_units(ctx,node,sizeof(*site)+sizeof(ctx->comptime_sites)+sizeof(ctx->comptime_count)+2)) return false;
     *site=(SourceComptimeSite){ctx->comptime_sites,node,module,owner,declaration,helper,expected,{0},0,0};
     ctx->comptime_sites=site;++ctx->comptime_count;
-    if (!ctx->comptime_input)
-        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CALL,ctx->functions[helper].result,{0},{0},helper,{0}},value);
+    if (!ctx->comptime_input) {
+        XrXirInstruction call={XR_XIR_CALL,ctx->functions[helper].result,{0},{0},helper,{0}};
+        uint32_t count=ctx->generics[helper].parameter_count;
+        XrXirType *arguments=count?source_alloc(ctx,count,sizeof(*arguments)):NULL;
+        if (count && !arguments) return false;
+        for (uint32_t a=0;a<count;++a) {
+            if (!source_work_units(ctx,node,sizeof(*arguments))) return false;
+            arguments[a]=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
+        }
+        if (count && !source_type_arguments(ctx,node,arguments,count,&call)) return false;
+        return source_recipe_record(ctx,call,value);
+    }
     const SourceComptimeSite *matched=NULL;
     for (const SourceComptimeSite *original=ctx->comptime_input;original;original=original->next) {
         if (!source_work_units(ctx,node,8)) return false;

@@ -8122,6 +8122,14 @@ An owned-instance batch completely verifies every genuine INSTANCE definition an
 
 The Source receiver in17.73 uses this batch owner to share independently received artifacts, while each genuine substitution executes separately and produces its own constant recipe. Complete ordinary checking, permissions and generic witness evidence remain. Public ABI, schema, opcodes, budgets and unfinished comptime-syntax/Library boundaries are unchanged. Reduced real physical allocations require a freshly measured complete denominator while retaining old fixed-input evidence. First/last fault points do not imply complete FI; original gates and deadlines remain.
 
+### 17.75 Internal execution of genuine generic comptime calls
+
+Source produces a genuine ordinary generic helper for a comptime expression depending on lexical type arguments. It inherits the original definition's symbolic binders, constraints, module and nominal owner, and the actual call explicitly records ordered type arguments. A completely closed helper retains no unused binders. Symbolic results enter ordinary Built checking only. The sole CTFE admits only real types closed by ordinary specialization, complete reachable closures and original limits, without per-instance AST reinterpretation.
+
+An internal execution entry automatically discovers generic comptime calls actually collected from the current Program graph, without caller-selected function ordinals, foreign type IDs, Values or PASS. Every row retains current source-definition/call-instruction and closed caller/callee/instruction coordinates, independently received and executed through17.74's owned batch. Views completely reverify current artifacts and actual source packets, then verify real calls and every ordered substitution before atomic publication. Checked and Lowered type IDs belong to their respective pools; complete structural correspondence replaces cross-pool ordinal comparison. Results and original definitions outlive AST, session and producer destruction, with allocation-free final release.
+
+These results are internal compiler site-execution data and publish no Source program containing unbound comptime expressions. Public Source still fails compilation until per-instance constant replacement is connected. Later Library instances and sites without current Source nodes gain no authority from this entry. All charging uses the original finite ledger; original steps/frame/output/depth and work/allocated/live limits remain. Complete syntax receiving, canonical site/result binding, independent packets, complete FI and formal safety remain separate requirements; this staging entry does not complete C0/C1.
+
 ---
 
 ## 18. Error Codes
