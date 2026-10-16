@@ -10,6 +10,7 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_map.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_compile_memory.h"
 
@@ -114,6 +115,24 @@ bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type) {
 bool xr_xir_type_is_array(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_ARRAY);
 }
+XR_FUNC bool xr_xir_type_is_map(const XrXirTypes *types, XrXirType type) {
+    return type_has_kind(types, type, XR_XIR_TYPE_MAP);
+}
+XR_FUNC bool xr_xir_type_is_set(const XrXirTypes *types, XrXirType type) {
+    return type_has_kind(types, type, XR_XIR_TYPE_SET);
+}
+XR_FUNC XrXirType xr_xir_map_key(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && node->kind == XR_XIR_TYPE_MAP ? node->element : XR_XIR_UNIT;
+}
+XR_FUNC XrXirType xr_xir_map_element(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && node->kind == XR_XIR_TYPE_MAP ? node->result : XR_XIR_UNIT;
+}
+XR_FUNC XrXirType xr_xir_set_element(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_type_node(types, type);
+    return node && node->kind == XR_XIR_TYPE_SET ? node->element : XR_XIR_UNIT;
+}
 XR_FUNC bool xr_xir_type_is_nullable(const XrXirTypes *types, XrXirType type) {
     return type_has_kind(types, type, XR_XIR_TYPE_NULLABLE);
 }
@@ -148,7 +167,7 @@ bool xr_xir_type_is_owned(const XrXirTypes *types, XrXirType type) {
         type == XR_XIR_PANIC_INFO || (node && (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
                   node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-                  node->kind == XR_XIR_TYPE_TASK));
+                  node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET));
 }
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -187,7 +206,7 @@ static bool type_component(const XrXirTypes *types, XrXirType type, uint32_t ear
     return node && id - XR_XIR_CONSTRUCTED_TYPE_BASE < earlier &&
         (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
          node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-         node->kind == XR_XIR_TYPE_TASK);
+         node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET);
 }
 static bool callable_component(const XrXirTypes *types, XrXirType type, uint32_t earlier) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -222,6 +241,15 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
             uint32_t component = xr_xir_type_span(types, node->parameters[p].type);
             if (component > span) span = component;
         }
+    } else if (node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET) {
+        if (node->parameters || node->parameter_count || node->flags ||
+            (node->kind == XR_XIR_TYPE_SET && node->result != XR_XIR_UNIT)) return XR_XIR_BAD_STRUCTURE;
+        if (!callable_component(types, node->element, index) ||
+            (node->kind == XR_XIR_TYPE_MAP && node->result != XR_XIR_UNIT &&
+             !callable_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
+        span = xr_xir_type_span(types, node->element);
+        uint32_t value_span = node->kind == XR_XIR_TYPE_MAP ? xr_xir_type_span(types, node->result) : 0;
+        if (value_span > span) span = value_span;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->element != XR_XIR_UNIT || node->result != XR_XIR_UNIT || node->flags)
             return XR_XIR_BAD_STRUCTURE;

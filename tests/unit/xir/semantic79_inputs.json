@@ -1,0 +1,116 @@
+[
+  {
+    "source": "compile_owner/checked_sizing78_golden.h",
+    "target": "compile_owner/checked_sizing79_golden.h",
+    "sha256": "ae36f27095cf5f13134b3583f7ee14bf0da425a3f3218584af0af21797e8d8ea",
+    "semantic": 78,
+    "models": [
+      "sizing78_golden",
+      "sizing78_embedded_golden",
+      "sizing78_empty_golden"
+    ]
+  },
+  {
+    "source": "root_construction78_goldens.h",
+    "target": "root_construction79_goldens.h",
+    "sha256": "64e2ffaf02ae98aa2adf134eb9b73586cdeaa70d3dd08767b88c9ca367bd2e79",
+    "semantic": 78,
+    "models": [
+      "root_construction72_checked",
+      "root_construction72_instance"
+    ]
+  },
+  {
+    "source": "unit_values/unit78_wire_golden.h",
+    "target": "unit_values/unit79_wire_golden.h",
+    "sha256": "38df217b95cda8eca5a2ae08729318c8355f5c639dd5ff2d2b96acc7b34ec8ea",
+    "semantic": 78,
+    "models": [
+      "unit78_packet"
+    ]
+  },
+  {
+    "source": "xir_assert_panics78_golden.h",
+    "target": "xir_assert_panics79_golden.h",
+    "sha256": "3b1f3adb394893f50228ca6215afe052d8a723db7a2f93dba6d824ce9ac234de",
+    "semantic": 78,
+    "models": [
+      "assert_panics78_golden"
+    ]
+  },
+  {
+    "source": "xir_checked_range78_golden.h",
+    "target": "xir_checked_range79_golden.h",
+    "sha256": "7f0d407e444aef0fc933a68c3dd43f0d45ca3070ba948a32432944ef24daa7fc",
+    "semantic": 78,
+    "models": [
+      "checked_range78_golden"
+    ]
+  },
+  {
+    "source": "xir_checked_scalar78_golden.h",
+    "target": "xir_checked_scalar79_golden.h",
+    "sha256": "785fa84078f8407feb69bc387b663498aad10caccf085c7daba323083518aafd",
+    "semantic": 78,
+    "models": [
+      "checked_scalar78_golden"
+    ]
+  },
+  {
+    "source": "xir_error_marker78_golden.h",
+    "target": "xir_error_marker79_golden.h",
+    "sha256": "f49576e35e648853d3fa0786eeed7d006f02f2be1ccb2e4a2b5b05a26476eb58",
+    "semantic": 78,
+    "models": [
+      "error_marker78_golden"
+    ]
+  },
+  {
+    "source": "xir_generic_method78_golden.h",
+    "target": "xir_generic_method79_golden.h",
+    "sha256": "b70cca6216f2a6c4bd98346f7f2adf50f122d95864bba46350c9f330de69c1a0",
+    "semantic": 78,
+    "models": [
+      "generic_method78_golden",
+      "generic_method78_invalid_flags0",
+      "generic_method78_invalid_flags1"
+    ]
+  },
+  {
+    "source": "xir_rune78_golden.h",
+    "target": "xir_rune79_golden.h",
+    "sha256": "bc3170191919b76e14565826fd802286aeeff290649e1e6423c861917dd16ab3",
+    "semantic": 78,
+    "models": [
+      "rune78_golden"
+    ]
+  },
+  {
+    "source": "xir_hash75_golden.h",
+    "target": "xir_hash79_golden.h",
+    "sha256": "0ed0d0639a2d309397e579bb3379da06a999efa670670d92c478047662b0feb0",
+    "semantic": 75,
+    "models": [
+      "hash75_golden"
+    ]
+  },
+  {
+    "source": "xir_nullable75_golden.h",
+    "target": "xir_nullable79_golden.h",
+    "sha256": "7936a3f03de7aad4030598f98617ebb69635f872a31a821ca849f2b6b203c47f",
+    "semantic": 75,
+    "models": [
+      "nullable_none75_golden",
+      "nullable_some75_golden"
+    ]
+  },
+  {
+    "source": "xir_nested_nullable75_golden.h",
+    "target": "xir_nested_nullable79_golden.h",
+    "sha256": "18bd7b854c0fa53f8319999ea46f21023b642c1cf8ac15d396f7654f45cef1c4",
+    "semantic": 75,
+    "models": [
+      "nested_nullable75_golden"
+    ]
+  }
+]

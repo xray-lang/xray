@@ -135,6 +135,15 @@ class Member:
 
 
 def simple_term(term, binder):
+    if isinstance(binder, tuple):
+        if len(binder) == 2:
+            key, value = [('name', name, ()) for name in binder]
+            return {key: 'KEY', value: 'VALUE', ('nullable', value): 'NULLABLE_VALUE',
+                    ('name', 'Array', (key,)): 'ARRAY_KEY',
+                    ('name', 'Array', (value,)): 'ARRAY_VALUE',
+                    ('name', 'Array', (('tuple', (key, value)),)): 'ARRAY_KEY_VALUE'}.get(
+                        term, simple_term(term, ''))
+        binder = binder[0] if binder else ''
     if term == ('tuple', ()):
         return 'UNIT'
     if term == ('name', 'i64', ()):
@@ -261,16 +270,30 @@ def parse_source(source, prelude):
                 lowered = True
             continue
         if header is None:
-            match = re.fullmatch(r'(struct|class)\s+([A-Za-z_]\w*)(?:<([A-Za-z_]\w*)>)?\s*\{', line)
+            match = re.fullmatch(r'(struct|class)\s+([A-Za-z_]\w*)(?:<([^<>]+)>)?\s*\{', line)
             if not match:
                 raise ValueError('expected a complete native declaration header')
-            kind, name, binder = match.groups()
-            binder = binder or ''
+            kind, name, parameter_text = match.groups()
+            parameters = []
+            for text in parameter_text.split(',') if parameter_text else []:
+                parameter = re.fullmatch(r'\s*([A-Za-z_]\w*)\s*(?::\s*(Hashable))?\s*', text)
+                if not parameter or parameter.group(1) in [p[0] for p in parameters]:
+                    raise ValueError('invalid or duplicate native generic parameter')
+                parameters.append(parameter.groups())
+            binder = tuple(p[0] for p in parameters)
             identity = int(marks[0])
-            if (kind, identity, name, bool(binder)) not in (('struct', 1, 'Array', True), ('struct', 2, 'string', False), ('class', 6, 'i64', False), ('class', 7, 'f64', False), ('class', 8, 'bool', False), ('class', 9, 'rune', False)):
+            valid = (kind == "struct" and (
+                     identity == 1 and name == "Array" and len(parameters) == 1 and not parameters[0][1] or
+                     identity == 2 and name == "string" and not parameters or
+                     identity == 10 and name == "Map" and parameters == [("K", "Hashable"), ("V", None)] or
+                     identity == 11 and name == "Set" and parameters == [("T", "Hashable")]) or
+                     kind == "class" and not parameters and (identity, name) in
+                     ((6, "i64"), (7, "f64"), (8, "bool"), (9, "rune")))
+            if not valid:
                 raise ValueError('native identity, value kind or generic arity mismatch')
-            if identity == 1 and not re.search(r'XR_BUILTIN_PRELUDE_TYPE\("Array",\s*1,', prelude):
-                raise ValueError('native declaration has no exact one-parameter prelude binding')
+            if identity in (1, 10, 11) and len(re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("' + name + r'",\s*' +
+                                               str(len(binder)) + r',', prelude)) != 1:
+                raise ValueError('native declaration has no exact prelude binding')
             header = (int(marks[0]), name, binder, number, len(raw[:raw.index(name)].encode('utf-8')) + 1)
             continue
         if line == '}':
@@ -323,6 +346,9 @@ def parse_source(source, prelude):
         pending, lowered = None, False
     if header is None or not closed or pending:
         raise ValueError('incomplete native declaration')
+    if header[0] in (10, 11):
+        validate_hash_members(header[0], members)
+        return header, members
     if header[0] in (7, 8, 9):
         contracts = {
             7: {'FLOAT_ABS': ('abs', '() -> f64', 'no_heap', 'none'),
@@ -385,7 +411,7 @@ def parse_source(source, prelude):
         if used != set(contracts):
             raise ValueError('integer declaration omits an admitted recipe')
         return header, members
-    recipes = array_recipe_contracts(header[2]) if header[0] == 1 else {}
+    recipes = array_recipe_contracts(header[2][0]) if header[0] == 1 else {}
     used = set()
     for member in members:
         if member.operation == 'NONE':
@@ -428,13 +454,41 @@ def parse_source(source, prelude):
     return header, members
 
 
+def validate_hash_members(identity, members):
+    """Signatures describe the type; no member gains execution authority here."""
+    contracts = {
+        10: {'get': ('READ', '(key: K) -> V?'), 'set': ('REF', '(key: K, value: V)'),
+            'containsKey': ('READ', '(key: K) -> bool'), 'containsValue': ('READ', '(value: V) -> bool'),
+            'delete': ('REF', '(key: K) -> bool'), 'clear': ('REF', '()'),
+            'keys': ('READ', '() -> Array<K>'), 'values': ('READ', '() -> Array<V>'),
+            'entries': ('READ', '() -> Array<(K, V)>'), 'forEach': ('READ', '(fn: fn(key: K, value: V)) -> ()'),
+            'iterator': ('READ', '() -> Iterator<K>'), 'entriesIterator': ('READ', '() -> Iterator<(K, V)>'),
+            'toString': ('READ', '() -> string')},
+        11: {'add': ('REF', '(value: T)'), 'contains': ('READ', '(value: T) -> bool'),
+            'delete': ('REF', '(value: T) -> bool'), 'clear': ('REF', '()'),
+            'values': ('READ', '() -> Array<T>'), 'forEach': ('READ', '(fn: fn(value: T)) -> ()'),
+            **{name: ('READ', '(other: Set<T>) -> Set<T>') for name in
+               ('union', 'intersection', 'difference', 'symmetricDifference')},
+            **{name: ('READ', '(other: Set<T>) -> bool') for name in ('isSubset', 'isSuperset')},
+            'toArray': ('READ', '() -> Array<T>'), 'iterator': ('READ', '() -> Iterator<T>'),
+            'toString': ('READ', '() -> string')},
+    }[identity]
+    if {member.name for member in members} != set(contracts):
+        raise ValueError('incorrect native hash member inventory')
+    for member in members:
+        receiver, signature = contracts[member.name]
+        if (member.receiver != receiver or tokens(member.signature) != tokens(signature) or
+                member.static or not member.method or member.lowered or member.operation != 'NONE'):
+            raise ValueError('native hash declaration disagrees with its signature contract: ' + member.name)
+
+
 def render_type(root, stem):
     path = root / f'stdlib/types/{stem}.xr'
     source = path.read_text(encoding='utf-8').replace('\r\n', '\n')
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
     header, members = parse_source(source, prelude)
     identity, name, binder, line, column = header
-    if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'), ('i64', 6, 'i64'), ('f64', 7, 'f64'), ('bool', 8, 'bool'), ('rune', 9, 'rune')):
+    if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'), ('i64', 6, 'i64'), ('f64', 7, 'f64'), ('bool', 8, 'bool'), ('rune', 9, 'rune'), ('map', 10, 'Map'), ('set', 11, 'Set')):
         raise ValueError('native source path does not own this declaration identity')
     lines = []
     for index, member in enumerate(members):
@@ -458,8 +512,13 @@ def render_type(root, stem):
                   'XR_NATIVE_TERM_' + simple_term(member.result, binder)]
         lines.append('    {' + ', '.join(fields) + '},')
     digest = hashlib.sha256(source.encode()).digest()
-    lines += ['};', f'static const XrNativeTypeDeclaration xr_native_{stem} = {{',
-              f'    {identity}, XR_NATIVE_DECLARATION_VALUE, {c_string(name)}, {c_string(binder)}, {int(bool(binder))},',
+    lines.append('};')
+    if binder:
+        lines.append(f'static const char *const xr_native_{stem}_type_parameters[] = ' +
+                     '{' + ', '.join(c_string(name) for name in binder) + '};')
+    type_parameters = f'xr_native_{stem}_type_parameters' if binder else 'NULL'
+    lines += [f'static const XrNativeTypeDeclaration xr_native_{stem} = {{',
+              f'    {identity}, XR_NATIVE_DECLARATION_VALUE, {c_string(name)}, {type_parameters}, {len(binder)},',
               f'    "stdlib/types/{stem}.xr", "xray-native:prelude/{name}", {{{{{", ".join(str(b) for b in digest)}}}}},',
               f'    {line}, {column}, xr_native_{stem}_members, {len(members)}', '};', '']
     return lines, header, members
@@ -516,8 +575,9 @@ def render_atomic_identities(root):
             'XR_NATIVE_RESULT_OWNERSHIP_' + ('UNIT' if index in (1,2,3) else 'OWNED'), params, str(len(parameters)),
             'XR_NATIVE_TERM_' + simple_term(result, 'T')]) + '},')
     digest = hashlib.sha256(source.encode()).digest()
-    output += ['};', 'static const XrNativeTypeDeclaration xr_native_atomic = {',
-        '    3, XR_NATIVE_DECLARATION_IDENTITY, "Atomic", "T", 1,',
+    output += ['};', 'static const char *const xr_native_atomic_type_parameters[] = {"T"};',
+        'static const XrNativeTypeDeclaration xr_native_atomic = {',
+        '    3, XR_NATIVE_DECLARATION_IDENTITY, "Atomic", xr_native_atomic_type_parameters, 1,',
         '    "stdlib/types/atomic.xr", "xray-native:prelude/Atomic", {{' + ', '.join(str(b) for b in digest) + '}},',
         '    2, 7, xr_native_atomic_members, 10', '};']
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8').replace('\r\n', '\n')
@@ -539,7 +599,7 @@ def render_atomic_identities(root):
             'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN','NULL','0','XR_NATIVE_TERM_UNADMITTED']) + '},')
     digest = hashlib.sha256(prelude.encode()).digest()
     output += ['};','static const XrNativeTypeDeclaration xr_native_ordering = {',
-        '    4, XR_NATIVE_DECLARATION_VALUE, "Ordering", "", 0,',
+        '    4, XR_NATIVE_DECLARATION_VALUE, "Ordering", NULL, 0,',
         '    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Ordering", {{' + ', '.join(str(b) for b in digest) + '}},',
         f'    {ordering_line}, {ordering_raw.index("Ordering")+1}, xr_native_ordering_members, 5', '};']
     return output
@@ -607,8 +667,9 @@ def render_task_identity(root):
             'XR_NATIVE_TERM_UNADMITTED']) + '},')
     number, raw = rows[14]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
-    output += ['};', 'static const XrNativeTypeDeclaration xr_native_task = {',
-        '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", "T", 1,',
+    output += ['};', 'static const char *const xr_native_task_type_parameters[] = {"T"};',
+        'static const XrNativeTypeDeclaration xr_native_task = {',
+        '    5, XR_NATIVE_DECLARATION_IDENTITY, "Task", xr_native_task_type_parameters, 1,',
         '    "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
         f'    {number}, {len(raw[:raw.index("Task")].encode("utf-8")) + 1}, xr_native_task_members, 6', '};']
@@ -664,6 +725,7 @@ def render(root):
         generated, _, _ = render_type(root, stem)
         scalar_lines += generated
     lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root)
+    lines += render_type(root, 'map')[0] + render_type(root, 'set')[0]
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

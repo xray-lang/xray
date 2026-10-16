@@ -1,5 +1,5 @@
-// Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c
-class Map<K: Hashable, V> {
+// @native-type id=10
+struct Map<K: Hashable, V> {
     get(key: K) -> V?
     ref set(key: K, value: V)
     containsKey(key: K) -> bool

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import gen_native_declarations as schema
 import embed_native_types as embed
+import gen_api_inventory as inventory
 
 
 class NativeDeclarations(unittest.TestCase):
@@ -24,7 +25,7 @@ class NativeDeclarations(unittest.TestCase):
         for name, text in first.items():
             self.assertEqual((ROOT / name).read_text(encoding='utf-8'), text)
         header, members = schema.parse_source(self.source, self.prelude)
-        self.assertEqual(header[:3], (1, 'Array', 'T'))
+        self.assertEqual(header[:3], (1, 'Array', ('T',)))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
                          {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
@@ -34,7 +35,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_integer_definition_and_recipe_rejections(self):
         source = (ROOT / 'stdlib/types/i64.xr').read_text(encoding='utf-8')
         header, members = schema.parse_source(source, self.prelude)
-        self.assertEqual(header[:3], (6, 'i64', ''))
+        self.assertEqual(header[:3], (6, 'i64', ()))
         executable = [m for m in members if m.operation != 'NONE']
         self.assertEqual(len(executable), 25)
         self.assertEqual(next(m for m in members if m.name == 'sqrt').operation, 'INTEGER_SQRT')
@@ -190,7 +191,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_string_value_identity_and_full_member_spans(self):
         source = (ROOT / 'stdlib/types/string.xr').read_text(encoding='utf-8')
         header, members = schema.parse_source(source, self.prelude)
-        self.assertEqual(header[:3], (2, 'string', ''))
+        self.assertEqual(header[:3], (2, 'string', ()))
         self.assertEqual(len(members), 19)
         rows = source.splitlines()
         self.assertEqual(rows[header[3] - 1][header[4] - 1:], 'string {')
@@ -278,10 +279,55 @@ class NativeDeclarations(unittest.TestCase):
             subprocess.run([sys.executable, str(Path(embed.__file__)), str(root), '--check', str(output)],
                            check=True, capture_output=True)
 
+    def test_hash_declarations_preserve_ordered_binders_and_value_identity(self):
+        for stem, identity, name, binders, count in [('map', 10, 'Map', ('K', 'V'), 13),
+                                                     ('set', 11, 'Set', ('T',), 15)]:
+            source = (ROOT / f'stdlib/types/{stem}.xr').read_text(encoding='utf-8')
+            header, members = schema.parse_source(source, self.prelude)
+            self.assertEqual(header[:3], (identity, name, binders))
+            self.assertEqual(len(members), count)
+            self.assertTrue(all(member.operation == 'NONE' for member in members))
+            self.assertNotIn(f'xr_native_def_{stem}', embed.render(ROOT / 'stdlib/types'))
+            for before, after in [('struct ', 'class '), (': Hashable', ''),
+                                  (': Hashable', ': Equal'), ('ref clear()', 'clear()'),
+                                  ('toString() -> string', 'toString() -> i64')]:
+                with self.subTest(stem=stem, before=before), self.assertRaises(ValueError):
+                    schema.parse_source(source.replace(before, after), self.prelude)
+        source = (ROOT / 'stdlib/types/map.xr').read_text(encoding='utf-8')
+        _, members = schema.parse_source(source, self.prelude)
+        get = next(member for member in members if member.name == 'get')
+        put = next(member for member in members if member.name == 'set')
+        self.assertEqual(schema.simple_term(get.result, ('K', 'V')), 'NULLABLE_VALUE')
+        self.assertEqual([schema.simple_term(p[1], ('K', 'V')) for p in put.parameters], ['KEY', 'VALUE'])
+        for header in ('Map<V, K: Hashable>', 'Map<K: Hashable, K>', 'Map<K: Hashable>', 'Map<K, V: Hashable>'):
+            with self.subTest(header=header), self.assertRaises(ValueError):
+                schema.parse_source(source.replace('Map<K: Hashable, V>', header), self.prelude)
+
+    def test_inventory_preserves_governed_hash_signatures_and_admission(self):
+        for stem, identity, names, signature in [('array', 1, ['T'], 'Array<T>'),
+                ('string', 2, [], 'string'), ('map', 10, ['K', 'V'], 'Map<K: Hashable, V>'),
+                ('set', 11, ['T'], 'Set<T: Hashable>')]:
+            path = ROOT / f'stdlib/types/{stem}.xr'
+            text = path.read_text(encoding='utf-8')
+            rows = inventory.collect_native_declaration(ROOT, path, text, 'stdlib', stem)
+            declaration = rows[0]
+            self.assertEqual(declaration['signature'], signature)
+            self.assertEqual(declaration['generic_parameter_names'], names)
+            self.assertEqual(declaration['generic_parameter_count'], len(names))
+            self.assertEqual(declaration['native_type_id'], identity)
+            self.assertEqual(declaration['declaration_kind'], 'struct')
+            if stem in ('map', 'set'):
+                self.assertTrue(all(not member['xir_admitted'] for member in rows[1:]))
+            else:
+                self.assertTrue(any(member['xir_admitted'] for member in rows[1:]))
+        with self.assertRaises(ValueError):
+            inventory.collect_native_declaration(ROOT, ROOT / 'stdlib/types/map.xr',
+                (ROOT / 'stdlib/types/set.xr').read_text(encoding='utf-8'), 'stdlib', 'map')
+
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr', 'stdlib/types/rune.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr', 'stdlib/types/rune.xr', 'stdlib/types/map.xr', 'stdlib/types/set.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
@@ -326,7 +372,7 @@ class NativeDeclarations(unittest.TestCase):
         for stem, identity, total, admitted in [('f64',7,12,7),('bool',8,1,1),('rune',9,6,2)]:
             source = (ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
             header, members = schema.parse_source(source, self.prelude)
-            self.assertEqual((identity,stem,''),header[:3])
+            self.assertEqual((identity,stem,()),header[:3])
             self.assertEqual(total,len(members))
             self.assertEqual(admitted,len([m for m in members if m.operation!='NONE']))
             self.assertNotIn('xr_native_def_'+stem,embed.render(ROOT / 'stdlib/types'))

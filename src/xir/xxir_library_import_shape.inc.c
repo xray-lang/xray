@@ -117,6 +117,8 @@ static bool library_catalog_state_type(const XrXirTypes *types,XrXirType type) {
     case XR_XIR_TYPE_NOMINAL:
     case XR_XIR_TYPE_CALLABLE:
     case XR_XIR_TYPE_ARRAY:
+    case XR_XIR_TYPE_MAP:
+    case XR_XIR_TYPE_SET:
     case XR_XIR_TYPE_TUPLE:
     case XR_XIR_TYPE_NULLABLE:
         return true;
@@ -161,7 +163,8 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         const XrXirTypeNode *node=&types->nodes[t];
         if (node->kind!=XR_XIR_TYPE_NOMINAL && node->kind!=XR_XIR_TYPE_CALLABLE &&
-            node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_TUPLE &&
+            node->kind!=XR_XIR_TYPE_ARRAY && node->kind!=XR_XIR_TYPE_MAP && node->kind!=XR_XIR_TYPE_SET &&
+            node->kind!=XR_XIR_TYPE_TUPLE &&
             node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_CELL &&
             !((node->kind==XR_XIR_TYPE_ATOMIC || node->kind==XR_XIR_TYPE_TASK) &&
               node->element==XR_XIR_I64))

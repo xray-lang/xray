@@ -21,7 +21,9 @@ static uint64_t expected_text(const char *text) { return 2*(strlen(text)+1); }
 static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
     uint64_t units=1+64;
     units+=expected_text(declaration->identity)+expected_text(declaration->source_path)+
-        expected_text(declaration->name)+expected_text(declaration->parameter_name);
+        expected_text(declaration->name);
+    for (uint32_t p=0;p<declaration->parameter_count;++p)
+        units+=1+expected_text(declaration->parameter_names[p]);
     for (uint32_t i=0;i<declaration->member_count;++i) {
         const XrNativeMemberDeclaration *member=&declaration->members[i];
         units+=1+expected_text(member->name)+expected_text(member->signature)+
@@ -32,14 +34,17 @@ static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
     return units;
 }
 static void complete_declarations(void) {
-    const struct { uint32_t id;const char *name;uint32_t members; } expected[]={
-        {1,"Array",32},{2,"string",19},{6,"i64",29},{7,"f64",12},{8,"bool",1},{9,"rune",6}
-    };
-    for (unsigned index=0;index<sizeof(expected)/sizeof(*expected);++index) {
-        const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(expected[index].id);
+    static const char *const names[]={"Array","string","Atomic","Ordering","Task","i64","f64","bool","rune","Map","Set"};
+    const uint32_t members[]={32,19,10,5,6,29,12,1,6,13,15};
+    const uint32_t parameters[]={1,0,1,0,1,0,0,0,0,2,1};
+    for (uint32_t id=1;id<=11;++id) {
+        const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(id);
         CHECK(declaration && xr_native_declaration_validate(declaration));
-        CHECK(!strcmp(declaration->name,expected[index].name));
-        CHECK(declaration->member_count==expected[index].members);
+        CHECK(!strcmp(declaration->name,names[id-1]));
+        CHECK(declaration->member_count==members[id-1] && declaration->parameter_count==parameters[id-1]);
+        CHECK(parameters[id-1] ? declaration->parameter_names && !strcmp(declaration->parameter_names[0],id==10?"K":"T") :
+            !declaration->parameter_names);
+        if (id==10) CHECK(!strcmp(declaration->parameter_names[1],"V"));
         uint64_t needed=expected_admission(declaration);
         printf("Native %s exhaustive work limits started, independently expected %llu\n",
             declaration->name,(unsigned long long)needed);
@@ -58,8 +63,25 @@ static void complete_declarations(void) {
         ((unsigned char *)&mutation.source_fingerprint)[0]^=1;
         ledger=(Work){UINT64_MAX,0,0};
         CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
-        CHECK(ledger.used==3+expected_text(declaration->identity)+expected_text(declaration->source_path)+
-            expected_text(declaration->name)+expected_text(declaration->parameter_name));
+        uint64_t prefix=3+expected_text(declaration->identity)+expected_text(declaration->source_path)+expected_text(declaration->name);
+        for (uint32_t p=0;p<declaration->parameter_count;++p) prefix+=1+expected_text(declaration->parameter_names[p]);
+        CHECK(ledger.used==prefix);
+        mutation=*declaration; mutation.parameter_count=parameters[id-1]+1;
+        CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+        if (declaration->parameter_count) {
+            const char *wrong[]={"U","V"}; mutation=*declaration; mutation.parameter_names=wrong;
+            CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+            if (id==10) {
+                const char *second[]={"K","K"}; mutation=*declaration; mutation.parameter_names=second;
+                CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+                second[1]=NULL;
+                CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+                second[0]="V";second[1]="K";
+                CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+            }
+            mutation=*declaration; mutation.parameter_names=NULL;
+            CHECK(xr_native_declaration_admit(&work,&mutation)==XR_NATIVE_DECLARATION_INVALID);
+        }
         printf("Native %s independently expected work %llu, every lower limit rejected\n",declaration->name,(unsigned long long)needed);
         fflush(stdout);
     }
@@ -72,12 +94,15 @@ static void lookup_boundaries(void) {
             (limit==12?XR_NATIVE_DECLARATION_OK:XR_NATIVE_DECLARATION_WORK_LIMIT));
         CHECK(limit==12 ? out==xr_native_declaration_by_id(1) : !out);
     }
-    /* Each governed name differs from '?' at its first byte. All nine names
+    /* Each governed name differs from '?' at its first byte. All eleven names
      * must be inspected before absence can be established. */
-    Work ledger={18,0,0};XrNativeDeclarationWork work={&ledger,charge};
+    Work ledger={20,0,0};XrNativeDeclarationWork work={&ledger,charge};
     const XrNativeTypeDeclaration *out=NULL;
+    CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
+    CHECK(!out && ledger.used==20 && ledger.calls==11);
+    ledger=(Work){22,0,0};
     CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_NOT_FOUND);
-    CHECK(!out && ledger.used==18 && ledger.calls==9);
+    CHECK(!out && ledger.used==22 && ledger.calls==11);
     ledger=(Work){0,0,0};
     CHECK(xr_native_declaration_find(&work,(const char *)(uintptr_t)1,&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
     CHECK(!out && !ledger.used && ledger.calls==1);

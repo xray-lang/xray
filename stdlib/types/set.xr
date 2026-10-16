@@ -1,5 +1,5 @@
-// Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c
-class Set<T: Hashable> {
+// @native-type id=11
+struct Set<T: Hashable> {
     ref add(value: T)
     contains(value: T) -> bool
     ref delete(value: T) -> bool

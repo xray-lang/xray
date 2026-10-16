@@ -22,8 +22,8 @@
 enum { XIR_OBJECT_CLASS = 260u,
        XIR_OBJECT_CELL = 258u,
        XIR_OBJECT_FUNCTION = 259u };
-_Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_TASK &&
-    (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_TASK && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_TASK &&
+_Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_SET &&
+    (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_SET && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_SET &&
     XIR_OBJECT_CLASS != 0x100u && XIR_OBJECT_CLASS != 257u && XIR_OBJECT_CELL != 0x100u &&
     XIR_OBJECT_FUNCTION != 0x100u, "storage tags exclude retired generations");
 _Static_assert(XIR_OBJECT_CLASS != XIR_OBJECT_CELL &&
@@ -60,6 +60,13 @@ typedef struct XirTuple {
     uint32_t count;
     XrXirValue *fields;
 } XirTuple;
+typedef struct XirHash {
+    XirObject object;
+    XrXirType key_type, value_type;
+    size_t length, capacity;
+    uint32_t key_offset, value_offset, stride, release_capacity;
+    unsigned char *data;
+} XirHash;
 XR_FUNC const XirNominalValue *xr_xir_compile_type_arena_empty_variant(
     const XrXirTypeArena *arena, XrXirType type, uint32_t variant);
 

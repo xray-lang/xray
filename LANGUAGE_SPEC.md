@@ -8075,6 +8075,15 @@ The slot wire record now contains five u32 fields. The current common identity i
 
 Source and Catalog consumers retain separate ownership evidence: received constants remain readable after destroying the producer, input packet and library source. Independent complete field models encode the new fields, and rehashed visibility, name and permission attacks reject. This declaration boundary opens no private library variables and does not qualify the complete standard library, every type, compiler execution or complete resource and safety gates. Those whole-consumer obligations remain.
 
+
+### 17.70 Unified declaration and hash container identities
+
+Native declaration IDs and XIR type kinds occupy separate namespaces. Array/string/Atomic/Ordering/Task retain declaration IDs1–5; i64/f64/bool/rune use6–9, and Map/Set use10/11. Retired Map6/Set7 cannot overwrite scalar declarations. Map/Set retain XIR type kinds9/10. Declaration sources, complete ordered binders and constraints, generated tables, Source queries and API inventory consume one identity. A declaration does not authorize an unimplemented member.
+
+The current unified identity is Checked schema32/semantic79, Value25, Call29 and Program34. Map records carry exact key/value edges, and Set records carry their exact element edge. Ordinary declarations retain authentic rest, exported constants and existing per-frame birth authority. Complete old31/78 declaration packets, old28/75 hash packets and both SDK preimages remain rejection evidence. There is no old reader, alias or version-guessing admission path. Independent models traverse all fields and recursive origins. Missing declaration fields in retired Nullable fixtures are reconstructed from named facts without refreshing expectations from the product writer.
+
+Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
+
 ---
 
 ## 18. Error Codes

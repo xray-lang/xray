@@ -991,15 +991,19 @@ def collect_native_declaration(root: Path, path: Path, text: str,
                          doc_surface: str, doc_module: str) -> list[dict[str, Any]]:
     prelude = (root / "stdlib/prelude/builtin_symbols.def").read_text(encoding="utf-8")
     header, members = gen_native_declarations.parse_source(text, prelude)
-    identity, name, binder, line, column = header
+    identity, name, binders, line, column = header
     owner = {1: ("Array", "array.xr"), 2: ("string", "string.xr"), 6: ("i64", "i64.xr"),
-             7: ("f64", "f64.xr"), 8: ("bool", "bool.xr"), 9: ("rune", "rune.xr")}.get(identity)
+             7: ("f64", "f64.xr"), 8: ("bool", "bool.xr"), 9: ("rune", "rune.xr"),
+             10: ("Map", "map.xr"), 11: ("Set", "set.xr")}.get(identity)
     if not owner or name != owner[0] or path != root / "stdlib/types" / owner[1]:
         raise ValueError("native declaration identity does not belong to this source path")
+    header_text = text.splitlines()[line - 1]
+    signature = header_text[header_text.index(name):].rsplit("{", 1)[0].strip()
     declaration = item(category="native-type", namespace=name, name=name, kind="type",
-                       signature=f"{name}<{binder}>" if binder else name, source=rel(root, path), line=line,
+                       signature=signature, source=rel(root, path), line=line,
                        doc_surface=doc_surface, doc_module=doc_module)
-    declaration.update(native_type_id=identity, declaration_kind="class" if identity >= 6 else "struct", column=column)
+    declaration.update(native_type_id=identity, declaration_kind="class" if 6 <= identity <= 9 else "struct", column=column,
+                       generic_parameter_count=len(binders), generic_parameter_names=list(binders))
     out = [declaration]
     for member_id, member in enumerate(members, 1):
         if member.method:

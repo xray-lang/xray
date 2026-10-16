@@ -24,7 +24,8 @@ typedef enum XrNativeDeclarationId { XR_NATIVE_DECLARATION_ARRAY = 1, XR_NATIVE_
     XR_NATIVE_DECLARATION_ATOMIC = 3, XR_NATIVE_DECLARATION_ORDERING = 4,
     XR_NATIVE_DECLARATION_TASK = 5, XR_NATIVE_DECLARATION_INTEGER = 6,
     XR_NATIVE_DECLARATION_FLOAT = 7, XR_NATIVE_DECLARATION_BOOLEAN = 8,
-    XR_NATIVE_DECLARATION_RUNE = 9 } XrNativeDeclarationId;
+    XR_NATIVE_DECLARATION_RUNE = 9,
+    XR_NATIVE_DECLARATION_MAP = 10, XR_NATIVE_DECLARATION_SET = 11 } XrNativeDeclarationId;
 typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_UNADMITTED, XR_NATIVE_TERM_UNIT, XR_NATIVE_TERM_I64,
     XR_NATIVE_TERM_ELEMENT, XR_NATIVE_TERM_STRING, XR_NATIVE_TERM_BOOL,
@@ -34,7 +35,9 @@ typedef enum XrNativeTypeTerm {
     XR_NATIVE_TERM_CALLBACK_REDUCE, XR_NATIVE_TERM_CALLBACK_VISIT,
     XR_NATIVE_TERM_CALLBACK_PREDICATE, XR_NATIVE_TERM_ORDERING,
     XR_NATIVE_TERM_TUPLE_ELEMENT_BOOL, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT, XR_NATIVE_TERM_F64,
-    XR_NATIVE_TERM_NULLABLE_I64, XR_NATIVE_TERM_U32
+    XR_NATIVE_TERM_NULLABLE_I64, XR_NATIVE_TERM_U32,
+    XR_NATIVE_TERM_KEY, XR_NATIVE_TERM_VALUE, XR_NATIVE_TERM_NULLABLE_VALUE,
+    XR_NATIVE_TERM_ARRAY_KEY, XR_NATIVE_TERM_ARRAY_VALUE, XR_NATIVE_TERM_ARRAY_KEY_VALUE
 } XrNativeTypeTerm;
 /* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
  * signature. They never grant authority to an arbitrary unparsed signature. */
@@ -139,7 +142,8 @@ typedef struct XrNativeMemberDeclaration {
 typedef struct XrNativeTypeDeclaration {
     uint32_t id;
     XrNativeDeclarationKind kind;
-    const char *name, *parameter_name;
+    const char *name;
+    const char *const *parameter_names;
     uint32_t parameter_count;
     const char *source_path, *identity;
     XrFingerprint source_fingerprint;

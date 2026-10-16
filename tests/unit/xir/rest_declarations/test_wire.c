@@ -19,7 +19,7 @@
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}} while(0)
 #include "../xir_library_compile_owner.h"
 #include "wire_golden.h"
-_Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==78 && XR_XIR_PROGRAM_ABI_VERSION==33,
+_Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==79 && XR_XIR_PROGRAM_ABI_VERSION==34,
     "Independent physical and semantic identities");
 _Static_assert(XR_XIR_ARRAY_NEW==73 && XR_XIR_FUNCTION_REF==57 && XR_XIR_CALL_INDIRECT==58 &&
     XR_XIR_CALLABLE_VARIADIC==16 && sizeof(XrXirFunctionIdentity)==40 &&

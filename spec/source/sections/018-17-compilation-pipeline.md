@@ -847,6 +847,15 @@ slot线格式现在为五个u32，当前共同协议为schema30/semantic77与Pro
 
 源码和Catalog消费者须分别保留拥有式证据：销毁producer、输入packet及库源码后，已接收常量仍可读取；新字段从独立完整字段模型编码，并对重算摘要的可见性、名称及权限篡改实施拒绝。导出const接点不开放库私有var，也不证明完整标准库、所有类型、编译期执行或完整资源与安全资格；相应整消费者门禁保持。
 
+
+### 17.70 统一声明与哈希容器身份
+
+native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/Ordering/Task的声明编号为1–5，i64/f64/bool/rune为6–9，Map/Set为10/11；不得用旧Map6/Set7覆盖标量声明。Map/Set的XIR类型种类仍为9/10。声明源、完整泛型绑定器及约束、共享生成表、Source查询和API盘点消费同一唯一声明；声明存在不授予未实现成员的执行权限。
+
+当前统一身份为Checked schema32/semantic79、Value25、Call29、Program34。Map类型记录携带准确key/value边，Set携带准确element边；普通声明保留真实rest、导出const和逐帧出生权限的既有字段。旧31/78声明包、旧28/75哈希包及双方完整SDK前像均保留为拒绝证据；不设置旧reader、别名或按版本猜测的接收通道。独立模型遍历全部字段和递归来源，旧Nullable夹具缺失的声明字段以显式命名事实重建，不能从产品writer刷新期望。
+
+紧凑哈希字段的拥有式载体读取须恢复子对象的实际arena/type，不将局部类型序号贴到另一个出生池的对象。哈希图遍历使用真实对象所保留的arena；存储准备沿同一已检查目标类型及原Domain、work、scratch和失败责任。此身份接收不代表完整Map/Set普通库方法、union、匿名记录、视图或普通Iterable已完成，完整资源、取消、安全及provider资格仍独立要求。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1804,5 +1813,14 @@ Source and Owned Library receiving recover names, types, visibility and slot ord
 The slot wire record now contains five u32 fields. The current common identity is schema30/semantic77 and Program32; Value24 and Call29 remain unchanged. The actual C layout is20 bytes with alignment4 and exported/name offsets12/16, also authenticated by SDK layout measurements. Exact matching, effect and provenance proofs, and generation storage receiving compare the added facts. Receiving compares actual owned name bytes rather than requiring relocated literal ordinals to match. Old schema29/semantic76 and Program31 reject directly.
 
 Source and Catalog consumers retain separate ownership evidence: received constants remain readable after destroying the producer, input packet and library source. Independent complete field models encode the new fields, and rehashed visibility, name and permission attacks reject. This declaration boundary opens no private library variables and does not qualify the complete standard library, every type, compiler execution or complete resource and safety gates. Those whole-consumer obligations remain.
+
+
+### 17.70 Unified declaration and hash container identities
+
+Native declaration IDs and XIR type kinds occupy separate namespaces. Array/string/Atomic/Ordering/Task retain declaration IDs1–5; i64/f64/bool/rune use6–9, and Map/Set use10/11. Retired Map6/Set7 cannot overwrite scalar declarations. Map/Set retain XIR type kinds9/10. Declaration sources, complete ordered binders and constraints, generated tables, Source queries and API inventory consume one identity. A declaration does not authorize an unimplemented member.
+
+The current unified identity is Checked schema32/semantic79, Value25, Call29 and Program34. Map records carry exact key/value edges, and Set records carry their exact element edge. Ordinary declarations retain authentic rest, exported constants and existing per-frame birth authority. Complete old31/78 declaration packets, old28/75 hash packets and both SDK preimages remain rejection evidence. There is no old reader, alias or version-guessing admission path. Independent models traverse all fields and recursive origins. Missing declaration fields in retired Nullable fixtures are reconstructed from named facts without refreshing expectations from the product writer.
+
+Reading an owned carrier from compact hash storage recovers the child's actual arena and type; a local type ordinal must never relabel an object from another birth pool. Hash graph traversal uses the actual object's retained arena. Storage preparation retains the checked destination type and original Domain, work, scratch and failure duties. This identity reception does not complete ordinary Map/Set library methods, unions, anonymous records, views or ordinary Iterable. Full resource, cancellation, safety and provider qualifications remain separate obligations.
 
 <!-- /xr-spec:en -->
