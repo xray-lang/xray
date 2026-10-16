@@ -54,6 +54,7 @@
 #include "xir_initial_ordinary_material_cases.h"
 #include "xir_error_owned_material_cases.h"
 #include "xir_cell_owned_run_cases.h"
+#include "xir_cell_type_projection_cases.h"
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
 
@@ -1746,6 +1747,9 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--cell-type-projection")) {
+        cell_type_projection_literals();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--invocation-write-index")) {
         invocation_write_index_literals();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

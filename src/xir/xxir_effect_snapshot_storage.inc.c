@@ -330,9 +330,11 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         if (status==XR_XIR_OK) status=effect_body_records_write(work,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
     }
+    if (status==XR_XIR_OK) status=effect_cell_body_project(&adapter);
     if (status==XR_XIR_OK) status=xir_cell_proof_builder_finish(&cells,&body->cells);
     if (status==XR_XIR_OK) status=effect_body_advertisements_finish(&advertisements,&body->declared);
     effect_body_advertisements_free(advertisements);xir_cell_proof_builder_free(cells);
+    effect_cell_body_projection_drop(&adapter);
     if (status!=XR_XIR_OK) { effect_body_material_free(body);return status; }
     if (!xir_compile_work(work,1)) { effect_body_material_free(body);return XR_XIR_BUDGET; }
     *output=body;return XR_XIR_OK;

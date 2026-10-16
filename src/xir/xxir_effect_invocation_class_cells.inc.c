@@ -16,8 +16,9 @@ static XrXirStatus effect_invocation_class_cells_match(EffectInvocationWorkspace
         return XR_XIR_BAD_STRUCTURE;
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     XrXirStatus status=effect_cell_body_request(owner->work,body,&adapter,&read);
-    if (status!=XR_XIR_OK) return status;
-    return xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final.cells,&read,NULL);
+    if (status==XR_XIR_OK) status=effect_cell_body_project(&adapter);
+    if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final.cells,&read,NULL);
+    effect_cell_body_projection_drop(&adapter);return status;
 }
 
 static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *flow,

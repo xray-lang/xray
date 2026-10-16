@@ -12,6 +12,9 @@
 typedef struct EffectCellBodyAdapter {
     const XrXirCompileContext *work;
     EffectBodyRequest request;
+    const EffectBodyMaterial *projection_body;
+    uint64_t *projection_offsets,projection_values;
+    XrXirType *projection_types;
 } EffectCellBodyAdapter;
 
 static bool effect_cell_body_adapter_valid(const XrXirCompileContext *work,
@@ -52,6 +55,18 @@ static XrXirStatus effect_cell_body_type(const XrXirCompileContext *work,const v
     const EffectCellBodyAdapter *adapter=owner;
     if (!effect_cell_body_adapter_valid(work,adapter) || !output) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
+    if (adapter->projection_body && effect_body_request_sequence_owned(&adapter->request)) {
+        XrXirStatus binding=effect_body_request_sequence_binding(&adapter->request);
+        if (binding!=XR_XIR_OK) return binding;
+        if (adapter->request.owner!=adapter->projection_body || !adapter->projection_offsets ||
+            !adapter->projection_types || f>=adapter->request.domain.function_count)
+            return XR_XIR_BAD_STRUCTURE;
+        uint64_t begin=adapter->projection_offsets[f],end=adapter->projection_offsets[f+1];
+        if (begin>end || end>adapter->projection_values || value>=end-begin)
+            return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(work,4+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=adapter->projection_types[begin+value];return XR_XIR_OK;
+    }
     XrXirType type=XR_XIR_UNIT;
     XrXirStatus status=effect_body_request_type(&adapter->request,f,value,&type);
     if (status!=XR_XIR_OK) return status;
@@ -159,8 +174,10 @@ static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
         request->read.owner!=work || request->read.consume!=effect_body_compile_consume ||
         !request->domain.types || !request->head || !request->instruction || !request->type || !request->shape)
         return XR_XIR_BAD_STRUCTURE;
+    if (adapter->projection_body || adapter->projection_offsets || adapter->projection_types ||
+        adapter->projection_values) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,10+sizeof(*adapter)+sizeof(*output))) return XR_XIR_BUDGET;
-    *adapter=(EffectCellBodyAdapter){work,*request};
+    *adapter=(EffectCellBodyAdapter){.work=work,.request=*request};
     *output=(XrXirCellProofBodyRead){request->domain,work->resources,adapter,
         effect_cell_body_head,effect_cell_body_instruction,effect_cell_body_type,effect_cell_body_shape,
         request->head==effect_body_owned_head?effect_cell_body_span:NULL,
@@ -172,6 +189,8 @@ static XrXirStatus effect_cell_body_bind(const XrXirCompileContext *work,
 static inline XrXirStatus effect_cell_body_request(const XrXirCompileContext *work,
     const EffectBodyRequest *request,EffectCellBodyAdapter *adapter,XrXirCellProofBodyRead *output) {
     if (!xir_compile_context_valid(work) || !request || !request->owner) return XR_XIR_BAD_STRUCTURE;
+    if (adapter && (adapter->projection_body || adapter->projection_offsets || adapter->projection_types ||
+        adapter->projection_values)) return XR_XIR_BAD_STRUCTURE;
     XirMetadataDomain domain={0};
     if (request->head==effect_body_raw_head && request->instruction==effect_body_raw_instruction &&
         request->type==effect_body_raw_type && request->shape==effect_body_raw_shape) {
@@ -207,3 +226,5 @@ static inline XrXirStatus effect_cell_body_owned(const XrXirCompileContext *work
     EffectBodyRequest request=effect_body_owned_request(work,body);
     return effect_cell_body_request(work,&request,adapter,output);
 }
+
+#include "xxir_effect_snapshot_cell_types.inc.c"
