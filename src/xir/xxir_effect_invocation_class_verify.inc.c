@@ -133,7 +133,7 @@ static XrXirStatus effect_invocation_class_verify_read(EffectInvocationWorkspace
         status=effect_invocation_origins_read(&flow,request);
         if (status==XR_XIR_OK) status=effect_invocation_class_body_match(&flow,limit);
         if (status==XR_XIR_OK) status=effect_invocation_class_terminals_match(&flow);
-        xr_compile_resources_free(flow.memory);
+        effect_invocation_flow_finish(&flow);
     }
     return status;
 }

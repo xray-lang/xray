@@ -19,6 +19,8 @@ typedef struct EffectInvocationFlow {
     uint64_t *rows;
     uint64_t *fixed,*certified;
     void *memory;
+    uint64_t *cell_row;
+    EffectInvocationScratch *scratch;
     bool changed,precision;
 } EffectInvocationFlow;
 
@@ -47,6 +49,12 @@ static uint64_t *effect_invocation_row(const EffectInvocationFlow *flow,uint32_t
     return row<flow->row_count ? flow->rows+(size_t)row*flow->basis.fn_words : NULL;
 }
 
+static void effect_invocation_flow_finish(EffectInvocationFlow *flow) {
+    if (!flow) return;
+    effect_invocation_scratch_release(flow->owner,flow->scratch);
+    flow->scratch=NULL;flow->memory=NULL;flow->cell_row=NULL;
+}
+
 static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     const EffectBodyFunctionHead *function=flow->function;
     const EffectPhysicalDomain *domain=flow->owner->final.physical;
@@ -69,9 +77,14 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     uint64_t flag_offset=(words*sizeof(*flow->rows)+indices+7)&~UINT64_C(7);
     if (flag_words>(SIZE_MAX-flag_offset)/(2*sizeof(uint64_t))) return XR_XIR_BUDGET;
     size_t bytes=(size_t)(flag_offset+2*flag_words*sizeof(uint64_t));
-    XrXirStatus status=XR_XIR_OK;flow->physical=physical;
-    flow->memory=bytes?xir_compile_alloc(flow->owner->work,bytes,&status):NULL;
-    if (bytes && !flow->memory) return status;
+    uint64_t cell_bytes=(uint64_t)flow->basis.cell_words*sizeof(uint64_t);
+    if (cell_bytes>SIZE_MAX-bytes) return XR_XIR_BUDGET;
+    if (flow->memory || flow->scratch) return XR_XIR_BAD_STRUCTURE;
+    flow->physical=physical;
+    XrXirStatus status=effect_invocation_scratch_claim(flow->owner,bytes+(size_t)cell_bytes,&flow->scratch);
+    if (status!=XR_XIR_OK) return status;
+    flow->memory=flow->scratch?(void *)(flow->scratch+1):NULL;
+    flow->cell_row=cell_bytes?(uint64_t *)((uint8_t *)flow->memory+bytes):NULL;
     uint64_t initialized=words*sizeof(*flow->rows)+indices+2*flag_words*sizeof(uint64_t);
     if (!xir_compile_work(flow->owner->work,initialized)) return XR_XIR_BUDGET;
     flow->rows=flow->memory;flow->row_count=physical->rows;flow->values=(uint32_t)values;

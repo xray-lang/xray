@@ -6,6 +6,11 @@ if(MSVC)
 else()
     target_compile_options(test_xir_effect_final_read PRIVATE -Wall -Wextra -Werror)
 endif()
+add_test(NAME test_xir_effect_invocation_replay_scratch
+    COMMAND test_xir_effect_final_read --replay-scratch)
+set_tests_properties(test_xir_effect_invocation_replay_scratch PROPERTIES
+    LABELS "unit;xir;metadata;ownership")
+
 add_test(NAME test_xir_effect_final_read_allocation_bounds
     COMMAND test_xir_effect_final_read --read-allocation-bounds)
 set_tests_properties(test_xir_effect_final_read_allocation_bounds PROPERTIES

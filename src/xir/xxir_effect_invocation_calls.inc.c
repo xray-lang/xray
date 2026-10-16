@@ -606,12 +606,14 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
     case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE: case XR_XIR_CELL_PROJECT: {
         if (!owner->final.cells && (op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PLACE_WRITE))
             return XR_XIR_OK;
-        XrXirStatus status=XR_XIR_OK;
-        uint64_t *row=xir_compile_calloc(owner->work,flow->basis.cell_words,sizeof(*row),&status);
-        if (!row) return status;
-        status=effect_invocation_cell(flow,op->args[0],row,NULL);
+        uint64_t *row=flow->cell_row;
+        if (!row || !flow->scratch || !flow->scratch->claimed) return XR_XIR_BAD_STRUCTURE;
+        size_t bytes=(size_t)flow->basis.cell_words*sizeof(*row);
+        if (!xir_compile_work(owner->work,bytes)) return XR_XIR_BUDGET;
+        memset(row,0,bytes);
+        XrXirStatus status=effect_invocation_cell(flow,op->args[0],row,NULL);
         if (status==XR_XIR_OK) status=effect_invocation_cell_consume(flow,row,changed);
-        xr_compile_resources_free(row);return status==XR_XIR_UNRESOLVED?XR_XIR_OK:status;
+        return status==XR_XIR_UNRESOLVED?XR_XIR_OK:status;
     }
     default:
         /* The common exhaustive local seed already classified all opcodes.

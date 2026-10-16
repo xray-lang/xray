@@ -204,7 +204,7 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
     if (status==XR_XIR_OK && owner->producer_enabled)
         status=effect_invocation_producer_step(&flow,changed,false);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
-    xr_compile_resources_free(flow.memory);
+    effect_invocation_flow_finish(&flow);
     if (status==XR_XIR_OK) {
         EffectInvocationNode *record=&owner->final.nodes[node];
         uint32_t dependencies=(uint32_t)(((uint64_t)flow.basis.parameters+63)/64);
@@ -234,7 +234,7 @@ static XrXirStatus effect_invocation_precision(EffectInvocationWorkspace *owner,
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->producer_enabled) status=effect_invocation_producer_step(&flow,changed,false);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
-    xr_compile_resources_free(flow.memory);return status;
+    effect_invocation_flow_finish(&flow);return status;
 }
 
 /* The local ROOT declaration seed is expanded once. Finite producer deltas
@@ -937,5 +937,6 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
     return status;
 }
 static void effect_invocation_read_close(EffectInvocationWorkspace *read) {
+    effect_invocation_scratch_free(read);
     xr_compile_resources_free(read->consumers);read->consumers=NULL;
 }

@@ -310,7 +310,7 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
             call->handled=true;
         }
         xr_compile_resources_free(coverage.memory);
-        xr_compile_resources_free(replay.memory);
+        effect_invocation_flow_finish(&replay);
     }
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final.count;++n) {
         EffectBodyFunctionDimensions head={0};
@@ -318,6 +318,7 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
         for (uint32_t i=0;status==XR_XIR_OK && i<head.instruction_count;++i)
             status=error_invocation_fallback(flow,contexts,certificate,n,i);
     }
+    effect_invocation_scratch_free(&owner);
     if (status!=XR_XIR_OK) { error_invocation_contexts_free(contexts);return status; }
     flow->summary_count=contexts->summaries;*output=contexts;return XR_XIR_OK;
 }

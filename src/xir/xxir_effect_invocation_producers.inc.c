@@ -645,7 +645,7 @@ static XrXirStatus effect_invocation_producers_verify_read(EffectInvocationWorks
         }
         bool changed=false;
         if (status==XR_XIR_OK) status=effect_invocation_producer_step(&flow,&changed,true);
-        xr_compile_resources_free(flow.memory);
+        effect_invocation_flow_finish(&flow);
         if (status!=XR_XIR_OK) return status;
         if (changed || owner->pending) return XR_XIR_BAD_STRUCTURE;
     }

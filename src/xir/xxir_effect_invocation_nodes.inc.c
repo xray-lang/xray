@@ -130,6 +130,7 @@ static void effect_invocation_final_free(EffectInvocationFinal *final) {
 
 static void effect_invocation_free(EffectInvocationWorkspace *owner) {
     if (!owner) return;
+    effect_invocation_scratch_free(owner);
     effect_invocation_result_free(owner->prepared_result);
     effect_invocation_final_clear(&owner->final);
     xr_compile_resources_free(owner->edge_index);xr_compile_resources_free(owner->consumers);

@@ -141,6 +141,15 @@ typedef struct EffectInvocationFinal {
     uint32_t count,capacity,edge_count,edge_capacity;
 } EffectInvocationFinal;
 
+/* Replays share only released storage. Every live replay claims a distinct
+ * block; no origin, flag or permission survives a new initialization. */
+typedef struct EffectInvocationScratch {
+    struct EffectInvocationScratch *next;
+    XrCompileResources *resources;
+    size_t capacity;
+    bool claimed;
+} EffectInvocationScratch;
+
 typedef struct EffectInvocationWorkspace {
     EffectInvocationFinal final;
     const XrXirCompileContext *work;
@@ -151,6 +160,7 @@ typedef struct EffectInvocationWorkspace {
     EffectFinalFunctions *prepared_result;
     uint32_t *edge_index;
     size_t edge_index_capacity;
+    EffectInvocationScratch *replay_scratch;
     uint32_t *consumers;
     EffectInvocationState *states;
     uint32_t maximum;
@@ -213,6 +223,7 @@ static void effect_invocation_result_free(EffectFinalFunctions *result);
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
     const XrXirRootEffectWitness *b);
 
+#include "xxir_effect_invocation_scratch.inc.c"
 #include "xxir_effect_invocation_class_nodes.inc.c"
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
