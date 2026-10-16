@@ -10,11 +10,11 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
     def test_every_complete_original_observation(self):
         traces=m.observations();self.assertEqual(set(traces),m._NAMES)
         self.assertEqual([len(traces[k]) for k in ['crypto_timing_safe_equal_direct','toml_pure_module_direct','io_read_stdin_shared_core']],[22,19,4])
-        self.assertEqual(sum(map(len,traces.values())),45)
+        self.assertEqual(sum(len(traces[name]) for name in m._ORIGINAL_NAMES),45)
         self.assertEqual(traces['crypto_timing_safe_equal_direct'][:12],[True,False,False,True,True,False,False,False,True,False,True,True])
         self.assertEqual(traces['toml_pure_module_direct'],['xray',2,True,'apple','red',2,'Nail',True,'TomlDiagnostic',True,2,'Duplicate key','Alice',True,0,True,True,True,True])
         self.assertEqual(traces['io_read_stdin_shared_core'],[20,False,False,False])
-        self.assertEqual(len(m.expected_rows()),3)
+        self.assertEqual(len([row for row in m.expected_rows() if row['original_source'] not in m._SYSTEM_PROGRAMS.values()]),3)
 
     def test_all_four_published_nist_aes256_known_answers_both_directions(self):
         key=bytes.fromhex('603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4')
@@ -109,5 +109,100 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
             self.assertEqual(row['stdout_utf8'],expected['expected']['stdout_utf8'])
             self.assertEqual(row['stdin_hex'],expected.get('required_stdin_hex',''))
 
+
+
+    def test_four_complete_math_random_domain_traces(self):
+        expected={'math_core_direct_type_preserve':['f64','42.0','f64',True,'f64','3.0','f64','7.0','f64','5.0','4.0','9.0','10.0','f64','5.5',1,2,2,1,
+         '0.0','1.0','0.0','0.0','0.0','0.0','0.0','0.0','2.0','3.0','1.0','0.0','1.0','0.0','5.0','3.0','3.0','0.0','0.0','2.5','0.0','0.0',-1,True,True,False],
+         'rounding_boundary':['0.3','5.55111512312578e-17','-2.77555756156289e-17','1.4142135623731','2.0','0.01','0.333333333333333','0.666666666666667'],
+         'crypto_random_system_direct':[True]*11,'runtime_domain_bytes':[True]*3}
+        self.assertEqual(sum(map(len,expected.values())),67);self.assertEqual(m.system_observations(),expected)
+        self.assertEqual(sum(map(len,m.observations().values())),112);self.assertEqual(len(m.expected_rows()),7)
+
+    def test_binary64_literals_and_left_associative_residual_known_bits(self):
+        f=m.FloatValue.literal;fraction=m.Fraction
+        a,b,c=[f(value) for value in [fraction(1,10),fraction(1,5),fraction(3,10)]]
+        self.assertEqual([a.bits,b.bits,c.bits],[0x3fb999999999999a,0x3fc999999999999a,0x3fd3333333333333])
+        added=m.float_binary(a,b,'add');self.assertEqual(added.bits,0x3fd3333333333334)
+        self.assertEqual(m.float_binary(added,c,'sub').bits,0x3c90000000000000)
+        self.assertEqual(m.float_binary(m.float_binary(c,a,'sub'),b,'sub').bits,0xbc80000000000000)
+        self.assertEqual(m.float_binary(f(1),f(3),'div').bits,0x3fd5555555555555)
+
+    def test_exact_rational_rounding_is_nearest_even_at_binary_ties(self):
+        fraction=m.Fraction;unit=0x3ff0000000000000
+        self.assertEqual(m.fraction_bits(1+fraction(1,2**53)),unit)
+        self.assertEqual(m.fraction_bits(1+fraction(3,2**53)),unit+2)
+        self.assertEqual(m.fraction_bits(-(1+fraction(3,2**53))),(1<<63)|unit+2)
+        for value,answer in [(fraction(1,2),0),(fraction(3,2),2),(fraction(5,2),2),(fraction(7,2),4)]:self.assertEqual(m.nearest_even(value),answer)
+        with self.assertRaises(ValueError):m.floor_log(m.Fraction(1),1)
+        for value in [True,0.1]:
+            with self.subTest(value=value),self.assertRaises(ValueError):m.fraction_bits(value)
+
+    def test_sqrt_rounding_is_bracketed_by_exact_adjacent_midpoints(self):
+        self.assertEqual(m.sqrt_bits(2),0x3ff6a09e667f3bcd)
+        for value in [m.Fraction(2),m.Fraction(9,4),m.Fraction(1,4),m.Fraction(25)]:
+            bits=m.sqrt_bits(value);root=m.bits_fraction(bits);lower=(m.bits_fraction(bits-1)+root)/2;upper=(root+m.bits_fraction(bits+1))/2
+            self.assertLess(lower*lower,value);self.assertGreater(upper*upper,value)
+        with self.assertRaises(ValueError):m.sqrt_bits(-1)
+
+    def test_human_float_format_uses_fifteen_digits_and_g_thresholds(self):
+        for value,text in [(m.Fraction(3,10),'0.3'),(m.Fraction(1,10000),'0.0001'),(m.Fraction(1,100000),'1e-05'),
+          (10**14,'100000000000000.0'),(10**15,'1e+15'),(m.Fraction(1999999999999999,10**15),'2.0')]:
+            with self.subTest(value=value):self.assertEqual(m.human_float(m.fraction_bits(value)),text)
+        self.assertEqual(m.human_float(1<<63),'-0.0');self.assertEqual(m.human_float(0),'0.0')
+        self.assertNotEqual(m.rounding_trace()[0],'0.30000000000000004')
+        with self.assertRaises(ValueError):m.human_float(0x7ff8000000000000)
+
+    def test_math_return_families_follow_declared_f64_context(self):
+        for name,args in [('abs',(-42,)),('min',(3,7,5)),('max',(3,7,5)),('clamp',(5,10,0))]:
+            with self.subTest(name=name):self.assertIsInstance(m.math_value(name,*args),m.FloatValue);self.assertEqual(m.math_value(name,*args).typename(),'f64')
+        self.assertEqual(m.math_value('abs',-(2**63)).fraction(),2**63)
+        for name,value in [('floor',m.Fraction(9,5)),('ceil',m.Fraction(6,5)),('round',m.Fraction(8,5)),('trunc',m.Fraction(9,5)),('sign',-10)]:
+            with self.subTest(name=name):self.assertIsInstance(m.math_value(name,value),m.IntegerValue);self.assertEqual(m.math_value(name,value).typename(),'i64')
+        with self.assertRaises(ValueError):m.math_value('abs',True)
+
+    def test_reversed_clamp_bounds_and_nan_predicates_keep_float_contract(self):
+        for value,answer in [(5,5),(15,10),(-1,0)]:self.assertEqual(m.math_value('clamp',value,10,0).fraction(),answer)
+        nan=m.math_value('sqrt',-1);self.assertTrue(m.math_value('isNaN',nan));self.assertFalse(m.math_value('isFinite',nan))
+        self.assertTrue(m.math_value('min',1,nan).nan());self.assertTrue(m.math_value('isFinite',1))
+        with self.assertRaises(ValueError):m.math_value('cos',1)
+
+    def test_all_original_math_call_occurrences_and_aliases_remain(self):
+        from collections import Counter
+        import re
+        text=(m.ROOT/m._SYSTEM_PROGRAMS['math_core_direct_type_preserve']).read_text(encoding='utf-8')
+        declared=re.findall(r'\bmath\.([A-Za-z0-9_]+)\s*\(',text)
+        for alias,name in [('mmin','min'),('mmax','max'),('cclamp','clamp')]:declared.extend([name]*len(re.findall(r'\b'+alias+r'\s*\(',text)))
+        values,calls=m.math_core_trace();self.assertEqual(len(values),45);self.assertEqual(len(calls),42);self.assertEqual(Counter(calls),Counter(declared))
+        self.assertEqual(calls.count('sqrt'),2);self.assertEqual(calls.count('min'),3)
+
+    def test_uuid_masks_cover_every_input_byte_without_assuming_entropy(self):
+        domains=m.uuid_domains();self.assertEqual(len(domains),36);self.assertEqual(domains[14],frozenset('4'));self.assertEqual(domains[19],frozenset('89ab'))
+        for position in [6,8]:
+            for byte in range(256):
+                data=bytearray(16);data[position]=byte;text=m.uuid_from_bytes(data)
+                self.assertEqual([len(part) for part in text.split('-')],[8,4,4,4,12]);self.assertEqual(text[14],'4');self.assertIn(text[19],'89ab')
+                self.assertTrue(all(char in domain for char,domain in zip(text,domains)))
+        with self.assertRaises(ValueError):m.uuid_from_bytes(b'')
+
+    def test_random_hex_symbolic_domain_keeps_length_and_lowercase_alphabet(self):
+        for count in [8,16]:
+            domains=m.random_hex_domains(count);self.assertEqual(len(domains),2*count);self.assertTrue(all(domain==frozenset('0123456789abcdef') for domain in domains))
+        for count in [0,-1,True]:
+            with self.subTest(count=count),self.assertRaises(ValueError):m.random_hex_domains(count)
+        self.assertEqual(m.random_trace(),[True]*11)
+
+    def test_domain_predicates_require_same_base_and_positive_live_charge(self):
+        before=m.DomainRead('before',True);during=m.DomainRead('before',True,m.channel_charge_minimum(16))
+        self.assertTrue(during.guaranteed_greater(before));self.assertFalse(before.guaranteed_greater(before));self.assertFalse(m.DomainRead('other',True,100).guaranteed_greater(before))
+        self.assertFalse(m.DomainRead('unknown_sign',False,10).at_least_zero());self.assertFalse(m.DomainRead('invalid_charge',True,-1).at_least_zero())
+        a,b=m.DomainRead('postclose_a',True),m.DomainRead('postclose_b',True);self.assertTrue(a.at_least_zero() and b.at_least_zero());self.assertFalse(a.guaranteed_greater(b))
+        for count in [-1,True]:
+            with self.subTest(count=count),self.assertRaises(ValueError):m.channel_charge_minimum(count)
+
+    def test_new_exact_whole_source_bindings_and_observation_denominators(self):
+        rows=[row for row in m.expected_rows() if row['original_source'] in m._SYSTEM_PROGRAMS.values()]
+        self.assertEqual(len(rows),4);self.assertEqual(sum(row['observation_count'] for row in rows),67)
+        for row in rows:self.assertEqual(row['source'],row['original_source']);self.assertEqual(row['expected']['exit_code'],0)
 
 if __name__=='__main__':unittest.main()

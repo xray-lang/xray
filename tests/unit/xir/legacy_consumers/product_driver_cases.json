@@ -31266,6 +31266,141 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 2
+    },
+    {
+      "id": "complete_pure_library_boundaries_crypto_random_system_direct",
+      "oracle_id": "complete_pure_library_boundaries_crypto_random_system_direct",
+      "source": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
+      "source_lf_sha256": "6319e875870f460cf312e04a2813bf4c721727162752db95018ad7197b77b33c",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent exact rational/binary64 arithmetic and15-significant-digit display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
+        "source_lf_sha256": "6319e875870f460cf312e04a2813bf4c721727162752db95018ad7197b77b33c"
+      },
+      "remaining_gates": [
+        "Complete math typeName/value/alias/vararg calls,all42 math calls,all8 rounding expressions,two randomBytes calls/full UUID shape,Channel creation/close and all runtime readings retained.",
+        "All67 original observations;actual VM/C/native,15digit display,entropy and physical shared-domain counters plus all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
+    },
+    {
+      "id": "complete_pure_library_boundaries_math_core_direct_type_preserve",
+      "oracle_id": "complete_pure_library_boundaries_math_core_direct_type_preserve",
+      "source": "tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr",
+      "source_lf_sha256": "ed86297b0fc6c1bf2f6fa5ebe975f065454775865009d48b2be0d7426efa46c4",
+      "entry": "run",
+      "stdout_utf8": "f64\n42.0\nf64\ntrue\nf64\n3.0\nf64\n7.0\nf64\n5.0\n4.0\n9.0\n10.0\nf64\n5.5\n1\n2\n2\n1\n0.0\n1.0\n0.0\n0.0\n0.0\n0.0\n0.0\n0.0\n2.0\n3.0\n1.0\n0.0\n1.0\n0.0\n5.0\n3.0\n3.0\n0.0\n0.0\n2.5\n0.0\n0.0\n-1\ntrue\ntrue\nfalse\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent exact rational/binary64 arithmetic and15-significant-digit display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr",
+        "source_lf_sha256": "ed86297b0fc6c1bf2f6fa5ebe975f065454775865009d48b2be0d7426efa46c4"
+      },
+      "remaining_gates": [
+        "Complete math typeName/value/alias/vararg calls,all42 math calls,all8 rounding expressions,two randomBytes calls/full UUID shape,Channel creation/close and all runtime readings retained.",
+        "All67 original observations;actual VM/C/native,15digit display,entropy and physical shared-domain counters plus all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 45
+    },
+    {
+      "id": "complete_pure_library_boundaries_rounding_boundary",
+      "oracle_id": "complete_pure_library_boundaries_rounding_boundary",
+      "source": "tests/diff/cases/semantics/float_fmt/rounding_boundary.xr",
+      "source_lf_sha256": "19fa8714c9d146eb83f4067df1b81f2bbbdbfb192868a36324a24cb5d7353e61",
+      "entry": "run",
+      "stdout_utf8": "0.3\n5.55111512312578e-17\n-2.77555756156289e-17\n1.4142135623731\n2.0\n0.01\n0.333333333333333\n0.666666666666667\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent exact rational/binary64 arithmetic and15-significant-digit display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/float_fmt/rounding_boundary.xr",
+        "source_lf_sha256": "19fa8714c9d146eb83f4067df1b81f2bbbdbfb192868a36324a24cb5d7353e61"
+      },
+      "remaining_gates": [
+        "Complete math typeName/value/alias/vararg calls,all42 math calls,all8 rounding expressions,two randomBytes calls/full UUID shape,Channel creation/close and all runtime readings retained.",
+        "All67 original observations;actual VM/C/native,15digit display,entropy and physical shared-domain counters plus all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 8
+    },
+    {
+      "id": "complete_pure_library_boundaries_runtime_domain_bytes",
+      "oracle_id": "complete_pure_library_boundaries_runtime_domain_bytes",
+      "source": "tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr",
+      "source_lf_sha256": "9f5e53e86d9d923f072babd0e98c9594fbea8f9a8e54f8b5f01bc620fcfbb324",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent exact rational/binary64 arithmetic and15-significant-digit display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr",
+        "source_lf_sha256": "9f5e53e86d9d923f072babd0e98c9594fbea8f9a8e54f8b5f01bc620fcfbb324"
+      },
+      "remaining_gates": [
+        "Complete math typeName/value/alias/vararg calls,all42 math calls,all8 rounding expressions,two randomBytes calls/full UUID shape,Channel creation/close and all runtime readings retained.",
+        "All67 original observations;actual VM/C/native,15digit display,entropy and physical shared-domain counters plus all original FI/resource/lifetime/sanitizer/provider/mixed remain required. Source refusal is not success."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
     }
   ]
 }

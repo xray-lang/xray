@@ -51,6 +51,29 @@ EXTERNAL_AUTHORITIES={
     'AES256_known_answer':'https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_Core256.pdf',
     'HMAC_known_answer':'https://www.rfc-editor.org/rfc/rfc4231.html#section-4.3'}
 
+_ORIGINAL_NAMES=_NAMES
+_SYSTEM_PROGRAMS={
+ "math_core_direct_type_preserve": "tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr",
+ "rounding_boundary": "tests/diff/cases/semantics/float_fmt/rounding_boundary.xr",
+ "crypto_random_system_direct": "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr",
+ "runtime_domain_bytes": "tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr"
+}
+_NAMES=_NAMES|frozenset(_SYSTEM_PROGRAMS)
+_PROGRAMS.update(_SYSTEM_PROGRAMS)
+_AUTHORITIES+=("stdlib/math/math.xr","stdlib/runtime/runtime.xr","src/shared/xr_float_fmt.h","src/coro/xchannel.c","src/coro/xchannel.h","src/runtime/xshared.h",)
+_INPUTS.update({
+ "tests/diff/cases/semantics/stdlib/math_core_direct_type_preserve.xr": "ed86297b0fc6c1bf2f6fa5ebe975f065454775865009d48b2be0d7426efa46c4",
+ "tests/diff/cases/semantics/float_fmt/rounding_boundary.xr": "19fa8714c9d146eb83f4067df1b81f2bbbdbfb192868a36324a24cb5d7353e61",
+ "tests/diff/cases/semantics/stdlib/crypto_random_system_direct.xr": "6319e875870f460cf312e04a2813bf4c721727162752db95018ad7197b77b33c",
+ "tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr": "9f5e53e86d9d923f072babd0e98c9594fbea8f9a8e54f8b5f01bc620fcfbb324",
+ "stdlib/math/math.xr": "0126a1eb1db1760b5950da3f6be0c47f504f65070afaff3757f7b45f27a86115",
+ "stdlib/runtime/runtime.xr": "9f4d87664a727e7b29ceec161efe07d67d4e416c47030b06c682062f8f2fe57c",
+ "src/shared/xr_float_fmt.h": "dc3f35e72dd96729e5948f98b8103810d1362bad8cec207aabf93db1352f983b",
+ "src/coro/xchannel.c": "8cc701e6dd5e14e2a9b44a64ca77c209b1d2e1736cf5011b1e2e2999ef84f9b3",
+ "src/coro/xchannel.h": "2ee14ccab5cf19bab7172a29c1d2ecaaa85bf30a856d1bc5cd21bbfaaa06e6c8",
+ "src/runtime/xshared.h": "152b7729cf355225e6bdb77c32734b5da33b0b39e409cb556898a83bca2e56c8"
+})
+
 
 def multiply(a,b):
     result=0
@@ -228,13 +251,234 @@ def stdin_trace(data):
     return [len(data),text.startswith('alpha\n'),'\nbeta\n' in text,text.endswith('omega\n')]
 
 
+from fractions import Fraction
+from math import isqrt
+
+
+def power(base,exponent):return Fraction(base**exponent) if exponent>=0 else Fraction(1,base**-exponent)
+
+
+def nearest_even(value):
+    if value<0:raise ValueError('Unsigned rounding helper requires nonnegative input')
+    whole,remainder=divmod(value.numerator,value.denominator)
+    return whole+int(2*remainder>value.denominator or 2*remainder==value.denominator and whole%2)
+
+
+def floor_log(value,base):
+    if base not in (2,10):raise ValueError('Only binary and decimal exponent bounds are reviewed')
+    if value<=0:raise ValueError('Logarithm bound requires positive input')
+    exponent=(value.numerator.bit_length()-value.denominator.bit_length()) if base==2 else len(str(value.numerator))-len(str(value.denominator))
+    while value<power(base,exponent):exponent-=1
+    while value>=power(base,exponent+1):exponent+=1
+    return exponent
+
+
+def fraction_bits(value):
+    if type(value) not in {int,Fraction}:raise ValueError('Use exact source literals,not a host floating calculation')
+    value=Fraction(value);sign=int(value<0);value=abs(value)
+    if not value:return 0
+    exponent=floor_log(value,2)
+    if not -1022<=exponent<=1023:raise ValueError('Selected arithmetic requires finite normal binary64 results')
+    significand=nearest_even(value*power(2,52-exponent))
+    if significand==1<<53:significand>>=1;exponent+=1
+    if exponent>1023:raise ValueError('Selected arithmetic overflow')
+    return sign<<63|(exponent+1023)<<52|(significand-(1<<52))
+
+
+def bits_fraction(bits):
+    if type(bits) is not int or not 0<=bits<1<<64:raise ValueError('Invalid binary64 bits')
+    exponent=(bits>>52)&2047;mantissa=bits&((1<<52)-1)
+    if exponent==2047:raise ValueError('Nonfinite values have no rational payload')
+    value=Fraction(mantissa)*power(2,-1074) if exponent==0 else Fraction((1<<52)+mantissa)*power(2,exponent-1075)
+    return -value if bits>>63 else value
+
+
+def sqrt_bits(value):
+    value=Fraction(value)
+    if value<0:raise ValueError('Positive-root helper does not model the NaN case')
+    if not value:return 0
+    exponent=floor_log(value,2)//2;scaled=value*power(2,2*(52-exponent))
+    whole=isqrt(scaled.numerator//scaled.denominator)
+    relation=4*scaled.numerator-scaled.denominator*(2*whole+1)**2
+    significand=whole+int(relation>0 or relation==0 and whole%2)
+    if significand==1<<53:significand>>=1;exponent+=1
+    return (exponent+1023)<<52|(significand-(1<<52))
+
+
+def human_float(bits):
+    value=bits_fraction(bits);sign='-' if bits>>63 else '';value=abs(value)
+    if not value:return sign+'0.0'
+    exponent=floor_log(value,10);coefficient=nearest_even(value*power(10,14-exponent))
+    if coefficient==10**15:coefficient//=10;exponent+=1
+    digits=str(coefficient).rstrip('0')
+    if -4<=exponent<15:
+        position=exponent+1
+        if position<=0:text='0.'+'0'*-position+digits
+        elif position>=len(digits):text=digits+'0'*(position-len(digits))
+        else:text=digits[:position]+'.'+digits[position:]
+    else:text=digits[0]+('.'+digits[1:] if len(digits)>1 else '')+'e'+('+' if exponent>=0 else '-')+str(abs(exponent)).zfill(2)
+    if '.' not in text and 'e' not in text:text+='.0'
+    return sign+text
+
+
+@dataclass(frozen=True)
+class FloatValue:
+    bits:int
+    @classmethod
+    def literal(cls,value):return cls(fraction_bits(value))
+    def fraction(self):return bits_fraction(self.bits)
+    def nan(self):return self.bits&0x7ff0000000000000==0x7ff0000000000000 and bool(self.bits&((1<<52)-1))
+    def finite(self):return self.bits&0x7ff0000000000000!=0x7ff0000000000000
+    def text(self):return human_float(self.bits)
+    def typename(self):return 'f64'
+
+
+@dataclass(frozen=True)
+class IntegerValue:
+    value:int
+    def typename(self):return 'i64'
+
+
+def math_value(name,*values,calls=None):
+    if calls is not None:calls.append(name)
+    args=[value if isinstance(value,FloatValue) else FloatValue.literal(value) for value in values]
+    if name in {'isNaN','isFinite'}:
+        if len(args)!=1:raise ValueError('Wrong predicate arity')
+        return args[0].nan() if name=='isNaN' else args[0].finite()
+    if any(value.nan() for value in args):return FloatValue(0x7ff8000000000000)
+    x=[value.fraction() for value in args]
+    if name=='abs':return FloatValue.literal(abs(x[0]))
+    if name in {'min','max'}:
+        return (min if name=='min' else max)(args,key=lambda value:value.fraction()) if args else FloatValue(0x7ff8000000000000)
+    if name=='clamp':
+        value,lo,hi=x;lo,hi=min(lo,hi),max(lo,hi);return FloatValue.literal(min(max(value,lo),hi))
+    if name in {'floor','ceil','round','trunc','sign'}:
+        value=x[0]
+        if name=='floor':answer=value.numerator//value.denominator
+        elif name=='ceil':answer=-((-value.numerator)//value.denominator)
+        elif name=='trunc':answer=(1 if value>=0 else -1)*(abs(value.numerator)//value.denominator)
+        elif name=='round':answer=(1 if value>=0 else -1)*((abs(value)+Fraction(1,2)).numerator//(abs(value)+Fraction(1,2)).denominator)
+        else:answer=int(value>0)-int(value<0)
+        return IntegerValue(answer)
+    if name=='sqrt':return FloatValue(0x7ff8000000000000) if x[0]<0 else FloatValue(sqrt_bits(x[0]))
+    if name=='pow' and x[1]==2:return FloatValue.literal(x[0]*x[0])
+    if name=='hypot':return FloatValue(sqrt_bits(sum(value*value for value in x)))
+    if name=='cbrt' and x==[27]:
+        if 3**3!=27:raise ValueError('Cube identity failed')
+        return FloatValue.literal(3)
+    if name=='fmod':
+        quotient=x[0]/x[1];whole=(1 if quotient>=0 else -1)*(abs(quotient.numerator)//quotient.denominator)
+        return FloatValue.literal(x[0]-whole*x[1])
+    if name=='lerp':return FloatValue.literal(x[0]+(x[1]-x[0])*x[2])
+    facts={('sin',(0,)):0,('cos',(0,)):1,('tan',(0,)):0,('asin',(0,)):0,('acos',(1,)):0,('atan',(0,)):0,('atan2',(0,1)):0,
+     ('log',(1,)):0,('log10',(100,)):2,('log2',(8,)):3,('exp',(0,)):1,('sinh',(0,)):0,('cosh',(0,)):1,('tanh',(0,)):0,
+     ('log1p',(0,)):0,('expm1',(0,)):0,('degToRad',(0,)):0,('radToDeg',(0,)):0}
+    if (name,tuple(x)) not in facts:raise ValueError('Outside the reviewed exact mathematical identities')
+    return FloatValue.literal(facts[name,tuple(x)])
+
+
+def math_core_trace():
+    calls=[];ev=lambda name,*args:math_value(name,*args,calls=calls)
+    a=ev('abs',-42);amin=ev('abs',-(2**63));mn=ev('min',3,7,5);mx=ev('max',3,7,5);cl=ev('clamp',5,10,0)
+    out=[a.typename(),a,amin.typename(),amin.fraction()>0,mn.typename(),mn,mx.typename(),mx,cl.typename(),cl,
+     ev('min',9,4,6),ev('max',9,4,6),ev('clamp',15,10,0),ev('min',Fraction(7,2),Fraction(36,5)).typename(),ev('clamp',Fraction(11,2),10,0),
+     ev('floor',Fraction(9,5)),ev('ceil',Fraction(6,5)),ev('round',Fraction(8,5)),ev('trunc',Fraction(9,5))]
+    out.extend(ev(name,*args) for name,args in [('sin',(0,)),('cos',(0,)),('tan',(0,)),('asin',(0,)),('acos',(1,)),('atan',(0,)),('atan2',(0,1)),
+     ('log',(1,)),('log10',(100,)),('log2',(8,)),('exp',(0,)),('sinh',(0,)),('cosh',(0,)),('tanh',(0,)),('hypot',(3,4)),('cbrt',(27,)),('fmod',(7,4)),
+     ('log1p',(0,)),('expm1',(0,)),('lerp',(2,4,Fraction(1,4))),('degToRad',(0,)),('radToDeg',(0,)),('sign',(-10,))])
+    out.extend([ev('isNaN',ev('sqrt',-1)),ev('isFinite',1),ev('isFinite',ev('sqrt',-1))])
+    if len(calls)!=42 or len(out)!=45:raise ValueError('Lost original typed math calls or outputs')
+    return [value.text() if isinstance(value,FloatValue) else value.value if isinstance(value,IntegerValue) else value for value in out],calls
+
+
+def float_binary(left,right,operation):
+    a,b=left.fraction(),right.fraction()
+    value={'add':lambda:a+b,'sub':lambda:a-b,'mul':lambda:a*b,'div':lambda:a/b}[operation]()
+    return FloatValue.literal(value)
+
+
+def rounding_trace():
+    a,b,c=(FloatValue.literal(value) for value in [Fraction(1,10),Fraction(1,5),Fraction(3,10)])
+    add=float_binary(a,b,'add');difference=float_binary(add,c,'sub');negative=float_binary(float_binary(c,a,'sub'),b,'sub')
+    root=math_value('sqrt',2);square=float_binary(math_value('sqrt',2),math_value('sqrt',2),'mul')
+    squared=math_value('pow',a,2);one=FloatValue.literal(1);two=FloatValue.literal(2);three=FloatValue.literal(3)
+    return [value.text() for value in [add,difference,negative,root,square,squared,float_binary(one,three,'div'),float_binary(two,three,'div')]]
+
+
+HEX=frozenset('0123456789abcdef')
+
+
+def random_hex_domains(count):
+    if type(count) is not int or count<=0:raise ValueError('Selected random request must be positive')
+    return tuple(HEX for _ in range(2*count))
+
+
+def uuid_domains():
+    digits=list(random_hex_domains(16));digits[12]=frozenset('4');digits[16]=frozenset('89ab')
+    result=[];start=0
+    for length in (8,4,4,4,12):
+        if result:result.append(frozenset('-'))
+        result.extend(digits[start:start+length]);start+=length
+    return tuple(result)
+
+
+def uuid_from_bytes(data):
+    if len(data)!=16:raise ValueError('Selected UUID requires16 bytes')
+    data=bytearray(data);data[6]=(data[6]&15)|64;data[8]=(data[8]&63)|128
+    text=''.join(format(value,'02x') for value in data)
+    return '-'.join(text[a:b] for a,b in [(0,8),(8,12),(12,16),(16,20),(20,32)])
+
+
+def random_trace():
+    r8,r16=random_hex_domains(8),random_hex_domains(16);uuid=uuid_domains();parts=[[]]
+    for domain in uuid:
+        if domain==frozenset('-'):parts.append([])
+        else:
+            if '-' in domain:raise ValueError('Ambiguous symbolic UUID separator')
+            parts[-1].append(domain)
+    variant=uuid[19]
+    return [len(r8)==16,len(r16)==32,len(uuid)==36,len(parts)==5,*[len(part)==length for part,length in zip(parts,(8,4,4,4,12))],
+     uuid[14]==frozenset('4'),bool(variant) and variant<=frozenset('89ab')]
+
+
+@dataclass(frozen=True)
+class DomainRead:
+    base:str
+    nonnegative:bool
+    charge_minimum:int=0
+    def at_least_zero(self):return self.nonnegative and self.charge_minimum>=0
+    def guaranteed_greater(self,previous):return self.base==previous.base and self.charge_minimum>previous.charge_minimum
+
+
+def channel_charge_minimum(capacity):
+    if type(capacity) is not int or capacity<0:raise ValueError('Invalid selected channel capacity')
+    # The owned Channel header is a nonempty SYNC_SHARED allocation. This is
+    # only a positive lower bound, never a prediction of actual byte counts.
+    return 1
+
+
+def domain_trace():
+    before=DomainRead('shared_before_channel',True);during=DomainRead(before.base,True,channel_charge_minimum(16))
+    static=DomainRead('static_after_close',True);a=DomainRead('shared_read_a_after_close',True);b=DomainRead('shared_read_b_after_close',True)
+    return [during.guaranteed_greater(before),static.at_least_zero(),b.at_least_zero() and a.at_least_zero()]
+
+
+def system_observations():
+    rows={'math_core_direct_type_preserve':math_core_trace()[0],'rounding_boundary':rounding_trace(),
+     'crypto_random_system_direct':random_trace(),'runtime_domain_bytes':domain_trace()}
+    if set(rows)!=set(_SYSTEM_PROGRAMS) or sum(map(len,rows.values()))!=67:raise ValueError('Lost full math/random/domain observations')
+    return rows
+
+
 def observations():
-    return {'crypto_timing_safe_equal_direct':crypto_trace(),'toml_pure_module_direct':toml_trace(),
+    rows={'crypto_timing_safe_equal_direct':crypto_trace(),'toml_pure_module_direct':toml_trace(),
             'io_read_stdin_shared_core':stdin_trace(STDIN_BYTES)}
+    rows.update(system_observations());return rows
 
 
 def expected_rows():
-    if (set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items()) or
+    if (set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items() if name in _ORIGINAL_NAMES) or
+            any(_PROGRAMS.get(name)!=path for name,path in _SYSTEM_PROGRAMS.items()) or
             set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()) or set(_RAW_INPUTS)!={_STDIN}):
         raise ValueError('Pure library model lost complete original programs or exact authorities')
     for path,digest in _INPUTS.items():
@@ -244,7 +488,7 @@ def expected_rows():
         if hashlib.sha256((ROOT/path).read_bytes()).hexdigest()!=digest or (ROOT/path).read_bytes()!=STDIN_BYTES:
             raise ValueError('Original stdin bytes changed;line endings are observable')
     traces=observations()
-    if set(traces)!=_NAMES or sum(map(len,traces.values()))!=45:raise ValueError('Pure library model lost complete original observations')
+    if set(traces)!=_NAMES or sum(map(len,traces.values()))!=112:raise ValueError('Pure library model lost complete original observations')
     rows=[]
     for name,path in sorted(_PROGRAMS.items()):
         row={'id':'complete_pure_library_boundaries_'+name,'source':path,'original_source':path,'required_target':None,
@@ -253,4 +497,7 @@ def expected_rows():
             'model':'Complete unchanged original;independent AES256/CBC+HMAC/PKCS7 and digests,typed TOML recovery and exact binary stdin. No product output or timing/entropy/provider/security qualification.'}
         if name=='io_read_stdin_shared_core':row['required_stdin_hex']=STDIN_BYTES.hex()
         rows.append(row)
+    for row in rows:
+        if row['original_source'] in _SYSTEM_PROGRAMS.values():
+            row['model']='Complete unchanged original;independent exact rational/binary64 arithmetic and15-significant-digit display,declared math return families and exact selected identities,all-byte UUID/hex shape domains,and symbolic nonnegative/positive shared-allocation counter predicates. No product output,entropy distribution,physical meter,lifetime,FI,safety or provider qualification.'
     return rows
