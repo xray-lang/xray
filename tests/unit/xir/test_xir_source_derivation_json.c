@@ -87,10 +87,14 @@ static void json_execute(const XrXirCompileContext *context,XrXirSourceResult *s
             CHECK(next==output.length || output.text[next]!='{');
         }
         FILE *file=fopen(emit,"wb");CHECK(file && fwrite(output.text,1,output.length,file)==output.length);
-        CHECK(fprintf(file,"\nconst uint32_t fixture_json_selection[3]={%uu,%uu,%uu};\n",main,encode,method)>0 && !fclose(file));
+        uint32_t quote=json_function(module,"jsonQuote");
+        CHECK(fprintf(file,"\nconst uint32_t fixture_json_selection[4]={%uu,%uu,%uu,%uu};\n",main,encode,method,quote)>0 && !fclose(file));
         xr_xir_compile_c_source_free(&output);
     }
+    uint32_t quote=json_function(module,"jsonQuote");
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+    if(!faults) json_quote_oracles(program,quote);
+    if(!faults) json_runtime_entered_oom(program,encode);
     size_t constant_sites=json_runtime_failures(program,main,false,faults),text_sites=json_runtime_failures(program,encode,true,faults);
     XrXirValue constant=json_runtime_take(program,main),text=json_runtime_take(program,encode);
     CHECK(constant.type==XR_XIR_I64 && !constant.reserved && constant.payload==42);xr_xir_value_drop(&constant);

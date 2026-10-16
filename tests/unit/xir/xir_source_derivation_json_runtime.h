@@ -10,6 +10,7 @@
 #define XIR_SOURCE_DERIVATION_JSON_RUNTIME_H
 #include "xir_source_compile_owner.h"
 #include "xir_runtime_allocations.h"
+#include "xir_json_quote_oracles.h"
 static void json_runtime_expected(const XrXirValue *value,bool text) {
     if (!text) {CHECK(value->type==XR_XIR_I64 && !value->reserved && value->payload==42);return;}
     const char expected[]="{\"left\":42,\"secret\":-7,\"enabled\":true,\"label\":\"\\\"\\\\\\u000a\\u0009\\u0000汉😀\"}";
@@ -25,6 +26,23 @@ static XrXirValue json_runtime_take(XrXirProgram *program,uint32_t function) {
     XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);return value;
 }
+static void json_runtime_entered_oom(XrXirProgram *program,uint32_t entry) {
+    size_t held=runtime_live,bytes=runtime_bytes;CHECK(runtime_fail_at==SIZE_MAX);
+    XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,1).outcome.status==XR_XIR_CALL_READY);
+    runtime_fail_at=runtime_attempts;
+    CHECK(xr_xir_instance_poll_bounded(instance,4096).outcome.status==XR_XIR_CALL_OOM);
+    CHECK(runtime_attempts>runtime_fail_at);runtime_fail_at=SIZE_MAX;
+    CHECK(xr_xir_instance_state(instance)!=XR_XIR_INSTANCE_FAILED);
+    XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_OOM);
+    CHECK(!value.type && !value.reserved && !value.payload && xr_xir_instance_free(instance)==XR_XIR_CALL_OOM);
+    CHECK(runtime_live==held && runtime_bytes==bytes);
+    value=json_runtime_take(program,entry);json_runtime_expected(&value,true);xr_xir_value_drop(&value);
+    CHECK(runtime_live==held && runtime_bytes==bytes);
+    puts("Ordinary JSON entered allocation failure: OOM take/free, Unit preservation and same Program retry");
+}
 static void json_runtime_attempt(XrXirProgram *program,uint32_t entry,bool text) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;XrXirValue value={0};bool driven=false;
@@ -35,7 +53,9 @@ static void json_runtime_attempt(XrXirProgram *program,uint32_t entry,bool text)
     CHECK(status==XR_XIR_CALL_RETURNED || (runtime_fail_at!=SIZE_MAX && status==XR_XIR_CALL_OOM));
     if (status==XR_XIR_CALL_RETURNED) CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
     else if (instance) {
-        CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_STATE);
+        XrXirCallStatus expected=xr_xir_instance_state(instance)==XR_XIR_INSTANCE_FAILED || !driven?
+            XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_OOM;
+        CHECK(xr_xir_instance_take_result(instance,&value)==expected);
         CHECK(!value.type && !value.reserved && !value.payload);
     }
     if (instance) CHECK(xr_xir_instance_free(instance)==(driven?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
