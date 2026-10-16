@@ -35,13 +35,14 @@ def main():
             expected=json.loads((proof/'EXPECTED.json').read_text())['rows']
             actual=json.loads(checked([str(probe_exe)]))
             assert actual==[dict(id=row['id'],value=row['value']) for row in expected]
-            for name,expected_line in [('read_loan',b'read-loan-sdk-ok\n'),('view_types',b'view-types-sdk-ok\n')]:
+            for name,expected_line in [('read_loan',b'read-loan-sdk-ok\n'),('view_types',b'view-types-sdk-ok\n'),
+                                       ('view_storage',b'view-storage-sdk-ok\n')]:
                 source=root/('tests/unit/xir/xir_sdk_'+name+'_consumer.c')
                 object_file=work/(name+'.obj');executable=work/(name+'.exe')
                 compile_source(args,sdk,source,object_file)
                 link(args,executable,[str(object_file)],libraries)
                 assert checked([str(executable)]).replace(b'\r\n',b'\n')==expected_line
-            print(args.provider+': shared read root, non-LIFO release, COW, borrowed descriptors and '+str(len(expected))+' independent ABI fields PASS',flush=True)
+            print(args.provider+': shared read root, non-LIFO release, COW, borrowed descriptors, view storage and '+str(len(expected))+' independent ABI fields PASS',flush=True)
     finally:
         if lease.poll() is None:
             lease.stdin.write('q');lease.stdin.flush()
