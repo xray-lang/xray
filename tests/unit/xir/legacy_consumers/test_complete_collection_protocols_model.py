@@ -73,7 +73,7 @@ probe=55'''
         with self.assertRaises(ValueError):model.take_branch(stack,kinds,4,0)
         self.assertEqual(stack,[1,4,5])
     def test_integer_endpoint_and_explicit_text_program(self):
-        rows=model.observations();minimum=-(1<<63);maximum=(1<<63)-1
+        rows={k:v for k,v in model.observations().items() if k!=model._STRING_NAME};minimum=-(1<<63);maximum=(1<<63)-1
         self.assertEqual(rows['generic_int_format_shared_core'],[minimum,maximum,
             'left=-9223372036854775808','9223372036854775807=right',
             '-9223372036854775808|9223372036854775807|-42',
@@ -98,5 +98,34 @@ probe=55'''
                 inputs[name]=hashlib.sha256(raw.replace(b'\r\n',b'\n')).hexdigest()
                 def changed(path):return raw if path==model.ROOT/name else saved(path)
                 with mock.patch.object(model,'_INPUTS',inputs),mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.expected_rows()
+
+    def test_string_members_preserve_all_values_and_first_match(self):
+        trace=model.string_member_trace()
+        self.assertEqual(trace['initial'],['a','b','c']);self.assertEqual(trace['after_fill'],['z','z','z'])
+        self.assertEqual(trace['after_push'],['z','z','z','w']);self.assertEqual(trace['observations'],['z','w',0,True])
+        self.assertEqual(trace['first_matching_index'],0);self.assertEqual(trace['all_original_main_calls'],1)
+        self.assertEqual(trace['operation_order'],['fill','print0','push','print3','indexOf','printIndex','contains','printContains'])
+
+    def test_string_member_port_removes_only_obsolete_comments(self):
+        original=(model.ROOT/model._PROGRAMS[model._STRING_NAME]).read_text();port=(model.ROOT/model._PORTS[model._STRING_NAME]).read_text()
+        self.assertEqual(model.port_text(model._STRING_NAME,original),port)
+        self.assertEqual(original[original.index('fn main()'):],port[port.index('fn main()'):])
+        self.assertEqual(port.count('print('),4);self.assertNotIn('diff-aot-reject',port);self.assertNotIn('diff-backends:',port)
+        self.assertEqual(hashlib.sha256(original.replace('\r\n','\n').encode()).hexdigest(),'4284fb21ad4b86733a2b436adbe8dced2d491ef09e7ee3e5ac7a897a2af7ced0')
+
+    def test_string_member_model_rederives_fresh_mutation_state(self):
+        first=model.string_member_trace();first['after_push'][0]='damaged'
+        self.assertEqual(model.string_member_trace()['observations'],['z','w',0,True])
+        with mock.patch.object(model,'string_member_trace',lambda:{'observations':['bad']}):
+            row=next(x for x in model.expected_rows() if x['original_source']==model._PROGRAMS[model._STRING_NAME])
+            self.assertEqual(row['expected']['stdout_utf8'],'bad\n')
+
+    def test_string_member_single_selected_oracle_does_not_qualify_retired_backend_source(self):
+        import complete_target_selection as selection
+        row=next(x for x in model.expected_rows() if x['original_source']==model._PROGRAMS[model._STRING_NAME])
+        selected={'case_id':row['original_source'],'selected_source':row['source'],'selected_source_lf_sha256':model._INPUTS[row['source']],'canonical_port_selected':True,'rejection_oracle_required':False}
+        self.assertEqual(selection.expected_for(selected,[],model.expected_rows())['expected']['stdout_utf8'],'z\nw\n0\ntrue\n')
+        selected.update(selected_source=row['original_source'],canonical_port_selected=False,selected_source_lf_sha256=model._INPUTS[row['original_source']])
+        self.assertIsNone(selection.expected_for(selected,[],model.expected_rows()))
 
 if __name__=='__main__':unittest.main()

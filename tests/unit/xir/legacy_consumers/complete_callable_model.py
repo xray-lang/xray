@@ -141,6 +141,59 @@ def unit_call_trace():
     return {'calls': calls, 'values': values, 'type_names': names, 'assertions': 2, 'events': events}
 
 
+
+_CYCLE_NAME='0836_closure_cycle_no_false_positives'
+_CYCLE_ORIGINAL='tests/regression/08_oop/0836_closure_cycle_no_false_positives.xr'
+_CYCLE_PORT='tests/unit/xir/legacy_consumers/fixtures/acyclic_closure_class_receiver/root.xr'
+_PROGRAMS[_CYCLE_NAME]=_CYCLE_ORIGINAL
+_NAMES=frozenset(set(_NAMES)|{_CYCLE_NAME})
+_INPUTS.update({'tests/regression/08_oop/0836_closure_cycle_no_false_positives.xr': '604a9627f9a3d5bccbc5959a18ca7663ac26a5398da11e17659a754dcb41651a', 'tests/unit/xir/legacy_consumers/fixtures/acyclic_closure_class_receiver/root.xr': '5c59b761dbfd46e9151500df6b12b077b91ca627c2c20a153c06442c101b604c'})
+_REQUIRED_INPUTS += (_CYCLE_ORIGINAL,_CYCLE_PORT)
+
+
+def cycle_receiver_port(text):
+    before='    ref render() -> i64 {'
+    if text.count(before)!=1:raise ValueError('Exact original class receiver port site changed')
+    return text.replace(before,'    render() -> i64 {')
+
+
+def graph_has_cycle(graph):
+    if any(type(name) is not str or type(edges) is not list or any(edge not in graph for edge in edges) for name,edges in graph.items()):
+        raise ValueError('Closure identity graph lost an explicit node')
+    visiting=set();done=set()
+    def visit(node):
+        if node in visiting:return True
+        if node in done:return False
+        visiting.add(node)
+        if any(visit(edge) for edge in graph[node]):return True
+        visiting.remove(node);done.add(node);return False
+    return any(visit(node) for node in graph)
+
+
+def acyclic_closure_trace():
+    # Each case uses scoped identities, not the source variable spelling alone.
+    graphs={
+        'no_capture':{'b':['onClick'],'onClick':[]},
+        'unrelated_capture':{'b':['onClick'],'onClick':[]},
+        'capture_without_store':{'b':['initial'],'initial':[],'f':['b']},
+        'store_into_other':{'b':['initial'],'initial':[],'h':['handler'],'handler':['b']},
+        'shadowed':{'outer_b':['onClick'],'onClick':[]},
+        'by_parameter':{'b':['onClick'],'onClick':[],'read_via_param':[]},
+        'nested_closures':{'b':['initial'],'initial':[],'outer':['b'],'inner':[],'slot':['handler'],'handler':[]},
+        'two_objects':{'a':['onClick'],'onClick':['b'],'b':['initial'],'initial':[]}}
+    if any(graph_has_cycle(graph) for graph in graphs.values()):raise ValueError('A legal original closure case gained a reference cycle')
+    clicks={'capture_without_store.b':0,'nested_closures.b':0}
+    def render(name):clicks[name]+=1;return clicks[name]
+    first=render('capture_without_store.b');parameter_read=0
+    scalar_k=5;inner=scalar_k;outer=inner+render('nested_closures.b')
+    return {'observations':[],'scenario_calls':list(graphs),'identity_graphs':graphs,
+        'Button_logical_constructions':9,'Holder_logical_constructions':2,
+        'direct_local_callable_calls':['capture_without_store.f','by_parameter.read_via_param','nested_closures.outer','nested_closures.inner'],
+        'diagnostic_only_discarded_results':{'f':first,'read_via_param':parameter_read,'outer':outer,'inner':inner},
+        'render_call_count':sum(clicks.values()),'final_clicks':clicks,
+        'stored_callbacks_invoked':0,'shadowed_inner_Button_constructed':False,
+        'original_assertions':0,'original_prints':0,'physical_allocations_releases_or_cycle_detector_completeness':'NOT_INFERRED'}
+
 def observations():
     traces = {}
     apply = lambda value, function: function(value)
@@ -238,6 +291,7 @@ def observations():
     def nothing(): return ()
     traces['unit_value_rendering'] = [nothing(),(1,2)]
     traces[_UNIT_NAME] = unit_call_trace()['values']
+    traces[_CYCLE_NAME] = acyclic_closure_trace()['observations']
     if set(traces) != _NAMES: raise ValueError('Complete callable trace lost a program')
     return traces
 
@@ -263,9 +317,18 @@ def expected_rows():
     original_unit = (ROOT/_UNIT_ORIGINAL).read_bytes().replace(b'\r\n',b'\n').decode('utf-8')
     if (ROOT/_UNIT_PORT).read_bytes().replace(b'\r\n',b'\n') != unit_call_port(original_unit).encode('utf-8'):
         raise ValueError('Unit migration changed more than the two obsolete assertions and comment')
+    original_cycle=(ROOT/_CYCLE_ORIGINAL).read_bytes().replace(b'\r\n',b'\n').decode('utf-8')
+    if (ROOT/_CYCLE_PORT).read_bytes().replace(b'\r\n',b'\n')!=cycle_receiver_port(original_cycle).encode():
+        raise ValueError('Acyclic class receiver port changed more than one receiver qualifier')
     traces = observations()
-    return [{'id':'complete_callable_'+name, 'source':_UNIT_PORT if name==_UNIT_NAME else selected if name=='bare_lambda_expression_positions' else source, 'original_source':source,
+    rows=[{'id':'complete_callable_'+name, 'source':_CYCLE_PORT if name==_CYCLE_NAME else _UNIT_PORT if name==_UNIT_NAME else selected if name=='bare_lambda_expression_positions' else source, 'original_source':source,
              'required_target':None, 'expected':{'exit_code':0,'stderr_utf8':'',
              'stdout_utf8':''.join(render(value)+'\n' for value in traces[name])},
              'model':('Complete original top-level/local empty call-result bindings, two typeName assertions and two prints. Only obsolete null assertions and their comment migrate to the published Unit() identity. No result binding/body/observation removed;physical slots,inlining,FI,lifetime and full providers remain unqualified.' if name==_UNIT_NAME else 'Full unchanged original program: source-bound independent call/capture/default/ref/Unit state trace; output does not prove physical release or complete FI.'),
              'observation_count':len(traces[name])} for name,source in sorted(_PROGRAMS.items())]
+
+    for row in rows:
+        if row['original_source']==_CYCLE_ORIGINAL:
+            row['required_semantic_trace']=acyclic_closure_trace()
+            row['model']='Complete original two classes,init bodies,eight acyclic closure scenarios and all eight top-level calls;only class render receiver ref removed. No original print/assert exists;discarded return diagnostics are not runtime assertions. Empty output does not prove allocation/release,FI or complete cycle detection.'
+    return rows

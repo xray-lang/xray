@@ -73845,7 +73845,33 @@
           "prior_lf_sha256": "42614a51f74f62118dccfb3961d1a07865421f4bbdd96c5c903b89ece0e61ad0",
           "review": "Only contextual init/type-position const retirement; all original runner links and semantic duties retained."
         }
-      ]
+      ],
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/acyclic_closure_class_receiver/root.xr",
+        "lf_sha256": "5c59b761dbfd46e9151500df6b12b077b91ca627c2c20a153c06442c101b604c",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "frozen_basis": "Spec006 class identity methods have no ref receiver;init remains the published constructor spelling. Remove only render receiver ref. Keep both classes,all initializers,eight original scenarios and all top-level calls. Empty stdout is original;no runtime leak or general cycle-detector qualification follows.",
+        "differential_input_obligation": {
+          "arguments": [],
+          "stdin_hex": "",
+          "arguments_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/acyclic_closure_class_receiver/root.args",
+            "state": "MISSING"
+          },
+          "stdin_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/acyclic_closure_class_receiver/root.stdin",
+            "state": "MISSING"
+          },
+          "execution": "NOT_RUN"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_ACYCLIC_CLOSURES_AFTER_CLASS_RECEIVER_PORT",
+        "owner_package": "P10",
+        "qualification": "NOT_RUN",
+        "reason": "Spec006 class identity methods have no ref receiver;init remains the published constructor spelling. Remove only render receiver ref. Keep both classes,all initializers,eight original scenarios and all top-level calls. Empty stdout is original;no runtime leak or general cycle-detector qualification follows."
+      }
     },
     {
       "case_id": "tests/regression/08_oop/0836_field_default_init.xr",
@@ -87296,7 +87322,33 @@
         },
         "execution": "NOT_RUN"
       },
-      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0."
+      "target_contract_review": "REQUIRED; preserve originals while applying frozen logical-copy, strict ranges, view permissions and definition-site contracts. Unhandled panic/fault inputs must not be blanket-assigned exit0.",
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/reference_string_array_members/root.xr",
+        "lf_sha256": "472f39c169eaf131011260cf0ded4e81fe68f6063053de0d4361af874aa5b7cd",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": "Current single XIR execution preserves legal typed Array<string> fill,push,indexOf,contains. Remove only retired backend-specific rejection comments,not any original body,mutation or print. Internal reference-count traffic,FI,lifetime and providers need separate qualification.",
+        "differential_input_obligation": {
+          "arguments": [],
+          "stdin_hex": "",
+          "arguments_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/reference_string_array_members/root.args",
+            "state": "MISSING"
+          },
+          "stdin_sidecar": {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/reference_string_array_members/root.stdin",
+            "state": "MISSING"
+          },
+          "execution": "NOT_RUN"
+        }
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_COMPLETE_STRING_ARRAY_MEMBERS_AFTER_SINGLE_XIR_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Current single XIR execution preserves legal typed Array<string> fill,push,indexOf,contains. Remove only retired backend-specific rejection comments,not any original body,mutation or print. Internal reference-count traffic,FI,lifetime and providers need separate qualification."
+      }
     },
     {
       "case_id": "tests/diff/cases/semantics/collections/array_member_scalar_target.xr",

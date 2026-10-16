@@ -127,12 +127,38 @@ def ref_branch_trace():
     out=[len(stack),*stack,len(kinds)];empty=[];marks=[];take_branch(empty,marks,0,0)
     return out+[len(empty)]
 
+
+_STRING_NAME='array_member_reference_element_refused'
+_PROGRAMS[_STRING_NAME]='tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr'
+_PORTS[_STRING_NAME]='tests/unit/xir/legacy_consumers/fixtures/reference_string_array_members/root.xr'
+_NAMES=frozenset(set(_NAMES)|{_STRING_NAME})
+_PORT_NAMES=frozenset(set(_PORT_NAMES)|{_STRING_NAME})
+_INPUTS.update({'tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr': '4284fb21ad4b86733a2b436adbe8dced2d491ef09e7ee3e5ac7a897a2af7ced0', 'tests/unit/xir/legacy_consumers/fixtures/reference_string_array_members/root.xr': '472f39c169eaf131011260cf0ded4e81fe68f6063053de0d4361af874aa5b7cd'})
+_REQUIRED_INPUTS += (_PROGRAMS[_STRING_NAME],_PORTS[_STRING_NAME])
+
+
+def string_member_trace():
+    values=['a','b','c'];initial=values.copy()
+    for index in range(len(values)):values[index]='z'
+    after_fill=values.copy();out=[values[0]]
+    values.append('w');after_push=values.copy();out.append(values[3])
+    first=next((index for index,value in enumerate(values) if value=='z'),-1)
+    out.extend([first,any(value=='w' for value in values)])
+    return {'observations':out,'initial':initial,'after_fill':after_fill,'after_push':after_push,
+        'first_matching_index':first,'operation_order':['fill','print0','push','print3','indexOf','printIndex','contains','printContains'],
+        'all_original_main_calls':1,'physical_reference_counts_or_copy_layout':'NOT_INFERRED'}
+
 def observations():
     return {'hof_index_param':indexed_callback_trace(),'map_bool_key':bool_map_trace(),
         'array_fill_ref_cross_module':ref_branch_trace(),
+        _STRING_NAME:string_member_trace()['observations'],
         'generic_int_format_shared_core':complete_numeric_model.observations()['int_wrap/generic_int_format_shared_core']}
 
 def port_text(name,text):
+    if name==_STRING_NAME:
+        if text.count('fn main()')!=1 or '// diff-backends: vm' not in text or '// diff-aot-reject: selector=fill intrinsic=0' not in text:
+            raise ValueError('Whole string member original lost its exact retired backend metadata')
+        return '// anchor: array-member-reference-element-refused\n// Preserve all string Array mutations and observations under one XIR execution.\n'+text[text.index('fn main()'):]
     if name=='map_bool_key':
         before='    ref fill() -> i64 {'
         if text.count(before)!=1:raise ValueError('Class identity receiver port lost the exact original method')
@@ -162,8 +188,14 @@ def expected_rows():
             raise ValueError('Explicit scalar-text port changed the complete original body')
     values=observations()
     if set(values)!=_NAMES:raise ValueError('Protocol model lost a complete program')
-    return [{'id':'complete_collection_protocols_'+name,'source':_PORTS.get(name,_PROGRAMS[name]),
+    rows=[{'id':'complete_collection_protocols_'+name,'source':_PORTS.get(name,_PROGRAMS[name]),
         'original_source':_PROGRAMS[name],'required_target':None,
         'expected':{'exit_code':0,'stdout_utf8':''.join(scalar(v)+'\n' for v in values[name]),'stderr_utf8':''},
         'model':'Complete original callback indices,ordered typed bool Map,imported ref roots and exact integer endpoints;only explicit typed scalar text replaces the removed heterogeneous Array.No physical/FI/safety claim.',
         'observation_count':len(values[name])} for name in sorted(_NAMES)]
+
+    for row in rows:
+        if row['original_source']==_PROGRAMS[_STRING_NAME]:
+            row['required_semantic_trace']=string_member_trace()
+            row['model']='Complete unchanged original string Array fill,push,indexOf,contains body and all four prints;only retired backend-specific comments removed. First-match search and membership independently derived;no reference-count,ABI,FI,lifetime,provider or safety qualification inferred.'
+    return rows

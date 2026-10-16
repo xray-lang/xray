@@ -367,6 +367,11 @@ FROZEN_TARGETS['tests/regression/08_mem/0804_self_returning_method_rc.xr'] = ('P
 FROZEN_TARGETS['tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr'] = ('POSITIVE_NULL_UNWRAP_PANIC_AFTER_FROZEN_PORT', 'P10')
 TARGET_PORT_ARGUMENTS['tests/diff/cases/semantics/exception/force_unwrap_error_shape.xr'] = []
 
+FROZEN_TARGETS['tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr'] = ('POSITIVE_COMPLETE_STRING_ARRAY_MEMBERS_AFTER_SINGLE_XIR_PORT', 'P09')
+TARGET_PORT_ARGUMENTS['tests/diff/cases/semantics/collections/array_member_reference_element_refused.xr'] = []
+FROZEN_TARGETS['tests/regression/08_oop/0836_closure_cycle_no_false_positives.xr'] = ('POSITIVE_COMPLETE_ACYCLIC_CLOSURES_AFTER_CLASS_RECEIVER_PORT', 'P10')
+TARGET_PORT_ARGUMENTS['tests/regression/08_oop/0836_closure_cycle_no_false_positives.xr'] = []
+
 def load_module(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     module = importlib.util.module_from_spec(spec)

@@ -23,7 +23,7 @@ class CallableTraces(unittest.TestCase):
             'unit_value_rendering':'()\n(1, 2)\n',
             'known_empty_call_result_is_null':'()\n()\n',
         }
-        traces = model.observations()
+        traces = {k:v for k,v in model.observations().items() if k!=model._CYCLE_NAME}
         self.assertEqual(set(traces),set(expected))
         self.assertEqual(sum(map(len,traces.values())),79)
         for name,text in expected.items():
@@ -123,5 +123,41 @@ class CallableTraces(unittest.TestCase):
         self.assertEqual(model._UNIT_ORIGINAL,row['preserved_original_identity']['source'])
         self.assertEqual('()\n()\n',row['stdout_utf8'])
 
+
+    def test_acyclic_closure_trace_keeps_eight_calls_and_no_invented_output(self):
+        trace=model.acyclic_closure_trace()
+        self.assertEqual(trace['scenario_calls'],['no_capture','unrelated_capture','capture_without_store','store_into_other','shadowed','by_parameter','nested_closures','two_objects'])
+        self.assertEqual(trace['observations'],[]);self.assertEqual(trace['original_prints'],0);self.assertEqual(trace['original_assertions'],0)
+        self.assertEqual((trace['Button_logical_constructions'],trace['Holder_logical_constructions'],trace['render_call_count']),(9,2,2))
+        self.assertEqual(trace['diagnostic_only_discarded_results'],{'f':1,'read_via_param':0,'outer':6,'inner':5})
+        self.assertEqual(trace['stored_callbacks_invoked'],0);self.assertFalse(trace['shadowed_inner_Button_constructed'])
+
+    def test_cycle_graph_uses_scoped_identity_and_rejects_real_cycles(self):
+        self.assertFalse(model.graph_has_cycle({'a':['callback'],'callback':['b'],'b':[]}))
+        self.assertTrue(model.graph_has_cycle({'b':['callback'],'callback':['b']}))
+        self.assertTrue(model.graph_has_cycle({'a':['b'],'b':['c'],'c':['a']}))
+        with self.assertRaises(ValueError):model.graph_has_cycle({'a':['missing']})
+        trace=model.acyclic_closure_trace();self.assertEqual(trace['identity_graphs']['shadowed'],{'outer_b':['onClick'],'onClick':[]})
+        self.assertEqual(trace['identity_graphs']['two_objects']['onClick'],['b'])
+
+    def test_acyclic_port_preserves_init_classes_and_every_body(self):
+        import hashlib
+        original=(model.ROOT/model._CYCLE_ORIGINAL).read_text();port=(model.ROOT/model._CYCLE_PORT).read_text()
+        self.assertEqual(model.cycle_receiver_port(original),port)
+        self.assertEqual(port.replace('    render() -> i64 {','    ref render() -> i64 {'),original)
+        self.assertEqual(port.count('init()'),2);self.assertNotIn('constructor(',port)
+        self.assertEqual(hashlib.sha256(original.replace('\r\n','\n').encode()).hexdigest(),'604a9627f9a3d5bccbc5959a18ca7663ac26a5398da11e17659a754dcb41651a')
+        self.assertTrue(port.rstrip().endswith('no_capture()\nunrelated_capture()\ncapture_without_store()\nstore_into_other()\nshadowed()\nby_parameter()\nnested_closures()\ntwo_objects()'))
+        row=next(x for x in model.expected_rows() if x['original_source']==model._CYCLE_ORIGINAL)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'','stderr_utf8':''});self.assertEqual(row['observation_count'],0)
+
+    def test_acyclic_port_rejects_extra_statement_even_if_digest_matches(self):
+        import hashlib
+        from pathlib import Path
+        from unittest import mock
+        saved=Path.read_bytes;path=model.ROOT/model._CYCLE_PORT;changed=saved(path)+b'\nprint(1)\n';pins=dict(model._INPUTS);pins[model._CYCLE_PORT]=hashlib.sha256(changed.replace(b'\r\n',b'\n')).hexdigest()
+        def read(pathValue):return changed if pathValue==path else saved(pathValue)
+        with mock.patch.object(model,'_INPUTS',pins),mock.patch.object(Path,'read_bytes',read),self.assertRaisesRegex(ValueError,'receiver port changed more'):
+            model.expected_rows()
 
 if __name__=='__main__':unittest.main()
