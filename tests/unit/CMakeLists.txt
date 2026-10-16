@@ -316,7 +316,10 @@ if(MSVC)
 else()
     target_compile_options(test_xir_allocations PRIVATE -Wall -Wextra -Werror)
 endif()
-add_test(NAME test_xir_allocations COMMAND test_xir_allocations)
+add_test(NAME test_xir_allocations
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_allocation_case_faults.py
+        --executable $<TARGET_FILE:test_xir_allocations>
+        --source-root ${CMAKE_SOURCE_DIR} --build-root ${CMAKE_BINARY_DIR} --mode aggregate)
 set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/allocation_feedback.cmake)
 
