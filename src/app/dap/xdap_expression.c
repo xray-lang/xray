@@ -17,7 +17,7 @@ typedef struct ExpressionBinding { const char *name;size_t length;XrXirValue val
 typedef struct ExpressionState {
     const XdapExpressionRequest *request;
     ExpressionBinding bindings[128];
-    uint32_t count,depth;
+    uint32_t count,depth,intrinsic_calls;
     XrXirStatus status;
     bool runtime;
 } ExpressionState;
@@ -61,23 +61,37 @@ static bool expression_binding(ExpressionState *state,const char *name) {
 static bool expression_native_work(void *context,uint64_t units) {
     return xr_compile_resources_work(context,units)==XR_COMPILE_RESOURCE_OK;
 }
+#include "xdap_expression_intrinsic.inc.c"
 /* This is syntax admission only. Source still resolves the actual receiver
  * and proves its declared operation; no callable value or provider is used. */
-static bool expression_call_allowed(const AstNode *node,XrCompileResources *resources,XrXirStatus *status) {
+static bool expression_call_allowed(const AstNode *node,XrCompileResources *resources,XrXirStatus *status,XrCoreBuiltinId *intrinsic) {
     const CallExprNode *call=&node->as.call_expr;
-    if (!call->callee || call->callee->type!=AST_MEMBER_ACCESS || !call->callee->as.member_access.name ||
-        call->type_arg_count || call->default_arg_count || call->arg_count<1 || call->arg_count>2 || !call->arguments) {
+    *intrinsic=XR_CORE_BUILTIN_NONE;
+    if (!call->callee || call->type_arg_count || call->default_arg_count || call->arg_count<1 || call->arg_count>2 || !call->arguments) {
         *status=XR_XIR_BAD_TYPE;return false;
     }
-    const XrNativeTypeDeclaration *type=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
-    XrNativeDeclarationWork work={resources,expression_native_work};const XrNativeMemberDeclaration *member=NULL;
-    XrNativeDeclarationStatus found=xr_native_declaration_find_member(&work,type,call->callee->as.member_access.name,&member);
-    if (found!=XR_NATIVE_DECLARATION_OK) {
-        *status=found==XR_NATIVE_DECLARATION_WORK_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;return false;
-    }
-    if (!member->is_public || !member->is_method || member->is_static || member->receiver!=XR_NATIVE_RECEIVER_READ ||
-        member->operation<XR_NATIVE_OPERATION_STRING_CONTAINS || member->operation>XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF) {
-        *status=XR_XIR_BAD_TYPE;return false;
+    if (call->callee->type==AST_VARIABLE) {
+        const char *name=call->callee->as.variable.name;const XrCoreIntrinsicDesc *descriptor=NULL;
+        if (!name) { *status=XR_XIR_BAD_STRUCTURE;return false; }
+        XrCoreIntrinsicQueryStatus query=xr_core_intrinsic_by_source_name_work(resources,expression_native_work,name,strlen(name),&descriptor);
+        if (query!=XR_CORE_INTRINSIC_QUERY_OK) { *status=query==XR_CORE_INTRINSIC_QUERY_WORK_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;return false; }
+        if (!descriptor || descriptor->id!=XR_CORE_BUILTIN_LEN || !xr_core_intrinsic_descriptor_validate(descriptor) ||
+            descriptor->effect!=XR_CORE_INTRINSIC_EFFECT_READS_VALUE || call->arg_count!=1) {
+            *status=XR_XIR_BAD_TYPE;return false;
+        }
+        *intrinsic=descriptor->id;
+    } else {
+        if (call->callee->type!=AST_MEMBER_ACCESS || !call->callee->as.member_access.name) { *status=XR_XIR_BAD_TYPE;return false; }
+        const XrNativeTypeDeclaration *type=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
+        XrNativeDeclarationWork work={resources,expression_native_work};const XrNativeMemberDeclaration *member=NULL;
+        XrNativeDeclarationStatus found=xr_native_declaration_find_member(&work,type,call->callee->as.member_access.name,&member);
+        if (found!=XR_NATIVE_DECLARATION_OK) {
+            *status=found==XR_NATIVE_DECLARATION_WORK_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;return false;
+        }
+        if (!member->is_public || !member->is_method || member->is_static || member->receiver!=XR_NATIVE_RECEIVER_READ ||
+            member->operation<XR_NATIVE_OPERATION_STRING_CONTAINS || member->operation>XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF) {
+            *status=XR_XIR_BAD_TYPE;return false;
+        }
     }
     for (int i=0;i<call->arg_count;++i) {
         if (!expression_native_work(resources,1)) { *status=XR_XIR_BUDGET;return false; }
@@ -99,11 +113,21 @@ static bool expression_visit(AstNode *node,void *context) {
     if (state->depth==128) { state->status=XR_XIR_BUDGET;return false; }
     if (xr_compile_resources_work(state->request->lexical->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
     if (node->type==AST_VARIABLE) return expression_binding(state,node->as.variable.name);
-    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,state->request->lexical->launch->resources,&state->status)) return false;
+    XrCoreBuiltinId intrinsic=XR_CORE_BUILTIN_NONE;
+    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,state->request->lexical->launch->resources,&state->status,&intrinsic)) return false;
+    if (intrinsic!=XR_CORE_BUILTIN_NONE) {
+        if (!expression_intrinsic_visible(state,node->as.call_expr.callee->as.variable.name)) return false;
+        if (state->intrinsic_calls==UINT32_MAX) { state->status=XR_XIR_BUDGET;return false; }
+        ++state->intrinsic_calls;
+    }
     if (!expression_node_allowed(node)) { state->status=XR_XIR_BAD_TYPE;return false; }
     if (node->type==AST_LITERAL_FLOAT || node->type==AST_LITERAL_RUNE || node->type==AST_LITERAL_STRING || node->type==AST_LITERAL_NULL ||
         node->type==AST_ARRAY_LITERAL || node->type==AST_TUPLE_LITERAL || node->type==AST_INDEX_GET || node->type==AST_MEMBER_ACCESS || node->type==AST_FORCE_UNWRAP || node->type==AST_NULLISH_COALESCE || node->type==AST_CALL_EXPR) state->runtime=true;
-    ++state->depth;bool ok=xr_ast_for_each_child(node,expression_visit,state);--state->depth;return ok;
+    ++state->depth;bool ok=true;
+    if (intrinsic!=XR_CORE_BUILTIN_NONE) {
+        for (int i=0;i<node->as.call_expr.arg_count && ok;++i) ok=expression_visit(node->as.call_expr.arguments[i],state);
+    } else ok=xr_ast_for_each_child(node,expression_visit,state);
+    --state->depth;return ok;
 }
 typedef struct ExpressionSyntax { XrCompileResources *resources;uint32_t depth;XrXirStatus status; } ExpressionSyntax;
 static bool expression_syntax(AstNode *node,void *context) {
@@ -111,8 +135,13 @@ static bool expression_syntax(AstNode *node,void *context) {
     if (!node) return true;
     if (syntax->depth==128 || xr_compile_resources_work(syntax->resources,1)!=XR_COMPILE_RESOURCE_OK) { syntax->status=XR_XIR_BUDGET;return false; }
     if (!expression_node_allowed(node)) { syntax->status=XR_XIR_BAD_TYPE;return false; }
-    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,syntax->resources,&syntax->status)) return false;
-    ++syntax->depth;bool ok=xr_ast_for_each_child(node,expression_syntax,syntax);--syntax->depth;return ok;
+    XrCoreBuiltinId intrinsic=XR_CORE_BUILTIN_NONE;
+    if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,syntax->resources,&syntax->status,&intrinsic)) return false;
+    ++syntax->depth;bool ok=true;
+    if (intrinsic!=XR_CORE_BUILTIN_NONE) {
+        for (int i=0;i<node->as.call_expr.arg_count && ok;++i) ok=expression_syntax(node->as.call_expr.arguments[i],syntax);
+    } else ok=xr_ast_for_each_child(node,expression_syntax,syntax);
+    --syntax->depth;return ok;
 }
 XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const char *text,size_t length) {
     if (!compiler || !text || !length) return XR_XIR_BAD_TYPE;
@@ -159,7 +188,8 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
     }
     if (status==XR_XIR_OK) {
         uint32_t function=UINT32_MAX;uint32_t count=state->runtime ? data.count : state->count;
-        status=expression_function(product,count,&function);
+        status=expression_intrinsic_proof(state,product);
+        if (status==XR_XIR_OK) status=expression_function(product,count,&function);
         if (status==XR_XIR_OK && state->runtime) status=expression_export(state,&data,&product,&function);
         if (status==XR_XIR_OK && state->runtime) status=expression_runtime(state,product,function,data.arguments,data.count,output);
         else if (status==XR_XIR_OK) {

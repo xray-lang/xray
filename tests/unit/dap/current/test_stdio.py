@@ -302,6 +302,8 @@ def original_wire():
                     assert evaluated['success'] and evaluated['body']['result']=='42',evaluated
                     unchanged=client.send('evaluate',{'expression':'doubled','frameId':frames[0]['id']})
                     assert unchanged['success'] and unchanged['body']['result']=='40',unchanged
+                    length=client.send('evaluate',{'expression':'len(label)','frameId':frames[0]['id'],'context':'hover'})
+                    assert length['success'] and length['body']['result']=='5',length
                     if args.scenario=='mutate-oracle':
                         assert client.send('setVariable',{'variablesReference':scope,'name':'doubled','value':'99'})['success']
                         assert client.send('scopes',{'frameId':frames[0]['id']})['success']

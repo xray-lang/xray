@@ -115,6 +115,17 @@ static void set_normal(void) {
     CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);prior=(XrXirValue){0};
     CHECK(xr_xir_vm_debug_snapshot_depth(old)==3);xr_xir_vm_debug_snapshot_drop(old);set_finish(&fixture);
 }
+static void set_intrinsic(void) {
+    SetFixture fixture=set_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;set_pause(&fixture,XR_DAP_CALL_FIXTURE,4);
+    XrXirVmDebugSnapshot *old=NULL;CHECK(xdap_current_snapshot(adapter->launch->control,&old)==XR_XIR_VALUE_OK);
+    uint64_t epoch=adapter->stop_epoch;uint32_t scope=adapter->frames[0].scope,frame=adapter->frames[0].handle;
+    XrJsonValue *reply=set_request(adapter,scope,"doubled","len(label)",true);
+    CHECK(!strcmp(xjson_get_string(xjson_get_object(reply,"body"),"value"),"5"));xjson_free(reply);capture.count=0;
+    CHECK(adapter->stop_epoch==epoch+1 && adapter->frames[0].scope==scope && adapter->frames[0].handle==frame);
+    set_scalar(adapter,"doubled",5);XrXirValue prior=set_owned(adapter,old,"doubled");CHECK(prior.payload==40);xr_xir_value_drop(&prior);
+    set_resume(adapter);set_output(0,"9\n",2);CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_vm_debug_snapshot_depth(old)==3);xr_xir_vm_debug_snapshot_drop(old);set_finish(&fixture);
+}
 static void set_array_page(XdapAdapter *adapter,uint32_t reference,bool success,int64_t expected) {
     char message[256];snprintf(message,sizeof(message),"{\"seq\":6,\"type\":\"request\",\"command\":\"variables\",\"arguments\":{\"variablesReference\":%u}}",reference);
     request(adapter,message);XrJsonValue *reply=last_response("variables",success);
@@ -177,7 +188,7 @@ static size_t set_fault(size_t fail) {
 }
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
-    set_normal();set_managed();set_caller_and_io();size_t sites=set_fault(SIZE_MAX);CHECK(sites);
+    set_normal();set_intrinsic();set_managed();set_caller_and_io();size_t sites=set_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) set_fault(i);else { set_fault(0);if (sites>1) set_fault(sites-1); }
     printf("DAP setVariable scalar100/actual104, readonly/type/stale rejection, managed/NUL/CoW, retired refs/restart, original owners; sites=%zu injection=%s physical=0/0 PASS\n",sites,resources ? "ALL" : "FIRST_LAST_ONLY");return 0;
 }

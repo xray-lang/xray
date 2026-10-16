@@ -87,6 +87,9 @@ static void evaluate_normal(void) {
     evaluate_context(adapter,"doubled",inner,"40","\"watch\"");
     evaluate_context(adapter,"doubled",inner,"40","\"custom-client-context\"");
     evaluate_context(adapter,"doubled",inner,NULL,"7");evaluate_context(adapter,"doubled",inner,NULL,"null");
+    evaluate_context(adapter,"len(label)",inner,"5","\"hover\"");
+    evaluate_request(adapter,"len(11)",inner,NULL);evaluate_request(adapter,"len(label,label)",inner,NULL);
+    evaluate_request(adapter,"len<i64>([1])",inner,NULL);evaluate_request(adapter,"len",inner,NULL);
     evaluate_request(adapter,"doubled + 2",inner,"42");evaluate_request(adapter,"doubled",inner,"40");
     evaluate_request(adapter,"value",inner,"20");evaluate_request(adapter,"input + value",outer,"39");
     evaluate_request(adapter,"doubled == 40 && value == 20",inner,"true");
@@ -139,12 +142,13 @@ static size_t evaluate_fault(size_t fail) {
     evaluate_dispose(&fixture);return sites;
 }
 #include "test_evaluate_data.inc.c"
+#include "test_evaluate_intrinsic.inc.c"
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");
     bool managed_resources=argc==2 && !strcmp(argv[1],"--managed-resources");
     bool managed=managed_resources || (argc==2 && !strcmp(argv[1],"--managed"));CHECK(argc==1 || resources || managed);
     if (managed) { evaluate_data();evaluate_data_failures(managed_resources);puts("Source data expressions, exact bits/NUL/nested Nullable and producer disposal PASS");return 0; }
-    evaluate_normal();size_t sites=evaluate_fault(SIZE_MAX);CHECK(sites);
+    evaluate_normal();evaluate_intrinsic_scopes();size_t sites=evaluate_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) evaluate_fault(i);
     else { evaluate_fault(0);if (sites>1) evaluate_fault(sites-1); }
     printf("Original call_stack Source evaluate42, doubled40 and final44 unchanged, caller scope/booleans/rejections/retired refs; sites=%zu injection=%s physical=0/0 PASS\n",sites,resources ? "ALL" : "FIRST_LAST_ONLY");return 0;

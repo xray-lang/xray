@@ -69,6 +69,15 @@ static void evaluate_data(void) {
         {"record.2.lastIndexOf(\"\\0\")",XR_XIR_I64,1,NULL,0,false,0},
         {"words.contains(\"b\")",XR_XIR_BOOL,1,NULL,0,false,0},
         {"words.indexOf(\"z\")",XR_XIR_I64,-1,NULL,0,false,0},
+        {"len(words)",XR_XIR_I64,2,NULL,0,false,0},
+        {"len(empty)",XR_XIR_I64,0,NULL,0,false,0},
+        {"len(record.2)",XR_XIR_I64,3,NULL,0,false,0},
+        {"len(\"界\\0a\")",XR_XIR_I64,3,NULL,0,false,0},
+        {"len([1,2,3])+len(words)",XR_XIR_I64,5,NULL,0,false,0},
+        {"len(true ? words : words)",XR_XIR_I64,2,NULL,0,false,0},
+        {"false && len(words)==99",XR_XIR_BOOL,0,NULL,0,false,0},
+        {"true || len(words)==99",XR_XIR_BOOL,1,NULL,0,false,0},
+        {"len([len(words),len(empty)])",XR_XIR_I64,2,NULL,0,false,0},
         {"true ? empty : empty",XR_XIR_UNIT,0,NULL,0,true,0}
     };
     for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
@@ -113,7 +122,8 @@ static void evaluate_data_failures(bool resources) {
         {"words[1]+record.2",XR_XIR_STRING,0,"bs\0x",4,false,0},
         {"[words[1],record.2]",XR_XIR_UNIT,0,NULL,0,true,2},
         {"record.2.indexOf(\"\\0\")",XR_XIR_I64,1,NULL,0,false,0},
-        {"nested! == null",XR_XIR_BOOL,1,NULL,0,false,0}
+        {"nested! == null",XR_XIR_BOOL,1,NULL,0,false,0},
+        {"len(words)+len(record.2)",XR_XIR_I64,5,NULL,0,false,0}
     };
     for (uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
         size_t sites=evaluate_data_fault(&cases[i],SIZE_MAX);CHECK(sites);

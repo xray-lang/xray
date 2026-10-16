@@ -77,6 +77,7 @@ static XrXirStatus expression_export(ExpressionState *state,const ExpressionData
         status=built==XR_SOURCE_COMPILE_OK ? XR_XIR_OK : built==XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
             built==XR_SOURCE_COMPILE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
     }
+    if (status==XR_XIR_OK) status=expression_intrinsic_proof(state,*product);
     if (status==XR_XIR_OK) status=expression_function(*product,data->count,function);
     xr_source_compile_diagnostic_free(&diagnostic);xdap_json_writer_free(&text);return status;
 }

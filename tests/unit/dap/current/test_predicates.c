@@ -127,13 +127,13 @@ static void predicate_logs(void) {
 }
 static void predicate_read_calls(void) {
     PredicateFixture fixture=predicate_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;
-    predicate_set(adapter,XR_DAP_CALL_FIXTURE,"{\"line\":4,\"condition\":\"label.contains(\\\"nn\\\") && value == 20\",\"logMessage\":\"match={label.indexOf(\\\"n\\\",2)}\"}",true);
+    predicate_set(adapter,XR_DAP_CALL_FIXTURE,"{\"line\":4,\"condition\":\"len(label) == 5 && label.contains(\\\"nn\\\") && value == 20\",\"logMessage\":\"match={label.indexOf(\\\"n\\\",2)},len={len(label)}\"}",true);
     char *condition=adapter->source_breakpoints[0].predicate.condition;
     predicate_set(adapter,XR_DAP_CALL_FIXTURE,"{\"line\":4,\"condition\":\"label.append(\\\"x\\\")\"}",false);
     CHECK(adapter->source_breakpoints[0].predicate.condition==condition);
     predicate_run(adapter,"configurationDone");predicate_pump(adapter);
     CHECK(adapter->terminal && !event_count("stopped") && event_count("output")==2);
-    predicate_output(0,"console","match=2\n",8);predicate_output(1,"stdout","44\n",3);
+    predicate_output(0,"console","match=2,len=5\n",14);predicate_output(1,"stdout","44\n",3);
     predicate_close(&fixture);
 }
 static void predicate_errors(void) {
