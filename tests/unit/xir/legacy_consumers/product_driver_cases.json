@@ -29297,6 +29297,179 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 13
+    },
+    {
+      "id": "complete_structural_calls_generic_width_direct_ordinal",
+      "oracle_id": "complete_structural_calls_generic_width_direct_ordinal",
+      "source": "tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr",
+      "source_lf_sha256": "3d865fcd62b556cefef18a632cd33fd24b6c652eedec8eb63bc47f3545c08247",
+      "entry": "run",
+      "stdout_utf8": "adabobcatdot\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original width-constrained field calls,explicit JSON/exact union narrowing,custom hash/equality and identity-stopping class copy,or unused READ signature. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr",
+        "source_lf_sha256": "3d865fcd62b556cefef18a632cd33fd24b6c652eedec8eb63bc47f3545c08247"
+      },
+      "remaining_gates": [
+        "All5complete original structural/hash/signature bodies and15observations;four constrained projections,explicit schema/static union checks,original class key/copy helpers and two uninvoked READ declarations retained.",
+        "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_structural_calls_object_shape_test_and_narrow",
+      "oracle_id": "complete_structural_calls_object_shape_test_and_narrow",
+      "source": "tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr",
+      "source_lf_sha256": "a44a8f2ce1319e6ba8a1f83320c4b9449d4465d796b6846ea2ec3d1f13432222",
+      "entry": "run",
+      "stdout_utf8": "ok decodes User=true\nmissing decodes User=false\nextra rejects by default=true\nextra ignores explicitly=true\nwrongKind decodes User=false\nnarrowed=Alice/30\nscalar decodes User=false\ntagged:9\nuser:Eve\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original width-constrained field calls,explicit JSON/exact union narrowing,custom hash/equality and identity-stopping class copy,or unused READ signature. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr",
+        "source_lf_sha256": "a44a8f2ce1319e6ba8a1f83320c4b9449d4465d796b6846ea2ec3d1f13432222"
+      },
+      "remaining_gates": [
+        "All5complete original structural/hash/signature bodies and15observations;four constrained projections,explicit schema/static union checks,original class key/copy helpers and two uninvoked READ declarations retained.",
+        "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 9
+    },
+    {
+      "id": "complete_structural_calls_hashable_contract",
+      "oracle_id": "complete_structural_calls_hashable_contract",
+      "source": "tests/diff/cases/semantics/oop/hashable_contract.xr",
+      "source_lf_sha256": "565be502da48d3e7ff398ecc3dc41e38938af86aba7e53a2c882931a12bb9d6a",
+      "entry": "run",
+      "stdout_utf8": "true\n99\n99\ntrue\n7\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original width-constrained field calls,explicit JSON/exact union narrowing,custom hash/equality and identity-stopping class copy,or unused READ signature. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/hashable_contract.xr",
+        "source_lf_sha256": "565be502da48d3e7ff398ecc3dc41e38938af86aba7e53a2c882931a12bb9d6a"
+      },
+      "remaining_gates": [
+        "All5complete original structural/hash/signature bodies and15observations;four constrained projections,explicit schema/static union checks,original class key/copy helpers and two uninvoked READ declarations retained.",
+        "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 5
+    },
+    {
+      "id": "complete_structural_calls_1471_default_read_rest_param",
+      "oracle_id": "complete_structural_calls_1471_default_read_rest_param",
+      "source": "tests/regression/13_types/1471_default_read_rest_param.xr",
+      "source_lf_sha256": "363eef017e2a79197fbd24c786533e3167ad5605951a9578ad43ef9d6e1079be",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original width-constrained field calls,explicit JSON/exact union narrowing,custom hash/equality and identity-stopping class copy,or unused READ signature. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/13_types/1471_default_read_rest_param.xr",
+        "source_lf_sha256": "363eef017e2a79197fbd24c786533e3167ad5605951a9578ad43ef9d6e1079be"
+      },
+      "remaining_gates": [
+        "All5complete original structural/hash/signature bodies and15observations;four constrained projections,explicit schema/static union checks,original class key/copy helpers and two uninvoked READ declarations retained.",
+        "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_structural_calls_1472_default_read_destructure_param",
+      "oracle_id": "complete_structural_calls_1472_default_read_destructure_param",
+      "source": "tests/regression/13_types/1472_default_read_destructure_param.xr",
+      "source_lf_sha256": "c1675c7e68842ac4c7d4fe075d94dda9d17270294f02b5abbba9b09353a7caf3",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11",
+        "P12",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original width-constrained field calls,explicit JSON/exact union narrowing,custom hash/equality and identity-stopping class copy,or unused READ signature. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/13_types/1472_default_read_destructure_param.xr",
+        "source_lf_sha256": "c1675c7e68842ac4c7d4fe075d94dda9d17270294f02b5abbba9b09353a7caf3"
+      },
+      "remaining_gates": [
+        "All5complete original structural/hash/signature bodies and15observations;four constrained projections,explicit schema/static union checks,original class key/copy helpers and two uninvoked READ declarations retained.",
+        "Actual concrete shape/ordinal/generic definition-site checks,JSON boundary,Hashable dispatch/class identity ownership and READ variadic/destructure declaration admission;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
     }
   ]
 }
