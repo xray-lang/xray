@@ -32568,6 +32568,64 @@
         "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
       ],
       "independent_observation_count": 0
+    },
+    {
+      "id": "complete_json_boundary_json_encode_boundary",
+      "oracle_id": "complete_json_boundary_json_encode_boundary",
+      "source": "tests/diff/cases/semantics/json/json_encode_boundary.xr",
+      "source_lf_sha256": "926bc8231df4e1428c342a1519fa223ab1a480b50f6bc2629ce45d8042ebb3aa",
+      "entry": "run",
+      "stdout_utf8": "Map\nBob\n20\ntrue\nMap\n1\nbee\nseven\n3\n1\n3\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P12",
+        "P13"
+      ],
+      "independent_execution_model": "Complete unchanged JSON encoding and active-arm/type queries;independent structural-to-Map materialization,positive typed paths,Set insertion order and disjoint seven-kind predicates. No parse/path error-channel shape or real encoding/FI/resource/lifetime/provider qualification invented.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/json/json_encode_boundary.xr",
+        "source_lf_sha256": "926bc8231df4e1428c342a1519fa223ab1a480b50f6bc2629ce45d8042ebb3aa"
+      },
+      "remaining_gates": [
+        "All original JSON.value/require/asArray/typeName/typeOf/kindOf and7 predicate calls,Set insertion order and every print retained;no body fragments or observed-product output used to construct oracle.",
+        "Invalid parse/typed root/path four complete originals retain their catch-panic versus typed-error acceptance conflict and remain unbound. No error interface invented,old pins changed or product Source refusal accepted as PASS;all full FI/resource/lifetime/safety/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 11,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_json_boundary_json_kind_and_object_type",
+      "oracle_id": "complete_json_boundary_json_kind_and_object_type",
+      "source": "tests/diff/cases/semantics/json/json_kind_and_object_type.xr",
+      "source_lf_sha256": "83664cec499ebd05c3b708cc84de9cc4ae4068b90f89f6014ceb7fd8f36591ab",
+      "entry": "run",
+      "stdout_utf8": "object\nMap\nJSON.Value\ntrue\nfalse\nnull\nbool\nint\nfloat\nstring\narray\nobject\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P12",
+        "P13"
+      ],
+      "independent_execution_model": "Complete unchanged JSON encoding and active-arm/type queries;independent structural-to-Map materialization,positive typed paths,Set insertion order and disjoint seven-kind predicates. No parse/path error-channel shape or real encoding/FI/resource/lifetime/provider qualification invented.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/json/json_kind_and_object_type.xr",
+        "source_lf_sha256": "83664cec499ebd05c3b708cc84de9cc4ae4068b90f89f6014ceb7fd8f36591ab"
+      },
+      "remaining_gates": [
+        "All original JSON.value/require/asArray/typeName/typeOf/kindOf and7 predicate calls,Set insertion order and every print retained;no body fragments or observed-product output used to construct oracle.",
+        "Invalid parse/typed root/path four complete originals retain their catch-panic versus typed-error acceptance conflict and remain unbound. No error interface invented,old pins changed or product Source refusal accepted as PASS;all full FI/resource/lifetime/safety/provider/mixed gates remain required."
+      ],
+      "independent_observation_count": 19,
+      "source_context": "original_absolute"
     }
   ]
 }

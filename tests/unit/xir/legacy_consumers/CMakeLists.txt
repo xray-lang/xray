@@ -230,3 +230,7 @@ if(XRAY_LEGACY_PRODUCT_BINARY)
         endforeach()
     endif()
 endif()
+
+add_test(NAME legacy_consumer_complete_json_boundary_model_controls
+    COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_complete_json_boundary_model.py")
+set_tests_properties(legacy_consumer_complete_json_boundary_model_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)
