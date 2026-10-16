@@ -19,6 +19,8 @@ typedef struct EffectInvocationFlow {
     uint64_t *rows;
     uint64_t *fixed,*certified;
     void *memory;
+    /* Fixed scalar flags belong to this replay and certify no callable origin. */
+    uint64_t local_flags[2];
     bool changed,precision;
 } EffectInvocationFlow;
 
@@ -65,18 +67,20 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     uint64_t flag_words=(values+63)/64;
     if (words>SIZE_MAX/sizeof(*flow->rows) || indices>SIZE_MAX-words*sizeof(*flow->rows) ||
         words*sizeof(*flow->rows)+indices>SIZE_MAX-7) return XR_XIR_BUDGET;
-    if (!xir_compile_work(flow->owner->work,6+sizeof(flag_words))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(flow->owner->work,8+sizeof(flag_words))) return XR_XIR_BUDGET;
     uint64_t flag_offset=(words*sizeof(*flow->rows)+indices+7)&~UINT64_C(7);
     if (flag_words>(SIZE_MAX-flag_offset)/(2*sizeof(uint64_t))) return XR_XIR_BUDGET;
     size_t bytes=(size_t)(flag_offset+2*flag_words*sizeof(uint64_t));
+    bool local_flags=!physical->rows && flag_words==1;
     XrXirStatus status=XR_XIR_OK;flow->physical=physical;
-    flow->memory=bytes?xir_compile_alloc(flow->owner->work,bytes,&status):NULL;
-    if (bytes && !flow->memory) return status;
+    flow->memory=bytes && !local_flags?xir_compile_alloc(flow->owner->work,bytes,&status):NULL;
+    if (bytes && !local_flags && !flow->memory) return status;
     uint64_t initialized=words*sizeof(*flow->rows)+indices+2*flag_words*sizeof(uint64_t);
     if (!xir_compile_work(flow->owner->work,initialized)) return XR_XIR_BUDGET;
     flow->rows=flow->memory;flow->row_count=physical->rows;flow->values=(uint32_t)values;
     flow->row_indices=physical->rows?(uint32_t *)(flow->rows+(size_t)words):NULL;
-    flow->fixed=flag_words?(uint64_t *)((uint8_t *)flow->memory+(size_t)flag_offset):NULL;
+    flow->fixed=local_flags?flow->local_flags:
+        flag_words?(uint64_t *)((uint8_t *)flow->memory+(size_t)flag_offset):NULL;
     flow->certified=flag_words?flow->fixed+(size_t)flag_words:NULL;
     if (words) memset(flow->rows,0,(size_t)words*sizeof(*flow->rows));
     if (flag_words) memset(flow->fixed,0,(size_t)flag_words*2*sizeof(uint64_t));
@@ -107,9 +111,13 @@ static XrXirStatus effect_invocation_flags_match(EffectInvocationFlow *flow) {
         return XR_XIR_BAD_STRUCTURE;
     if (!flow->values) return !flow->fixed && !flow->certified?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     uint64_t words=((uint64_t)flow->values+63)/64;
-    if (!flow->memory || !flow->fixed || !flow->certified ||
+    if (!flow->fixed || !flow->certified ||
         flow->certified!=flow->fixed+(size_t)words) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(flow->owner->work,4)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(flow->owner->work,10)) return XR_XIR_BUDGET;
+    if (!flow->physical->rows && words==1) {
+        if (flow->memory || flow->rows || flow->row_indices || flow->row_count ||
+            flow->fixed!=flow->local_flags) return XR_XIR_BAD_STRUCTURE;
+    } else if (!flow->memory) return XR_XIR_BAD_STRUCTURE;
     uint32_t tail=flow->values%64;
     if (!tail) return XR_XIR_OK;
     if (!xir_compile_work(flow->owner->work,5+2*sizeof(uint64_t))) return XR_XIR_BUDGET;

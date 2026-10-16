@@ -100,15 +100,15 @@ foreach(task_fault_backend IN ITEMS 0 1 vm native)
         set_tests_properties(test_xir_mixed_task_fault_compiler_${task_fault_backend}_${task_fault_compiler_mode} PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;task;compiler;resource;generated-c;throw;panic")
     endforeach()
-    foreach(task_fault_compiler_shard RANGE 0 292)
+    foreach(task_fault_compiler_shard RANGE 0 279)
         math(EXPR task_fault_compiler_begin "${task_fault_compiler_shard} * 32")
         math(EXPR task_fault_compiler_end "${task_fault_compiler_begin} + 32")
-        if(task_fault_compiler_end GREATER 9346)
-            set(task_fault_compiler_end 9346)
+        if(task_fault_compiler_end GREATER 8944)
+            set(task_fault_compiler_end 8944)
         endif()
         add_test(NAME test_xir_mixed_task_fault_compiler_${task_fault_backend}_fi_${task_fault_compiler_shard}
             COMMAND test_xir_mixed_task_fault_compiler ${task_fault_backend} fi
-                ${task_fault_compiler_begin} ${task_fault_compiler_end} 9346)
+                ${task_fault_compiler_begin} ${task_fault_compiler_end} 8944)
         set_tests_properties(test_xir_mixed_task_fault_compiler_${task_fault_backend}_fi_${task_fault_compiler_shard} PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;compiler;resource;generated-c;throw;panic;fault-injection")
     endforeach()
@@ -132,15 +132,15 @@ foreach(task_compiler_backend IN ITEMS 0 1 vm native)
         set_tests_properties(test_xir_mixed_task_source_compiler_${task_compiler_backend}_${task_compiler_mode} PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;task;compiler;resource;generated-c")
     endforeach()
-    foreach(task_compiler_shard RANGE 0 71)
+    foreach(task_compiler_shard RANGE 0 68)
         math(EXPR task_compiler_begin "${task_compiler_shard} * 64")
         math(EXPR task_compiler_end "${task_compiler_begin} + 64")
-        if(task_compiler_end GREATER 4578)
-            set(task_compiler_end 4578)
+        if(task_compiler_end GREATER 4410)
+            set(task_compiler_end 4410)
         endif()
         add_test(NAME test_xir_mixed_task_source_compiler_${task_compiler_backend}_fi_${task_compiler_shard}
             COMMAND test_xir_mixed_task_source_compiler ${task_compiler_backend} fi
-                ${task_compiler_begin} ${task_compiler_end} 4578)
+                ${task_compiler_begin} ${task_compiler_end} 4410)
         set_tests_properties(test_xir_mixed_task_source_compiler_${task_compiler_backend}_fi_${task_compiler_shard} PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;task;compiler;resource;generated-c;fault-injection")
     endforeach()

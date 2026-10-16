@@ -177,7 +177,9 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
     EffectInvocationNode *node=&owner->nodes[flow->node];
     if (fact->value<flow->values) {
         const uint64_t *row=NULL;
-        if (flow->memory) row=effect_invocation_row(flow,fact->value);
+        /* A complete replay remains distinct from an input-only projection,
+         * including when its non-callable flags need no heap block. */
+        if (flow->physical) row=effect_invocation_row(flow,fact->value);
         else if (fact->value<flow->function->parameter_count)
             row=node->input+(size_t)fact->value*flow->basis.row_words;
         if (!row) return XR_XIR_BAD_STRUCTURE;
