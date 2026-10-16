@@ -9,16 +9,22 @@
 typedef struct StringLiteralFixture {bool grow;unsigned mode;} StringLiteralFixture;
 static XrXirStatus string_literal_operation(const XrXirCompileContext *context,void *opaque) {
     const StringLiteralFixture *fixture=opaque;SourceContext ctx={0};ctx.compile=*context;
-    XrXirLiteral original[16];uint32_t id=99;
-    if(fixture->grow){for(unsigned i=0;i<16;++i)original[i]=(XrXirLiteral){"owned",5};ctx.literals=original;ctx.literal_count=ctx.literal_capacity=16;}
+    XrXirLiteral original[16],*initial=NULL;uint32_t id=99;bool ok=false;
+    if(fixture->grow){
+        for(unsigned i=0;i<16;++i)original[i]=(XrXirLiteral){"owned",5};
+        initial=source_alloc(&ctx,16,sizeof(*initial));if(!initial)goto done;
+        memcpy(initial,original,sizeof(original));ctx.literals=initial;ctx.literal_count=ctx.literal_capacity=16;
+    }
     if(fixture->mode==4){if(fixture->grow)ctx.literal_count=ctx.literal_capacity=UINT32_MAX/2+1;else ctx.literal_count=UINT32_MAX;}
-    bool ok=source_literal_append(&ctx,NULL,(!fixture->grow&&fixture->mode==5)?NULL:"",
+    ok=source_literal_append(&ctx,NULL,(!fixture->grow&&fixture->mode==5)?NULL:"",
         fixture->grow&&fixture->mode==3?(size_t)UINT32_MAX+1:!fixture->grow&&fixture->mode==5?1:0,
         fixture->grow&&fixture->mode==5?NULL:&id);
     if(ok){CHECK(fixture->mode==0&&id==(fixture->grow?16u:0u));CHECK(ctx.literal_count==(fixture->grow?17u:1u)&&!ctx.functions);
-        CHECK(ctx.literals[id].length==0);if(fixture->grow)CHECK(ctx.literal_capacity==32&&ctx.literals!=original&&!memcmp(ctx.literals,original,sizeof(original)));}
-    else {CHECK(id==99);CHECK(ctx.literal_count==(fixture->mode==4?(fixture->grow?UINT32_MAX/2+1:UINT32_MAX):fixture->grow?16u:0u));if(fixture->grow)CHECK(ctx.literals==original);}
+        CHECK(ctx.literals[id].length==0);if(fixture->grow)CHECK(ctx.literal_capacity==32&&ctx.literals!=initial&&!memcmp(ctx.literals,original,sizeof(original)));}
+    else {CHECK(id==99);CHECK(ctx.literal_count==(fixture->mode==4?(fixture->grow?UINT32_MAX/2+1:UINT32_MAX):fixture->grow?16u:0u));if(fixture->grow)CHECK(ctx.literals==initial);}
+done:
     while(ctx.memory)source_release_private(ctx.memory+1);
+    source_vector_retired_free(&ctx);
     return ok?XR_XIR_OK:ctx.diagnostic.status;
 }
 static void string_literal_boundaries(bool grow) {

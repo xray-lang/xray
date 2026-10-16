@@ -13,7 +13,7 @@
 #include "xir_assert_panics69_golden.h"
 #include "xir_assert_panics70_golden.h"
 #include "xir_assert_panics71_golden.h"
-#include "xir_assert_panics74_golden.h"
+#include "xir_assert_panics72_golden.h"
 #include "xir_assert_panics74_golden.h"
 #include "xir_assert_atomic64_packet_rejection.h"
 static void panics_word(uint8_t *bytes,uint32_t value) {
