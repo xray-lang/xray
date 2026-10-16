@@ -7605,6 +7605,10 @@ Array的长度、容量、索引读取、reserve、索引写入与追加在接�
 
 Cell读取与写入使用实际出生存储；跨池写入的身份查找在原工作量账本内有界计费，实际存储操作仍检查原Domain和借用权限。普通旧Cell副作用在后继候选失败后保留；只撤销候选的新绑定和拥有存储。I64/String与Cell<i64>历史、嵌套Cell/Array身份和写回已验证；真实Source的旧Cell读写也覆盖VM、native及两个混合方向。Class/Array全部操作、完整闭包/调用族、其他历史类型根与完整G2/G3、P14协调及全部资源/安全门仍未完成。
 
+公共Source REPL拥有者一次性拥有真实Compiler、其Catalog与同一个累计Instance。完整MEMORY输入必须匹配构造时的namespace，经一次解析的真实AST进入同一Source成对事务；正常返回才发布，编译与运行失败不发布新声明，旧普通写入和已扣费用保留。poll/wait/resume/cancel共用真实运行驱动，输出回调期间的mutation返回BUSY。结果、读值与诊断拥有其真实数据，整个REPL及Compiler销毁后仍有效。若实际候选清理继续报告LIMIT/OOM，观察事件报告CLEANUP_FAILED并停止拥有者，同时保留原终态结果，不重新授予额度。
+
+此公共拥有者目前只接完整普通Source单元；它不提供尾表达式显示、implicit it、rooted文件输入或CLI交互接线。原38项、额外代际用例、既有profile/TLS/scheduler行为、完整FI/安全及SDK/provider退出门仍须独立完成。
+
 ---
 
 ## 18. 错误码 (Error Codes)

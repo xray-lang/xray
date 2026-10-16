@@ -560,6 +560,10 @@ Array的长度、容量、索引读取、reserve、索引写入与追加在接�
 
 Cell读取与写入使用实际出生存储；跨池写入的身份查找在原工作量账本内有界计费，实际存储操作仍检查原Domain和借用权限。普通旧Cell副作用在后继候选失败后保留；只撤销候选的新绑定和拥有存储。I64/String与Cell<i64>历史、嵌套Cell/Array身份和写回已验证；真实Source的旧Cell读写也覆盖VM、native及两个混合方向。Class/Array全部操作、完整闭包/调用族、其他历史类型根与完整G2/G3、P14协调及全部资源/安全门仍未完成。
 
+公共Source REPL拥有者一次性拥有真实Compiler、其Catalog与同一个累计Instance。完整MEMORY输入必须匹配构造时的namespace，经一次解析的真实AST进入同一Source成对事务；正常返回才发布，编译与运行失败不发布新声明，旧普通写入和已扣费用保留。poll/wait/resume/cancel共用真实运行驱动，输出回调期间的mutation返回BUSY。结果、读值与诊断拥有其真实数据，整个REPL及Compiler销毁后仍有效。若实际候选清理继续报告LIMIT/OOM，观察事件报告CLEANUP_FAILED并停止拥有者，同时保留原终态结果，不重新授予额度。
+
+此公共拥有者目前只接完整普通Source单元；它不提供尾表达式显示、implicit it、rooted文件输入或CLI交互接线。原38项、额外代际用例、既有profile/TLS/scheduler行为、完整FI/安全及SDK/provider退出门仍须独立完成。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1230,5 +1234,9 @@ An indirect call in the root execution stream selects its birth Program's entrie
 A host call to an old function selects its birth generation only for that execution. Subsequent Source storage receiving starts at the exact published generation, never treating the most recently executed old Program as published Source identity. Pending candidates, foreign Instances and stopped owners still reject. Escaped functions retain the actual birth Program and owned captures after Source, Instance and caller Program references die; final drop releases those leases. These semantics do not establish complete closure families, extra function/generic type roots, full G2/G3, paired REPL coordination or complete resource and safety qualification.
 
 Cell reads and writes use actual birth storage. Cross-arena write lookup charges a bounded walk on the original work ledger; the storage operation still checks its actual Domain and loan authority. Ordinary old-Cell side effects survive a later candidate failure; only new candidate bindings and owned storage are revoked. I64/String and Cell<i64> history, nested Cell/Array identities and writeback have been verified. Real Source Cell reads and writes cover VM, native and both mixed directions. Complete Class/Array operations, complete closure/call families, other historical type roots, full G2/G3, P14 coordination and all resource and safety gates remain unfinished.
+
+A public Source REPL owner owns the real Compiler, its Catalog and one cumulative Instance. A complete MEMORY input must match the namespace supplied at construction. Its once-parsed, authentic AST enters the same paired Source transaction. Only normal return publishes; compile or runtime failure publishes no new declarations and preserves ordinary prior-state writes and spent resources. Poll/wait/resume/cancel use the real runtime driver, and mutation during an output callback returns BUSY. Results, read values and diagnostics own their actual data and survive destruction of the entire REPL and Compiler. If actual candidate retirement still reports LIMIT/OOM, the observed event reports CLEANUP_FAILED and stops the owner while preserving the original terminal result; no fresh allowance is granted.
+
+This public owner currently admits complete ordinary Source units. It does not yet elaborate tail-expression display, implicit it, rooted file inputs or CLI interaction. The original38 cases, extra generation cases, existing profile/TLS/scheduler behavior, complete fault/safety and SDK/provider gates remain separate completion requirements.
 
 <!-- /xr-spec:en -->

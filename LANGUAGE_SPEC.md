@@ -7768,6 +7768,10 @@ A host call to an old function selects its birth generation only for that execut
 
 Cell reads and writes use actual birth storage. Cross-arena write lookup charges a bounded walk on the original work ledger; the storage operation still checks its actual Domain and loan authority. Ordinary old-Cell side effects survive a later candidate failure; only new candidate bindings and owned storage are revoked. I64/String and Cell<i64> history, nested Cell/Array identities and writeback have been verified. Real Source Cell reads and writes cover VM, native and both mixed directions. Complete Class/Array operations, complete closure/call families, other historical type roots, full G2/G3, P14 coordination and all resource and safety gates remain unfinished.
 
+A public Source REPL owner owns the real Compiler, its Catalog and one cumulative Instance. A complete MEMORY input must match the namespace supplied at construction. Its once-parsed, authentic AST enters the same paired Source transaction. Only normal return publishes; compile or runtime failure publishes no new declarations and preserves ordinary prior-state writes and spent resources. Poll/wait/resume/cancel use the real runtime driver, and mutation during an output callback returns BUSY. Results, read values and diagnostics own their actual data and survive destruction of the entire REPL and Compiler. If actual candidate retirement still reports LIMIT/OOM, the observed event reports CLEANUP_FAILED and stops the owner while preserving the original terminal result; no fresh allowance is granted.
+
+This public owner currently admits complete ordinary Source units. It does not yet elaborate tail-expression display, implicit it, rooted file inputs or CLI interaction. The original38 cases, extra generation cases, existing profile/TLS/scheduler behavior, complete fault/safety and SDK/provider gates remain separate completion requirements.
+
 ---
 
 ## 18. Error Codes
