@@ -7607,7 +7607,7 @@ Cell读取与写入使用实际出生存储；跨池写入的身份查找在原�
 
 公共Source REPL拥有者一次性拥有真实Compiler、其Catalog与同一个累计Instance。完整MEMORY输入必须匹配构造时的namespace，经一次解析的真实AST进入同一Source成对事务；正常返回才发布，编译与运行失败不发布新声明，旧普通写入和已扣费用保留。poll/wait/resume/cancel共用真实运行驱动，输出回调期间的mutation返回BUSY。结果、读值与诊断拥有其真实数据，整个REPL及Compiler销毁后仍有效。若实际候选清理继续报告LIMIT/OOM，观察事件报告CLEANUP_FAILED并停止拥有者，同时保留原终态结果，不重新授予额度。
 
-此公共拥有者目前只接完整普通Source单元；它不提供尾表达式显示、implicit it、rooted文件输入或CLI交互接线。原38项、额外代际用例、既有profile/TLS/scheduler行为、完整FI/安全及SDK/provider退出门仍须独立完成。
+公共拥有者通过原有REPL解析规则接入共同Source检查器。真实类型推导后的非Unit尾表达式生成普通不可变声明、实际slot及typed reader，来源仍是调用者未经改写的AST节点。Program默认入口继续返回i64；协调者通过普通specialization与lowering对应启动该真实reader，初始化只求值一次。共享格式器从实际拥有的返回值准备完整显示，在同一累计输出额度内成功写出后才成对发布；宿主显示失败中止候选并停止拥有者，旧普通副作用保留。后续输入的it选择准确的已发布声明及出生代，Unit与失败候选不替换它；None不显示但发布实际可选值。顶层it声明保留，局部可遮蔽；历史函数继续绑定定义时的旧结果。函数显示采用既有规范文本<fn>。普通与交互历史不能混用。rooted文件输入和CLI交互接线、原38项、额外代际用例、既有profile/TLS/scheduler行为、完整FI/安全及SDK/provider退出门仍须独立完成。
 
 ---
 
