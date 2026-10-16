@@ -47,8 +47,9 @@ static void evaluate_start(XdapAdapter *adapter) {
     request(adapter,"{\"seq\":4,\"type\":\"request\",\"command\":\"configurationDone\"}");
     CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK && adapter->snapshot && !adapter->running);capture.count=0;
 }
-static void evaluate_request(XdapAdapter *adapter,const char *expression,uint32_t frame,const char *expected) {
-    char message[1024];snprintf(message,sizeof(message),"{\"seq\":5,\"type\":\"request\",\"command\":\"evaluate\",\"arguments\":{\"expression\":\"%s\",\"frameId\":%u}}",expression,frame);
+static void evaluate_context(XdapAdapter *adapter,const char *expression,uint32_t frame,const char *expected,const char *context) {
+    char message[1024],option[128]={0};if (context) snprintf(option,sizeof(option),",\"context\":%s",context);
+    snprintf(message,sizeof(message),"{\"seq\":5,\"type\":\"request\",\"command\":\"evaluate\",\"arguments\":{\"expression\":\"%s\",\"frameId\":%u%s}}",expression,frame,option);
     XrXirStatus requested=xdap_adapter_request(adapter,message,strlen(message));
     if (requested!=XR_XIR_OK) fprintf(stderr,"Evaluate request [%s] status=%d\n",expression,(int)requested);
     if (requested!=XR_XIR_OK) {
@@ -65,6 +66,9 @@ static void evaluate_request(XdapAdapter *adapter,const char *expression,uint32_
     if (expected) CHECK(!strcmp(xjson_get_string(xjson_get_object(reply,"body"),"result"),expected));
     xjson_free(reply);capture.count=0;
 }
+static void evaluate_request(XdapAdapter *adapter,const char *expression,uint32_t frame,const char *expected) {
+    evaluate_context(adapter,expression,frame,expected,NULL);
+}
 static void evaluate_normal(void) {
     EvaluateFixture fixture=evaluate_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;evaluate_start(adapter);
     if (adapter->depth!=3) fprintf(stderr,"Original call stack depth=%u\n",adapter->depth);
@@ -75,6 +79,14 @@ static void evaluate_normal(void) {
         CHECK(!strcmp(adapter->launch->functions[frame.function].name,i ? "outer" : "inner"));
     }
     XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;
+    evaluate_context(adapter,"doubled + 2",inner,"42","\"hover\"");
+    evaluate_context(adapter,"label.contains(\\\"nn\\\")",inner,"true","\"hover\"");
+    evaluate_context(adapter,"input + value",outer,"39","\"hover\"");
+    evaluate_context(adapter,"doubled = 99",inner,NULL,"\"hover\"");
+    evaluate_context(adapter,"print(value)",inner,NULL,"\"hover\"");
+    evaluate_context(adapter,"doubled",inner,"40","\"watch\"");
+    evaluate_context(adapter,"doubled",inner,"40","\"custom-client-context\"");
+    evaluate_context(adapter,"doubled",inner,NULL,"7");evaluate_context(adapter,"doubled",inner,NULL,"null");
     evaluate_request(adapter,"doubled + 2",inner,"42");evaluate_request(adapter,"doubled",inner,"40");
     evaluate_request(adapter,"value",inner,"20");evaluate_request(adapter,"input + value",outer,"39");
     evaluate_request(adapter,"doubled == 40 && value == 20",inner,"true");
@@ -113,7 +125,7 @@ static void evaluate_normal(void) {
 }
 static size_t evaluate_fault(size_t fail) {
     EvaluateFixture fixture=evaluate_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;evaluate_start(adapter);
-    char message[256];snprintf(message,sizeof(message),"{\"seq\":5,\"type\":\"request\",\"command\":\"evaluate\",\"arguments\":{\"expression\":\"doubled+2\",\"frameId\":%u}}",adapter->frames[0].handle);
+    char message[256];snprintf(message,sizeof(message),"{\"seq\":5,\"type\":\"request\",\"command\":\"evaluate\",\"arguments\":{\"expression\":\"doubled+2\",\"context\":\"hover\",\"frameId\":%u}}",adapter->frames[0].handle);
     XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(fixture.ledger,&before)==XR_COMPILE_RESOURCE_OK);
     size_t live=runtime_live,bytes=runtime_bytes,begin=runtime_attempts;

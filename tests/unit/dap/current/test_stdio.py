@@ -223,6 +223,7 @@ def original_session():
     client=Client()
     initialized=client.send('initialize',{'supportsVariableType':True,'supportsVariablePaging':True})
     assert initialized['success'] and initialized['body']['supportsConfigurationDoneRequest']
+    assert initialized['body']['supportsPauseRequest'] and initialized['body']['supportsEvaluateForHovers']
     client.event('initialized')
     return client
 

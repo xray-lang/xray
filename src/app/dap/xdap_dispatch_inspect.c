@@ -338,9 +338,12 @@ static XrXirStatus inspect_disassemble(XdapAdapter *s,const XdapRequest *r) {
     XDAP_TEXT(&body,"]}");return inspect_finish(s,r,&body);
 }
 static XrXirStatus inspect_evaluate(XdapAdapter *s,const XdapRequest *r) {
-    uint64_t handle=0;uint32_t expression=0;XrXirStatus status=xdap_dispatch_number(r,"frameId",0,&handle);
+    uint64_t handle=0;uint32_t expression=0,context=0;XrXirStatus status=xdap_dispatch_number(r,"frameId",0,&handle);
     if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"expression",&expression);
+    if (status==XR_XIR_OK) status=xdap_dispatch_argument(r,"context",&context);
     if (status!=XR_XIR_OK) return status;
+    if (context && r->document.nodes[context].kind!=XDAP_JSON_STRING)
+        return xdap_dispatch_response(s,r,false,NULL,"Evaluation context must be a string");
     uint32_t frame=handle ? inspect_frame(s,handle,false) : 0;
     if (!s->snapshot || frame>=s->depth) return xdap_dispatch_response(s,r,false,NULL,"Invalid or retired stopped frame");
     if (!expression || r->document.nodes[expression].kind!=XDAP_JSON_STRING || !r->document.nodes[expression].length)

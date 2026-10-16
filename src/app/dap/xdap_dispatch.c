@@ -167,7 +167,7 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
         "\"supportsTerminateRequest\":true,\"supportsRestartRequest\":true,\"supportsSteppingGranularity\":true,\"supportsDisassembleRequest\":true,"
         "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,\"supportsHitConditionalBreakpoints\":true,"
         "\"supportsConditionalBreakpoints\":true,\"supportsLogPoints\":true,"
-        "\"supportsSetVariable\":true,"
+        "\"supportsSetVariable\":true,\"supportsEvaluateForHovers\":true,\"supportsPauseRequest\":true,"
         "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false}]}");
     XrXirStatus status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }
@@ -262,17 +262,30 @@ static XrXirStatus dispatch_start(XdapAdapter *s,const XdapRequest *r) {
     else s->stop_reason=s->source_breakpoint_count ? "breakpoint" : "function breakpoint";
     s->configured=true;s->running=true;return xdap_dispatch_response(s,r,true,NULL,NULL);
 }
+static XrXirStatus dispatch_pause(XdapAdapter *s,const XdapRequest *r,uint64_t thread) {
+    if (!s->running) return xdap_dispatch_response(s,r,false,NULL,"Thread is already stopped");
+    uint64_t ids[65];uint32_t count=0;
+    XrXirValueStatus observed=xdap_current_threads(s->launch->control,ids,65,&count);
+    if (observed==XR_XIR_VALUE_UNSUPPORTED)
+        return xdap_dispatch_response(s,r,false,NULL,"Complete thread observation requires admitted VM ingress");
+    if (observed!=XR_XIR_VALUE_OK) return dispatch_value(observed);
+    if (xr_compile_resources_work(s->resources,count)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
+    bool found=false;for (uint32_t i=0;i<count;++i) if (ids[i]==thread) found=true;
+    if (!found) return xdap_dispatch_response(s,r,false,NULL,"No active thread");
+    XdapJsonWriter response={0};XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
+    if (status!=XR_XIR_OK) return status;
+    /* This is an all-stop target. A real active identity may request the next
+     * admitted VM boundary; preparing a response never schedules that pause. */
+    xdap_current_pause(s->launch->control);s->stop_reason="pause";
+    status=xdap_dispatch_send_prepared(s,&response);xdap_json_writer_free(&response);return status;
+}
 static XrXirStatus dispatch_control(XdapAdapter *s,const XdapRequest *r,const char *command) {
     uint64_t thread=0;XrXirStatus status=xdap_dispatch_number(r,"threadId",0,&thread);
     if (status!=XR_XIR_OK) return status;
     uint64_t stopped=s->snapshot ? xr_xir_vm_debug_snapshot_stopped_thread(s->snapshot) : 1;
-    if (!s->launch || !s->configured || !thread || s->terminal ||
-        (!strcmp(command,"pause") ? thread!=1 : thread!=stopped))
+    if (!s->launch || !s->configured || !thread || s->terminal || (strcmp(command,"pause") && thread!=stopped))
         return xdap_dispatch_response(s,r,false,NULL,"No active thread");
-    if (!strcmp(command,"pause")) {
-        if (!s->running) return xdap_dispatch_response(s,r,false,NULL,"Thread is already stopped");
-        xdap_current_pause(s->launch->control);s->stop_reason="pause";return xdap_dispatch_response(s,r,true,NULL,NULL);
-    }
+    if (!strcmp(command,"pause")) return dispatch_pause(s,r,thread);
     if (!s->snapshot || !s->stop_epoch) return xdap_dispatch_response(s,r,false,NULL,"notStopped");
     XrXirVmDebugMode mode=XR_XIR_VM_DEBUG_CONTINUE;
     if (strcmp(command,"continue")) {
