@@ -1249,6 +1249,19 @@ class PreparationChecks(unittest.TestCase):
                 row["original_runner_entries"][0]["entry"] = "wrong"
             self.assertEqual(json.dumps(original, sort_keys=True), before)
 
+    def test_invalid_metadata_is_rejected_before_loading_unneeded_runner_modules(self):
+        from unittest import mock
+        bad, row = self.mutated_runner_route(next(iter(audit.FROZEN_TARGETS)))
+        del row["target_disposition"]
+        with mock.patch.object(audit, "load_module", side_effect=AssertionError("Invalid metadata must fail before runner compilation")):
+            with self.assertRaisesRegex(ValueError, "required disposition"):
+                self.validate_runner_routes(bad)
+        bad, row = self.mutated_oracle(self.oracles["cases"][0]["id"])
+        row["execution_source"] = "not-owned.xr"
+        with mock.patch.object(audit, "load_module", side_effect=AssertionError("Invalid metadata must fail before literal-reader compilation")):
+            with self.assertRaisesRegex(ValueError, "not an owned input"):
+                audit.validate_oracles(bad)
+
     def execution_review_expected(self, name):
         return next(r["expected"] for r in self.oracles["cases"]
                     if r["id"] == "execution_review_" + name)

@@ -504,6 +504,20 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
     ids = [r["case_id"] for r in rows]
     if not rows or len(ids) != len(set(ids)):
         raise ValueError("empty or duplicate reviewed runner inputs")
+    # Reject invalid declarations before compiling unrelated runner modules.
+    # Every valid row still reaches all source, sidecar and parser checks below.
+    for row in rows:
+        identity = row["case_id"]
+        port = row.get("target_source_port")
+        disposition = row.get("target_disposition")
+        target = FROZEN_TARGETS.get(identity)
+        if target is not None or disposition is not None:
+            if (not disposition or target != (disposition["kind"], disposition["owner_package"])
+                    or disposition["owner_package"] not in row["producer_packages"]
+                    or disposition["qualification"] != "NOT_RUN" or not disposition.get("reason")):
+                raise ValueError("planned frozen migration cannot publish qualification or change its required disposition")
+            if (target[0] == "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT" or target[0].endswith("_PORT")) and not port:
+                raise ValueError("planned frozen migration requires its frozen source port")
     errors = load_module("runner_route_expectations", "tests/compile_errors/run_compile_error_tests.py")
     diff = load_module("runner_route_differential", "tests/diff/run_backend_diff.py")
     if actual_entries is None:
@@ -601,15 +615,6 @@ def validate_runner_routes(data: dict, responsibilities: dict, actual_entries: d
                     or partial["owner_package"] not in row["producer_packages"]
                     or actual.get("lf_sha256") != partial["lf_sha256"]):
                 raise ValueError("partial target program changed or hid remaining original tests")
-        disposition = row.get("target_disposition")
-        target = FROZEN_TARGETS.get(identity)
-        if target is not None or disposition is not None:
-            if (not disposition or target != (disposition["kind"], disposition["owner_package"])
-                    or disposition["owner_package"] not in row["producer_packages"]
-                    or disposition["qualification"] != "NOT_RUN" or not disposition.get("reason")):
-                raise ValueError("planned frozen migration cannot publish qualification or change its required disposition")
-            if (target[0] == "POSITIVE_AFTER_FROZEN_CLASS_SURFACE_PORT" or target[0].endswith("_PORT")) and not port:
-                raise ValueError("planned frozen migration requires its frozen source port")
         if "original_rejection_oracle" in row:
             oracle = row["original_rejection_oracle"]
             path, kind = errors.expected_path_for(source)
@@ -689,22 +694,9 @@ def validate_oracles(data: dict) -> dict:
     ids = [row["id"] for row in data["cases"]]
     if len(ids) != len(set(ids)) or not ids:
         raise ValueError("empty or duplicate oracle cases")
-    legacy = load_module("legacy_consumer_literals", "scripts/source_product_consumer_inventory.py")
-    source = legacy.SOURCE.read_text(encoding="utf-8")
     for row in data["cases"]:
         if row["status"] != "PREPARED_NOT_EXECUTED" or not row["rationale"] or not row["expected"]:
             raise ValueError("an oracle needs independent reasoning and must remain unqualified")
-        for item in row["inputs"]:
-            path = ROOT / item["path"]
-            actual = record(path)
-            if actual["state"] != "PRESENT" or actual["lf_sha256"] != item["lf_sha256"]:
-                raise ValueError(f"oracle input changed: {item['path']}")
-            if "original_literal" in item:
-                start = source.index("TEST(" + row["legacy_case"] + ")")
-                end = legacy.function_end(source, source.index("{", start))
-                original = legacy.static_strings(source[start:end])[item["original_literal"]]
-                if path.read_bytes().replace(b"\r\n", b"\n") != original:
-                    raise ValueError(f"original positive program changed: {row['id']}")
         execution_source = row.get("execution_source")
         if execution_source and execution_source not in {i["path"] for i in row["inputs"]}:
             raise ValueError("oracle execution source is not an owned input")
@@ -746,6 +738,20 @@ def validate_oracles(data: dict) -> dict:
             target = route.get("target_source_port", {}).get("fixture", identity)
             if row.get("execution_source") != target or row.get("execution_entry") != "test":
                 raise ValueError("reviewed library oracle must use full actual test entry")
+    legacy = load_module("legacy_consumer_literals", "scripts/source_product_consumer_inventory.py")
+    source = legacy.SOURCE.read_text(encoding="utf-8")
+    for row in data["cases"]:
+        for item in row["inputs"]:
+            path = ROOT / item["path"]
+            actual = record(path)
+            if actual["state"] != "PRESENT" or actual["lf_sha256"] != item["lf_sha256"]:
+                raise ValueError(f"oracle input changed: {item['path']}")
+            if "original_literal" in item:
+                start = source.index("TEST(" + row["legacy_case"] + ")")
+                end = legacy.function_end(source, source.index("{", start))
+                original = legacy.static_strings(source[start:end])[item["original_literal"]]
+                if path.read_bytes().replace(b"\r\n", b"\n") != original:
+                    raise ValueError(f"original positive program changed: {row['id']}")
     return {"oracle_cases": len(ids), "product_execution": "NOT_RUN"}
 
 
