@@ -11,8 +11,8 @@ class CompleteStructuralCalls(unittest.TestCase):
             'object_shape_test_and_narrow':['ok decodes User=true','missing decodes User=false','extra rejects by default=true',
                 'extra ignores explicitly=true','wrongKind decodes User=false','narrowed=Alice/30','scalar decodes User=false','tagged:9','user:Eve'],
             'hashable_contract':[True,99,99,True,7],'1471_default_read_rest_param':[],'1472_default_read_destructure_param':[]}
-        self.assertEqual({k:v['observations'] for k,v in m.observations().items()},expected)
-        rows=m.expected_rows();self.assertEqual([x['observation_count'] for x in rows],[1,9,5,0,0])
+        self.assertEqual({k:v['observations'] for k,v in m.observations().items() if k!=m._DECLARED_NAME},expected)
+        rows=[row for row in m.expected_rows() if Path(row['source']).stem!=m._DECLARED_NAME];self.assertEqual([x['observation_count'] for x in rows],[1,9,5,0,0])
         self.assertEqual(sum(x['observation_count'] for x in rows),15)
         for row in rows:
             name=Path(row['source']).stem
@@ -100,6 +100,49 @@ class CompleteStructuralCalls(unittest.TestCase):
             case=cases[row['id']];self.assertEqual(case['source'],row['source']);self.assertEqual(case['source'],case['preserved_original_identity']['source'])
             self.assertEqual(case['entry'],'run');self.assertEqual(case['source_context'],'original_absolute');self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'')
             self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
+
+
+    def test_declared_selector_methods_keep_all_three_original_calls(self):
+        trace=m.declared_selector_trace()
+        self.assertEqual(trace['observations'],[10,False,True])
+        self.assertEqual(trace['nominal_receiver'],'Box');self.assertEqual(trace['initial_total'],4)
+        self.assertEqual(trace['helper_calls'],['spread(Box)','holds(Box)'])
+        self.assertEqual(trace['declared_method_calls'],[
+            {'caller':'spread','method':'Box.fill','arguments':[1,2,3]},
+            {'caller':'holds','method':'Box.contains','arguments':[7]},
+            {'caller':'main','method':'Box.contains','arguments':[4]}])
+        self.assertEqual(trace['total_after_calls'],4);self.assertEqual(trace['receiver_writes'],0)
+        self.assertEqual(trace['container_operations'],0);self.assertEqual(trace['original_main_calls'],1)
+
+    def test_declared_receiver_arithmetic_and_equality_do_not_use_container_semantics(self):
+        receiver=m.DeclaredBoxRead(4)
+        self.assertEqual(receiver.fill(1,2,3),10)
+        self.assertFalse(receiver.contains(7));self.assertTrue(receiver.contains(4))
+        self.assertEqual(m.DeclaredBoxRead(8).fill(1,2,3),14)
+        self.assertTrue(m.DeclaredBoxRead(7).contains(7));self.assertEqual(receiver.total,4)
+        for bad in (True,False,None,4.0,'4',1<<63,-(1<<63)-1):
+            with self.subTest(value=bad):
+                with self.assertRaises(ValueError):m.DeclaredBoxRead(bad)
+                with self.assertRaises(ValueError):receiver.contains(bad)
+                with self.assertRaises(ValueError):receiver.fill(bad,2,3)
+        with self.assertRaises(ValueError):m.DeclaredBoxRead((1<<63)-1).fill(1,0,0)
+
+    def test_declared_selector_whole_original_remains_unchanged(self):
+        source=m._PROGRAMS[m._DECLARED_NAME];text=(m.ROOT/source).read_text(encoding='utf-8')
+        self.assertEqual(hashlib.sha256(text.replace('\r\n','\n').encode()).hexdigest(),'883b0955fe6a6e138a11e2219bdebec065a5640ab49cdb821d2f39d403d94d08')
+        self.assertEqual(text.count('print('),3)
+        for body in ('return this.total + value + start + end','return this.total == value','return box.fill(1, 2, 3)','return box.contains(7)','print(b.contains(4))','main()'):
+            self.assertIn(body,text)
+        row=next(x for x in m.expected_rows() if Path(x['source']).stem==m._DECLARED_NAME)
+        self.assertEqual(row['source'],source);self.assertEqual(row['observation_count'],3)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'10\nfalse\ntrue\n','stderr_utf8':''})
+
+    def test_declared_selector_registered_output_changes_with_the_independent_method_trace(self):
+        with mock.patch.object(m.DeclaredBoxRead,'fill',lambda self,*args:11):
+            row=next(x for x in m.expected_rows() if Path(x['source']).stem==m._DECLARED_NAME)
+            self.assertEqual(row['expected']['stdout_utf8'],'11\nfalse\ntrue\n')
+        trace=m.declared_selector_trace()
+        self.assertEqual(trace['internal_intrinsic_or_ABI_identity'],'NOT_INFERRED_FROM_THREE_OUTPUTS')
 
 
 if __name__=='__main__':unittest.main()

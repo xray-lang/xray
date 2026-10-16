@@ -32828,6 +32828,36 @@
         "legacy_spec004_example_reconciliation": "OPEN",
         "SDK_FI_lifetime_provider_qualified": false
       }
+    },
+    {
+      "id": "complete_structural_calls_array_member_declared_selector_refused",
+      "oracle_id": "complete_structural_calls_array_member_declared_selector_refused",
+      "source": "tests/diff/cases/semantics/collections/array_member_declared_selector_refused.xr",
+      "source_lf_sha256": "883b0955fe6a6e138a11e2219bdebec065a5640ab49cdb821d2f39d403d94d08",
+      "entry": "run",
+      "stdout_utf8": "10\nfalse\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P09",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged original Box field default,declared fill/contains bodies,spread/holds helpers,main and all three prints;independent receiver arithmetic and exact i64 equality. Same spelling does not grant container semantics. No internal intrinsic stamp,ABI,class ownership,FI,lifetime,safety or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/collections/array_member_declared_selector_refused.xr",
+        "source_lf_sha256": "883b0955fe6a6e138a11e2219bdebec065a5640ab49cdb821d2f39d403d94d08"
+      },
+      "remaining_gates": [
+        "Complete original Box default field,all declared bodies,two helper calls,main and all3prints retained;exact10/false/true independently authored before product execution.",
+        "Actual nominal method binding and complete VM/C/defaultnative execution;internal intrinsic authority,ABI,class ownership,full FI/resources/lifetime/cancellation/safety/provider/mixed remain separate duties."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
     }
   ]
 }

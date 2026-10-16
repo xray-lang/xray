@@ -16,6 +16,7 @@ _PROGRAMS={
  'generic_width_direct_ordinal':'tests/diff/cases/semantics/objects/generic_width_direct_ordinal.xr',
  'object_shape_test_and_narrow':'tests/diff/cases/semantics/types/object_shape_test_and_narrow.xr',
  'hashable_contract':'tests/diff/cases/semantics/oop/hashable_contract.xr',
+ 'array_member_declared_selector_refused':'tests/diff/cases/semantics/collections/array_member_declared_selector_refused.xr',
  '1471_default_read_rest_param':'tests/regression/13_types/1471_default_read_rest_param.xr',
  '1472_default_read_destructure_param':'tests/regression/13_types/1472_default_read_destructure_param.xr'}
 _NAMES=frozenset(_PROGRAMS)
@@ -87,6 +88,41 @@ class KeyTable:
     def contains(self,key):return any(present.equal(key) for present,_ in self.buckets.get(self.hasher(key),[]))
 
 
+_DECLARED_NAME='array_member_declared_selector_refused'
+_INPUTS[_PROGRAMS[_DECLARED_NAME]]='883b0955fe6a6e138a11e2219bdebec065a5640ab49cdb821d2f39d403d94d08'
+
+
+def declared_i64(value):
+    if type(value) is not int or not -(1<<63)<=value<(1<<63):
+        raise ValueError('Declared method model requires an exact finite i64')
+    return value
+
+
+@dataclass(frozen=True)
+class DeclaredBoxRead:
+    """Read projection of the original receiver; not a class ownership model."""
+    total: int=4
+    def __post_init__(self):declared_i64(self.total)
+    def fill(self,value,start,end):
+        return declared_i64(self.total+declared_i64(value)+declared_i64(start)+declared_i64(end))
+    def contains(self,value):return self.total==declared_i64(value)
+
+
+def declared_selector_trace():
+    receiver=DeclaredBoxRead()
+    spread=receiver.fill(1,2,3)
+    holds=receiver.contains(7)
+    direct=receiver.contains(4)
+    return {'observations':[spread,holds,direct],'nominal_receiver':'Box','initial_total':4,
+        'helper_calls':['spread(Box)','holds(Box)'],'declared_method_calls':[
+            {'caller':'spread','method':'Box.fill','arguments':[1,2,3]},
+            {'caller':'holds','method':'Box.contains','arguments':[7]},
+            {'caller':'main','method':'Box.contains','arguments':[4]}],
+        'total_after_calls':receiver.total,'original_main_calls':1,
+        'container_operations':0,'receiver_writes':0,
+        'internal_intrinsic_or_ABI_identity':'NOT_INFERRED_FROM_THREE_OUTPUTS'}
+
+
 def observations():
     required={'name':'string'}
     concrete=[{'name':'ada','age':1},{'name':'bob','zzz':2},{'age':3,'name':'cat'},{'id':4,'name':'dot'}]
@@ -119,6 +155,7 @@ def observations():
         'temporary_owner_moved_into_generic':True,'copy_stops_at_class_identity':True,
         'original_helper_bodies':['Token.init','Token.operator==','Token.hash','passHashable<T:Hashable>']}
     return {'generic_width_direct_ordinal':width,'object_shape_test_and_narrow':shape,'hashable_contract':hashed,
+        _DECLARED_NAME:declared_selector_trace(),
         '1471_default_read_rest_param':{'observations':[],'declaration':{'name':'bad','parameter_mode':'READ',
             'variadic':True,'element_type':'i64','parameter_pattern':'xs','invocations':0,'body_empty':True,
             'rest_storage_representation':'NOT_INFERRED_FROM_UNUSED_DECLARATION'}},
@@ -128,7 +165,7 @@ def observations():
 
 
 def expected_rows():
-    if (set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values())|{GOLDEN} or set(_PROGRAMS)!=_NAMES or len(_PROGRAMS)!=5 or tuple(_PROGRAMS.items())!=_IDENTITIES):
+    if (set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values())|{GOLDEN} or set(_PROGRAMS)!=_NAMES or len(_PROGRAMS)!=6 or tuple(_PROGRAMS.items())!=_IDENTITIES):
         raise ValueError('Complete structural-call source or authority identities changed')
     for path,digest in _INPUTS.items():
         if hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Structural complete source or normative input changed: '+path)
@@ -145,4 +182,6 @@ def expected_rows():
             'expected':{'exit_code':0,'stdout_utf8':stdout,'stderr_utf8':''},'observation_count':len(trace['observations']),
             'required_semantic_trace':{k:v for k,v in trace.items() if k!='observations'},
             'model':'Complete unchanged original width-constrained field calls,explicit JSON/exact union narrowing,custom hash/equality and identity-stopping class copy,or unused READ signature. Empty declarations do not execute arguments. No generic specialization/ordinal ABI/trait dispatch/ownership/lifetime/resource/provider qualification.'})
+        if name==_DECLARED_NAME:
+            rows[-1]['model']='Complete unchanged original Box field default,declared fill/contains bodies,spread/holds helpers,main and all three prints;independent receiver arithmetic and exact i64 equality. Same spelling does not grant container semantics. No internal intrinsic stamp,ABI,class ownership,FI,lifetime,safety or provider qualification inferred.'
     return rows
