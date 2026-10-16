@@ -7941,7 +7941,9 @@ Source已接准确记录类型/别名、标识符字面量、字段简写、展�
 
 深准入已先由父字段声明认证盒装子值，随后保留子值实际出生arena与type；不能用父池解释该子值的局部序号。重新排序的已接收Record/Tuple、COW后新池Array子值、函数准入回调的重入/拒绝与同形未认证池分别核验；调用方Domain、gate/context、work/scratch和失败原子性保持。该元数据/存储回归不授予实际跨Program调用执行权限。
 
-VM、真实生成C及双向mixed已覆盖上述有限路径，真实Checked独立包另覆盖空记录、Unit字段、开放泛型描述和直接字段替换。编译期记录沿原预算、类型准入、字段路径与拥有式重建，不产生第二evaluator。结构约束的定义处只读字段/借用来源、完整模式、真实跨池函数字段gate、全部FI/预算/取消/安全与完整provider资格仍未完成。Readonly字段注解当前明确拒绝，仍是待实现的合法目标。普通Iterable/Lengthable/FromLiteral、union、views及完整公共REPL不由此获得资格。
+普通库状态族和闭合类型接收显式包含Record，复用完整Checked复验、拥有式字段名及准确类型重定位。真实Source多代用例使出生记录258在当前池成为259：记录同时携带Array与捕获Cell的函数，当前代COW修改副本后调用原出生函数；VM、真实生成C和双向mixed分别保42、43、失败候选写44与撤销后45。另一路从函数字段返回闭包，保发布前与foreign Instance拒绝、发布后调用、Source与外部Program引用销毁后的继续执行及最终capture44。该有限Program执行证明不替代完整结构约束、视图借用来源或资源/取消/安全资格。
+
+VM、真实生成C及双向mixed已覆盖上述有限路径，真实Checked独立包另覆盖空记录、Unit字段、开放泛型描述和直接字段替换。编译期记录沿原预算、类型准入、字段路径与拥有式重建，不产生第二evaluator。结构约束的定义处只读字段/借用来源、完整模式、其余跨池字段/捕获族、全部FI/预算/取消/安全与完整provider资格仍未完成。Readonly字段注解当前明确拒绝，仍是待实现的合法目标。普通Iterable/Lengthable/FromLiteral、union、views及完整公共REPL不由此获得资格。
 
 ---
 

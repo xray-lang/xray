@@ -17,9 +17,10 @@
 #include "../xir_source_fixture_owner.h"
 #include "source_history_cell_fixture.h"
 #include "source_history_function_fixture.h"
+#include "source_history_record_fixture.h"
 static const char *history_mode_name(unsigned kind) {
-    static const char *const names[]={"read","write","array","array_const","class","class_array","array_equal","class_ref","class_inline_ref","function_call","function_value"};
-    CHECK(kind<11);return names[kind];
+    static const char *const names[]={"read","write","array","array_const","class","class_array","array_equal","class_ref","class_inline_ref","function_call","function_value","record_call","record_value"};
+    CHECK(kind<13);return names[kind];
 }
 static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group) {
     unsigned *calls=context;
@@ -27,10 +28,11 @@ static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group
     ++*calls;return XR_XIR_OUTPUT_OK;
 }
 static void produce_mode(const char *directory,FILE *header,unsigned kind) {
-    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==7 || kind==8 || kind==9;
+    bool mutating=kind==1 || kind==2 || kind==4 || kind==5 || kind==7 || kind==8 || kind==9 || kind==11;
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,kind==9 ? "birth-closure-probe" :
-        kind==10 ? "birth-function-value" : "history-check-test",NULL,NULL,NULL};
+        kind==10 ? "birth-function-value" : kind==11 ? "birth-record-call" :
+        kind==12 ? "birth-record-value" : "history-check-test",NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;
     CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);
     XrXirInstanceConfig runtime;CHECK(xr_xir_instance_config_init(&runtime,sizeof(runtime))==XR_XIR_CALL_READY);
@@ -38,7 +40,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
         .write=output_once,.context=&calls};
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_generation_new(&runtime,&instance)==XR_XIR_CALL_READY);
     for (unsigned generation=1;generation<=4;++generation) {
-        const char *source=kind>=9 ? source_history_function_input(generation,kind==10) :
+        const char *source=kind>=11 ? source_history_record_input(generation,kind==12) : kind>=9 ? source_history_function_input(generation,kind==10) :
             source_history_cell_input(generation,kind);
         XrXirSourceText text={NULL,source,strlen(source)};uint64_t serial=0;
         CHECK(xr_xir_compile_source_generation_prepare(owner,&text,&serial,NULL)==XR_XIR_OK && serial==generation);
@@ -79,7 +81,7 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
         } else {
             CHECK(status==XR_XIR_CALL_RETURNED);
             XrXirValue value={0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
-            if (kind==10 && generation>1) {
+            if ((kind==10 || kind==12) && generation>1) {
                 const XrXirFunctionBinding *binding=xr_xir_function_binding(&value);
                 CHECK(binding && binding->capture_count==1);
             } else if (kind==7 && generation>1) {
@@ -100,13 +102,13 @@ int main(int argc,char **argv) {
     CHECK(argc==2);char path[4096];int n=snprintf(path,sizeof(path),"%s/source_history_native_generated.h",argv[1]);
     CHECK(n>0 && (size_t)n<sizeof(path));FILE *header=fopen(path,"wb");CHECK(header);
     CHECK(fputs("#ifndef SOURCE_HISTORY_NATIVE_GENERATED_H\n#define SOURCE_HISTORY_NATIVE_GENERATED_H\n#include \"xir/xxir_program.h\"\n",header)>=0);
-    for (unsigned mode=0;mode<11;++mode) produce_mode(argv[1],header,mode);
-    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[11][4]={\n",header)>=0);
-    for (unsigned mode=0;mode<11;++mode) {
+    for (unsigned mode=0;mode<13;++mode) produce_mode(argv[1],header,mode);
+    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[13][4]={\n",header)>=0);
+    for (unsigned mode=0;mode<13;++mode) {
         CHECK(fputs("{",header)>=0);
         for (unsigned generation=1;generation<=4;++generation)
             CHECK(fprintf(header,"%s&source_history_%s_%u_program",generation==1 ? "" : ",",history_mode_name(mode),generation)>0);
-        CHECK(fputs(mode==10 ? "}\n" : "},\n",header)>=0);
+        CHECK(fputs(mode==12 ? "}\n" : "},\n",header)>=0);
     }
     CHECK(fputs("};\n#endif\n",header)>=0 && !fclose(header));
     return 0;

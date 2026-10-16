@@ -50,6 +50,12 @@ else()
     target_compile_options(test_xir_p10_source_generations PRIVATE -Wall -Wextra -Werror)
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
+foreach(record_kind IN ITEMS call value catalog)
+    add_test(NAME test_xir_p10_source_history_record_${record_kind}
+        COMMAND test_xir_p10_source_generations --history-record-${record_kind})
+    set_tests_properties(test_xir_p10_source_history_record_${record_kind} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept;record;birth-function")
+endforeach()
 add_test(NAME test_xir_p10_source_history_function_value
     COMMAND test_xir_p10_source_generations --history-function-value)
 add_test(NAME test_xir_p10_source_history_function_call
@@ -80,7 +86,7 @@ set_target_properties(source_history_native_producer PROPERTIES C_STANDARD 11 C_
 set(history_native_dir "${CMAKE_CURRENT_BINARY_DIR}/source_history_native")
 set(history_native_header "${history_native_dir}/source_history_native_generated.h")
 set(history_native_sources)
-foreach(history_mode IN ITEMS read write array array_const class class_array array_equal class_ref class_inline_ref function_call function_value)
+foreach(history_mode IN ITEMS read write array array_const class class_array array_equal class_ref class_inline_ref function_call function_value record_call record_value)
     foreach(history_generation RANGE 1 4)
         list(APPEND history_native_sources "${history_native_dir}/source_history_${history_mode}_${history_generation}.c")
     endforeach()
@@ -90,6 +96,7 @@ add_custom_command(OUTPUT ${history_native_sources} "${history_native_header}"
     COMMAND $<TARGET_FILE:source_history_native_producer> "${history_native_dir}"
     DEPENDS source_history_native_producer "${CMAKE_CURRENT_LIST_DIR}/source_history_cell_fixture.h"
         "${CMAKE_CURRENT_LIST_DIR}/source_history_function_fixture.h"
+        "${CMAKE_CURRENT_LIST_DIR}/source_history_record_fixture.h"
     VERBATIM)
 add_library(source_history_native_entries STATIC ${history_native_sources} "${history_native_header}")
 target_link_libraries(source_history_native_entries PRIVATE xray_xir_scalar)
@@ -121,7 +128,7 @@ foreach(history_backend IN ITEMS native vm_native native_vm)
     else()
         target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
     endif()
-    foreach(history_kind IN ITEMS cell cell-write array array-const class class-array array-equal class-ref class-inline-ref function-call function-value)
+    foreach(history_kind IN ITEMS cell cell-write array array-const class class-array array-equal class-ref class-inline-ref function-call function-value record-call record-value)
         string(REPLACE "-" "_" history_suffix "${history_kind}")
         add_test(NAME test_xir_p10_source_history_${history_suffix}_${history_backend}
             COMMAND ${history_target} --history-${history_kind})
