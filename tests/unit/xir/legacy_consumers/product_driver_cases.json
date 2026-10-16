@@ -26651,8 +26651,8 @@
     {
       "id": "complete_ffi_memory_extern_layout_bytecode_roundtrip",
       "oracle_id": "complete_ffi_memory_extern_layout_bytecode_roundtrip",
-      "source": "tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr",
-      "source_lf_sha256": "c9952f576205c27c0bf39d80fddbf319bdcc11f034cd9dfb4a6df11eb9d3176e",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/root.xr",
+      "source_lf_sha256": "ff9d5480da4686e602b57eb56566783d0f7e90e0b9d4e0c7f3d12301faf21733",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "7\n37\n-37\n",
@@ -26662,11 +26662,11 @@
       "stdin_hex": "",
       "companions": [
         {
-          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/xray.toml",
           "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
         },
         {
-          "path": "tests/diff/cases/semantics/ffi/_extern_layout_bytecode_lib.xr",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/_extern_layout_bytecode_lib.xr",
           "lf_sha256": "4bf2dc1f041e4b9debab9b29acaa5cc31a6aaf55f6d884145d24ea5140765c16"
         }
       ],
@@ -26907,8 +26907,8 @@
     {
       "id": "complete_ffi_memory_mem_view_extern_layout",
       "oracle_id": "complete_ffi_memory_mem_view_extern_layout",
-      "source": "tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr",
-      "source_lf_sha256": "06ccd9d1c6e6ab2f3de43b65af008e68370be3928d527baa438fb3545682bfc8",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout/root.xr",
+      "source_lf_sha256": "9d3d576ba81537e8c2003cdc4432fdeb1f0f6ba953b7f08ed5b5fe277a346975",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "7\n4100\n91\n91\n",
@@ -26918,7 +26918,7 @@
       "stdin_hex": "",
       "companions": [
         {
-          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout/xray.toml",
           "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
         }
       ],
@@ -26943,8 +26943,8 @@
     {
       "id": "complete_ffi_memory_mem_view_extern_layout_native_size",
       "oracle_id": "complete_ffi_memory_mem_view_extern_layout_native_size",
-      "source": "tests/diff/cases/semantics/ffi/mem_view_extern_layout_native_size.xr",
-      "source_lf_sha256": "546f77db298649653b17b7d5f2a77f99c47c62d830d25737f78e6845a5c85921",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout_native_size/root.xr",
+      "source_lf_sha256": "44be0fa8c3baa89e098f594d485ac31f8d4806e81c9ec2a338a48aa0abd94438",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "37\n-37\n91\n-91\n",
@@ -26954,7 +26954,7 @@
       "stdin_hex": "",
       "companions": [
         {
-          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout_native_size/xray.toml",
           "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
         }
       ],
@@ -26979,8 +26979,8 @@
     {
       "id": "complete_ffi_memory_mem_view_imported_layout_native_size",
       "oracle_id": "complete_ffi_memory_mem_view_imported_layout_native_size",
-      "source": "tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr",
-      "source_lf_sha256": "f54de878f96c1f1c325ac13de3158f83e9bf018341f4fd4e93969f69ed4cd29e",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/root.xr",
+      "source_lf_sha256": "526e6354ea16d990ebf16cfbb47713c4353cb4debdea2490de65286114368213",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "37\n-37\n91\n-91\n",
@@ -26990,11 +26990,11 @@
       "stdin_hex": "",
       "companions": [
         {
-          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/xray.toml",
           "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
         },
         {
-          "path": "tests/diff/cases/semantics/ffi/_native_size_layout_lib.xr",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/_native_size_layout_lib.xr",
           "lf_sha256": "c740d4610c26c177c12d2818361315894f26980eaf5a5fe1c7feab2430a5ec00"
         }
       ],
@@ -27019,8 +27019,8 @@
     {
       "id": "complete_ffi_memory_mem_view_packed_nested_native_size",
       "oracle_id": "complete_ffi_memory_mem_view_packed_nested_native_size",
-      "source": "tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr",
-      "source_lf_sha256": "fa4e17fc57cf3c639a6795d8090b59328f5a5a2f00ceb9d9b35b56e3899a334a",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_packed_nested_native_size/root.xr",
+      "source_lf_sha256": "d1724f76a65adcdcfa2a363ff1ae7312ad64e008de9c0bdcb120057ec707ef1b",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "7\n37\n-37\n91\n-91\n",
@@ -27030,7 +27030,7 @@
       "stdin_hex": "",
       "companions": [
         {
-          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_packed_nested_native_size/xray.toml",
           "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
         }
       ],
@@ -27055,8 +27055,8 @@
     {
       "id": "complete_ffi_memory_mem_with_slice_mut_exception_loan_end",
       "oracle_id": "complete_ffi_memory_mem_with_slice_mut_exception_loan_end",
-      "source": "tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr",
-      "source_lf_sha256": "95af03d141b69c8d98c578efbfee2b1ee2f4af14f7cd7066d131e0117d91f4cc",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_exception_loan_end/root.xr",
+      "source_lf_sha256": "599c95f616194f86b129340d65f186b9c6d9ed5e9033e4b0306b90f0ab752618",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "caught\n9\n",
@@ -27066,7 +27066,7 @@
       "stdin_hex": "",
       "companions": [
         {
-          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_exception_loan_end/xray.toml",
           "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
         }
       ],
@@ -27091,8 +27091,8 @@
     {
       "id": "complete_ffi_memory_mem_with_slice_mut_extern_layout",
       "oracle_id": "complete_ffi_memory_mem_with_slice_mut_extern_layout",
-      "source": "tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr",
-      "source_lf_sha256": "53d140e2de9bd052ef349596bb21e0974377330a0ace43892703b98c5ae2b290",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_extern_layout/root.xr",
+      "source_lf_sha256": "05a9daffd5ed50f112fa453466f46cae91e79351c6c377ec148a710def5efa84",
       "entry": "run",
       "source_context": "original_absolute",
       "stdout_utf8": "-73\n73\n-73\n",
@@ -27102,7 +27102,7 @@
       "stdin_hex": "",
       "companions": [
         {
-          "path": "tests/diff/cases/semantics/ffi/xray.toml",
+          "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_extern_layout/xray.toml",
           "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
         }
       ],

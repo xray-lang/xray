@@ -1,0 +1,31 @@
+// anchor: task-235-with-slice-mut
+import mem
+
+struct Header {
+    length: u64
+    delta: i64
+}
+
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<Header>() as usize) }
+    var result = unsafe {
+        mem.withSliceMut<Header>(raw, 1, ref raw, fn(view: ref MutSlice<Header>) -> i64 {
+            view[0].length = 73
+            view[0].delta = -73
+            return view[0].delta
+        })
+    }
+    print(result)
+    unsafe {
+        print(mem.load<u64>(raw, mem.offsetOf<Header>("length"), Endian.Native))
+        print(mem.load<i64>(raw, mem.offsetOf<Header>("delta"), Endian.Native))
+        free(raw)
+    }
+}
+
+main()

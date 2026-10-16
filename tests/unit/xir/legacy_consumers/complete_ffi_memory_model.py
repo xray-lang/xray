@@ -25,6 +25,12 @@ _NAMES = frozenset({
     'ptr_memory', 'rawptr_copy_nonoverlap_owner', 'rawptr_static_null',
     'unsafe_return_block'})
 _PROGRAMS = {name: BASE + name + '.xr' for name in _NAMES}
+_PORT_NAMES = frozenset({'extern_layout_bytecode_roundtrip', 'mem_view_extern_layout',
+    'mem_view_extern_layout_native_size', 'mem_view_imported_layout_native_size',
+    'mem_view_packed_nested_native_size', 'mem_with_slice_mut_exception_loan_end',
+    'mem_with_slice_mut_extern_layout'})
+_PORTS = {name: 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/' + name + '/root.xr'
+          for name in _PORT_NAMES}
 _AUTHORITIES = (
     'spec/source/sections/003-2-type-system.md',
     'spec/source/sections/004-3-expressions.md',
@@ -72,7 +78,23 @@ _INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e
  'tests/diff/cases/semantics/ffi/rawptr_copy_nonoverlap_owner.xr': '042c448f061edcbf5e833d3c4414a3dd85ce3f10c4fba839efb25c029d341f4b',
  'tests/diff/cases/semantics/ffi/rawptr_static_null.xr': '3286a62cbce1c11f4b69c89bccfe764516ca8cbba3d01d97567988da565779d3',
  'tests/diff/cases/semantics/ffi/unsafe_return_block.xr': 'd86139ee7173bba5fabb4ad2ab837e387b63fb99590785c38b4af9d762f2fb98',
- 'tests/diff/cases/semantics/ffi/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94'}
+ 'tests/diff/cases/semantics/ffi/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/_extern_layout_bytecode_lib.xr': '4bf2dc1f041e4b9debab9b29acaa5cc31a6aaf55f6d884145d24ea5140765c16',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/root.xr': 'ff9d5480da4686e602b57eb56566783d0f7e90e0b9d4e0c7f3d12301faf21733',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout/root.xr': '9d3d576ba81537e8c2003cdc4432fdeb1f0f6ba953b7f08ed5b5fe277a346975',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout_native_size/root.xr': '44be0fa8c3baa89e098f594d485ac31f8d4806e81c9ec2a338a48aa0abd94438',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout_native_size/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/_native_size_layout_lib.xr': 'c740d4610c26c177c12d2818361315894f26980eaf5a5fe1c7feab2430a5ec00',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/root.xr': '526e6354ea16d990ebf16cfbb47713c4353cb4debdea2490de65286114368213',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_packed_nested_native_size/root.xr': 'd1724f76a65adcdcfa2a363ff1ae7312ad64e008de9c0bdcb120057ec707ef1b',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_packed_nested_native_size/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_exception_loan_end/root.xr': '599c95f616194f86b129340d65f186b9c6d9ed5e9033e4b0306b90f0ab752618',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_exception_loan_end/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_extern_layout/root.xr': '05a9daffd5ed50f112fa453466f46cae91e79351c6c377ec148a710def5efa84',
+ 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_extern_layout/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94'}
 
 
 def aggregate(fields, *, packed=False, union=False):
@@ -239,21 +261,55 @@ def render(value):
     raise ValueError('Unreviewed FFI observation')
 
 
+def port_text(name, original):
+    if name not in _PORT_NAMES: raise ValueError('No reviewed complete foreign-view migration')
+    if name == 'mem_view_extern_layout_native_size':
+        binding = '    var headers = unsafe { mem.slice<NativeSizeHeader>(raw, 1, raw) }\n'
+        boundary = '    }\n    print(headers[0].length)'
+        if original.count(binding) != 1 or original.count(boundary) != 1:
+            raise ValueError('Native-size view lost its exact write/read boundary')
+        return original.replace(binding, '').replace(boundary, '    }\n' + binding + '    print(headers[0].length)')
+    expected = 2 if name == 'mem_with_slice_mut_exception_loan_end' else 1
+    if original.count('ref Slice<') != expected:
+        raise ValueError('Foreign callback lost its exact writable view parameters')
+    return original.replace('ref Slice<', 'ref MutSlice<')
+
+
+def companion_paths(name):
+    directory = Path(_PORTS[name]).parent.as_posix() + '/'
+    files = ['xray.toml']
+    if name == 'extern_layout_bytecode_roundtrip': files.append('_extern_layout_bytecode_lib.xr')
+    if name == 'mem_view_imported_layout_native_size': files.append('_native_size_layout_lib.xr')
+    return [directory + item for item in files]
+
+
 def expected_rows():
     if (set(_PROGRAMS) != _NAMES or len(set(_PROGRAMS.values())) != len(_NAMES)
             or any(path != BASE + name + '.xr' for name, path in _PROGRAMS.items())
-            or set(_INPUTS) != set(_AUTHORITIES) | set(_PROGRAMS.values())):
+            or set(_PORTS) != _PORT_NAMES
+            or any(path != 'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/' + name + '/root.xr'
+                   for name, path in _PORTS.items())
+            or set(_INPUTS) != set(_AUTHORITIES) | set(_PROGRAMS.values()) | set(_PORTS.values()) |
+               {path for name in _PORTS for path in companion_paths(name)}):
         raise ValueError('FFI model lost its exact complete programs or required authority')
     for name, digest in _INPUTS.items():
         if hashlib.sha256((ROOT / name).read_bytes().replace(b'\r\n', b'\n')).hexdigest() != digest:
             raise ValueError('FFI source, manifest or layout authority changed: ' + name)
+    for name, path in _PORTS.items():
+        original = (ROOT / _PROGRAMS[name]).read_bytes().replace(b'\r\n', b'\n').decode('utf-8')
+        if (ROOT / path).read_bytes().replace(b'\r\n', b'\n') != port_text(name, original).encode('utf-8'):
+            raise ValueError('Foreign view port changed beyond its complete-source permission migration')
+        for companion in companion_paths(name):
+            if (ROOT / companion).read_bytes().replace(b'\r\n', b'\n') != (ROOT / (BASE + Path(companion).name)).read_bytes().replace(b'\r\n', b'\n'):
+                raise ValueError('Foreign view port changed its native plan or imported declaration')
     plan = tomllib.loads((ROOT / (BASE + 'xray.toml')).read_text(encoding='utf-8'))
     symbols = {item['xray']: item['native'] for item in plan['native']['symbol']}
     if symbols['task208LabsA'] != 'labs' or symbols['task208LabsB'] != 'labs':
         raise ValueError('FFI source aliases lost their explicit symbol mappings')
     traces = observations()
-    return [{'id': 'complete_ffi_memory_' + name, 'source': path, 'original_source': path,
+    return [{'id': 'complete_ffi_memory_' + name, 'source': _PORTS.get(name, path), 'original_source': path,
              'required_target': TARGET, 'expected': {'exit_code': 0, 'stderr_utf8': '',
              'stdout_utf8': ''.join(render(value) + '\n' for value in traces[name])},
-             'model': 'Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.',
+             'model': 'Independent full original callback/state/byte trace and explicit little-endian x64 size/alignment/offset model. Successful foreign allocations only; no ABI, stack bound, provider, failure, lifetime or physical-release qualification is inferred.' +
+                      (' Complete-source permission migration: writable callbacks use MutSlice; a shared read view is formed after the preceding writes.' if name in _PORTS else ''),
              'observation_count': len(traces[name])} for name, path in sorted(_PROGRAMS.items())]

@@ -40,7 +40,8 @@ class FfiMemoryTraces(unittest.TestCase):
         rows = model.expected_rows()
         self.assertEqual(len(rows), 26)
         self.assertTrue(all(row['required_target'] == 'windows-x86_64' for row in rows))
-        self.assertTrue(all(row['source'] == row['original_source'] for row in rows))
+        self.assertEqual(sum(row['source'] != row['original_source'] for row in rows), 7)
+        self.assertTrue(all(row['source'] == model._PORTS.get(row['id'].removeprefix('complete_ffi_memory_'), row['original_source']) for row in rows))
         for name in ['extern_libm', 'extern_no_arg_void_and_unused']:
             self.assertNotIn(name, expected)  # Provider-specific sqrt/rand still need their own evidence.
 
@@ -100,7 +101,7 @@ class FfiMemoryTraces(unittest.TestCase):
     def test_exact_complete_program_set_and_source_identity_are_required(self):
         swapped = dict(model._PROGRAMS); names = sorted(swapped)
         swapped[names[0]], swapped[names[1]] = swapped[names[1]], swapped[names[0]]
-        for attribute, value in [('_PROGRAMS', swapped), ('_PROGRAMS', {}), ('_INPUTS', {})]:
+        for attribute, value in [('_PROGRAMS', swapped), ('_PROGRAMS', {}), ('_INPUTS', {}), ('_PORTS', {})]:
             with self.subTest(attribute=attribute), mock.patch.object(model, attribute, value), self.assertRaises(ValueError):
                 model.expected_rows()
 
@@ -110,12 +111,39 @@ class FfiMemoryTraces(unittest.TestCase):
         for expected in model.expected_rows():
             with self.subTest(program=expected['id']):
                 row = cases[expected['id']]
-                self.assertEqual(row['source'], expected['original_source'])
+                self.assertEqual(row['source'], expected['source'])
+                self.assertEqual(row['preserved_original_identity']['source'], expected['original_source'])
                 self.assertEqual(row['stdout_utf8'], expected['expected']['stdout_utf8'])
                 self.assertEqual((row['entry'], row['source_context']), ('run', 'original_absolute'))
-                self.assertIn(model.BASE+'xray.toml', {item['path'] for item in row['companions']})
-        self.assertIn(model.BASE+'_native_size_layout_lib.xr',
+                self.assertIn((Path(row['source']).parent/'xray.toml').as_posix(), {item['path'] for item in row['companions']})
+        self.assertIn((Path(model._PORTS['mem_view_imported_layout_native_size']).parent/'_native_size_layout_lib.xr').as_posix(),
                       {item['path'] for item in cases['complete_ffi_memory_mem_view_imported_layout_native_size']['companions']})
+
+    def test_complete_ports_only_change_permission_and_shared_view_birth(self):
+        for name, path in model._PORTS.items():
+            with self.subTest(program=name):
+                original = (model.ROOT/model._PROGRAMS[name]).read_text()
+                migrated = (model.ROOT/path).read_text()
+                self.assertEqual(migrated, model.port_text(name, original))
+                if name == 'mem_view_extern_layout_native_size':
+                    birth = migrated.index('var headers =')
+                    self.assertLess(migrated.index('37, Endian.Native)'), birth)
+                    self.assertLess(birth, migrated.index('print(headers[0].length)'))
+                    self.assertLess(migrated.index('print(headers[0].delta)'), migrated.index('91, Endian.Native)'))
+                else:
+                    self.assertNotIn('ref Slice<', migrated)
+                    self.assertIn('ref MutSlice<', migrated)
+
+    def test_updated_digest_cannot_hide_a_truncated_or_extended_port(self):
+        import hashlib
+        saved = Path.read_bytes
+        for name in model._PORTS.values():
+            with self.subTest(port=name):
+                altered = saved(model.ROOT/name) + b'\nprint(999)\n'
+                inputs = dict(model._INPUTS); inputs[name] = hashlib.sha256(altered.replace(b'\r\n', b'\n')).hexdigest()
+                def changed(path): return altered if path == model.ROOT/name else saved(path)
+                with mock.patch.object(model, '_INPUTS', inputs), mock.patch.object(Path, 'read_bytes', changed), self.assertRaises(ValueError):
+                    model.expected_rows()
 
 
 if __name__ == '__main__': unittest.main()

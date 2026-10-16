@@ -5257,6 +5257,31 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/root.xr",
+        "lf_sha256": "ff9d5480da4686e602b57eb56566783d0f7e90e0b9d4e0c7f3d12301faf21733",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/xray.toml",
+            "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+          },
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/_extern_layout_bytecode_lib.xr",
+            "lf_sha256": "4bf2dc1f041e4b9debab9b29acaa5cc31a6aaf55f6d884145d24ea5140765c16"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
       }
     },
     {
@@ -5671,6 +5696,27 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout/root.xr",
+        "lf_sha256": "9d3d576ba81537e8c2003cdc4432fdeb1f0f6ba953b7f08ed5b5fe277a346975",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout/xray.toml",
+            "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
       }
     },
     {
@@ -5717,6 +5763,27 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout_native_size/root.xr",
+        "lf_sha256": "44be0fa8c3baa89e098f594d485ac31f8d4806e81c9ec2a338a48aa0abd94438",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout_native_size/xray.toml",
+            "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
       }
     },
     {
@@ -5763,6 +5830,31 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/root.xr",
+        "lf_sha256": "526e6354ea16d990ebf16cfbb47713c4353cb4debdea2490de65286114368213",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/xray.toml",
+            "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+          },
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/_native_size_layout_lib.xr",
+            "lf_sha256": "c740d4610c26c177c12d2818361315894f26980eaf5a5fe1c7feab2430a5ec00"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
       }
     },
     {
@@ -5809,6 +5901,27 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_packed_nested_native_size/root.xr",
+        "lf_sha256": "d1724f76a65adcdcfa2a363ff1ae7312ad64e008de9c0bdcb120057ec707ef1b",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_packed_nested_native_size/xray.toml",
+            "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
       }
     },
     {
@@ -5855,6 +5968,27 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_exception_loan_end/root.xr",
+        "lf_sha256": "599c95f616194f86b129340d65f186b9c6d9ed5e9033e4b0306b90f0ab752618",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_exception_loan_end/xray.toml",
+            "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
       }
     },
     {
@@ -5901,6 +6035,27 @@
           "state": "MISSING"
         },
         "execution": "NOT_RUN"
+      },
+      "target_source_port": {
+        "fixture": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_extern_layout/root.xr",
+        "lf_sha256": "05a9daffd5ed50f112fa453466f46cae91e79351c6c377ec148a710def5efa84",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "frozen_basis": [
+          "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
+        ],
+        "companion_inputs": [
+          {
+            "path": "tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_extern_layout/xray.toml",
+            "lf_sha256": "3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94"
+          }
+        ]
+      },
+      "target_disposition": {
+        "kind": "POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT",
+        "owner_package": "P09",
+        "qualification": "NOT_RUN",
+        "reason": "Spec2.4.2 shared Slice is read-only, writes require MutSlice, and an owner cannot be written while its shared view is live. Preserve the complete original foreign-memory program and all outputs."
       }
     },
     {

@@ -31,6 +31,13 @@ FROZEN_TARGETS['tests/diff/cases/semantics/collections/stringbuilder_append_shar
 FROZEN_TARGETS['tests/diff/cases/semantics/collections/stringbuilder_scalar_known_append_shared_core.xr'] = ('POSITIVE_OWNED_STRING_ACCUMULATION_AFTER_STRINGBUILDER_RETIREMENT', 'P09')
 FROZEN_TARGETS['tests/diff/cases/semantics/int/enum_ordinal_conversion.xr'] = ('POSITIVE_EXPLICIT_ENUM_ORDINAL_PORT', 'P09')
 FROZEN_TARGETS['tests/diff/cases/semantics/string/multiconcat.xr'] = ('POSITIVE_EXACT_NULLABLE_CONTEXT_PORT', 'P10')
+FROZEN_TARGETS['tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr'] = ('POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT', 'P09')
+FROZEN_TARGETS['tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr'] = ('POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT', 'P09')
+FROZEN_TARGETS['tests/diff/cases/semantics/ffi/mem_view_extern_layout_native_size.xr'] = ('POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT', 'P09')
+FROZEN_TARGETS['tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr'] = ('POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT', 'P09')
+FROZEN_TARGETS['tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr'] = ('POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT', 'P09')
+FROZEN_TARGETS['tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr'] = ('POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT', 'P09')
+FROZEN_TARGETS['tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr'] = ('POSITIVE_FOREIGN_MUTABLE_VIEW_PERMISSION_PORT', 'P09')
 FROZEN_TARGETS['tests/diff/cases/semantics/modules/_classlib.xr'] = ('POSITIVE_ORDINARY_CLASS_RECEIVER_MODULE_PORT', 'P10')
 FROZEN_TARGETS['tests/diff/cases/semantics/modules/xmod_class.xr'] = ('POSITIVE_ORDINARY_CLASS_RECEIVER_MODULE_PORT', 'P10')
 FROZEN_TARGETS['tests/diff/cases/semantics/modules/_exported_struct_methods_lib.xr'] = ('POSITIVE_NAMED_STRUCT_FACTORY_MODULE_PORT', 'P10')
@@ -176,6 +183,26 @@ TARGET_PORT_IMPORTS = {
     "tests/diff/cases/semantics/slice/slice_borrow_return_cross_module.xr": (
         "tests/unit/xir/legacy_consumers/fixtures/slice_borrow_cross_module/_borrow_return_lib.xr",)
 }
+
+
+TARGET_PORT_IMPORTS.update({
+    'tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr': (
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/xray.toml',
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/extern_layout_bytecode_roundtrip/_extern_layout_bytecode_lib.xr'),
+    'tests/diff/cases/semantics/ffi/mem_view_extern_layout.xr': (
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout/xray.toml',),
+    'tests/diff/cases/semantics/ffi/mem_view_extern_layout_native_size.xr': (
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_extern_layout_native_size/xray.toml',),
+    'tests/diff/cases/semantics/ffi/mem_view_imported_layout_native_size.xr': (
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/xray.toml',
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_imported_layout_native_size/_native_size_layout_lib.xr'),
+    'tests/diff/cases/semantics/ffi/mem_view_packed_nested_native_size.xr': (
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_view_packed_nested_native_size/xray.toml',),
+    'tests/diff/cases/semantics/ffi/mem_with_slice_mut_exception_loan_end.xr': (
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_exception_loan_end/xray.toml',),
+    'tests/diff/cases/semantics/ffi/mem_with_slice_mut_extern_layout.xr': (
+        'tests/unit/xir/legacy_consumers/fixtures/ffi_mutable_views/mem_with_slice_mut_extern_layout/xray.toml',),
+})
 
 
 # Complete reviewed regression module closures and frozen full source drafts.
