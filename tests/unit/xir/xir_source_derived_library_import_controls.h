@@ -84,15 +84,7 @@ static int library_generator_only(const char *emit,const char *packet_path) {
     XrXirLibraryCatalog *catalog=library_catalog(&context,&packet,bindings,2);
     memset(bindings,0xa5,sizeof(bindings));memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     xr_compile_resources_release(transport.resources);
-    char text[]=
-        "import {generate} from \"./constructor_names\"\n"
-        "interface CtorNames {parameterNames()->string}\n"
-        "@derive(CtorNames,generate,construct:true)\n"
-        "struct Later {private const total:i64\n"
-        " private init(right:i64,left:i64){this.total=right+left}\n"
-        " static seed()->Later{return Later(9,7)} }\n"
-        "export fn names()->string{return Later.seed().parameterNames()}\n"
-        "export fn main()->i64{const folded=comptime Later.seed().parameterNames();return (folded==\"right:left\" && names()==folded)?42:0}\n";
+    char text[sizeof(downstream_selected_source)];memcpy(text,downstream_selected_source,sizeof(text));
     XrXirSourceResult source={0};XrXirStatus status=library_source(&context,catalog,"downstream-generator-only.xr",text,XR_XIR_PROGRAM,&source);
     memset(text,0xa5,sizeof(text));xr_xir_compile_library_catalog_free(catalog);
     if(status!=XR_XIR_OK) {

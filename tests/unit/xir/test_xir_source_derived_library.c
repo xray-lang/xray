@@ -72,6 +72,15 @@ static const char downstream_local_source[]=
     " const folded=comptime Later.seed().parameterNames()\n"
     " const measured=comptime Future.seed().measure()\n"
     " return (folded==\"right:left\" && measured==42 && observed()==\"left:right\" && names()==\"left:right\")?Future.seed().measure():0\n}\n";
+static const char downstream_selected_source[]=
+    "import {generate} from \"./constructor_names\"\n"
+    "interface CtorNames {parameterNames()->string}\n"
+    "@derive(CtorNames,generate,construct:true)\n"
+    "struct Later {private const total:i64\n"
+    " private init(right:i64,left:i64){this.total=right+left}\n"
+    " static seed()->Later{return Later(9,7)} }\n"
+    "export fn names()->string{return Later.seed().parameterNames()}\n"
+    "export fn main()->i64{const folded=comptime Later.seed().parameterNames();return (folded==\"right:left\" && names()==folded)?42:0}\n";
 static XrXirCompileContext library_context(void) {
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&library_caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();return context;

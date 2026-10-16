@@ -39,11 +39,13 @@ static XrXirStatus library_resource_whole(const XrXirCompileContext *context,con
         CHECK(!session);status=opened==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
             opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;goto done;
     }
-    char path[2048],logical[64];int n=snprintf(logical,sizeof(logical),"downstream-%u.xr",(unsigned)XR_DERIVED_LIBRARY_VARIANT);
+    char path[2048],logical[64];int n=XR_DERIVED_LIBRARY_VARIANT==2?snprintf(logical,sizeof(logical),"downstream-generator-only.xr"):
+        snprintf(logical,sizeof(logical),"downstream-%u.xr",(unsigned)XR_DERIVED_LIBRARY_VARIANT);
     CHECK(n>0 && n<(int)sizeof(logical));n=snprintf(path,sizeof(path),"%s/%s",XR_DERIVED_LIBRARY_WORK,logical);CHECK(n>0 && n<(int)sizeof(path));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_DERIVED_LIBRARY_WORK};
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
-    const char *text=XR_DERIVED_LIBRARY_VARIANT?downstream_local_source:downstream_source;
+    const char *text=XR_DERIVED_LIBRARY_VARIANT==2?downstream_selected_source:
+        XR_DERIVED_LIBRARY_VARIANT?downstream_local_source:downstream_source;
     XrXirSourceText bytes={logical,text,strlen(text)};XrXirSourceDiagnostic diagnostic={0};
     *stage="Source";status=xr_xir_compile_source_check_text(&request,&bytes,&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK){CHECK(!source.checked && !source.snapshot);goto done;}
