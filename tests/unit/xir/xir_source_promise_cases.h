@@ -125,15 +125,36 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output, bool
     CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
     xr_xir_compile_program_drop(program);
 }
-static void source_fixed_promise_case(const XrXirSourceRequest *request) {
+static void source_forward_rejections(const XrXirSourceRequest *request) {
+    for (uint32_t mode=0;mode<2;++mode) {
+        FILE *file=fopen(request->entry_path,"wb");CHECK(file);
+        CHECK(fputs("fn pure()->i64{return 7}\n"
+            "fn erase(f:fn()->i64)->fn()->i64{return f}\n"
+            "fn forward(f:fn()->i64)->fn()->i64{return erase(f)}\n"
+            "fn use()->i64{const callback=forward(pure);return callback()}\n",file)>=0);
+        if (!mode) CHECK(fputs("const worker=go use()\n",file)>=0);
+        CHECK(fclose(file)==0);
+        SourceTestDeclaration declared[]={{"pure",NULL,NULL,true},{mode?"erase":"forward",NULL,"f",false}};
+        source_manifest_write(request,"qualified_boundary.xr",declared,2);
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        CHECK(effect_execution_check(request,&result,&diagnostic)==XR_XIR_BAD_TYPE);
+        CHECK(!result.checked && !result.snapshot && diagnostic.status==XR_XIR_BAD_TYPE);
+        if (!mode) CHECK(strstr(diagnostic.message,"GO target lacks proof for worker execution"));
+        xr_xir_compile_source_result_free(&result);
+    }
+}
+static void source_fixed_promise_case(const XrXirSourceRequest *request, bool forwarding) {
     char path[8192];source_fixture_path(request,"qualified_boundary.xr",path);
     FILE *file=fopen(path,"wb");CHECK(file);
     CHECK(fputs("fn pure()->i64{return 7}\n"
-        "fn erase(f:fn()->i64)->fn()->i64{return f}\n"
-        "export fn promisedUse()->i64{const callback=erase(pure);return callback()}\n"
-        "export fn capturedUse()->i64{return promisedUse()}\n",file)>=0 && fclose(file)==0);
+        "fn erase(f:fn()->i64)->fn()->i64{return f}\n",file)>=0);
+    if (forwarding) CHECK(fputs("fn forward(f:fn()->i64)->fn()->i64{return erase(f)}\n",file)>=0);
+    CHECK(fputs(forwarding ?
+        "export fn promisedUse()->i64{const callback=forward(pure);return callback()}\n" :
+        "export fn promisedUse()->i64{const callback=erase(pure);return callback()}\n",file)>=0);
+    CHECK(fputs("export fn capturedUse()->i64{return promisedUse()}\n",file)>=0 && fclose(file)==0);
     XrXirSourceRequest probe=*request;probe.entry_path=path;
-    SourceTestDeclaration declared[]={{"pure",NULL,NULL,true},{"erase",NULL,"f",false}};
+    SourceTestDeclaration declared[]={{"pure",NULL,NULL,true},{forwarding?"forward":"erase",NULL,"f",false}};
     source_manifest_write(&probe,"qualified_boundary.xr",declared,2);
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=effect_execution_check(&probe,&result,&diagnostic);
@@ -142,6 +163,7 @@ static void source_fixed_promise_case(const XrXirSourceRequest *request) {
     CHECK(status==XR_XIR_OK);
     XrXirArtifact *checked=result.checked;result.checked=NULL;xr_xir_compile_source_result_free(&result);
     source_qualified_vm(checked,NULL,true);
+    if (forwarding) source_forward_rejections(&probe);
     CHECK(xr_test_unlink(path)==0);source_manifest_raw(request,"");
 }
 static void source_callable_promise_cases(XrXirSourceRequest *request, const char *output) {
@@ -203,6 +225,7 @@ static void source_callable_promise_cases(XrXirSourceRequest *request, const cha
     XrXirArtifact *checked = result.checked; result.checked = NULL;
     xr_xir_compile_source_result_free(&result); source_manifest_raw(request, "");
     memset(items, 0xCC, sizeof(items)); source_qualified_vm(checked, output, false);
-    source_fixed_promise_case(request);
+    source_fixed_promise_case(request,false);
+    source_fixed_promise_case(request,true);
 }
 #endif // XIR_SOURCE_PROMISE_CASES_H

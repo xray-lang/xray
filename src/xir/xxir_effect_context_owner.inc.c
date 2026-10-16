@@ -38,9 +38,27 @@ static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
 }
 
 
-/* A true CALL_BIND COPY keeps the original consuming declaration after
- * Source discards its temporary refinement owner. Other records describe
- * their current authentic producer and cannot invent a stronger bound. */
+/* A fixed barrier may discard a qualifier from its pre-normalization value.
+ * The actual WEAKEN, its exact record and both weakening relations still prove
+ * this boundary; a stored mode alone cannot advertise a stronger value. */
+static XrXirStatus effect_invocation_source_fixed(const XrXirCompileContext *work,
+    const XrXirModule *source,uint32_t function,const XrXirRootValueIdentity *identity,
+    XrXirType original) {
+    const XrXirFunction *body=&source->functions[function];
+    const XrXirInstruction *op=&body->instructions[identity->instruction];
+    if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+    if (identity->mode!=XR_XIR_EFFECT_VALUE_FIXED || op->op!=XR_XIR_FUNCTION_WEAKEN ||
+        op->type!=identity->declared_type ||
+        (uint64_t)op->args[0]>=(uint64_t)body->parameter_count+body->instruction_count)
+        return XR_XIR_BAD_TYPE;
+    XrXirStatus status=xr_xir_compile_callable_weakening(work,source->types,
+        xr_xir_operand_type(body,op->args[0]),identity->declared_type);
+    return status==XR_XIR_OK?xr_xir_compile_callable_weakening(work,source->types,
+        original,identity->declared_type):status;
+}
+
+/* CALL_BIND keeps its consuming declaration. A real fixed WEAKEN keeps its
+ * normalized bound instead of resurrecting a discarded pre-bottom qualifier. */
 static XrXirStatus effect_invocation_source_declarations(const XrXirCompileContext *work,
     const XrXirModule *source,uint32_t function,const XrXirType *prebottom,XrXirType **output) {
     if (!source || !source->functions || function>=source->function_count || !output || *output)
@@ -57,8 +75,11 @@ static XrXirStatus effect_invocation_source_declarations(const XrXirCompileConte
     XrXirStatus status=effect_contract_values(work,source,function,contract);
     bool present=false;
     for (uint32_t v=0;v<contract->value_count && status==XR_XIR_OK;++v) {
-        if (!xir_compile_work(work,1)) { status=XR_XIR_BUDGET;break; }
-        if (contract->values[v].mode==XR_XIR_EFFECT_VALUE_CALL_BIND) present=true;
+        if (!xir_compile_work(work,3)) { status=XR_XIR_BUDGET;break; }
+        const XrXirRootValueIdentity *identity=&contract->values[v];
+        if (identity->mode==XR_XIR_EFFECT_VALUE_CALL_BIND ||
+            (prebottom && identity->mode==XR_XIR_EFFECT_VALUE_FIXED &&
+                prebottom[identity->instruction]!=identity->declared_type)) present=true;
     }
     if (status!=XR_XIR_OK || !present) return status;
     uint64_t bytes=(uint64_t)body->instruction_count*sizeof(XrXirType);
@@ -72,9 +93,13 @@ static XrXirStatus effect_invocation_source_declarations(const XrXirCompileConte
     for (uint32_t v=0;v<contract->value_count && status==XR_XIR_OK;++v) {
         if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
         const XrXirRootValueIdentity *identity=&contract->values[v];
-        if (identity->mode!=XR_XIR_EFFECT_VALUE_CALL_BIND) continue;
-        status=xr_xir_compile_callable_weakening(work,source->types,
-            body->instructions[identity->instruction].type,identity->declared_type);
+        if (identity->mode==XR_XIR_EFFECT_VALUE_CALL_BIND)
+            status=xr_xir_compile_callable_weakening(work,source->types,
+                body->instructions[identity->instruction].type,identity->declared_type);
+        else if (prebottom && identity->mode==XR_XIR_EFFECT_VALUE_FIXED &&
+            prebottom[identity->instruction]!=identity->declared_type)
+            status=effect_invocation_source_fixed(work,source,function,identity,prebottom[identity->instruction]);
+        else continue;
         if (status==XR_XIR_OK) types[identity->instruction]=identity->declared_type;
     }
     if (status!=XR_XIR_OK) { xr_compile_resources_free(types);return status; }

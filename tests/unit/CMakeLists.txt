@@ -272,6 +272,8 @@ add_test(NAME test_xir_effects_source COMMAND test_xir_effects_source)
 set_tests_properties(test_xir_effects_source PROPERTIES LABELS "unit;xir;metadata;ownership")
 add_test(NAME test_xir_source_fixed_callable_boundary COMMAND test_xir_effects_source --qualified-boundary)
 set_tests_properties(test_xir_source_fixed_callable_boundary PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 60)
+add_test(NAME test_xir_source_qualified_forwarding COMMAND test_xir_effects_source --qualified-forwarding)
+set_tests_properties(test_xir_source_qualified_forwarding PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 60)
 set(XIR_EFFECT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_effect_fixture.c)
 add_custom_command(OUTPUT ${XIR_EFFECT_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
