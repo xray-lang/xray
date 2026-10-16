@@ -8162,6 +8162,14 @@ Ordinary specialization selects providers only for actual sites and complete clo
 
 Original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth,policy2/8MiB output,128 substitution depth and explicit supported target remain. Public layouts, schema30/contract75, construction C3 and opcodes remain unchanged. This section implements public Program receiving. Future generic Library calls, collection without original AST sites and complete function/type/nominal/site/key relocation remain unfinished; nonempty-table Library imports still fail explicitly. Dropping tables and executing helpers is forbidden. This flow and focused gates establish neither complete C0/C1, full FI/original-limit, VM/native/mixed, formal safety/provider nor production qualification.
 
+### 17.79 Owned observations of missing generic comptime keys
+
+The internal pending entry accepts genuine Checked Program Source only. Ordinary specialization follows actual calls and closed substitutions to the first site lacking a canonical binding. Existing bindings still select their original providers. Original generics, constraints, lexical owners, requirement/private witnesses and complete TEMPLATE contracts survive. Success without an actual missing key returns no owner and fabricates no execution or Value. An observation is compiler metadata, with no closed INSTANCE, Lowered, Program or executable authority.
+
+Receiving independently owns complete Source, required new closed types and the complete ordered argument vector. Existing type IDs retain their prefix; the complete common Checker validates added descriptions. Every query completely verifies current Source and exact packet correspondence, repeats actual ordinary specialization discovery and compares the site and complete ordered type structure. Producer, session and packet-byte death do not invalidate ownership. Current body, type, name or argument edits cannot obtain a view through cached PASS. Arguments must be closed and satisfy the original helper's complete constraints. No per-instance AST interpretation, canonical-table or TEMPLATE clearing, or reevaluation of existing bindings occurs.
+
+Preparation, copying, verification and retries share the original finite compiler ledger. Budgets and OOM fail atomically; final destruction allocates nothing. Ordinary missing-key specialization remains refused as in17.78. This entry does not yet execute the pending helper or authorize Library table relocation, future-instance evaluation or complete qualification. Original schema30/contract75, construction interface3, Value24/Call29/Program30, opcodes and all limits remain unchanged.
+
 ---
 
 ## 18. Error Codes

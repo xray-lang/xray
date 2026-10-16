@@ -938,6 +938,14 @@ Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原�
 
 原work128000000、累计分配64MiB、live8MiB、steps/frame65536、depth128、policy2/8MiB输出、替换深度128和显式支持target保持。公开布局、schema30/contract75、construction C3及opcode不变。本节实现公共Program接回；Library泛型模板的未来调用、无原AST站点的完整收集及函数/类型/nominal/站点/键重定位仍未实现，非空表Library导入继续明确拒绝。不得丢表后执行helper，也不以本流程或定向门替代完整C0/C1、全FI、原限额、VM/native/mixed、正式安全/provider及生产资格。
 
+### 17.79 拥有式泛型comptime缺键观察
+
+内部待求值接点只接受真实Checked Program Source。普通specializer按实际调用和关闭替换寻找第一个尚无规范绑定的站点；已存在绑定仍选择原provider，全部原泛型、约束、词法owner、requirement/private witness及完整TEMPLATE保留。没有实际缺键时成功返回空owner，不伪造执行或Value。缺键观察仅为编译器元数据，不是关闭INSTANCE、Lowered、Program或可执行资格。
+
+接收方独立拥有完整Source、必要新增关闭类型和完整有序实参；类型ID原前缀保持，新生描述符随完整共同Checker重新检查。每次查询重新完整验证当前Source及其逐字packet对应，再重复真实普通专化发现并核对站点和完整有序类型结构。原生产者、session和packet字节死亡后仍可查询；修改当前body、类型、名称或实参不能凭缓存PASS获得视图。实参必须关闭并满足原helper的完整约束，不按实例解释AST，不清空规范表或TEMPLATE，不把已有绑定重新求值。
+
+所有准备、复制、复验和重试共用原有限compiler ledger；预算或OOM原子失败，最后释放不分配。17.78的缺键普通特化拒绝保持。本接点尚不执行待求值helper，也不授予Library表重定位、未来实例求值或完整P11资格。原schema30/contract75、construction接口3、Value24/Call29/Program30、opcode和所有预算保持。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -2007,5 +2015,13 @@ Final construction owns every site and current key/provider binding. Original ge
 Ordinary specialization selects providers only for actual sites and complete closed keys. Missing current keys fail compilation, without runtime helpers replacing comptime. An outer nested literal may remove inner runtime calls while original Source retains all sites and actually collected keys. Root-local CTFE failures report their actual batch selection and original syntax site without execution retries. Global preparation failures fabricate no root index. Errors, budgets and OOM publish no partial Source; failures and retries use the same original ledger, all prefixes release, and final destruction allocates nothing.
 
 Original128000000 work,64MiB cumulative allocation,8MiB live,65536 steps/frame,128 depth,policy2/8MiB output,128 substitution depth and explicit supported target remain. Public layouts, schema30/contract75, construction C3 and opcodes remain unchanged. This section implements public Program receiving. Future generic Library calls, collection without original AST sites and complete function/type/nominal/site/key relocation remain unfinished; nonempty-table Library imports still fail explicitly. Dropping tables and executing helpers is forbidden. This flow and focused gates establish neither complete C0/C1, full FI/original-limit, VM/native/mixed, formal safety/provider nor production qualification.
+
+### 17.79 Owned observations of missing generic comptime keys
+
+The internal pending entry accepts genuine Checked Program Source only. Ordinary specialization follows actual calls and closed substitutions to the first site lacking a canonical binding. Existing bindings still select their original providers. Original generics, constraints, lexical owners, requirement/private witnesses and complete TEMPLATE contracts survive. Success without an actual missing key returns no owner and fabricates no execution or Value. An observation is compiler metadata, with no closed INSTANCE, Lowered, Program or executable authority.
+
+Receiving independently owns complete Source, required new closed types and the complete ordered argument vector. Existing type IDs retain their prefix; the complete common Checker validates added descriptions. Every query completely verifies current Source and exact packet correspondence, repeats actual ordinary specialization discovery and compares the site and complete ordered type structure. Producer, session and packet-byte death do not invalidate ownership. Current body, type, name or argument edits cannot obtain a view through cached PASS. Arguments must be closed and satisfy the original helper's complete constraints. No per-instance AST interpretation, canonical-table or TEMPLATE clearing, or reevaluation of existing bindings occurs.
+
+Preparation, copying, verification and retries share the original finite compiler ledger. Budgets and OOM fail atomically; final destruction allocates nothing. Ordinary missing-key specialization remains refused as in17.78. This entry does not yet execute the pending helper or authorize Library table relocation, future-instance evaluation or complete qualification. Original schema30/contract75, construction interface3, Value24/Call29/Program30, opcodes and all limits remain unchanged.
 
 <!-- /xr-spec:en -->

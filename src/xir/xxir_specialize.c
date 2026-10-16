@@ -17,6 +17,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_implementation_verify.h"
 #include "xxir_type_match_internal.h"
+#include "xxir_comptime_pending_internal.h"
 #include "../base/xmalloc.h"
 #include "../base/xhash.h"
 #include <stdio.h>
@@ -31,6 +32,15 @@ typedef struct SpecInstance {
 } SpecInstance;
 typedef struct SpecIndexEntry { uint32_t ordinal, hash; } SpecIndexEntry;
 typedef struct SpecTypeFrame { uint32_t index, next; XrXirTypeNode node; } SpecTypeFrame;
+
+typedef struct SpecPendingPoint {
+    XrXirComptimeSite site;
+    const XrXirType *borrowed_arguments;
+    XrXirType *arguments;
+    XrXirTypes *types;
+    uint32_t count;
+    bool found, complete;
+} SpecPendingPoint;
 typedef struct SpecContext {
     const XrXirModule *source;
     const XrXirArtifact *source_artifact;
@@ -51,6 +61,7 @@ typedef struct SpecContext {
     uint32_t node_capacity;
     SpecInstance closed;
     SpecTypeFrame *type_stack;
+    SpecPendingPoint *pending;
 } SpecContext;
 static void *spec_alloc(SpecContext *c, uint64_t count, size_t size) {
     XrXirStatus allocation_status = XR_XIR_OK;
@@ -428,7 +439,16 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         }
         XirComptimeSelection selection={c->source,&c->types,instance->declaration,i,types,count};
         const XrXirComptimeBinding *constant=NULL;
-        c->diagnostic.status=xir_comptime_select(&c->remaining,c->source_artifact->construction,&selection,&constant);
+        XrXirStatus selected=xir_comptime_select(&c->remaining,c->source_artifact->construction,&selection,&constant);
+        if (c->pending && selected==XR_XIR_BAD_TYPE) {
+            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance->declaration,i);
+            if (site && site->helper==declaration) {
+                if (!spec_work(c,sizeof(*c->pending))) return false;
+                c->pending->site=*site;c->pending->borrowed_arguments=types;c->pending->count=count;c->pending->found=true;
+                return false;
+            }
+        }
+        c->diagnostic.status=selected;
         if (c->diagnostic.status!=XR_XIR_OK) return false;
         if (constant) { declaration=constant->provider;types=NULL;count=0; }
         SpecEffectInput input={function,op,index,i};SpecEffectVector effect={0};
@@ -551,7 +571,9 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     return status;
 }
 #include "xxir_specialize_materialization.inc.c"
-XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+#include "xxir_pending_prepare.inc.c"
+static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
+    XrXirDiagnostic *diagnostic,SpecPendingPoint *pending) {
     if (!checked || !output || *output) {
         if (diagnostic) *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
             UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
@@ -563,6 +585,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     c.diagnostic = (XrXirDiagnostic) {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     c.source = xr_xir_compile_artifact_module(checked);c.source_artifact=checked;c.cleanup_owner=UINT32_MAX;
     c.remaining = *budget;
+    c.pending=pending;
     XrXirCompileContext limits = c.remaining;
 
     if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
@@ -575,7 +598,10 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     if (xir_effect_evidence_is_instance(c.source)) {
         c.diagnostic.status=xr_xir_compile_recheck_v2(&limits, c.source, checked->construction, output, &c.diagnostic); goto done;
     }
-    if (c.source->types && c.source->types->nominals) {
+    if (pending && c.source->types) {
+        c.diagnostic.status=spec_pending_seed(&c);
+        if (c.diagnostic.status!=XR_XIR_OK) goto done;
+    } else if (c.source->types && c.source->types->nominals) {
         c.diagnostic.status = spec_nominal_seed(&c);
         if (c.diagnostic.status != XR_XIR_OK) goto done;
     }
@@ -588,7 +614,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
         c.diagnostic.status = xr_xir_compile_recheck_v2(&limits, &specialized, checked->construction, output, &c.diagnostic);
         goto done;
     }
-    if (c.source->types && !c.types.nominals) {
+    if (c.source->types && !c.types.nominals && !pending) {
         c.closed.node_cache = spec_alloc(&c, c.source->types->count, sizeof(*c.closed.node_cache));
         if (!c.closed.node_cache) goto done;
         for (uint32_t t = 0; t < c.source->types->count; ++t)
@@ -617,6 +643,7 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     }
     if (!c.count) { c.diagnostic.status = XR_XIR_BAD_STRUCTURE; goto done; }
     for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
+    if (pending) { pending->complete=true;goto done; }
     XrXirDeclarations declarations = {0};
     if (!spec_declarations(&c, &declarations)) goto done;
     c.diagnostic.status = spec_nominal_fields(&c);
@@ -639,8 +666,16 @@ XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifac
     xr_xir_compile_construction_free(projected);
     xr_xir_compile_provenance_free(provenance);
 done:
+    if (pending && c.diagnostic.status==XR_XIR_OK) {
+        if (pending->found) c.diagnostic.status=spec_pending_receive(&c);
+        else if (!pending->complete) c.diagnostic.status=XR_XIR_BAD_STRUCTURE;
+    }
     xir_source_facts_release(c.source_facts);
     while (c.memory) { SpecMemory *next = c.memory->next; xr_compile_resources_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;
 }
+XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
+    return spec_run(checked,output,diagnostic,NULL);
+}
+#include "xxir_comptime_pending.inc.c"

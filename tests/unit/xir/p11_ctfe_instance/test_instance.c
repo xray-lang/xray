@@ -172,8 +172,15 @@ static void instance_limits(void) {
 #include "program_cases.h"
 #include "program_resources.h"
 #include "program_controls.h"
+#include "pending_cases.h"
+#include "pending_controls.h"
+#include "pending_resources.h"
 int main(int argc,char **argv) {
     CHECK(argc>=2 && argc<=4);
+    if (!strcmp(argv[1],"pending")) { CHECK(argc==3);pending_normal(argv[2]);return 0; }
+    if (!strcmp(argv[1],"pending-controls")) { CHECK(argc==2);pending_controls();return 0; }
+    if (!strcmp(argv[1],"pending-prefix")) { CHECK(argc==3);pending_resources(argv[2],false);return 0; }
+    if (!strcmp(argv[1],"pending-faults")) { CHECK(argc==3);pending_resources(argv[2],true);return 0; }
     if (!strcmp(argv[1],"program")) { CHECK(argc==3);program_normal(argv[2]);return 0; }
     if (!strcmp(argv[1],"program-controls")) { CHECK(argc==2);program_controls();return 0; }
     if (!strcmp(argv[1],"program-binding-controls")) { CHECK(argc==2);program_binding_controls();program_batch_controls();return 0; }
