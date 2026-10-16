@@ -71,7 +71,8 @@ static void fixture(const char *path,bool write){
     CHECK(CloseHandle(file));
 }
 static XrCliToolchainUpdateStatus run(const XrCliToolchainUpdateRequest *request,size_t cut,
-    const XrCompileResourceLimits *limits,XrCompileResourceStats *stats,bool producer_death){
+    const XrCompileResourceLimits *limits,XrCompileResourceStats *stats,bool producer_death,
+    XrCliToolchainUpdateStatus *construction){
     char path[4096],target[128],compiler[4096];
     XrCliToolchainUpdateRequest transient=*request;
     if(producer_death){
@@ -91,6 +92,7 @@ static XrCliToolchainUpdateStatus run(const XrCliToolchainUpdateRequest *request
     }
     XrCliToolchainUpdate *owner=NULL;
     XrCliToolchainUpdateStatus status=xr_cli_toolchain_update_new(state,request,&owner);
+    if(construction)*construction=status;
     if(status==XR_CLI_TOOLCHAIN_UPDATE_OK){
         XrCliToolchainUpdate *occupied=owner;
         CHECK(xr_cli_toolchain_update_new(state,request,&occupied)==XR_CLI_TOOLCHAIN_UPDATE_INVALID&&occupied==owner);
@@ -200,22 +202,22 @@ static int test_main(int argc,char **argv){
     if(!strcmp(argv[2],"faults")){
         XrCliToolchainUpdateRequest request={argv[1],"native","C:/after/编译器/cl.exe",NULL,XR_TOOLCHAIN_SELECTOR_MSVC,false};
         XrCompileResourceStats stats={0};
-        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,false)==XR_CLI_TOOLCHAIN_UPDATE_OK);
+        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,false,NULL)==XR_CLI_TOOLCHAIN_UPDATE_OK);
         size_t total=calls;
         for(size_t cut=0;cut<total;++cut){
             fixture(argv[1],true);XrCompileResourceStats unused={0};
-            CHECK(run(&request,cut,&defaults,&unused,false)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);fixture(argv[1],false);
+            CHECK(run(&request,cut,&defaults,&unused,false,NULL)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);fixture(argv[1],false);
         }
         const uint64_t bounds[3]={stats.allocated_bytes,stats.peak_bytes,stats.work};
         for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta){
             fixture(argv[1],true);XrCompileResourceLimits limits=defaults;uint64_t bound=bounds[axis];CHECK(bound);
             uint64_t selected=delta<0?bound-1:bound+(unsigned)delta;
             if(axis==0)limits.allocated_bytes=selected;if(axis==1)limits.live_bytes=selected;if(axis==2)limits.work=selected;
-            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&limits,&unused,false);
+            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&limits,&unused,false,NULL);
             CHECK(status==(delta<0?XR_CLI_TOOLCHAIN_UPDATE_BUDGET:XR_CLI_TOOLCHAIN_UPDATE_OK));
             if(delta<0)fixture(argv[1],false);
         }
-        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,true)==XR_CLI_TOOLCHAIN_UPDATE_OK);
+        fixture(argv[1],true);CHECK(run(&request,SIZE_MAX,&defaults,&stats,true,NULL)==XR_CLI_TOOLCHAIN_UPDATE_OK);
         printf("complete update cuts=%zu axes=3 physical=0 handles=baseline\n",total);return 0;
     }
     CHECK(argc==6);
@@ -223,7 +225,7 @@ static int test_main(int argc,char **argv){
     XrCliToolchainUpdateRequest request={argv[1],!strcmp(argv[2],"reset-all")?NULL:argv[3],
         !strcmp(argv[4],"-")?NULL:argv[4],NULL,reset?XR_TOOLCHAIN_SELECTOR_AUTO:XR_TOOLCHAIN_SELECTOR_MSVC,reset};
     XrCompileResourceStats stats={0};
-    XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&defaults,&stats,true);
+    XrCliToolchainUpdateStatus status=run(&request,SIZE_MAX,&defaults,&stats,true,NULL);
     if(status!=atoi(argv[5]))fprintf(stderr,"actual status=%u expected=%s\n",(unsigned)status,argv[5]);
     CHECK(status==atoi(argv[5]));printf("status=%u\n",(unsigned)status);return 0;
 }

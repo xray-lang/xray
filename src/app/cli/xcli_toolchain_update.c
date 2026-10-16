@@ -10,6 +10,7 @@
 #include "../toolchain/xtc_xir_publication.h"
 #include "../../base/xfileio.h"
 #include "../../base/xtoml.h"
+#include "../../base/xutf8.h"
 #include "../../os/os_fs.h"
 #include <string.h>
 #ifdef XR_OS_WINDOWS
@@ -74,6 +75,8 @@ static bool update_copy(XrCliToolchainUpdate *owner, const char *input, size_t l
     }
     if (owner->view.first_error != XR_CLI_TOOLCHAIN_UPDATE_OK) return false;
     if (!length) { update_fail(owner, XR_CLI_TOOLCHAIN_UPDATE_INVALID); return false; }
+    if (!update_work(owner, length)) return false;
+    if (!xr_utf8_validate(input, length)) { update_fail(owner, XR_CLI_TOOLCHAIN_UPDATE_INVALID); return false; }
     if (!update_io(owner, owner->policy.alloc(owner->policy.context, length + 1, (void **)output)) ||
         !update_work(owner, length + 1)) return false;
     memcpy(*output, input, length + 1); return true;

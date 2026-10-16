@@ -91,15 +91,16 @@ static int matrix_main(int argc,char **argv){
     CHECK(argc==4);winapi_control();
     unsigned phase=(unsigned)atoi(argv[2]);bool resources=!strcmp(argv[3],"resources");
     MatrixCase test;matrix_case(&test,argv[1],phase);matrix_setup(&test);
-    XrCompileResourceStats stats={0};
-    XrCliToolchainUpdateStatus baseline=run(&test.request,SIZE_MAX,&defaults,&stats,false,test.construction_status);
+    XrCompileResourceStats stats={0};XrCliToolchainUpdateStatus construction=XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY;
+    XrCliToolchainUpdateStatus baseline=run(&test.request,SIZE_MAX,&defaults,&stats,false,&construction);
+    CHECK(construction==test.construction_status);
     if(baseline!=test.expected)fprintf(stderr,"phase=%u actual=%u expected=%u\n",phase,(unsigned)baseline,(unsigned)test.expected);
     CHECK(baseline==test.expected);
     size_t total=calls;
     if(resources){
         for(size_t cut=0;cut<total;++cut){
             matrix_setup(&test);XrCompileResourceStats unused={0};
-            CHECK(run(&test.request,cut,&defaults,&unused,false,test.construction_status)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);
+            CHECK(run(&test.request,cut,&defaults,&unused,false,NULL)==XR_CLI_TOOLCHAIN_UPDATE_OUT_OF_MEMORY);
             matrix_preserved(&test);
         }
         const uint64_t bounds[3]={stats.allocated_bytes,stats.peak_bytes,stats.work};
@@ -107,7 +108,7 @@ static int matrix_main(int argc,char **argv){
             matrix_setup(&test);XrCompileResourceLimits limits=defaults;uint64_t bound=bounds[axis];CHECK(bound);
             uint64_t selected=delta<0?bound-1:bound+(unsigned)delta;
             if(axis==0)limits.allocated_bytes=selected;if(axis==1)limits.live_bytes=selected;if(axis==2)limits.work=selected;
-            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&test.request,SIZE_MAX,&limits,&unused,false,test.construction_status);
+            XrCompileResourceStats unused={0};XrCliToolchainUpdateStatus status=run(&test.request,SIZE_MAX,&limits,&unused,false,NULL);
             CHECK(status==(delta<0?XR_CLI_TOOLCHAIN_UPDATE_BUDGET:test.expected));
             if(delta<0||status!=XR_CLI_TOOLCHAIN_UPDATE_OK)matrix_preserved(&test);
         }
