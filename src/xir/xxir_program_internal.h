@@ -76,10 +76,11 @@ XR_FUNC bool xr_xir_instance_initialization_publication_missing(
 /* Inspect sealed facts and the advertised bound during the actual callback view. */
 XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_admit(XrXirCallView *view, uint32_t entry,
     const XrXirValue *function, const XrXirValue *arguments, uint32_t count);
-/* Preserves exact entry equality for host Calls; only the real Instance
- * admission owner may resolve a compiler-received birth binding. */
-XR_FUNC XrXirCallStatus xir_instance_function_entry_match(XrXirCallView *view,
-    const XrXirValue *function,uint32_t entry);
+/* A successful permission check still names the exact function binding when
+ * selecting borrowed metadata. No host table or numeric entry grants a route. */
+struct XrXirCallMetadata;
+XR_FUNC XrXirCallStatus xr_xir_instance_call_target(XrXirCallView *view,
+    const XrXirValue *function, uint32_t entry, struct XrXirCallMetadata *output);
 /* Revalidate the same selection while every actual Class loan is reserved. */
 XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_recheck(XrXirCallView *view, uint32_t entry,
     const XrXirValue *function, const XrXirValue *arguments, uint32_t count,
