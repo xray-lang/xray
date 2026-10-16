@@ -84,9 +84,12 @@ static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
     XirGeneratorState state=atomic_load_explicit(&generator->state,memory_order_acquire);
     if(generator->object.domain!=call->config.admission.domain ||
         generator->generation!=call->executor_generation || !generator->identity ||
-        generator->identity==call->executor_ticket ||
         (state!=XIR_GENERATOR_TERMINAL && generator->executor!=call->executor_owner)) {
         abort_frames(call,XR_XIR_CALL_BAD_STATE);return;
+    }
+    if(generator->identity==call->executor_ticket) {
+        /* An authentic self-demand fails execution with intact cleanup state. */
+        request_execution_failure(call,XR_XIR_CALL_BAD_STATE);return;
     }
     XrXirValue prepared={0};XrXirValueStatus copied=xr_xir_value_copy(&action.value,&prepared);
     if(copied!=XR_XIR_VALUE_OK) {

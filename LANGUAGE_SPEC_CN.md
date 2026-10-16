@@ -7579,6 +7579,8 @@ Source hasNext()/next()绑定完整治理声明的native身份8（6/7保留给�
 
 消费者通过现有Call等待槽保留拥有式lease，wake同时认证executor、activation、世代及ticket。hasNext保留已产出的缓存值，重复查询不推进producer；next只转移一次缓存owner。缺少缓存时只由共同FIFO执行器推进独立producer，不在回调内递归执行后端；Coro.yield只让出调度，不交付值或EOS。producer完成全部cleanup后再交付终态。正常耗尽/关闭的hasNext为false，next以既定E0432报告；真实producer Error/panic保留供后续消费准确观察。消费者取消解绑并请求producer关闭，最后外部drop和Instance关闭仍由同一执行器排空。
 
+宿主wake选择属于当前root operation，即使实际外部请求来自独立producer或Task。root取消成功立即撤销已选宿主票据；仍独立存活的Task等待在后续poll重选新票据，旧票据不能先于producer取消排空被再次接受。经过完整身份认证的自驱动是运行失败，沿原frame的结构化退出执行已登记cleanup；错误Domain/世代/身份仍按协议错误关闭。真实Source标准time.sleep、两级producer的Timer等待、正常/取消/stop/free/drop、伪票据、自驱动和循环第二消费者已有定向VM/native及两向mixed验证；这不代替完整外部事件、并发、FI和安全矩阵。
+
 这些是规范类型、body、工厂和hasNext/next的开发输入，不授完整Generator或Channel资格。Program封装仍核对真实角色/自有body proof，普通Instance.start/Function拒绝直接generator body；低层驱动不替代认证工厂。当前子集已覆盖真实VM/native及双向混合producer/consumer、已启动清理、多activation和root更换；nth/for-in、隐藏环境/内部视图、完整等待竞争/取消/GC/代码lease、原全部FI/预算/安全和平台矩阵仍须实施与资格验证。没有增加Source close()方法。
 
 ---

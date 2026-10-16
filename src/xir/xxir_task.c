@@ -562,9 +562,9 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_root(XrXirTaskExecutor *exec
     if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     XrXirCallStatus status = xr_xir_call_request_cancel(executor->root.call);
     if (status != XR_XIR_CALL_CANCEL_REQUESTED) return status;
-    if (executor->external == &executor->root) {
-        executor->external = NULL; executor->external_call_wake = 0;
-    }
+    /* A host wake belongs to the current root operation even when a producer
+     * or child owns its external request. Cancellation revokes that selection. */
+    executor->external = NULL; executor->external_call_wake = 0;
     if (!executor->root.queued) task_core_enqueue(executor, &executor->root);
     return status;
 }
