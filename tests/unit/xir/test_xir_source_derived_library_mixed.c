@@ -36,9 +36,10 @@ static void cold_mixed(unsigned direction,bool faults,const char *path) {
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     XrXirArtifact *artifact=cold_mixed_lower(&context,path);const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
     CHECK(module->function_count==fixture_derived_library_program.entry_count);
-    uint32_t caller=fixture_derived_library_selection[1],method=fixture_derived_library_selection[2];
-    CHECK(caller<module->function_count && method<module->function_count && module->functions[method].name_length==7 &&
-        !memcmp(module->functions[method].name,"measure",7));bool calls=false;
+    uint32_t caller=fixture_derived_library_selection[XR_DERIVED_LIBRARY_GENERATOR_ONLY?0:1],method=fixture_derived_library_selection[2];
+    const char *method_name=XR_DERIVED_LIBRARY_GENERATOR_ONLY?"parameterNames":"measure";
+    CHECK(caller<module->function_count && method<module->function_count && module->functions[method].name_length==strlen(method_name) &&
+        !memcmp(module->functions[method].name,method_name,strlen(method_name)));bool calls=false;
     for(uint32_t i=0;i<module->functions[caller].instruction_count;++i) {
         const XrXirInstruction *op=&module->functions[caller].instructions[i];calls|=op->op==XR_XIR_CALL && op->immediate==method;
     }
@@ -58,7 +59,7 @@ static void cold_mixed(unsigned direction,bool faults,const char *path) {
     cold_runtime_faults(program,fixture_derived_library_selection,faults);
     XrXirValue kept=cold_runtime_results(program,fixture_derived_library_selection);xr_xir_compile_program_drop(program);
     xr_compile_resources_release(context.resources);CHECK(cold_mixed_released==released+1);cold_runtime_retained(&kept);
-    printf("Cold library mixed direction%u: actual private READ CALL42, last String, one lease and physical0\n",direction);
+    printf("Cold library mixed direction%u: actual %s CALL, main42, last String, one lease and physical0\n",direction,method_name);
 }
 int main(int argc,char **argv) {
     bool faults=(argc==2 || argc==3) && !strcmp(argv[1],"--runtime-resources"),vm=(argc==2 || argc==3) && !strcmp(argv[1],"--vm-runtime-resources");CHECK(argc==1 || faults || vm);

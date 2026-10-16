@@ -21,5 +21,7 @@ int main(int argc,char **argv) {
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&fixture_derived_library_program,&program)==XR_XIR_OK);
     cold_runtime_faults(program,fixture_derived_library_selection,faults);XrXirValue kept=cold_runtime_results(program,fixture_derived_library_selection);
     xr_xir_compile_program_drop(program);xr_compile_resources_release(context.resources);cold_runtime_retained(&kept);
-    puts("Cold derived library actual C11: private READ42, owned String after Program and compiler caller death, physical0");return 0;
+    puts(XR_DERIVED_LIBRARY_GENERATOR_ONLY?
+        "Selected generator-only actual C11: constructor names right:left, main42, owned String after Program and compiler caller death, physical0":
+        "Cold derived library actual C11: private READ42, owned String after Program and compiler caller death, physical0");return 0;
 }

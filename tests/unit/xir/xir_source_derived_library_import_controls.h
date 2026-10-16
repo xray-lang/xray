@@ -49,7 +49,7 @@ static int library_import_controls(void) {
             grants->policies[1].member_count==1 && grants->policies[1].members[0].field==0 &&
             grants->policies[1].members[0].operations==(XR_XIR_DERIVE_DESCRIBE|XR_XIR_DERIVE_READ));
         CHECK(grants->records[0].function<grants->records[1].function && grants->records[0].policy==0 && grants->records[1].policy==1);
-        XrXirValue retained=library_execute(&contexts[i],&result,NULL,NULL);xr_compile_resources_release(contexts[i].resources);
+        XrXirValue retained=library_execute(&contexts[i],&result,NULL,NULL,false);xr_compile_resources_release(contexts[i].resources);
         const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&retained,&bytes,&length) && length==10 && !memcmp(bytes,"left:right",10));
         xr_xir_value_drop(&retained);printf("Derived direct generator import order%u: original two policies/grants, exact private READ42 and final String\n",i);
     }
@@ -77,7 +77,7 @@ static void library_generator_hidden(const XrXirCheckedPacket *packet,XrXirLibra
     xr_compile_resources_release(context.resources);
     CHECK(source_fixture_compile_live==live && source_fixture_compile_bytes==bytes && !runtime_live && !runtime_bytes);
 }
-static int library_generator_only(void) {
+static int library_generator_only(const char *emit,const char *packet_path) {
     XrXirCompileContext transport=library_context();XrXirLibraryModuleInput bindings[2];
     XrXirCheckedPacket packet=library_fixture(&transport,bindings);library_generator_hidden(&packet,bindings);
     XrXirCompileContext context=library_context();
@@ -112,7 +112,11 @@ static int library_generator_only(void) {
     for(uint32_t i=0;interfaces && i<interfaces->count;++i) {
         XrXirLiteral name=interfaces->declarations[i].name;CHECK(name.length!=7 || memcmp(name.bytes,"Measure",7));
     }
-    XrXirValue retained=library_execute(&context,&source,NULL,NULL);xr_compile_resources_release(context.resources);
+    XrXirValue retained=library_execute(&context,&source,emit,packet_path,true);
+    XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(context.resources,&spent)==XR_COMPILE_RESOURCE_OK);
+    fprintf(stderr,"Generator-only receiver complete allocated=%llu peak=%llu work=%llu\n",
+        (unsigned long long)spent.allocated_bytes,(unsigned long long)spent.peak_bytes,(unsigned long long)spent.work);
+    xr_compile_resources_release(context.resources);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&retained,&bytes,&length) && length==10 && !memcmp(bytes,"right:left",10));
     xr_xir_value_drop(&retained);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
     puts("Generator-only cold view excludes unselected Future policies, admits exactly local constructor grant, comptime42 and final String/physical0");return 0;

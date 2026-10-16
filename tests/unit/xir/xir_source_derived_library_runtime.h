@@ -11,6 +11,10 @@
 #include "xir/xxir_vm.h"
 #include "xir_source_compile_owner.h"
 #include "xir_runtime_allocations.h"
+#ifndef XR_DERIVED_LIBRARY_GENERATOR_ONLY
+#define XR_DERIVED_LIBRARY_GENERATOR_ONLY 0
+#endif
+static const char *const cold_runtime_expected=XR_DERIVED_LIBRARY_GENERATOR_ONLY?"right:left":"left:right";
 static XrXirValue cold_runtime_call(XrXirProgram *program,uint32_t entry) {
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
@@ -32,7 +36,7 @@ static void cold_runtime_fault_attempt(XrXirProgram *program,uint32_t entry,bool
     if(status==XR_XIR_CALL_READY){status=xr_xir_instance_poll_bounded(instance,4096).outcome.status;entered_oom=status==XR_XIR_CALL_OOM;}
     if(status==XR_XIR_CALL_RETURNED) {
         CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
-        if(string){const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&value,&bytes,&length) && length==10 && !memcmp(bytes,"left:right",10));}
+        if(string){const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&value,&bytes,&length) && length==10 && !memcmp(bytes,cold_runtime_expected,10));}
         else CHECK(value.type==XR_XIR_I64 && !value.reserved && value.payload==42);
         xr_xir_value_drop(&value);
     }else if(instance) {
@@ -58,7 +62,7 @@ static void cold_runtime_faults(XrXirProgram *program,const uint32_t selection[3
     }
 }
 static void cold_runtime_retained(XrXirValue *value) {
-    const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(value,&bytes,&length) && length==10 && !memcmp(bytes,"left:right",10));
+    const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(value,&bytes,&length) && length==10 && !memcmp(bytes,cold_runtime_expected,10));
     xr_xir_value_drop(value);CHECK(!runtime_live && !runtime_bytes && !source_fixture_compile_live && !source_fixture_compile_bytes);
 }
 #endif // XIR_SOURCE_DERIVED_LIBRARY_RUNTIME_H

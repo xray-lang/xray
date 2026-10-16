@@ -117,7 +117,7 @@ static uint32_t library_function(const XrXirModule *module,const char *name) {
         !memcmp(module->functions[f].name,name,strlen(name))){CHECK(found==UINT32_MAX);found=f;}
     CHECK(found!=UINT32_MAX);return found;
 }
-static XrXirValue library_execute(const XrXirCompileContext *context,XrXirSourceResult *source,const char *emit,const char *packet_path) {
+static XrXirValue library_execute(const XrXirCompileContext *context,XrXirSourceResult *source,const char *emit,const char *packet_path,bool selected) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
     if(packet_path){FILE *file=fopen(packet_path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));}
     xr_xir_compile_source_result_free(source);XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
@@ -129,9 +129,9 @@ static XrXirValue library_execute(const XrXirCompileContext *context,XrXirSource
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);uint32_t entries[]={library_function(module,"names"),library_function(module,"main")};
     if(emit) {
-        uint32_t method=library_function(module,"measure");bool calls=false;
-        for(uint32_t i=0;i<module->functions[entries[1]].instruction_count;++i) {
-            const XrXirInstruction *op=&module->functions[entries[1]].instructions[i];calls|=op->op==XR_XIR_CALL && op->immediate==method;
+        uint32_t method=library_function(module,selected?"parameterNames":"measure"),caller=entries[selected?0:1];bool calls=false;
+        for(uint32_t i=0;i<module->functions[caller].instruction_count;++i) {
+            const XrXirInstruction *op=&module->functions[caller].instructions[i];calls|=op->op==XR_XIR_CALL && op->immediate==method;
         }
         CHECK(calls);XrXirCSource output={0};XrXirStatus status=xr_xir_compile_emit_c(lowered,"fixture_derived_library",8388608,&output);
         fprintf(stderr,"Cold library actual C11 emit%u\n",(unsigned)status);CHECK(status==XR_XIR_OK);
@@ -218,7 +218,7 @@ static int library_normal(const char *emit,const char *packet_path) {
             CHECK(field.length==10 && !memcmp(field.bytes,"Future.sum",10));
         }
         XrXirValue result={0};
-        if(i<2)result=library_execute(&receivers[i],&source,i==XR_DERIVED_LIBRARY_VARIANT?emit:NULL,i==XR_DERIVED_LIBRARY_VARIANT?packet_path:NULL);
+        if(i<2)result=library_execute(&receivers[i],&source,i==XR_DERIVED_LIBRARY_VARIANT?emit:NULL,i==XR_DERIVED_LIBRARY_VARIANT?packet_path:NULL,false);
         else xr_xir_compile_source_result_free(&source);
         XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(receivers[i].resources,&spent)==XR_COMPILE_RESOURCE_OK);
         fprintf(stderr,"Derived library receiver%u complete allocated=%llu peak=%llu work=%llu\n",i,
@@ -238,7 +238,8 @@ static int library_normal(const char *emit,const char *packet_path) {
 int main(int argc,char **argv) {
     if(argc==1)return library_normal(NULL,NULL);
     if(argc==2 && !strcmp(argv[1],"--import-controls"))return library_import_controls();
-    if(argc==2 && !strcmp(argv[1],"--generator-only"))return library_generator_only();
+    if(argc==2 && !strcmp(argv[1],"--generator-only"))return library_generator_only(NULL,NULL);
+    if(argc==4 && !strcmp(argv[1],"--emit-generator-only"))return library_generator_only(argv[2],argv[3]);
     if(argc==4 && !strcmp(argv[1],"--emit-native"))return library_normal(argv[2],argv[3]);
     return library_resource_main(argc,argv);
 }
