@@ -32334,6 +32334,240 @@
         "All50 sends/receives,14 dynamic-capacity assertions,16 yields,2000timeout,80sleep,2zero-capacity sends,all23 original assertions and11 named output lines remain;all fullFI/resource/lifetime/sanitizer/provider/mixed gates remain required."
       ],
       "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_regression_1132_task_monitor",
+      "oracle_id": "complete_task_regression_1132_task_monitor",
+      "source": "tests/regression/11_coroutine/1132_task_monitor.xr",
+      "source_lf_sha256": "ae8260b568f5e4d6240a6f95cbd8d2325cc0c119b1755d52ccd0f5cc9c4fd458",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1132_task_monitor.xr",
+        "source_lf_sha256": "ae8260b568f5e4d6240a6f95cbd8d2325cc0c119b1755d52ccd0f5cc9c4fd458"
+      },
+      "remaining_gates": [
+        "All original bodies/imports/calls/17 syntactic assertions (14 selected-path assertions),100 increments,21 linked scopes,1000000ms select deadline,null payload statuses and module companion retained. Two declaration-only named bodies require real discovery and full VM/C/native execution.",
+        "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1133_linked_scope_cancel",
+      "oracle_id": "complete_task_regression_1133_linked_scope_cancel",
+      "source": "tests/regression/11_coroutine/1133_linked_scope_cancel.xr",
+      "source_lf_sha256": "2d81e84733acca2aec5e26a59ffaae8eedb9542b590820a3e112c0010f4085bd",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1133_linked_scope_cancel.xr",
+        "source_lf_sha256": "2d81e84733acca2aec5e26a59ffaae8eedb9542b590820a3e112c0010f4085bd"
+      },
+      "remaining_gates": [
+        "All original bodies/imports/calls/17 syntactic assertions (14 selected-path assertions),100 increments,21 linked scopes,1000000ms select deadline,null payload statuses and module companion retained. Two declaration-only named bodies require real discovery and full VM/C/native execution.",
+        "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
+      ],
+      "independent_observation_count": 0,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1157_select_after_scope_cancel",
+      "oracle_id": "complete_task_regression_1157_select_after_scope_cancel",
+      "source": "tests/regression/11_coroutine/1157_select_after_scope_cancel.xr",
+      "source_lf_sha256": "bd99a770dfb0659e141d5f1d7767d13de10a8a30fb1bde6879dda53c6400d1f2",
+      "entry": "run",
+      "stdout_utf8": "scope-cancel-select-after ok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1157_select_after_scope_cancel.xr",
+        "source_lf_sha256": "bd99a770dfb0659e141d5f1d7767d13de10a8a30fb1bde6879dda53c6400d1f2"
+      },
+      "remaining_gates": [
+        "All original bodies/imports/calls/17 syntactic assertions (14 selected-path assertions),100 increments,21 linked scopes,1000000ms select deadline,null payload statuses and module companion retained. Two declaration-only named bodies require real discovery and full VM/C/native execution.",
+        "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
+      ],
+      "independent_observation_count": 1,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1164_channel_recv_raw_match_nullable_payload",
+      "oracle_id": "complete_task_regression_1164_channel_recv_raw_match_nullable_payload",
+      "source": "tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr",
+      "source_lf_sha256": "24fa703263a109406f89b0846dbb118952fe76c9f0a5c0fbeb54a99d9fb02e1e",
+      "entry": "run",
+      "stdout_utf8": "ok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr",
+        "source_lf_sha256": "24fa703263a109406f89b0846dbb118952fe76c9f0a5c0fbeb54a99d9fb02e1e"
+      },
+      "remaining_gates": [
+        "All original bodies/imports/calls/17 syntactic assertions (14 selected-path assertions),100 increments,21 linked scopes,1000000ms select deadline,null payload statuses and module companion retained. Two declaration-only named bodies require real discovery and full VM/C/native execution.",
+        "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
+      ],
+      "independent_observation_count": 1,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_regression_1172_module_readonly_capture",
+      "oracle_id": "complete_task_regression_1172_module_readonly_capture",
+      "source": "tests/regression/11_coroutine/1172_module_readonly_capture.xr",
+      "source_lf_sha256": "6560afc4671b20039f674fb19148938db01cd54bfa771dafeebaf3a5b0ce0b7c",
+      "entry": "run",
+      "stdout_utf8": "module!\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/regression/11_coroutine/modules/module_readonly_capture.xr",
+          "lf_sha256": "74e0d44071edb33728b909b4036d27b1361cf040f8e5eeb3caa70134fabbb418"
+        }
+      ],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete original entry trace from FIFO capacity, explicit awaits, permutation-invariant pure completions, scope joining and lexical LIFO cleanup;not a lazy-go or scheduling/provider/lifetime proof.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1172_module_readonly_capture.xr",
+        "source_lf_sha256": "6560afc4671b20039f674fb19148938db01cd54bfa771dafeebaf3a5b0ce0b7c"
+      },
+      "remaining_gates": [
+        "All original bodies/imports/calls/17 syntactic assertions (14 selected-path assertions),100 increments,21 linked scopes,1000000ms select deadline,null payload statuses and module companion retained. Two declaration-only named bodies require real discovery and full VM/C/native execution.",
+        "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
+      ],
+      "independent_observation_count": 1,
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_task_named_1132_task_monitor",
+      "oracle_id": "complete_task_named_1132_task_monitor",
+      "source": "tests/regression/11_coroutine/1132_task_monitor.xr",
+      "source_lf_sha256": "ae8260b568f5e4d6240a6f95cbd8d2325cc0c119b1755d52ccd0f5cc9c4fd458",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1132_task_monitor.xr",
+        "source_lf_sha256": "ae8260b568f5e4d6240a6f95cbd8d2325cc0c119b1755d52ccd0f5cc9c4fd458"
+      },
+      "remaining_gates": [
+        "All original bodies/imports/calls/17 syntactic assertions (14 selected-path assertions),100 increments,21 linked scopes,1000000ms select deadline,null payload statuses and module companion retained. Two declaration-only named bodies require real discovery and full VM/C/native execution.",
+        "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
+      ],
+      "independent_observation_count": 0
+    },
+    {
+      "id": "complete_task_named_1133_linked_scope_cancel",
+      "oracle_id": "complete_task_named_1133_linked_scope_cancel",
+      "source": "tests/regression/11_coroutine/1133_linked_scope_cancel.xr",
+      "source_lf_sha256": "2d81e84733acca2aec5e26a59ffaae8eedb9542b590820a3e112c0010f4085bd",
+      "entry": "test",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1133_linked_scope_cancel.xr",
+        "source_lf_sha256": "2d81e84733acca2aec5e26a59ffaae8eedb9542b590820a3e112c0010f4085bd"
+      },
+      "remaining_gates": [
+        "All original bodies/imports/calls/17 syntactic assertions (14 selected-path assertions),100 increments,21 linked scopes,1000000ms select deadline,null payload statuses and module companion retained. Two declaration-only named bodies require real discovery and full VM/C/native execution.",
+        "Logical status/prefix/wait diagrams do not qualify physical cancellation wakeup,retraction,latency,TaskResult payload shape,resources,lifetime,safety,provider or VM/AOT mixed;all original caps and full gates remain required."
+      ],
+      "independent_observation_count": 0
     }
   ]
 }

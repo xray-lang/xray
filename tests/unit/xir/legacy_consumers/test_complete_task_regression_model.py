@@ -39,8 +39,9 @@ class TaskRegressionTraces(unittest.TestCase):
           '1139_error_isolation':'test1: error isolation\n  done: true\n  failed: true\ntest2: error does not affect other coroutines\n  result: 42\n',
           '1140_task_error':'t1.done: true\nt1.failed: true\nt2.done: true\nt2.result: 42\n'})
         expected.update({name:'' for name in model._NAMED_CHANNEL_PROGRAMS})
+        expected.update({'1132_task_monitor':'','1133_linked_scope_cancel':'','1157_select_after_scope_cancel':'scope-cancel-select-after ok\n','1164_channel_recv_raw_match_nullable_payload':'ok\n','1172_module_readonly_capture':'module!\n'})
         traces=model.observations()
-        self.assertEqual(set(expected),set(traces));self.assertEqual(sum(map(len,traces.values())),163)
+        self.assertEqual(set(expected),set(traces));self.assertEqual(sum(map(len,traces.values())),166)
         for name,text in expected.items():
             with self.subTest(program=name):self.assertEqual(''.join(model.render(v)+'\n' for v in traces[name]),text)
 
@@ -81,7 +82,7 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(rows['complete_task_regression_1128_yield']['required_original_yield_checkpoints'],39)
 
     def test_declaration_only_modules_have_separate_full_named_body_requirements(self):
-        entries={x['id']:x for x in model.expected_rows()};named=model.named_expected_rows();self.assertEqual(len(named),11)
+        entries={x['id']:x for x in model.expected_rows()};named=model.named_expected_rows();self.assertEqual(len(named),13)
         for row in named:
             name=row['id'].removeprefix('complete_task_named_')
             self.assertEqual(entries['complete_task_regression_'+name]['expected']['stdout_utf8'],'')
@@ -243,5 +244,74 @@ class TaskRegressionTraces(unittest.TestCase):
             self.assertEqual(entries[path]['expected']['stdout_utf8'],'');self.assertFalse(entries[path]['separate_named_body_obligation']['executed_by_run'])
             self.assertEqual(named[path]['expected']['required_test_names'],model.named_functions(name))
             self.assertIn('required_semantic_trace',named[path])
+
+
+    def test_monitor_matches_only_selected_branches_and_sticky_completed_value(self):
+        facts=model.task_monitor_requirements();self.assertEqual(facts['assertion_results'],[True]*5)
+        trace=facts['semantic_trace'];self.assertEqual(trace['selected_match_branches'],['Success','Failed','Success'])
+        self.assertEqual(trace['completed_task_terminal_flags'],['Success','Failed','Success'])
+        self.assertEqual(trace['completed_success_values'],[42,42]);self.assertEqual(trace['completed_action_evaluations'],3)
+        self.assertTrue(trace['already_completed_poll_evaluates_no_action']);self.assertEqual(trace['unselected_original_assert_false_branches'],3)
+        self.assertTrue(trace['business_failure_payload_not_projected_or_retyped']);self.assertTrue(trace['public_TaskResult_failed_payload_shape_not_qualified'])
+
+    def test_linked_scope_catch_is_invariant_for_every_slow_loop_prefix(self):
+        facts=model.linked_scope_prefix_proof();self.assertEqual(facts['assertion_results'],[True]*3)
+        trace=facts['semantic_trace'];cases=trace['slow_sibling_prefix_and_completion_cases']
+        self.assertEqual([row['increments'] for row in cases[:-1]],list(range(101)))
+        self.assertTrue(all(row['terminal']=='Cancelled' and row['failure_caught'] for row in cases[:-1]))
+        self.assertEqual(cases[-1],{'increments':100,'terminal':'Success','failure_caught':True})
+        self.assertEqual(trace['completed_success_values'],[[42,42],[42,42]])
+        for count in (0,1,7):
+            smaller=model.linked_scope_prefix_proof(count)['semantic_trace']['slow_sibling_prefix_and_completion_cases']
+            self.assertEqual(len(smaller),count+2);self.assertEqual(smaller[-1]['increments'],count)
+        for invalid in (-1,True):
+            with self.assertRaises(ValueError):model.linked_scope_prefix_proof(invalid)
+        self.assertFalse(trace['real_cancellation_checkpoints_scheduling_and_cleanup_qualified'])
+
+    def test_cancel_select_retains_all_twenty_one_scopes_and_original_large_timeout(self):
+        facts=model.linked_cancel_select_trace();self.assertEqual(facts['assertion_results'],[True,True])
+        trace=facts['semantic_trace'];self.assertEqual(trace['original_select_timeout_ms'],1000000)
+        self.assertEqual(trace['original_caught_loop_rounds'],20);self.assertEqual(len(trace['rounds']),21)
+        self.assertEqual(trace['independent_registration_order_combinations'],2097152)
+        for index,item in enumerate(trace['rounds']):
+            self.assertEqual(item['original_round'],index);self.assertEqual([path['select_registered_before_failure'] for path in item['registration_orders']],[False,True])
+            for path in item['registration_orders']:
+                self.assertEqual((path['sibling_terminal'],path['scope_children_remaining'],path['active_wait_registrations']),('Cancelled',0,0))
+                self.assertTrue(path['stale_deadline_has_no_second_completion'])
+        self.assertFalse(trace['real_cancel_wakeup_registration_retraction_lifetime_and_resources_qualified'])
+        for invalid in (-1,True):
+            with self.assertRaises(ValueError):model.linked_cancel_select_trace(invalid)
+
+    def test_nullable_channel_value_is_distinct_from_empty_closed_and_zero(self):
+        facts=model.nullable_receive_trace();self.assertEqual(facts['assertion_results'],[True]*4)
+        trace=facts['semantic_trace'];self.assertEqual(trace['receive_statuses'],['Value','Value','Closed'])
+        self.assertEqual(trace['original_receive_payloads'],[0,None]);self.assertTrue(trace['null_payload_is_ready'])
+        self.assertTrue(trace['selected_null_is_payload_not_empty_or_closed']);self.assertTrue(trace['all_original_channels_closed'])
+        data=model.Channel(1);self.assertEqual(data.try_recv(),('Empty',None));data.send(None)
+        self.assertEqual(data.try_recv(),('Value',None));data.close();self.assertEqual(data.try_recv(),('Closed',None))
+        self.assertFalse(trace['real_raw_recv_lowering_and_runtime_payload_tags_qualified'])
+
+    def test_module_readonly_import_companion_and_fallback_are_preserved(self):
+        row=next(row for row in model.expected_rows() if row['source'].endswith('/1172_module_readonly_capture.xr'))
+        self.assertEqual(row['expected']['stdout_utf8'],'module!\n');self.assertEqual(len(row['required_companions']),1)
+        companion=row['required_companions'][0];self.assertEqual(companion['path'],model.BASE+'modules/module_readonly_capture.xr')
+        self.assertEqual(companion['lf_sha256'],model._INPUTS[companion['path']])
+        trace=row['required_semantic_trace'];self.assertFalse(trace['fallback_taken']);self.assertEqual(trace['completed_child_value'],'module!')
+        self.assertFalse(trace['real_module_publication_ownership_and_task_transport_qualified'])
+        with mock.patch.object(model,'_COMPANIONS',{}),self.assertRaises(ValueError):model.expected_rows()
+
+    def test_new_complete_sources_preserve_branch_assertions_root_calls_and_named_routes(self):
+        import re
+        named=model.cancel_named_requirements();roots=model.cancel_root_traces();self.assertEqual(sum(len(row['assertion_results']) for row in named.values()),8)
+        self.assertEqual(sum(len(row['assertion_results']) for row in roots.values()),6)
+        counts={'1132_task_monitor':8,'1133_linked_scope_cancel':3,'1157_select_after_scope_cancel':2,'1164_channel_recv_raw_match_nullable_payload':4,'1172_module_readonly_capture':0}
+        for name,path in model._CANCEL_PROGRAMS.items():
+            source=(model.ROOT/path).read_text(encoding='utf-8');code=re.sub(r'//[^\n]*','',source)
+            self.assertEqual(len(re.findall(r'\bassert(?:Equal)?\s*\(',code)),counts[name])
+            if name in named:
+                for function in model.named_functions(name):self.assertIsNone(re.search(r'(?m)^'+function+r'\s*\(',code))
+            elif name in roots:
+                self.assertTrue(any(row['source']==path and row['observation_count']==1 for row in model.expected_rows()))
+        self.assertEqual(model._CANCEL_NAMED,{'1132_task_monitor':'test_task_monitor','1133_linked_scope_cancel':'test_linked_scope_cancel'})
 
 if __name__=='__main__':unittest.main()

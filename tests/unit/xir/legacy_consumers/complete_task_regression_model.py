@@ -83,6 +83,16 @@ _DECLARATION_ONLY.update({"1137_await_any_success":"test_await_any_success","115
 _INPUTS.update({"tests/regression/11_coroutine/1137_await_any_success.xr":"1de5d0186d017722788733a27fb10dad978b0b7ba75e64f2fb429eed17fe1cd4","tests/regression/11_coroutine/1150_select_block_buffer_wake.xr":"b60864a58ecc701663896ac0459176d9beffbfb60402509cf6db88c1523e1a26","tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr":"b77276d0b2dd138dbd98c8b7603fa9f013f8b00fd74dce2583515acb40f149c7","tests/regression/11_coroutine/1156_select_close_wake.xr":"e80fe3a863216a1ddcd279bd50b1180e4624a332261a8faea411cfdc539de5a3","tests/regression/11_coroutine/1161_multiple_task_awaiters.xr":"206e61534f1d4e81446f353e24f024345daa62be78b8b584209312e5e81e8b3e","tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr":"6d640ddb1fc97917916b234399f8328b29b39664d295e2905f343802d7a1f131","tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr":"8a6af93d05b4ad696cfc70afb091fe29be471e292a3e7329eab0bc4c8d49982d"})
 
 
+_CANCEL_PROGRAMS={'1132_task_monitor': 'tests/regression/11_coroutine/1132_task_monitor.xr', '1133_linked_scope_cancel': 'tests/regression/11_coroutine/1133_linked_scope_cancel.xr', '1157_select_after_scope_cancel': 'tests/regression/11_coroutine/1157_select_after_scope_cancel.xr', '1164_channel_recv_raw_match_nullable_payload': 'tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr', '1172_module_readonly_capture': 'tests/regression/11_coroutine/1172_module_readonly_capture.xr'}
+_CANCEL_NAMED={'1132_task_monitor': 'test_task_monitor', '1133_linked_scope_cancel': 'test_linked_scope_cancel'}
+_COMPANIONS={'tests/regression/11_coroutine/modules/module_readonly_capture.xr': '74e0d44071edb33728b909b4036d27b1361cf040f8e5eeb3caa70134fabbb418'}
+_PROGRAMS.update(_CANCEL_PROGRAMS)
+_NAMES = _NAMES | frozenset(_CANCEL_PROGRAMS)
+_DECLARATION_ONLY.update(_CANCEL_NAMED)
+_AUTHORITIES += ('spec/source/sections/012-11-modules.md',)
+_INPUTS.update({'tests/regression/11_coroutine/1132_task_monitor.xr': 'ae8260b568f5e4d6240a6f95cbd8d2325cc0c119b1755d52ccd0f5cc9c4fd458', 'tests/regression/11_coroutine/1133_linked_scope_cancel.xr': '2d81e84733acca2aec5e26a59ffaae8eedb9542b590820a3e112c0010f4085bd', 'tests/regression/11_coroutine/1157_select_after_scope_cancel.xr': 'bd99a770dfb0659e141d5f1d7767d13de10a8a30fb1bde6879dda53c6400d1f2', 'tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr': '24fa703263a109406f89b0846dbb118952fe76c9f0a5c0fbeb54a99d9fb02e1e', 'tests/regression/11_coroutine/1172_module_readonly_capture.xr': '6560afc4671b20039f674fb19148938db01cd54bfa771dafeebaf3a5b0ce0b7c', 'tests/regression/11_coroutine/modules/module_readonly_capture.xr': '74e0d44071edb33728b909b4036d27b1361cf040f8e5eeb3caa70134fabbb418', 'spec/source/sections/012-11-modules.md': '3c32493b1e22d29c459362a9f465a6f5316856b5b375c3d1c1e06025756eecd8'})
+
+
 def named_functions(name):
     names=_DECLARATION_ONLY[name]
     return list(names) if isinstance(names,tuple) else [names]
@@ -293,6 +303,131 @@ def channel_named_requirements():
     return results
 
 
+
+def task_monitor_requirements():
+    scope=Scope(False);evaluations=[]
+    def succeed():evaluations.append('success');return 42
+    def fail():
+        evaluations.append('business_failure')
+        raise TypedError('MonitorErr','Msg',{'message':'monitor test error'})
+    successful=scope.add(succeed);tag,value=successful.observe()
+    checks=[tag=='Success' and value==42,successful.state in {'Success','Failed','Cancelled'}]
+    failed=scope.add(fail);failure_tag,_=failed.observe()
+    checks += [failure_tag=='Failed',failed.state in {'Success','Failed','Cancelled'}]
+    completed=scope.add(succeed);awaited=completed.await_value();poll_tag,poll_value=completed.observe()
+    checks.append(poll_tag=='Success' and poll_value==42)
+    if awaited!=42 or evaluations!=['success','business_failure','success']:raise ValueError('Completed monitor actions changed')
+    return {'assertion_results':checks,'semantic_trace':{
+        'selected_match_branches':['Success','Failed','Success'],'completed_success_values':[value,poll_value],
+        'completed_task_terminal_flags':[successful.state,failed.state,completed.state],
+        'completed_action_evaluations':len(evaluations),'already_completed_poll_evaluates_no_action':len(evaluations)==3,
+        'executed_original_assertions':5,'unselected_original_assert_false_branches':3,
+        'business_failure_payload_not_projected_or_retyped':True,'public_TaskResult_failed_payload_shape_not_qualified':True}}
+
+
+def linked_scope_prefix_proof(iterations=100):
+    """Retain every possible local increment prefix, including full completion."""
+    if type(iterations) is not int or iterations<0:raise ValueError('Invalid loop extent')
+    def fail():raise TypedError('ChildErr','Failed')
+    caught_paths=[]
+    for failure_first in (False,True):
+        scope=Scope(True)
+        for action in ([fail,lambda:42] if failure_first else [lambda:42,fail]):scope.add(action)
+        caught=False
+        try:scope.close()
+        except TypedError:caught=True
+        caught_paths.append(caught)
+    outcomes=[]
+    for cut in range(iterations+1):
+        value=0
+        for _ in range(cut):value+=1
+        outcomes.append({'increments':value,'terminal':'Cancelled','failure_caught':all(caught_paths)})
+    value=0
+    for _ in range(iterations):value+=1
+    outcomes.append({'increments':value,'terminal':'Success','failure_caught':all(caught_paths)})
+    success_paths=[]
+    for order in itertools.permutations((0,1)):
+        tasks=[Task(lambda:42),Task(lambda:42)]
+        for index in order:tasks[index].finish()
+        success_paths.append([task.await_value() for task in tasks])
+    checks=[all(caught_paths),all(row['failure_caught'] for row in outcomes),all(values==[42,42] for values in success_paths)]
+    return {'assertion_results':checks,'semantic_trace':{'original_slow_loop_iterations':iterations,
+        'fast_success_failure_completion_orders':2,'slow_sibling_prefix_and_completion_cases':outcomes,
+        'all_success_completion_orders':len(success_paths),'completed_success_values':success_paths,
+        'does_not_assume_slow_sibling_runs_zero_or_all_iterations':True,
+        'real_cancellation_checkpoints_scheduling_and_cleanup_qualified':False}}
+
+
+def linked_cancel_select_trace(repetitions=20):
+    """Finite wait bookkeeping; the product must prove real cancellation wakeup."""
+    if type(repetitions) is not int or repetitions<0:raise ValueError('Invalid original repetition count')
+    rounds=[]
+    for index in range(repetitions+1):
+        alternatives=[]
+        for parked_before_failure in (False,True):
+            waits=WaitTokens();token=None;data=None
+            if parked_before_failure:
+                data=Channel(1)
+                if data.try_recv()[0]!='Empty':raise ValueError('Original select unexpectedly ready')
+                token=waits.begin(0,1000000)
+            sibling_state='Cancelled'
+            if token is not None and waits.complete(token,'Cancelled')!='Cancelled':raise ValueError('Cancel lost registered wait')
+            stale_timer=None if token is None else waits.expire(token,1000000)
+            if waits.active or stale_timer is not None:raise ValueError('Cancelled select retained an active timeout')
+            alternatives.append({'select_registered_before_failure':parked_before_failure,
+                'sibling_terminal':sibling_state,'scope_children_remaining':0,
+                'active_wait_registrations':len(waits.active),'stale_deadline_has_no_second_completion':stale_timer is None,
+                'scope_rethrows_first_child_error':True})
+        rounds.append({'original_round':index,'registration_orders':alternatives})
+    caught=all(path['scope_rethrows_first_child_error'] for path in rounds[0]['registration_orders'])
+    count=sum(all(path['scope_rethrows_first_child_error'] for path in item['registration_orders']) for item in rounds[1:])
+    return {'outputs':['scope-cancel-select-after ok'],'assertion_results':[caught,count==20],
+        'semantic_trace':{'first_scope_plus_original_loop_rounds':len(rounds),'original_repetition_count':repetitions,
+        'original_select_timeout_ms':1000000,'original_channel_capacity':1,'original_caught_loop_rounds':count,
+        'rounds':rounds,'independent_registration_order_combinations':2**len(rounds),
+        'original_select_has_no_close_or_sender':True,'no_wall_clock_or_cancel_wakeup_latency_measured':True,
+        'real_cancel_wakeup_registration_retraction_lifetime_and_resources_qualified':False}}
+
+
+def nullable_receive_trace():
+    channel=Channel(2)
+    for value in (0,None):channel.send(value)
+    first=channel.recv();zero=first[1] if first[0]=='Value' else -1
+    second=channel.recv();nil=second[1] if second[0]=='Value' else 7
+    channel.close();closed=channel.recv();closed_branch=closed[0]!='Value'
+    selected=Channel(1);selected.send(None);ready_before_select=bool(selected.queue)
+    sentinel=object();selected_value=receive_only_ready([selected],sentinel);saw_null=selected_value is None;selected.close()
+    return {'outputs':['ok'],'assertion_results':[zero==0,nil is None,closed_branch,saw_null],
+        'semantic_trace':{'original_channel_capacities':[2,1],'receive_statuses':[first[0],second[0],closed[0]],
+        'original_receive_payloads':[first[1],second[1]],'null_payload_is_ready':ready_before_select,
+        'selected_null_is_payload_not_empty_or_closed':saw_null,'all_original_channels_closed':channel.closed and selected.closed,
+        'original_root_invocations':['test_recv_match_keeps_payload_status','test_select_keeps_null_payload_ready'],
+        'executed_original_assertions':4,'real_raw_recv_lowering_and_runtime_payload_tags_qualified':False}}
+
+
+def module_readonly_trace():
+    published={'PREFIX':'module'};child=Task(lambda:published['PREFIX']+'!');value=child.await_value()
+    coalesced=value if value is not None else 'failed'
+    return {'outputs':[coalesced],'assertion_results':[],'semantic_trace':{
+        'published_module_const_name':'PREFIX','published_module_const_value':published['PREFIX'],
+        'original_import':BASE+'modules/module_readonly_capture.xr','completed_child_value':value,
+        'null_coalescing_fallback':'failed','fallback_taken':value is None,
+        'completion_value_evaluations':child.executions,'ordinary_mutable_module_capture_not_granted':True,
+        'real_module_publication_ownership_and_task_transport_qualified':False}}
+
+
+def cancel_named_requirements():
+    return {'1132_task_monitor':task_monitor_requirements(),'1133_linked_scope_cancel':linked_scope_prefix_proof()}
+
+
+def cancel_root_traces():
+    traces={'1157_select_after_scope_cancel':linked_cancel_select_trace(),
+        '1164_channel_recv_raw_match_nullable_payload':nullable_receive_trace(),
+        '1172_module_readonly_capture':module_readonly_trace()}
+    if any(not all(trace['assertion_results']) for trace in traces.values()):raise ValueError('Original root assertion failed independently')
+    return traces
+
+
 def named_requirements():
     naming=ordered_values([1*10,sum(range(1,5)),2*10,3*10,4*10,5*10])+['done']
     slots={};name_key,count_key,id_key,value_key=object(),object(),object(),object()
@@ -323,6 +458,7 @@ def named_requirements():
             '1125_coro_local':{'assertion_results':checks},'1130_linked_scope':{'assertion_results':linked},
             '1131_linked_go_expr':{'assertion_results':go_checks}}
     result.update(channel_named_requirements())
+    result.update(cancel_named_requirements())
     return result
 
 
@@ -494,12 +630,13 @@ def observations():
     for name in _DECLARATION_ONLY:out[name]=[]
     out['1128_yield']=['test1: main yield','test1: after yield',line('test2: result =','yielded'),line('test3:',*ordered_values([10,20,30])),line('test4: sum =',sum(range(5))),line('test5: sums =',*ordered_values([sum(range(10))]*3))]
     out.update({name:trace['outputs'] for name,trace in event_boundary_traces().items()})
+    out.update({name:trace['outputs'] for name,trace in cancel_root_traces().items()})
     if set(out)!=_NAMES:raise ValueError('Task model lost a complete original program')
     return out
 
 
 def expected_rows():
-    if set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items() if name not in _EVENT_PROGRAMS) or {name:_PROGRAMS.get(name) for name in _EVENT_PROGRAMS}!=_EVENT_PROGRAMS or set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values()):
+    if set(_PROGRAMS)!=_NAMES or any(path!=BASE+name+'.xr' for name,path in _PROGRAMS.items() if name not in _EVENT_PROGRAMS) or {name:_PROGRAMS.get(name) for name in _EVENT_PROGRAMS}!=_EVENT_PROGRAMS or set(_INPUTS)!=set(_AUTHORITIES)|set(_PROGRAMS.values())|set(_COMPANIONS):
         raise ValueError('Task model lost an exact program or normative input')
     for path,digest in _INPUTS.items():
         if hashlib.sha256((ROOT/path).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:raise ValueError('Task source or authority changed: '+path)
@@ -516,6 +653,9 @@ def expected_rows():
         if name in named:row['separate_named_body_obligation']={'name':_DECLARATION_ONLY[name],**named[name],'executed_by_run':False,'qualification':'OPEN_REQUIRES_NAMED_TEST_EXECUTION'}
         if name in _NAMED_CHANNEL_PROGRAMS and isinstance(_DECLARATION_ONLY[name],tuple):
             obligation=row['separate_named_body_obligation'];obligation.pop('name');obligation['names']=named_functions(name)
+        if name in cancel_root_traces():
+            trace=cancel_root_traces()[name];row['required_semantic_trace']=trace['semantic_trace'];row['required_original_assertion_results']=trace['assertion_results']
+        if name=='1172_module_readonly_capture':row['required_companions']=[{'path':path,'lf_sha256':digest} for path,digest in _COMPANIONS.items()]
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
@@ -533,5 +673,5 @@ def named_expected_rows():
             'required_test_names':named_functions(name)},
             'required_original_assertion_results':body.get('assertion_results',[]),
             'model':'Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.'})
-        if name in _NAMED_CHANNEL_PROGRAMS:rows[-1]['required_semantic_trace']=body['semantic_trace']
+        if name in _NAMED_CHANNEL_PROGRAMS or name in _CANCEL_NAMED:rows[-1]['required_semantic_trace']=body['semantic_trace']
     return rows
