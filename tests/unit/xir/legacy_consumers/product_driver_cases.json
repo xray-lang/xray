@@ -28363,6 +28363,114 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 6
+    },
+    {
+      "id": "complete_pure_library_boundaries_crypto_timing_safe_equal_direct",
+      "oracle_id": "complete_pure_library_boundaries_crypto_timing_safe_equal_direct",
+      "source": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
+      "source_lf_sha256": "92c90b37090a22a746c4837c35df06a15765d434d536cbf569f74c53b5aa0c05",
+      "entry": "run",
+      "stdout_utf8": "true\nfalse\nfalse\ntrue\ntrue\nfalse\nfalse\nfalse\ntrue\nfalse\ntrue\ntrue\n900150983cd24fb0d6963f7d28e17f72\na9993e364706816aba3e25717850c26c9cd0d89d\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\nddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f\n9d5c73ef85594d34ec4438b7c97e51d8\n104152c5bfdca07bc633eebd46199f0255c9f49d\n5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0\n3c5953a18f7303ec653ba170ae334fafa08e3846f2efe317b87efce82376253cb52a8c31ddcde5a3a2eee183c2b34cb91f85e64ddbc325f7692b199473579c58\n5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent AES256/CBC+HMAC/PKCS7 and digests,typed TOML recovery and exact binary stdin. No product output or timing/entropy/provider/security qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/crypto_timing_safe_equal_direct.xr",
+        "source_lf_sha256": "92c90b37090a22a746c4837c35df06a15765d434d536cbf569f74c53b5aa0c05"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source,all byte/typed-diagnostic/encryption/input observations through real CLI/VM/C/native.",
+        "Original entropy and crypto timing/authentication/security obligations;binary stdin and parser error/resource behavior;complete compiler/runtime FI,lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 22
+    },
+    {
+      "id": "complete_pure_library_boundaries_io_read_stdin_shared_core",
+      "oracle_id": "complete_pure_library_boundaries_io_read_stdin_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/io_read_stdin_shared_core.xr",
+      "source_lf_sha256": "c5afbd4bd0983e98251d0c85893481dc95be6b32318fd4590a212f602aaf743a",
+      "entry": "run",
+      "stdout_utf8": "20\nfalse\nfalse\nfalse\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "616c7068610d0a626574610d0a6f6d6567610d0a",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent AES256/CBC+HMAC/PKCS7 and digests,typed TOML recovery and exact binary stdin. No product output or timing/entropy/provider/security qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/io_read_stdin_shared_core.xr",
+        "source_lf_sha256": "c5afbd4bd0983e98251d0c85893481dc95be6b32318fd4590a212f602aaf743a"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source,all byte/typed-diagnostic/encryption/input observations through real CLI/VM/C/native.",
+        "Original entropy and crypto timing/authentication/security obligations;binary stdin and parser error/resource behavior;complete compiler/runtime FI,lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_pure_library_boundaries_toml_pure_module_direct",
+      "oracle_id": "complete_pure_library_boundaries_toml_pure_module_direct",
+      "source": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr",
+      "source_lf_sha256": "31fa1eb79f86e7c822d4ad0f630d7fd3f86ecfe1df538426aee8f4b4608ba3e2",
+      "entry": "run",
+      "stdout_utf8": "xray\n2\ntrue\napple\nred\n2\nNail\ntrue\nTomlDiagnostic\ntrue\n2\nDuplicate key\nAlice\ntrue\n0\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original;independent AES256/CBC+HMAC/PKCS7 and digests,typed TOML recovery and exact binary stdin. No product output or timing/entropy/provider/security qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/toml_pure_module_direct.xr",
+        "source_lf_sha256": "31fa1eb79f86e7c822d4ad0f630d7fd3f86ecfe1df538426aee8f4b4608ba3e2"
+      },
+      "remaining_gates": [
+        "Whole unchanged original source,all byte/typed-diagnostic/encryption/input observations through real CLI/VM/C/native.",
+        "Original entropy and crypto timing/authentication/security obligations;binary stdin and parser error/resource behavior;complete compiler/runtime FI,lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 19
     }
   ]
 }
