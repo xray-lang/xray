@@ -71,13 +71,21 @@ static bool cell_access(const XirCell *cell, const XrXirCellAuthority *authority
     if (cell->projection_count) return cell_authority_equal(&cell->projection_authority, authority);
     return !((const XirCell *)owner)->module_storage || cell_authority_valid(authority);
 }
+static bool cell_write_access(const XirCell *cell,const XrXirCellAuthority *authority) {
+    if (!cell_access(cell,authority)) return false;
+    const XirObject *owner=cell_root_object(cell);
+    if (owner->kind!=XIR_OBJECT_CELL) return true;
+    const XirCell *root=(const XirCell *)owner;
+    return !root->read_loans && !root->prepared_read_loan;
+}
 XR_FUNC XrXirValueStatus xr_xir_cell_publication_prepare(const XrXirValue *value,
     const XrXirCellPublication *publication) {
     XirCell *cell = cell_owner(value);
     return cell && publication && publication->owner && publication->domain &&
         publication->slot != UINT32_MAX && cell->object.domain == publication->domain &&
         !cell->projection_count && !cell->module_storage && !cell->borrow_top &&
-        !cell->prepared_loan ? XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
+        !cell->prepared_loan && !cell->read_loans && !cell->prepared_read_loan ?
+        XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 XR_FUNC void xr_xir_cell_publication_commit(const XrXirValue *value,
     const XrXirCellPublication *publication) {
@@ -107,7 +115,8 @@ XR_FUNC bool xr_xir_cell_same_owner(const XrXirValue *left, const XrXirValue *ri
 }
 XR_FUNC bool xr_xir_cell_unborrowed(const XrXirValue *value) {
     XirCell *cell = cell_owner(value);
-    return cell && !cell->projection_count && !cell->borrow_top && !cell->prepared_loan;
+    return cell && !cell->projection_count && !cell->borrow_top && !cell->prepared_loan &&
+        !cell->read_loans && !cell->prepared_read_loan;
 }
 XR_FUNC bool xr_xir_cell_is_projection(const XrXirValue *value) {
     XirCell *cell = cell_owner(value);
@@ -129,7 +138,8 @@ static XrXirValueStatus cell_loan_prepare_operation(const XrXirValue *value,
     XrXirCellLoan **top = cell_root_loans(owner);
     if (!top) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *storage = owner->kind == XIR_OBJECT_CELL ? (XirCell *)owner : NULL;
-    if (storage && storage->prepared_loan) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (storage && (storage->prepared_loan || storage->read_loans || storage->prepared_read_loan))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
     XirClassObject *identity = owner->kind == XIR_OBJECT_CLASS ? (XirClassObject *)owner : NULL;
     if (identity && !class_origin_reserve(identity, true)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
@@ -196,6 +206,8 @@ XR_FUNC void xr_xir_cell_loan_release(XrXirCellLoan *loan) {
         "live Class loan release cannot race a prepared child or publication");
     XR_CHECK(identity || !((const XirCell *)owner)->prepared_loan,
         "live Cell loan release cannot race a prepared child");
+    XR_CHECK(identity || !((const XirCell *)owner)->prepared_read_loan,
+        "live Cell loan release cannot race a prepared read reservation");
     XrXirCellLoan **top = cell_root_loans(owner);
     XR_CHECK(top && *top == loan, "cell loans restore their exact immediate parent");
     *top = loan->previous;
@@ -218,7 +230,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_authorized_read(const XrXirValue *value,
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_write(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValue *value, XrXirValueAdmission *admission) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!cell_access(cell_owner(cell), authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!cell_write_access(cell_owner(cell), authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = xr_xir_cell_write_graph_operation(cell, value, admission, authority);
     xr_xir_value_graph_end();
@@ -227,7 +239,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_authorized_write(const XrXirValue *cell,
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_place(const XrXirValue *cell,
     const XrXirCellAuthority *authority, XrXirValueAdmission *admission, XrXirValuePlace *output) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    if (!cell_access(cell_owner(cell), authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!cell_write_access(cell_owner(cell), authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
     XrXirValueStatus status = xr_xir_cell_value_place_graph_operation(cell, admission, output, authority);
     xr_xir_value_graph_end();

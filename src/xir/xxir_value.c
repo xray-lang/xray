@@ -14,6 +14,7 @@
 #include "xxir_value_internal.h"
 #include "xxir_compile_domain.h"
 #include "xxir_cell_owner_internal.h"
+#include "xxir_cell_read_loan_internal.h"
 #include "xxir_class_origin_internal.h"
 #include "xxir_type_arena.h"
 #include "xxir_types.h"
@@ -74,13 +75,23 @@ typedef struct XirCell {
     bool initialized, module_storage;
     uint32_t projection_count;
     size_t allocation_bytes;
-    XrXirCellAuthority projection_authority;
+    /* Whole roots and scoped projections have disjoint storage roles. */
+    union {
+        XrXirCellAuthority projection_authority;
+        struct {
+            XrXirCellReadLoan *read_loans, *prepared_read_loan;
+            uint64_t read_reserved;
+        };
+    };
 } XirCell;
+_Static_assert(sizeof(XrXirCellAuthority)==2*sizeof(XrXirCellReadLoan *)+sizeof(uint64_t),
+    "whole-root read links reuse the projection-only authority storage");
 static bool cell_projection_valid(const XirCell *cell);
 static XrXirValueStatus cell_projection_write(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValue *value,
     XrXirValueAdmission *admission);
 static bool cell_access(const XirCell *cell, const XrXirCellAuthority *authority);
+static bool cell_write_access(const XirCell *cell, const XrXirCellAuthority *authority);
 static XrXirValue path_key_value(const XrXirValuePathStep *step, const XrXirTypeArena *arena) {
     if (step->kind != XR_XIR_PATH_KEY) return (XrXirValue){0};
     const XrXirTypes *types = xr_xir_compile_type_arena_types(arena);
@@ -240,6 +251,20 @@ static bool value_header_valid(const XrXirValue *value) {
          (node->kind == XR_XIR_TYPE_ATOMIC && ((XirAtomic *)object)->element ==
           xr_xir_atomic_element(xr_xir_compile_type_arena_types(object->arena), type)));
 }
+/* Restricting an already admitted Cell needs its body header, not another
+ * traversal of the logical aggregate. Payload admission stays independent. */
+static bool cell_root_header_valid(const XirCell *cell) {
+    if (!cell || cell->projection_count || !cell->initialized ||
+        cell->allocation_bytes!=sizeof(*cell)) return false;
+    const XrXirValue *content=&cell->value;
+    XrXirType element=xr_xir_cell_element(xr_xir_compile_type_arena_types(cell->object.arena),cell->object.type);
+    if (content->type!=(uint32_t)element || !value_header_valid(content)) return false;
+    if (owned_carrier_type(element) && !arena_free_carrier(element)) {
+        const XirObject *child=object_pointer(content);
+        return child->arena==cell->object.arena && child->kind!=XIR_OBJECT_CELL;
+    }
+    return true;
+}
 XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (!value_header_valid(value)) return false;
     if (!owned_carrier_type((XrXirType) value->type)) return true;
@@ -302,14 +327,10 @@ XR_FUNC bool xr_xir_value_valid(const XrXirValue *value) {
     if (object->kind == XIR_OBJECT_CELL) {
         const XirCell *cell = (const XirCell *)object;
         if (cell->projection_count) return cell_projection_valid(cell);
-        if (cell->allocation_bytes != sizeof(*cell)) return false;
+        if (!cell_root_header_valid(cell)) return false;
         const XrXirValue *content = &cell->value;
         XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(object->arena), object->type);
-        if (!cell->initialized || content->type != (uint32_t) element || !value_header_valid(content)) return false;
-        if (owned_carrier_type(element) && !arena_free_carrier(element)) {
-            XirObject *child = object_pointer(content);
-            return child->arena == object->arena && child->kind != XIR_OBJECT_CELL && xr_xir_value_valid(content);
-        }
+        if (owned_carrier_type(element) && !arena_free_carrier(element)) return xr_xir_value_valid(content);
     }
     return true;
 }
@@ -792,6 +813,8 @@ static void release_pending(XirObject *pending) {
             xr_xir_domain_deallocate(domain, task, sizeof(*task));
         } else if (object->kind == XIR_OBJECT_CELL) {
             XirCell *cell = (XirCell *) object;
+            XR_CHECK(cell->projection_count || (!cell->read_loans && !cell->prepared_read_loan),
+                "read loan callers pin their actual root until retirement");
             if (!object->graph_dead) {
                 XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
                 for (uint32_t i = 0; i < cell->projection_count; ++i) {
@@ -1290,13 +1313,14 @@ static XrXirValueStatus xr_xir_cell_new_graph_operation(XrXirDomain *domain, XrX
     cell->value = (XrXirValue) {0};
     cell->borrow_top = NULL;
     cell->prepared_loan = NULL;
+    cell->read_loans = cell->prepared_read_loan = NULL;
+    cell->read_reserved = 0;
     cell->module_owner = NULL;
     cell->module_slot = UINT32_MAX;
     cell->initialized = false;
     cell->module_storage = false;
     cell->projection_count = 0;
     cell->allocation_bytes = sizeof(*cell);
-    cell->projection_authority = (XrXirCellAuthority){0};
     status = xr_xir_value_copy(initial, &cell->value);
     if (status != XR_XIR_VALUE_OK) { constructed_discard(&cell->object, sizeof(*cell)); return status; }
     cell->initialized = true;
@@ -1345,7 +1369,7 @@ static XrXirValueStatus xr_xir_cell_write_graph_operation(const XrXirValue *cell
     if (!xr_xir_value_valid(cell) || !owned_carrier_type((XrXirType) cell->type) ||
         object_pointer(cell)->kind != XIR_OBJECT_CELL) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *target = (XirCell *) object_pointer(cell);
-    if (!cell_access(target, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!cell_write_access(target, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (target->projection_count) return cell_projection_write(cell, authority, value, admission);
     if (!admission_owner(admission, target->object.arena, target->object.domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirType element = xr_xir_cell_element(xr_xir_compile_type_arena_types(target->object.arena), target->object.type);
@@ -1794,7 +1818,7 @@ static XrXirValueStatus xr_xir_cell_value_place_graph_operation(const XrXirValue
     if (!xr_xir_value_argument(cell, admission->arena, (XrXirType) cell->type) ||
         !xr_xir_cell_in_domain(cell, admission->domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *holder = (XirCell *) object_pointer(cell);
-    if (holder->projection_count || !cell_access(holder, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (holder->projection_count || !cell_write_access(holder, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirType type = (XrXirType) holder->value.type;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     if (type != XR_XIR_STRING && !xr_xir_type_is_array(types, type) &&
@@ -1820,6 +1844,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_hash_projection.inc.c"
 #include "xxir_set_algebra.inc.c"
 #include "xxir_cell_owner.inc.c"
+#include "xxir_cell_read_loan.inc.c"
 #include "xxir_class_value.inc.c"
 #include "xxir_struct_value.inc.c"
 #include "xxir_value_path.inc.c"

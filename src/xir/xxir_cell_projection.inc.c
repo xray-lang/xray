@@ -210,7 +210,8 @@ static XrXirValueStatus cell_path_operation(const XrXirValue *value,
     const CellPathOperation *operation) {
     const XrXirValuePath *suffix = operation->suffix;
     XirCell *cell = cell_owner(value);
-    if (!cell || !suffix || !cell_access(cell, authority) ||
+    if (!cell || !suffix || !(operation->output ? cell_access(cell,authority) :
+            cell_write_access(cell,authority)) ||
         !admission_owner(admission, cell->object.arena, cell->object.domain))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     /* Descriptor selectors add real traversal to every access. */
