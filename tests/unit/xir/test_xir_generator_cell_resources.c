@@ -31,7 +31,7 @@ static void source_native_event_role(SourceNativeAllocationEvent *event) {
 #include "xir_generator_wait_resource_operation.h"
 #include "xir_generator_wait_resource_gates.h"
 XR_DATA const XrXirProgramSpec generator_closure_program;
-XR_DATA const uint32_t generator_closure_ids[13];
+XR_DATA const uint32_t generator_closure_ids[17];
 int main(int argc,char **argv) {
     CHECK(argc==3 || argc==5);setvbuf(stdout,NULL,_IONBF,0);
     unsigned selected=UINT32_MAX;
@@ -40,7 +40,7 @@ int main(int argc,char **argv) {
         CHECK(*argv[3] && !*end && mode<3 && !strcmp(argv[2],"probe-fault"));selected=(unsigned)mode;
     }
     WaitResourceFixture fixture={0};
-    const WaitResourceProgram input={&generator_closure_program,generator_closure_ids,generator_closure_ids[12]};
+    const WaitResourceProgram input={&generator_closure_program,generator_closure_ids,generator_closure_ids[12],0};
     resource_fixture_new(&fixture,argv[1],&input);
     for(unsigned mode=0;mode<3;++mode) {
         if(argc==5 && mode!=selected) continue;

@@ -13,11 +13,11 @@ XR_DATA const uint32_t generator_wait_ids[8];
 typedef struct WaitResourceProgram {
     const XrXirProgramSpec *native;
     const uint32_t *ids;
-    uint32_t factory;
+    uint32_t factory,nth;
 } WaitResourceProgram;
 typedef struct WaitResourceFixture {
     const uint32_t *ids;
-    uint32_t factory;
+    uint32_t factory,nth;
     SourceFixtureOwner compiler;
     XrXirArtifact *lowered;
     XrXirVmBinding *bindings;
@@ -45,6 +45,7 @@ static void resource_fixture_new(WaitResourceFixture *fixture,const char *provid
     const XrXirProgramSpec *native=input ? input->native : &generator_wait_program;
     fixture->ids=input ? input->ids : generator_wait_ids;
     fixture->factory=input ? input->factory : generator_wait_ids[0];
+    fixture->nth=input ? input->nth : 0;
     CHECK(native->entry_count<=64);
     bool all_native=!strcmp(provider,"native"),all_vm=!strcmp(provider,"vm");
     bool root_native=!strcmp(provider,"native-vm");

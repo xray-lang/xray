@@ -330,7 +330,7 @@ typedef enum EffectSeedProjection {
  * Metadata-dependent calls require their actual operand/signature fields. */
 static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *effect) {
     switch (op) {
-    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
         effect->suspend = XR_XIR_EFFECT_MAY; return EFFECT_SEED_LOCAL;
     case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: return EFFECT_SEED_LOCAL;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
@@ -735,7 +735,7 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
             if (!effect_seed_type(body.domain.types,callable,instruction,&local)) return XR_XIR_BAD_STRUCTURE;
             XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
             if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_GENERATOR_YIELD || op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS ||
-                op == XR_XIR_TASK_AWAIT || op==XR_XIR_ITERATOR_HAS_NEXT || op==XR_XIR_ITERATOR_NEXT)) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
+                op == XR_XIR_TASK_AWAIT || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH))) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
             else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)
                 cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             if (!cause) continue;

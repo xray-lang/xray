@@ -569,12 +569,17 @@ static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
         if (emit_has_cleanup(buffer, function)) EMIT_U_SHAPE(buffer, et_c1b53604735e1cf4, " state->panic_frontier = %uu;\n", " state->panic_frontier = ", "u;\n",
             function->blocks[function->blocks[block].panic].frontier);
     }
-    EMIT_FORMAT(buffer, et_844689fb37535891, " state->waiting = true; state->destination = %uu; state->expected = %uu;\n"
-        " return (XrXirAction) {%s, %uu, NULL, 0,\n"
+    if(op->op==XR_XIR_ITERATOR_NTH)
+        EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            0u,(uint32_t)XR_XIR_I64,layout->offsets[op->args[1]]);
+    EMIT_FORMAT(buffer, et_ad0f85267e6cf4eb, " state->waiting = true; state->destination = %uu; state->expected = %uu;\n"
+        " return (XrXirAction) {%s, %uu, %s, %uu,\n"
         " {%uu, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, %s};\n",
         destination, (uint32_t) expected,
         op->op==XR_XIR_TASK_AWAIT ? "XR_XIR_ACTION_AWAIT_TASK" : "XR_XIR_ACTION_AWAIT_ITERATOR",
-        op->op==XR_XIR_TASK_AWAIT ? 0u : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT : XR_XIR_WAIT_ITERATOR_NEXT,
+        op->op==XR_XIR_TASK_AWAIT ? 0u : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT :
+        op->op==XR_XIR_ITERATOR_NTH ? XR_XIR_WAIT_ITERATOR_NTH : XR_XIR_WAIT_ITERATOR_NEXT,
+        op->op==XR_XIR_ITERATOR_NTH ? "state->arguments" : "NULL",op->op==XR_XIR_ITERATOR_NTH ? 1u : 0u,
         (uint32_t) xr_xir_operand_type(function, op->args[0]),
         layout->offsets[op->args[0]], protected_wait ? "XR_XIR_ACTION_PROTECTED" : "0u");
 }
@@ -1000,7 +1005,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_GO:
         emit_resume_go(buffer, function, op, layout, destination);
         return;
-    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH:
         emit_resume_await(buffer, function, op, layout, index);
         return;
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:

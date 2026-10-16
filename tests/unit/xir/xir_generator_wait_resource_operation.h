@@ -26,7 +26,7 @@ typedef struct WaitResourceRequest {
 typedef struct WaitResourceRun {
     XrXirInstance *instance;
     const uint32_t *ids;
-    uint32_t factory;
+    uint32_t factory,nth;
     XrXirDomain *domain;
     XrXirValue inner,outer,held;
     WaitResourceCost *cost;
@@ -49,10 +49,10 @@ static bool resource_failure(WaitResourceRun *run,XrXirCallStatus status) {
     if(run->cost->failure==XR_XIR_CALL_READY) run->cost->failure=status;
     return false;
 }
-static bool resource_root(WaitResourceRun *run,uint32_t entry,const XrXirValue *argument,XrXirValue *value) {
+static bool resource_root_arguments(WaitResourceRun *run,uint32_t entry,const XrXirValue *arguments,uint32_t count,XrXirValue *value) {
     CHECK(!value->type);
     source_native_phase=1;resource_observed_instance=run->instance;
-    XrXirCallStatus status=xr_xir_instance_start(run->instance,entry,argument,argument ? 1u : 0u);
+    XrXirCallStatus status=xr_xir_instance_start(run->instance,entry,arguments,count);
     if(status!=XR_XIR_CALL_READY) return resource_failure(run,status);
     XrXirInstanceResult pending={0};
     for(;;) {
@@ -87,9 +87,28 @@ static bool resource_root(WaitResourceRun *run,uint32_t entry,const XrXirValue *
         CHECK(xr_xir_instance_take_result(run->instance,value)==XR_XIR_CALL_RETURNED);return true;
     }
 }
+static bool resource_root(WaitResourceRun *run,uint32_t entry,const XrXirValue *argument,XrXirValue *value) {
+    return resource_root_arguments(run,entry,argument,argument ? 1u : 0u,value);
+}
+static bool resource_nth_run(WaitResourceRun *run) {
+    const uint32_t *ids=run->ids;
+    if(run->mode==4) {
+        XrXirValue more={0};if(!resource_root(run,ids[1],&run->inner,&more)) return false;
+        CHECK(more.type==XR_XIR_BOOL && more.payload);xr_xir_value_drop(&more);
+    }
+    XrXirValue arguments[]={run->inner,{XR_XIR_I64,0,run->mode==5 ? 0 : 1}};
+    if(!resource_root_arguments(run,run->nth,arguments,2,&run->held)) return false;
+    resource_string(&run->held,run->mode==5 ? "one" : "two");
+    if(run->mode!=5) {
+        XrXirValue more={0};if(!resource_root(run,ids[1],&run->inner,&more)) return false;
+        CHECK(more.type==XR_XIR_BOOL && !more.payload && run->cleanup[0]==1);xr_xir_value_drop(&more);
+    }
+    return true;
+}
 static bool resource_instance_run(WaitResourceRun *run) {
     const uint32_t *ids=run->ids;
     if(!resource_root(run,run->factory,NULL,&run->inner)) return false;
+    if(run->mode>=3) return resource_nth_run(run);
     if(run->mode==1 && !resource_root(run,ids[4],&run->inner,&run->outer)) return false;
     const XrXirValue *iterator=run->mode==1 ? &run->outer : &run->inner;
     for(unsigned n=0;n<(run->mode==2 ? 1u : 2u);++n) {
@@ -136,12 +155,12 @@ static WaitResourceCost resource_operation(WaitResourceFixture *fixture,const Wa
     unsigned mode=request->mode,cancel_pass=request->cancel_pass;size_t fault=request->fault;
     const XrXirInstanceConfig *limits=request->limits;uint32_t cancel_prefix=request->cancel_prefix;
     bool retire=request->retire;
-    CHECK(mode<3 && !runtime_live && !runtime_bytes && runtime_fail_at==SIZE_MAX);
+    CHECK(mode<6 && !runtime_live && !runtime_bytes && runtime_fail_at==SIZE_MAX);
     WaitResourceCost cost={0};WaitResourceRun runs[2]={0};runtime_attempts=0;runtime_fail_at=fault;
     source_native_event_count=0;source_native_recording=true;resource_observed_instance=NULL;
     for(unsigned i=0;i<2;++i) {
         source_native_phase=0;source_native_instance=i;source_native_poll=UINT32_MAX;
-        runs[i]=(WaitResourceRun){.ids=fixture->ids,.factory=fixture->factory,.cost=&cost,.pass=i,.mode=mode,.cancel_prefix=i==cancel_pass ? cancel_prefix : UINT32_MAX};
+        runs[i]=(WaitResourceRun){.ids=fixture->ids,.factory=fixture->factory,.nth=fixture->nth,.cost=&cost,.pass=i,.mode=mode,.cancel_prefix=i==cancel_pass ? cancel_prefix : UINT32_MAX};
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         if(limits) config=*limits;
         config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,resource_output,&runs[i]};
@@ -160,7 +179,7 @@ static WaitResourceCost resource_operation(WaitResourceFixture *fixture,const Wa
     for(unsigned i=0;i<2;++i) {
         source_native_phase=5;source_native_instance=i;source_native_poll=UINT32_MAX;
         if(runs[i].domain) cost.values[i]=xr_xir_domain_stats(runs[i].domain);
-        if(runs[i].held.type) {resource_string(&runs[i].held,"one");xr_xir_value_drop(&runs[i].held);}
+        if(runs[i].held.type) {resource_string(&runs[i].held,mode==3 || mode==4 ? "two" : "one");xr_xir_value_drop(&runs[i].held);}
         if(runs[i].domain) {
             XrXirDomainBudgetStats stats=xr_xir_domain_budget_stats(runs[i].domain);
             CHECK(!stats.call_live && !stats.metadata_live && stats.call_allocations==stats.call_frees &&

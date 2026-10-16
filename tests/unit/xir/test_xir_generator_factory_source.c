@@ -21,10 +21,26 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_fixture_owner.h"
 #include "xir_generator_factory_cases.h"
-#include "xir_generator_factory87_golden.h"
+#include "xir_generator_factory88_golden.h"
 #include "xir_generator_factory86_golden.h"
+#include "xir_generator_factory87_golden.h"
 #include "xir_checked_legacy_packets.h"
 #include "xir_generator_factory85_golden.h"
+static void factory_previous87(const XrXirCompileContext *context) {
+    const XirLegacyPacket packets[]={
+        {factory87_i64,sizeof(factory87_i64)},
+        {factory87_unit,sizeof(factory87_unit)},
+        {factory87_no_suspend,sizeof(factory87_no_suspend)},
+        {factory87_ordinary_target,sizeof(factory87_ordinary_target)},
+        {factory87_scalar_result,sizeof(factory87_scalar_result)},
+        {factory87_argument_count,sizeof(factory87_argument_count)},
+        {factory87_targets,sizeof(factory87_targets)},
+        {factory87_yield_in_factory,sizeof(factory87_yield_in_factory)},
+        {factory87_owned_cell,sizeof(factory87_owned_cell)},
+        {factory87_borrowed_cell,sizeof(factory87_borrowed_cell)},
+    };
+    checked_legacy_packets(context,packets,sizeof(packets)/sizeof(*packets));
+}
 static void factory_previous86(const XrXirCompileContext *context) {
     const XirLegacyPacket packets[]={
         {factory86_i64,sizeof(factory86_i64)},
@@ -40,6 +56,7 @@ static void factory_previous86(const XrXirCompileContext *context) {
 }
 _Static_assert(XR_XIR_GENERATOR_NEW==177 && XR_XIR_TYPE_ITERATOR==11,"independent factory protocol ordinals");
 static void factory_packet_models(const XrXirCompileContext *context) {
+    factory_previous87(context);
     factory_previous86(context);
     const struct {const uint8_t *bytes;size_t length;} previous85[]={
         {factory85_i64,sizeof(factory85_i64)},
@@ -59,16 +76,16 @@ static void factory_packet_models(const XrXirCompileContext *context) {
         CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
     }
     const struct {const uint8_t *bytes;size_t length;XrXirStatus expected;} cases[]={
-        {factory87_i64,sizeof(factory87_i64),XR_XIR_OK},
-        {factory87_unit,sizeof(factory87_unit),XR_XIR_OK},
-        {factory87_no_suspend,sizeof(factory87_no_suspend),XR_XIR_OK},
-        {factory87_ordinary_target,sizeof(factory87_ordinary_target),XR_XIR_BAD_TYPE},
-        {factory87_scalar_result,sizeof(factory87_scalar_result),XR_XIR_BAD_TYPE},
-        {factory87_argument_count,sizeof(factory87_argument_count),XR_XIR_BAD_STRUCTURE},
-        {factory87_targets,sizeof(factory87_targets),XR_XIR_BAD_STRUCTURE},
-        {factory87_yield_in_factory,sizeof(factory87_yield_in_factory),XR_XIR_BAD_TYPE},
-        {factory87_owned_cell,sizeof(factory87_owned_cell),XR_XIR_OK},
-        {factory87_borrowed_cell,sizeof(factory87_borrowed_cell),XR_XIR_BAD_VALUE}};
+        {factory88_i64,sizeof(factory88_i64),XR_XIR_OK},
+        {factory88_unit,sizeof(factory88_unit),XR_XIR_OK},
+        {factory88_no_suspend,sizeof(factory88_no_suspend),XR_XIR_OK},
+        {factory88_ordinary_target,sizeof(factory88_ordinary_target),XR_XIR_BAD_TYPE},
+        {factory88_scalar_result,sizeof(factory88_scalar_result),XR_XIR_BAD_TYPE},
+        {factory88_argument_count,sizeof(factory88_argument_count),XR_XIR_BAD_STRUCTURE},
+        {factory88_targets,sizeof(factory88_targets),XR_XIR_BAD_STRUCTURE},
+        {factory88_yield_in_factory,sizeof(factory88_yield_in_factory),XR_XIR_BAD_TYPE},
+        {factory88_owned_cell,sizeof(factory88_owned_cell),XR_XIR_OK},
+        {factory88_borrowed_cell,sizeof(factory88_borrowed_cell),XR_XIR_BAD_VALUE}};
     for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         XrXirArtifact *decoded=NULL;XrXirStatus status=xr_xir_compile_checked_read(context,cases[i].bytes,cases[i].length,&decoded,NULL);
         if(status!=cases[i].expected) fprintf(stderr,"Factory packet%u status%u expected%u\n",i,status,cases[i].expected);

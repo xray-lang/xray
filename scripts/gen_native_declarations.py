@@ -580,19 +580,19 @@ def render_iterator_identity(root):
                     'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower()]) + '},')
             output.append('};')
         lowered = number > 1 and source.splitlines()[number - 2].strip() == '// @lowered'
-        if name in ('hasNext', 'next') and not lowered:
+        if name in ('hasNext', 'next', 'nth') and not lowered:
             raise ValueError('Iterator pull operation requires its exact lowered signature')
         facts.append((index, number, raw, name, signature, parameters, result, result_text, lowered))
     output.append('static const XrNativeMemberDeclaration xr_native_iterator_members[] = {')
     for index, number, raw, name, signature, parameters, result, result_text, lowered in facts:
         params = f'xr_native_iterator_parameters_{index}' if parameters else 'NULL'
-        operation = {'hasNext': 'ITERATOR_HAS_NEXT', 'next': 'ITERATOR_NEXT'}.get(name, 'NONE')
+        operation = {'hasNext': 'ITERATOR_HAS_NEXT', 'next': 'ITERATOR_NEXT', 'nth': 'ITERATOR_NTH'}.get(name, 'NONE')
         output.append('    {' + ', '.join([str(index + 1), c_string(name), c_string(signature),
             c_string(result_text), str(number), str(len(raw[:raw.index(name)].encode('utf-8')) + 1),
             'XR_NATIVE_RECEIVER_READ', 'false', 'true', str(lowered).lower(), 'true',
             'XR_NATIVE_OPERATION_' + operation,
             'XR_NATIVE_ALLOCATION_MAY_HEAP' if operation != 'NONE' else 'XR_NATIVE_ALLOCATION_UNKNOWN',
-            '"IteratorExhausted"' if name == 'next' else '""',
+            '"IteratorExhausted"' if name in ('next', 'nth') else '""',
             'XR_NATIVE_RESULT_OWNERSHIP_OWNED' if operation != 'NONE' else 'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN',
             params, str(len(parameters)),
             'XR_NATIVE_TERM_' + simple_term(result, 'T')]) + '},')

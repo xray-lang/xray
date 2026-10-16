@@ -21,7 +21,8 @@ static bool iterator_wait_matches(const XrXirCall *call,const XrXirTaskWaitToken
     const XrXirWaitRequest *wait=&token->request;
     return xr_xir_call_executor_member(call,&token->binding) && call->top && !call->cancel_requested &&
         call->result.status==XR_XIR_CALL_SUSPENDED && token->wake && call->result.wake==token->wake &&
-        iterator_wait_kind(wait->kind) && call->wait.kind==wait->kind && !wait->reserved && !wait->after_ms &&
+        iterator_wait_kind(wait->kind) && call->wait.kind==wait->kind && !wait->reserved && call->wait.after_ms==wait->after_ms &&
+        (wait->kind==XR_XIR_WAIT_ITERATOR_NTH || !wait->after_ms) &&
         call->wait.subject==wait->subject && call->wait.generation==wait->generation &&
         call->wait.ticket==wait->ticket && call->waiting_task.type;
 }
@@ -64,6 +65,9 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_iterator_wait(XrXirCall *call,const
         if(token->request.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT) outcome.value=(XrXirValue){XR_XIR_BOOL,0,1};
         else if(xr_xir_call_generator_take(generator->call,&outcome.value)!=XR_XIR_CALL_YIELDED)
             return XR_XIR_CALL_BAD_STATE;
+    }
+    if(!terminal && token->request.kind==XR_XIR_WAIT_ITERATOR_NTH && call->wait.after_ms) {
+        xr_xir_call_result_drop(&outcome);--call->wait.after_ms;return XR_XIR_CALL_SUSPENDED;
     }
     unlink_task_wait(call,false);return complete_owned_wait(call,&outcome);
 }

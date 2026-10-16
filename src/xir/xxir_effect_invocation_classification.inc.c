@@ -91,7 +91,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     if (!effect_physical_error_empty_opcode(op)) mask|=EFFECT_PHYSICAL_ERROR_ESCAPE;
     if (op==XR_XIR_GO) mask|=EFFECT_PHYSICAL_GO;
     switch (op) {
-    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_GO: case XR_XIR_CALL_REQUIREMENT:
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
         mask|=EFFECT_PHYSICAL_CONTROL;break;

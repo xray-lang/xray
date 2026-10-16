@@ -575,7 +575,7 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i,
         XrXirInstruction call_storage;const XrXirInstruction *call=NULL;
         read=error_operation(flow,flow->function_index,(uint32_t)op->immediate,&call_storage,&call);
         if (read!=XR_XIR_OK) return read;
-        if (call->op == XR_XIR_TASK_AWAIT || call->op==XR_XIR_ITERATOR_HAS_NEXT || call->op==XR_XIR_ITERATOR_NEXT) {
+        if (call->op == XR_XIR_TASK_AWAIT || call->op==XR_XIR_ITERATOR_HAS_NEXT || call->op==XR_XIR_ITERATOR_NEXT || call->op==XR_XIR_ITERATOR_NTH) {
             if (!xir_compile_work(flow->remaining, (uint64_t)words * sizeof(*out))) return XR_XIR_BUDGET;
             memcpy(out, error_read(flow, flow->work, call->args[0]), (size_t)words * sizeof(*out));
             return XR_XIR_OK;
@@ -597,7 +597,7 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i,
         op->op == XR_XIR_INVOKE_DEFAULT || op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_SUSPEND || op->op == XR_XIR_TIMER_AFTER_MS ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT ||
         op->op == XR_XIR_GO || op->op == XR_XIR_GENERATOR_NEW || op->op == XR_XIR_TASK_AWAIT ||
-        op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT ||
+        op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH ||
         op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR || op->op == XR_XIR_CELL_LOCAL_WRITE)
         return error_cells(flow,UINT32_MAX,NULL);
     return XR_XIR_OK;
@@ -804,11 +804,11 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b,const uint8_t *zero_c
         return status == XR_XIR_OK ? error_edge(flow, b, end->targets[1], end, false) : status;
     }
     if (end->op == XR_XIR_INVOKE_DEFAULT || end->op == XR_XIR_INVOKE || end->op == XR_XIR_INVOKE_INDIRECT ||
-        (end->op == XR_XIR_TASK_AWAIT || end->op==XR_XIR_ITERATOR_HAS_NEXT || end->op==XR_XIR_ITERATOR_NEXT)) {
+        (end->op == XR_XIR_TASK_AWAIT || end->op==XR_XIR_ITERATOR_HAS_NEXT || end->op==XR_XIR_ITERATOR_NEXT || end->op==XR_XIR_ITERATOR_NTH)) {
         XrXirStatus status = error_edge(flow, b, end->targets[0], NULL, true);
         if (status != XR_XIR_OK) return status;
         { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->outcomes_work.words * sizeof(uint64_t))) { return XR_XIR_BUDGET; } memset(flow->snapshot, 0, (size_t)flow->effects->outcomes_work.words * sizeof(uint64_t)); }
-        if ((end->op == XR_XIR_TASK_AWAIT || end->op==XR_XIR_ITERATOR_HAS_NEXT || end->op==XR_XIR_ITERATOR_NEXT)) {
+        if ((end->op == XR_XIR_TASK_AWAIT || end->op==XR_XIR_ITERATOR_HAS_NEXT || end->op==XR_XIR_ITERATOR_NEXT || end->op==XR_XIR_ITERATOR_NTH)) {
             if (!xir_compile_work(flow->remaining, (uint64_t)flow->effects->outcomes_work.words * sizeof(uint64_t))) return XR_XIR_BUDGET;
             memcpy(flow->snapshot, error_read(flow, flow->work, end->args[0]),
                 (size_t)flow->effects->outcomes_work.words * sizeof(uint64_t));

@@ -476,7 +476,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
                 task_core_enqueue(executor, activation);
             }
             else if (wait.kind == XR_XIR_WAIT_TASK) task_core_register_wait(executor, activation->call);
-            else if(wait.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || wait.kind==XR_XIR_WAIT_ITERATOR_NEXT)
+            else if(wait.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || wait.kind==XR_XIR_WAIT_ITERATOR_NEXT || wait.kind==XR_XIR_WAIT_ITERATOR_NTH)
                 generator_core_register_consumer(executor,activation->call);
         } else if (task) task_core_finish_task(executor, task);
         else if(generator) {

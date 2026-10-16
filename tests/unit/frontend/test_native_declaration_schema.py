@@ -255,9 +255,10 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(rows, schema.render_iterator_identity(ROOT))
         projected = '\n'.join(rows)
         self.assertIn('8, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1', projected)
-        self.assertEqual(projected.count('XR_NATIVE_OPERATION_NONE'), 3)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_NONE'), 2)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT'), 1)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NEXT'), 1)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NTH'), 1)
         self.assertNotIn('XR_NATIVE_OPERATION_ARRAY_', projected)
         with tempfile.TemporaryDirectory(prefix='xray-iterator-identity-') as directory:
             root = Path(directory)
@@ -270,6 +271,7 @@ class NativeDeclarations(unittest.TestCase):
             self.assertEqual(schema.render_iterator_identity(root), rows)
             for old, new in [('next() -> T', 'next() -> i64'),
                              ('Iterator<T>', 'Iterator<U>'),
+                             ('// @lowered\n    nth(', '// removed\n    nth('),
                              ('// @lowered\n    hasNext()', '// removed\n    hasNext()'),
                              ('// Built-in', '// @native-type id=6\n// Built-in')]:
                 source.write_text(original.replace(old, new, 1), encoding='utf-8')

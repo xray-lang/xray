@@ -14,14 +14,16 @@
 #include "xir_runtime_allocations.h"
 #include "xir_generator_wait_cases.h"
 #include "xir_generator_cell_escape_cases.h"
+#include "xir_generator_nth_cases.h"
 XR_DATA const XrXirProgramSpec generator_closure_program;
-XR_DATA const uint32_t generator_closure_ids[13];
+XR_DATA const uint32_t generator_closure_ids[17];
 int main(void) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context,&generator_closure_program,&program)==XR_XIR_OK);
-    uint32_t ids[13];for(unsigned n=0;n<13;++n) ids[n]=generator_closure_ids[n];
+    uint32_t ids[17];for(unsigned n=0;n<17;++n) ids[n]=generator_closure_ids[n];
     uint32_t factories[]={ids[0],ids[8],ids[9],ids[10],ids[11],ids[12]};
     for(unsigned n=0;n<6;++n) {CHECK(xr_xir_compile_program_retain(program));ids[0]=factories[n];generator_wait_cases(program,ids);}
+    generator_nth_cases(program,ids,factories);
     closure_cell_escape_case(program,ids);source_fixture_owner_free(&owner);
     CHECK(!runtime_live && !runtime_bytes);puts("Generated C Iterator pull caching and exact transfer; physical0 PASS");return 0;
 }

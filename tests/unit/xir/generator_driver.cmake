@@ -35,7 +35,7 @@ endif()
 add_test(NAME test_xir_generator_native COMMAND test_xir_generator_native)
 set_tests_properties(test_xir_generator_native PROPERTIES LABELS "unit;xir;generator;generated-c;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 
-add_test(NAME test_xir_generator_packet_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator87_vectors.py")
+add_test(NAME test_xir_generator_packet_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator88_vectors.py")
 set_tests_properties(test_xir_generator_packet_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_cleanup_source xir/test_xir_generator_cleanup_source.c)
@@ -76,7 +76,7 @@ foreach(generator_factory_target test_xir_generator_factory_source test_xir_gene
     set_tests_properties(${generator_factory_target} PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
-add_test(NAME test_xir_generator_factory_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator_factory87_vectors.py")
+add_test(NAME test_xir_generator_factory_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_generator_factory88_vectors.py")
 set_tests_properties(test_xir_generator_factory_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_consumer_source xir/test_xir_generator_consumer_source.c)
@@ -107,7 +107,7 @@ else()
 endif()
 add_test(NAME test_xir_iterator_pull_packets COMMAND test_xir_iterator_pull_packets)
 set_tests_properties(test_xir_iterator_pull_packets PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 120 PROCESSORS 1)
-add_test(NAME test_xir_iterator_pull_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_iterator_pull87_vectors.py")
+add_test(NAME test_xir_iterator_pull_vectors COMMAND ${XRAY_PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/xir/derive_iterator_pull88_vectors.py")
 set_tests_properties(test_xir_iterator_pull_vectors PROPERTIES LABELS "unit;xir;generator;abi;compiler" TIMEOUT 30 PROCESSORS 1)
 
 add_executable(test_xir_generator_consumer_mixed xir/test_xir_generator_consumer_mixed.c "${XIR_GENERATOR_CONSUMER_C}")
@@ -225,5 +225,26 @@ foreach(provider native vm vm-native native-vm)
         endif()
         set_tests_properties(test_xir_generator_cell_resources_${mode}_${provider} PROPERTIES
             LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_cell_resource_timeout} PROCESSORS 1)
+    endforeach()
+endforeach()
+
+add_executable(test_xir_generator_nth_resources xir/test_xir_generator_nth_resources.c "${XIR_GENERATOR_WAIT_C}" "${XIR_GENERATOR_CLOSURE_C}")
+target_link_libraries(test_xir_generator_nth_resources PRIVATE xray_xir_vm xray_xir_scalar)
+if(MSVC)
+    target_compile_options(test_xir_generator_nth_resources PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_generator_nth_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(provider native vm vm-native native-vm)
+    foreach(mode measure axes faults cancel)
+        add_test(NAME test_xir_generator_nth_resources_${mode}_${provider}
+            COMMAND test_xir_generator_nth_resources ${provider} ${mode})
+        if(mode STREQUAL "measure" OR mode STREQUAL "axes")
+            set(generator_nth_resource_timeout 120)
+        else()
+            set(generator_nth_resource_timeout 300)
+        endif()
+        set_tests_properties(test_xir_generator_nth_resources_${mode}_${provider} PROPERTIES
+            LABELS "unit;xir;generator;ownership;runtime" TIMEOUT ${generator_nth_resource_timeout} PROCESSORS 1)
     endforeach()
 endforeach()

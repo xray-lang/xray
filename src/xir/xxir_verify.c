@@ -885,7 +885,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             continue;
         }
         XrXirType expected = op->type;
-        if (op->op == XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT) {
+        if (op->op == XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH) {
             expected = xr_xir_operand_type(function, op->args[0]);
             const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
             if (!task || task->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
@@ -999,7 +999,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 operand_type = xr_xir_operand_type(function, op->args[1]);
                 if (!xr_xir_type_is_integer(operand_type)) return XR_XIR_BAD_TYPE;
             }
-            if (op->op == XR_XIR_STRING_INDEX_OF && a == 2) operand_type = XR_XIR_I64;
+            if ((op->op == XR_XIR_STRING_INDEX_OF && a == 2) || (op->op == XR_XIR_ITERATOR_NTH && a == 1)) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_ASSERT_CONDITION) operand_type = a ? XR_XIR_STRING : XR_XIR_BOOL;
             if ((op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
             if (op->op == XR_XIR_OUTPUT || op->op == XR_XIR_PRINT) {

@@ -7571,7 +7571,7 @@ Source的Iterator<T>类型拼写绑定stdlib/types/iterator.xr及prelude唯一�
 
 有真实yield的Iterator<T>函数按所属词法body标记Generator角色；不信任旧analyzer的is_generator，也不把嵌套函数的yield算入外层。角色保存在既有FunctionIdentity的独立GENERATOR位；NoSuspend义务只读取自己的位，不能把非零角色当作NoSuspend承诺。合成defer helper不继承外层Generator角色。规范GENERATOR_YIELD操作的指令类型为Unit，可选操作数必须匹配Iterator真实元素；Unit元素没有SSA载荷。声明结果仍为Iterator，generator body的正常RETURN完成类型为Unit，因此产值与EOS不同。当前可验证范围包括真实Source→Checked独立重读→特化/Lowered→VM及真实生成C的本机执行，含调度Coro.yield()与yield ()的区分。
 
-认证拥有式Cell参数以Checked87/Call32原子接收，wire28/Value27/Program30及共同Call/Instance布局不变；Iterator需求动作、两种内部等待和单消费者私有存储继续沿唯一协议。完整旧Value24/26 Domain前缀在访问新字段前拒绝；完整旧73/74/84/85/86包在头部拒绝且不分配。新Generator完整包从独立命名字段模型构造，正例与角色、元素、Unit载荷、ref参数及未知位拒例不得以product writer输出推导。generator入口必须具有封闭Iterator结果，产值经共同Call的拥有式YIELDED状态转移；正常完成返回Unit。取走产值恢复同一frame就绪，不分配wake；只有真实调度挂起产生wake。普通结果take、Task终态和resume都不能消费产值，取消须释放尚未取走的owner。
+认证拥有式Cell参数与nth消费以Checked88/Call33原子接收，wire28/Value27/Program30及共同Call/Instance布局不变；Iterator需求动作、三种内部等待和单消费者私有存储继续沿唯一协议。完整旧Value24/26 Domain前缀在访问新字段前拒绝；完整旧73/74/84/85/86/87包在头部拒绝且不分配。新Generator完整包从独立命名字段模型构造，正例与角色、元素、Unit载荷、ref参数及未知位拒例不得以product writer输出推导。generator入口必须具有封闭Iterator结果，产值经共同Call的拥有式YIELDED状态转移；正常完成返回Unit。取走产值恢复同一frame就绪，不分配wake；只有真实调度挂起产生wake。普通结果take、Task终态和resume都不能消费产值，取消须释放尚未取走的owner。
 
 Source对真实generator声明的直接调用语法生成唯一GENERATOR_NEW177；普通CALL/FUNCTION_REF/GO操作仍不能执行body。创建在当前认证view下按封存Program的真实调用者/指令站点选择完整callee、结果和参数数；相同latent证书与独立provenance接收检查保留完整特化身份，创建不执行body，也不继承body的立即挂起/语言错误。每个Iterator在原Instance执行器和同一预算下拥有独立非移动Call frame；停驻producer不阻止普通root返回。最后一个外部owner释放只发布关闭信号，由共同FIFO执行器迭代取消并完成cleanup；Instance关闭先排空活动producer再退休代码，终态Iterator仅持有类型Arena和Domain存储。未启动producer的defer没有注册，关闭不得凭空执行。没有增加共同Call/Instance字段。
 
@@ -7585,7 +7585,9 @@ Source hasNext()/next()绑定完整治理声明的native身份8（6/7保留给�
 
 宿主wake选择属于当前root operation，即使实际外部请求来自独立producer或Task。root取消成功立即撤销已选宿主票据；仍独立存活的Task等待在后续poll重选新票据，旧票据不能先于producer取消排空被再次接受。经过完整身份认证的自驱动是运行失败，沿原frame的结构化退出执行已登记cleanup；错误Domain/世代/身份仍按协议错误关闭。真实Source标准time.sleep、两级producer的Timer等待、正常/取消/stop/free/drop、伪票据、自驱动和循环第二消费者已有定向VM/native及两向mixed验证；这不代替完整外部事件、并发、FI和安全矩阵。
 
-这些是规范类型、body、工厂和hasNext/next的开发输入，不授完整Generator或Channel资格。Program封装仍核对真实角色/自有body proof，普通Instance.start/Function拒绝直接generator body；低层驱动不替代认证工厂。当前子集已覆盖真实VM/native及双向混合producer/consumer、已启动清理、多activation和root更换；nth/for-in、隐藏环境/内部视图、完整等待竞争/取消/GC/代码lease、原全部FI/预算/安全和平台矩阵仍须实施与资格验证。没有增加Source close()方法。
+Source nth(index:i64)绑定相同治理声明并生成ITERATOR_NTH180，以Unit控制指令、Iterator与精确i64两个操作数及独占正常/错误后继表示。它丢弃当前位置起的index个产值，再转移一个产值；index为0等同next，负数在推进producer之前报告E0430，跳过期间耗尽报告E0432。每个被丢弃的owner立即释放，Unit仍是一个产值。消费全程保留同一消费者绑定，通过现有FIFO执行器逐项推进，不使用C递归；真实Timer仍按原请求等待。既有WaitRequest.after_ms仅在内部NTH等待中保存剩余丢弃数，每次递减使旧token失效；它不会成为宿主Timer时长。取消先解绑，再完成producer清理；错误与panic沿原后继传播，终态错误保持可重复观察。
+
+这些是规范类型、body、工厂和hasNext/next/nth的开发输入，不授完整Generator或Channel资格。Program封装仍核对真实角色/自有body proof，普通Instance.start/Function拒绝直接generator body；低层驱动不替代认证工厂。当前子集已覆盖真实VM/native及双向混合producer/consumer、已启动清理、多activation和root更换；for-in、隐藏环境/内部视图、完整等待竞争/取消/GC/代码lease、原全部FI/预算/安全和平台矩阵仍须实施与资格验证。没有增加Source close()方法。
 
 ---
 

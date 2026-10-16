@@ -15,6 +15,12 @@ static void generator_core_complete_consumer(XrXirTaskExecutor *executor,XirGene
     XR_CHECK(activation && activation->call==call && activation->ticket==token.binding.ticket && !activation->queued,
         "a parked consumer owns one activation and one pending wake");
     XrXirCallStatus status=xr_xir_call_complete_iterator_wait(call,&token);
+    if(status==XR_XIR_CALL_SUSPENDED) {
+        XR_CHECK(generator->consumer==call && generator->call &&
+            xr_xir_call_state(generator->call)==XR_XIR_CALL_READY && !generator->activation.queued,
+            "an intermediate nth discard retains its exact consumer and readies only its producer");
+        task_core_enqueue(executor,&generator->activation);return;
+    }
     if(status!=XR_XIR_CALL_READY) status=xr_xir_call_fail_iterator_wait(call,&token,status);
     XR_CHECK(status==XR_XIR_CALL_READY,"producer completion delivers or faults one consumer");
     task_core_record_failure(executor,activation);task_core_enqueue(executor,activation);

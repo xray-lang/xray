@@ -69,7 +69,7 @@ static void wait_invalid_tokens(XirGenerator *generator,bool nested) {
         case 5:forged.request.kind=forged.request.kind==XR_XIR_WAIT_ITERATOR_NEXT ?
             XR_XIR_WAIT_ITERATOR_HAS_NEXT : XR_XIR_WAIT_ITERATOR_NEXT;break;
         case 6:forged.request.reserved=1;break;
-        case 7:forged.request.after_ms=1;break;
+        case 7:++forged.request.after_ms;break;
         case 8:forged.request.subject=NULL;break;
         case 9:++forged.request.generation;break;
         default:++forged.request.ticket;break;

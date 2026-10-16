@@ -63,14 +63,16 @@ static const XrNativeMemberDeclaration *source_iterator_member(SourceContext *ct
     const XrNativeMemberDeclaration *member=source_native_member(ctx,native,name);
     if(!source_work(ctx,node)) return NULL;
     if(!member || !member->is_public || !member->is_method || member->is_static || !member->lowered ||
-        member->parameter_count || (member->operation!=XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT &&
-        member->operation!=XR_NATIVE_OPERATION_ITERATOR_NEXT)) {
+        member->parameter_count!=(member->operation==XR_NATIVE_OPERATION_ITERATOR_NTH ? 1u : 0u) ||
+        (member->operation!=XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT && member->operation!=XR_NATIVE_OPERATION_ITERATOR_NEXT &&
+        member->operation!=XR_NATIVE_OPERATION_ITERATOR_NTH)) {
         source_fail(ctx,node,XR_XIR_BAD_TYPE,"Iterator member has no admitted pull-operation contract");return NULL;
     }
     return member;
 }
 static bool source_iterator_member_reference(SourceContext *ctx,AstNode *node,const XrNativeMemberDeclaration *member) {
-    uint32_t index=member->operation==XR_NATIVE_OPERATION_ITERATOR_NEXT;
+    uint32_t index=member->operation==XR_NATIVE_OPERATION_ITERATOR_NTH ? 2u :
+        member->operation==XR_NATIVE_OPERATION_ITERATOR_NEXT;
     if(!ctx->iterator_members[index]) {
         SourceName symbol={0};symbol.name=source_owned_text(ctx,member->name);if(!symbol.name) return false;
         XrXirSourceRange range={ctx->iterator_module,(int)member->line,(int)member->column,

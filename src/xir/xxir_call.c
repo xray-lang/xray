@@ -669,6 +669,7 @@ static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
     return XR_XIR_CALL_READY;
 }
 
+static XrXirCallStatus complete_owned_wait(XrXirCall *call,XrXirCallResult *outcome);
 #include "xxir_call_generator.inc.c"
 
 XrXirAction xr_xir_call_match_failure(void) {
@@ -807,7 +808,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
     if (action.kind == XR_XIR_ACTION_CALL) {
         accept_child_action(call, action); return;
     }
-    if ((action.callee && action.kind!=XR_XIR_ACTION_AWAIT_ITERATOR) || action.arguments || action.argument_count) {
+    if (action.kind!=XR_XIR_ACTION_AWAIT_ITERATOR && (action.callee || action.arguments || action.argument_count)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE);
         return;
     }
@@ -1098,7 +1099,7 @@ static bool task_wait_token_matches(const XrXirCall *call, const XrXirTaskWaitTo
         call->wait.ticket == wait->ticket && call->waiting_task.type;
 }
 static void unlink_task_wait(XrXirCall *call,bool abandon) {
-    if(call->wait_linked && (call->wait.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || call->wait.kind==XR_XIR_WAIT_ITERATOR_NEXT)) {
+    if(call->wait_linked && iterator_wait_kind(call->wait.kind)) {
         XirGenerator *generator=(XirGenerator *)(uintptr_t)call->waiting_task.payload;
         XR_CHECK(generator && generator->consumer==call,"iterator waiter belongs to its exact producer");
         generator->consumer=NULL;call->wait_linked=false;

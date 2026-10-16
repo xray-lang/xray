@@ -66,12 +66,14 @@ XR_FUNC XrXirCallStatus xr_xir_call_generator_take(XrXirCall *call,XrXirValue *o
 }
 
 static bool iterator_wait_kind(uint32_t kind) {
-    return kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || kind==XR_XIR_WAIT_ITERATOR_NEXT;
+    return kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || kind==XR_XIR_WAIT_ITERATOR_NEXT || kind==XR_XIR_WAIT_ITERATOR_NTH;
 }
 static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
     const XrXirTypeNode *type=xr_xir_type_node(
         xr_xir_compile_type_arena_types(call->config.admission.arena),(XrXirType)action.value.type);
-    if(!iterator_wait_kind(action.callee) || action.arguments || action.argument_count ||
+    bool nth=action.callee==XR_XIR_WAIT_ITERATOR_NTH;
+    if(!iterator_wait_kind(action.callee) || action.argument_count!=(nth ? 1u : 0u) ||
+        (nth ? !action.arguments || !boundary_value(action.arguments[0],XR_XIR_I64) : action.arguments!=NULL) ||
         !call->executor_owner || !call->executor_generation || !call->executor_ticket ||
         !type || type->kind!=XR_XIR_TYPE_ITERATOR ||
         !xr_xir_value_argument(&action.value,call->config.admission.arena,(XrXirType)action.value.type) ||
@@ -91,6 +93,12 @@ static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
         /* An authentic self-demand fails execution with intact cleanup state. */
         request_execution_failure(call,XR_XIR_CALL_BAD_STATE);return;
     }
+    call->top->protected_call=(action.flags & XR_XIR_ACTION_PROTECTED)!=0;
+    if(nth && action.arguments[0].payload<0) {
+        XrXirCallResult bounds=call_result(XR_XIR_CALL_BOUNDS);
+        bounds.panic.detail=(XrXirFaultDetail){XR_XIR_PANIC_BOUNDS,0,action.arguments[0].payload,0};
+        (void)complete_owned_wait(call,&bounds);return;
+    }
     XrXirValue prepared={0};XrXirValueStatus copied=xr_xir_value_copy(&action.value,&prepared);
     if(copied!=XR_XIR_VALUE_OK) {
         if(copied==XR_XIR_VALUE_OOM || copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT)
@@ -102,5 +110,5 @@ static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
     XR_CHECK(!call->waiting_task.type,"one activation owns one pending execution dependency");
     call->waiting_task=prepared;call->top->protected_call=(action.flags & XR_XIR_ACTION_PROTECTED)!=0;
     call->result=call_result(XR_XIR_CALL_SUSPENDED);call->result.wake=++call->next_wake;
-    call->wait=(XrXirWaitRequest){action.callee,0,0,generator,generator->generation,generator->identity};
+    call->wait=(XrXirWaitRequest){action.callee,0,nth ? (uint64_t)action.arguments[0].payload : 0,generator,generator->generation,generator->identity};
 }

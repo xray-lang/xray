@@ -271,7 +271,7 @@ static const XrNativeParameter xr_native_iterator_parameters_2[] = {
 static const XrNativeMemberDeclaration xr_native_iterator_members[] = {
     {1, "hasNext", "() -> bool", "bool", 5, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_BOOL},
     {2, "next", "() -> T", "T", 7, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ELEMENT},
-    {3, "nth", "(index: i64) -> T", "T", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, xr_native_iterator_parameters_2, 1, XR_NATIVE_TERM_ELEMENT},
+    {3, "nth", "(index: i64) -> T", "T", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NTH, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_iterator_parameters_2, 1, XR_NATIVE_TERM_ELEMENT},
     {4, "iterator", "() -> Iterator<T>", "Iterator<T>", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {5, "toString", "() -> string", "string", 13, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
 };
