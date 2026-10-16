@@ -28579,6 +28579,78 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 53
+    },
+    {
+      "id": "complete_simd_vectors_simd_portable_integer_vectors",
+      "oracle_id": "complete_simd_vectors_simd_portable_integer_vectors",
+      "source": "tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr",
+      "source_lf_sha256": "d2169107c3035c858f47771bbd4c0c6db9bc99f640f071ccb77509a5e9dcb00a",
+      "entry": "run",
+      "stdout_utf8": "OK simd portable integer vectors\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original SIMD body;independent unsigned lane algebra,modulo64 shifts,little-byte reinterpretation,all assertions and store traces. Baseline nativeBytes16;alternate16/32/64 prefix controls do not qualify targets. Legacy ref Slice write interface remains open;no product ABI/intrinsic/alignment/acceleration/borrow/resource/provider PASS.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr",
+        "source_lf_sha256": "d2169107c3035c858f47771bbd4c0c6db9bc99f640f071ccb77509a5e9dcb00a"
+      },
+      "remaining_gates": [
+        "Whole original portable SIMD and top-level module-slot vector bodies through actual VM/C/native;all107 baseline assertions and7stores retained;all source bytes unchanged.",
+        "Legacy ref Slice store permission migration,exact typed vector/module-slot ABI,intrinsic/alignment/accelerated/scalable target behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
+    },
+    {
+      "id": "complete_simd_vectors_simd_top_level_shared_vectors",
+      "oracle_id": "complete_simd_vectors_simd_top_level_shared_vectors",
+      "source": "tests/diff/cases/semantics/stdlib/simd_top_level_shared_vectors.xr",
+      "source_lf_sha256": "b053d22d8211064d249e1d957442a43c6799b406081a317fb6b5aa1d9ebe2319",
+      "entry": "run",
+      "stdout_utf8": "OK simd top-level shared vectors\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original SIMD body;independent unsigned lane algebra,modulo64 shifts,little-byte reinterpretation,all assertions and store traces. Baseline nativeBytes16;alternate16/32/64 prefix controls do not qualify targets. Legacy ref Slice write interface remains open;no product ABI/intrinsic/alignment/acceleration/borrow/resource/provider PASS.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/simd_top_level_shared_vectors.xr",
+        "source_lf_sha256": "b053d22d8211064d249e1d957442a43c6799b406081a317fb6b5aa1d9ebe2319"
+      },
+      "remaining_gates": [
+        "Whole original portable SIMD and top-level module-slot vector bodies through actual VM/C/native;all107 baseline assertions and7stores retained;all source bytes unchanged.",
+        "Legacy ref Slice store permission migration,exact typed vector/module-slot ABI,intrinsic/alignment/accelerated/scalable target behavior;all original compiler/runtime FI,resources/lifetime/cancel/physical/sanitizer/provider qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 1
     }
   ]
 }
