@@ -1585,8 +1585,8 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     if (d->slot_count) {
         EMIT_FORMAT(buffer, et_f16c13d386d8e11f, "static const XrXirSlot %s_slots[] = {\n", prefix);
         for (uint32_t i = 0; i < d->slot_count && emit_work(buffer, 1); ++i)
-            append(buffer, "    {%uu, (XrXirType) %u, %uu},\n", d->slots[i].module,
-                (uint32_t) d->slots[i].type, d->slots[i].mutable);
+            append(buffer, "    {%uu, (XrXirType) %u, %uu, %uu, %uu},\n", d->slots[i].module,
+                (uint32_t) d->slots[i].type, d->slots[i].mutable, d->slots[i].exported, d->slots[i].name);
         EMIT_LITERAL(buffer, "};\n");
     }
     if (d->literal_count) {

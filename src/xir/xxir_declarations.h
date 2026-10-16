@@ -56,6 +56,8 @@ typedef struct XrXirSlot {
     uint32_t module;
     XrXirType type;
     uint32_t mutable;
+    /* Only exported immutable slots name an owned literal; private slots use zero. */
+    uint32_t exported, name;
 } XrXirSlot;
 typedef struct XrXirDeclarations {
     const XrXirSourceModule *modules;

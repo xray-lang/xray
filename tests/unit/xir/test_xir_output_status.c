@@ -193,7 +193,7 @@ static void renderer_channels(void) {
 int main(void) {
     _Static_assert(sizeof(XrXirOutputProvider)==24 && sizeof(XrXirOutputSink)==32,"versioned output prefixes");
     _Static_assert(XR_XIR_CALL_ABI_VERSION==29 && XR_XIR_VALUE_ABI_VERSION==24 &&
-        XR_XIR_PROGRAM_ABI_VERSION==31,"current execution admission versions");
+        XR_XIR_PROGRAM_ABI_VERSION==32,"current execution admission versions");
     _Static_assert(sizeof(XrXirCallConfig)==136 && sizeof(XrXirInstanceConfig)==144,"exact config admission sizes");
     _Static_assert(offsetof(XrXirCallConfig,entries)==8 && offsetof(XrXirInstanceConfig,metadata_limit)==8 &&
         offsetof(XrXirOutputProvider,write)==8 && offsetof(XrXirOutputSink,write)==8,"ABI prefixes precede payload fields");

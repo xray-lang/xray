@@ -272,7 +272,7 @@ static void rp_constant_competition(bool slot_first) {
         {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0},
         {.op=XR_XIR_SLOT_LOAD,.type=XR_XIR_I64}, {.op=XR_XIR_RETURN,.args={2,0}}};
     if (slot_first) { XrXirInstruction swap=apply[0];apply[0]=apply[1];apply[1]=swap; }
-    XrXirBlock block={.count=3};XrXirSlot slot={0,XR_XIR_I64,1};
+    XrXirBlock block={.count=3};XrXirSlot slot={0,XR_XIR_I64,1,0,0};
     f.functions[1].instructions=apply;f.functions[1].instruction_count=3;f.functions[1].blocks=&block;
     XrXirInstruction init[3]={
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=9},

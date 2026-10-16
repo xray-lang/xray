@@ -40,6 +40,19 @@ static XrXirCallStatus generation_owner(XrXirInstance *instance) {
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
     return instance->stopping ? XR_XIR_CALL_BAD_STATE : XR_XIR_CALL_READY;
 }
+static XrXirCallStatus generation_slot_name(XrXirDomain *domain,const XrXirDeclarations *from,
+    uint32_t source,const XrXirDeclarations *to,uint32_t target) {
+    const XrXirSlot *a=&from->slots[source],*b=&to->slots[target];
+    if (a->exported!=b->exported) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!a->exported) return a->name || b->name ? XR_XIR_CALL_BAD_ARGUMENT : XR_XIR_CALL_READY;
+    if (a->name>=from->literal_count || b->name>=to->literal_count || !from->literals || !to->literals)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirLiteral *left=&from->literals[a->name],*right=&to->literals[b->name];
+    if (!left->length || left->length!=right->length || !left->bytes || !right->bytes)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(domain,left->length)) return XR_XIR_CALL_LIMIT;
+    return memcmp(left->bytes,right->bytes,left->length) ? XR_XIR_CALL_BAD_ARGUMENT : XR_XIR_CALL_READY;
+}
 static XrXirCallStatus generation_storage_receive(XrXirInstance *candidate,
     XrXirInstance *current,const XirGenerationStorage *storage) {
     const XrXirDeclarations *from=current->program->declarations,*to=candidate->program->declarations;
@@ -73,6 +86,8 @@ static XrXirCallStatus generation_storage_receive(XrXirInstance *candidate,
             from->slots[s].module>=storage->module_count ||
             to->slots[target].module!=storage->modules[from->slots[s].module] ||
             from->slots[s].mutable!=to->slots[target].mutable) return XR_XIR_CALL_BAD_ARGUMENT;
+        status=generation_slot_name(candidate->domain,from,s,to,target);
+        if (status!=XR_XIR_CALL_READY) return status;
         InstanceStorageRoute birth={current,s};
         if (current->slot_origins && current->slot_origins[s].owner) birth=current->slot_origins[s];
         InstanceStorageRoute module=candidate->module_origins[to->slots[target].module];

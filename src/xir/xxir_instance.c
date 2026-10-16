@@ -1153,10 +1153,13 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t function = xr_xir_call_current_entry(view->activation), module = d->slots[slot].module;
     if (view_is_child(instance, view) && !worker_slot_read(instance, slot)) return XR_XIR_CALL_BAD_STATE;
+    uint32_t caller=d->functions[function].module;
+    if (caller!=module && !xr_xir_domain_work(instance->domain,d->modules[caller].dependency_count))
+        return XR_XIR_CALL_LIMIT;
     if (instance->slot_origins && instance->slot_origins[slot].owner) {
         InstanceStorageRoute route=instance->slot_origins[slot];
         XrXirInstance *birth=route.owner;
-        if (!instance->ready[module] || d->functions[function].module!=module ||
+        if (!instance->ready[module] || !xr_xir_slot_readable(d,d->functions[function].module,slot) ||
             route.index>=birth->program->declarations->slot_count || !birth->published[route.index] ||
             !birth->ready[birth->program->declarations->slots[route.index].module]) return XR_XIR_CALL_BAD_STATE;
         XrXirValueAdmission *admission=xr_xir_call_admission(view);
@@ -1166,8 +1169,9 @@ XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, Xr
             !xr_xir_cell_unborrowed(&birth->slots[route.index]))) return XR_XIR_CALL_BAD_STATE;
         return value_call_status(xr_xir_value_copy(&birth->slots[route.index],output));
     }
-    if (!instance->published[slot] || d->functions[function].module != module ||
-        (!instance->ready[module] && instance->current_module != module)) return XR_XIR_CALL_BAD_STATE;
+    if (!instance->published[slot] || !xr_xir_slot_readable(d,d->functions[function].module,slot) ||
+        (!instance->ready[module] && (d->functions[function].module!=module ||
+            instance->current_module!=module))) return XR_XIR_CALL_BAD_STATE;
     if (d->slots[slot].mutable &&
         (!instance_cell_published(instance, slot, &instance->slots[slot]) ||
          !xr_xir_cell_unborrowed(&instance->slots[slot]))) return XR_XIR_CALL_BAD_STATE;

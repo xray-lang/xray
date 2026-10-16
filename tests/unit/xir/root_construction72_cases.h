@@ -12,12 +12,12 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_nominal.h"
 #include "base/xsha256.h"
-#include "root_construction72_goldens.h"
+#include "root_construction77_goldens.h"
 _Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_ADD_INT == 25 && XR_XIR_CALL == 28 &&
     XR_XIR_RETURN == 33 && XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83,
     "Independent construction vector opcode identities changed");
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 29u && XR_XIR_CHECKED_CONTRACT == 76u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 77u &&
     XR_XIR_CALLABLE_ROOT_REQUIRED == 4u, "Independent construction wire facts changed");
 
 static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
@@ -154,6 +154,7 @@ static void root_construction72_attacks(void) {
     CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous,
         sizeof(root_construction71_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(decoded == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
+    decoded=NULL;
     CHECK(xr_xir_compile_checked_read(&context,root_construction74_previous,
         sizeof(root_construction74_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded);

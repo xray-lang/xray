@@ -44,7 +44,7 @@ static void nominal_visibility_cases(const XrXirProgramSpec *base) {
         declarations.slots=slots;
         XrXirType parameters[] = {(XrXirType)(mode == 3 ? 258 : 257), XR_XIR_STRING};
         if (!mode) {
-            slots[5] = (XrXirSlot) {declarations.root_module, (XrXirType)258, 1};
+            slots[5] = (XrXirSlot) {declarations.root_module, (XrXirType)258, 1,0,0};
             declarations.slots = slots; declarations.slot_count = 6;
         } else if (mode == 1) entries[8].result = (XrXirType)257;
         else entries[8].parameters = parameters;

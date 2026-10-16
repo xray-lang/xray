@@ -113,6 +113,8 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
         MATCH(a->slots[i].module, b->slots[i].module);
         MATCH(a->slots[i].type, b->slots[i].type);
         MATCH(a->slots[i].mutable, b->slots[i].mutable);
+        MATCH(a->slots[i].exported, b->slots[i].exported);
+        MATCH(a->slots[i].name, b->slots[i].name);
     }
     for (uint32_t i = 0; i < a->literal_count; ++i)
         TRY(match_literal(a->literals[i], b->literals[i], context));

@@ -100,6 +100,7 @@ PUBLIC_STRUCTURES = [
  (4400, 'XrXirAtomicOutcome', [('status','enum'),('permission','enum'),('continuing','bool')]),
  (4500, 'XrXirClassEvent', [('serial','u64'),('type','u32'),('declaration','u32'),
      ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
+ (4600, 'XrXirSlot', [('module','u32'),('type','enum'),('mutable','u32'),('exported','u32'),('name','u32')]),
 ]
 
 PUBLIC_SCALARS = [

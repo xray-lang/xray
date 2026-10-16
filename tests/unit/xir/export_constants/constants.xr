@@ -1,0 +1,5 @@
+export const answer:i64=42
+export const enabled:bool=true
+export const done:()=()
+export const (left,right)=(19,23)
+const secret:i64=17

@@ -141,7 +141,7 @@ static void product_layout_vector(void) {
             CHECK(!memcmp(historical,product_layout_value21_digest,32) && !memcmp(current,product_layout_value22_digest,32));
             xr_sha256(layout_current24_preimage,sizeof(layout_current24_preimage),current);
             CHECK(!memcmp(current,product_layout_value24_digest,32));
-            _Static_assert(XR_XIR_VALUE_ABI_VERSION==24u && XR_XIR_CALL_ABI_VERSION==29u && XR_XIR_PROGRAM_ABI_VERSION==31u,"owned Domain layout identity");
+            _Static_assert(XR_XIR_VALUE_ABI_VERSION==24u && XR_XIR_CALL_ABI_VERSION==29u && XR_XIR_PROGRAM_ABI_VERSION==32u,"owned Domain layout identity");
             for(unsigned previous=21;previous<24;++previous) {
                 facts.target.abi_version=previous;
                 memset(digest,0x5a,sizeof(digest));memcpy(saved,digest,sizeof(saved));

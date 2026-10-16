@@ -63,7 +63,7 @@ static void invocation_deferred_fixture(InvocationDeferredFixture *f,uint32_t mo
         .result=XR_XIR_I64,.blocks=&f->two,.block_count=1,.instructions=f->read,.instruction_count=2};
     f->functions[3]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .blocks=&f->init_block,.block_count=1,.instructions=f->init,.instruction_count=f->init_block.count};
-    f->source=(XrXirSourceModule){"deferred",8,NULL,0,3, 0};f->slot=(XrXirSlot){0,f->cell,1};
+    f->source=(XrXirSourceModule){"deferred",8,NULL,0,3, 0};f->slot=(XrXirSlot){0,f->cell,1,0,0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .entry_function=0,.slots=mode?&f->slot:NULL,.slot_count=mode?1:0};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=4,

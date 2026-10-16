@@ -13,7 +13,7 @@ static void access_temporary_cases(void) {
     XrXirNominalDeclaration nominal={.module={"a",1},.name={"S",1}};XrXirNominalTable table={&nominal,1,NULL};
     XrXirTypeNode node={.kind=XR_XIR_TYPE_NOMINAL};XrXirTypes types={&node,1,&table,NULL};
     XrXirType type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirFunctionIdentity identities[2]={{0},{0}};XrXirSourceModule source={"a",1,NULL,0,0, 0};XrXirSlot slot={0,type,0};
+    XrXirFunctionIdentity identities[2]={{0},{0}};XrXirSourceModule source={"a",1,NULL,0,0, 0};XrXirSlot slot={0,type,0,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule module={.stage=XR_XIR_CHECKED,.function_count=2,.declarations=&declarations,.types=&types};
     AccessTemporaryFixture f={&module,type};

@@ -14,7 +14,7 @@
 #include "xir_construction_fixture.h"
 #include "xir_array_metadata_fixture.h"
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 29 && XR_XIR_CHECKED_CONTRACT == 76,
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 30 && XR_XIR_CHECKED_CONTRACT == 77,
     "array checked wire identity");
 
 static void array_checked_const_slot(XrXirCheckedPacket *packet, size_t entry, size_t slot) {
@@ -47,17 +47,17 @@ static void array_checked_cases(void) {
     CHECK(xir_fixture_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; memset(&f, 0xCC, sizeof(f));
-    /* Independent 29/75 fields: module76 + function records204/665/128;
-     * declarations20 + source19 + identities3*36 + slot12 + impl-count4;
-     * generics4 + types(12+12+12+20) + construction4 + defaults4 + provenance4 = 1308. */
+    /* Independent 30/77 fields: module76 + function records204/665/128;
+     * declarations20 + source19 + identities3*36 + slot20 + impl-count4;
+     * generics4 + types(12+12+12+20) + construction4 + defaults4 + provenance4 = 1316. */
     const size_t entry = 321, operands = 925, slot = 1220;
-    CHECK(packet.length == 1308);
+    CHECK(packet.length == 1316);
     fprintf(stderr,"array packet actual length=%zu entry=%u array=%u operand=%u\n",packet.length,packet.bytes[entry],packet.bytes[entry+2*40],packet.bytes[operands+8]);
     CHECK(packet.bytes[entry] == XR_XIR_CONST_INT && packet.bytes[116 + 40] == XR_XIR_CELL_NEW &&
         packet.bytes[entry + 2 * 40] == XR_XIR_ARRAY_NEW && packet.bytes[operands + 8] == 3);
     CHECK(packet.bytes[entry + 6 * 40] == XR_XIR_SLOT_LOAD &&
         packet.bytes[entry + 7 * 40] == XR_XIR_CELL_PLACE && packet32(&packet, slot + 4) == 257);
-    uint8_t original[1308]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[1316]; memcpy(original, packet.bytes, sizeof(original));
     for (uint32_t attack = 0; attack < 20; ++attack) {
         if (attack == 0) put32(packet.bytes + entry + 2 * 40, XR_XIR_OP_COUNT);
         if (attack == 1) put32(packet.bytes + entry + 2 * 40 + 4, 257);

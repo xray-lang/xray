@@ -58,7 +58,7 @@ static XrXirArtifact *state_failure_fixture(const XrXirCompileContext *context,u
         {"right",5,&base,1,2, 0},{"root",4,diamond,2,3, 0}};
     const XrXirFunctionIdentity identities[]={
         {.module=0},{.module=1},{.module=2},{.module=3},{.module=3,.exported=true}};
-    const XrXirSlot slot={0,scenario==2?XR_XIR_I64:XR_XIR_STRING,false};
+    const XrXirSlot slot={0,scenario==2?XR_XIR_I64:XR_XIR_STRING,false,0,0};
     const XrXirLiteral literals[]={{"module-owned-text",17},{"module initializer assertion",28}};
     const XrXirDeclarations declarations={modules,4,identities,&slot,1,literals,2,3,4,NULL};
     const XrXirModule module={XR_XIR_BUILT,functions,5,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};

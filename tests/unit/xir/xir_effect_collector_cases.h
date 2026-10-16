@@ -60,7 +60,7 @@ static XrXirArtifact *collector_go_fixture(void) {
         {"entry",5,NULL,0,XR_XIR_I64,&blocks[1],1,entry,3,NULL,0},
         {"worker",6,NULL,0,XR_XIR_UNIT,&blocks[2],1,worker,3,NULL,0}};
     XrXirSourceModule source={"collector",9,NULL,0,0, 0};XrXirFunctionIdentity ids[3]={{0}};
-    XrXirSlot slot={0,cell,1};XrXirDeclarations declarations={&source,1,ids,&slot,1,NULL,0,0,1,NULL};
+    XrXirSlot slot={0,cell,1,0,0};XrXirDeclarations declarations={&source,1,ids,&slot,1,NULL,0,0,1,NULL};
     XrXirModule module={XR_XIR_BUILT,bodies,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *artifact=NULL;
     CHECK(xir_fixture_check(&effect_context,&module,&artifact,NULL)==XR_XIR_OK && artifact);

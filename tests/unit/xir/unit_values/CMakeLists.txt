@@ -25,5 +25,8 @@ set_tests_properties(test_xir_public_cli_unit_arguments PROPERTIES
 add_test(NAME test_xir_semantic76_fields
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_LIST_DIR}/../derive_semantic76_vectors.py")
 set_tests_properties(test_xir_semantic76_fields PROPERTIES TIMEOUT 30 LABELS "unit;xir;wire;oracle;unit-value")
+add_test(NAME test_xir_semantic77_fields
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_LIST_DIR}/../derive_semantic77_vectors.py")
+set_tests_properties(test_xir_semantic77_fields PROPERTIES TIMEOUT 30 LABELS "unit;xir;wire;oracle;unit-value")
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()

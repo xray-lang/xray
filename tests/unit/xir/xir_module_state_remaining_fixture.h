@@ -99,7 +99,7 @@ static void remaining_fixture(RemainingFixture *f,uint32_t scenario,uint32_t rej
     f->identities[7].nominal_owner=2;f->identities[7].method_kind=XR_XIR_CONSTRUCTOR;
     f->modules[0]=(XrXirSourceModule){"base",4,NULL,0,0, 0};f->modules[1]=(XrXirSourceModule){"left",4,&f->base,1,1, 0};
     f->modules[2]=(XrXirSourceModule){"right",5,&f->base,1,2, 0};f->modules[3]=(XrXirSourceModule){"root",4,f->diamond,2,3, 0};
-    for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected && rejected<3?0:3,f->class_type,rejected==2?0:1};
+    for(uint32_t i=0;i<4;++i)f->slots[i]=(XrXirSlot){rejected && rejected<3?0:3,f->class_type,rejected==2?0:1,0,0};
     f->literals[0]=(XrXirLiteral){"x",1};f->literals[1]=(XrXirLiteral){"module initializer assertion",28};f->literals[2]=(XrXirLiteral){"",0};
     f->declarations=(XrXirDeclarations){f->modules,4,f->identities,f->slots,4,f->literals,3,3,4,NULL};
     f->module=(XrXirModule){XR_XIR_BUILT,f->functions,8,&f->declarations,NULL,&f->types,NULL,XR_XIR_PROGRAM,NULL};

@@ -140,8 +140,9 @@ static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContex
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t s=0;a && s<a->slot_count;++s) {
-        if (!xir_compile_work(context,2)) return XR_XIR_BUDGET;
-        if (!b->slots || a->slots[s].module!=b->slots[s].module || a->slots[s].mutable!=b->slots[s].mutable)
+        if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+        if (!b->slots || a->slots[s].module!=b->slots[s].module || a->slots[s].mutable!=b->slots[s].mutable ||
+            a->slots[s].exported!=b->slots[s].exported || a->slots[s].name!=b->slots[s].name)
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=effect_terms_domain_type(terms,source->types,a->slots[s].type,b->slots[s].type,0);
         if (status!=XR_XIR_OK) return status;

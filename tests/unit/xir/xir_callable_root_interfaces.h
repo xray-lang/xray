@@ -36,7 +36,7 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
     if(flags&1)identities[2].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirImplementationBinding binding={{0,NULL,0},0,2};
     XrXirImplementation implementation={0,{0,NULL,0},&binding,1};XrXirImplementationTable table={&implementation,1};
-    XrXirSlot slot={0,XR_XIR_I64,1};
+    XrXirSlot slot={0,XR_XIR_I64,1,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=0,.implementations=&table};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};

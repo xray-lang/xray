@@ -243,13 +243,15 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         id.test_timeout_seconds = checked_u32(c, id.test_timeout_seconds);
         if (c->reading) identities[i] = id;
     }
-    XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 12);
+    XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 20);
     d->slots = slots;
     for (uint32_t i = 0; i < d->slot_count && c->status == XR_XIR_OK; ++i) {
         XrXirSlot slot = slots[i];
         slot.module = checked_u32(c, slot.module);
         slot.type = (XrXirType) checked_u32(c, (uint32_t) slot.type);
         slot.mutable = checked_u32(c, slot.mutable);
+        slot.exported = checked_u32(c, slot.exported);
+        slot.name = checked_u32(c, slot.name);
         if (c->reading) slots[i] = slot;
     }
     XrXirLiteral *literals = checked_array(c, d->literals, d->literal_count, sizeof(*literals), 4);

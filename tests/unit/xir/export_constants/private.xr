@@ -1,0 +1,2 @@
+import "./constants" as c
+export fn result()->i64{return c.secret}

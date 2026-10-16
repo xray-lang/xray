@@ -861,6 +861,9 @@ static SourceName *visible_name(SourceContext *ctx, const char *name) {
 static bool source_declaration_exported(const SourceContext *ctx, const SourceName *name) {
     if (!name) return false;
     switch (name->kind) {
+    case SOURCE_SLOT: case SOURCE_UNIT_SLOT:
+        return name->index < ctx->slot_count && ctx->slots &&
+            ctx->slots[name->index].exported == 1 && !ctx->slots[name->index].mutable;
     case SOURCE_FUNCTION:
         return name->index < ctx->function_count && ctx->identities &&
             ctx->identities[name->index].exported != 0 &&
@@ -1077,6 +1080,7 @@ static bool source_literal_append(SourceContext *ctx, AstNode *node, const char 
     ++ctx->literal_count; *literal = id;
     return true;
 }
+#include "xxir_source_slot_declarations.inc.c"
 static bool source_string_literal(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, SourceValue *value) {
     uint32_t id;
@@ -1548,6 +1552,16 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
     if (!source_reference_promise(ctx, node, symbol->index, expected, &op.type)) return false;
     return source_type_arguments(ctx, node, arguments.substitution.types, arguments.count, &op) && source_recipe_record(ctx,op,value);
 }
+static bool source_import_value(SourceContext *ctx,AstNode *node,SourceName *binding,
+    SourceName *target,SourceExpectedType expected,SourceValue *value) {
+    if (target && (target->kind==SOURCE_SLOT || target->kind==SOURCE_UNIT_SLOT)) {
+        if (!source_name_ready(target))
+            return source_fail(ctx,node,XR_XIR_BAD_VALUE,"imported constant is not initialized");
+        return source_query_reference(ctx,node,binding,target,XR_XIR_SOURCE_READ) &&
+            source_binding_read(ctx,target,value);
+    }
+    return source_function_value(ctx,node,binding,target,expected,value);
+}
 static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     AstNode *callee = node->as.function_ref.callee;
     SourceName *symbol = NULL, *binding = NULL;
@@ -1630,7 +1644,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
         SourceTypeArguments arguments = {0};
         if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, &arguments, context, value);
-        return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), context, value);
+        return source_import_value(ctx, node, base, imported_declaration(ctx, base, member->name), context, value);
     }
     case AST_THIS_EXPR: case AST_VARIABLE: {
         SourceName *symbol = ctx->active_expression->binding;
@@ -1644,7 +1658,9 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
                 return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"declaration value is not ready in its lexical owner");
             symbol=live_binding;
         }
-        if (symbol && (symbol->kind == SOURCE_FUNCTION || symbol->kind == SOURCE_IMPORT))
+        if (symbol && symbol->kind==SOURCE_IMPORT)
+            return source_import_value(ctx,node,symbol,imported_declaration(ctx,symbol,symbol->imported),context,value);
+        if (symbol && symbol->kind == SOURCE_FUNCTION)
             return source_function_value(ctx, node, symbol, symbol, context, value);
         if (!source_name_ready(symbol))
             return source_fail(ctx, node, XR_XIR_BAD_VALUE, "name is not an initialized value");
@@ -2309,24 +2325,20 @@ static bool collect_declarations(SourceContext *ctx) {
             AstNode *node = spec->ast->as.program.statements[i];
             if (node->type == AST_FUNCTION_DECL) { if (!declare_function(ctx, node, function++)) return false; }
             else if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
-                if (node->is_exported) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "exported state is not admitted");
                 SourceName *symbol = add_name(ctx, &ctx->names[m], node->as.var_decl.name, node);
                 if (!symbol) return false;
-                symbol->kind = SOURCE_SLOT; symbol->index = slot; symbol->mutable = !node->as.var_decl.is_const;
-                if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, 0, source_query_range(ctx, node, symbol->name))) return false;
-                ctx->slots[slot++] = (XrXirSlot) {m, XR_XIR_UNIT, symbol->mutable};
+                if (!source_slot_declare(ctx, symbol, node, !node->as.var_decl.is_const,
+                    source_query_range(ctx, node, symbol->name), slot++)) return false;
             } else if(node->type==AST_DESTRUCTURE_DECL) {
                 uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
                 for(uint32_t f=0;f<fields;++f) {
                     if(!source_work(ctx,node))return false;
                     XrDestructurePattern *field=node->as.destructure_decl.pattern->as.array.elements[f];
                     if(field->type==PATTERN_SKIP)continue;
-                    if(node->is_exported) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"exported state is not admitted");
                     SourceName *symbol=add_name(ctx,&ctx->names[m],field->as.identifier.name,node);
                     if(!symbol)return false;
-                    symbol->kind=SOURCE_SLOT;symbol->index=slot;symbol->mutable=!node->as.destructure_decl.is_const;
-                    if(!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,0,source_destructure_range(ctx,field)))return false;
-                    ctx->slots[slot++]=(XrXirSlot){m,XR_XIR_UNIT,symbol->mutable};
+                    if (!source_slot_declare(ctx,symbol,node,!node->as.destructure_decl.is_const,
+                        source_destructure_range(ctx,field),slot++)) return false;
                 }
             }
         }

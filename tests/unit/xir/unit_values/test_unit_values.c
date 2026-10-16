@@ -20,9 +20,9 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_tuple.h"
-#include "unit_wire_golden.h"
+#include "unit77_wire_golden.h"
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA==29u && XR_XIR_CHECKED_CONTRACT==76u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA==30u && XR_XIR_CHECKED_CONTRACT==77u &&
     XR_XIR_TUPLE_NEW==143 && XR_XIR_RETURN==33 && XR_XIR_I64==2 && XR_XIR_UNIT==0,
     "Independent Unit wire fields require an explicit protocol update");
 
@@ -63,15 +63,19 @@ static void unit_wire(const XrXirCompileContext *context) {
     XrXirArtifact *checked=unit_checked(context,false),*received=NULL;
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(unit76_packet) && !memcmp(packet.bytes,unit76_packet,packet.length));
+    CHECK(packet.length==sizeof(unit77_packet) && !memcmp(packet.bytes,unit77_packet,packet.length));
     xr_xir_compile_artifact_free(checked);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_checked_read(context,unit76_packet,sizeof(unit76_packet),&received,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,unit77_packet,sizeof(unit77_packet),&received,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(received);
     CHECK(module->functions[0].parameter_count==1 && module->functions[0].parameters[0]==XR_XIR_UNIT);
     xr_xir_compile_artifact_free(received);received=NULL;
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_xir_compile_checked_read(context,previous75_packet,sizeof(previous75_packet),&received,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(!received && xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes &&
+        after.live_bytes==before.live_bytes);
+    CHECK(xr_xir_compile_checked_read(context,previous76_packet,sizeof(previous76_packet),&received,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!received && xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes &&
         after.live_bytes==before.live_bytes);

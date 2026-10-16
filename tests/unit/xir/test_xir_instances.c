@@ -203,9 +203,9 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
         f->entries[10] = (XrXirCallEntry){XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_UNIT,
             0, initialization_fault_child, NULL, NULL, 0, 0};
     }
-    f->slots[0] = (XrXirSlot) {2, (XrXirType)257, 0};
-    f->slots[1] = (XrXirSlot) {1, (XrXirType)257, 0};
-    f->slots[2] = (XrXirSlot) {0, (XrXirType)258, 1};
+    f->slots[0] = (XrXirSlot) {2, (XrXirType)257, 0,0,0};
+    f->slots[1] = (XrXirSlot) {1, (XrXirType)257, 0,0,0};
+    f->slots[2] = (XrXirSlot) {0, (XrXirType)258, 1,0,0};
     f->literals[0] = (XrXirLiteral) {"A\0\xe4\xb8\xad", 5};
     f->literals[1] = (XrXirLiteral) {"independent", 11};
     f->declarations = (XrXirDeclarations) {f->modules, 3, f->identities, f->slots, 3, f->literals, 2, 0, 3, NULL};

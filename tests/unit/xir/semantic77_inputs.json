@@ -1,0 +1,79 @@
+[
+  {
+    "source": "compile_owner/checked_sizing76_golden.h",
+    "target": "compile_owner/checked_sizing77_golden.h",
+    "sha256": "f877ce8b1fe6278560e8ad244851bb853100981a1df9ddd8185405c04ea64266",
+    "zero_slot_models": [
+      "sizing76_golden",
+      "sizing76_embedded_golden",
+      "sizing76_empty_golden"
+    ]
+  },
+  {
+    "source": "root_construction72_goldens.h",
+    "target": "root_construction77_goldens.h",
+    "sha256": "776a08fe41a1526dcd91f629b9f0d26aa80eadabace04f8198bd77df9b11b6c1",
+    "zero_slot_models": [
+      "root_construction72_checked",
+      "root_construction72_instance"
+    ]
+  },
+  {
+    "source": "unit_values/unit_wire_golden.h",
+    "target": "unit_values/unit77_wire_golden.h",
+    "sha256": "2d127a7982b10cb2f2e9a0898692f532d639b40795687e9ed16ce3446d586ff7",
+    "zero_slot_models": [
+      "unit76_packet"
+    ]
+  },
+  {
+    "source": "xir_assert_panics76_golden.h",
+    "target": "xir_assert_panics77_golden.h",
+    "sha256": "92223b2b59a6a94774373eb2afd3354b559b77f071c6b37eea34d742f71087b8",
+    "zero_slot_models": [
+      "assert_panics76_golden"
+    ]
+  },
+  {
+    "source": "xir_checked_range76_golden.h",
+    "target": "xir_checked_range77_golden.h",
+    "sha256": "9e3251c6634d0088a24c724dfe352404c6aa90c6e203ae8cad31790f1ed9956d",
+    "zero_slot_models": [
+      "checked_range76_golden"
+    ]
+  },
+  {
+    "source": "xir_checked_scalar76_golden.h",
+    "target": "xir_checked_scalar77_golden.h",
+    "sha256": "b7762bfe2ee07c19d98b2e22881db836d55ab87f48afd29efd490886e3e15bcd",
+    "zero_slot_models": [
+      "checked_scalar76_golden"
+    ]
+  },
+  {
+    "source": "xir_error_marker76_golden.h",
+    "target": "xir_error_marker77_golden.h",
+    "sha256": "3eb3f4cbbb559bc3f9fadae15b85e9faca706b3653707849f1c33ec0a1dcedf4",
+    "zero_slot_models": [
+      "error_marker76_golden"
+    ]
+  },
+  {
+    "source": "xir_generic_method76_golden.h",
+    "target": "xir_generic_method77_golden.h",
+    "sha256": "cd7b90be912e0f9b3a266eaa73344da33481ae9b33d1b8256dca123171a831bf",
+    "zero_slot_models": [
+      "generic_method76_golden",
+      "generic_method76_invalid_flags0",
+      "generic_method76_invalid_flags1"
+    ]
+  },
+  {
+    "source": "xir_rune76_golden.h",
+    "target": "xir_rune77_golden.h",
+    "sha256": "bc448914cfe262d90855ab1b86275def11cfd4cce4eb8bbd1ae553a10d6d099b",
+    "zero_slot_models": [
+      "rune76_golden"
+    ]
+  }
+]

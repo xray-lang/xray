@@ -68,7 +68,7 @@ static XrXirStatus permission_fixture(const XrXirCompileContext *context, uint32
     identities[4].exported=1;
     identities[12].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirSourceModule source={"root",4,NULL,0,0, 0};
-    XrXirSlot slot={0,cell_type,1};
+    XrXirSlot slot={0,cell_type,1,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,13,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};

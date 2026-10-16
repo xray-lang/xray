@@ -8,7 +8,7 @@
  */
 static XrXirStatus library_state_typed_values_map_operation(const XrXirCompileContext *context,void *opaque) {
     (void)opaque;SourceContext ctx={0};ctx.compile=*context;ctx.slot_count=5;
-    XrXirSlot slots[3]={{0,XR_XIR_I64,1},{1,XR_XIR_I64,1},{1,XR_XIR_STRING,1}};
+    XrXirSlot slots[3]={{0,XR_XIR_I64,1,0,0},{1,XR_XIR_I64,1,0,0},{1,XR_XIR_STRING,1,0,0}};
     XrXirDeclarations declarations={.slots=slots,.slot_count=3};
     XrXirModule library={.declarations=&declarations};uint32_t modules[2]={UINT32_MAX,4};
     SourceLibraryMap map={.modules=modules,.module_count=2};
@@ -38,7 +38,7 @@ static XrXirStatus library_state_typed_values_type_operation(const XrXirCompileC
         (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+11)};
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CELL,.element=input}};
-    XrXirTypes types={.nodes=nodes,.count=2};XrXirSlot slot={0,(XrXirType)(input+1),1};
+    XrXirTypes types={.nodes=nodes,.count=2};XrXirSlot slot={0,(XrXirType)(input+1),1,0,0};
     XrXirDeclarations declarations={.slots=&slot,.slot_count=1};
     XrXirModule library={.types=&types,.declarations=&declarations};
     uint32_t modules[1]={3},slots[1]={0};

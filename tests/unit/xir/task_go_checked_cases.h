@@ -144,7 +144,7 @@ static void task_go_slots(void) {
         for (uint32_t mutable = 0; mutable < 2; ++mutable) {
             XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
             TaskGoFixture f; task_go_fixture(&f);
-            f.slot = (XrXirSlot){0, XR_XIR_I64, mutable};
+            f.slot = (XrXirSlot){0, XR_XIR_I64, mutable,0,0};
             f.declarations.slots = &f.slot; f.declarations.slot_count = 1;
             if (!transitive) {
                 f.worker[0] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = XR_XIR_I64};
@@ -422,7 +422,7 @@ static void task_go_previous_packets(void) {
 static void task_go_cleanup_fixture(TaskGoFixture *f, uint32_t spawn, uint32_t mutable) {
         task_go_fixture(f);
         f->identities[3].cleanup_owner = 1;
-        f->slot = (XrXirSlot){0, XR_XIR_I64, 1}; f->declarations.slots = &f->slot; f->declarations.slot_count = 1;
+        f->slot = (XrXirSlot){0, XR_XIR_I64, 1,0,0}; f->declarations.slots = &f->slot; f->declarations.slot_count = 1;
         f->worker[0] = (XrXirInstruction){.op = XR_XIR_CLEANUP_REGISTER, .args = {0, 1}, .targets = {1}, .immediate = 3};
         f->worker[1] = (XrXirInstruction){.op = XR_XIR_CLEANUP_LEAVE, .targets = {2}};
         f->worker[2] = (XrXirInstruction){.op = XR_XIR_RETURN};

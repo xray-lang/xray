@@ -4591,3 +4591,4 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_graph_quiescence.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/xir/effect_physical_records.cmake)
 add_subdirectory(xir/unit_values)
+add_subdirectory(xir/export_constants)

@@ -647,7 +647,9 @@ static XrXirStatus provenance_declarations(ProvenanceMatch *c) {
         if (status != XR_XIR_OK) return status;
     }
     for (uint32_t s = 0; s < a->slot_count; ++s) {
-        if (a->slots[s].module != b->slots[s].module || a->slots[s].mutable != b->slots[s].mutable)
+        if (!xir_compile_work(c->remaining,4)) return XR_XIR_BUDGET;
+        if (a->slots[s].module != b->slots[s].module || a->slots[s].mutable != b->slots[s].mutable ||
+            a->slots[s].exported != b->slots[s].exported || a->slots[s].name != b->slots[s].name)
             return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status = xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->source->types, c->destination->types, NULL, 0, a->slots[s].type, b->slots[s].type, &c->scratch);
         if (status != XR_XIR_OK) return status;

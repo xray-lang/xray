@@ -545,7 +545,8 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"lexical scope is outside the selected Checked closure");
         ctx->modules[map->modules[m]].lexical_scope=map->modules[scope-1]+1;
     }
-    if (!source_library_slots(ctx,library,map) || !source_library_literals(ctx, library, map)) return false;
+    if (!source_library_slots(ctx,library,map) || !source_library_literals(ctx, library, map) ||
+        !source_library_slot_names(ctx,map)) return false;
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
     }

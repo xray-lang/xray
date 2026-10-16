@@ -69,7 +69,7 @@ static XrXirArtifact *trace_fixture(const XrXirCompileContext *context) {
     XrXirFunctionIdentity identities[16]={{0}};
     identities[13].cleanup_owner=13;
     XrXirSourceModule source={"root",4,NULL,0,0,0};
-    XrXirSlot slots[]={{0,cell,1},{0,XR_XIR_I64,0}};
+    XrXirSlot slots[]={{0,cell,1,0,0},{0,XR_XIR_I64,0,0,0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=slots,.slot_count=2,.entry_function=1};
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},

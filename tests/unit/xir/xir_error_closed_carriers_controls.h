@@ -282,7 +282,7 @@ static XrXirStatus cc_whole(const XrXirCompileContext *c,unsigned mode) {
     ClosedCarrierFixture f;cc_fixture(&f,mode<9 ? mode : 8);
     XrXirInstruction actual[4]={{0}},initialize[4]={{0}};
     XrXirBlock actual_block={0},initialize_block={.count=4};
-    XrXirSlot slot={0,(XrXirType)CC_ARRAY_CELL,1};uint32_t operand=0;
+    XrXirSlot slot={0,(XrXirType)CC_ARRAY_CELL,1,0,0};uint32_t operand=0;
     if (mode>=9) {
         CHECK(mode==9 || mode==10);
         EdgeFixture *edge=&f.edge;edge->module.function_count=4;

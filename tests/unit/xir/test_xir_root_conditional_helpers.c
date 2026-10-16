@@ -542,7 +542,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
         {.name="localUnit",.name_length=9,.result=XR_XIR_UNIT,.blocks=&blocks[5],.block_count=1,
          .instructions=local_unit,.instruction_count=3,.operands=&shared_operand,.operand_count=1}};
     XrXirFunctionIdentity identities[6]={0};XrXirSourceModule source={"cell-effects",12,NULL,0,3, 0};
-    XrXirSlot slot={0,(XrXirType)256,1};
+    XrXirSlot slot={0,(XrXirType)256,1,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=6,
@@ -624,7 +624,7 @@ static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, 
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[3],.block_count=1,
          .instructions=initialize,.instruction_count=3}};
     XrXirFunctionIdentity identities[4]={0};XrXirSourceModule source={"cell-payload",12,NULL,0,3, 0};
-    XrXirSlot slot={0,(XrXirType)257,1};
+    XrXirSlot slot={0,(XrXirType)257,1,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=0};
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=4,
@@ -791,7 +791,7 @@ static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context
          .blocks=&blocks[2],.block_count=1}};
     XrXirFunctionIdentity identities[3]={[1]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
     XrXirSourceModule source={"zero-module-fn",14,NULL,0,2, 0};
-    XrXirSlot slot={0,(XrXirType)257,1};
+    XrXirSlot slot={0,(XrXirType)257,1,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule module={.stage=XR_XIR_CHECKED,.types=&types,.functions=functions,
@@ -1029,7 +1029,7 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
     XrXirFunctionIdentity identities[7]={[1]={.cleanup_owner=1},[2]={.cleanup_owner=2},
         [3]={.promises=XR_XIR_FUNCTION_NO_SUSPEND},[4]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
     XrXirSourceModule identity={"nested-reference",16,NULL,0,6, 0};
-    XrXirSlot slot={0,(XrXirType)257,1};
+    XrXirSlot slot={0,(XrXirType)257,1,0,0};
     XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,
         .entry_function=5,.slots=&slot,.slot_count=1};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=7,

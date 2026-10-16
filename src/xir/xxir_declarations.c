@@ -19,6 +19,7 @@
 #include "../base/xmalloc.h"
 #include "../shared/xr_utf8_core.h"
 #include <limits.h>
+#include "xxir_slot_exports.inc.c"
 
 
 /* Types, identity metadata and signature structure precede this pass.  A
@@ -87,6 +88,14 @@ bool xr_xir_module_imports(const XrXirDeclarations *d, uint32_t from, uint32_t t
     for (uint32_t i = 0; i < module->dependency_count; ++i)
         if (module->dependencies[i] == target) return true;
     return false;
+}
+XR_FUNC bool xr_xir_slot_readable(const XrXirDeclarations *d,uint32_t from,uint32_t index) {
+    if (!d || !d->modules || !d->slots || from>=d->module_count || index>=d->slot_count)
+        return false;
+    const XrXirSlot *slot=&d->slots[index];
+    if (slot->module>=d->module_count) return false;
+    return from==slot->module || (slot->exported==1 && !slot->mutable &&
+        xr_xir_module_imports(d,from,slot->module));
 }
 #include "xxir_nominal_access.inc.c"
 XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile_context, const XrXirDeclarations *d, uint32_t *order) {
@@ -223,7 +232,9 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
     }
     for (uint32_t i = 0; i < d->slot_count; ++i) {
         const XrXirSlot *slot = &d->slots[i];
-        if (slot->module >= d->module_count || slot->mutable > 1) return XR_XIR_BAD_STRUCTURE;
+        if (slot->module >= d->module_count || slot->mutable > 1 || slot->exported>1 ||
+            (!slot->exported && slot->name) || (slot->exported &&
+                (slot->mutable || slot->name>=d->literal_count))) return XR_XIR_BAD_STRUCTURE;
         bool cell = xr_xir_type_is_cell(types, slot->type);
         XrXirType logical = cell ? xr_xir_cell_element(types, slot->type) : slot->type;
         if (cell != !!slot->mutable || (logical != XR_XIR_UNIT && logical != XR_XIR_BOOL &&
@@ -242,6 +253,8 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             xr_utf8_core_scan_strict((const uint8_t *) literal->bytes, literal->length).error != XR_UTF8_OK)
             return XR_XIR_BAD_STRUCTURE;
     }
+    status=declaration_slot_exports(work,d);
+    if (status!=XR_XIR_OK) return status;
     /* The temporary order and the traversal's done bitmap overlap. */
     uint64_t scratch = (uint64_t)d->module_count * (sizeof(uint32_t) + 1);
     if (scratch > SIZE_MAX) return XR_XIR_BUDGET;

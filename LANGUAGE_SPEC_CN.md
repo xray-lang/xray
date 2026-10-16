@@ -7879,9 +7879,19 @@ Unit保留一个真实逻辑参数与有序arity，不能按零宽frame擦除。
 
 当前Source沿共同实参计划接入自由函数、callable/closure、方法/构造器、接口签名及泛型定义中的固定Unit READ形参；未能推导的构造器参数仍拒绝。独立public leaf CTFE、生成C leaf与原Tuple的VM/native/mixed消费者沿同一接点验证。泛型Unit实参域及各表面完整资格仍须分别闭合，不能从固定Unit参数推断额外能力。Source、Program、Instance及库state权限的原限制不变。
 
-本族扩展Checked值验证域，唯一semantic为76；wire29与Value24/Call29/Program31的字段、布局和ABI事实未变。旧75完整包及SDK语义在早期准入拒绝，不留旧reader或别名；独立完整旧前像保留作拒例，新向量从明确字段推导而非writer输出刷新。布局与identity仍由§17.6列出的实现常量唯一承担。
+Unit逻辑参数扩展使用semantic76；随后§17.69的共同slot声明切换更新当前协议。旧75及76完整包与SDK语义在早期准入拒绝，不留旧reader或别名；独立完整旧前像保留作拒例，新向量从明确字段推导而非writer输出刷新。布局与identity仍由§17.6列出的实现常量唯一承担。
 
 Unit空值本身不分配，结构接收、完整复验和参数元数据仍计原ledger。所有原完整物理FI、分配/peak/work三轴、same-owner重试、失败输出保全、取消/physical0、sanitizer及provider门继续必需；本族不调高128M、64MiB/8MiB、steps/frame/depth或既有timeout，也不开放库私有var或授予完整标准库资格。
+
+### 17.69 导出常量的拥有式声明
+
+模块级export const使用真实不可变slot，保持普通initializer、发布及失败顺序。slot的exported事实只能为0或1；导出槽不可变，name索引同一声明拥有的literal池。导出名称须为非空、合法UTF-8且不含NUL；同一模块不能有重名导出槽。私有槽的name必须为零，匿名内部存储不制造导出名称。Source的统一命名空间检查继续拒绝跨声明种类重名。
+
+Source与Owned Library从同一声明恢复名称、类型、可见性和槽编号；名称字节随已有literal克隆和接收重定位。导入读取生成真实SLOT_LOAD。Unit读取仍执行槽发布与初始化检查，然后通过普通空Tuple构造取得逻辑值。跨模块读取必须有直接导入且目标为导出const；写入、place、初始化、Domain、worker及root权限不因可见性扩大。
+
+slot线格式现在为五个u32，当前共同协议为schema30/semantic77与Program32；Value24和Call29不变。实际C布局为20字节、4字节对齐，exported/name偏移为12/16；SDK同时认证这些布局测量。精确匹配、效果与来源证明以及跨代存储接收均核对新增事实；接收时名称按实际拥有字节对应，不以重定位后的literal编号相等替代名称检查。旧schema29/semantic76及Program31直接拒绝。
+
+源码和Catalog消费者须分别保留拥有式证据：销毁producer、输入packet及库源码后，已接收常量仍可读取；新字段从独立完整字段模型编码，并对重算摘要的可见性、名称及权限篡改实施拒绝。导出const接点不开放库私有var，也不证明完整标准库、所有类型、编译期执行或完整资源与安全资格；相应整消费者门禁保持。
 
 ---
 

@@ -119,7 +119,8 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
     if (!d || op->immediate < 0 || (uint64_t) op->immediate >= d->slot_count) return XR_XIR_BAD_STRUCTURE;
     const XrXirSlot *slot = &d->slots[op->immediate];
     uint32_t caller = (uint32_t) (function - module->functions);
-    if (d->functions[caller].module != slot->module) return XR_XIR_BAD_STRUCTURE;
+    if (op->op==XR_XIR_SLOT_LOAD ? !xr_xir_slot_readable(d,d->functions[caller].module,(uint32_t)op->immediate) :
+        d->functions[caller].module!=slot->module) return XR_XIR_BAD_STRUCTURE;
     if ((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_SLOT_PLACE) && op->type != slot->type) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_SLOT_INIT && d->modules[slot->module].initializer != caller)
         return XR_XIR_BAD_STRUCTURE;
@@ -395,7 +396,7 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
             const XrXirInstruction *op = &function->instructions[i];
             visibility = type_use_context(context, function_id, op->type);
             if (visibility != XR_XIR_OK) return visibility;
-            if ((xr_xir_op_references_function(op->op)) && context->module->declarations) {
+            if ((xr_xir_op_references_function(op->op) || op->op==XR_XIR_SLOT_LOAD) && context->module->declarations) {
                 const XrXirDeclarations *d = context->module->declarations;
                 uint32_t caller = (uint32_t) (function - context->module->functions);
                 if (!xir_compile_work(&context->remaining, d->modules[d->functions[caller].module].dependency_count))

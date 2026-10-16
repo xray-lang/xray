@@ -61,7 +61,7 @@ static void cell_class_fact_fixture(CellClassFactFixture *f,unsigned mode) {
     f->entry[7]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={6}};
     f->entry_operands[1]=5;uint32_t count=8,operands=2,blocks=1;
     if (mode==1) {
-        f->slot=(XrXirSlot){0,(XrXirType)260,1};
+        f->slot=(XrXirSlot){0,(XrXirType)260,1,0,0};
         f->init[0]=f->entry[0];f->init[1]=f->entry[1];
         f->init[2]=(XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)260,.args={1}};
         f->init[3]=(XrXirInstruction){.op=XR_XIR_SLOT_INIT,.args={2}};
