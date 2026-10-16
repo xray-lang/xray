@@ -434,6 +434,8 @@ static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/foldingRange"))return 17;
     if(!strcmp(method,"textDocument/selectionRange"))return 18;
     if(!strcmp(method,"textDocument/documentSymbol"))return 19;
+    if(!strcmp(method,"textDocument/formatting"))return 20;
+    if(!strcmp(method,"textDocument/onTypeFormatting"))return 21;
     return -1;
 }
 static bool source_request_submit(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params, unsigned mode) {

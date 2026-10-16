@@ -18,6 +18,8 @@
 #include "xlsp_document_store.h"
 #include "xlsp_source_syntax.h"
 #include "xlsp_source_selection.h"
+#include "xlsp_source_format.h"
+#include "xlsp_source_on_type.h"
 #include "../../base/xchecks.h"
 #include <limits.h>
 #include <string.h>
@@ -41,12 +43,17 @@ struct XlspHierarchyRequest {
     uint32_t previous_result_id;
     int version;
     XrLspRange range;
+    XrFmtConfig formatting;
+    XlspSourceOnTypeInput on_type;
     bool started, selected;
 };
 static bool hierarchy_local_syntax(XlspSourceScopeQueryKind kind) {
-    return kind==XLSP_SOURCE_FOLDING||kind==XLSP_SOURCE_SELECTION||kind==XLSP_SOURCE_DOCUMENT_SYMBOLS;
+    return kind==XLSP_SOURCE_FOLDING||kind==XLSP_SOURCE_SELECTION||kind==XLSP_SOURCE_DOCUMENT_SYMBOLS||
+        kind==XLSP_SOURCE_FORMATTING||kind==XLSP_SOURCE_ON_TYPE;
 }
 static unsigned hierarchy_stage(XlspSourceScopeQueryKind kind) {
+    if (kind == XLSP_SOURCE_ON_TYPE) return 21u;
+    if (kind == XLSP_SOURCE_FORMATTING) return 20u;
     if (kind == XLSP_SOURCE_DOCUMENT_SYMBOLS) return 19u;
     if (kind == XLSP_SOURCE_SELECTION) return 18u;
     if (kind == XLSP_SOURCE_FOLDING) return 17u;
@@ -198,6 +205,43 @@ static XrXirStatus hierarchy_position(XrCompileResources *resources,const XrJson
         return XR_XIR_BAD_STRUCTURE;
     *out=(XrLspPosition){(uint32_t)line->as.integer,(uint32_t)column->as.integer};return XR_XIR_OK;
 }
+static XrXirStatus hierarchy_edit_params(XlspHierarchyRequest *request) {
+    XrCompileResources *resources=request->context.resources;
+    const XrJsonValue *params=xlsp_source_params_view(request->params),*options=NULL,*tabs=NULL,*spaces=NULL;
+    XrXirStatus status=hierarchy_member(resources,params,"options",true,&options);
+    if(status==XR_XIR_OK)status=hierarchy_member(resources,options,"tabSize",true,&tabs);
+    if(status==XR_XIR_OK)status=hierarchy_member(resources,options,"insertSpaces",true,&spaces);
+    if(status!=XR_XIR_OK)return status;
+    if(tabs->type!=XR_JSON_NUMBER||!tabs->is_integer||tabs->as.integer<=0||tabs->as.integer>INT32_MAX||
+        spaces->type!=XR_JSON_BOOL)return XR_XIR_BAD_STRUCTURE;
+    if(request->kind==XLSP_SOURCE_FORMATTING) {
+        if(request->formatting.max_line_length<0)return XR_XIR_BAD_STRUCTURE;
+        request->formatting.indent_size=(int)tabs->as.integer;
+        request->formatting.use_tabs=spaces->as.boolean?0:1;
+        return XR_XIR_OK;
+    }
+    const XrJsonValue *position=NULL,*trigger=NULL;
+    status=hierarchy_member(resources,params,"position",true,&position);
+    if(status==XR_XIR_OK)status=hierarchy_position(resources,position,&request->on_type.position);
+    if(status==XR_XIR_OK)status=hierarchy_member(resources,params,"ch",true,&trigger);
+    if(status!=XR_XIR_OK)return status;
+    if(trigger->type!=XR_JSON_STRING||!trigger->as.string||trigger->string_len!=1||
+        (trigger->as.string[0]!='}'&&trigger->as.string[0]!='\n'&&trigger->as.string[0]!=';'))return XR_XIR_BAD_STRUCTURE;
+    request->on_type.tab_size=(uint32_t)tabs->as.integer;
+    request->on_type.insert_spaces=spaces->as.boolean;
+    request->on_type.trigger=trigger->as.string[0];
+    return XR_XIR_OK;
+}
+static void hierarchy_format_config(XlspHierarchyRequest *request,const XlspConfig *config) {
+    request->formatting=xfmt_default_config;
+    request->formatting.max_line_length=config->format_max_line_length;
+    request->formatting.align_branch_arrows=config->format_align_branch_arrows?1:0;
+    request->formatting.align_enum_values=config->format_align_enum_values?1:0;
+    request->formatting.align_struct_fields=config->format_align_struct_fields?1:0;
+    request->formatting.align_trailing_comments=config->format_align_trailing_comments?1:0;
+    request->formatting.wrap_long_lines=config->format_wrap_long_lines?1:0;
+    request->formatting.multiline_trailing_comma=config->format_multiline_trailing_comma?1:0;
+}
 static XrXirStatus hierarchy_selection_params(XlspHierarchyRequest *request) {
     const XrJsonValue *positions=NULL;
     XrCompileResources *resources=request->context.resources;
@@ -219,6 +263,7 @@ static XrXirStatus hierarchy_semantic_params(XlspHierarchyRequest *request) {
     if(status==XR_XIR_OK)status=hierarchy_member(resources,document,"uri",true,&uri);
     if(status!=XR_XIR_OK)return status;
     if(request->kind==XLSP_SOURCE_SELECTION)return hierarchy_selection_params(request);
+    if(request->kind==XLSP_SOURCE_FORMATTING||request->kind==XLSP_SOURCE_ON_TYPE)return hierarchy_edit_params(request);
     if(request->kind==XLSP_SOURCE_SEMANTIC_DELTA){
         status=hierarchy_member(resources,params,"previousResultId",true,&request->previous_id);
         if(status!=XR_XIR_OK)return status;
@@ -302,6 +347,7 @@ static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspSe
             request->config.inlay_hints_parameter_names=server->config.inlay_hints_parameter_names;
             request->config.inlay_hints_type_annotations=server->config.inlay_hints_type_annotations;
         }
+        if(request->kind==XLSP_SOURCE_FORMATTING)hierarchy_format_config(request,&server->config);
         status=hierarchy_semantic_params(request);
         if(status==XR_XIR_OK&&hierarchy_local_syntax(request->kind))
             return hierarchy_syntax_document(request,server);
@@ -322,7 +368,7 @@ static XrXirStatus hierarchy_inputs(XlspHierarchyRequest *request, const XrLspSe
 XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *server, const XrJsonValue *params,
     unsigned mode, XlspSourceScopeQueryKind kind, XlspHierarchyRequest **out) {
     if (!server || !out || *out || kind < XLSP_SOURCE_CALL_HIERARCHY ||
-        kind > XLSP_SOURCE_DOCUMENT_SYMBOLS || mode > 2 || (kind >= XLSP_SOURCE_BINDING_LENSES && mode))
+        kind > XLSP_SOURCE_ON_TYPE || mode > 2 || (kind >= XLSP_SOURCE_BINDING_LENSES && mode))
         return XR_XIR_BAD_STRUCTURE;
     server->source_failure.stage = hierarchy_stage(kind); server->source_failure.status = XR_XIR_BAD_STRUCTURE;
     if (!params || server->shutdown_received || server->workspace_folder_count < 0 ||
@@ -478,7 +524,11 @@ XR_FUNC XrXirStatus xlsp_hierarchy_request_run(XlspHierarchyRequest *request,
         bound = true;
     }
     if(request->kind>=XLSP_SOURCE_SEMANTIC_FULL){
-        result.status=request->kind==XLSP_SOURCE_SELECTION ? hierarchy_selection(request,&result.json) :
+        result.status=request->kind==XLSP_SOURCE_FORMATTING ?
+            xlsp_source_format_json(request->context.resources,&request->documents[0],&request->formatting,&result.json) :
+            request->kind==XLSP_SOURCE_ON_TYPE ?
+            xlsp_source_on_type_json(request->context.resources,&request->documents[0],&request->on_type,&result.json) :
+            request->kind==XLSP_SOURCE_SELECTION ? hierarchy_selection(request,&result.json) :
             hierarchy_local_syntax(request->kind) ? hierarchy_syntax(request,&result.json) :
             request->kind==XLSP_SOURCE_INLAY_BINDINGS ? hierarchy_parameters(request,&result.json) :
             request->kind==XLSP_SOURCE_DOCUMENT_LINKS ? hierarchy_links(request,&result.json) :

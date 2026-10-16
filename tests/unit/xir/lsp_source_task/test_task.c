@@ -103,7 +103,7 @@ static void rejected(XrLspServer *server, const XlspRequestId *id, XrJsonValue *
 static void check_admission(XrLspServer *server, const XlspRequestId *id, XrJsonValue *params) {
     XlspRequestId invalid = {0}, missing = {.kind = XLSP_ID_NUMBER, .as.number = 42};
     rejected(server, &invalid, params, 0, XR_XIR_BAD_STRUCTURE);
-    rejected(server, id, params, 20, XR_XIR_BAD_STRUCTURE);
+    rejected(server, id, params, 22, XR_XIR_BAD_STRUCTURE);
     rejected(server, &missing, params, 0, XR_XIR_BAD_STAGE);
     server->initialized = false; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->initialized = true;
     server->shutdown_received = true; rejected(server, id, params, 0, XR_XIR_BAD_STAGE); server->shutdown_received = false;
@@ -221,10 +221,16 @@ static int run(int argc, char **argv) {
 #ifdef XLSP_FOLDING_TASK
 #include "../lsp_folding_task/task_cases.h"
 #endif
+#ifdef XLSP_EDIT_TASK
+#include "../lsp_edit_task/task_cases.h"
+#endif
 #ifdef XLSP_SYNTAX_TASK
 #include "../lsp_syntax_task/task_cases.h"
 #endif
 static int dispatch_run(int argc, char **argv) {
+#ifdef XLSP_EDIT_TASK
+    if(argc>=3&&!strcmp(argv[2],"--edit"))return edit_main(argc,argv);
+#endif
 #ifdef XLSP_SYNTAX_TASK
     if(argc>=3&&!strcmp(argv[2],"--syntax"))return syntax_main(argc,argv);
 #endif

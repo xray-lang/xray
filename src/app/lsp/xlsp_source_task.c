@@ -49,7 +49,7 @@ static void source_task_complete(void *data, void *result) {
 
 XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *server, const XlspRequestId *id,
                                            XrJsonValue *params, unsigned mode) {
-    if (!server || !xlsp_request_id_valid(id) || mode > 19) return XR_XIR_BAD_STRUCTURE;
+    if (!server || !xlsp_request_id_valid(id) || mode > 21) return XR_XIR_BAD_STRUCTURE;
     if (!server->async || !server->initialized || server->shutdown_received || server->exit_received)
         return XR_XIR_BAD_STAGE;
     if (server->source_revision == UINT64_MAX) return XR_XIR_BUDGET;
@@ -62,6 +62,7 @@ XR_FUNC XrXirStatus xlsp_source_task_submit(XrLspServer *server, const XlspReque
     status = (mode < 4 || mode == 15) ?
         xlsp_navigation_capture(server, params, mode == 15 ? 4u : mode, &source->request) :
         xlsp_hierarchy_request_capture(server, params, mode >= 10 ? 0u : mode < 7 ? mode - 4 : mode - 7,
+            mode == 21 ? XLSP_SOURCE_ON_TYPE : mode == 20 ? XLSP_SOURCE_FORMATTING :
             mode == 19 ? XLSP_SOURCE_DOCUMENT_SYMBOLS : mode == 18 ? XLSP_SOURCE_SELECTION :
                 mode == 17 ? XLSP_SOURCE_FOLDING : mode == 16 ? XLSP_SOURCE_INLAY_BINDINGS :
                 mode == 14 ? XLSP_SOURCE_DOCUMENT_LINKS :

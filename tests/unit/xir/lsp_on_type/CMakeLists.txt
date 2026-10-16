@@ -4,7 +4,7 @@ endif()
 add_executable(test_lsp_source_on_type "${CMAKE_CURRENT_LIST_DIR}/test_on_type.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_on_type.c"
     "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_on_type.c")
-target_link_libraries(test_lsp_source_on_type PRIVATE xray_lsp_document_open)
+target_link_libraries(test_lsp_source_on_type PRIVATE xray_lsp_hierarchy_handlers)
 if(WIN32)
     target_link_libraries(test_lsp_source_on_type PRIVATE bcrypt)
 endif()

@@ -99,10 +99,11 @@ target_link_libraries(xray_lsp_source_hierarchy PUBLIC xray_lsp_source_workspace
 target_compile_features(xray_lsp_source_hierarchy PUBLIC c_std_11)
 add_library(xray_lsp_hierarchy_handlers STATIC ../app/lsp/xlsp_hierarchy_handlers.c ../app/lsp/xlsp_source_scope.c
     ../app/lsp/xlsp_hierarchy_request.c ../app/lsp/xlsp_source_params.c ../app/lsp/xlsp_source_selection.c
+    ../app/lsp/xlsp_source_format.c ../app/lsp/xlsp_source_on_type.c
     ../app/lsp/xlsp_source_links.c ../app/lsp/xlsp_source_imports.c
     ../app/lsp/xlsp_source_binding_lenses.c
     ../app/lsp/xlsp_ignore.c ../app/lsp/xlsp_index_scan.c ../app/lsp/xlsp_index_pool.c ../app/lsp/xlsp_source_index.c)
-target_link_libraries(xray_lsp_hierarchy_handlers PUBLIC xray_lsp_document_open xray_lsp_source_hierarchy)
+target_link_libraries(xray_lsp_hierarchy_handlers PUBLIC xray_lsp_document_open xray_lsp_source_hierarchy xray_frontend_format)
 target_compile_features(xray_lsp_hierarchy_handlers PUBLIC c_std_11)
 target_include_directories(xray_lsp_hierarchy_handlers PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../base")
 if(WIN32)

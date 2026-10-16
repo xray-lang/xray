@@ -4631,3 +4631,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_folding_task/CMakeLists.txt")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_json_decode/CMakeLists.txt")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_syntax_task/CMakeLists.txt")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_edit_task/CMakeLists.txt")
