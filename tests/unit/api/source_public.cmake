@@ -18,19 +18,34 @@ set_tests_properties(source_public_repl_file PROPERTIES TIMEOUT 120 LABELS "unit
 add_test(NAME source_public_repl_rooted COMMAND test_source_public_repl --rooted)
 set_tests_properties(source_public_repl_rooted PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;authority")
 add_test(NAME source_public_repl_probe COMMAND test_source_public_faults --repl-probe)
-add_test(NAME source_public_repl_faults COMMAND test_source_public_faults --repl)
+function(xray_add_public_repl_faults name option mode)
+    if(WIN32)
+        add_test(NAME ${name} COMMAND ${Python3_EXECUTABLE}
+            "${CMAKE_CURRENT_LIST_DIR}/source_public/run_repl_fault_partitions.py"
+            --executable $<TARGET_FILE:test_source_public_faults> --mode ${mode}
+            --reports-root "${CMAKE_CURRENT_BINARY_DIR}/repl-fault-partitions")
+        set_tests_properties(${name} PROPERTIES PROCESSORS 8)
+    else()
+        add_test(NAME ${name} COMMAND test_source_public_faults ${option})
+    endif()
+endfunction()
+add_test(NAME source_public_repl_partition_protocol COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/source_public/test_repl_fault_partitions.py")
+set_tests_properties(source_public_repl_partition_protocol PROPERTIES TIMEOUT 30
+    LABELS "unit;api;source;ownership;repl;compiler-faults;protocol")
+xray_add_public_repl_faults(source_public_repl_faults --repl history)
 add_test(NAME source_public_repl_budget COMMAND test_source_public_faults --repl-budget)
 add_test(NAME source_public_repl_samples COMMAND test_source_public_faults --repl-samples)
 add_test(NAME source_public_repl_display_failure COMMAND test_source_public_faults --repl-display)
 set_tests_properties(source_public_repl_probe source_public_repl_budget source_public_repl_samples source_public_repl_display_failure PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;budget")
 set_tests_properties(source_public_repl_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120 LABELS "unit;api;source;ownership;repl;compiler-faults;runtime-faults;slow")
-add_test(NAME source_public_repl_inspect_faults COMMAND test_source_public_faults --repl-inspect)
+xray_add_public_repl_faults(source_public_repl_inspect_faults --repl-inspect inspection)
 add_test(NAME source_public_repl_inspect_probe COMMAND test_source_public_faults --repl-inspect-probe)
 add_test(NAME source_public_repl_inspect_budget COMMAND test_source_public_faults --repl-inspect-budget)
 add_test(NAME source_public_repl_inspect_samples COMMAND test_source_public_faults --repl-inspect-samples)
 set_tests_properties(source_public_repl_inspect_probe source_public_repl_inspect_budget source_public_repl_inspect_samples PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;budget;inspection")
 set_tests_properties(source_public_repl_inspect_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120 LABELS "unit;api;source;ownership;repl;compiler-faults;runtime-faults;slow;inspection")
-add_test(NAME source_public_repl_rooted_faults COMMAND test_source_public_faults --repl-rooted)
+xray_add_public_repl_faults(source_public_repl_rooted_faults --repl-rooted rooted)
 add_test(NAME source_public_repl_rooted_probe COMMAND test_source_public_faults --repl-rooted-probe)
 add_test(NAME source_public_repl_rooted_budget COMMAND test_source_public_faults --repl-rooted-budget)
 add_test(NAME source_public_repl_rooted_samples COMMAND test_source_public_faults --repl-rooted-samples)
@@ -191,7 +206,7 @@ add_test(NAME source_public_repl_file_budget COMMAND test_source_public_faults -
 add_test(NAME source_public_repl_file_samples COMMAND test_source_public_faults --repl-file-samples)
 set_tests_properties(source_public_repl_file_probe source_public_repl_file_budget source_public_repl_file_samples
     PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;file;budget;ownership")
-add_test(NAME source_public_repl_file_faults COMMAND test_source_public_faults --repl-file)
+xray_add_public_repl_faults(source_public_repl_file_faults --repl-file file)
 set_tests_properties(source_public_repl_file_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
     LABELS "unit;api;source;repl;file;compiler-faults;runtime-faults;slow")
 
@@ -201,7 +216,7 @@ add_test(NAME source_public_repl_array_budget COMMAND test_source_public_faults 
 add_test(NAME source_public_repl_array_samples COMMAND test_source_public_faults --repl-array-samples)
 set_tests_properties(source_public_repl_array_history source_public_repl_array_probe source_public_repl_array_budget
     source_public_repl_array_samples PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;array;ownership;budget")
-add_test(NAME source_public_repl_array_faults COMMAND test_source_public_faults --repl-array)
+xray_add_public_repl_faults(source_public_repl_array_faults --repl-array array)
 set_tests_properties(source_public_repl_array_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
     LABELS "unit;api;source;repl;array;compiler-faults;runtime-faults;slow")
 
@@ -211,7 +226,7 @@ add_test(NAME source_public_repl_write_budget COMMAND test_source_public_faults 
 add_test(NAME source_public_repl_write_samples COMMAND test_source_public_faults --repl-write-samples)
 set_tests_properties(source_public_repl_write source_public_repl_write_probe source_public_repl_write_budget
     source_public_repl_write_samples PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;write;ownership;budget")
-add_test(NAME source_public_repl_write_faults COMMAND test_source_public_faults --repl-write)
+xray_add_public_repl_faults(source_public_repl_write_faults --repl-write write)
 set_tests_properties(source_public_repl_write_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 120
     LABELS "unit;api;source;repl;write;compiler-faults;runtime-faults;slow")
 
