@@ -451,3 +451,36 @@ foreach(iterator_pair_backend IN ITEMS 0 1 vm native)
     set_tests_properties(test_xir_mixed_iterator_interleave_${iterator_pair_backend} PROPERTIES
         TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;cell;timer;cleanup;interleave;reentry")
 endforeach()
+
+add_executable(test_xir_mixed_iterator_source_compiler xir/test_xir_mixed_iterator_source_compiler.c "${XIR_MIXED_ITERATOR_LIFETIME_C}")
+target_link_libraries(test_xir_mixed_iterator_source_compiler PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm xray_xir_scalar)
+target_compile_definitions(test_xir_mixed_iterator_source_compiler PRIVATE
+    XR_ITERATOR_LIFETIME_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_iterators"
+    XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_xir_mixed_iterator_source_compiler PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_iterator_source_compiler PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_iterator_source_compiler PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(iterator_compiler_backend IN ITEMS 0 1 vm native)
+    foreach(iterator_compiler_mode IN ITEMS baseline axes)
+        add_test(NAME test_xir_mixed_iterator_source_compiler_${iterator_compiler_backend}_${iterator_compiler_mode}
+            COMMAND test_xir_mixed_iterator_source_compiler ${iterator_compiler_backend} ${iterator_compiler_mode})
+        set_tests_properties(test_xir_mixed_iterator_source_compiler_${iterator_compiler_backend}_${iterator_compiler_mode} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;generator;iterator;compiler;resource")
+    endforeach()
+endforeach()
+
+foreach(iterator_compiler_backend IN ITEMS 0 1 vm native)
+    foreach(iterator_compiler_begin RANGE 0 8582 64)
+        math(EXPR iterator_compiler_end "${iterator_compiler_begin} + 64")
+        if(iterator_compiler_end GREATER 8583)
+            set(iterator_compiler_end 8583)
+        endif()
+        add_test(NAME test_xir_mixed_iterator_source_compiler_${iterator_compiler_backend}_fi_${iterator_compiler_begin}_${iterator_compiler_end}
+            COMMAND test_xir_mixed_iterator_source_compiler ${iterator_compiler_backend} fi ${iterator_compiler_begin} ${iterator_compiler_end} 8583)
+        set_tests_properties(test_xir_mixed_iterator_source_compiler_${iterator_compiler_backend}_fi_${iterator_compiler_begin}_${iterator_compiler_end} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 5 LABELS "unit;xir;mixed;ownership;generated-c;generator;iterator;compiler;resource;fault_injection")
+    endforeach()
+endforeach()
