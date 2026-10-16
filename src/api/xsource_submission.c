@@ -25,7 +25,7 @@ struct XrSourceSubmission {
     XrXirTarget target;
     uint64_t source_serial, runtime_serial;
     XrXirInstanceResult observed;
-    bool busy, has_observed, taken;
+    bool busy, has_observed, taken, repl_result;
     SubmissionBirth *pending_birth, *published_births;
 };
 static XrSourceStatus submission_resource(XrCompileResourceStatus status) {
@@ -55,7 +55,7 @@ static XrSourceStatus submission_capture(const XrSourceSubmission *owner,XrSourc
 }
 static void submission_clear(XrSourceSubmission *owner) {
     owner->source_serial=owner->runtime_serial=0;
-    owner->observed=(XrXirInstanceResult){0};owner->has_observed=owner->taken=false;
+    owner->observed=(XrXirInstanceResult){0};owner->has_observed=owner->taken=owner->repl_result=false;
 }
 static XrXirCallStatus submission_abort(XrSourceSubmission *owner) {
     XrXirCallStatus status=XR_XIR_CALL_READY;
@@ -95,7 +95,7 @@ typedef struct SubmissionBindingDraft {
     bool received;
     const char *failure;
     uint8_t *reader_keys;
-    uint32_t readers;
+    uint32_t readers, repl_reader, repl_entry;
 } SubmissionBindingDraft;
 #include "xsource_submission_bindings.inc.c"
 static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram **output,uint32_t *entry,
@@ -108,8 +108,18 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
     if(status==XR_XIR_OK) {
         stage="Source candidate lexical selectors";
         bindings->owner=owner;bindings->checked=view.result->checked;
+        bindings->repl_reader=bindings->repl_entry=UINT32_MAX;
         status=xr_xir_compile_source_generation_candidate_bindings(owner->source,owner->source_serial,
             &bindings->names,&bindings->name_count);
+        if(status==XR_XIR_OK && view.repl_result) {
+            XrXirSourceGenerationDefinition definition={0};
+            status=xr_xir_compile_source_generation_definition(owner->source,view.serial,view.repl_result->name,&definition);
+            if(status==XR_XIR_OK) {
+                if(!view.interactive || definition.checked!=bindings->checked || definition.reader==UINT32_MAX ||
+                    definition.mutable || definition.kind!=XR_XIR_SOURCE_DEFINITION_BINDING)status=XR_XIR_BAD_STRUCTURE;
+                else bindings->repl_reader=definition.reader;
+            }
+        }
     }
     XrXirSpecializationReceiver receiver={bindings,submission_receive_bindings};
     if(status==XR_XIR_OK) {
@@ -129,7 +139,9 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
         if(!declarations || declarations->entry_function>=module->function_count ||
             module->functions[declarations->entry_function].parameter_count ||
             module->functions[declarations->entry_function].result!=XR_XIR_I64)status=XR_XIR_BAD_STRUCTURE;
-        else *entry=declarations->entry_function;
+        else if(view.repl_result && (bindings->repl_entry==UINT32_MAX || bindings->repl_entry>=module->function_count))
+            status=XR_XIR_BAD_STRUCTURE;
+        else {*entry=view.repl_result ? bindings->repl_entry : declarations->entry_function;owner->repl_result=view.repl_result!=NULL;}
     }
     if(status==XR_XIR_OK) {stage="Source Program transfer";status=xr_xir_compile_vm_program_take(&lowered,output);}
     if(status==XR_XIR_OK) {
@@ -147,6 +159,7 @@ static XrSourceStatus submission_program(XrSourceSubmission *owner,XrXirProgram 
 typedef struct SubmissionInput {
     const XrXirSourceText *text;
     const XrXirSourceAstOwner *ast;
+    bool interactive;
 } SubmissionInput;
 static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const SubmissionInput *input,
     XrXirSourceDiagnostic *diagnostic) {
@@ -156,7 +169,8 @@ static XrSourceStatus submission_prepare(XrSourceSubmission *owner,const Submiss
     XrSourceStatus status=submission_resource(xr_compile_state_status(owner->state));
     if(status!=XR_SOURCE_OK)return status;
     owner->busy=true;
-    XrXirStatus prepared=input->ast ? xr_xir_compile_source_generation_prepare_ast_bindings(owner->source,
+    XrXirStatus prepared=input->interactive ? xr_xir_compile_source_generation_prepare_repl_ast_bindings(owner->source,
+        input->ast,&owner->source_serial,diagnostic) : input->ast ? xr_xir_compile_source_generation_prepare_ast_bindings(owner->source,
         input->ast,&owner->source_serial,diagnostic) : xr_xir_compile_source_generation_prepare_bindings(owner->source,
         input->text,&owner->source_serial,diagnostic);
     status=submission_capture(owner,submission_xir(prepared));
@@ -190,6 +204,14 @@ XR_FUNC XrSourceStatus xr_source_submission_prepare_ast(XrSourceSubmission *owne
     XrXirSourceDiagnostic *diagnostic) {
     const SubmissionInput input={.ast=ast};
     return submission_prepare(owner,&input,diagnostic);
+}
+XR_FUNC XrSourceStatus xr_source_submission_prepare_repl_ast(XrSourceSubmission *owner,const XrXirSourceAstOwner *ast,
+    XrXirSourceDiagnostic *diagnostic) {
+    const SubmissionInput input={.ast=ast,.interactive=true};
+    return submission_prepare(owner,&input,diagnostic);
+}
+XR_FUNC bool xr_source_submission_repl_result(const XrSourceSubmission *owner) {
+    return owner && owner->source_serial && owner->repl_result;
 }
 XR_FUNC XrSourceStatus xr_source_submission_poll(XrSourceSubmission *owner,uint64_t quantum,XrXirInstanceResult *output) {
     if(!owner || !output || !quantum)return XR_SOURCE_BAD_ARGUMENT;
@@ -277,11 +299,11 @@ XR_FUNC XrSourceStatus xr_source_submission_lookup_runtime(const XrSourceSubmiss
     }
     if(!birth)return XR_SOURCE_BAD_STATE;
     size_t length=0;
-    status=submission_resource(xr_compile_state_string_length(owner->state,name,&length));
+    status=submission_resource(xr_compile_state_string_length(owner->state,source.declaration->name,&length));
     if(status!=XR_SOURCE_OK)return status;
     if(!length || length>UINT32_MAX)return XR_SOURCE_BAD_ARGUMENT;
     const XrXirInstanceBinding *binding=NULL;
-    status=submission_call(xr_xir_instance_binding_lookup(owner->runtime,name,(uint32_t)length,&binding));
+    status=submission_call(xr_xir_instance_binding_lookup(owner->runtime,source.declaration->name,(uint32_t)length,&binding));
     if(status!=XR_SOURCE_OK)return status;
     XrXirInstanceBindingView view={0};
     status=submission_call(xr_xir_instance_binding_view(owner->runtime,binding,&view));
@@ -296,7 +318,7 @@ static XrSourceStatus submission_read_binding(XrSourceSubmission *owner,const ch
     if(status!=XR_SOURCE_OK)return status;
     XrXirSourceGenerationDefinition definition={0};
     status=submission_capture(owner,submission_xir(xr_xir_compile_source_generation_definition(owner->source,
-        selected.generation,name,&definition)));
+        selected.generation,selected.declaration->name,&definition)));
     if(status!=XR_SOURCE_OK)return status;
     if(definition.reader==UINT32_MAX)return XR_SOURCE_BAD_STATE;
     const SubmissionBirth *birth=owner->published_births;

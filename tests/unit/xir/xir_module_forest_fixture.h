@@ -52,7 +52,7 @@ static XrXirArtifact *module_forest_fixture(const XrXirCompileContext *context, 
     };
     const uint32_t dependency = 2;
     const XrXirSourceModule modules[] = {
-        {"extra", 5, NULL, 0, 0, 0}, {"root", 4, &dependency, 1, 1, 0}, {"leaf", 4, NULL, 0, 2, 0}
+        {"extra", 5, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"root", 4, &dependency, 1, 1, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"leaf", 4, NULL, 0, 2, 0,XR_XIR_MODULE_FRESH_STORAGE}
     };
     const XrXirFunctionIdentity identities[] = {
         {0}, {1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}, {2,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}, {1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}, {0,1,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0}, {2,1,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0},

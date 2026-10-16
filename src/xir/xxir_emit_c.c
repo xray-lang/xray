@@ -684,8 +684,9 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
         if(op->op == XR_XIR_CLASS_SET) {
             EMIT_LITERAL(buffer," value = ");emit_value(buffer,function,layout,op->args[1]);EMIT_LITERAL(buffer,";\n");
             EMIT_FORMAT(buffer, et_105640b30c89915c," status=xr_xir_class_set(&receiver,%uu,&value,xr_xir_call_admission(view));\n",(uint32_t)op->immediate);
-        } else EMIT_FORMAT(buffer, et_a81a2bf8209a647d," status=xr_xir_value_admit(&receiver,(XrXirType)receiver.type,xr_xir_call_admission(view));\n"
-            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",(uint32_t)op->immediate);
+        } else append(buffer," status=xr_xir_value_admit(&receiver,(XrXirType)%uu,xr_xir_call_admission(view));\n"
+            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",
+            (uint32_t)xr_xir_operand_type(function,op->args[0]),(uint32_t)op->immediate);
     }
     EMIT_STATIC(buffer, es_ee88b60d69c79771," if(status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         " status == XR_XIR_VALUE_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"
@@ -1116,11 +1117,11 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                 " return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, concrete, {0}, 0}; }\n");
             return;
         }
-        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, {%uu, 0, ",
-               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN", type);
-        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "0");
-        else EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
-        EMIT_LITERAL(buffer, "}, {0}, 0};\n");
+        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, ",
+               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN");
+        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "{0}");
+        else emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer, ", {0}, 0};\n");
         return;
     }
     default:
@@ -1568,7 +1569,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
         EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", source->name_length);
         if (source->dependency_count) append(buffer, "%s_dependencies_%u", prefix, m);
         else EMIT_LITERAL(buffer, "NULL");
-        append(buffer, ", %uu, %uu, %uu},\n", source->dependency_count, source->initializer, source->lexical_scope);
+        append(buffer, ", %uu, %uu, %uu, %uu},\n", source->dependency_count, source->initializer, source->lexical_scope,source->storage);
     }
     EMIT_FORMAT(buffer, et_69a1907ec586c822, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)

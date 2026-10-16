@@ -26,9 +26,9 @@
 #include "xir_source_program_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "static_methods_source_shape.h"
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 29u && XR_XIR_CHECKED_CONTRACT == 75u, "Exact formal Checked identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 76u, "Exact formal Checked identity");
 _Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 31u, "Exact formal public runtime identity");
+    XR_XIR_PROGRAM_ABI_VERSION == 32u, "Exact formal public runtime identity");
 
 /* Observe an actual owner. Complete admission belongs to the public verifier. */
 static void construction_owner(const XrXirArtifact *artifact, const XrXirCompileContext *caller) {

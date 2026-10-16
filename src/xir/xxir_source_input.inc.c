@@ -26,6 +26,7 @@ typedef struct SourceInput {
     const XrXirSourceAstOwner *ast_owner;
     bool ast_input;
     bool binding_readers;
+    bool interactive;
     const SourceHistoryUnit *history, *self;
 } SourceInput;
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
@@ -52,6 +53,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     ctx.compile = *request->context;
     ctx.semantic_output=input.capture ? &input.capture->semantic : NULL;
     ctx.binding_readers=input.binding_readers;
+    ctx.interactive=input.interactive;
     ctx.history_input=input.history;ctx.self_unit=input.self;
     ctx.remaining_blocks = ctx.compile.limits.blocks;
     ctx.remaining_instructions = ctx.compile.limits.instructions;
@@ -124,6 +126,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (ctx.graph->has_cycle || ctx.graph->entry_index < 0) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
+    if(!source_repl_select_tail(&ctx))goto done;
     semantic_started = true;
     source_construct(&ctx, &result);
     source_comptime_receive(&ctx, &result);

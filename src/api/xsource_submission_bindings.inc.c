@@ -35,6 +35,11 @@ static XrXirStatus submission_receive_reader(SubmissionBindingDraft *draft,
         !(closed->declarations->functions[physical].promises&XR_XIR_FUNCTION_NO_SUSPEND) ||
         closed->functions[physical].parameter_count)
         return submission_binding_mismatch(draft,"Binding reader has no admitted ordinary zero-argument entry");
+    if(definition->reader==draft->repl_reader) {
+        if(draft->repl_entry!=UINT32_MAX || definition->generation!=draft->owner->source_serial)
+            return submission_binding_mismatch(draft,"Interactive result has no unique actual reader");
+        draft->repl_entry=physical;
+    }
     uint8_t *key=draft->reader_keys+(size_t)draft->readers*16;
     XrXirStatus status=submission_reader_key(draft->owner,definition->generation,definition->reader,key);
     if(status==XR_XIR_OK) {

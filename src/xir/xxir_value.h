@@ -136,7 +136,10 @@ typedef struct XrXirFunctionBinding {
     const XrXirValue *captures;
     uint32_t capture_count;
 } XrXirFunctionBinding;
-/* The caller validates a live execution gate; pointer equality is not authority. */
+/* The caller validates a live execution gate; pointer equality is not authority.
+ * During this callback the admission arena names the actual function owner,
+ * and work points to that same admission's work field. Context and Domain are
+ * unchanged; the receiving arena is restored before callback return escapes. */
 typedef XrXirValueStatus (*XrXirFunctionAdmission)(void *context,
     const XrXirFunctionBinding *binding, XrXirType type, uint64_t *work);
 typedef struct XrXirValueAdmission {

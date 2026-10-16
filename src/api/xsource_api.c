@@ -11,7 +11,9 @@
 #include "../../include/xray_source_ast.h"
 #include "../../include/xray_source_entry.h"
 #include "../../include/xray_source_instance.h"
+#include "../../include/xray_source_repl.h"
 #include "xsource_compiler.h"
+#include "xsource_submission.h"
 #include "../frontend/parser/xparse.h"
 #include "xsource_paths.h"
 #include "../execution/xr_xir_host_execution.h"
@@ -20,6 +22,7 @@
 #include "../xir/xxir_vm.h"
 #include "../xir/xxir_output.h"
 #include "../xir/xxir_format.h"
+#include "../xir/xxir_nullable.h"
 #include "../xir/xxir_compile_domain.h"
 #include "../xir/xxir_error.h"
 #include "../shared/xr_utf8_core.h"
@@ -425,3 +428,4 @@ XRAY_API void xray_source_result_free(XrSourceResult *result) {
 }
 #include "xsource_value_api.inc.c"
 #include "xsource_value_projection_api.inc.c"
+#include "xsource_repl_api.inc.c"

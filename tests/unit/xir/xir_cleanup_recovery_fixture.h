@@ -69,7 +69,7 @@ static void cleanup_recovery_fixture(CleanupRecoveryFixture *f, bool cold, bool 
     }
     f->identities[1].exported = 1;
     f->identities[2].cleanup_owner = 2;
-    f->source = (XrXirSourceModule){"root", 4, NULL, 0, 0, 0};
+    f->source = (XrXirSourceModule){"root", 4, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations = (XrXirDeclarations){.modules = &f->source, .module_count = 1,
         .functions = f->identities, .root_module = 0, .entry_function = 1};
     f->module = (XrXirModule){.stage = XR_XIR_BUILT, .functions = f->functions, .function_count = 3,

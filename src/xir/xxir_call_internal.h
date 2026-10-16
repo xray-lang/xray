@@ -33,6 +33,17 @@ typedef enum XrXirCellParameterRole {
 /* The resolver consumes complete checked provenance, never parameter shape alone. */
 typedef XrXirCellParameterRole (*XrXirCellRoleResolver)(void *context,
     uint32_t entry, uint32_t parameter);
+/* Metadata is borrowed from a sealed live Instance generation. The Call keeps
+ * one admission ledger, executor binding and frame stack across all tables. */
+typedef struct XrXirCallMetadata {
+    const XrXirCallEntry *entries;
+    uint32_t entry_count;
+    const XrXirTypeArena *arena;
+    void *admission_context;
+    XrXirCellRoleResolver cell_role;
+    void *cell_context;
+} XrXirCallMetadata;
+
 typedef struct XrXirCallRequest {
     uint32_t entry;
     const XrXirValue *arguments;

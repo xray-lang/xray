@@ -8,6 +8,11 @@
  */
 static bool source_declaration_storage(SourceContext *ctx,uint32_t nominals,uint32_t interfaces) {
     uint32_t count=ctx->module_count,capacity=ctx->function_capacity,slots=ctx->slot_count;
+    if(ctx->repl_tail) {
+        if(slots==UINT32_MAX)return source_fail(ctx,ctx->repl_tail,XR_XIR_BUDGET,"implicit result slot capacity exhausted");
+        ++slots;
+    }
+    ctx->slot_capacity=slots;
     ctx->functions = source_alloc(ctx, capacity, sizeof(*ctx->functions));
     ctx->bodies = source_alloc(ctx, capacity, sizeof(*ctx->bodies));
     ctx->identities = source_alloc(ctx, capacity, sizeof(*ctx->identities));
@@ -40,7 +45,7 @@ static bool source_declaration_modules(SourceContext *ctx) {
         uint32_t *deps = source_alloc(ctx, (size_t) spec->dep_count, sizeof(*deps));
         if (!deps) return false;
         for (int i = 0; i < spec->dep_count; ++i) deps[i] = (uint32_t) spec->dep_indices[i];
-        ctx->modules[m] = (XrXirSourceModule) {spec->canonical, (uint32_t) source_text_size(ctx, spec->canonical), deps, (uint32_t) spec->dep_count, m, 0};
+        ctx->modules[m] = (XrXirSourceModule) {spec->canonical, (uint32_t) source_text_size(ctx, spec->canonical), deps, (uint32_t) spec->dep_count, m, 0,XR_XIR_MODULE_FRESH_STORAGE};
         ctx->bodies[m].module = m;
         ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
         ctx->identities[m].module = m;

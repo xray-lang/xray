@@ -96,6 +96,7 @@ static XrXirStatus match_declarations(const XrXirDeclarations *a,
         TRY(match_bytes(x->name, y->name, x->name_length, context));
         MATCH(x->initializer, y->initializer); MATCH(x->dependency_count, y->dependency_count);
         MATCH(x->lexical_scope, y->lexical_scope);
+        MATCH(x->storage,y->storage);
         for (uint32_t p = 0; p < x->dependency_count; ++p)
             MATCH(x->dependencies[p], y->dependencies[p]);
     }

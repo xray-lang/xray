@@ -51,7 +51,8 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         if (xr_xir_type_is_cell(spec->types, slot->type) != !!slot->mutable ||
             (slot->type != XR_XIR_UNIT && !program_value_type(spec, slot->type)) ||
             (!slot->mutable && xr_xir_type_is_callable(spec->types, slot->type) &&
-             slot->module != spec->declarations->root_module)) return XR_XIR_BAD_TYPE;
+             slot->module != spec->declarations->root_module &&
+             spec->declarations->modules[slot->module].storage!=XR_XIR_MODULE_BIRTH_STORAGE)) return XR_XIR_BAD_TYPE;
     }
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
@@ -96,8 +97,14 @@ static void program_dispose(XrXirProgram *program) {
     xr_compile_resources_free(program);
 }
 static XrXirStatus program_execution_order(XrXirProgram *program) {
-    return xr_xir_compile_declarations_active(&program->context,program->declarations,
+    XrXirStatus status=xr_xir_compile_declarations_active(&program->context,program->declarations,
         program->order,program->active_modules,&program->initialization_count);
+    for (uint32_t i=0;status==XR_XIR_OK && i<program->declarations->module_count;++i) {
+        if (!xir_compile_work(&program->context,1)) {status=XR_XIR_BUDGET;break;}
+        if (program->declarations->modules[i].storage==XR_XIR_MODULE_BIRTH_STORAGE)
+            program->requires_birth_storage=true;
+    }
+    return status;
 }
 static XrXirStatus program_copy_entries(XrXirProgram *program, const XrXirProgramSpec *spec) {
     const XrXirCompileContext *context = &program->context;

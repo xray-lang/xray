@@ -165,7 +165,7 @@ static void pool_and_access_cases(void) {
     nodes[0]=(XrXirTypeNode){.kind=XR_XIR_TYPE_NOMINAL};
     nodes[1]=(XrXirTypeNode){.kind=XR_XIR_TYPE_ATOMIC,.element=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE};
     types.count=2;types.nominals=&nominals;
-    XrXirSourceModule modules[2]={{"home",4,NULL,0,0, 0},{"away",4,NULL,0,1, 0}};
+    XrXirSourceModule modules[2]={{"home",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"away",4,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[2]={{.module=0},{.module=1}};
     XrXirDeclarations declarations={.modules=modules,.module_count=2,.functions=identities};
     XrXirFunction functions[2]={{0},{0}};

@@ -546,6 +546,10 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     for (uint32_t m=0;m<map->module_count;++m) {
         if (!source_work(ctx,NULL)) return false;
         if (map->modules[m]==UINT32_MAX) continue;
+        /* Only an actual Checked Program contributes a former root. Catalog
+         * Libraries cannot carry the birth requirement at their own admission. */
+        ctx->modules[map->modules[m]].storage=library->linkage_kind==XR_XIR_PROGRAM &&
+            m==library->declarations->root_module ? XR_XIR_MODULE_BIRTH_STORAGE : library->declarations->modules[m].storage;
         uint32_t scope=library->declarations->modules[m].lexical_scope;
         if (!scope) continue;
         if (scope>map->module_count || map->modules[scope-1]==UINT32_MAX)

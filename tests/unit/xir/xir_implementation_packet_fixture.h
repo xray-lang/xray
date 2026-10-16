@@ -27,7 +27,7 @@ static XrXirStatus implementation_packet_fixture(const XrXirCompileContext *cont
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0}};
-    XrXirSourceModule module = {"alpha",5,NULL,0,1, 0};
+    XrXirSourceModule module = {"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0},{0},{0,1,1,0,0,0,XR_XIR_READ_METHOD, 0, 0}};
     XrXirImplementationBinding binding = {{0,&argument,1},0,2};
     XrXirImplementation implementation = {0,{0,&argument,1},&binding,1};

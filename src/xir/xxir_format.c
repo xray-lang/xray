@@ -47,6 +47,10 @@ static int xir_format_scalar(const XrXirValue *value,XrValueFormatView *view) {
         view->quote = '"';
         return 1;
     }
+    if (xr_xir_function_binding(value)) {
+        view->kind=XR_VALUE_FORMAT_LITERAL;view->name="<fn>";view->name_size=4;
+        return 1;
+    }
     uint32_t floating = xr_xir_float_bits(type);
     if (floating) {
         if (!xr_xir_float_format(floating, (uint64_t)value->payload,

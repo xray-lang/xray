@@ -82,6 +82,42 @@ static XrXirCallStatus generation_storage_receive(XrXirInstance *candidate,
             return XR_XIR_CALL_BAD_STATE;
         candidate->slot_origins[target]=birth;
     }
+    if (storage->function_count!=current->program->entry_count || !storage->functions)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    candidate->function_origins=instance_metadata_allocate(candidate->domain,
+        (uint64_t)candidate->program->entry_count*sizeof(*candidate->function_origins),&status);
+    if (status!=XR_XIR_CALL_READY) return status;
+    for (uint32_t f=0;f<storage->function_count;++f) {
+        if (!xr_xir_domain_work(candidate->domain,1)) return XR_XIR_CALL_LIMIT;
+        uint32_t target=storage->functions[f];
+        if (target==UINT32_MAX) continue;
+        if (target>=candidate->program->entry_count || candidate->function_origins[target].owner ||
+            from->functions[f].module>=storage->module_count ||
+            to->functions[target].module!=storage->modules[from->functions[f].module] ||
+            current->program->entries[f].parameter_count!=candidate->program->entries[target].parameter_count ||
+            current->program->entries[f].cleanup_owner || candidate->program->entries[target].cleanup_owner)
+            return XR_XIR_CALL_BAD_ARGUMENT;
+        candidate->function_origins[target]=(InstanceStorageRoute){current,f};
+    }
+    return XR_XIR_CALL_READY;
+}
+static XrXirCallStatus generation_birth_storage_admit(const XrXirInstance *candidate) {
+    if (!candidate->program->requires_birth_storage) return XR_XIR_CALL_READY;
+    const XrXirDeclarations *d=candidate->program->declarations;
+    for (uint32_t m=0;m<d->module_count;++m) {
+        if (!xr_xir_domain_work(candidate->domain,1)) return XR_XIR_CALL_LIMIT;
+        if (d->modules[m].storage!=XR_XIR_MODULE_BIRTH_STORAGE) continue;
+        if (!candidate->module_origins || !candidate->module_origins[m].owner || !candidate->ready[m])
+            return XR_XIR_CALL_BAD_STATE;
+    }
+    for (uint32_t s=0;s<d->slot_count;++s) {
+        if (!xr_xir_domain_work(candidate->domain,1)) return XR_XIR_CALL_LIMIT;
+        uint32_t module=d->slots[s].module;
+        if (d->modules[module].storage!=XR_XIR_MODULE_BIRTH_STORAGE) continue;
+        if (!candidate->slot_origins || !candidate->slot_origins[s].owner ||
+            candidate->slot_origins[s].owner!=candidate->module_origins[module].owner)
+            return XR_XIR_CALL_BAD_STATE;
+    }
     return XR_XIR_CALL_READY;
 }
 static XrXirCallStatus generation_prepare(XrXirInstance *instance,
@@ -89,10 +125,13 @@ static XrXirCallStatus generation_prepare(XrXirInstance *instance,
     if (!program || !generation || *generation) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus status = generation_owner(instance);
     if (status != XR_XIR_CALL_READY) return status;
+    if (program->requires_birth_storage && !storage) return XR_XIR_CALL_BAD_STATE;
     if (instance->prepared_generation) return XR_XIR_CALL_BUSY;
     XrXirInstance *current = instance_current(instance);
-    XrXirInstance *source=storage ? instance->published_generation : NULL;
-    if (storage && (!source || storage->source!=source->program || storage->target!=program))
+    /* Storage correspondence follows publication; abort separately restores
+     * the prior active call and its still-owned result. */
+    XrXirInstance *published=instance_entry_state(instance);
+    if (storage && (!published->program || storage->source!=published->program || storage->target!=program))
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (current->executor && !xr_xir_task_executor_root_idle(current->executor)) return XR_XIR_CALL_BUSY;
     if (current->executor && xr_xir_task_executor_completion_status(current->executor) != XR_XIR_CALL_READY)
@@ -110,7 +149,8 @@ static XrXirCallStatus generation_prepare(XrXirInstance *instance,
     instance->driving = true;
     XrXirInstance *candidate = NULL;
     status = instance_new_state(program, &instance->config, instance, &candidate);
-    if (status==XR_XIR_CALL_READY && storage) status=generation_storage_receive(candidate,source,storage);
+    if (status==XR_XIR_CALL_READY && storage) status=generation_storage_receive(candidate,published,storage);
+    if (status==XR_XIR_CALL_READY) status=generation_birth_storage_admit(candidate);
     if (status == XR_XIR_CALL_READY && current->call)
         status = instance_executor_new(current, &candidate->replacement_executor);
     if (status != XR_XIR_CALL_READY && candidate) {

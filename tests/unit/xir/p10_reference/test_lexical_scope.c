@@ -31,7 +31,7 @@ int main(void) {
         {"answer",6,NULL,0,XR_XIR_I64,&two,1,call,2,NULL,0}};
     uint32_t dependency=0;
     XrXirSourceModule modules[]={
-        {"birth",5,NULL,0,0,0},{"current",7,&dependency,1,1,1}};
+        {"birth",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE},{"current",7,&dependency,1,1,1,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[4]={{0}};
     identities[1].module=identities[3].module=1;identities[3].exported=1;
     XrXirDeclarations declarations={modules,2,identities,NULL,0,NULL,0,1,3,NULL};

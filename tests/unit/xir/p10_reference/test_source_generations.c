@@ -9,6 +9,7 @@
 #include "xir/xxir_source_generation.h"
 #include "xir/xxir_instance_generation.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_nominal.h"
 #include "xir/xxir_types.h"
@@ -20,6 +21,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "../xir_source_fixture_owner.h"
 #include "source_history_cell_fixture.h"
+#include "source_history_function_fixture.h"
 #if defined(XR_SOURCE_HISTORY_NATIVE)
 #include "source_history_native_generated.h"
 static bool history_native_case;
@@ -55,7 +57,9 @@ static XrXirProgram *program(const XrXirSourceGenerationView *view,const char *n
     bool native=history_native_case && !(view->serial==1 ? XR_SOURCE_HISTORY_OLD_VM : XR_SOURCE_HISTORY_NEW_VM);
     if (native) {
         CHECK(view->serial>=1 && view->serial<=4);
-        const XrXirProgramSpec *spec=source_history_native_programs[history_native_kind][view->serial-1];
+        unsigned fixture=history_native_kind>=9 ? history_native_kind-5 : history_native_kind;
+        CHECK(fixture<6);
+        const XrXirProgramSpec *spec=source_history_native_programs[fixture][view->serial-1];
         CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(lowered),spec,&output)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);return output;
     }
@@ -95,6 +99,7 @@ static void source_publish(SourceFixtureOwner *compiler,XrXirSourceGenerations *
     CHECK(xr_compile_resources_stats(compiler->context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(before.work==after.work && before.allocated_bytes==after.allocated_bytes && after.live_bytes<=before.live_bytes);
 }
+#include "source_history_function_value.h"
 static void compile_failure(XrXirSourceGenerations *owner,uint64_t first) {
     const char source[]="const value=missing";
     const XrXirSourceText text={NULL,source,sizeof(source)-1};
@@ -114,7 +119,8 @@ static void aborted_string(XrXirSourceGenerations *owner,XrXirInstance *instance
     XrXirSourceGenerationBinding binding={0};
     CHECK(xr_xir_compile_source_generation_lookup(owner,"value",&binding)==XR_XIR_OK && binding.generation==first);
     uint32_t entry=0;XrXirProgram *candidate=program(&view,"answer",&entry);uint64_t runtime=0;
-    CHECK(xr_xir_instance_generation_prepare(instance,candidate,&runtime)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,candidate)==XR_XIR_OK);
+    CHECK(xr_xir_source_generation_prepare_instance(owner,serial,instance,&runtime)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
     const char *bytes=NULL;size_t length=0;CHECK(xr_xir_string_view(&result,&bytes,&length) && length==3 && !memcmp(bytes,"new",3));
@@ -128,7 +134,8 @@ static void failed_runtime(XrXirSourceGenerations *owner,XrXirInstance *instance
     uint64_t serial=prepare(owner,"const value=9\nassert(false,\"new-fault\")\nexport fn answer()->i64{return value}");
     XrXirSourceGenerationView view={0};CHECK(xr_xir_compile_source_generation_view(owner,serial,&view)==XR_XIR_OK);
     uint32_t entry=0;XrXirProgram *candidate=program(&view,"answer",&entry);uint64_t runtime=0;
-    CHECK(xr_xir_instance_generation_prepare(instance,candidate,&runtime)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,candidate)==XR_XIR_OK);
+    CHECK(xr_xir_source_generation_prepare_instance(owner,serial,instance,&runtime)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_ASSERTION);
     CHECK(xr_xir_instance_generation_publish(instance,runtime)==XR_XIR_CALL_BAD_STATE);
     CHECK(xr_xir_instance_copy_failure(instance,failure)==XR_XIR_CALL_ASSERTION);
@@ -257,9 +264,10 @@ static int history_check(const char *mode) {
         CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,initial)==XR_XIR_BAD_STRUCTURE);
         if (cell || array_value) {
             XrXirInstance *in_use=NULL;
-            CHECK(xr_xir_instance_new(received,&runtime_config,&in_use)==XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_new(received,&runtime_config,&in_use)==XR_XIR_CALL_BAD_STATE && !in_use);
+            CHECK(xr_xir_compile_program_retain(received));
             CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,received)==XR_XIR_BAD_STAGE);
-            CHECK(xr_xir_instance_free(in_use)==XR_XIR_CALL_READY);
+            xr_xir_compile_program_drop(received);
         }
         bind_program(&compiler,owner,serial,received);
         CHECK(xr_xir_compile_source_generation_bind_program(owner,serial,initial)==XR_XIR_BAD_STAGE);
@@ -389,6 +397,13 @@ static void inspection_definitions(void) {
     xr_xir_compile_source_generations_free(owner);source_fixture_owner_free(&compiler);
 }
 int main(int argc,char **argv) {
+    if (argc==2 && (!strcmp(argv[1],"--history-function-call") || !strcmp(argv[1],"--history-function-value"))) {
+        bool escaped=!strcmp(argv[1],"--history-function-value");
+#if defined(XR_SOURCE_HISTORY_NATIVE)
+        history_native_case=true;history_native_kind=escaped?10u:9u;
+#endif
+        return escaped?history_function_value():history_function_call();
+    }
     if (argc==2) return history_check(argv[1]);
     CHECK(argc==1);
     mutable_definitions();
@@ -416,7 +431,8 @@ int main(int argc,char **argv) {
     XrXirInstanceConfig runtime_config;CHECK(xr_xir_instance_config_init(&runtime_config,sizeof(runtime_config))==XR_XIR_CALL_READY);
     unsigned output_calls=0;runtime_config.output=(XrXirOutputProvider){.abi_version=XR_XIR_CALL_ABI_VERSION,.write=generation_output,.context=&output_calls};
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_generation_new(&runtime_config,&instance)==XR_XIR_CALL_READY);
-    uint64_t runtime=0;CHECK(xr_xir_instance_generation_prepare(instance,initial,&runtime)==XR_XIR_CALL_READY);
+    bind_program(&compiler,owner,first,initial);
+    uint64_t runtime=0;CHECK(xr_xir_source_generation_prepare_instance(owner,first,instance,&runtime)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
     XrXirValue function={0};CHECK(xr_xir_instance_take_result(instance,&function)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_generation_publish(instance,runtime)==XR_XIR_CALL_READY);source_publish(&compiler,owner,first);
@@ -428,7 +444,8 @@ int main(int argc,char **argv) {
     uint64_t next=prepare(owner,"const value=\"published\"\nexport fn answer()->string{return value}");
     CHECK(next>first+2 && xr_xir_compile_source_generation_view(owner,next,&view)==XR_XIR_OK);
     uint32_t next_entry=0;XrXirProgram *newer=program(&view,"answer",&next_entry);uint64_t next_runtime=0;
-    CHECK(xr_xir_instance_generation_prepare(instance,newer,&next_runtime)==XR_XIR_CALL_READY);
+    bind_program(&compiler,owner,next,newer);
+    CHECK(xr_xir_source_generation_prepare_instance(owner,next,instance,&next_runtime)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,next_entry,NULL,0)==XR_XIR_CALL_READY && generation_poll(instance)==XR_XIR_CALL_RETURNED);
     XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_generation_publish(instance,next_runtime)==XR_XIR_CALL_READY);source_publish(&compiler,owner,next);

@@ -153,6 +153,13 @@ XR_FUNC XrCompileState *xr_source_compiler_state(const XrSourceCompiler *compile
 XR_FUNC XrCompileResources *xr_source_compiler_resources(const XrSourceCompiler *compiler) {
     return compiler ? compiler->context.resources : NULL;
 }
+XR_FUNC XrSourceCompileStatus xr_source_compiler_generation_config(const XrSourceCompiler *compiler,
+    const char *namespace_id,XrXirSourceGenerationConfig *output) {
+    if(!compiler || !namespace_id || !output)return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    *output=(XrXirSourceGenerationConfig){compiler->context,namespace_id,compiler->stdlib_path,
+        NULL,compiler->libraries};
+    return XR_SOURCE_COMPILE_OK;
+}
 static XrSourceCompileStatus compiler_capture(XrSourceCompiler *compiler, XrSourceCompileStatus status) {
     if (status != XR_SOURCE_COMPILE_BUDGET && status != XR_SOURCE_COMPILE_OUT_OF_MEMORY) return status;
     return compiler_resource(xr_compile_state_fail(xr_source_compiler_state(compiler),

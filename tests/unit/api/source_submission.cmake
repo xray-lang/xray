@@ -79,3 +79,41 @@ set_tests_properties(source_submission_ast_budget PROPERTIES TIMEOUT 120 LABELS 
 add_test(NAME source_submission_ast_resources COMMAND test_source_submission_ast_resources --resources)
 set_tests_properties(source_submission_ast_resources PROPERTIES TIMEOUT 600 COST 100 RUN_SERIAL TRUE
     LABELS "unit;api;source;ownership;ast;generation;compiler-faults;runtime-faults")
+add_executable(test_source_binding_history_callable "${CMAKE_CURRENT_LIST_DIR}/source_submission/test_source_binding_history_callable.c")
+target_link_libraries(test_source_binding_history_callable PRIVATE xray_source_api)
+target_include_directories(test_source_binding_history_callable PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
+target_compile_definitions(test_source_binding_history_callable PRIVATE XR_SUBMISSION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_source_binding_history_callable PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_binding_history_callable PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_binding_history_callable PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME source_binding_history_callable COMMAND test_source_binding_history_callable)
+set_tests_properties(source_binding_history_callable PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;binding;history-accept")
+add_test(NAME source_binding_history_generic_callable COMMAND test_source_binding_history_callable --generic)
+set_tests_properties(source_binding_history_generic_callable PROPERTIES TIMEOUT 120
+    LABELS "unit;api;source;ownership;binding;history-accept;generic")
+add_executable(test_source_birth_storage "${CMAKE_CURRENT_LIST_DIR}/source_submission/test_source_birth_storage.c")
+target_link_libraries(test_source_birth_storage PRIVATE xray_source_api)
+target_include_directories(test_source_birth_storage PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
+target_compile_definitions(test_source_birth_storage PRIVATE XR_SUBMISSION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_source_birth_storage PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_birth_storage PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_birth_storage PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME source_birth_storage COMMAND test_source_birth_storage)
+set_tests_properties(source_birth_storage PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;generation;checked;storage")
+add_test(NAME source_birth_storage_vectors COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/compile_owner/derive_birth_storage76_golden.py"
+    --source-root "${PROJECT_SOURCE_DIR}")
+add_test(NAME checked_storage76_vectors COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_storage76_vectors.py"
+    --source-root "${PROJECT_SOURCE_DIR}")
+add_test(NAME checked_sizing76_vectors COMMAND "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/compile_owner/derive_checked_sizing76_golden.py"
+    --source-root "${PROJECT_SOURCE_DIR}")
+set_tests_properties(source_birth_storage_vectors checked_storage76_vectors checked_sizing76_vectors
+    PROPERTIES TIMEOUT 120 LABELS "unit;api;source;generation;checked;storage;independent")

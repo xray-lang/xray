@@ -17,6 +17,10 @@ static SourceName *find_name(SourceContext *ctx, SourceName *names, const char *
     return NULL;
 }
 static SourceName *add_name(SourceContext *ctx, SourceName **head, const char *name, AstNode *node) {
+    if(name && ctx->interactive && ctx->names && ctx->graph && ctx->graph->entry_index>=0 &&
+        head==&ctx->names[ctx->graph->entry_index] && source_text_same(ctx,node,name,"it")) {
+        source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"it is reserved for the last successful non-Unit REPL result");return NULL;
+    }
     if (!name || !*name || find_name(ctx, *head, name)) {
         source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "duplicate or empty declaration name"); return NULL;
     }

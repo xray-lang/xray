@@ -64,7 +64,7 @@ static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
         {"root",4,NULL,0,XR_XIR_I64,&blocks[1],1,root,4,&argument,1},
         {"echo",4,&parameter,1,parameter,&blocks[2],1,target,2,NULL,0}
     };
-    XrXirSourceModule source = {"root",4,NULL,0,0, 0};
+    XrXirSourceModule source = {"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};

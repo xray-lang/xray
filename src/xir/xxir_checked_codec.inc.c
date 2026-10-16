@@ -213,7 +213,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
     d->literal_count = checked_u32(c, d->literal_count);
     d->root_module = checked_u32(c, d->root_module);
     d->entry_function = checked_u32(c, d->entry_function);
-    XrXirSourceModule *modules = checked_array(c, d->modules, d->module_count, sizeof(*modules), 16);
+    XrXirSourceModule *modules = checked_array(c, d->modules, d->module_count, sizeof(*modules), 20);
     d->modules = modules;
     for (uint32_t i = 0; i < d->module_count && c->status == XR_XIR_OK; ++i) {
         XrXirSourceModule m = modules[i];
@@ -227,6 +227,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         }
         m.initializer = checked_u32(c, m.initializer);
         m.lexical_scope = checked_u32(c, m.lexical_scope);
+        m.storage = checked_u32(c,m.storage);
         if (c->reading) modules[i] = m;
     }
     XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 36);

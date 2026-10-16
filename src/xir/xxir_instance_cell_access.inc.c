@@ -15,6 +15,25 @@ static bool instance_cell_work(XrXirCallView *view, uint64_t work) {
     admission->work -= work;
     return admission->domain && xr_xir_domain_work(admission->domain, work);
 }
+static XrXirCallStatus instance_received_type(XrXirValueAdmission *admission,const XrXirValue *value,
+    XrXirType *type) {
+    if (!admission || !type || !xr_xir_value_valid(value)) return XR_XIR_CALL_BAD_ARGUMENT;
+    const XrXirTypeArena *arena=xr_xir_value_arena(value);*type=(XrXirType)value->type;
+    if (arena && arena!=admission->arena) {
+        uint64_t work=xir_type_arena_lookup_work(admission->arena);
+        if (work>admission->work || !admission->domain || !xr_xir_domain_work(admission->domain,work))
+            return XR_XIR_CALL_LIMIT;
+        admission->work-=work;
+        if (!xir_type_arena_local_type(admission->arena,arena,(XrXirType)value->type,type))
+            return XR_XIR_CALL_BAD_ARGUMENT;
+    }
+    return xr_xir_value_argument(value,admission->arena,*type) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_ARGUMENT;
+}
+static XrXirCallStatus instance_received_value(XrXirValueAdmission *admission,const XrXirValue *value,
+    XrXirType *type) {
+    XrXirCallStatus status=instance_received_type(admission,value,type);
+    return status==XR_XIR_CALL_READY ? admit_instance_value(admission,value,*type) : status;
+}
 static bool instance_cell_published(const XrXirInstance *instance, uint32_t slot,
     const XrXirValue *cell) {
     const XrXirDeclarations *d = instance->program->declarations;

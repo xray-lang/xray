@@ -261,7 +261,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
     const XrXirArtifact *lowered, XrXirSourceDiagnostic *diagnostic) {
     XrXirStatus status = XR_XIR_BAD_STRUCTURE;
     uint32_t module = 0;
-    bool state_rejected = false;
+    bool state_rejected = false,birth_rejected=false;
     uint32_t *order=NULL,active_count=0;
     uint8_t *active=NULL;
     const XrXirCompileContext *context=xr_xir_compile_artifact_context(lowered);
@@ -275,6 +275,13 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
         declarations->root_module >= declarations->module_count ||
         (declarations->slot_count && !declarations->slots)) goto done;
     status = XR_XIR_OK;
+    for (module=0;module<declarations->module_count;++module) {
+        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+        if (declarations->modules[module].storage==XR_XIR_MODULE_BIRTH_STORAGE) {
+            birth_rejected=true;status=XR_XIR_BAD_STRUCTURE;break;
+        }
+    }
+    if (status!=XR_XIR_OK) goto done;
     for (uint32_t s = 0; s < declarations->slot_count; ++s) {
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
         const XrXirSlot *slot = &declarations->slots[s];
@@ -301,6 +308,9 @@ done:
         if (state_rejected) {
             static const char message[] = "library mutable or exported state is not admitted";
             memcpy(diagnostic->message, message, sizeof(message));
+        } else if (birth_rejected) {
+            static const char message[]="historical module requires published birth storage";
+            memcpy(diagnostic->message,message,sizeof(message));
         }
     }
     return status;

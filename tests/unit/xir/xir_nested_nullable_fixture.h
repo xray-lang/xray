@@ -73,7 +73,7 @@ static const XrXirFunction nested_functions[]={
     {"unwrap_inner",12,nested_inner_parameters,1,XR_XIR_I64,nested_blocks+6,1,nested_unwrap_inner_ops,2,NULL,0},
     {"presence",8,nested_outer_parameters,1,XR_XIR_BOOL,nested_blocks+7,1,nested_presence_ops,2,NULL,0}
 };
-static const XrXirSourceModule nested_modules[]={{"nested",6,NULL,0,0, 0}};
+static const XrXirSourceModule nested_modules[]={{"nested",6,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE}};
 static const XrXirFunctionIdentity nested_identities[]={
     {0},{.exported=1},{.exported=1},{.exported=1},
     {.exported=1},{.exported=1},{.exported=1},{.exported=1}
