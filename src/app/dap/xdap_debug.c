@@ -428,15 +428,6 @@ void xr_debug_free(XrVMRuntime *isolate) {
         fbp = next;
     }
 
-    // Free watches
-    struct XrWatch *w = dbg->watches;
-    while (w) {
-        struct XrWatch *next = w->next;
-        xr_free(w->expression);
-        xr_free(w);
-        w = next;
-    }
-
     // Free exception message
     xr_free(dbg->exception_message);
 

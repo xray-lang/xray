@@ -123,14 +123,6 @@ typedef struct XrDebugState {
     XrFuncBreakpoint *func_breakpoints;
     int next_func_bp_id;
 
-    // Watch expressions
-    struct XrWatch {
-        int id;
-        char *expression;
-        struct XrWatch *next;
-    } *watches;
-    int next_watch_id;
-
     // Last stop location (for step-over, owned copy via strdup)
     char *last_path;
     int last_line;
@@ -194,13 +186,6 @@ XR_FUNC void xr_debug_clear_breakpoints(XrVMRuntime *isolate, const char *path);
 XR_FUNC int xr_debug_check_breakpoint_ex(XrVMRuntime *isolate, const char *path, int line,
                                          char **out_log_message);
 XR_FUNC bool xr_debug_check_breakpoint(XrVMRuntime *isolate, const char *path, int line);
-
-// Watch expression management
-XR_FUNC int xr_debug_add_watch(XrVMRuntime *isolate, const char *expression);
-XR_FUNC bool xr_debug_remove_watch(XrVMRuntime *isolate, int id);
-XR_FUNC void xr_debug_clear_watches(XrVMRuntime *isolate);
-XR_FUNC int xr_debug_get_watch_count(XrVMRuntime *isolate);
-XR_FUNC bool xr_debug_get_watch(XrVMRuntime *isolate, int idx, int *out_id, const char **out_expr);
 
 // Execution control
 XR_FUNC void xr_debug_continue(XrVMRuntime *isolate);

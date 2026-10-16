@@ -34,7 +34,7 @@ static void watches_resume(XdapAdapter *adapter) {
 static void watches_normal(void) {
     EvaluateFixture fixture=evaluate_open(XR_DAP_CALL_FIXTURE);XdapAdapter *adapter=fixture.adapter;
     CHECK(!watches_count(adapter));uint32_t ids[5]={0};char owned[]="doubled + 2";
-    CHECK(xdap_watch_add(adapter,owned,sizeof(owned)-1,&ids[0])==XR_XIR_OK);memset(owned,'x',sizeof(owned)-1);
+    CHECK(xdap_watch_add(adapter,owned,sizeof(owned)-1,&ids[0])==XR_XIR_OK && ids[0]==1);memset(owned,'x',sizeof(owned)-1);
     const char *texts[]={"input + value","label","doubled + 2","print(value)"};
     for (uint32_t i=0;i<4;++i) CHECK(xdap_watch_add(adapter,texts[i],strlen(texts[i]),&ids[i+1])==XR_XIR_OK && ids[i+1]>ids[i]);
     CHECK(watches_count(adapter)==5);XdapWatchText first={0},escaped={0};
