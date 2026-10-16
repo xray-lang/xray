@@ -198,10 +198,11 @@ static void trace_terminal_values(void) {
 }
 
 #include "xir_root_trace_resources.h"
+#include "xir_record_endpoint_cases.h"
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--literals")));
     CHECK(!trace_live && !trace_live_bytes);
-    trace_literals();trace_detached();trace_invalid_inputs();trace_bad_forests();trace_terminal_values();
+    record_endpoint_cases();trace_literals();trace_detached();trace_invalid_inputs();trace_bad_forests();trace_terminal_values();
     if (argc==1) { trace_oom_sites();trace_budget_boundaries();trace_post_admission_cuts(); }
     CHECK(!trace_live && !trace_live_bytes);
     puts("Owned root cause traces: literal dual chains, detached lifetime, failure atomicity and physical zero passed");
