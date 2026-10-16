@@ -12,7 +12,7 @@
  *   No runtime type dependencies — only xdefs.h + xmalloc.h.
  */
 
-#include "xjson.h"
+#include "xjson_parse.h"
 #include "xmalloc.h"
 #include "xchecks.h"
 #include "xutf8.h"
@@ -31,6 +31,7 @@ typedef struct {
     const char *end;
     const char *pos;
     int depth;
+    XrJsonParseStatus status;
 } JsonParser;
 
 /* ========== Parser Helpers ========== */
@@ -56,12 +57,18 @@ static XrJsonValue *alloc_value(XrJsonType type) {
     return v;
 }
 
+static XrJsonValue *parse_alloc_value(JsonParser *parser,XrJsonType type) {
+    XrJsonValue *value=alloc_value(type);
+    if(!value)parser->status=XR_JSON_PARSE_OUT_OF_MEMORY;
+    return value;
+}
+
 /* ========== Parse Null ========== */
 
 static XrJsonValue *parse_null(JsonParser *p) {
-    if (p->pos + 4 <= p->end && strncmp(p->pos, "null", 4) == 0) {
+    if ((size_t)(p->end-p->pos) >= 4 && strncmp(p->pos, "null", 4) == 0) {
         p->pos += 4;
-        return alloc_value(XR_JSON_NULL);
+        return parse_alloc_value(p,XR_JSON_NULL);
     }
     return NULL;
 }
@@ -69,16 +76,16 @@ static XrJsonValue *parse_null(JsonParser *p) {
 /* ========== Parse Bool ========== */
 
 static XrJsonValue *parse_bool(JsonParser *p) {
-    if (p->pos + 4 <= p->end && strncmp(p->pos, "true", 4) == 0) {
+    if ((size_t)(p->end-p->pos) >= 4 && strncmp(p->pos, "true", 4) == 0) {
         p->pos += 4;
-        XrJsonValue *v = alloc_value(XR_JSON_BOOL);
+        XrJsonValue *v = parse_alloc_value(p,XR_JSON_BOOL);
         if (v)
             v->as.boolean = true;
         return v;
     }
-    if (p->pos + 5 <= p->end && strncmp(p->pos, "false", 5) == 0) {
+    if ((size_t)(p->end-p->pos) >= 5 && strncmp(p->pos, "false", 5) == 0) {
         p->pos += 5;
-        XrJsonValue *v = alloc_value(XR_JSON_BOOL);
+        XrJsonValue *v = parse_alloc_value(p,XR_JSON_BOOL);
         if (v)
             v->as.boolean = false;
         return v;
@@ -150,13 +157,12 @@ static XrJsonValue *parse_number(JsonParser *p) {
     char *numbuf = stack_numbuf;
     if (tok_len + 1 > sizeof(stack_numbuf)) {
         numbuf = (char *) xr_malloc(tok_len + 1);
-        if (!numbuf)
-            return NULL;
+        if (!numbuf) {p->status=XR_JSON_PARSE_OUT_OF_MEMORY;return NULL;}
     }
     memcpy(numbuf, start, tok_len);
     numbuf[tok_len] = '\0';
 
-    XrJsonValue *v = alloc_value(XR_JSON_NUMBER);
+    XrJsonValue *v = parse_alloc_value(p,XR_JSON_NUMBER);
     if (v) {
         if (is_float) {
             v->is_integer = false;
@@ -203,13 +209,11 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
     if (p->pos >= p->end || *p->pos != '"')
         return NULL;
     p->pos++; /* skip opening quote */
-
     /* Stack buffer for common case; heap for long strings */
     char stack_buf[256];
     size_t cap = sizeof(stack_buf);
     char *buf = stack_buf;
     size_t len = 0;
-
 #define STR_ENSURE(n)                                                                              \
     do {                                                                                           \
         if (len + (n) >= cap) {                                                                    \
@@ -217,7 +221,7 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
             while (new_cap < len + (n) + 1)                                                        \
                 new_cap *= 2;                                                                      \
             char *nb = (char *) xr_malloc(new_cap);                                                \
-            if (!nb) {                                                                             \
+            if (!nb) {p->status=XR_JSON_PARSE_OUT_OF_MEMORY;                                                                             \
                 if (buf != stack_buf)                                                              \
                     xr_free(buf);                                                                  \
                 return NULL;                                                                       \
@@ -229,7 +233,6 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
             cap = new_cap;                                                                         \
         }                                                                                          \
     } while (0)
-
     while (p->pos < p->end && *p->pos != '"') {
         if (*p->pos == '\\') {
             p->pos++;
@@ -271,17 +274,16 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
                     break;
                 case 'u': {
                     p->pos++;
-                    if (p->pos + 4 > p->end)
+                    if ((size_t)(p->end-p->pos) < 4)
                         goto bad_escape;
                     int cp = parse_hex4(p->pos);
                     if (cp < 0)
                         goto bad_escape;
                     p->pos += 4;
-
                     /* UTF-16 surrogate pair handling */
                     if (cp >= 0xD800 && cp <= 0xDBFF) {
                         /* High surrogate: expect \uDCxx */
-                        if (p->pos + 6 <= p->end && p->pos[0] == '\\' && p->pos[1] == 'u') {
+                        if ((size_t)(p->end-p->pos) >= 6 && p->pos[0] == '\\' && p->pos[1] == 'u') {
                             int low = parse_hex4(p->pos + 2);
                             if (low >= 0xDC00 && low <= 0xDFFF) {
                                 unsigned int full = 0x10000 + ((unsigned) (cp - 0xD800) << 10) +
@@ -301,7 +303,6 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
                         len += xr_utf8_encode((uint32_t) cp, buf + len);
                     }
                     break;
-
                 bad_escape:
                     /* Invalid unicode escape: free and fail */
                     if (buf != stack_buf)
@@ -315,13 +316,12 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
                     return NULL;
             }
         } else {
+            if((unsigned char)*p->pos<0x20) {if(buf!=stack_buf)xr_free(buf);return NULL;}
             STR_ENSURE(1);
             buf[len++] = *p->pos++;
         }
     }
-
 #undef STR_ENSURE
-
     if (p->pos >= p->end || *p->pos != '"') {
         /* Unterminated string */
         if (buf != stack_buf)
@@ -329,10 +329,11 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
         return NULL;
     }
     p->pos++; /* skip closing quote */
-
+    if(!xr_utf8_validate(buf,len)) {if(buf!=stack_buf)xr_free(buf);return NULL;}
     /* Copy result to heap */
     char *result = (char *) xr_malloc(len + 1);
     if (!result) {
+        p->status=XR_JSON_PARSE_OUT_OF_MEMORY;
         if (buf != stack_buf)
             xr_free(buf);
         return NULL;
@@ -352,7 +353,7 @@ static XrJsonValue *parse_string(JsonParser *p) {
     if (!str)
         return NULL;
 
-    XrJsonValue *v = alloc_value(XR_JSON_STRING);
+    XrJsonValue *v = parse_alloc_value(p,XR_JSON_STRING);
     if (!v) {
         xr_free(str);
         return NULL;
@@ -368,7 +369,7 @@ static XrJsonValue *parse_array(JsonParser *p) {
     XR_DCHECK(p->pos < p->end && *p->pos == '[', "parse_array: expected '['");
     p->pos++;
 
-    XrJsonValue *arr = alloc_value(XR_JSON_ARRAY);
+    XrJsonValue *arr = parse_alloc_value(p,XR_JSON_ARRAY);
     if (!arr)
         return NULL;
     arr->as.array.items = NULL;
@@ -389,7 +390,15 @@ static XrJsonValue *parse_array(JsonParser *p) {
             return NULL;
         }
 
+        if(arr->as.array.count==INT_MAX) {
+            xjson_free(elem);xjson_free(arr);return NULL;
+        }
+        int previous=arr->as.array.count;
         xjson_array_push(arr, elem);
+        if(arr->as.array.count!=previous+1) {
+            p->status=XR_JSON_PARSE_OUT_OF_MEMORY;
+            xjson_free(elem);xjson_free(arr);return NULL;
+        }
 
         skip_whitespace(p);
         if (p->pos < p->end && *p->pos == ']') {
@@ -412,7 +421,7 @@ static XrJsonValue *parse_object(JsonParser *p) {
     XR_DCHECK(p->pos < p->end && *p->pos == '{', "parse_object: expected '{'");
     p->pos++;
 
-    XrJsonValue *obj = alloc_value(XR_JSON_OBJECT);
+    XrJsonValue *obj = parse_alloc_value(p,XR_JSON_OBJECT);
     if (!obj)
         return NULL;
     obj->as.object.members = NULL;
@@ -454,10 +463,15 @@ static XrJsonValue *parse_object(JsonParser *p) {
 
         /* Append member: transfer ownership of key (no strdup needed) */
         if (obj->as.object.count >= obj->as.object.capacity) {
-            int new_cap = obj->as.object.capacity < 8 ? 8 : obj->as.object.capacity * 2;
+            int capacity=obj->as.object.capacity;
+            int new_cap=capacity<8?8:capacity>INT_MAX/2?INT_MAX:capacity*2;
+            if(obj->as.object.count==INT_MAX||sizeof(XrJsonMember)>SIZE_MAX/(size_t)new_cap) {
+                xr_free(key);xjson_free(val);xjson_free(obj);return NULL;
+            }
             XrJsonMember *tmp = (XrJsonMember *) xr_realloc(
                 obj->as.object.members, (size_t) new_cap * sizeof(XrJsonMember));
             if (!tmp) {
+                p->status=XR_JSON_PARSE_OUT_OF_MEMORY;
                 xr_free(key);
                 xjson_free(val);
                 xjson_free(obj);
@@ -530,24 +544,18 @@ static XrJsonValue *parse_value(JsonParser *p) {
 
 /* ========== Public Parse API ========== */
 
-XR_FUNC XrJsonValue *xjson_parse(const char *json, size_t len) {
-    if (!json)
-        return NULL;
-
-    JsonParser p = {.src = json, .end = json + len, .pos = json, .depth = 0};
-
-    XrJsonValue *result = parse_value(&p);
-    if (!result)
-        return NULL;
-
-    /* RFC 8259: no trailing content after valid value */
-    skip_whitespace(&p);
-    if (p.pos != p.end) {
-        xjson_free(result);
-        return NULL;
-    }
-
-    return result;
+XR_FUNC XrJsonParseStatus xjson_parse_status(const char *json,size_t len,XrJsonValue **out) {
+    if(!json||!out||*out||len>PTRDIFF_MAX)return XR_JSON_PARSE_BAD_ARGUMENT;
+    JsonParser parser={.src=json,.end=json+len,.pos=json,.status=XR_JSON_PARSE_INVALID_JSON};
+    XrJsonValue *result=parse_value(&parser);
+    if(!result)return parser.status;
+    skip_whitespace(&parser);
+    if(parser.pos!=parser.end) {xjson_free(result);return XR_JSON_PARSE_INVALID_JSON;}
+    *out=result;return XR_JSON_PARSE_OK;
+}
+XR_FUNC XrJsonValue *xjson_parse(const char *json,size_t len) {
+    XrJsonValue *result=NULL;
+    return xjson_parse_status(json,len,&result)==XR_JSON_PARSE_OK?result:NULL;
 }
 
 /* ========== Free ========== */
