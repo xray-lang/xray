@@ -39,5 +39,5 @@ static XrXirType task_await_result(const XrXirModule *module, const XrXirFunctio
     const XrXirInstruction *op) {
     XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
     return op->op==XR_XIR_TASK_AWAIT ? xr_xir_task_element(module->types,receiver) :
-        op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : xr_xir_iterator_element(module->types,receiver);
+        op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(module->types,receiver);
 }

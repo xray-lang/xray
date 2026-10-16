@@ -2340,9 +2340,9 @@ static bool collect_declarations(SourceContext *ctx) {
         return source_fail(ctx, NULL, XR_XIR_BUDGET, "default constructor capacity exhausted");
     uint32_t capacity = functions + nominals;
     if (!source_comptime_inventory(ctx,closures.comptime,&capacity)) return false;
-    if (closures.members > UINT32_MAX - capacity)
-        return source_fail(ctx,NULL,XR_XIR_BUDGET,"member helper capacity exhausted");
-    capacity += closures.members;
+    if (closures.helpers > UINT32_MAX - capacity)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"synthetic helper capacity exhausted");
+    capacity += closures.helpers;
     if (!ctx->core_factory && capacity <= UINT32_MAX - 7) capacity += 7;
     if (capacity > ctx->compile.limits.functions) capacity = ctx->compile.limits.functions;
     ctx->function_capacity = capacity;

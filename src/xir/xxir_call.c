@@ -1229,6 +1229,8 @@ XrXirCallStatus xr_xir_call_request_cancel(XrXirCall *call) {
          call->result.status != XR_XIR_CALL_YIELDED))
         return XR_XIR_CALL_BAD_STATE;
     call->cancel_requested = true;
+    if(call->result.status==XR_XIR_CALL_SUSPENDED && call->wait.kind==XR_XIR_WAIT_ITERATOR_CLOSE && cleanup_active(call))
+        return XR_XIR_CALL_CANCEL_REQUESTED;
     if (call->result.status == XR_XIR_CALL_SUSPENDED || call->result.status == XR_XIR_CALL_YIELDED) {
         unlink_task_wait(call,true);
         xr_xir_value_drop(&call->waiting_task);

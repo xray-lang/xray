@@ -5,7 +5,7 @@ import argparse, hashlib, importlib.util, json, struct
 def words(*items):
     return struct.pack('<' + 'I' * len(items), *items)
 
-def packet(kind=11, element=2, second=3, contract=88, second_kind=11):
+def packet(kind=11, element=2, second=3, contract=89, second_kind=11):
     name = b'iteratorTypes'
     function = words(len(name)) + name + words(2, 256, 257, 0)
     function += words(1, 0, 1, 0, 0)
@@ -43,6 +43,9 @@ def main():
     previous87=[(n.replace('iterator_types_','iterator_types_previous87_'),packet(element=e,second=v,contract=87)) for n,e,v in [('iterator_types_golden',2,3),('iterator_types_unit',0,3),('iterator_types_cycle',256,3),('iterator_types_unknown',2,3),('iterator_types_duplicate',2,2)]]
     previous87[3]=('iterator_types_previous87_unknown',packet(kind=0xffffffff,contract=87))
     helper.header(here / 'xir_iterator_types_previous87_golden.h','XIR_ITERATOR_TYPES_PREVIOUS87_GOLDEN_H',previous87,args.write)
+    previous88=[(n.replace('iterator_types_','iterator_types_previous88_'),packet(element=e,second=v,contract=88)) for n,e,v in [('iterator_types_golden',2,3),('iterator_types_unit',0,3),('iterator_types_cycle',256,3),('iterator_types_unknown',2,3),('iterator_types_duplicate',2,2)]]
+    previous88[3]=('iterator_types_previous88_unknown',packet(kind=0xffffffff,contract=88))
+    helper.header(here / 'xir_iterator_types_previous88_golden.h','XIR_ITERATOR_TYPES_PREVIOUS88_GOLDEN_H',previous88,args.write)
     helper.header(here / 'xir_iterator_types_golden.h', 'XIR_ITERATOR_TYPES_GOLDEN_H', rows, args.write)
     print(json.dumps({'writer_used': False, 'packets': [{'name': n, 'bytes': len(b),
           'sha256': hashlib.sha256(b).hexdigest()} for n, b in rows]}, indent=2))

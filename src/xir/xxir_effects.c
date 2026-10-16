@@ -332,7 +332,8 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     switch (op) {
     case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
         effect->suspend = XR_XIR_EFFECT_MAY; return EFFECT_SEED_LOCAL;
-    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: return EFFECT_SEED_LOCAL;
+    /* Lifecycle drain performs scheduler work without a language suspension. */
+    case XR_XIR_ITERATOR_CLOSE: case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: return EFFECT_SEED_LOCAL;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return EFFECT_SEED_LOCAL;
     case XR_XIR_CALL_REQUIREMENT: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:

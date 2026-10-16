@@ -53,7 +53,7 @@ static XrXirValueStatus generator_core_prepare(XrXirTaskExecutor *executor,XrXir
     xr_xir_value_object_publish(&generator->object);*output=generator;return XR_XIR_VALUE_OK;
 }
 static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallView *view,
-    XrXirType type,const XrXirCallRequest *request,XrXirValue *output) {
+    XrXirType type,const XrXirCallRequest *request,XrXirValue *output,uint32_t instruction) {
     bool child=false;
     if(!executor || !view || !request || !task_core_empty_value(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     if(task_executor_observing(executor) || !xr_xir_task_executor_view_member(executor,view,&child)) return XR_XIR_CALL_BUSY;
@@ -79,6 +79,11 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
     if(!config.admission.arena) config.admission=(XrXirValueAdmission){program->arena,executor->config.domain,NULL,NULL,
         executor->config.poll_limit,executor->config.call_limit};
     XrXirCallStatus status=xr_xir_call_generator_new_budgeted(&config,request,executor->budget,&generator->call);
+    if(status==XR_XIR_CALL_READY && child) {
+        XirEffectInvocationSelection context={0};
+        status=xr_xir_instance_generator_context(view,instruction,request,&context);
+        if(status==XR_XIR_CALL_READY) status=xr_xir_call_generator_bind_context(generator->call,&context);
+    }
     if(status==XR_XIR_CALL_READY) status=xr_xir_call_execution_status(view);
     if(status==XR_XIR_CALL_READY && (executor->stopping || executor->budget->exhausted))
         status=executor->budget->exhausted ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_CANCELLED;
@@ -101,10 +106,10 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
     *output=generator_core_value(generator);return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xr_xir_task_executor_generator(XrXirTaskExecutor *executor,
-    XrXirCallView *view,XrXirType type,const XrXirCallRequest *request,XrXirValue *output) {
+    XrXirCallView *view,XrXirType type,const XrXirCallRequest *request,XrXirValue *output,uint32_t instruction) {
     if(!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirCallStatus status=generator_core_new(executor,view,type,request,output);
+    XrXirCallStatus status=generator_core_new(executor,view,type,request,output,instruction);
     xr_xir_value_graph_end();return status;
 }
 static void generator_core_complete_consumer(XrXirTaskExecutor *executor,XirGenerator *generator);
@@ -137,7 +142,8 @@ static void generator_core_cancel(XrXirTaskExecutor *executor,XirGenerator *gene
     XrXirCallStatus status=xr_xir_call_request_cancel(generator->call);
     XR_CHECK(status==XR_XIR_CALL_CANCEL_REQUESTED || status==XR_XIR_CALL_BAD_STATE || status==XR_XIR_CALL_BUSY,
         "generator cancellation belongs to its exact live Call");
-    if(!generator->activation.queued && executor->current!=&generator->activation)
+    if(!generator->activation.queued && executor->current!=&generator->activation &&
+        xr_xir_call_state(generator->call)!=XR_XIR_CALL_SUSPENDED)
         task_core_enqueue(executor,&generator->activation);
 }
 static void generator_core_scan(XrXirTaskExecutor *executor) {

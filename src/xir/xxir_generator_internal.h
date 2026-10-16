@@ -32,5 +32,5 @@ typedef struct XirGenerator {
 XR_FUNC bool xr_xir_generator_storage_valid(const XirGenerator *generator);
 /* Construction is private to an authenticated executing Instance view. */
 XR_FUNC XrXirCallStatus xr_xir_task_executor_generator(XrXirTaskExecutor *executor,
-    XrXirCallView *view, XrXirType type, const XrXirCallRequest *request, XrXirValue *output);
+    XrXirCallView *view, XrXirType type, const XrXirCallRequest *request, XrXirValue *output, uint32_t instruction);
 #endif
