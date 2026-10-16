@@ -21,10 +21,11 @@
  *     - 1 LSP recovery entry that takes a pre-initialised Parser:
  *         * xr_compile_parse_recoverable
  *
- *     - The Parser struct (callers stack-allocate it) plus the two LSP
+ *     - The Parser struct (callers stack-allocate it) plus the LSP
  *       setup helpers it needs:
  *         * xr_compile_parser_open
  *         * xr_parser_set_error_callback
+ *         * xr_parser_set_call_syntax_callback
  *
  *   All Pratt-table internals (Precedence, ParseRule, parse-helper fns,
  *   token-stream helpers, error helpers, AST-builder helpers) live in
@@ -72,6 +73,18 @@ typedef struct XrParseDiagnostics {
     int max_errors;
 } XrParseDiagnostics;
 
+/* Completed-call observations borrow the parser arena only during the callback.
+ * Boundaries are the position after '(' and after each argument comma, including
+ * a trailing comma. Speculative observations require final-AST reachability
+ * validation before publication. A failed callback aborts the owning parse. */
+typedef struct XrParseCallSyntax {
+    const AstNode *node, *callee;
+    XrNameSpan opening, closing;
+    const XrNameSpan *boundaries;
+    size_t boundary_count;
+} XrParseCallSyntax;
+typedef XrCompileResourceStatus (*XrParseCallSyntaxFn)(void *, const XrParseCallSyntax *);
+
 /* ========== Parser State ==========
  *
  * Callers stack-allocate this struct. After parsing, callers may read:
@@ -97,6 +110,8 @@ struct Parser {
     // Error callback (for LSP)
     XrParseErrorCallback error_callback;
     void *error_callback_data;
+    XrParseCallSyntaxFn call_syntax_callback;
+    void *call_syntax_data;
     int error_count;  // Number of errors collected
     int max_errors;   // Max errors before stopping (0 = unlimited)
 
@@ -234,6 +249,7 @@ XR_FUNC XrParseStatus xr_compile_parser_status(const Parser *parser);
 // means "no limit".
 XR_FUNC void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
                                           void *user_data, int max_errors);
+XR_FUNC void xr_parser_set_call_syntax_callback(Parser *, XrParseCallSyntaxFn, void *);
 
 // Consumes the parser scope. OK or RECOVERED publishes an AST borrowing the
 // caller's exact arena; resource failure never publishes a partial AST.

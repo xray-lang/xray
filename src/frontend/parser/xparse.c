@@ -536,6 +536,14 @@ void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
     parser->error_count = 0;
 }
 
+XR_FUNC void xr_parser_set_call_syntax_callback(Parser *parser, XrParseCallSyntaxFn callback,
+                                                  void *context) {
+    if (!parser) return;
+    parser->call_syntax_callback = callback;
+    parser->call_syntax_data = context;
+}
+
+
 // Report error at a specific token (shared implementation)
 static void xr_parser_error_at(Parser *parser, Token *token, const char *message) {
     if (!xr_parser_healthy(parser)) return;
@@ -1569,44 +1577,7 @@ AstNode *xr_parse_variable(Parser *parser) {
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);  // Consume (
 
-        // Parse argument list
-        AstNode **arguments = NULL;
-        XrCallArgAccess *arg_accesses = NULL;
-        int arg_count = 0;
-        int arg_capacity = 0;
-        int access_count = 0;
-        int access_capacity = 0;
-
-        if (!xr_parser_check(parser, TK_RPAREN)) {
-            do {
-                XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-                AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
-                if (!xr_parser_healthy(parser)) return NULL;
-                do {
-                    XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                do {
-                    XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
-        }
-
-        do {
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-
-        // `Map<K,V>()` / `Array<T>()` / `Channel<T>(n)` construct built-in heap
-        // types directly (no `new`); route to the construction node.
-        if (xr_is_construct_only_type_name(parser, name)) {
-            return xr_ast_new_expr(parser->compiler_session, NULL, name, arguments, arg_accesses,
-                                   arg_count, type_args, type_arg_count, line);
-        }
-
-        return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_accesses,
-                                        arg_count, type_args, type_arg_count, line);
+        return xr_parse_call_with_types(parser, callee, type_args, type_arg_count);
     }
 
     // Check for struct literal: Name{field: value, ...}

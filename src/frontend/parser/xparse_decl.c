@@ -1250,66 +1250,82 @@ bool xr_is_construct_only_type_name(Parser *parser, const char *name) {
     return false;
 }
 
-AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
+XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
+                                         XrTypeRef **type_args, int type_count) {
     if (!xr_parser_healthy(parser)) return NULL;
-    XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
-    int line = callee && callee->line > 0 ? callee->line : parser->previous.line;
-    int column = callee && callee->column > 0 ? callee->column : parser->previous.column;
-
-    /* `a?.b.c()` — the call continues an optional chain, so it becomes the
-     * chain's method-call link and short-circuits with it (spec §3.6), exactly
-     * like the `a?.c()` the programmer could have written. */
-    if (callee && callee->type == AST_OPTIONAL_CHAIN && callee->as.optional_chain.implicit_link &&
-        callee->as.optional_chain.chain_type == 0 && callee->as.optional_chain.name) {
-        callee->as.optional_chain.chain_type = 2;
-    }
-
+    Token opening = parser->previous;
+    int before_errors = parser->error_count;
+    int line = callee && callee->line > 0 ? callee->line : opening.line;
+    int column = callee && callee->column > 0 ? callee->column : opening.column;
     AstNode **arguments = NULL;
     XrCallArgAccess *arg_accesses = NULL;
-    int arg_count = 0;
-    int arg_capacity = 0;
-    int access_count = 0;
-    int access_capacity = 0;
-
+    XrNameSpan *boundaries = NULL;
+    int arg_count = 0, arg_capacity = 0, access_count = 0, access_capacity = 0;
+    int boundary_count = 0, boundary_capacity = 0;
+    if (parser->call_syntax_callback) {
+        XrNameSpan boundary = {opening.line, opening.column + opening.length};
+        XR_PARSE_PUSH(parser, boundaries, boundary_count, boundary_capacity, boundary);
+        if (!xr_parser_healthy(parser)) return NULL;
+    }
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
             XrCallArgAccess access = XR_CALL_ARG_PLAIN;
             AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
             if (!xr_parser_healthy(parser)) return NULL;
-            do {
-                XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+            if (!xr_parser_healthy(parser)) return NULL;
+            XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
+            if (!xr_parser_healthy(parser)) return NULL;
+            if (!xr_parser_match(parser, TK_COMMA)) break;
+            if (parser->call_syntax_callback) {
+                XrNameSpan boundary = {parser->previous.line,
+                                       parser->previous.column + parser->previous.length};
+                XR_PARSE_PUSH(parser, boundaries, boundary_count, boundary_capacity, boundary);
                 if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
+            }
+        } while (!xr_parser_check(parser, TK_RPAREN));
     }
-
-    do {
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-    int end_line = parser->previous.line;
-    int end_column = parser->previous.column + parser->previous.length;
-
-    // `Map()` / `Array()` / `Channel(n)` etc. construct built-in heap types.
+    xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+    if (!xr_parser_healthy(parser)) return NULL;
+    Token closing = parser->previous;
+    AstNode *call = NULL;
     if (callee && callee->type == AST_VARIABLE &&
         xr_is_construct_only_type_name(parser, callee->as.variable.name)) {
-        return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
-                               arg_accesses, arg_count, NULL, 0, line);
+        call = xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name,
+                               arguments, arg_accesses, arg_count, type_args, type_count, line);
+    } else if (type_count) {
+        call = xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_accesses,
+                                        arg_count, type_args, type_count, line);
+    } else {
+        call = xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses,
+                                arg_count, line);
     }
-
-    AstNode *call = xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses,
-                                     arg_count, line);
-    if (!xr_parser_healthy(parser)) return NULL;
-    if (call) {
-        call->column = column;
-        call->end_line = end_line;
-        call->end_column = end_column;
+    if (!xr_parser_healthy(parser) || !call) return NULL;
+    call->column = column;
+    call->end_line = closing.line;
+    call->end_column = closing.column + closing.length;
+    if (parser->call_syntax_callback && opening.type == TK_LPAREN && closing.type == TK_RPAREN &&
+        parser->error_count == before_errors) {
+        XrParseCallSyntax syntax = {call, callee, {opening.line, opening.column},
+                                    {closing.line, closing.column}, boundaries,
+                                    (size_t)boundary_count};
+        XrCompileResourceStatus status = parser->call_syntax_callback(parser->call_syntax_data, &syntax);
+        if (status != XR_COMPILE_RESOURCE_OK) {
+            (void)xr_compile_state_fail(parser->state, status);
+            return NULL;
+        }
     }
     return call;
+}
+
+XR_FUNC AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
+    if (!xr_parser_healthy(parser)) return NULL;
+    /* Calls on implicit optional member links short-circuit with the chain. */
+    if (callee && callee->type == AST_OPTIONAL_CHAIN && callee->as.optional_chain.implicit_link &&
+        callee->as.optional_chain.chain_type == 0 && callee->as.optional_chain.name) {
+        callee->as.optional_chain.chain_type = 2;
+    }
+    return xr_parse_call_with_types(parser, callee, NULL, 0);
 }
 
 /* ========== Array Parsing ========== */
