@@ -17,7 +17,7 @@
 #include "xir_runtime_allocations.h"
 #include "xir_generator_worker_cases.h"
 XR_DATA const XrXirProgramSpec generator_worker_program;
-XR_DATA const uint32_t generator_worker_ids[7];
+XR_DATA const uint32_t generator_worker_ids[11];
 int main(void) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context,&generator_worker_program,&program)==XR_XIR_OK);

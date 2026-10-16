@@ -15,7 +15,7 @@
 #include "xir_generator_wait_cases.h"
 #include "xir_generator_loop_cases.h"
 XR_DATA const XrXirProgramSpec generator_loop_program;
-XR_DATA const uint32_t generator_loop_ids[23];
+XR_DATA const uint32_t generator_loop_ids[24];
 int main(void) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context,&generator_loop_program,&program)==XR_XIR_OK);

@@ -18,7 +18,7 @@
 #include "xir_generator_wait_cases.h"
 #include "xir_generator_loop_cases.h"
 XR_DATA const XrXirProgramSpec generator_loop_program;
-XR_DATA const uint32_t generator_loop_ids[23];
+XR_DATA const uint32_t generator_loop_ids[24];
 static const XrXirCallEntry *mixed_selected[128];
 static unsigned mixed_steps[2],mixed_yields[2],mixed_demands[2],mixed_timers[2];
 static bool mixed_native[128];

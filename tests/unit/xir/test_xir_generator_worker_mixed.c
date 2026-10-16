@@ -17,7 +17,7 @@
 #include "xir_runtime_allocations.h"
 #include "xir_generator_worker_cases.h"
 XR_DATA const XrXirProgramSpec generator_worker_program;
-XR_DATA const uint32_t generator_worker_ids[7];
+XR_DATA const uint32_t generator_worker_ids[11];
 static const XrXirCallEntry *mixed_selected[128];
 static unsigned mixed_steps[2],mixed_yields[2],mixed_demands[2],mixed_timers[2];
 static bool mixed_native[128];

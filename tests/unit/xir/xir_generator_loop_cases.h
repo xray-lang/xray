@@ -8,10 +8,10 @@
  */
 #ifndef XIR_GENERATOR_LOOP_CASES_H
 #define XIR_GENERATOR_LOOP_CASES_H
-static void loop_query_closed(XrXirInstance *instance,const uint32_t ids[23],int64_t expected) {
+static void loop_query_closed(XrXirInstance *instance,const uint32_t ids[24],int64_t expected) {
     XrXirValue count=wait_make(instance,ids[12]);CHECK(count.type==XR_XIR_I64 && count.payload==expected);xr_xir_value_drop(&count);
 }
-static void loop_value_case(XrXirProgram *program,const uint32_t ids[23],unsigned mode) {
+static void loop_value_case(XrXirProgram *program,const uint32_t ids[24],unsigned mode) {
     GeneratorWaitLog log={0};XrXirInstance *instance=wait_instance(program,&log);
     uint32_t entries[]={ids[8],ids[9],ids[10],ids[11],ids[14],ids[16],ids[18],ids[19]};
     XrXirValue iterator=wait_make(instance,ids[mode==4 ? 13 : 15]);
@@ -35,7 +35,7 @@ static void loop_value_case(XrXirProgram *program,const uint32_t ids[23],unsigne
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && log.count==1);xr_xir_value_drop(&iterator);
     if(mode==2 || mode==6) wait_string(&value,mode==2 ? "one" : "onetwo");xr_xir_value_drop(&value);
 }
-static void loop_cancel_case(XrXirProgram *program,const uint32_t ids[23],unsigned mode,bool second) {
+static void loop_cancel_case(XrXirProgram *program,const uint32_t ids[24],unsigned mode,bool second) {
     GeneratorWaitLog log={0};XrXirInstance *instance=wait_instance(program,&log);
     XrXirValue iterator=wait_make(instance,ids[15]);
     CHECK(xr_xir_instance_start(instance,ids[9],&iterator,1)==XR_XIR_CALL_READY);
@@ -56,7 +56,7 @@ static void loop_cancel_case(XrXirProgram *program,const uint32_t ids[23],unsign
     XirGenerator *generator=(XirGenerator *)(uintptr_t)iterator.payload;
     CHECK(log.count==1 && !generator->call && !generator->consumer);xr_xir_value_drop(&iterator);
 }
-static void loop_nested_case(XrXirProgram *program,const uint32_t ids[23],bool alias) {
+static void loop_nested_case(XrXirProgram *program,const uint32_t ids[24],bool alias) {
     GeneratorWaitLog log={0};XrXirInstance *instance=wait_instance(program,&log);
     XrXirValue values[]={wait_make(instance,ids[15]),{0}};
     if(alias) CHECK(xr_xir_value_copy(&values[0],&values[1])==XR_XIR_VALUE_OK);else values[1]=wait_make(instance,ids[15]);
@@ -67,7 +67,7 @@ static void loop_nested_case(XrXirProgram *program,const uint32_t ids[23],bool a
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && log.count==(alias ? 1u : 2u));
     xr_xir_value_drop(&values[0]);xr_xir_value_drop(&values[1]);
 }
-static void loop_close_cancel_case(XrXirProgram *program,const uint32_t ids[23]) {
+static void loop_close_cancel_case(XrXirProgram *program,const uint32_t ids[24]) {
     GeneratorWaitLog log={0};XrXirInstance *instance=wait_instance(program,&log);
     XrXirValue iterator=wait_make(instance,ids[15]);XirGenerator *generator=(XirGenerator *)(uintptr_t)iterator.payload;
     CHECK(xr_xir_instance_start(instance,ids[8],&iterator,1)==XR_XIR_CALL_READY);
@@ -91,12 +91,12 @@ static void loop_close_cancel_case(XrXirProgram *program,const uint32_t ids[23])
     CHECK(closing && result.outcome.status==XR_XIR_CALL_CANCELLED && log.count==1);
     loop_query_closed(instance,ids,1);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&iterator);
 }
-static void loop_builtin_case(XrXirProgram *program,const uint32_t ids[23]) {
+static void loop_builtin_case(XrXirProgram *program,const uint32_t ids[24]) {
     GeneratorWaitLog log={0};XrXirInstance *instance=wait_instance(program,&log);
     XrXirValue value=wait_make(instance,ids[20]);CHECK(value.type==XR_XIR_I64 && value.payload==13 && !log.count);
     xr_xir_value_drop(&value);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
 }
-static void loop_task_case(XrXirProgram *program,const uint32_t ids[23],unsigned mode) {
+static void loop_task_case(XrXirProgram *program,const uint32_t ids[24],unsigned mode) {
     GeneratorWaitLog log={0};XrXirInstance *instance=wait_instance(program,&log);
     CHECK(xr_xir_instance_start(instance,ids[mode==4 ? 22 : 21],NULL,0)==XR_XIR_CALL_READY);
     XrXirInstanceResult pending=wait_timer(instance,5);
@@ -117,11 +117,17 @@ static void loop_task_case(XrXirProgram *program,const uint32_t ids[23],unsigned
     else {XrXirValue value=wait_returned(instance);CHECK(value.type==XR_XIR_I64 && value.payload==(mode==4 ? 17 : 1));xr_xir_value_drop(&value);}
     CHECK(log.count==1 && xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
 }
-static void generator_loop_cases(XrXirProgram *program,const uint32_t ids[23]) {
+static void loop_cold_case(XrXirProgram *program,const uint32_t ids[24]) {
+    GeneratorWaitLog log={0};XrXirInstance *instance=wait_instance(program,&log);
+    XrXirValue value=wait_make(instance,ids[23]);CHECK(value.type==XR_XIR_I64 && value.payload==11 && !log.count);
+    xr_xir_value_drop(&value);loop_query_closed(instance,ids,0);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && !log.count);
+}
+static void generator_loop_cases(XrXirProgram *program,const uint32_t ids[24]) {
     for(unsigned mode=0;mode<8;++mode) loop_value_case(program,ids,mode);
     for(unsigned mode=0;mode<3;++mode) for(unsigned second=0;second<2;++second) loop_cancel_case(program,ids,mode,second!=0);
     loop_nested_case(program,ids,false);loop_nested_case(program,ids,true);loop_close_cancel_case(program,ids);
-    loop_builtin_case(program,ids);for(unsigned mode=0;mode<5;++mode) loop_task_case(program,ids,mode);
-    puts("Iterator for-in: 23 real lexical close, control, capture, Unit, Error, panic and cancellation cases PASS");
+    loop_cold_case(program,ids);loop_builtin_case(program,ids);for(unsigned mode=0;mode<5;++mode) loop_task_case(program,ids,mode);
+    puts("Iterator for-in: 24 real lexical close, control, capture, Unit, Error, panic and cancellation cases PASS");
 }
 #endif

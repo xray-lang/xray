@@ -6,6 +6,21 @@
  *
  * xxir_task_iterator_wait.inc.c - FIFO producer demand and exact consumer wake
  */
+/* Cached values and terminal outcomes need no producer execution authority.
+ * Every ordinary advance, including an nth discard, uses the consumer role. */
+static XrXirCallStatus generator_core_advance_permission(XrXirTaskExecutor *executor,
+    XirGenerator *generator,const XrXirTaskWaitToken *token) {
+    if(token->request.kind==XR_XIR_WAIT_ITERATOR_CLOSE) return XR_XIR_CALL_READY;
+    XirTaskActivation *consumer=token->binding.activation;
+    XirGenerator *parent=generator_core_activation(executor,consumer);
+    bool child=generator->child || consumer->task || (parent && parent->child);
+    if(!child) return XR_XIR_CALL_READY;
+    const XrXirProgramPermissions *permissions=executor->config.program->permissions;
+    uint32_t entry=generator->activation.entry;
+    if(!permissions || entry>=permissions->function_count || permissions->entries[entry].worker!=XR_XIR_OK)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    generator->child=true;return XR_XIR_CALL_READY;
+}
 static void generator_core_complete_consumer(XrXirTaskExecutor *executor,XirGenerator *generator) {
     XrXirCall *call=generator->consumer;if(!call) return;
     XrXirTaskWaitToken token={0};
@@ -19,7 +34,10 @@ static void generator_core_complete_consumer(XrXirTaskExecutor *executor,XirGene
         XR_CHECK(generator->consumer==call && generator->call &&
             xr_xir_call_state(generator->call)==XR_XIR_CALL_READY && !generator->activation.queued,
             "an intermediate nth discard retains its exact consumer and readies only its producer");
-        task_core_enqueue(executor,&generator->activation);return;
+        XR_CHECK(xr_xir_call_iterator_wait_token(call,&token),
+            "an intermediate nth demand refreshes its decremented exact token");
+        status=generator_core_advance_permission(executor,generator,&token);
+        if(status==XR_XIR_CALL_READY) {task_core_enqueue(executor,&generator->activation);return;}
     }
     if(status!=XR_XIR_CALL_READY) status=xr_xir_call_fail_iterator_wait(call,&token,status);
     XR_CHECK(status==XR_XIR_CALL_READY,"producer completion delivers or faults one consumer");
@@ -34,12 +52,15 @@ static void generator_core_register_consumer(XrXirTaskExecutor *executor,XrXirCa
     }
     if(status==XR_XIR_CALL_SUSPENDED) {
         XirGenerator *generator=(XirGenerator *)(uintptr_t)token.request.subject;
-        if(xr_xir_call_state(generator->call)==XR_XIR_CALL_READY && !generator->activation.queued)
-            task_core_enqueue(executor,&generator->activation);
-        return;
+        status=generator_core_advance_permission(executor,generator,&token);
+        if(status==XR_XIR_CALL_READY) {
+            if(xr_xir_call_state(generator->call)==XR_XIR_CALL_READY && !generator->activation.queued)
+                task_core_enqueue(executor,&generator->activation);
+            return;
+        }
     }
     XR_CHECK(xr_xir_call_fail_iterator_wait(call,&token,status)==XR_XIR_CALL_READY,
-        "rejected demand leaves the original consumer and producer untouched");
+        "rejected demand faults one consumer and releases only its exact producer lease");
     task_core_record_failure(executor,token.binding.activation);task_core_enqueue(executor,token.binding.activation);
 }
 static bool task_core_internal_wait(XrXirCall *call,XrXirTaskWaitToken *token) {

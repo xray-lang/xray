@@ -56,6 +56,14 @@ static const char worker_source[]=
     " for(value in items()){break}\n"
     " return done}\n"
     "export fn good()->i64 {return await go owned_worker()}\n"
+    "fn park_worker()->i64 {const unused=module_items()\n return 11}\n"
+    "export fn park()->i64 {return await go park_worker()}\n"
+    "fn worker_has()->i64 {const it=module_items()\n it.hasNext()\n return 0}\n"
+    "export fn bad_has()->i64 {return await go worker_has()}\n"
+    "fn worker_next()->i64 {const it=module_items()\n return it.next()}\n"
+    "export fn bad_next()->i64 {return await go worker_next()}\n"
+    "fn worker_nth()->i64 {const it=module_items()\n return it.nth(1)}\n"
+    "export fn bad_nth()->i64 {return await go worker_nth()}\n"
     "fn main(){}\n"
     "\n";
 int main(int argc,char **argv) {
@@ -75,14 +83,14 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_specialize(decoded,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
-    const char *names[]={"root_ok","count","bad_direct","bad_local","bad_transit","bad_callback","good"};uint32_t ids[7]={0};
-    for(unsigned n=0;n<7;++n) for(uint32_t f=0;f<module->function_count;++f)
+    const char *names[]={"root_ok","count","bad_direct","bad_local","bad_transit","bad_callback","good","park","bad_has","bad_next","bad_nth"};uint32_t ids[11]={0};
+    for(unsigned n=0;n<11;++n) for(uint32_t f=0;f<module->function_count;++f)
         if(module->functions[f].name_length==strlen(names[n]) && !memcmp(module->functions[f].name,names[n],strlen(names[n]))) ids[n]=f;
-    for(unsigned n=0;n<7;++n) CHECK(ids[n]);
+    for(unsigned n=0;n<11;++n) CHECK(ids[n]);
     XrXirCSource c={0};CHECK(xr_xir_compile_emit_c(lowered,"generator_worker",1048576,&c)==XR_XIR_OK);
     CHECK(c.text && c.length && !strstr(c.text,"({"));
     if(argc==2) {FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(c.text,1,c.length,file)==c.length);
-        CHECK(fprintf(file,"\nconst uint32_t generator_worker_ids[7]={%u,%u,%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6])>0);CHECK(!fclose(file));}
+        CHECK(fprintf(file,"\nconst uint32_t generator_worker_ids[11]={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6],ids[7],ids[8],ids[9],ids[10])>0);CHECK(!fclose(file));}
     xr_xir_compile_c_source_free(&c);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
     worker_boundary_cases(program,ids);xr_xir_compile_program_drop(program);source_fixture_owner_free(&owner);return 0;

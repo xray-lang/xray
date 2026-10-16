@@ -107,8 +107,8 @@ static bool resource_nth_run(WaitResourceRun *run) {
 }
 static bool resource_loop_task_run(WaitResourceRun *run) {
     XrXirValue result={0};
-    if(!resource_root(run,run->ids[run->mode==9 ? 21 : 22],NULL,&result)) return false;
-    CHECK(result.type==XR_XIR_I64 && result.payload==(run->mode==9 ? 1 : 17) && run->cleanup[0]==1);
+    if(!resource_root(run,run->ids[run->mode==9 ? 21 : run->mode==10 ? 22 : 23],NULL,&result)) return false;
+    CHECK(result.type==XR_XIR_I64 && result.payload==(run->mode==9 ? 1 : run->mode==10 ? 17 : 11) && run->cleanup[0]==(run->mode==11 ? 0u : 1u));
     xr_xir_value_drop(&result);return true;
 }
 static bool resource_loop_run(WaitResourceRun *run) {
@@ -175,7 +175,7 @@ static WaitResourceCost resource_operation(WaitResourceFixture *fixture,const Wa
     unsigned mode=request->mode,cancel_pass=request->cancel_pass;size_t fault=request->fault;
     const XrXirInstanceConfig *limits=request->limits;uint32_t cancel_prefix=request->cancel_prefix;
     bool retire=request->retire;
-    CHECK(mode<11 && !runtime_live && !runtime_bytes && runtime_fail_at==SIZE_MAX);
+    CHECK(mode<12 && !runtime_live && !runtime_bytes && runtime_fail_at==SIZE_MAX);
     WaitResourceCost cost={0};WaitResourceRun runs[2]={0};runtime_attempts=0;runtime_fail_at=fault;
     source_native_event_count=0;source_native_recording=true;resource_observed_instance=NULL;
     for(unsigned i=0;i<2;++i) {

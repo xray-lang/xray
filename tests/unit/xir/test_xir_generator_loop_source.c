@@ -140,6 +140,8 @@ static const char factory_source[]=
     " return await work}\n"
     "export fn loop_task_error()->i64 {const work=go task_iterator_worker(true)\n"
     " try{return await work} catch(error){return 17}}\n"
+    "fn cold_worker()->i64 {const unused=make_owned()\n return 11}\n"
+    "export fn loop_cold()->i64 {return await go cold_worker()}\n"
     "fn main(){}\n";
 static void loop_rejections(SourceFixtureOwner *owner) {
     const char *cases[]={
@@ -206,17 +208,17 @@ int main(int argc,char **argv) {
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(decoded);
     CHECK(xr_xir_compile_lower(closed,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
-    const char *names[]={"make","probe","take","empty","make_relay","task_root","make_self","make_cycle","loop_break","loop_continue","loop_return","loop_throw","closed_count","make_units","loop_units","make_owned","loop_panic","loop_nested","loop_captures","loop_generic","loop_builtin","loop_task","loop_task_error"};
-    uint32_t ids[23]={0};
-    for(unsigned n=0;n<23;++n) for(uint32_t f=0;f<module->function_count;++f)
+    const char *names[]={"make","probe","take","empty","make_relay","task_root","make_self","make_cycle","loop_break","loop_continue","loop_return","loop_throw","closed_count","make_units","loop_units","make_owned","loop_panic","loop_nested","loop_captures","loop_generic","loop_builtin","loop_task","loop_task_error","loop_cold"};
+    uint32_t ids[24]={0};
+    for(unsigned n=0;n<24;++n) for(uint32_t f=0;f<module->function_count;++f)
         if(module->functions[f].name_length==strlen(names[n]) && !memcmp(module->functions[f].name,names[n],strlen(names[n]))) ids[n]=f;
-    for(unsigned n=0;n<23;++n) CHECK(ids[n]);
+    for(unsigned n=0;n<24;++n) CHECK(ids[n]);
     for(uint32_t i=0;i<module->functions[ids[20]].instruction_count;++i)
         CHECK(module->functions[ids[20]].instructions[i].op!=XR_XIR_CLEANUP_REGISTER);
     XrXirCSource c={0};CHECK(xr_xir_compile_emit_c(lowered,"generator_loop",1048576,&c)==XR_XIR_OK);
     CHECK(c.text && c.length && !strstr(c.text,"({"));
     if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(c.text,1,c.length,file)==c.length);
-        CHECK(fprintf(file,"\nconst uint32_t generator_loop_ids[23]={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6],ids[7],ids[8],ids[9],ids[10],ids[11],ids[12],ids[13],ids[14],ids[15],ids[16],ids[17],ids[18],ids[19],ids[20],ids[21],ids[22])>0);CHECK(!fclose(file));}
+        CHECK(fprintf(file,"\nconst uint32_t generator_loop_ids[24]={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6],ids[7],ids[8],ids[9],ids[10],ids[11],ids[12],ids[13],ids[14],ids[15],ids[16],ids[17],ids[18],ids[19],ids[20],ids[21],ids[22],ids[23])>0);CHECK(!fclose(file));}
     xr_xir_compile_c_source_free(&c);XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
     CHECK(xr_xir_compile_program_retain(program));generator_wait_cases(program,ids);

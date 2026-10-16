@@ -64,8 +64,7 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
         program->entries[request->entry].result!=type || !(program->entries[request->entry].flags & XR_XIR_ENTRY_GENERATOR) ||
         program->entries[request->entry].cleanup_owner) return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirProgramPermissions *permissions=program->permissions;
-    if(!permissions || permissions->function_count!=program->entry_count ||
-        (child && permissions->entries[request->entry].worker!=XR_XIR_OK)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!permissions || permissions->function_count!=program->entry_count) return XR_XIR_CALL_BAD_ARGUMENT;
     XirGenerator *generator=NULL;XrXirValueStatus prepared=generator_core_prepare(executor,type,&generator);
     if(prepared!=XR_XIR_VALUE_OK) return task_core_value_status(prepared);
     XrXirCallConfig config;XR_CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY,
@@ -79,7 +78,9 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
     if(!config.admission.arena) config.admission=(XrXirValueAdmission){program->arena,executor->config.domain,NULL,NULL,
         executor->config.poll_limit,executor->config.call_limit};
     XrXirCallStatus status=xr_xir_call_generator_new_budgeted(&config,request,executor->budget,&generator->call);
-    if(status==XR_XIR_CALL_READY && child) {
+    /* Cold creation does not execute the producer. An ineligible worker body
+     * remains parked until an actual demand is rejected before scheduling. */
+    if(status==XR_XIR_CALL_READY && child && permissions->entries[request->entry].worker==XR_XIR_OK) {
         XirEffectInvocationSelection context={0};
         status=xr_xir_instance_generator_context(view,instruction,request,&context);
         if(status==XR_XIR_CALL_READY) status=xr_xir_call_generator_bind_context(generator->call,&context);
