@@ -9,7 +9,7 @@
  *                                   the modules it imports.
  *
  * KEY CONCEPT:
- *   An in-memory entry module (xr_isolate_dostring) has no source_path -- that
+ *   An in-memory entry module has no source_path -- that
  *   is its ordinary shape, not a defect. Export lookup used to require one,
  *   so every `mod.fn(...)` call in an eval'd script resolved to no callee
  *   links. Losing the links silently disabled caller-side default-argument
@@ -28,24 +28,11 @@
  */
 
 #include "../test_framework.h"
-#include "xray_vm.h"
-#include "runtime/xisolate_api.h"
-#include "module/xmodule_identity.h"
+#include "source_legacy_script.h"
 #include <stddef.h>
 
-static const XrModuleIdentityAuthority k_dostring_defaults_memory_authority = {
-    .kind = XR_MODULE_IDENTITY_MEMORY,
-    .namespace_id = "dostring-module-defaults-fixture-v1",
-};
-
 static int run_eval_script(const char *source) {
-    XrVMConfig params = {0};
-    XrVMRuntime *iso = xray_vm_new_full(&params);
-    if (!iso)
-        return -1;
-    int rc = xr_isolate_dostring(iso, source, &k_dostring_defaults_memory_authority);
-    xray_vm_delete(iso);
-    return rc;
+    return legacy_source_script(source,NULL,"dostring-module-defaults-fixture-v1");
 }
 
 /* A scalar default (`padding: string = " "`) omitted at the call site. Without

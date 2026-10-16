@@ -3670,9 +3670,15 @@ set_tests_properties(test_stdlib_generators_content_stable PROPERTIES
 # ============================================================================
 
 add_xray_unit_test(test_api_defense api/test_api_defense.c)
-add_xray_unit_test(test_dostring_module_defaults api/test_dostring_module_defaults.c)
+foreach(source_entry IN ITEMS test_dostring_module_defaults test_dostring_program_image)
+    add_executable(${source_entry} api/${source_entry}.c)
+    target_link_libraries(${source_entry} PRIVATE xray_source_api)
+    target_include_directories(${source_entry} PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(${source_entry} PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+    set_target_properties(${source_entry} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    add_test(NAME ${source_entry} COMMAND $<TARGET_FILE:${source_entry}>)
+endforeach()
 set_tests_properties(test_dostring_module_defaults PROPERTIES LABELS "api;modules;defaults")
-add_xray_unit_test(test_dostring_program_image api/test_dostring_program_image.c)
 set_tests_properties(test_dostring_program_image PROPERTIES LABELS "api;modules;generics")
 add_test(
     NAME test_api_inventory_param_modes
