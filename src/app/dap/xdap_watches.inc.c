@@ -88,7 +88,7 @@ XR_FUNC XrXirStatus xdap_watch_clear(XdapAdapter *s) {
 static XrXirStatus watch_evaluate_text(XdapAdapter *s,const char *text,size_t length,uint32_t frame,XrXirValue *output) {
     XdapLexicalView lexical={0};XrXirStatus status=xdap_lexical_open(s->launch,s->snapshot,frame,&lexical);
     if (status!=XR_XIR_OK) return status;
-    XdapExpressionRequest request={s->compiler,&lexical,text,length,s->config.message_limit};
+    XdapExpressionRequest request={s->compiler,&lexical,text,length,s->config.message_limit,NULL};
     return xdap_expression_evaluate(&request,output);
 }
 XR_FUNC XrXirStatus xdap_watch_evaluate(XdapAdapter *s,uint32_t id,uint32_t frame,XrXirValue *output) {

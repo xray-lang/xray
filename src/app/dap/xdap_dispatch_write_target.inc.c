@@ -18,7 +18,7 @@ static bool inspect_write_index(const XdapJsonNode *name,uint64_t *output) {
     *output=value;return true;
 }
 static XrXirStatus inspect_write_child(XdapAdapter *s,const XdapValueRef *parent,const XdapJsonNode *name,
-    XrXirValuePathStep steps[128],XdapValueOrigin *output) {
+    XrXirValuePathStep steps[128],XdapValueOrigin *output,XrXirValue *expected) {
     if (!parent->origin.epoch || parent->origin.epoch!=s->stop_epoch) return XR_XIR_BAD_TYPE;
     if (xr_compile_resources_work(s->resources,name->length+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     uint64_t first=0,end=parent->shape.children;
@@ -37,9 +37,11 @@ static XrXirStatus inspect_write_child(XdapAdapter *s,const XdapValueRef *parent
             info.name=index;info.name_length=(size_t)bytes;
         }
         bool matches=info.name_length==name->length && !memcmp(info.name,name->text,name->length);
-        xr_xir_value_drop(&child);if (!matches) continue;
-        if (!info.selected) return XR_XIR_BAD_TYPE;
-        return inspect_origin_child(s,parent,&info,steps,output);
+        if (!matches) { xr_xir_value_drop(&child);continue; }
+        if (!info.selected) { xr_xir_value_drop(&child);return XR_XIR_BAD_TYPE; }
+        status=inspect_origin_child(s,parent,&info,steps,output);
+        if (status==XR_XIR_OK) *expected=child;else xr_xir_value_drop(&child);
+        return status;
     }
     return XR_XIR_UNRESOLVED;
 }

@@ -673,3 +673,22 @@ add_test(NAME test_xir_source_query_retirement COMMAND test_xir_source_query_ret
 add_test(NAME test_xir_source_query_retirement_resources COMMAND test_xir_source_query_retirement --resources)
 set_tests_properties(test_xir_source_query_retirement PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;metadata")
 set_tests_properties(test_xir_source_query_retirement_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;metadata;resources;fault-injection")
+
+add_executable(test_dap_contextual_write test_contextual_write.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_contextual_write PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_contextual_write PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_ARRAY_FIXTURE="${XR_DAP_FIXTURE_DIR}/owned_values.xr" XR_DAP_STRING_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/write_values.xr"
+    XR_DAP_CALLER_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/write_caller.xr" XR_DAP_CONTEXT_WRITE_FIXTURE="${XR_DAP_FIXTURE_DIR}/contextual_write.xr")
+if(MSVC)
+    target_compile_options(test_dap_contextual_write PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_contextual_write PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_contextual_write COMMAND test_dap_contextual_write)
+set_tests_properties(test_dap_contextual_write PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;types")
+
+foreach(XR_DAP_CONTEXT_KIND scalar nullable array)
+    add_test(NAME test_dap_contextual_write_${XR_DAP_CONTEXT_KIND}_resources COMMAND test_dap_contextual_write --${XR_DAP_CONTEXT_KIND}-resources)
+    set_tests_properties(test_dap_contextual_write_${XR_DAP_CONTEXT_KIND}_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;types;resources;fault-injection")
+endforeach()

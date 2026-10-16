@@ -186,7 +186,10 @@ static size_t set_fault(size_t fail) {
     CHECK(!adapter->running && adapter->next_handle==next);set_resume(adapter);set_output(0,fail==SIZE_MAX ? "104\n" : "44\n",fail==SIZE_MAX ? 4 : 3);
     set_dispose(&fixture);return sites;
 }
-int main(int argc,char **argv) {
+#ifndef XR_DAP_SET_VARIABLE_ENTRY
+#define XR_DAP_SET_VARIABLE_ENTRY main
+#endif
+int XR_DAP_SET_VARIABLE_ENTRY(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     set_normal();set_intrinsic();set_managed();set_caller_and_io();size_t sites=set_fault(SIZE_MAX);CHECK(sites);
     if (resources) for (size_t i=0;i<sites;++i) set_fault(i);else { set_fault(0);if (sites>1) set_fault(sites-1); }

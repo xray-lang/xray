@@ -85,7 +85,7 @@ static void evaluate_data(void) {
         XdapAdapter *adapter=fixture.adapter;XdapLexicalView lexical={0};
         CHECK(xdap_lexical_open(adapter->launch,adapter->snapshot,0,&lexical)==XR_XIR_OK);
         XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;
-        XdapExpressionRequest request={adapter->compiler,&lexical,test->text,strlen(test->text),16384};
+        XdapExpressionRequest request={adapter->compiler,&lexical,test->text,strlen(test->text),16384,NULL};
         XrXirValue value={0};XrXirStatus status=xdap_expression_evaluate(&request,&value);
         if (status!=XR_XIR_OK) fprintf(stderr,"Data expression [%s] status=%d\n",test->text,(int)status);
         CHECK(status==XR_XIR_OK && adapter->snapshot==snapshot && adapter->stop_epoch==epoch && !adapter->running && !capture.count);
@@ -101,7 +101,7 @@ static size_t evaluate_data_fault(const EvaluateDataCase *test,size_t fail) {
     XrXirVmDebugSnapshot *snapshot=adapter->snapshot;uint64_t epoch=adapter->stop_epoch;
     XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(fixture.ledger,&before)==XR_COMPILE_RESOURCE_OK);
     size_t allocations=runtime_live,bytes=runtime_bytes,begin=runtime_attempts;
-    XdapExpressionRequest request={adapter->compiler,&lexical,test->text,strlen(test->text),16384};XrXirValue value={0};
+    XdapExpressionRequest request={adapter->compiler,&lexical,test->text,strlen(test->text),16384,NULL};XrXirValue value={0};
     runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;
     XrXirStatus status=xdap_expression_evaluate(&request,&value);size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
     if (fail==SIZE_MAX) {

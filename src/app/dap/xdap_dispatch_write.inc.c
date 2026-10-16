@@ -10,18 +10,20 @@ static XrXirStatus inspect_write_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
 }
-static XrXirStatus inspect_write_binding(const XdapLexicalView *lexical,const XdapJsonNode *name,uint32_t *operand) {
+static XrXirStatus inspect_write_binding(const XdapLexicalView *lexical,const XdapJsonNode *name,uint32_t *operand,XrXirValue *expected) {
     for (uint32_t b=lexical->environment;b;b=lexical->function->bindings[b-1].parent) {
         const XrXirSourceDebugBinding *binding=&lexical->function->bindings[b-1];
         const char *text=lexical->source->declarations[binding->declaration-1].name;size_t bytes=strlen(text);
         if (xr_compile_resources_work(lexical->launch->resources,(uint64_t)bytes+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         if (bytes!=name->length || memcmp(text,name->text,bytes)) continue;
         if (!(binding->flags&XR_XIR_SOURCE_DEBUG_CELL)) return XR_XIR_BAD_TYPE;
-        *operand=binding->value;return XR_XIR_OK;
+        const char *read_name=NULL;size_t length=0;
+        XrXirStatus status=inspect_write_status(xdap_lexical_read(lexical,b,expected,&read_name,&length));
+        if (status==XR_XIR_OK) *operand=binding->value;return status;
     }
     return XR_XIR_UNRESOLVED;
 }
-static XrXirStatus inspect_write_global(const XdapLexicalView *view,const XdapJsonNode *name,uint32_t *slot) {
+static XrXirStatus inspect_write_global(const XdapLexicalView *view,const XdapJsonNode *name,uint32_t *slot,XrXirValue *expected) {
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(view->launch->source);
     if (!debug) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t g=0;g<debug->global_count;++g) {
@@ -29,11 +31,11 @@ static XrXirStatus inspect_write_global(const XdapLexicalView *view,const XdapJs
         XrXirValueStatus read=xdap_global_read(view,g,&value,&text,&length);
         if (read==XR_XIR_VALUE_BAD_ARGUMENT || read==XR_XIR_VALUE_UNSUPPORTED) continue;
         if (read!=XR_XIR_VALUE_OK) return inspect_write_status(read);
-        bool matches=length==name->length && !memcmp(text,name->text,length);xr_xir_value_drop(&value);
-        if (!matches) continue;
+        bool matches=length==name->length && !memcmp(text,name->text,length);
+        if (!matches) { xr_xir_value_drop(&value);continue; }
         const XrXirSourceDeclaration *declaration=&view->source->declarations[debug->globals[g].declaration-1];
-        if (!declaration->mutable) return XR_XIR_BAD_TYPE;
-        *slot=debug->globals[g].slot;return XR_XIR_OK;
+        if (!declaration->mutable) { xr_xir_value_drop(&value);return XR_XIR_BAD_TYPE; }
+        *expected=value;*slot=debug->globals[g].slot;return XR_XIR_OK;
     }
     return XR_XIR_UNRESOLVED;
 }
@@ -75,19 +77,20 @@ static XrXirStatus inspect_set_variable(XdapAdapter *s,const XdapRequest *r) {
         return xdap_dispatch_response(s,r,false,NULL,"A current variable scope or child reference, writable name and complete value expression are required");
     if (s->stop_epoch==UINT64_MAX) return XR_XIR_BUDGET;
     XdapLexicalView lexical={0};status=xdap_lexical_open(s->launch,s->snapshot,frame,&lexical);
-    XrXirValuePathStep steps[128];XdapValueOrigin target={0};XrXirValue value={0};
-    if (status==XR_XIR_OK && parent) status=inspect_write_child(s,parent,&r->document.nodes[name],steps,&target);
+    XrXirValuePathStep steps[128];XdapValueOrigin target={0};XrXirValue value={0},expected={0};
+    if (status==XR_XIR_OK && parent) status=inspect_write_child(s,parent,&r->document.nodes[name],steps,&target,&expected);
     else if (status==XR_XIR_OK) {
-        uint32_t operand=0;status=global ? inspect_write_global(&lexical,&r->document.nodes[name],&operand) :
-            inspect_write_binding(&lexical,&r->document.nodes[name],&operand);
+        uint32_t operand=0;status=global ? inspect_write_global(&lexical,&r->document.nodes[name],&operand,&expected) :
+            inspect_write_binding(&lexical,&r->document.nodes[name],&operand,&expected);
         if (status==XR_XIR_OK) target=(XdapValueOrigin){lexical.epoch,lexical.frame_id,operand,{0},global};
     }
     if (status==XR_XIR_OK && (target.epoch!=s->stop_epoch || target.frame!=lexical.frame_id)) status=XR_XIR_BAD_TYPE;
     if (status==XR_XIR_OK) {
         const XdapJsonNode *expression=&r->document.nodes[text];
-        XdapExpressionRequest request={s->compiler,&lexical,expression->text,expression->length,s->config.message_limit};
+        XdapExpressionRequest request={s->compiler,&lexical,expression->text,expression->length,s->config.message_limit,&expected};
         status=xdap_expression_evaluate(&request,&value);
     }
+    xr_xir_value_drop(&expected);
     if (status!=XR_XIR_OK) {
         if (status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_BUDGET) return status;
         return xdap_dispatch_response(s,r,false,NULL,"The selected binding or value expression is not writable");

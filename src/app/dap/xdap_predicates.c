@@ -62,7 +62,7 @@ XR_FUNC XrXirStatus xdap_predicate_prepare(XdapAdapter *s,const XdapRequest *req
 static XrXirStatus predicate_evaluate(XdapAdapter *s,const char *text,size_t length,XrXirValue *output) {
     XdapLexicalView lexical={0};XrXirStatus status=xdap_lexical_open(s->launch,s->snapshot,0,&lexical);
     if (status!=XR_XIR_OK) return status;
-    XdapExpressionRequest request={s->compiler,&lexical,text,length,s->config.message_limit};return xdap_expression_evaluate(&request,output);
+    XdapExpressionRequest request={s->compiler,&lexical,text,length,s->config.message_limit,NULL};return xdap_expression_evaluate(&request,output);
 }
 static XrXirStatus predicate_log(XdapAdapter *s,const XdapBreakpointPredicate *predicate,XdapJsonWriter *text) {
     if (xr_compile_resources_work(s->resources,predicate->log_length)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;

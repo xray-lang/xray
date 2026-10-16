@@ -175,12 +175,14 @@ XR_FUNC XrXirStatus xdap_expression_validate(XrSourceCompiler *compiler,const ch
 }
 #include "xdap_expression_source.inc.c"
 #include "xdap_expression_runtime.inc.c"
+#include "xdap_expression_receive.inc.c"
 static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output) {
     const XdapExpressionRequest *request=state->request;const XdapLexicalView *view=request->lexical;
     XdapJsonWriter source=xdap_json_writer(view->launch->resources,request->source_limit);
     ExpressionData data={0};XrXirValue scalar_arguments[128]={{0}};
     XrXirStatus status=state->runtime ? expression_data_prepare(state,&data) : XR_XIR_OK;
-    const char prefix[]="const evaluator = fn(";xdap_json_text(&source,prefix,sizeof(prefix)-1);
+    const char *prefix=request->expected && state->runtime ? "export fn evaluator(" : "const evaluator = fn(";
+    xdap_json_text(&source,prefix,strlen(prefix));
     if (state->runtime) xdap_json_text(&source,data.parameters.bytes,data.parameters.length);
     else for (uint32_t i=0;i<state->count && source.status==XR_XIR_OK;++i) {
         const ExpressionBinding *binding=&state->bindings[i];XrXirType type=(XrXirType)binding->value.type;
@@ -189,7 +191,13 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
         if (i) xdap_json_text(&source,",",1);xdap_json_text(&source,binding->name,binding->length);
         xdap_json_text(&source,":",1);xdap_json_text(&source,name,strlen(name));scalar_arguments[i]=binding->value;
     }
-    xdap_json_text(&source,") {\n",4);
+    xdap_json_text(&source,")",1);
+    if (request->expected) {
+        xdap_json_text(&source," -> ",4);
+        expression_type(&source,xr_xir_compile_type_arena_types(xr_xir_value_arena(request->expected)),
+            (XrXirType)request->expected->type,0);
+    }
+    xdap_json_text(&source," {\n",3);
     if (state->runtime) xdap_json_text(&source,data.body.bytes,data.body.length);
     xdap_json_text(&source,"return (",8);xdap_json_text(&source,request->text,request->length);xdap_json_text(&source,"\n) }\n",5);
     if (status==XR_XIR_OK) status=source.status;
@@ -204,7 +212,7 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
         uint32_t function=UINT32_MAX;uint32_t count=state->runtime ? data.count : state->count;
         status=expression_intrinsic_proof(state,product);
         if (status==XR_XIR_OK) status=expression_function(product,count,&function);
-        if (status==XR_XIR_OK && state->runtime) status=expression_export(state,&data,&product,&function);
+        if (status==XR_XIR_OK && state->runtime && !request->expected) status=expression_export(state,&data,&product,&function);
         if (status==XR_XIR_OK && state->runtime) status=expression_runtime(state,product,function,data.arguments,data.count,output);
         else if (status==XR_XIR_OK) {
             XrXirCtfeLimits limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES};
@@ -214,6 +222,7 @@ static XrXirStatus expression_compiled(ExpressionState *state,XrXirValue *output
                 evaluated==XR_XIR_CTFE_OUTPUT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
         }
     }
+    if (status==XR_XIR_OK && request->expected) status=expression_receive(state,output);
     xr_source_compile_diagnostic_free(&diagnostic);xr_xir_compile_source_product_free(product);
     expression_data_free(&data);xdap_json_writer_free(&source);return status;
 }
@@ -222,6 +231,7 @@ XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *reques
         !request->lexical->launch || !request->lexical->source || !request->lexical->function || !request->lexical->snapshot ||
         !output || output->type || output->reserved || output->payload ||
         xr_source_compiler_resources(request->compiler)!=request->lexical->launch->resources) return XR_XIR_BAD_STRUCTURE;
+    if (request->expected && !xr_xir_value_valid(request->expected)) return XR_XIR_BAD_STRUCTURE;
     if (request->length>(UINT64_MAX-1)/2 ||
         xr_compile_resources_work(request->lexical->launch->resources,(uint64_t)request->length*2+1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     if (memchr(request->text,0,request->length)) return XR_XIR_BAD_TYPE;
@@ -232,11 +242,16 @@ XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *reques
     AstNode *program=NULL;XrParseStatus parsed=expression_parse(request->compiler,text,"<debug-expression>",&program);
     if (parsed!=XR_PARSE_OK) { xr_compile_resources_free(text);return parsed==XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : parsed==XR_PARSE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE; }
     XdapExpressionRequest owned=*request;owned.text=text;ExpressionState state={.request=&owned};
+    if (request->expected && request->expected->type!=XR_XIR_BOOL &&
+        !xr_xir_type_is_integer((XrXirType)request->expected->type)) state.runtime=true;
     if (program->type!=AST_PROGRAM || program->as.program.count!=1) state.status=XR_XIR_BAD_STRUCTURE;
     AstNode *expression=state.status==XR_XIR_OK ? program->as.program.statements[0] : NULL;
     if (state.status==XR_XIR_OK && expression_visit(expression,&state)) {
         while (expression->type==AST_GROUPING) expression=expression->as.grouping;
-        if (expression->type==AST_VARIABLE) { *output=state.bindings[0].value;state.bindings[0].value=(XrXirValue){0}; }
+        bool direct=expression->type==AST_VARIABLE && (!request->expected ||
+            (state.bindings[0].value.type==request->expected->type &&
+             xr_xir_value_arena(&state.bindings[0].value)==xr_xir_value_arena(request->expected)));
+        if (direct) { *output=state.bindings[0].value;state.bindings[0].value=(XrXirValue){0}; }
         else state.status=expression_compiled(&state,output);
     }
     for (uint32_t i=0;i<state.count;++i) xr_xir_value_drop(&state.bindings[i].value);

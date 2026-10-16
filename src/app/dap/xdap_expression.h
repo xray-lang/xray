@@ -14,6 +14,8 @@ typedef struct XdapExpressionRequest {
     const XdapLexicalView *lexical;
     const char *text;
     size_t length,source_limit;
+    /* A target borrow supplies ordinary Source typing, never write authority. */
+    const XrXirValue *expected;
 } XdapExpressionRequest;
 /* Identifiers read owned data. Ordinary Source inference and closed proof
  * feed finite scalar CTFE or an isolated, bounded data Program. Structural
