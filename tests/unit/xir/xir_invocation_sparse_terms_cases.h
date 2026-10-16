@@ -19,13 +19,13 @@ static const uint32_t sparse_counts[5]={1,1,3,1,1};
 /* A complete real owner rejects missing physical Callable membership
  * before allocating or publishing a receiving certificate. Restore it before
  * the original seal; the independent raw classifier supplies the expected set. */
-static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *owner,
-    EffectInvocationResult *solution) {
-    const XrXirCompileContext *context=owner->work;
-    EffectPhysicalFunction *physical=&owner->physical->functions[1];
+static void conditional_sparse_physical_bound_rejections(EffectInvocationWorkspace *owner,
+    EffectFinalFunctions *solution) {
+    const XrXirCompileContext *context=owner->read.work;
+    EffectPhysicalFunction *physical=&owner->final.physical->functions[1];
     CHECK(physical->count && physical->records[0].value==0 &&
         physical->records[0].mask&EFFECT_PHYSICAL_CALLABLE);
-    EffectInvocationOwner *held=owner;EffectInvocationResult *staged=solution;
+    EffectInvocationWorkspace *held=owner;EffectFinalFunctions *staged=solution;
     EffectInvocationSealRequest request={&held,&staged,NULL};EffectInvocationCertificate *output=NULL;
     uint32_t original_mask=physical->records[0].mask;
     XrCompileResourceStats before=rp_stats(context);RootParameterMark retained=rp_mark();
@@ -34,8 +34,8 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *
         held==owner && staged==solution && rp_stats(context).live_bytes==before.live_bytes &&
         rp_stats(context).allocation_count==before.allocation_count);
     physical->records[0].mask=original_mask;rp_balanced(retained);
-    CHECK(effect_body_physical_match(context,owner->physical,owner->material)==XR_XIR_OK);
-    EffectInvocationDeclaredBounds *bounds=(EffectInvocationDeclaredBounds *)owner->declared;
+    CHECK(effect_body_physical_match(context,owner->final.physical,owner->final.material)==XR_XIR_OK);
+    EffectInvocationDeclaredBounds *bounds=(EffectInvocationDeclaredBounds *)owner->read.declared;
     EffectInvocationValueBound *bound=&bounds->functions[1].bounds[0];
     CHECK(bound->value==0 && bound->callable && bound->mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
 }
@@ -43,9 +43,9 @@ static void conditional_sparse_physical_bound_rejections(EffectInvocationOwner *
 /* The independent sparse indices define the expected canonical stream.
  * Matching may read it once, but must neither allocate an expected copy nor
  * write through either the staged storage or an aliased receiving request. */
-static void conditional_sparse_receiver_rejections(EffectInvocationOwner *owner,
-    EffectInvocationResult *solution,uint32_t mode) {
-    const XrXirCompileContext *context=owner->work;
+static void conditional_sparse_receiver_rejections(EffectInvocationWorkspace *owner,
+    EffectFinalFunctions *solution,uint32_t mode) {
+    const XrXirCompileContext *context=owner->read.work;
     XrXirRootFormula *formula=&solution->functions[1].formula;
     XrXirRootTerm *terms=(XrXirRootTerm *)formula->terms;
     CHECK(formula->term_count==sparse_counts[mode] && terms);
@@ -68,9 +68,9 @@ static void conditional_sparse_receiver_rejections(EffectInvocationOwner *owner,
     formula->terms=span;formula->term_count=limit+1;
     CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
     formula->term_count=limit;
-    uint32_t root=owner->roots[1];owner->roots[1]=owner->count;
+    uint32_t root=owner->final.roots[1];owner->final.roots[1]=owner->final.count;
     CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_BAD_STRUCTURE && rp_attempts==attempts);
-    owner->roots[1]=root;
+    owner->final.roots[1]=root;
     CHECK(effect_invocation_result_match(owner,solution)==XR_XIR_OK && rp_attempts==attempts &&
         rp_stats(context).live_bytes==before.live_bytes &&
         rp_stats(context).allocated_bytes==before.allocated_bytes);
@@ -81,14 +81,14 @@ static void conditional_sparse_receiver_rejections(EffectInvocationOwner *owner,
 
 /* The mutations attack a solved real owner, never manufacture a trusted row.
  * Restoration must precede the independent seal and producer destruction. */
-static void conditional_sparse_rejections(EffectInvocationOwner *owner,
-    EffectInvocationResult *solution,uint32_t mode) {
-    CHECK(mode<5 && owner->roots[1]<owner->count);
+static void conditional_sparse_rejections(EffectInvocationWorkspace *owner,
+    EffectFinalFunctions *solution,uint32_t mode) {
+    CHECK(mode<5 && owner->final.roots[1]<owner->final.count);
     conditional_sparse_physical_bound_rejections(owner,solution);
     conditional_sparse_receiver_rejections(owner,solution,mode);
-    EffectInvocationNode *node=&owner->nodes[owner->roots[1]];
+    EffectInvocationNode *node=&owner->final.nodes[owner->final.roots[1]];
     uint32_t instructions=node->instruction_count;
-    CHECK(instructions==owner->material->functions[node->body].instruction_count && instructions);
+    CHECK(instructions==owner->final.material->functions[node->body].instruction_count && instructions);
     node->instruction_count=instructions-1;
     CHECK(effect_invocation_closed(owner)==XR_XIR_BAD_STRUCTURE);
     node->instruction_count=instructions+1;
@@ -163,7 +163,7 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
+    EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -187,22 +187,21 @@ static XrXirStatus conditional_sparse_case(const XrXirCompileContext *context,ui
     memset(references,0xCE,sizeof(references));
     if (status==XR_XIR_OK) {
         uint32_t caller=UINT32_MAX,formal=UINT32_MAX;
-        phase=10;status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[0],&caller);
+        phase=10;status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&caller);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_node_mask(context,certificate,
-            certificate->equations->roots[1],&formal);
+            certificate->final->roots[1],&formal);
         if (status==XR_XIR_OK && oracle) {
             CHECK(!caller && formal==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-            const XrXirRootFormula *formula=&certificate->result->functions[1].formula;
+            const XrXirRootFormula *formula=&certificate->final->summary.functions[1].formula;
             CHECK(!formula->constant_mask && formula->term_count==sparse_counts[mode] && formula->terms);
             for (uint32_t t=0;t<formula->term_count;++t)
                 CHECK(formula->terms[t].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
                     formula->terms[t].index==sparse_indices[mode][t]);
-            CHECK(certificate->equations->deferred_count==sparse_counts[mode]);
+            CHECK(certificate->final->deferred_count==sparse_counts[mode]);
             uint32_t original_mask=UINT32_MAX;
             CHECK(effect_invocation_bounds_mask(context,certificate->declared,1,0,&original_mask)==XR_XIR_OK &&
                 original_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
-            CHECK(!certificate->equations->work && !certificate->equations->body.read.owner &&
-                !certificate->equations->effects && !certificate->equations->graph && !certificate->equations->declared);
+            CHECK((certificate->final->material!=NULL));
         }
     }
     effect_invocation_certificate_free(certificate);return status;

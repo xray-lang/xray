@@ -76,39 +76,52 @@ static bool array_error_execute(XrXirProgram *program,uint32_t entry,unsigned mo
     }
     CHECK(!runtime_live&&!runtime_bytes);return completed;
 }
-static void array_error_type_controls(void) {
-    XrXirTypeNode nodes[5]={{.kind=XR_XIR_TYPE_ARRAY,.element=257},
-        {.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
-        {.kind=XR_XIR_TYPE_CALLABLE}, {.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64}};
-    XrXirTypes types={nodes,5,NULL,NULL};
-    for(unsigned minus=0;minus<2;++minus) {
-        XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
-        XrXirDomainBudgetControls controls={1048576,1048576,2-minus,1048576,1048576};
-        CHECK(xr_xir_domain_budget_bind(domain,&controls)==XR_XIR_VALUE_OK);
-        XrXirTaskExecutor executor={0};executor.config.domain=domain;
-        CHECK(task_core_error_field_admit(&executor,&types,256)==(minus?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));
-        XrXirDomainBudgetStats spent=xr_xir_domain_budget_stats(domain);
-        CHECK(spent.work==2-minus&&spent.work_limit==2-minus);
-        CHECK(task_core_error_field_admit(&executor,&types,256)==XR_XIR_CALL_LIMIT);
-        CHECK(xr_xir_domain_budget_stats(domain).work==spent.work);
-        xr_xir_domain_drop(domain);
-    }
+static uint64_t array_error_graph_control(XrXirTypeArena *arena,uint64_t limit,bool minus) {
     XrXirDomain *domain=NULL;CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
-    XrXirDomainBudgetControls controls={1048576,1048576,32,1048576,1048576};
+    XrXirDomainBudgetControls controls={1048576,1048576,limit,1048576,1048576};
     CHECK(xr_xir_domain_budget_bind(domain,&controls)==XR_XIR_VALUE_OK);
-    XrXirTaskExecutor executor={0};executor.config.domain=domain;
+    XrXirValueAdmission admission={arena,domain,NULL,NULL,1000000,1048576};
+    XrXirValue leaf={XR_XIR_I64,0,42},inner={0},outer={0};
+    CHECK(xr_xir_array_new((XrXirType)256,&leaf,1,&admission,&inner)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_array_new((XrXirType)257,&inner,1,&admission,&outer)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_value_admit(&outer,(XrXirType)257,&admission)==(minus?XR_XIR_VALUE_LIMIT:XR_XIR_VALUE_OK));
+    XrXirDomainBudgetStats spent=xr_xir_domain_budget_stats(domain);CHECK(spent.work<=limit);
+    if (minus || spent.work==limit) {
+        CHECK(xr_xir_value_admit(&outer,(XrXirType)257,&admission)==XR_XIR_VALUE_LIMIT);
+        XrXirDomainBudgetStats retry=xr_xir_domain_budget_stats(domain);
+        CHECK(retry.work==spent.work && retry.requested_bytes==spent.requested_bytes &&
+            retry.requested_call_bytes==spent.requested_call_bytes);
+    }
+    xr_xir_value_drop(&outer);xr_xir_value_drop(&inner);xr_xir_domain_drop(domain);
+    CHECK(!runtime_live&&!runtime_bytes);return spent.work;
+}
+static void array_error_type_controls(void) {
+    const XrXirCompileContext *context=effects_source_owner(UINT64_C(67108864),UINT64_C(128000000));
+    XrXirTypeNode nodes[5]={{.kind=XR_XIR_TYPE_ARRAY,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_ARRAY,.element=256}, {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE},
+        {.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64}};
+    XrXirTypes types={nodes,5,NULL,NULL};XrXirTypeArena *arena=NULL;
+    CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_OK);
+    XrXirModule module={0};module.types=xr_xir_compile_type_arena_types(arena);
+    XrXirProofContext proof={&module,{XR_XIR_CONTEXT_CLOSED,0,0}};
     const XrXirType rejected[]={XR_XIR_ERROR,XR_XIR_PANIC_INFO,258,259,999};
     for(unsigned i=0;i<sizeof(rejected)/sizeof(rejected[0]);++i)
-        CHECK(task_core_error_field_admit(&executor,&types,rejected[i])==XR_XIR_CALL_BAD_STATE);
-    nodes[0].element=258;CHECK(task_core_error_field_admit(&executor,&types,256)==XR_XIR_CALL_BAD_STATE);
-    nodes[0].element=260;CHECK(task_core_error_field_admit(&executor,&types,256)==XR_XIR_CALL_UNSUPPORTED);
-    nodes[0].parameter_span=1;CHECK(task_core_error_field_admit(&executor,&types,256)==XR_XIR_CALL_BAD_STATE);
-    nodes[0].parameter_span=0;nodes[0].element=256;
-    uint64_t before=xr_xir_domain_budget_stats(domain).work;
-    CHECK(task_core_error_field_admit(&executor,&types,256)==XR_XIR_CALL_BAD_STATE);
-    CHECK(xr_xir_domain_budget_stats(domain).work==before+types.count);
-    xr_xir_domain_drop(domain);CHECK(!runtime_live&&!runtime_bytes);
+        CHECK(xr_xir_compile_type_markers_prove(context,&proof,rejected[i],XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_type_markers_prove(context,&proof,(XrXirType)260,XR_XIR_CONSTRAINT_SENDABLE)==XR_XIR_OK);
+    uint64_t work=array_error_graph_control(arena,1000000,false);CHECK(work>1);
+    CHECK(array_error_graph_control(arena,work,false)==work);
+    (void)array_error_graph_control(arena,work-1,true);
+    xr_xir_compile_type_arena_drop(arena);arena=NULL;
+    /* Malformed descriptors never acquire an immutable runtime type owner. */
+    nodes[0].element=999;CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(!arena);nodes[0].element=XR_XIR_I64;nodes[0].parameter_span=1;
+    CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
+    nodes[0].parameter_span=0;nodes[0].element=257;
+    CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
+    nodes[0].element=256;
+    CHECK(xr_xir_compile_type_arena_new(context,&types,&arena)==XR_XIR_VALUE_BAD_ARGUMENT && !arena);
+    CHECK(!runtime_live&&!runtime_bytes);
 }
 static uint64_t array_error_work_operation(XrXirProgram *program,uint32_t entry,uint64_t limit,
     XrXirCallStatus expected,bool boundary) {
@@ -156,7 +169,7 @@ int main(int argc,char **argv) {
     }
     runtime_fail_at=SIZE_MAX;
     if(!fi)program=array_error_program(mode,native,&entry);
-    array_error_work_axes(program,entry);xr_xir_compile_program_drop(program);effects_source_owners_free();
-    CHECK(!effects_compile_live&&!effects_compile_bytes);array_error_type_controls();
+    array_error_work_axes(program,entry);xr_xir_compile_program_drop(program);array_error_type_controls();
+    effects_source_owners_free();CHECK(!effects_compile_live&&!effects_compile_bytes);
     printf("TASK_ARRAY_ERROR %s %s %s sites=%zu twoInstances stickyCopies=2 escaped physical=0/0\n",argv[1],argv[2],argv[3],sites);return 0;
 }

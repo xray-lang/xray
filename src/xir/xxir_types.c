@@ -10,6 +10,7 @@
  *   Earlier node edges form a finite graph whose exact contracts have one identity.
  */
 #include "xxir_types.h"
+#include "xxir_task_result_internal.h"
 #include "xxir_type_match_internal.h"
 #include "xxir_compile_memory.h"
 
@@ -77,14 +78,10 @@ XR_FUNC XrXirType xr_xir_task_element(const XrXirTypes *types, XrXirType type) {
     return node && node->kind == XR_XIR_TYPE_TASK ? node->element : XR_XIR_UNIT;
 }
 XR_FUNC bool xr_xir_task_parameter_supported(const XrXirTypes *types, XrXirType type) {
-    if (type == XR_XIR_BOOL || type == XR_XIR_I64 || type == XR_XIR_STRING) return true;
-    const XrXirTypeNode *node = xr_xir_type_node(types, type);
-    /* Closed I64 Atomic and Task handles retain their identity when copied
-     * to this Instance's child. The common GO checker still proves Sendable,
-     * closed root effects and full argument admission before publication. */
-    return node && (node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-                    node->kind == XR_XIR_TYPE_TASK) &&
-        node->element == XR_XIR_I64;
+    /* Copyable arguments use the same closed executable carriers as results.
+     * The actual worker certificate still proves the complete Sendable graph,
+     * and Call admission prepares owned arguments before Task publication. */
+    return type != XR_XIR_UNIT && xr_xir_task_result_supported(types,type);
 }
 XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);

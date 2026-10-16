@@ -12,17 +12,6 @@
  */
 #include "xxir_metadata_domain_internal.h"
 
-XR_FUNC const XrXirRootEffects *xr_xir_effects_root(const XrXirEffects *effects, uint32_t function) {
-    return effects && function < effects->count ? &effects->root[function] : NULL;
-}
-XR_FUNC const XrXirRootEffectWitness *xr_xir_effects_root_witness(const XrXirEffects *effects, uint32_t function) {
-    return effects && function < effects->count && effects->root_witnesses[function].cause ?
-        &effects->root_witnesses[function] : NULL;
-}
-XR_FUNC const XrXirRootEffectWitness *xr_xir_effects_unresolved_witness(const XrXirEffects *effects, uint32_t function) {
-    return effects && function < effects->count && effects->unresolved_witnesses[function].cause ?
-        &effects->unresolved_witnesses[function] : NULL;
-}
 static bool effect_root_cause_before(const XrXirRootEffectWitness *a, const XrXirRootEffectWitness *b) {
     if (a->instruction != b->instruction) return a->instruction < b->instruction;
     if (a->callee != b->callee) return a->callee < b->callee;
@@ -168,7 +157,7 @@ XR_FUNC XrXirStatus xr_xir_compile_root_cause_trace_copy(const XrXirCompileConte
     if (effects && effects->contexts)
         return effect_context_owner_trace(context,effects,function,output);
     if (effects && effects->invocations)
-        return effect_invocation_public_trace(context,effects->invocations,effects->count,function,
+        return effect_invocation_public_trace(context,effects->invocations,function,
             function<effects->count?&effects->root[function]:NULL,output);
     if (!xir_compile_context_valid(context) || !effects || effects->resources != context->resources ||
         function >= effects->count || !effects->root || !effects->root_witnesses ||

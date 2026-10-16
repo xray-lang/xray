@@ -1,0 +1,27 @@
+enum Choice { Empty, Selected { values:Array<i64> } }
+fn leaf()->i64 { Coro.yield(); return 42 }
+fn worker_array(value:Array<i64>)->Array<i64> { Coro.yield(); return value }
+export fn await_array()->Array<i64> { var input=[10,20]; const task=go worker_array(input); input[0]=99; if(input[0]!=99){return [0,0]}; var first=await task; first[0]=77; return await task }
+export fn handle_array()->Task<Array<i64>> { var input=[10,20]; const task=go worker_array(input); input[0]=99; return task }
+fn worker_nested(value:Array<Array<string>>)->Array<Array<string>> { Coro.yield(); return value }
+export fn await_nested()->Array<Array<string>> { var input=[["owned","array"],["typed"]]; const task=go worker_nested(input); input[0][0]="changed"; var first=await task; first[0][0]="changed"; return await task }
+export fn handle_nested()->Task<Array<Array<string>>> { var input=[["owned","array"],["typed"]]; const task=go worker_nested(input); input[0][0]="changed"; return task }
+fn worker_nullable(value:i64?)->i64? { Coro.yield(); return value }
+export fn await_nullable()->i64? { const value:i64?=42; const task=go worker_nullable(value); const first=await task; return await task }
+export fn handle_nullable()->Task<i64?> { const value:i64?=42; return go worker_nullable(value) }
+fn worker_nullable_array(value:Array<i64>?)->Array<i64>? { Coro.yield(); return value }
+export fn await_nullable_array()->Array<i64>? { const value:Array<i64>?=[10,20]; const task=go worker_nullable_array(value); const first=await task; return await task }
+export fn handle_nullable_array()->Task<Array<i64>?> { const value:Array<i64>?=[10,20]; return go worker_nullable_array(value) }
+fn worker_tuple(value:(i64,string))->(i64,string) { Coro.yield(); return value }
+export fn await_tuple()->(i64,string) { const task=go worker_tuple((42,"owned")); const first=await task; return await task }
+export fn handle_tuple()->Task<(i64,string)> { return go worker_tuple((42,"owned")) }
+fn worker_enum(value:Choice)->Choice { Coro.yield(); return value }
+export fn await_enum()->Choice { const task=go worker_enum(Choice.Selected{values:[10,20]}); const first=await task; return await task }
+export fn handle_enum()->Task<Choice> { return go worker_enum(Choice.Selected{values:[10,20]}) }
+fn worker_atomic(value:Atomic<i64>)->Atomic<i64> { Coro.yield(); value.fetchAdd(41); return value }
+export fn await_atomic()->Atomic<i64> { const input=Atomic<i64>(1); const task=go worker_atomic(input); const first=await task; if(input.load()!=42){return Atomic<i64>(0)}; return await task }
+export fn handle_atomic()->Task<Atomic<i64>> { return go worker_atomic(Atomic<i64>(1)) }
+fn worker_task(value:Task<i64>)->Task<i64> { Coro.yield(); return value }
+export fn await_task()->Task<i64> { const input=go leaf(); const task=go worker_task(input); const first=await task; return await task }
+export fn handle_task()->Task<Task<i64>> { return go worker_task(go leaf()) }
+export fn main()->i64 { return 7 }

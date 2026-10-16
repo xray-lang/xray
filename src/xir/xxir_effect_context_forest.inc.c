@@ -116,14 +116,14 @@ static XrXirStatus effect_invocation_forest_trace(const XrXirCompileContext *wor
 static XrXirStatus effect_invocation_context_edge_mask(const XrXirCompileContext *work,
     const EffectContextForest *forest,uint32_t caller,uint32_t instruction,uint32_t target,uint32_t *output);
 
-/* The real dense count remains the public forest bound. Equation and atom
- * identities stay in the independent sealed owner; they never replace it. */
+/* Dense ordinals identify public declarations. An executing cause can visit
+ * one body in several distinct invocation environments before its terminal. */
 static XrXirStatus effect_context_forest_seal(const XrXirCompileContext *context,
     const XrXirModule *source,EffectOrdinaryContexts *contexts,EffectContextForest **output) {
     if (!xir_compile_context_valid(context) || !source || !contexts || !output || *output ||
         contexts->uses.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=contexts->uses.root?XR_XIR_OK:effect_ordinary_roots(context,source,contexts);
-    if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,contexts->uses.invocations,contexts->count);
+    if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,contexts->uses.invocations);
     if (status!=XR_XIR_OK) return status;
     EffectContextForest *forest=xir_compile_calloc(context,1,sizeof(*forest),&status);
     if (!forest) return status;

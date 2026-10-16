@@ -23,9 +23,10 @@ static void flow_storage_case(uint32_t values, bool callable, bool fail) {
     EffectPhysicalFunction physical={.instructions=values,.values=values,.rows=callable?1u:0u,
         .count=callable?1u:0u,.capacity=callable?1u:0u,.records=callable?&record:NULL};
     EffectPhysicalDomain domain={context.resources,1,&physical};
-    EffectInvocationNode node={0}; EffectInvocationOwner owner={.work=&context,.physical=&domain,.nodes=&node,.count=1};
+    EffectInvocationNode node={0}; EffectInvocationFinal final={.physical=&domain,.nodes=&node,.count=1};
+    EffectInvocationRead reader={.work=&context,.final=&final};
     EffectBodyFunctionHead head={.instruction_count=values};
-    EffectInvocationFlow flow={.owner=&owner,.function=&head,.basis={.fn_words=1}};
+    EffectInvocationFlow flow={.read=&reader,.function=&head,.basis={.fn_words=1}};
     bool local=values && values<=64 && !callable;
     instance_compile_injected=false; size_t attempts=instance_compile_attempts;
     if(fail) instance_compile_fail_at=attempts;
@@ -74,9 +75,10 @@ static void flow_storage_budget(void) {
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     EffectPhysicalFunction physical={.instructions=64,.values=64};
     EffectPhysicalDomain domain={context.resources,1,&physical};EffectInvocationNode node={0};
-    EffectInvocationOwner owner={.work=&context,.physical=&domain,.nodes=&node,.count=1};
+    EffectInvocationFinal final={.physical=&domain,.nodes=&node,.count=1};
+    EffectInvocationRead reader={.work=&context,.final=&final};
     EffectBodyFunctionHead head={.instruction_count=64};
-    EffectInvocationFlow flow={.owner=&owner,.function=&head,.basis={.fn_words=1}};
+    EffectInvocationFlow flow={.read=&reader,.function=&head,.basis={.fn_words=1}};
     size_t attempts=instance_compile_attempts;
     CHECK(effect_invocation_flow_storage(&flow)==XR_XIR_BUDGET && !flow.memory && !flow.fixed && !flow.certified);
     CHECK(attempts==instance_compile_attempts);

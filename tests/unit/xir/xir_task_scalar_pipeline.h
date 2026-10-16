@@ -36,6 +36,15 @@ static XrXirArtifact *task_scalar_lower(const XrXirCompileContext *context,
         diagnostic.function, diagnostic.instruction);
     CHECK(status == XR_XIR_OK && lowered);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered); unsigned matches[TASK_SCALAR_CASES][2] = {{0}};
+#ifdef XR_TASK_PARAMETER_FIXTURE
+    unsigned workers=0;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *function=&module->functions[f];
+        if (function->name_length<7 || memcmp(function->name,"worker_",7)) continue;
+        CHECK(function->parameter_count==1);++workers;
+    }
+    CHECK(workers==TASK_SCALAR_CASES);
+#endif
     for (unsigned n = 0; n < TASK_SCALAR_CASES; ++n) for (unsigned mode = 0; mode < 2; ++mode) {
         char name[64]; CHECK(snprintf(name, sizeof(name), "%s_%s", mode ? "handle" : "await", task_scalar_oracles[n].name) > 0);
         for (uint32_t f = 0; f < module->function_count; ++f) {

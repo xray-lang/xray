@@ -27,7 +27,7 @@ static XrXirStatus conditional_invocation_producer(const XrXirCompileContext *co
             !memcmp(&untouched,&frozen,sizeof(frozen)));
         CHECK(xir_effects_producer(context,effects,UINT32_MAX,instruction,&untouched)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&untouched,&frozen,sizeof(frozen)));
-        EffectInvocationSite *site=&effects->invocations->equations->sites[real.site];
+        EffectInvocationSite *site=&effects->invocations->final->sites[real.site];
         uint32_t target=site->target;site->target=1;
         CHECK(xir_effects_producer(context,effects,0,instruction,&untouched)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&untouched,&frozen,sizeof(frozen)));
@@ -37,13 +37,14 @@ static XrXirStatus conditional_invocation_producer(const XrXirCompileContext *co
         CHECK(xir_effects_producer(&foreign,effects,0,instruction,&untouched)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&untouched,&frozen,sizeof(frozen)));
         rp_owner_free(&foreign,baseline);rp_balanced(mark);
-        const XrXirRootEffects *facts=xr_xir_effects_root(effects,0);
+        XrXirEffectFacts facts_read=xr_xir_effects_read(effects,0);
+        const XrXirRootEffects *facts=(facts_read.status==XR_XIR_OK?&facts_read.root:NULL);
         CHECK(facts && facts->requires_root==(mode!=0) && !facts->unresolved);
     }
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) status=xir_effects_producer(context,effects,0,instruction,&real);
     if (status==XR_XIR_OK && oracle)
         CHECK(real.target==2 && real.instruction==instruction && !real.capture_count &&
-            xr_xir_effects_root(effects,1)->unresolved);
+            xr_xir_effects_read(effects,1).root.unresolved);
     xr_xir_compile_effects_free(effects);return status;
 }

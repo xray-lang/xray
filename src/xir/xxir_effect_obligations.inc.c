@@ -65,7 +65,8 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             status = xr_xir_effects_go_safe(facts, (uint32_t)op->immediate);
             XrXirDiagnosticReason reason = XR_XIR_DIAGNOSTIC_NONE;
             if (status == XR_XIR_BAD_TYPE) {
-                const XrXirRootEffects *root = xr_xir_effects_root(facts, (uint32_t)op->immediate);
+                XrXirEffectFacts root_read=xr_xir_effects_read(facts, (uint32_t)op->immediate);
+                const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);
                 if (!root) status = XR_XIR_BAD_STRUCTURE;
                 else if (root->requires_root) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_REQUIRED;
                 else if (root->unresolved) reason = XR_XIR_DIAGNOSTIC_GO_ROOT_UNRESOLVED;
@@ -82,14 +83,17 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
             status = XR_XIR_BAD_TYPE; break;
         }
-        const XrXirFunctionEffects *fact = xr_xir_effects_function(facts, f);
+        XrXirEffectFacts fact_read=xr_xir_effects_read(facts, f);
+        const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);
+        if (!fact) { status=fact_read.status;break; }
         if ((cleanup && fact->throws == XR_XIR_EFFECT_MAY) || fact->suspend != XR_XIR_EFFECT_NONE) {
             *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_TYPE, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
             diagnostic->reason = !cleanup ? XR_XIR_DIAGNOSTIC_NO_SUSPEND :
                 fact->throws == XR_XIR_EFFECT_MAY ? XR_XIR_DIAGNOSTIC_CLEANUP_THROW : XR_XIR_DIAGNOSTIC_CLEANUP_SUSPEND;
             status = XR_XIR_BAD_TYPE;
             if (diagnostic->reason != XR_XIR_DIAGNOSTIC_CLEANUP_THROW) {
-                const XrXirEffectWitness *witness = xr_xir_effects_suspend_witness(facts, f);
+                XrXirEffectFacts witness_read=xr_xir_effects_read(facts, f);
+                const XrXirEffectWitness *witness=(witness_read.status==XR_XIR_OK && witness_read.suspend_witness.cause!=0?&witness_read.suspend_witness:NULL);
                 if (!witness) { status = XR_XIR_BAD_STRUCTURE; break; }
                 diagnostic->instruction = witness->instruction;
                 const XrXirFunction *function = &module->functions[f];

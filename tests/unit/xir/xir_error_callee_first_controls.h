@@ -44,9 +44,9 @@ static void cf_order_fixture(CalleeOrderFixture *f,unsigned mode) {
             .instructions=&f->instruction,.instruction_count=1};
     f->module=(XrXirModule){.stage=XR_XIR_LOWERED,.linkage_kind=XR_XIR_LIBRARY,
         .types=&f->types,.functions=f->functions,.function_count=n};
-    f->effects.count=n;f->effects.words=2;
+    f->effects.count=n;f->effects.outcomes_work.words=2;
     for (uint32_t i=0;i<10;++i) f->summary[i]=UINT64_C(0x9182736455aa6600)+i;
-    f->effects.errors=f->summary;
+    f->effects.outcomes_work.errors=f->summary;
     for (uint32_t i=0;i<5;++i) f->heads[i]=f->error_heads[i]=UINT32_MAX;
     f->graph=(EffectGraph){.heads=f->heads,.queue=f->queue,.queued=f->queued,.edges=f->edges};
     if (mode<2) {
@@ -190,14 +190,14 @@ static void cf_whole_fixture(CalleeWholeFixture *whole,CalleeWholeMode mode,bool
     }
 }
 static void cf_whole_golden(const XrXirEffects *e,CalleeWholeMode mode) {
-    CHECK(e && e->count==ED_COUNT && e->atom_count==2 && e->words==1);
+    CHECK(e && e->count==ED_COUNT && effect_final_outcomes(e)->atom_count==2 && effect_final_outcomes(e)->words==1);
     for (uint32_t f=0;f<ED_COUNT;++f) {
         uint64_t bits=f<2 ? 0u : mode==CF_UNKNOWN && f==2 ? 1u : 4u;
-        CHECK(e->errors[f]==bits);
-        CHECK(e->functions[f].throws==(bits==1 ? XR_XIR_EFFECT_UNKNOWN : bits ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
-        CHECK(e->task_errors[f]==(bits==1 ? XR_XIR_BAD_TYPE : XR_XIR_OK));
+        CHECK(effect_final_outcomes(e)->errors[f]==bits);
+        CHECK(effect_final_outcomes(e)->functions[f].throws==(bits==1 ? XR_XIR_EFFECT_UNKNOWN : bits ? XR_XIR_EFFECT_MAY : XR_XIR_EFFECT_NONE));
+        CHECK(effect_final_outcomes(e)->task_errors[f]==(bits==1 ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK(e->root[f].requires_root==(f==0) && e->root[f].unresolved==(mode==CF_UNKNOWN && f==2));
-        CHECK(e->functions[f].suspend==(f==2 && mode==CF_GO ? XR_XIR_EFFECT_MAY :
+        CHECK(effect_final_outcomes(e)->functions[f].suspend==(f==2 && mode==CF_GO ? XR_XIR_EFFECT_MAY :
             f==2 && mode==CF_UNKNOWN ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_NONE));
     }
 }

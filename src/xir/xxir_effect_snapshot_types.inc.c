@@ -12,6 +12,14 @@
  */
 #include "xxir_metadata_domain_internal.h"
 
+/* Declaration IDs retain their public function admission. Private ordinary
+ * environments and invocation keys share the existing finite equation bound;
+ * every descriptor and expansion still consumes the original resource ledger. */
+static uint32_t effect_body_entry_limit(const XrXirCompileContext *work) {
+    uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
+    return maximum>UINT32_MAX?UINT32_MAX:(uint32_t)maximum;
+}
+
 enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023 };
 /* The sole owned representation is an actual affine record. Inactive delta
  * slots are neither initialized nor read. No summary, authority or pointer to
