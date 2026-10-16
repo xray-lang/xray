@@ -32,16 +32,24 @@ static void handle_message(XrLspServer *server,XrJsonValue *message) {
 #include "app/lsp/xlsp_transport.c"
 #include "byte_frame.inc.c"
 int main(int argc,char **argv) {
-    CHECK(argc==3);size_t failure=(size_t)strtoull(argv[1],NULL,10);unsigned scenario=(unsigned)strtoul(argv[2],NULL,10);
+    CHECK(argc==3||(argc==4&&!strcmp(argv[3],"--wait-input")));bool wait_reported=false;size_t failure=(size_t)strtoull(argv[1],NULL,10);unsigned scenario=(unsigned)strtoul(argv[2],NULL,10);
     clone_fault(SIZE_MAX);XrLspServer server={0};server.initialized=true;server.next_request_id=71;
     server.transport=xlsp_transport_stdio();CHECK(server.transport);size_t sites=0,frames=0;bool hit=false;
     while(!server.exit_received){size_t length=0;bool block=false;char *text=xlsp_transport_try_read(server.transport,&length,&block);
-        if(!text){CHECK(!block);break;}
+        if(!text){
+            if(block){
+                /* A temporary empty pipe can precede the producer's first write. */
+                if(argc==4&&!wait_reported){fputs("FRAME_WAIT\n",stderr);fflush(stderr);wait_reported=true;}
+                xr_time_sleep_ns(100000ULL);continue;
+            }
+            break;
+        }
         ++frames;bool inject=scenario==0?frames==2:frames==1;
         clone_fault(inject?failure:SIZE_MAX);handle_json_frame(&server,text,length);CloneStats stats=clone_stats();
         if(inject){sites=stats.attempts;hit=stats.injected;}
         memset(text,'?',length);clone_test_free(text);
     }
+    CHECK(argc==3||wait_reported);
     bool exited=server.exit_received;CHECK(server.next_request_id==71&&!server.pending_requests.count);
     xlsp_transport_free(server.transport);CHECK(!clone_stats().live&&!clone_stats().bytes);
     fprintf(stderr,"FRAME scenario=%u frames=%zu dispatches=%zu sites=%zu injected=%u exit=%u JSON_and_transport0/0 dispatch_spy=1\n",

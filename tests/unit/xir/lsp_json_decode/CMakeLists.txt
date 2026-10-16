@@ -50,3 +50,6 @@ foreach(mode normal resources)
         "${CMAKE_CURRENT_LIST_DIR}/test_frame.py" "$<TARGET_FILE:test_lsp_json_frame>" --${mode})
     set_tests_properties(test_lsp_json_frame_${mode} PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;json;protocol;ownership;allocation")
 endforeach()
+add_test(NAME test_lsp_json_frame_wait COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_frame_wait.py" "$<TARGET_FILE:test_lsp_json_frame>")
+set_tests_properties(test_lsp_json_frame_wait PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;lsp;json;protocol;ownership")
