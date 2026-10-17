@@ -176,4 +176,50 @@ class CollectionValues(unittest.TestCase):
             row=next(x for x in model.expected_rows() if x['original_source']==model._TYPE_NAMES_ORIGINAL)
             self.assertEqual(row['expected']['stdout_utf8'],'changed\n'*10)
 
+    def test_complete_net_reference_keeps_all_three_outputs_without_calling_the_copier(self):
+        trace=model.net_reference_trace()
+        self.assertEqual(trace['observations'],[True,'NetError','NetError'])
+        self.assertEqual(trace['original_imports'],['CopyBidirectionalResult','NetConn','NetError','copyBidirectional'])
+        self.assertEqual(trace['original_helper_bodies'],['counts','accepts'])
+        self.assertEqual((trace['counts_helper_invocations'],trace['accepts_helper_invocations'],trace['copier_argument_invocations']),(0,1,0))
+        self.assertEqual(trace['actual_socket_or_copy_operations'],0)
+        self.assertFalse(trace['network_copy_cancellation_ABI_Source_lifetime_FI_provider_qualified'])
+
+    def test_net_callable_signature_is_proved_but_its_body_is_never_invoked(self):
+        from unittest import mock
+        with mock.patch.object(model.NetCallableReference,'invoke',side_effect=AssertionError('copier called')):
+            self.assertIs(model.accept_net_copier(model.NetCallableReference(('NetConn','NetConn'),'CopyBidirectionalResult')),True)
+            self.assertEqual(model.net_reference_trace()['observations'],[True,'NetError','NetError'])
+        for parameters,result,symbol in [(('NetConn',),'CopyBidirectionalResult','copyBidirectional'),(('NetConn','NetConn'),'i64','copyBidirectional'),(('NetConn','NetConn'),'CopyBidirectionalResult','counts')]:
+            with self.subTest(parameters=parameters,result=result,symbol=symbol),self.assertRaises(ValueError):
+                model.accept_net_copier(model.NetCallableReference(parameters,result,symbol))
+
+    def test_net_reference_retains_the_entire_original_program_and_exact_registered_source(self):
+        import hashlib,json
+        from pathlib import Path
+        original=(model.ROOT/model._NET_REFERENCE_ORIGINAL).read_text(encoding='utf-8')
+        self.assertEqual(hashlib.sha256(original.replace('\r\n','\n').encode()).hexdigest(),'cf115225bc75cd1aaaccbd2b9cd24f1fcc6a0592625caf4a48d86eb928fbc3cd')
+        self.assertEqual(original.count('print('),3)
+        self.assertEqual(original.count('copyBidirectional'),2)
+        self.assertEqual(original.count('counts('),1);self.assertEqual(original.count('accepts('),2)
+        row=next(x for x in model.expected_rows() if x['original_source']==model._NET_REFERENCE_ORIGINAL)
+        self.assertEqual(row['source'],model._NET_REFERENCE_ORIGINAL);self.assertEqual(row['observation_count'],3)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'true\nNetError\nNetError\n','stderr_utf8':''})
+        case=next(x for x in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases'] if x['id']==row['id'])
+        self.assertEqual(case['source'],row['source']);self.assertEqual(case['source_context'],'original_absolute')
+        self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'');self.assertEqual(case['companions'],[])
+
+    def test_net_reference_declarations_and_nominal_names_are_independent_of_product_output(self):
+        from pathlib import Path
+        from unittest import mock
+        saved=Path.read_text
+        for old,new in [('Timeout,','TimeoutChanged,'),('b: NetConn','b: i64')]:
+            def changed(path,*args,**kwargs):
+                value=saved(path,*args,**kwargs)
+                return value.replace(old,new) if path==model.ROOT/model._NET_REFERENCE_DECLARATIONS else value
+            with mock.patch.object(Path,'read_text',changed),self.assertRaises(ValueError):model.net_reference_declarations()
+        with mock.patch.object(model,'accept_net_copier',lambda reference:False):
+            row=next(x for x in model.expected_rows() if x['original_source']==model._NET_REFERENCE_ORIGINAL)
+            self.assertEqual(row['expected']['stdout_utf8'],'false\nNetError\nNetError\n')
+
 if __name__=='__main__':unittest.main()

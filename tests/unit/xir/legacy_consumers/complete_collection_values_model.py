@@ -325,6 +325,7 @@ def observations():
     rows.update(display_observations())
     rows.update(value_boundary_observations())
     rows[_TYPE_NAMES_NAME]=type_names_trace()['observations']
+    rows[_NET_REFERENCE_NAME]=net_reference_trace()['observations']
     if set(rows)!=_NAMES:raise ValueError('Collection model lost a full source')
     return rows
 
@@ -385,6 +386,10 @@ def expected_rows():
         if row['original_source']==_TYPE_NAMES_ORIGINAL:
             row['required_semantic_trace']=type_names_trace()
             row['model']='Whole original ten typeName/print calls with all scalar,Array,Map,Set andRange operands preserved;only retired builder becomes owned String. Fixed neutral name labels and Source top-family rules;Range Source admission,string ownership,FI and providers remain unqualified.'
+    for row in rows:
+        if row['original_source']==_NET_REFERENCE_ORIGINAL:
+            row['required_semantic_trace']=net_reference_trace()
+            row['model']='Complete unchanged original four-name net import,two helper bodies andallthreeprints;one typed callable-reference acceptance andtwo nominal enum family names. Neither counts helper nor copyBidirectional body is called;no socket/bytecopy/cancellation/ABI/Source/lifetime/FI/provider qualification inferred.'
     rows.extend(json_boundary.expected_rows())
     return rows
 
@@ -440,3 +445,61 @@ def type_names_trace():
         'all_original_operand_values':values,'original_typeName_calls':10,'original_print_expressions':10,
         'retired_builder_target':'owned empty String','generic_arguments_not_printed_for_top_builtin_families':True,
         'Range_Source_admission_and_result_string_ownership_FI_provider_qualified':False}
+
+from dataclasses import dataclass
+
+
+_NET_REFERENCE_NAME='net_copy_bidirectional_type_surface'
+_NET_REFERENCE_ORIGINAL='tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr'
+_NET_REFERENCE_DECLARATIONS='stdlib/net/net.xr'
+_PROGRAMS[_NET_REFERENCE_NAME]=_NET_REFERENCE_ORIGINAL
+_NAMES=frozenset(set(_NAMES)|{_NET_REFERENCE_NAME})
+_INPUTS.update({'tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr': 'cf115225bc75cd1aaaccbd2b9cd24f1fcc6a0592625caf4a48d86eb928fbc3cd', 'stdlib/net/net.xr': '3894b2d9b0fb7f167b4f39334f0fdedd7bd70d5d1ceada35ff8b9247e08c8d85'})
+_REQUIRED_INPUTS += (_NET_REFERENCE_ORIGINAL,_NET_REFERENCE_DECLARATIONS)
+
+
+@dataclass(frozen=True)
+class NetCallableReference:
+    parameter_types: tuple
+    result_type: str
+    symbol: str='copyBidirectional'
+
+    def invoke(self,*arguments):
+        raise AssertionError('Original type-surface consumer never calls the copier')
+
+
+def accept_net_copier(reference):
+    # Prove the written callable type before the helper's constant true body.
+    if (type(reference) is not NetCallableReference or reference.parameter_types!=('NetConn','NetConn')
+            or reference.result_type!='CopyBidirectionalResult' or reference.symbol!='copyBidirectional'):
+        raise ValueError('Unreviewed net callable-reference type')
+    return True
+
+
+def net_reference_declarations():
+    import re
+    source=(ROOT/_NET_REFERENCE_DECLARATIONS).read_text(encoding='utf-8')
+    signature=re.search(r'^export fn copyBidirectional\(a: NetConn, b: NetConn\) -> (CopyBidirectionalResult) \{',source,re.M)
+    enum=re.search(r'^export enum (NetError) \{([^}]+)\}',source,re.M)
+    if signature is None or enum is None:raise ValueError('Complete net type declarations changed')
+    variants=[line.strip().rstrip(',') for line in enum[2].splitlines() if line.strip() and not line.lstrip().startswith('//')]
+    if not {'Timeout','Cancelled'}<=set(variants):raise ValueError('Observed net error variants changed')
+    ref=(ROOT/'tests/unit/xir/legacy_consumers/fixtures/type_names_reference/xxir_source_type_name.inc.c.txt').read_text(encoding='utf-8')
+    type_name_reference()
+    if 'case XR_XIR_TYPE_NOMINAL:' not in ref or '(const char *) declaration->name.bytes, declaration->name.length' not in ref:
+        raise ValueError('Fixed nominal family type-name rule changed')
+    return {'parameters':('NetConn','NetConn'),'result':signature[1],'nominal_name':enum[1],'variants':variants}
+
+
+def net_reference_trace():
+    declarations=net_reference_declarations();reference=NetCallableReference(declarations['parameters'],declarations['result'])
+    outputs=[accept_net_copier(reference)]
+    for variant in ('Timeout','Cancelled'):
+        if variant not in declarations['variants']:raise ValueError('Missing complete net observation')
+        outputs.append(declarations['nominal_name'])
+    return {'observations':outputs,'original_imports':['CopyBidirectionalResult','NetConn','NetError','copyBidirectional'],
+        'original_helper_bodies':['counts','accepts'],'counts_helper_invocations':0,'accepts_helper_invocations':1,
+        'copier_argument_invocations':0,'copier_argument_symbol':reference.symbol,'copier_parameter_types':reference.parameter_types,
+        'copier_result_type':reference.result_type,'typeName_variants':['Timeout','Cancelled'],'typeName_nominal_family':declarations['nominal_name'],
+        'original_print_expressions':3,'actual_socket_or_copy_operations':0,
+        'network_copy_cancellation_ABI_Source_lifetime_FI_provider_qualified':False}

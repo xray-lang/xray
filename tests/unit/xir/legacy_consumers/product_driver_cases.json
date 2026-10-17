@@ -32974,6 +32974,34 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 6
+    },
+    {
+      "id": "complete_collection_values_net_copy_bidirectional_type_surface",
+      "oracle_id": "complete_collection_values_net_copy_bidirectional_type_surface",
+      "source": "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr",
+      "source_lf_sha256": "cf115225bc75cd1aaaccbd2b9cd24f1fcc6a0592625caf4a48d86eb928fbc3cd",
+      "entry": "run",
+      "stdout_utf8": "true\nNetError\nNetError\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P13",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged original four-name net import,two helper bodies andallthreeprints;one typed callable-reference acceptance andtwo nominal enum family names. Neither counts helper nor copyBidirectional body is called;no socket/bytecopy/cancellation/ABI/Source/lifetime/FI/provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_type_surface.xr",
+        "source_lf_sha256": "cf115225bc75cd1aaaccbd2b9cd24f1fcc6a0592625caf4a48d86eb928fbc3cd"
+      },
+      "remaining_gates": [
+        "Whole original execution;legal Source refusal remains failure;unused counts/copier bodies grant no network runtime,cancellation,ABI,lifetime,FI,safety/provider or mixed qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
     }
   ]
 }
