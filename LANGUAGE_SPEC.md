@@ -7878,6 +7878,13 @@ Hosted products share the native Lowered target and Instance defaults. Initializ
 
 Public interactive operations always select their explicit owner instead of a thread's last-created VM. Concurrently live owners retain separate Compiler ledgers, Domains, executors, callback contexts and terminal lifetimes. A synchronous root with ordinary Array allocation uses the executor's authentic inline root Call without creating a child Task; go creates a real same-owner child and FIFO entry. Child yields are scheduled by the shared executor. An actual external root yield resumes only with its observed epoch/wake. Destroying one owner does not alter another owner's pending child; owned read values and results survive both. These entry checks do not replace complete worker/ref/Task, resource or safety qualification.
 
+
+### 17.51 Public observation of terminal Task data
+
+An owned public Task can copy its already completed actual outcome into an independently owned Result. Successful observation returns OK; callers then inspect the Result for RETURNED, THROWN, PANICKED, CANCELLED or another actual terminal state. A terminal LIMIT/OOM is distinct from a failed copy: publish only a complete outcome actually copied by the kernel, and preserve the empty output if copying or final wrapper allocation fails. Observation and copying continue to spend the original Task Domain and Compiler cumulative ledgers without resetting resources or accessing a dead Compiler.
+
+Pending returns BAD_STATE without allocating a result wrapper, driving, waiting, cancelling or acquiring an executor lease. Repeated observation and aliases retain the same actual terminal outcome. Task, Program, Compiler and Instance may be released after success while the result keeps exact types, Error/Panic and UTF-8/NUL bytes. Owning this data grants no Task execution, cross-Instance, Class-member, loan or callable permission. The existence of trusted Array and nominal getters does not make them public authority; full access and progress leases still require separate actual-owner receiving and verification.
+
 ---
 
 ## 18. Error Codes

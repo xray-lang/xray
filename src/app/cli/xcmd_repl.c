@@ -431,7 +431,7 @@ static void repl_failure(ReplState *state,XrSourceStatus status,XrSourceDiagnost
     if(diagnostic && xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK) {
         if(info.path)fprintf(stderr,"%s:%d:%d: %s\n",info.path,info.line,info.column,info.message);
         else fprintf(stderr,"Error: %s\n",info.message);
-    } else xr_cli_error("repl",repl_status_text(status));
+    } else xr_cli_error("repl","%s",repl_status_text(status));
     if(status==XR_SOURCE_BUDGET || status==XR_SOURCE_OUT_OF_MEMORY || status==XR_SOURCE_LIMIT ||
         status==XR_SOURCE_IO || status==XR_SOURCE_BAD_STATE || status==XR_SOURCE_EXECUTION_FAILED)state->failed=true;
 }
