@@ -105,7 +105,7 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     uint32_t origin = body->count, error = body->block_count;
     if (error == UINT32_MAX) return source_fail(ctx, node, XR_XIR_BUDGET, "await block identity exhausted");
     XrXirInstruction op = {XR_XIR_TASK_AWAIT, XR_XIR_UNIT, {task.id, 0}, {error + 1, error}, 0, {0}};
-    if (!source_recipe_append(ctx, op, NULL) || !begin_block(ctx)) return false;
+    if (!source_recipe_append(ctx, op, NULL) || !source_handler_site(ctx,origin) || !begin_block(ctx)) return false;
     SourceValue caught;
     if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_INVOKE_ERROR, XR_XIR_ERROR, {0}, {0}, origin, {0}}, &caught))
         return false;

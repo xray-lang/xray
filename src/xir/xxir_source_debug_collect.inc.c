@@ -16,7 +16,9 @@ static XrXirStatus source_debug_publish(SourceContext *ctx,XrXirSourceResult *ou
         functions[f]=(XrXirSourceDebugFunction){f,ctx->bodies[f].declaration,
             module->functions[f].parameter_count,module->functions[f].instruction_count,ctx->bodies[f].debug_points,
             ctx->bodies[f].debug_bindings,ctx->bodies[f].debug_binding_count,
-            ctx->bodies[f].debug_throws,ctx->bodies[f].throw_count};
+            ctx->bodies[f].debug_throws,ctx->bodies[f].throw_count,
+            ctx->bodies[f].debug_handlers,ctx->bodies[f].handler_count,
+            ctx->bodies[f].debug_routes,ctx->bodies[f].route_count};
     }
     XrXirSourceDebugGlobal *globals=ctx->slot_count ? source_alloc(ctx,ctx->slot_count,sizeof(*globals)) : NULL;
     if (ctx->slot_count && !globals) return ctx->diagnostic.status;

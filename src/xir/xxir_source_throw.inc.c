@@ -26,5 +26,7 @@ static bool source_throw(SourceContext *ctx,AstNode *node) {
         return source_fail(ctx,node,XR_XIR_BUDGET,"source throw observation exhausted");
     SourceThrowRecipe *site=source_alloc(ctx,1,sizeof(*site));if (!site) return false;
     *site=(SourceThrowRecipe){body->throw_recipes,body->count-1,value.id};
-    body->throw_recipes=site;++body->throw_count;ctx->returned=true;return true;
+    body->throw_recipes=site;++body->throw_count;
+    if (!source_handler_site(ctx,body->count-1)) return false;
+    ctx->returned=true;return true;
 }

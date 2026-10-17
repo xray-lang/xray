@@ -33,7 +33,7 @@ static bool source_region_seal(SourceContext *ctx,const uint32_t *map,uint32_t v
     SourceRootValue *root_values,const XrXirSourceDebugPoint *points) {
     SourceFunction *body=&ctx->bodies[ctx->function];
     uint32_t parameters=ctx->functions[ctx->function].parameter_count;
-    if (!source_throw_map(ctx,map,value_count,parameters)) return false;
+    if (!source_throw_map(ctx,map,value_count,parameters) || !source_handler_map(ctx,map,value_count,parameters)) return false;
     for (uint32_t i=0;i<body->debug_binding_count;++i) {
         if (!source_work_units(ctx,NULL,sizeof(*body->debug_bindings))) return false;
         XrXirSourceDebugBinding *binding=&body->debug_bindings[i];

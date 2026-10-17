@@ -6,6 +6,7 @@
  *
  * xxir_source_debug_owner.inc.c - Owned source instruction observations
  */
+#include "xxir_source_handler_owner.inc.c"
 static XrXirStatus source_debug_throw_validate(SourceQueryCopy *copy,
     const XrXirSourceDebugFunction *function,const XrXirModule *module,uint32_t f) {
     if (function->throw_count>function->instruction_count || (!!function->throw_count!=!!function->throw_sites) ||
@@ -80,6 +81,8 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         }
         XrXirStatus throws=source_debug_throw_validate(&copy,function,module,f);
         if (throws!=XR_XIR_OK) return throws;
+        XrXirStatus handlers=source_debug_handler_validate(&copy,function,&module->functions[f]);
+        if (handlers!=XR_XIR_OK) return handlers;
         if (!function->points) continue;
         for (uint32_t i=0;i<function->instruction_count;++i) {
             if (!query_work(&copy,1)) return copy.status;
@@ -105,6 +108,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         if (debug->functions[f].throw_count)
             functions[f].throw_sites=query_copy(&copy,debug->functions[f].throw_sites,
                 debug->functions[f].throw_count,sizeof(*functions[f].throw_sites));
+        source_debug_handler_copy(&copy,&debug->functions[f],&functions[f]);
     }
     if (!query_work(&copy,sizeof(snapshot->debug)+sizeof(snapshot->debug_ready))) {
         while (snapshot->memory!=previous) {

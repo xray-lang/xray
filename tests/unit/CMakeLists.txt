@@ -4586,3 +4586,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/xir/error_contract_source.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/source_handler_facts.cmake)

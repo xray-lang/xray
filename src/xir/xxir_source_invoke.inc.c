@@ -6,6 +6,15 @@
  *
  * xxir_source_invoke.inc.c - Function-local explicit error continuations
  */
+static bool source_handler_site(SourceContext *ctx,uint32_t instruction) {
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    if (!body->error_context) return true;
+    if (!body->error_context->route || instruction>=body->count || body->route_count==UINT32_MAX)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source handler site has no route");
+    SourceRouteRecipe *site=source_alloc(ctx,1,sizeof(*site));if (!site) return false;
+    *site=(SourceRouteRecipe){body->route_recipes,body->error_context->route,instruction};
+    body->route_recipes=site;++body->route_count;return true;
+}
 static bool source_error_edge(SourceContext *ctx, SourceValue value) {
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->block_count && !begin_block(ctx)) return false;
@@ -32,7 +41,7 @@ static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, Source
         op.op = XR_XIR_INVOKE_DEFAULT;
     } else op.op = op.op == XR_XIR_CALL ? XR_XIR_INVOKE : XR_XIR_INVOKE_INDIRECT;
     op.targets[0] = error+1; op.targets[1] = error;
-    if (!source_recipe_append(ctx,op,NULL) || !begin_block(ctx)) return false;
+    if (!source_recipe_append(ctx,op,NULL) || !source_handler_site(ctx,origin) || !begin_block(ctx)) return false;
     SourceValue caught;
     if (!source_recipe_append(ctx,(XrXirInstruction){XR_XIR_INVOKE_ERROR,XR_XIR_ERROR,{0},{0},origin,{0}},&caught) ||
         !source_error_edge(ctx,caught) || !begin_block(ctx)) return false;

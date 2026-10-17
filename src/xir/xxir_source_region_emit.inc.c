@@ -23,6 +23,7 @@ static bool source_region_id(const uint32_t *map,uint32_t count,uint32_t id,uint
     *out=map[id]; return true;
 }
 #include "xxir_source_throw_map.inc.c"
+#include "xxir_source_handler_map.inc.c"
 /* Dead catch bindings have no runtime predecessor. Their sentinel is retained
  * only in the private initialization snapshot; executable sealing never accepts
  * it. Control edges and recipe definitions always require real identities. */

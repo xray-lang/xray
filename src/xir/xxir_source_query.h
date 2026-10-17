@@ -48,6 +48,24 @@ typedef struct XrXirSourceDebugPoint {
  * before routing or cleanup; synthetic propagation is not a new source throw. */
 typedef struct XrXirSourceDebugThrow { uint32_t instruction, operand; } XrXirSourceDebugThrow;
 
+/* Half-open selector instructions precede accepted. Rejected names the next
+ * selector or the propagation instruction; UINT32_MAX means unconditional
+ * acceptance. Coordinates describe existing code and grant no evaluation. */
+typedef struct XrXirSourceDebugSelector {
+    uint32_t first, accepted, rejected;
+} XrXirSourceDebugSelector;
+
+/* Handler identities are one-based within one function. A nonzero parent is
+ * the later-built outer propagation route. The Error operand is its existing
+ * join value; a consumed route has no propagation instruction or parent. */
+typedef struct XrXirSourceDebugHandler {
+    uint32_t error, parent, propagation;
+    const XrXirSourceDebugSelector *selectors;
+    uint32_t selector_count;
+} XrXirSourceDebugHandler;
+
+typedef struct XrXirSourceDebugRoute { uint32_t instruction, handler; } XrXirSourceDebugRoute;
+
 typedef struct XrXirSourceDebugFunction {
     uint32_t function, declaration, parameter_count, instruction_count;
     const XrXirSourceDebugPoint *points;
@@ -55,6 +73,10 @@ typedef struct XrXirSourceDebugFunction {
     uint32_t binding_count;
     const XrXirSourceDebugThrow *throw_sites;
     uint32_t throw_count;
+    const XrXirSourceDebugHandler *handlers;
+    uint32_t handler_count;
+    const XrXirSourceDebugRoute *routes;
+    uint32_t route_count;
 } XrXirSourceDebugFunction;
 
 /* A producer-selected slot is a display coordinate, never a module grant. */

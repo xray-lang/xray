@@ -151,6 +151,7 @@ typedef struct SourceThrowRecipe {
     struct SourceThrowRecipe *next;
     uint32_t instruction,operand;
 } SourceThrowRecipe;
+#include "xxir_source_handler_types.inc.c"
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
     bool checked_library;
@@ -172,6 +173,11 @@ typedef struct SourceFunction {
     SourceThrowRecipe *throw_recipes;
     XrXirSourceDebugThrow *debug_throws;
     uint32_t throw_count;
+    SourceHandlerRecipe *handler_recipes;
+    SourceRouteRecipe *route_recipes;
+    XrXirSourceDebugHandler *debug_handlers;
+    XrXirSourceDebugRoute *debug_routes;
+    uint32_t handler_count, route_count;
     XrXirSourceDebugBinding *debug_bindings;
     uint32_t debug_binding_count, debug_binding_capacity;
     SourceRootValue *root_values;
@@ -196,7 +202,11 @@ typedef struct SourceErrorEdge {
     uint32_t block, jump;
     SourceValue value;
 } SourceErrorEdge;
-struct SourceErrorContext { SourceErrorEdge *edges; uint32_t count, frontier; };
+struct SourceErrorContext {
+    SourceErrorEdge *edges;
+    uint32_t count, frontier;
+    SourceHandlerRecipe *route;
+};
 
 typedef struct SourceTypeScope {
     bool active;
