@@ -590,6 +590,12 @@ Class字段读取和即时贷款也保真实出生carrier：VM以当前已检查
 
 Pending 只返回 BAD_STATE，不分配结果外壳、不推进、等待、取消或取得 executor lease。重复观察与 alias 保同一真实终态；Task、Program、Compiler 和 Instance 可以在成功后释放，结果继续拥有准确类型、Error/Panic 与 UTF-8/NUL 字节。结果数据的拥有不授予 Task 执行、跨 Instance、Class 成员、借用或 callable 权限。Array 和名义成员的受信内核 getter 不能因存在而直接成为公共权限；完整访问与推进 lease 仍须实际 owner 的独立接收和验证。
 
+### 17.52 公共 Source 的解析失败诊断
+
+格式有效的宿主请求遇到源码语法错误时，file、text、AST 编译以及 REPL 输入和类型查询返回 INVALID。诊断接收实际解析器的首条消息、行列和失败模块路径；导入语法错误指向被导入文件，MEMORY 根没有物理路径时为 NULL。消息与路径由诊断拥有，调用者输入、AST、Compiler 或 REPL 销毁后仍有效。请求诊断与否不改变语法失败状态，拥有诊断消费者的解析不另向进程 stderr 打印错误。
+
+坏宿主请求仍返回 BAD_ARGUMENT。解析或诊断接收中的真实 OOM/BUDGET/IO 保留资源失败，不映为语法错误。普通语法失败不发布 Program 或新 REPL 声明，且同一 Compiler/REPL 可继续接受合法输入；资源失败保持既有累计额度与粘滞状态。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1290,5 +1296,11 @@ Public interactive operations always select their explicit owner instead of a th
 An owned public Task can copy its already completed actual outcome into an independently owned Result. Successful observation returns OK; callers then inspect the Result for RETURNED, THROWN, PANICKED, CANCELLED or another actual terminal state. A terminal LIMIT/OOM is distinct from a failed copy: publish only a complete outcome actually copied by the kernel, and preserve the empty output if copying or final wrapper allocation fails. Observation and copying continue to spend the original Task Domain and Compiler cumulative ledgers without resetting resources or accessing a dead Compiler.
 
 Pending returns BAD_STATE without allocating a result wrapper, driving, waiting, cancelling or acquiring an executor lease. Repeated observation and aliases retain the same actual terminal outcome. Task, Program, Compiler and Instance may be released after success while the result keeps exact types, Error/Panic and UTF-8/NUL bytes. Owning this data grants no Task execution, cross-Instance, Class-member, loan or callable permission. The existence of trusted Array and nominal getters does not make them public authority; full access and progress leases still require separate actual-owner receiving and verification.
+
+### 17.52 Public Source parser failure diagnostics
+
+A valid host request with invalid source syntax returns INVALID from file, text and AST compilation, REPL input and type queries. Diagnostics receive the actual parser's first message, location and failed module path. An imported syntax error identifies the imported file; a MEMORY root without a physical path reports NULL. The diagnostic owns its message and path after caller input, AST, Compiler or REPL destruction. Requesting a diagnostic does not change syntax failure status, and parsing with a diagnostic consumer does not print additional process stderr.
+
+Invalid host requests still return BAD_ARGUMENT. Actual OOM/BUDGET/IO during parsing or diagnostic receiving retain their resource failure classification. Syntax failure publishes no Program or new REPL declaration, and the same Compiler or REPL can accept subsequent valid input. Resource failure retains the existing cumulative limits and sticky state.
 
 <!-- /xr-spec:en -->

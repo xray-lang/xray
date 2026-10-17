@@ -218,6 +218,10 @@ XR_FUNC XrParseStatus xr_compile_parse_repl_with_trivia(XrCompilerSession *sessi
     const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_with_source(XrCompilerSession *session, const char *source,
                                            const char *source_file, AstNode **output);
+/* Same owning parse without trivia. Diagnostic messages borrow only during
+ * the callback; a supplied consumer receives errors without console output. */
+XR_FUNC XrParseStatus xr_compile_parse_with_diagnostics(XrCompilerSession *session, const char *source,
+    const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_with_trivia(XrCompilerSession *session, const char *source,
     const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_expression_string(XrCompilerSession *session, const char *source,

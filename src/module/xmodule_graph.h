@@ -85,6 +85,13 @@ typedef struct XrModuleSpec {
 
 /* ========== Module Graph ========== */
 
+typedef struct XrModuleParseDiagnostic {
+    bool present;
+    uint32_t module;
+    int line, column;
+    char message[192];
+} XrModuleParseDiagnostic;
+
 typedef struct XrModuleGraph {
     XrCompileResources *resources; /* Shared with the borrowed session and resolver. */
     XrModuleSpec *specs; /* Dynamic array of module specs */
@@ -123,6 +130,9 @@ typedef struct XrModuleGraph {
     int entry_index;
     /* Failure remains observable even when allocating its diagnostic fails. */
     XrModuleStatus resolution_status;
+    /* First parser callback, copied on the same ledger before parser teardown.
+     * Its module selects this graph's independently owned source_path. */
+    XrModuleParseDiagnostic parse_diagnostic;
 } XrModuleGraph;
 
 /* ========== API ========== */

@@ -15,6 +15,7 @@ static void api_parse_error(void *context,int line,int column,int end_line,int e
     ApiParseDiagnostic *capture=context;
     if(!capture->output || capture->output->detail.source.source.line)return;
     XrXirSourceDiagnostic *detail=&capture->output->detail.source.source;
+    detail->origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;
     size_t size=0;
     if(xr_compile_state_string_length(capture->state,message,&size)!=XR_COMPILE_RESOURCE_OK)return;
     if(size>=sizeof(detail->message))size=sizeof(detail->message)-1;

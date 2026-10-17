@@ -7798,6 +7798,12 @@ An owned public Task can copy its already completed actual outcome into an indep
 
 Pending returns BAD_STATE without allocating a result wrapper, driving, waiting, cancelling or acquiring an executor lease. Repeated observation and aliases retain the same actual terminal outcome. Task, Program, Compiler and Instance may be released after success while the result keeps exact types, Error/Panic and UTF-8/NUL bytes. Owning this data grants no Task execution, cross-Instance, Class-member, loan or callable permission. The existence of trusted Array and nominal getters does not make them public authority; full access and progress leases still require separate actual-owner receiving and verification.
 
+### 17.52 Public Source parser failure diagnostics
+
+A valid host request with invalid source syntax returns INVALID from file, text and AST compilation, REPL input and type queries. Diagnostics receive the actual parser's first message, location and failed module path. An imported syntax error identifies the imported file; a MEMORY root without a physical path reports NULL. The diagnostic owns its message and path after caller input, AST, Compiler or REPL destruction. Requesting a diagnostic does not change syntax failure status, and parsing with a diagnostic consumer does not print additional process stderr.
+
+Invalid host requests still return BAD_ARGUMENT. Actual OOM/BUDGET/IO during parsing or diagnostic receiving retain their resource failure classification. Syntax failure publishes no Program or new REPL declaration, and the same Compiler or REPL can accept subsequent valid input. Resource failure retains the existing cumulative limits and sticky state.
+
 ---
 
 ## 18. Error Codes

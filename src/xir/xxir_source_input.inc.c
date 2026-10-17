@@ -115,7 +115,14 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         module_status = xr_compile_module_graph_build(ctx.graph, request->entry_path, request->authority, &error);
     }
     if (module_status != XR_MODULE_OK) {
-        source_module_fail(&ctx, NULL, module_status, error ? error : "module graph build failed"); goto done;
+        const XrModuleParseDiagnostic *parse=&ctx.graph->parse_diagnostic;
+        source_module_fail(&ctx, NULL, module_status, parse->present && parse->message[0] ?
+            parse->message : error ? error : "module graph build failed");
+        if(parse->present) {
+            ctx.diagnostic.origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;
+            ctx.diagnostic.module=parse->module;ctx.diagnostic.line=parse->line;ctx.diagnostic.column=parse->column;
+        }
+        goto done;
     }
     if (input.prelude_factory) ctx.prelude_module=(uint32_t)ctx.graph->entry_index+1;
     if (!source_manifests_load(&ctx) || (!input.prelude_factory && !source_prelude_discover(&ctx))) goto done;
@@ -135,7 +142,8 @@ done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
     if (!result.snapshot) source_query_publish(&ctx, &result);
-    if (failure_path && semantic_started && ctx.diagnostic.status != XR_XIR_OK &&
+    if (failure_path && (semantic_started || ctx.diagnostic.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE) &&
+        ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
         ctx.diagnostic.module < (uint32_t)ctx.graph->spec_count) {
         XrModuleSpec *module = &ctx.graph->specs[ctx.diagnostic.module];

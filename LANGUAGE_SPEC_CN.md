@@ -7635,6 +7635,12 @@ Class字段读取和即时贷款也保真实出生carrier：VM以当前已检查
 
 Pending 只返回 BAD_STATE，不分配结果外壳、不推进、等待、取消或取得 executor lease。重复观察与 alias 保同一真实终态；Task、Program、Compiler 和 Instance 可以在成功后释放，结果继续拥有准确类型、Error/Panic 与 UTF-8/NUL 字节。结果数据的拥有不授予 Task 执行、跨 Instance、Class 成员、借用或 callable 权限。Array 和名义成员的受信内核 getter 不能因存在而直接成为公共权限；完整访问与推进 lease 仍须实际 owner 的独立接收和验证。
 
+### 17.52 公共 Source 的解析失败诊断
+
+格式有效的宿主请求遇到源码语法错误时，file、text、AST 编译以及 REPL 输入和类型查询返回 INVALID。诊断接收实际解析器的首条消息、行列和失败模块路径；导入语法错误指向被导入文件，MEMORY 根没有物理路径时为 NULL。消息与路径由诊断拥有，调用者输入、AST、Compiler 或 REPL 销毁后仍有效。请求诊断与否不改变语法失败状态，拥有诊断消费者的解析不另向进程 stderr 打印错误。
+
+坏宿主请求仍返回 BAD_ARGUMENT。解析或诊断接收中的真实 OOM/BUDGET/IO 保留资源失败，不映为语法错误。普通语法失败不发布 Program 或新 REPL 声明，且同一 Compiler/REPL 可继续接受合法输入；资源失败保持既有累计额度与粘滞状态。
+
 ---
 
 ## 18. 错误码 (Error Codes)

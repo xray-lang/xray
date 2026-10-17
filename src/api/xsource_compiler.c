@@ -259,6 +259,8 @@ static XrSourceCompileStatus compiler_build_supplied(XrSourceCompiler *compiler,
         status = compiler_xir(supplied.ast ?
             xr_xir_compile_source_product_build_ast(&request, &ast, &product, &detail.source) :
             xr_xir_compile_source_product_build_text(&request, &text, &product, &detail.source));
+        if(detail.source.status==XR_XIR_BAD_STRUCTURE &&
+            detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE)status=XR_SOURCE_COMPILE_INVALID;
         if (status == XR_SOURCE_COMPILE_OK) {
             XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
             status = compiler_xir(admitted);

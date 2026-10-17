@@ -1,0 +1,2 @@
+import "./坏 库" as Bad
+print(42)

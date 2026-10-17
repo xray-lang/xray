@@ -219,6 +219,27 @@ static XrModuleStatus parse_status(XrParseStatus status) {
     default: return XR_MODULE_INVALID;
     }
 }
+typedef struct GraphParseCapture {
+    ModuleWork *work;
+    XrModuleGraph *graph;
+    uint32_t module;
+} GraphParseCapture;
+static void graph_parse_diagnostic(void *context,int line,int column,int end_line,int end_column,
+    const char *message) {
+    (void)end_line;(void)end_column;
+    GraphParseCapture *capture=context;
+    XrModuleParseDiagnostic *diagnostic=&capture->graph->parse_diagnostic;
+    if(diagnostic->present)return;
+    diagnostic->present=true;diagnostic->module=capture->module;
+    diagnostic->line=line;diagnostic->column=column;
+    if(!message){module_status(capture->work,XR_MODULE_INVALID);return;}
+    size_t length=0;
+    while(length+1<sizeof(diagnostic->message) && module_work(capture->work,1)) {
+        if(!message[length])break;
+        ++length;
+    }
+    if(module_copy(capture->work,diagnostic->message,message,length))diagnostic->message[length]=0;
+}
 static XrModuleStatus read_status(XrFileReadStatus status) {
     switch (status) {
     case XR_FILE_READ_OK: return XR_MODULE_OK;
@@ -296,7 +317,12 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             text = bytes.data;
         }
         AstNode *ast = NULL;
-        if (work->status == XR_MODULE_OK) module_status(work,parse_status(xr_compile_parse_with_source(graph->compiler_session,text,spec->source_path,&ast)));
+        if (work->status == XR_MODULE_OK) {
+            GraphParseCapture capture={work,graph,(uint32_t)index};
+            const XrParseDiagnostics diagnostics={graph_parse_diagnostic,&capture,20};
+            module_status(work,parse_status(xr_compile_parse_with_diagnostics(
+                graph->compiler_session,text,spec->source_path,&diagnostics,&ast)));
+        }
         if (work->status == XR_MODULE_OK) module_status(work,module_resource_status(
             xr_compile_module_source_fingerprint(graph->resources,text,&spec->source_content_fingerprint)));
         xr_compile_resources_free(bytes.data);
