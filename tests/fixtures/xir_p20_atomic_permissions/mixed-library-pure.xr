@@ -1,0 +1,2 @@
+import "./state" as state
+export fn run()->i64 {return await go state.pure(40)}

@@ -1,0 +1,3 @@
+import "./state" as state
+fn worker()->i64 {var value=Atomic<i64>(40);value.add(1,Ordering.Relaxed);return value.load(Ordering.Acquire)}
+export fn run()->i64 {return await go worker()}

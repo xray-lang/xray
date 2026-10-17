@@ -1,0 +1,2 @@
+import "./state" as state
+export fn run()->i64 {const value=state.currentI64();return await go state.readI64Param(value)}

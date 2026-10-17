@@ -1,0 +1,4 @@
+import "./state" as state
+var alias=state.fixedI64Handle()
+fn worker()->i64 {return alias.load(Ordering.Acquire)}
+export fn run()->i64 {return await go worker()}

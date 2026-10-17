@@ -1,0 +1,2 @@
+import "./state" as state
+export fn run()->f64 {return await go state.readF64Param(state.currentF64())}
