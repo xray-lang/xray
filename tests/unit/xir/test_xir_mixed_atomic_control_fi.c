@@ -29,7 +29,7 @@ static void atomic_control_fi_range(const AtomicControlSpec *spec,unsigned begin
         spec->backend,spec->victim,spec->call,spec->entry,spec->prefix,spec->polls,spec->mode,spec->close,spec->drop,begin,end,normal->sites);fflush(stdout);
 }
 int main(int argc,char **argv) {
-    CHECK(argc==10 || argc==14);(void)atomic_resource_original_main;(void)atomic_resource_axes;(void)atomic_budget_axes;
+    CHECK(argc==10 || argc==14);(void)atomic_resource_original_main;(void)atomic_resource_axes;(void)atomic_budget_axes;(void)atomic_runtime_before_free;(void)atomic_resource_baseline;
     const char *names[]={"0","1","vm","native"};unsigned backend=0;
     while(backend<4 && strcmp(argv[1],names[backend]))++backend;CHECK(backend<4);
     AtomicControlSpec spec={.backend=backend,.victim=atomic_control_fi_number(argv[3]),.call=atomic_control_fi_number(argv[4]),.entry=atomic_control_fi_number(argv[5])};
