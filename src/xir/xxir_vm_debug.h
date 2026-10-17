@@ -12,6 +12,13 @@
 
 typedef struct XrXirVmDebug XrXirVmDebug;
 typedef struct XrXirVmDebugSnapshot XrXirVmDebugSnapshot;
+typedef struct XirCallNativeSourceCode XirCallNativeSourceCode;
+typedef struct XrXirVmDebugNative {
+    XrXirProgramSpec *program;
+    const XirCallNativeSourceCode *source;
+    const unsigned char *mask;
+    uint32_t count;
+} XrXirVmDebugNative;
 typedef enum XrXirVmDebugMode {
     XR_XIR_VM_DEBUG_CONTINUE, XR_XIR_VM_DEBUG_PAUSE,
     XR_XIR_VM_DEBUG_STEP_IN, XR_XIR_VM_DEBUG_STEP_OVER, XR_XIR_VM_DEBUG_STEP_OUT,
@@ -55,10 +62,13 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_debug_program_take(XrXirArtifact **artifac
     XrXirVmDebug *debug, XrXirProgram **output);
 /* Select genuine native entries from the exact same closed proof. A nonzero
  * mask byte selects native; zero selects observed VM. Native callbacks and
- * environments remain intact. Success moves artifact and native->code; failure
- * preserves both inputs and output. At least one entry of each kind is required. */
+ * environments remain intact. The emitted source descriptor must match every
+ * selected callback and frame region; missing or old protocols are rejected.
+ * Descriptor inputs are borrowed synchronously; receiving owns copied offsets.
+ * Success moves artifact and native->program->code; failure preserves all
+ * inputs and output. At least one entry of each kind is required. */
 XR_FUNC XrXirStatus xr_xir_compile_vm_debug_mixed_program_take(XrXirArtifact **,
-    XrXirProgramSpec *native,const unsigned char *mask,uint32_t count,XrXirVmDebug *,XrXirProgram **);
+    const XrXirVmDebugNative *,XrXirVmDebug *,XrXirProgram **);
 /* Construct only the Instance of this observer's authenticated Program.
  * One target is bound; foreign Programs and a second target are rejected. */
 XR_FUNC XrXirCallStatus xr_xir_vm_debug_instance_new(XrXirVmDebug *debug,
@@ -82,7 +92,10 @@ typedef enum XrXirVmDebugExceptionFilter {
 /* Select first-chance language throws in the current logical execution flow.
  * Caught/uncaught require complete Source facts and a pure observed VM Program;
  * a Task escape is uncaught in that flow, regardless of a future await. Faults
- * and native-origin throws are not silently classified by these VM filters.
+ * are not language throws. Mixed native entries with generated source hooks
+ * and an authenticated Source map support ALL at the actual authored throw;
+ * incomplete native source coverage rejects ALL before changing the filters.
+ * native caught/uncaught remain unsupported rather than guessed at return.
  * Source-owned throw sites include local jumps and cleanup error continuations;
  * an unmapped IR function observes its actual THROW operation. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *,uint32_t filters);

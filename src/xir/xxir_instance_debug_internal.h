@@ -11,6 +11,12 @@
 #include "xxir_program.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_call_internal.h"
+#include "xxir_call_native_source_internal.h"
+
+/* Only before the first start of the exact freshly constructed Program target.
+ * The code lease keeps the trusted receiver alive through Instance disposal. */
+XR_FUNC XrXirCallStatus xir_instance_native_source_bind(XrXirInstance *,XrXirProgram *,
+    const XirCallNativeSourceObserver *);
 typedef struct XirInstanceDebugActivation {
     bool child;
     uint32_t driver;

@@ -378,6 +378,17 @@ XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_INSTANCE_DRAINING;
     return !instance || instance->stopping ? XR_XIR_INSTANCE_DRAINING : instance->state;
 }
+XR_FUNC XrXirCallStatus xir_instance_native_source_bind(XrXirInstance *instance,XrXirProgram *program,
+    const XirCallNativeSourceObserver *observer) {
+    if (!instance || !program || !observer || !observer->owner || !observer->before || !instance_owner_current(instance))
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (instance->driving || instance_observing(instance)) return XR_XIR_CALL_BUSY;
+    if (instance->program!=program || instance->state!=XR_XIR_INSTANCE_NEW || instance->stopping ||
+        instance->call || instance->epoch || instance->budget.native_source) return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_domain_work(instance->domain,1)) return XR_XIR_CALL_LIMIT;
+    instance->budget.native_source=observer;instance->budget.native_source_instance=instance;
+    return XR_XIR_CALL_READY;
+}
 XR_FUNC XrXirCallStatus xr_xir_instance_class_observation_open(XrXirInstance *instance,
     uint32_t capacity, XrXirClassObservation **output) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;

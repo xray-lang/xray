@@ -54,6 +54,8 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 
 调试器对值返回错误的 caught／uncaught 分类以当前逻辑执行流的同步调用链为边界：选中本流中的 catch 为 caught，错误逃出真实 Instance 根入口或当前 Task 根入口为 uncaught。Task 保存的错误随后经另一执行流 await 再抛出时，在该 await 所在流重新分类；这不把 Task 失败等同于整个程序失败。观察点位于实际 throw 交付、handler 和清理效果执行之前。分类要求完整的 Source 路由事实及经过认证的执行边界；native 或缺失事实保持未知，不能据此报告 uncaught。
 
+同源混合调试 Program 必须接收生成器发布的现行观察协议描述符，核对所选 native 回调及帧偏移并拥有复制注册元数据；缺失或旧协议在执行前拒绝。完整认证 Source 映射下，生成 native 的 `all` 停点位于原始 Source throw 对应指令执行之前，包括降为局部跳转或词法错误退出的 throw；native Source 覆盖不完整时，`all` 配置保持原值并明确拒绝。继续执行时该指令只运行一次；传播返回和内部 dispatcher 不被当作新的 Source throw。拥有型异常快照保留真实 native 帧身份、Source 指令和枚举值，不暴露 native locals 或执行状态。native 的 caught／uncaught 分类、无映射的 native 来源及公开 native 调试载入仍须独立验证；本观察点不授予任意 native 源码单步能力。
+
 #### 8.1.2 `try` / `catch`
 
 ```xray
@@ -626,6 +628,8 @@ throw point → deliver an independently owned error value → return up the cal
 - Unhandled top-level errors print `[Uncaught Error] <enum value>`, exit code = 1
 
 Debugger caught/uncaught classification of value-return errors uses the synchronous call chain of the current logical execution flow. Selection of a catch in that flow is caught; escape from the authenticated Instance root or current Task root is uncaught. A stored Task error rethrown by await in another flow is classified again in that awaiting flow. A Task failure therefore does not imply whole-program failure. Observation precedes actual throw delivery, handler execution, and cleanup effects. Classification requires complete Source route facts and authenticated execution boundaries; native or missing facts remain unknown and cannot establish uncaught.
+
+A same-proof mixed debug Program must receive the generator's current observation descriptor, verify selected native callbacks and frame offsets, and own copied registration metadata; missing or old protocols are rejected before execution. With complete authenticated Source mapping, generated native code supports `all` stops before the instruction for an original Source throw executes, including throws lowered to local jumps or lexical error exits. Incomplete native Source coverage rejects `all` configuration without changing the previous filters. Continuing executes that instruction once; propagated returns and the internal dispatcher are not new Source throws. An owned exception snapshot retains the real native frame identity, Source instruction and enum value without exposing native locals or execution state. Native caught/uncaught classification, unmapped native origins and public native debug loading still require independent qualification. This observation point grants no arbitrary native source stepping.
 
 #### 8.1.2 `try` / `catch`
 

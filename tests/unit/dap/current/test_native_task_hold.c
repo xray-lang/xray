@@ -19,6 +19,7 @@
 #include "../../xir/xir_runtime_allocations.h"
 #include "xir/xxir_task.c"
 #include "xir/xxir_call_native_observer_internal.h"
+#include "xir/xxir_call_native_source_internal.h"
 #include "native_task.h"
 
 _Static_assert(NT_FUNCTIONS<=128,"finite native fixture observation capacity");
@@ -85,6 +86,13 @@ static XrXirAction task_resume(XrXirCallView *view) {
     CHECK(f<NT_FUNCTIONS && !w->view && view->environment==native_tasks->selected[f].environment);
     if(w->enabled) CHECK(xir_call_native_observer_bind(view,&w->observer)==XR_XIR_CALL_READY);
     if(view->phase==XR_XIR_CALL_EXIT) ++w->exits[f];else ++w->steps[f];
+    if(f==NT_FAIL && native_tasks->backend!=NT_NATIVE_VM && view->phase==XR_XIR_CALL_NORMAL) {
+        bool unchanged=true;XrXirCallView copy=*view;
+        CHECK(xir_call_native_source_before(&copy,0,view->state,0,&unchanged)==XR_XIR_CALL_BAD_ARGUMENT && unchanged);
+        const unsigned char *outside=(const unsigned char *)((uintptr_t)view->state-1);
+        CHECK(xir_call_native_source_before(view,0,outside,0,&unchanged)==XR_XIR_CALL_BAD_STATE && unchanged);
+        CHECK(xir_call_native_source_before(view,0,view->state,UINT32_MAX,&unchanged)==XR_XIR_CALL_BAD_STATE && unchanged);
+    }
     w->view=view;XrXirAction action=native_tasks->selected[f].resume(view);
     if(view->phase==XR_XIR_CALL_NORMAL) {
         w->throws[f]+=action.kind==XR_XIR_ACTION_THROW;

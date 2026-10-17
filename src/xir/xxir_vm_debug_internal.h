@@ -54,7 +54,7 @@ typedef struct XirVmDebugPendingCall {
 } XirVmDebugPendingCall;
 XR_FUNC bool xir_vm_debug_retain(XrXirVmDebug *debug);
 XR_FUNC bool xir_vm_debug_bind(XrXirVmDebug *debug, const XrXirArtifact *artifact);
-XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program,bool mixed);
+XR_FUNC void xir_vm_debug_program(XrXirVmDebug *,XrXirProgram *,const XirCallNativeSourceCode *);
 XR_FUNC void xir_vm_debug_unbind(XrXirVmDebug *debug);
 XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     const XirVmDebugPoint *point, bool *stopped);

@@ -9,6 +9,7 @@
 #include "app/dap/xdap_current.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
+#include "xir/xxir_call_native_source_internal.h"
 #include "../../test_win_compat.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@
 #include "../../xir/xir_runtime_allocations.h"
 #include "base/xcompile_resources.c"
 XR_DATA const XrXirProgramSpec child_callable_native_program;
+XR_DATA const XirCallNativeSourceCode child_callable_native_native_source;
 enum { MIX_INIT,MIX_ENTRY,MIX_ROOT,MIX_CHILD,MIX_PURE,MIX_RELAY,MIX_ROOT_LEAF,MIX_UNKNOWN,MIX_BOTH,MIX_FACTORY,MIX_FUNCTIONS };
 typedef struct MixedFixture {
     XrCompileResources *resources;
@@ -56,8 +58,7 @@ static void mixed_new(MixedFixture *fixture,bool root_native) {
     unsigned char mask[MIX_FUNCTIONS];memset(mask,root_native ? 1 : 0,sizeof(mask));
     mask[MIX_CHILD]=mask[MIX_PURE]=root_native ? 0 : 1;
     native.code=(XrXirCodeLease){fixture,mixed_code_release};
-    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture->lowered,&native,mask,MIX_FUNCTIONS,
-        fixture->debug,&fixture->program)==XR_XIR_OK && !fixture->lowered && !native.code.owner && !native.code.release);
+    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture->lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture->debug,&fixture->program)==XR_XIR_OK && !fixture->lowered && !native.code.owner && !native.code.release);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.metadata_limit=config.value_limit=config.call_limit=1048576;
     config.requested_value_limit=config.requested_call_limit=1048576;
@@ -78,22 +79,44 @@ static void mixed_rejections(void) {
     XrXirProgramSpec native=child_callable_native_program;native.code=(XrXirCodeLease){&fixture,mixed_code_release};
     unsigned char mask[MIX_FUNCTIONS]={0};mask[MIX_CHILD]=mask[MIX_PURE]=1;
     XrXirArtifact *artifact=fixture.lowered;XrXirProgramSpec before=native;
-    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&native,mask,MIX_FUNCTIONS-1,
-        fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS-1},fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);
     CHECK(fixture.lowered==artifact && !fixture.program && !memcmp(&native,&before,sizeof(native)) && !fixture.releases);
     unsigned char identity[32];memcpy(identity,native.proof.identity,sizeof(identity));identity[0]^=1;
     native.proof.identity=identity;
-    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&native,mask,MIX_FUNCTIONS,
-        fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);
     CHECK(fixture.lowered==artifact && !fixture.program && !fixture.releases);native=before;
     mask[0]=2;
-    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&native,mask,MIX_FUNCTIONS,
-        fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);mask[0]=0;
+    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);mask[0]=0;
     memset(mask,1,sizeof(mask));
-    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&native,mask,MIX_FUNCTIONS,
-        fixture.debug,&fixture.program)==XR_XIR_UNSUPPORTED);
+    CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program)==XR_XIR_UNSUPPORTED);
     CHECK(fixture.lowered==artifact && !fixture.program && !memcmp(&native,&before,sizeof(native)) && !fixture.releases);
     mixed_constructor_close(&fixture);
+}
+static void mixed_source_protocol_rejections(void) {
+    MixedFixture fixture;mixed_prepare(&fixture);
+    XrXirProgramSpec native=child_callable_native_program;native.code=(XrXirCodeLease){&fixture,mixed_code_release};
+    XrXirProgramSpec before=native;XrXirArtifact *artifact=fixture.lowered;
+    unsigned char mask[MIX_FUNCTIONS]={0};mask[MIX_CHILD]=mask[MIX_PURE]=1;
+    XirCallNativeSourceCode code=child_callable_native_native_source;
+    XrXirVmDebugNative input={&native,&code,mask,MIX_FUNCTIONS};
+    for(unsigned damage=0;damage<8;++damage) {
+        code=child_callable_native_native_source;native=before;input.source=&code;
+        uint32_t offsets[MIX_FUNCTIONS];memcpy(offsets,code.offsets,sizeof(offsets));
+        XrXirCallEntry entries[MIX_FUNCTIONS];memcpy(entries,native.entries,sizeof(entries));
+        if(damage==0) input.source=NULL;
+        else if(damage==1) code.version=0;
+        else if(damage==2) ++code.version;
+        else if(damage==3) --code.count;
+        else if(damage==4) code.entries=NULL;
+        else if(damage==5) code.offsets=NULL;
+        else if(damage==6) { offsets[MIX_CHILD]=UINT32_MAX;code.offsets=offsets; }
+        else { entries[MIX_CHILD].resume=entries[MIX_PURE].resume;native.entries=entries; }
+        XrXirProgramSpec unchanged=native;
+        CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&input,fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);
+        CHECK(fixture.lowered==artifact && !fixture.program && !memcmp(&native,&unchanged,sizeof(native)) && !fixture.releases);
+    }
+    mixed_constructor_close(&fixture);
+    puts("Mixed native source protocol: absent/old/foreign code and frame regions rejected before execution");
 }
 static size_t mixed_constructor_fault(size_t fail,bool root_native) {
     MixedFixture fixture;mixed_prepare(&fixture);
@@ -102,15 +125,14 @@ static size_t mixed_constructor_fault(size_t fail,bool root_native) {
     unsigned char mask[MIX_FUNCTIONS];memset(mask,root_native ? 1 : 0,sizeof(mask));mask[MIX_CHILD]=mask[MIX_PURE]=root_native ? 0 : 1;
     XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(fixture.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     size_t begin=runtime_attempts;runtime_fail_at=fail==SIZE_MAX ? SIZE_MAX : begin+fail;
-    XrXirStatus status=xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&native,mask,MIX_FUNCTIONS,fixture.debug,&fixture.program);
+    XrXirStatus status=xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program);
     size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;
     CHECK(status==(fail==SIZE_MAX ? XR_XIR_OK : XR_XIR_OUT_OF_MEMORY));
     if (fail!=SIZE_MAX) {
         CHECK(sites>fail && fixture.lowered==artifact && !fixture.program && !memcmp(&native,&before,sizeof(native)) && !fixture.releases);
         XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(fixture.resources,&spent)==XR_COMPILE_RESOURCE_OK);
         CHECK(spent.live_bytes==baseline.live_bytes);
-        CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&native,mask,MIX_FUNCTIONS,
-            fixture.debug,&fixture.program)==XR_XIR_OK);
+        CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program)==XR_XIR_OK);
         XrCompileResourceStats retry={0};CHECK(xr_compile_resources_stats(fixture.resources,&retry)==XR_COMPILE_RESOURCE_OK);
         CHECK(retry.allocated_bytes>=spent.allocated_bytes && retry.work>=spent.work);
     }
@@ -127,7 +149,7 @@ static XrXirVmDebugFrameInfo mixed_frame(XrXirVmDebugSnapshot *snapshot,uint32_t
 }
 static void mixed_run(bool root_native,bool cancel) {
     MixedFixture fixture;mixed_new(&fixture,root_native);
-    CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_ALL)==XR_XIR_VALUE_OK);
+    CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_ALL)==XR_XIR_VALUE_UNSUPPORTED);
     CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_CAUGHT)==XR_XIR_VALUE_UNSUPPORTED);
     CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_UNCAUGHT)==XR_XIR_VALUE_UNSUPPORTED);
     CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_NONE)==XR_XIR_VALUE_OK);
@@ -192,6 +214,7 @@ static void mixed_run(bool root_native,bool cancel) {
 }
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();
+    mixed_source_protocol_rejections();
     if (argc==2 && !strcmp(argv[1],"--resources")) {
         for (unsigned native=0;native<2;++native) {
             size_t sites=mixed_constructor_fault(SIZE_MAX,native!=0);CHECK(sites);

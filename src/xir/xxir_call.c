@@ -17,6 +17,7 @@
 #include "xxir_call_internal.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_call_native_observer_internal.h"
+#include "xxir_call_native_source_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_task_internal.h"
 #include "xxir_type_arena.h"
@@ -577,6 +578,7 @@ static void abort_frames(XrXirCall *call, XrXirCallStatus reason) {
     if (call->abort_reason == XR_XIR_CALL_READY) call->abort_reason = reason;
 }
 #include "xxir_call_native_observer.inc.c"
+#include "xxir_call_native_source.inc.c"
 #include "xxir_call_exit.inc.c"
 
 XrXirCallStatus xr_xir_call_config_init(XrXirCallConfig *config, size_t size) {
@@ -642,6 +644,7 @@ static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
         return status;
     if (budget && budget->observer && budget->observer_instance != config->instance) return XR_XIR_CALL_BAD_STATE;
     if (budget && budget->native_observer && budget->native_instance!=config->instance) return XR_XIR_CALL_BAD_STATE;
+    if (budget && budget->native_source && budget->native_source_instance!=config->instance) return XR_XIR_CALL_BAD_STATE;
     if (entry >= config->entry_count || config->entries[entry].cleanup_owner)
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirValueAdmission admission = config->admission;

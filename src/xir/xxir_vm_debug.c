@@ -36,6 +36,8 @@ typedef struct DebugExceptionPlan {
     XirVmDebugExceptionLocal local;
     XirVmDebugExceptionRoute route;
     uint32_t operand,filter;
+    uint32_t native_instruction;
+    bool native;
 } DebugExceptionPlan;
 typedef struct DebugBreakpoint {
     uint32_t function, instruction;
@@ -99,6 +101,8 @@ struct XrXirVmDebug {
     XrXirProgram *program;
     XrXirInstance *target;
     XirDebugCalls calls;
+    XirCallNativeSourceObserver native_source;
+    const XirCallNativeSourceCode *native_code;
     DebugFrame *frames;
     DebugBreakpoint breakpoints[32];
     uint64_t hits[32];
@@ -121,6 +125,7 @@ struct XrXirVmDebug {
     XrXirVmDebugSnapshot *snapshot;
     DebugWrite write;
 };
+static XrXirCallStatus debug_native_source_before(void *,const XirCallNativeSourcePoint *,bool *);
 static bool debug_unit_value(const XrXirValue *value) {
     return value && value->type==XR_XIR_UNIT && !value->reserved && !value->payload;
 }
@@ -155,6 +160,7 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_new(XrXirDomain *domain, uint32_t capac
     debug->domain = domain;
     atomic_init(&debug->references, 1);
     debug->capacity = capacity;
+    debug->native_source=(XirCallNativeSourceObserver){debug,debug_native_source_before};
     debug->frames = debug_allocate(domain, (uint64_t)capacity * sizeof(*debug->frames), &status);
     if (!debug->frames) {
         debug_deallocate(domain, debug, sizeof(*debug));
@@ -231,16 +237,20 @@ XR_FUNC bool xir_vm_debug_bind(XrXirVmDebug *debug, const XrXirArtifact *artifac
     debug->calls.functions=xr_xir_compile_artifact_module(artifact)->function_count;
     return true;
 }
-XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program,bool mixed) {
+XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug,XrXirProgram *program,const XirCallNativeSourceCode *native) {
     XR_CHECK(debug_valid(debug) && debug->artifact && !debug->program, "debug Program binding invalid");
-    debug->program=program;debug->mixed=mixed;
+    debug->program=program;debug->mixed=native!=NULL;debug->native_code=native;
 }
 XR_FUNC XrXirCallStatus xr_xir_vm_debug_instance_new(XrXirVmDebug *debug,
     XrXirProgram *program, const XrXirInstanceConfig *config, XrXirInstance **output) {
     if (!debug_valid(debug) || !program || debug->program != program || debug->target ||
         debug->disabled || !output || *output) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirCallStatus status = xr_xir_instance_new(program, config, output);
-    if (status == XR_XIR_CALL_READY) { debug->target = *output;debug->calls.target=*output; }
+    XrXirInstance *fresh=NULL;XrXirCallStatus status = xr_xir_instance_new(program, config, &fresh);
+    if (status==XR_XIR_CALL_READY && debug->mixed) {
+        status=xir_instance_native_source_bind(fresh,program,&debug->native_source);
+        if (status!=XR_XIR_CALL_READY) { xr_xir_instance_free(fresh);return status; }
+    }
+    if (status == XR_XIR_CALL_READY) { debug->target = fresh;debug->calls.target=fresh;*output=fresh; }
     return status;
 }
 XR_FUNC void xir_vm_debug_unbind(XrXirVmDebug *debug) {
@@ -249,6 +259,7 @@ XR_FUNC void xir_vm_debug_unbind(XrXirVmDebug *debug) {
     debug->artifact = NULL;
     debug->program = NULL;
     debug->target = NULL;
+    debug->native_code=NULL;
     debug_source_clear(debug);
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
@@ -359,6 +370,7 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_continue(XrXirVmDebug *debug,
     if (mode>=XR_XIR_VM_DEBUG_STATEMENT_IN && !debug->source_memory) return XR_XIR_VALUE_UNSUPPORTED;
     if (!xr_xir_domain_work(debug->domain, 1)) return XR_XIR_VALUE_LIMIT;
     const XrXirVmDebugFrameInfo *current=&debug->snapshot->frames[0].info;
+    if (current->code==XR_XIR_VM_DEBUG_NATIVE && mode!=XR_XIR_VM_DEBUG_CONTINUE) return XR_XIR_VALUE_UNSUPPORTED;
     const XirDebugCallFrame *call=xir_debug_calls_id(&debug->calls,current->id);
     if (!call) return XR_XIR_VALUE_BAD_ARGUMENT;
     debug->skip_id=current->id;debug->skip_instruction=current->instruction;
@@ -504,7 +516,7 @@ static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFram
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
     const XrXirFunction *function=&module->functions[call->event.entry];
     const DebugFrame *live=call->event.code==XR_XIR_CALL_CODE_VM ? find_id(debug,call->id) : NULL;
-    bool values=live && call->thread==snapshot->stopped_thread;
+    bool values=view && live && call->thread==snapshot->stopped_thread;
     frame->info=(XrXirVmDebugFrameInfo){.id=call->id,.epoch=debug->epoch+1,.function=call->event.entry,
         .instruction=live ? live->point.instruction : UINT32_MAX,
         .value_count=values ? live->point.layout->slot_count : 0,.thread=call->thread,
@@ -543,7 +555,7 @@ static XrXirValueStatus capture_prepare(XrXirVmDebug *debug,XrXirCallView *view,
     for (const XirDebugCallFrame *call=current;call;call=xir_debug_calls_parent(&debug->calls,call)) {
         if (call->event.entry==debug->calls.functions) continue;
         if (at==snapshot->count || snapshot_contains(snapshot,at,call->id)) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
-        status=capture_frame(debug,call,view,snapshot,at++);if (status!=XR_XIR_VALUE_OK) goto fail;
+        status=capture_frame(debug,call,exception && exception->native ? NULL : view,snapshot,at++);if (status!=XR_XIR_VALUE_OK) goto fail;
     }
     while (at<snapshot->count) {
         const XirDebugCallFrame *selected=NULL;
@@ -554,12 +566,17 @@ static XrXirValueStatus capture_prepare(XrXirVmDebug *debug,XrXirCallView *view,
                 (call->thread==selected->thread && call->event.depth>selected->event.depth)) selected=call;
         }
         if (!selected) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
-        status=capture_frame(debug,selected,view,snapshot,at++);if (status!=XR_XIR_VALUE_OK) goto fail;
+        status=capture_frame(debug,selected,exception && exception->native ? NULL : view,snapshot,at++);if (status!=XR_XIR_VALUE_OK) goto fail;
     }
     if (exception) {
         uint32_t operand=exception->operand;SnapshotFrame *frame=&snapshot->frames[0];
-        if (operand>=frame->info.value_count || !frame->known[operand] ||
-            frame->values[operand].payload!=exception->error.payload) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
+        if (!exception->native && (operand>=frame->info.value_count || !frame->known[operand] ||
+            frame->values[operand].payload!=exception->error.payload)) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
+        if (exception->native) {
+            if (frame->info.code!=XR_XIR_VM_DEBUG_NATIVE) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
+            frame->info.instruction=exception->native_instruction;
+            status=capture_read_scope(debug,frame->info.function,view,frame);if (status!=XR_XIR_VALUE_OK) goto fail;
+        }
         XrXirValue concrete={0};
         if (!xr_xir_error_borrow(&exception->error,&concrete)) { status=XR_XIR_VALUE_BAD_ARGUMENT;goto fail; }
         XrXirEnumBorrow shape={0};
@@ -584,6 +601,7 @@ static XrXirValueStatus capture(XrXirVmDebug *debug,XrXirCallView *view,const De
     if (status==XR_XIR_VALUE_OK) capture_publish(debug,snapshot);return status;
 }
 #include "xxir_vm_debug_write.inc.c"
+#include "xxir_vm_debug_native_source.inc.c"
 XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     const XirVmDebugPoint *point, bool *stopped) {
     *stopped = false;

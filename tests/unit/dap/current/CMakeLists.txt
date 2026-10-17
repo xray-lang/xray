@@ -46,6 +46,37 @@ endforeach()
 add_test(NAME test_dap_native_task_hold COMMAND test_dap_native_task_hold)
 set_tests_properties(test_dap_native_task_hold PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;task;ownership;execution")
 
+add_executable(test_dap_native_source_producer test_native_task_producer.c)
+target_link_libraries(test_dap_native_source_producer PRIVATE xray_xir_source xray_xir_cgen)
+target_compile_definitions(test_dap_native_source_producer PRIVATE
+    XR_NATIVE_TASK_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/native-source" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set(XR_DAP_NATIVE_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/native-source")
+add_custom_command(OUTPUT "${XR_DAP_NATIVE_SOURCE_DIR}/native_task.c" "${XR_DAP_NATIVE_SOURCE_DIR}/native_task.h"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XR_DAP_NATIVE_SOURCE_DIR}"
+    COMMAND $<TARGET_FILE:test_dap_native_source_producer> "${XR_DAP_NATIVE_SOURCE_DIR}"
+    DEPENDS test_dap_native_source_producer "${CMAKE_CURRENT_SOURCE_DIR}/native-source/native_task_throw.xr" VERBATIM)
+add_executable(test_dap_native_source_stop test_native_source_stop.c
+    "${XR_DAP_NATIVE_SOURCE_DIR}/native_task.c" "${XR_DAP_NATIVE_SOURCE_DIR}/native_task.h")
+target_link_libraries(test_dap_native_source_stop PRIVATE xray_dap_current xray_xir_source)
+target_include_directories(test_dap_native_source_stop PRIVATE "${XR_DAP_NATIVE_SOURCE_DIR}")
+target_compile_definitions(test_dap_native_source_stop PRIVATE
+    XR_NATIVE_TASK_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/native-source" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_dap_native_source_stop PRIVATE /W4 /WX /utf-8)
+    target_compile_options(test_dap_native_source_producer PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_native_source_stop PRIVATE -Wall -Wextra -Werror)
+    target_compile_options(test_dap_native_source_producer PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_native_source_stop COMMAND test_dap_native_source_stop)
+add_test(NAME test_dap_native_source_stop_census COMMAND test_dap_native_source_stop --census)
+add_test(NAME test_dap_native_source_stop_boundary COMMAND test_dap_native_source_stop --boundary)
+add_test(NAME test_dap_native_source_stop_resources COMMAND test_dap_native_source_stop --resources)
+set_tests_properties(test_dap_native_source_stop PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;exceptions")
+set_tests_properties(test_dap_native_source_stop_census PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;resources;census")
+set_tests_properties(test_dap_native_source_stop_boundary PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;resources;boundary")
+set_tests_properties(test_dap_native_source_stop_resources PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;resources;fault-injection")
+
 add_executable(test_xir_effects_compile_prefix test_effects_compile_prefix.c)
 target_link_libraries(test_xir_effects_compile_prefix PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_effects_compile_prefix PRIVATE

@@ -16,6 +16,7 @@
 #include "xxir_emit_c.h"
 #include "xxir_checked.h"
 #include "xxir_program.h"
+#include "xxir_call_native_source_internal.h"
 #include "xxir_atomic.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -878,7 +879,14 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                             uint32_t index) {
     const XrXirInstruction *op = &function->instructions[index];
     uint32_t destination = layout->offsets[function->parameter_count + index];
-    append(buffer, "    case %uu:\n state->pc = %uu;\n", index, index + 1);
+    append(buffer, "    case %uu:\n", index);
+    if (op->op==XR_XIR_JUMP || op->op==XR_XIR_THROW || op->op==XR_XIR_CLEANUP_ERROR) {
+        append(buffer," { bool stopped = false;\n"
+            " XrXirCallStatus observed = xir_call_native_source_before(view,%uu,state->frame,%uu,&stopped);\n"
+            " if (observed != XR_XIR_CALL_READY) return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,observed}};\n"
+            " if (stopped) return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE}; }\n",index,layout->frame_bytes);
+    }
+    append(buffer," state->pc = %uu;\n",index+1);
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
@@ -1608,6 +1616,12 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     if (module->types) append(buffer, "&%s_types", prefix); else EMIT_LITERAL(buffer, "NULL");
     append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity, %s_layouts}};\n",
         prefix, prefix, prefix, prefix);
+    append(buffer,"static const uint32_t %s_native_source_offsets[] = {\n",prefix);
+    for(uint32_t f=0;f<module->function_count && emit_work(buffer,1);++f)
+        append(buffer,"    (uint32_t)offsetof(%s_state_%u,frame),\n",prefix,f);
+    append(buffer,"};\nXR_DATADEF const XirCallNativeSourceCode %s_native_source = {\n"
+        "    %uu,%uu,%s_entries,%s_native_source_offsets};\n",
+        prefix,XIR_CALL_NATIVE_SOURCE_VERSION,module->function_count,prefix,prefix);
 }
 
 /* Sizing and writing traverse the same immutable Lowered artifact. */
@@ -1615,6 +1629,8 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
+    EMIT_LITERAL(buffer,"#include \"xir/xxir_call_native_source_internal.h\"\n");
+    append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
     EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
