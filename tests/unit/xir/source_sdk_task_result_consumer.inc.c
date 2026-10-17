@@ -44,10 +44,14 @@ static void sdk_terminal_task_cases(const char *stdlib_path) {
     CHECK(xray_source_compiler_new(&options,&compiler)==XR_SOURCE_OK && compiler);
     const XrSourceText text={NULL,"installed-terminal-tasks",source,sizeof(source)-1};
     CHECK(xray_source_compile_text(compiler,&text,&program,NULL)==XR_SOURCE_OK && program);
+    XrSourceCallOptions runtime;
+    CHECK(xray_source_call_options_init(&runtime,sizeof(runtime))==XR_SOURCE_OK);
     XrSourceValue *tasks[7]={NULL};XrSourceResult *survivors[7]={NULL};
+    XrSourceInvocation missing_options=request(names[0],NULL,0);XrSourceResult *unpublished=NULL;
+    CHECK(xray_source_invoke(program,&missing_options,NULL,&unpublished,NULL)==XR_SOURCE_BAD_ARGUMENT && !unpublished);
     for(size_t i=0;i<7;++i) {
         XrSourceInvocation invocation=request(names[i],NULL,0);XrSourceResult *result=NULL;
-        CHECK(xray_source_invoke(program,&invocation,NULL,&result,NULL)==XR_SOURCE_OK && result);
+        CHECK(xray_source_invoke(program,&invocation,&runtime,&result,NULL)==XR_SOURCE_OK && result);
         XrSourceEvent event;
         CHECK(xray_source_result_event(result,&event)==XR_SOURCE_OK && event.state==XR_SOURCE_RUN_RETURNED);
         tasks[i]=sdk_task_value(result,XR_SOURCE_VALUE_TASK);xray_source_result_free(result);
