@@ -156,10 +156,14 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
     if (!xir_compile_work(work,14+sizeof(*cursor))) return XR_XIR_BUDGET;
     XrXirCellProofSpanCursor current=*cursor;
     while (current.run<function->run_count) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        if ((function->runs[current.run].mask&EFFECT_BODY_LITERAL_ROWS) && function->runs[current.run].count>2)
+        if (!xir_compile_work(work,6+sizeof(EffectBodyRun *))) return XR_XIR_BUDGET;
+        const EffectBodyRun *stored=&function->runs[current.run];
+        /* Completed scalar blocks may precede a live construction span. Skip
+         * their validated whole extent without demanding an unpublished EOF.
+         * A selection or cursor inside a literal uses the complete reader. */
+        if ((stored->mask&EFFECT_BODY_LITERAL_ROWS) && stored->count>2 &&
+            (current.next!=stored->first || current.next==first || stored->count>first-current.next))
             return effect_cell_literal_span(work,function,first,count,cursor);
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         const EffectBodyRun *ref;
         XrXirStatus status=effect_body_run_ref(&adapter->request.read,function,current.run,current.next,&ref);
         if (status!=XR_XIR_OK) return status;

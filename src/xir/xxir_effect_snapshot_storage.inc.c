@@ -329,7 +329,6 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink.span))) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) status=effect_body_records_write(work,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
-        if (status==XR_XIR_OK) status=effect_body_short_literals_pack(work,function);
         if (status==XR_XIR_OK) status=effect_body_runs_finish(work,function);
     }
     if (status==XR_XIR_OK) status=effect_cell_body_project(&adapter);

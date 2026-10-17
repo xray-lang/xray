@@ -119,50 +119,35 @@ static XrXirStatus effect_body_runs_finish(const XrXirCompileContext *work,
     return effect_body_runs_replace(work,function,function->run_count);
 }
 
-/* Only an unpublished constructor compacts this private array. A stack run
- * receives complete initialized rows before an earlier slot is overwritten;
- * failure exposes no body and the unique destructor owns the entire array. */
-static XrXirStatus effect_body_short_literals_pack(const XrXirCompileContext *work,
-    EffectBodyFunction *function) {
-    EffectBodyRun pending;uint32_t pending_count=0,written=0;
-    if (!xir_compile_work(work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
-    for (uint32_t r=0;r<function->run_count;++r) {
-        const EffectBodyRun *source=&function->runs[r];
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-        if (source->count==1 || (source->mask&EFFECT_BODY_LITERAL_ROWS)) {
-            if (!source->count || source->count>EFFECT_BODY_LITERAL_CAPACITY ||
-                (source->count==1 && source->mask) || (source->mask&EFFECT_BODY_MASK))
+/* Only completed scalar-only records join the current literal tail. A
+ * uniform-span record remains a stable boundary, so a semantic cursor never
+ * changes its preceding directory positions. The input is a local value and
+ * no array element reference survives reserve or immutable replacement. */
+static XrXirStatus effect_body_short_literals_append(const XrXirCompileContext *work,
+    EffectBodyFunction *function,const EffectBodyRun *run) {
+    for (uint32_t i=0;i<run->count;++i) {
+        if (!xir_compile_work(work,3+sizeof(uint32_t)+sizeof(const XrXirInstruction *))) return XR_XIR_BUDGET;
+        const XrXirInstruction *row=i?&run->literal_tail[i-1]:&run->base;
+        uint32_t first=run->first+i;
+        if (function->run_count) {
+            EffectBodyRun *last=&function->runs[function->run_count-1];
+            if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
+            if (!last->count || last->first>=function->instruction_count ||
+                last->count>function->instruction_count-last->first || last->first+last->count!=first)
                 return XR_XIR_BAD_STRUCTURE;
-            for (uint32_t i=0;i<source->count;++i) {
-                const XrXirInstruction *row=i?&source->literal_tail[i-1]:&source->base;
-                if (!xir_compile_work(work,4+3*sizeof(uint32_t)+sizeof(*row))) return XR_XIR_BUDGET;
-                if (!pending_count) {pending.first=source->first+i;pending.base=*row;}
-                else pending.literal_tail[pending_count-1]=*row;
-                pending.count=++pending_count;pending.mask=pending_count>1?EFFECT_BODY_LITERAL_ROWS:0;
-                if (pending_count==EFFECT_BODY_LITERAL_CAPACITY) {
-                    XrXirStatus status=effect_body_run_copy_initialized(work,&pending,&function->runs[written]);
-                    if (status!=XR_XIR_OK) return status;
-                    ++written;pending_count=0;
-                }
+            if (last->count<EFFECT_BODY_LITERAL_CAPACITY &&
+                (last->mask==EFFECT_BODY_LITERAL_ROWS || (last->count==1 && !last->mask))) {
+                if (!xir_compile_work(work,sizeof(*row)+2*sizeof(uint32_t)+1)) return XR_XIR_BUDGET;
+                last->literal_tail[last->count-1]=*row;++last->count;last->mask=EFFECT_BODY_LITERAL_ROWS;continue;
             }
-            continue;
-        }
-        if (pending_count) {
-            XrXirStatus status=effect_body_run_copy_initialized(work,&pending,&function->runs[written]);
-            if (status!=XR_XIR_OK) return status;
-            ++written;pending_count=0;
-        }
-        XrXirStatus status=effect_body_run_copy_initialized(work,source,&function->runs[written]);
+        } else if (first) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=effect_body_runs_reserve(work,function);
         if (status!=XR_XIR_OK) return status;
-        ++written;
+        if (!xir_compile_work(work,3*sizeof(uint32_t)+sizeof(*row)+1)) return XR_XIR_BUDGET;
+        EffectBodyRun *target=&function->runs[function->run_count];
+        target->first=first;target->count=1;target->mask=0;target->base=*row;++function->run_count;
     }
-    if (pending_count) {
-        XrXirStatus status=effect_body_run_copy_initialized(work,&pending,&function->runs[written]);
-        if (status!=XR_XIR_OK) return status;
-        ++written;
-    }
-    if (!xir_compile_work(work,sizeof(function->run_count))) return XR_XIR_BUDGET;
-    function->run_count=written;return XR_XIR_OK;
+    return XR_XIR_OK;
 }
 
 static inline XrXirStatus effect_body_run_append(const XrXirCompileContext *work,
@@ -225,26 +210,39 @@ typedef struct EffectBodyWriteSink {
 static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
     const XrXirFunction *source,EffectBodyFunction *target,EffectBodyRun *run,
     const EffectBodyWriteSink *sink) {
-    if (!source || !target || !target->runs || !run || run!=&target->runs[target->run_count] ||
-        target->run_count>=target->run_capacity || !run->count ||
-        run->first>=target->instruction_count || run->count>target->instruction_count-run->first)
+    if (!source || !target || !run || target->run_count>target->run_capacity ||
+        target->run_capacity>target->instruction_count || (target->run_capacity && !target->runs) ||
+        !run->count || run->first>=target->instruction_count || run->count>target->instruction_count-run->first ||
+        (run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_ROWS)) || (run->count==1 && run->mask) ||
+        ((run->mask&EFFECT_BODY_LITERAL_ROWS) && (run->mask&EFFECT_BODY_MASK)))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,1+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,3+3*sizeof(uint32_t)+2*sizeof(uintptr_t))) return XR_XIR_BUDGET;
+    uintptr_t address=(uintptr_t)run,begin=(uintptr_t)target->runs;
+    if (target->runs && address>=begin && (address-begin)/sizeof(*run)<target->run_capacity)
+        return XR_XIR_BAD_STRUCTURE;
     uint32_t first=run->first,count=run->count,mask=run->mask;
     if (count==2 && mask) {
-        if (!xir_compile_work(work,2+sizeof(run->literal_tail[0])+sizeof(run->mask)))
-            return XR_XIR_BUDGET;
+        if (!xir_compile_work(work,2+sizeof(run->literal_tail[0])+sizeof(run->mask))) return XR_XIR_BUDGET;
         run->literal_tail[0]=source->instructions[first+1];run->mask=EFFECT_BODY_LITERAL_ROWS;
     }
-    ++target->run_count;
-    if (!sink) return XR_XIR_OK;
+    EffectBodyRead read=effect_body_compile_read(work);
+    XrXirStatus status=effect_body_run_payload_check(&read,run);
+    if (status!=XR_XIR_OK) return status;
+    if (count==1 || (run->mask&EFFECT_BODY_LITERAL_ROWS)) status=effect_body_short_literals_append(work,target,run);
+    else {
+        status=effect_body_runs_reserve(work,target);
+        if (status==XR_XIR_OK) status=effect_body_run_copy_initialized(work,run,&target->runs[target->run_count]);
+        if (status==XR_XIR_OK && !xir_compile_work(work,1)) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) ++target->run_count;
+    }
+    if (status!=XR_XIR_OK || !sink) return status;
     if (!sink->owner || !sink->row || !sink->span) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
     if (count>1 && !(run->mask&EFFECT_BODY_LITERAL_ROWS) && !(mask&UINT32_C(3)))
         return sink->span(sink->owner,first,count);
     for (uint32_t i=first;i<first+count;++i) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        XrXirStatus status=sink->row(sink->owner,i,&source->instructions[i]);
+        status=sink->row(sink->owner,i,&source->instructions[i]);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -277,7 +275,7 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
     if (!source->instruction_count) return XR_XIR_OK;
     if (!xir_compile_work(work,sizeof(uint32_t)+sizeof(EffectBodyRun *))) return XR_XIR_BUDGET;
-    uint32_t column=UINT32_MAX;EffectBodyRun *run=NULL;
+    uint32_t column=UINT32_MAX;EffectBodyRun pending,*run=NULL;
     for (uint32_t i=0;i<source->instruction_count;++i) {
         const XrXirInstruction *op=&source->instructions[i];
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
@@ -286,11 +284,9 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
             if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
         }
         if (!run) {
-            XrXirStatus status=effect_body_runs_reserve(work,target);
-            if (status!=XR_XIR_OK) return status;
             if (!xir_compile_work(work,sizeof(run))) return XR_XIR_BUDGET;
-            run=&target->runs[target->run_count];
-            status=effect_body_run_seed(work,run,op,i);
+            run=&pending;
+            XrXirStatus status=effect_body_run_seed(work,run,op,i);
             if (status!=XR_XIR_OK) return status;
         } else if (run->count==1) {
             if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
@@ -341,20 +337,17 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
                 if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             }
             XrXirStatus status=effect_body_run_submit(work,source,target,run,sink);
-            if (status==XR_XIR_OK) status=effect_body_runs_reserve(work,target);
             if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(run))) status=XR_XIR_BUDGET;
-            if (status==XR_XIR_OK) { run=&target->runs[target->run_count];
+            if (status==XR_XIR_OK) { run=&pending;
                 status=effect_body_run_seed(work,run,op,i); }
             if (status!=XR_XIR_OK) return status;
         }
     }
     XrXirStatus status=effect_body_run_submit(work,source,target,run,sink);
     if (status!=XR_XIR_OK) return status;
-    /* A live semantic builder still owns its original numeric span cursor.
-     * Its independent function EOF check precedes any directory compaction. */
+    /* Semantic span boundaries are already stable. Their independent
+     * function EOF still precedes final immutable storage replacement. */
     if (sink) return XR_XIR_OK;
-    status=effect_body_short_literals_pack(work,target);
-    if (status!=XR_XIR_OK) return status;
     /* Immutable receiving retires the real construction tail. Only complete
      * initialized records move, and failure leaves the original owner intact. */
     return effect_body_runs_finish(work,target);
