@@ -164,6 +164,10 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *co
     const XrXirModule *source, const struct XrXirEffects *effects);
 XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
     const struct XrXirEffects *effects);
+/* A refresh cannot retire an active lexical reader. While pre-bottom bounds
+ * remain owned, unmatched contexts are consumed before a rebuild; subsequent
+ * failure permits cleanup only. Source retains all input storage independently.
+ * Without those bounds, a failed replacement keeps the previous owner. */
 XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
     const XrXirModule *source, const struct XrXirEffects *effects);
 XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *context,

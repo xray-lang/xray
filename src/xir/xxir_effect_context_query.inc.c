@@ -23,6 +23,7 @@ static XrXirStatus effect_context_owner_project(const XrXirCompileContext *conte
 
 static XrXirStatus effect_context_owner_refresh(const XrXirCompileContext *context,
     const XrXirModule *source, XrXirEffects *effects,EffectBodyMaterial *initial) {
+    if (effects->contexts && effects->contexts->borrows) return XR_XIR_BAD_STRUCTURE;
     if (!source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
         !source->declarations || !source->declarations->functions) return XR_XIR_OK;
     EffectContextOwner *fresh=NULL;
@@ -48,6 +49,7 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
     if (!normalized.types) normalized.types=&effect_empty_types;
     source=&normalized;
     if (!effects->contexts) return XR_XIR_OK;
+    if (effects->contexts->borrows) return XR_XIR_BAD_STRUCTURE;
     if (effects->refinement) {
         XrXirStatus bound_status=effect_refinement_match(context,source,effects->refinement);
         if (bound_status!=XR_XIR_OK) return bound_status;
@@ -58,10 +60,18 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
     XrXirStatus status=effect_terms_snapshot_match(&terms,source->types,ordinary->source_type_count);
     if (status==XR_XIR_OK) status=effect_ordinary_bodies_match(ordinary,source,&terms);
     effect_terms_free(&terms);
-    if (status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE)
-        /* Source may have advanced inside the refiner before the next outer
-         * invocation publication. Its changed view needs the original writer. */
-        return effect_context_owner_refresh(context,source,(XrXirEffects *)effects,NULL);
+    if (status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE) {
+        XrXirEffects *owner=(XrXirEffects *)effects;
+        if (owner->refinement) {
+            /* This unmatched view cannot serve the advanced Source input.
+             * Retire it before rebuilding; later failure permits cleanup only.
+             * Independent invocation owners retain their own material edges. */
+            if (!xir_compile_work(context,sizeof(owner->contexts)+2)) return XR_XIR_BUDGET;
+            EffectContextOwner *old=owner->contexts;owner->contexts=NULL;
+            effect_context_owner_free(old);
+        }
+        return effect_context_owner_refresh(context,source,owner,NULL);
+    }
     return status;
 }
 
@@ -240,8 +250,14 @@ XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *con
         !operation || effects->count!=source->function_count) return XR_XIR_BAD_STRUCTURE;
     XirEffectContextScope selection_scope={context,effects,source,types,XR_XIR_OK,
         EFFECT_CONTEXT_ADMISSION_PENDING};
-    if (!xir_compile_work(context,sizeof(selection_scope))) return XR_XIR_BUDGET;
+    EffectContextOwner *owner=effects->contexts;
+    /* The immutable callback owns this lexical borrow. Prepay its release so
+     * every callback status can unwind without allowing an overlapping refresh. */
+    if (owner->borrows==UINT32_MAX ||
+        !xir_compile_work(context,sizeof(selection_scope)+2*sizeof(owner->borrows)+2)) return XR_XIR_BUDGET;
+    ++owner->borrows;
     XrXirStatus status=operation(data,&selection_scope);
+    --owner->borrows;
     return selection_scope.status!=XR_XIR_OK ? selection_scope.status : status;
 }
 

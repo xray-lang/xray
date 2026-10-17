@@ -4475,6 +4475,7 @@ include(xir/callable_root_source.cmake)
 include(xir/source_copy_refinement.cmake)
 include(xir/invocation_zero_inputs.cmake)
 include(xir/effect_term_scratch.cmake)
+include(xir/refinement_context_lifetime.cmake)
 
 include(xir/program_root_permissions.cmake)
 

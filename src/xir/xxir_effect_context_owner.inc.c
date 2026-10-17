@@ -15,6 +15,7 @@ struct EffectContextOwner {
     EffectContextForest *forest;
     EffectInvocationDeclaredBounds *declared;
     EffectRefinementBounds *refinement;
+    uint32_t borrows;
 };
 
 static void effect_context_owner_free(EffectContextOwner *owner) {
