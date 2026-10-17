@@ -12,6 +12,8 @@
  */
 #include "xir/xxir_call_view_internal.h"
 #include "xir/xxir_call_internal.h"
+#include "xir/xxir_array.h"
+#include "xir/xxir_value_internal.h"
 #include "xir/xxir_compile_domain.h"
 #include "xir/xxir_type_arena.h"
 #include <stdio.h>
