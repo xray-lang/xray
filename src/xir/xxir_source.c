@@ -331,20 +331,8 @@ static bool source_module_fail(SourceContext *ctx, AstNode *node, XrModuleStatus
         status == XR_MODULE_NOT_FOUND ? XR_XIR_UNRESOLVED : XR_XIR_BAD_STRUCTURE;
     return source_fail(ctx, node, mapped, message);
 }
-static void *source_alloc(SourceContext *ctx, size_t count, size_t size) {
-    if (ctx->diagnostic.status != XR_XIR_OK) return NULL;
-    if (!size || count > (SIZE_MAX - sizeof(SourceMemory)) / size) {
-        source_fail(ctx, NULL, XR_XIR_BUDGET, "source metadata budget exhausted"); return NULL;
-    }
-    size_t bytes = sizeof(SourceMemory) + count * size;
-    XrXirStatus status = XR_XIR_OK;
-    SourceMemory *memory = xir_compile_calloc(&ctx->compile, 1, bytes, &status);
-    if (!memory) { source_fail(ctx, NULL, status, "source allocation failed"); return NULL; }
-    memory->next = ctx->memory; memory->previous = &ctx->memory;
-    if (ctx->memory) ctx->memory->previous = &memory->next;
-    ctx->memory = memory;
-    return memory + 1;
-}
+#include "xxir_source_memory.inc.c"
+
 static void source_release_private(void *pointer) {
     SourceMemory *memory=(SourceMemory *)pointer-1;
     *memory->previous=memory->next;

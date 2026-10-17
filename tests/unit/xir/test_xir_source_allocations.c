@@ -512,6 +512,7 @@ static void method_promise_allocations(void) {
 #include "xir_source_region_output_cases.h"
 #include "xir_query_coalloc_cases.h"
 #include "xir_call_storage_cases.h"
+#include "xir_source_compact_receiving_cases.h"
 static void source_root_allocations(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
     XrXirSourceRequest request = {NULL, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
@@ -584,6 +585,7 @@ static void allocation_effect_observer_control(void) {
 }
 int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--private-storage-control")) {
+        source_compact_receiving_cases();
         source_call_storage_cases();source_region_output_cases();source_plan_context_cases();
         source_plan_conversion_budget_cases();
         CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);

@@ -15,7 +15,7 @@ static const void *source_storage_compact(SourceContext *ctx, const void *array,
     if (count>*capacity || !count || !array) {
         source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source query capacity is inconsistent");return NULL;
     }
-    void *compact=source_alloc(ctx,count,size);
+    void *compact=source_reserve(ctx,count,size);
     if (!compact || !source_copy_bytes(ctx,NULL,compact,array,(size_t)count*size)) return NULL;
     source_vector_retire(ctx,array);*capacity=count;return compact;
 }
