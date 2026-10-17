@@ -17,6 +17,7 @@
 #include "../../xir/xxir_types.h"
 #include "../../xir/xxir_value_internal.h"
 #include "../../xir/xxir_value_observe_internal.h"
+#include <string.h>
 static XrXirValueAdmission value_admission(const XrXirValue *value,XrXirDomain *domain) {
     return (XrXirValueAdmission){.arena=xr_xir_value_arena(value),.domain=domain,.work=65536,.scratch_bytes=65536};
 }
@@ -105,4 +106,32 @@ XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *view,uint64_t ind
     }
     if (status==XR_XIR_VALUE_OK) *info=child;
     return status;
+}
+
+/* A field name selects only a member authorized by this exact stopped frame.
+ * The owned child carries no selector or write authority for later requests. */
+XR_FUNC XrXirValueStatus xdap_value_member(const XdapValueView *view,const char *name,
+    size_t length,XrXirValue *output) {
+    if (!view || !view->value || !name || !length || !output || output->type || output->reserved ||
+        output->payload || !xr_xir_domain_current(view->domain) || !xr_xir_value_valid(view->value))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirValue *value=view->value;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(xr_xir_value_arena(value));
+    const XrXirNominalIdentity *identity=value_nominal(value,types);
+    if (!identity) return XR_XIR_VALUE_UNSUPPORTED;
+    for (uint32_t f=0;f<identity->field_count;++f) {
+        if (!xr_xir_domain_work(view->domain,1)) return XR_XIR_VALUE_LIMIT;
+        bool allowed=false;
+        XrXirValueStatus status=xr_xir_vm_debug_snapshot_member(view->snapshot,view->frame,value,f,&allowed);
+        if (status!=XR_XIR_VALUE_OK) return status;
+        if (!allowed) continue;
+        const XrXirLiteral *candidate=&identity->fields[f].name;
+        if (!xr_xir_domain_work(view->domain,(uint64_t)candidate->length+1)) return XR_XIR_VALUE_LIMIT;
+        if (candidate->length!=length || memcmp(candidate->bytes,name,length)) continue;
+        XrXirValueAdmission admission=value_admission(value,view->domain);
+        XrXirValuePathStep selector={XR_XIR_PATH_FIELD,(XrXirType)value->type,f};XrXirFaultDetail fault={0};
+        return xr_xir_type_is_class(types,(XrXirType)value->type) ? xr_xir_class_get(value,f,&admission,output):
+            xir_value_observe_child(value,&selector,&admission,output,&fault);
+    }
+    return XR_XIR_VALUE_UNSUPPORTED;
 }

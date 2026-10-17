@@ -144,6 +144,9 @@ static size_t evaluate_fault(size_t fail) {
 #include "test_evaluate_data.inc.c"
 #include "test_evaluate_intrinsic.inc.c"
 #include "test_evaluate_visibility.inc.c"
+#include "test_evaluate_members.inc.c"
+#include "test_evaluate_member_consumers.inc.c"
+#include "test_evaluate_member_fault.inc.c"
 #ifndef XDAP_EVALUATE_MAIN
 #define XDAP_EVALUATE_MAIN main
 #endif
@@ -153,7 +156,10 @@ int XDAP_EVALUATE_MAIN(int argc,char **argv) {
     bool visibility_resources=argc==2 && !strcmp(argv[1],"--visibility-resources");
     bool visibility=visibility_resources || (argc==2 && !strcmp(argv[1],"--visibility"));
     bool managed_resources=argc==2 && !strcmp(argv[1],"--managed-resources");
-    bool managed=managed_resources || (argc==2 && !strcmp(argv[1],"--managed"));CHECK(argc==1 || resources || managed || visibility || visibility_source_resources);
+    bool member_resources=argc==2 && !strcmp(argv[1],"--members-resources");
+    bool members=member_resources || (argc==2 && !strcmp(argv[1],"--members"));
+    bool managed=managed_resources || (argc==2 && !strcmp(argv[1],"--managed"));CHECK(argc==1 || resources || managed || members || visibility || visibility_source_resources);
+    if (members) { evaluate_members();evaluate_member_predicates();evaluate_member_consumers();evaluate_member_escape();evaluate_member_failures(member_resources);return 0; }
     if (visibility_source_resources) { evaluate_visibility_source_failures(true);return 0; }
     if (visibility) { evaluate_visibility(visibility_resources);evaluate_visibility_source_failures(false);return 0; }
     if (managed) { evaluate_data();evaluate_data_failures(managed_resources);puts("Source data expressions, exact bits/NUL/nested Nullable and producer disposal PASS");return 0; }

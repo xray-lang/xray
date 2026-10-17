@@ -13,10 +13,16 @@
 #include "../../frontend/parser/xast_walk.h"
 #include "../../shared/xnative_declaration.h"
 #include <string.h>
-typedef struct ExpressionBinding { const char *name;size_t length;XrXirValue value; } ExpressionBinding;
+typedef struct ExpressionBinding { const char *name;size_t length;XrXirValue value;bool owned_name; } ExpressionBinding;
+typedef struct ExpressionToken { size_t offset,length;int line,column;XrTokenType kind; } ExpressionToken;
+typedef struct ExpressionProjection { const AstNode *node;size_t begin,end;uint32_t binding; } ExpressionProjection;
 typedef struct ExpressionState {
     const XdapExpressionRequest *request;
     ExpressionBinding bindings[128];
+    ExpressionProjection projections[128];
+    ExpressionToken *tokens;
+    uint32_t token_count,token_capacity,projection_count;
+    XrXirDomain *member_domain;
     uint32_t count,depth,intrinsic_calls;
     XrXirStatus status;
     bool runtime;
@@ -25,23 +31,17 @@ static XrXirStatus expression_value_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK ? XR_XIR_OK : status==XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_BUDGET : XR_XIR_BAD_TYPE;
 }
-static bool expression_binding(ExpressionState *state,const char *name) {
+static bool expression_name_read(ExpressionState *state,const char *name,ExpressionBinding *output) {
     const XdapLexicalView *view=state->request->lexical;size_t length=strlen(name);
-    for (uint32_t i=0;i<state->count;++i) {
-        if (xr_compile_resources_work(view->launch->resources,length+1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
-        if (state->bindings[i].length==length && !memcmp(state->bindings[i].name,name,length)) return true;
-    }
     for (uint32_t b=view->environment;b;b=view->function->bindings[b-1].parent) {
-        if (xr_compile_resources_work(view->launch->resources,length+1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
+        if (xr_compile_resources_work(view->launch->resources,length+1)!=XR_COMPILE_RESOURCE_OK) {
+            state->status=XR_XIR_BUDGET;return false;
+        }
         const XrXirSourceDebugBinding *binding=&view->function->bindings[b-1];
         const char *candidate=view->source->declarations[binding->declaration-1].name;
         if (strcmp(candidate,name)) continue;
-        if (state->count==128) { state->status=XR_XIR_BUDGET;return false; }
-        ExpressionBinding fresh={0};
-        state->status=expression_value_status(xdap_lexical_read(view,b,&fresh.value,&fresh.name,&fresh.length));
-        if (state->status!=XR_XIR_OK) return false;
-        if (fresh.value.type!=XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType)fresh.value.type)) state->runtime=true;
-        state->bindings[state->count++]=fresh;return true;
+        state->status=expression_value_status(xdap_lexical_read(view,b,&output->value,&output->name,&output->length));
+        return state->status==XR_XIR_OK;
     }
     const XrXirSourceDebugView *debug=xr_xir_compile_source_product_debug(view->launch->source);
     if (!debug) { state->status=XR_XIR_BAD_STRUCTURE;return false; }
@@ -49,15 +49,25 @@ static bool expression_binding(ExpressionState *state,const char *name) {
         ExpressionBinding fresh={0};XrXirValueStatus read=xdap_global_read(view,g,&fresh.value,&fresh.name,&fresh.length);
         if (read==XR_XIR_VALUE_BAD_ARGUMENT || read==XR_XIR_VALUE_UNSUPPORTED) continue;
         state->status=expression_value_status(read);if (state->status!=XR_XIR_OK) return false;
-        if (fresh.length==length && !memcmp(fresh.name,name,length)) {
-            if (state->count==128) { xr_xir_value_drop(&fresh.value);state->status=XR_XIR_BUDGET;return false; }
-            if (fresh.value.type!=XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType)fresh.value.type)) state->runtime=true;
-            state->bindings[state->count++]=fresh;return true;
-        }
+        if (fresh.length==length && !memcmp(fresh.name,name,length)) { *output=fresh;return true; }
         xr_xir_value_drop(&fresh.value);
     }
     state->status=XR_XIR_UNRESOLVED;return false;
 }
+static bool expression_binding(ExpressionState *state,const char *name) {
+    const XdapLexicalView *view=state->request->lexical;size_t length=strlen(name);
+    for (uint32_t i=0;i<state->count;++i) {
+        if (xr_compile_resources_work(view->launch->resources,length+1)!=XR_COMPILE_RESOURCE_OK) {
+            state->status=XR_XIR_BUDGET;return false;
+        }
+        if (state->bindings[i].length==length && !memcmp(state->bindings[i].name,name,length)) return true;
+    }
+    if (state->count==128) { state->status=XR_XIR_BUDGET;return false; }
+    ExpressionBinding fresh={0};if (!expression_name_read(state,name,&fresh)) return false;
+    if (fresh.value.type!=XR_XIR_BOOL && !xr_xir_type_is_integer((XrXirType)fresh.value.type)) state->runtime=true;
+    state->bindings[state->count++]=fresh;return true;
+}
+#include "xdap_expression_members.inc.c"
 static bool expression_native_work(void *context,uint64_t units) {
     return xr_compile_resources_work(context,units)==XR_COMPILE_RESOURCE_OK;
 }
@@ -113,6 +123,10 @@ static bool expression_visit(AstNode *node,void *context) {
     if (state->depth==128) { state->status=XR_XIR_BUDGET;return false; }
     if (xr_compile_resources_work(state->request->lexical->launch->resources,1)!=XR_COMPILE_RESOURCE_OK) { state->status=XR_XIR_BUDGET;return false; }
     if (node->type==AST_VARIABLE) return expression_binding(state,node->as.variable.name);
+    if (node->type==AST_MEMBER_ACCESS) {
+        if (expression_member_project(state,node)) return true;
+        if (state->status!=XR_XIR_OK) return false;
+    }
     XrCoreBuiltinId intrinsic=XR_CORE_BUILTIN_NONE;
     if (node->type==AST_CALL_EXPR && !expression_call_allowed(node,state->request->lexical->launch->resources,&state->status,&intrinsic)) return false;
     if (intrinsic!=XR_CORE_BUILTIN_NONE) {
@@ -248,12 +262,26 @@ XR_FUNC XrXirStatus xdap_expression_evaluate(const XdapExpressionRequest *reques
     AstNode *expression=state.status==XR_XIR_OK ? program->as.program.statements[0] : NULL;
     if (state.status==XR_XIR_OK && expression_visit(expression,&state)) {
         while (expression->type==AST_GROUPING) expression=expression->as.grouping;
-        bool direct=expression->type==AST_VARIABLE && (!request->expected ||
-            (state.bindings[0].value.type==request->expected->type &&
-             xr_xir_value_arena(&state.bindings[0].value)==xr_xir_value_arena(request->expected)));
-        if (direct) { *output=state.bindings[0].value;state.bindings[0].value=(XrXirValue){0}; }
-        else state.status=expression_compiled(&state,output);
+        uint32_t direct=expression->type==AST_VARIABLE ? 0 : UINT32_MAX;
+        for (uint32_t i=0;i<state.projection_count;++i)
+            if (state.projections[i].node==expression) direct=state.projections[i].binding;
+        if (direct!=UINT32_MAX && request->expected && (state.bindings[direct].value.type!=request->expected->type ||
+            xr_xir_value_arena(&state.bindings[direct].value)!=xr_xir_value_arena(request->expected))) direct=UINT32_MAX;
+        if (direct!=UINT32_MAX) { *output=state.bindings[direct].value;state.bindings[direct].value=(XrXirValue){0}; }
+        else {
+            XdapJsonWriter rewritten=xdap_json_writer(request->lexical->launch->resources,request->source_limit);
+            if (state.projection_count) {
+                state.status=expression_members_rewrite(&state,&rewritten);
+                if (state.status==XR_XIR_OK) { owned.text=rewritten.bytes;owned.length=rewritten.length; }
+            }
+            if (state.status==XR_XIR_OK) state.status=expression_compiled(&state,output);
+            xdap_json_writer_free(&rewritten);
+        }
     }
-    for (uint32_t i=0;i<state.count;++i) xr_xir_value_drop(&state.bindings[i].value);
+    for (uint32_t i=0;i<state.count;++i) {
+        xr_xir_value_drop(&state.bindings[i].value);
+        if (state.bindings[i].owned_name) xr_compile_resources_free((void *)state.bindings[i].name);
+    }
+    xr_xir_domain_drop(state.member_domain);xr_compile_resources_free(state.tokens);
     xr_program_destroy(program);xr_compile_resources_free(text);return state.status;
 }

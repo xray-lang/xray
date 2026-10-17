@@ -20,6 +20,9 @@ typedef struct XdapExpressionRequest {
 /* Identifiers read owned data. Ordinary Source inference and closed proof
  * feed finite scalar CTFE or an isolated, bounded data Program. Structural
  * inputs are rebuilt from actual owned observations; the target never runs.
+ * Consecutive nominal fields require the exact frame member permission. Their
+ * owned leaves become collision-free inputs to Source, without foreign nominal
+ * declarations, eager indexing/unwraps or derived write authority.
  * Readonly Core calls retain their actual Source intrinsic identity; an
  * original same-name binding never becomes a debugger-provided builtin.
  * Unsupported expressions fail with the empty output unchanged. */

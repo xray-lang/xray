@@ -600,6 +600,7 @@ add_executable(test_dap_watches test_watches.c ${PROJECT_SOURCE_DIR}/src/base/xj
 target_link_libraries(test_dap_watches PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_watches PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
     XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_MEMBER_FIXTURE="${XR_DAP_FIXTURE_DIR}/member_expressions.xr"
     XR_DAP_EXPRESSION_FIXTURE="${XR_DAP_FIXTURE_DIR}/expression_data.xr")
 if(MSVC)
     target_compile_options(test_dap_watches PRIVATE /W4 /WX)
@@ -614,6 +615,7 @@ add_executable(test_dap_evaluate test_evaluate.c ${PROJECT_SOURCE_DIR}/src/base/
 target_link_libraries(test_dap_evaluate PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_evaluate PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
     XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr" XR_DAP_CALL_FIXTURE="${XR_DAP_FIXTURE_DIR}/call_stack.xr"
+    XR_DAP_MEMBER_FIXTURE="${XR_DAP_FIXTURE_DIR}/member_expressions.xr"
     XR_DAP_EXPRESSION_FIXTURE="${XR_DAP_FIXTURE_DIR}/expression_data.xr")
 if(MSVC)
     target_compile_options(test_dap_evaluate PRIVATE /W4 /WX)
@@ -623,6 +625,10 @@ endif()
 add_test(NAME test_dap_evaluate COMMAND test_dap_evaluate)
 add_test(NAME test_dap_evaluate_resources COMMAND test_dap_evaluate --resources)
 add_test(NAME test_dap_evaluate_data COMMAND test_dap_evaluate --managed)
+add_test(NAME test_dap_evaluate_members COMMAND test_dap_evaluate --members)
+add_test(NAME test_dap_evaluate_members_resources COMMAND test_dap_evaluate --members-resources)
+set_tests_properties(test_dap_evaluate_members_resources PROPERTIES TIMEOUT 1800 COST 180 LABELS "dap;evaluate;source;ownership;resources;fault-injection;nominal" RUN_SERIAL TRUE)
+set_tests_properties(test_dap_evaluate_members PROPERTIES TIMEOUT 120 LABELS "dap;evaluate;source;ownership;nominal")
 add_test(NAME test_dap_evaluate_data_resources COMMAND test_dap_evaluate --managed-resources)
 set_tests_properties(test_dap_evaluate_data_resources PROPERTIES TIMEOUT 120 LABELS "dap;evaluate;source;ownership;data;resources;fault-injection")
 set_tests_properties(test_dap_evaluate_data PROPERTIES TIMEOUT 120 LABELS "dap;evaluate;source;ownership;data")

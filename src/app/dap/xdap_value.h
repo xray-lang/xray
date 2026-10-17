@@ -32,6 +32,9 @@ typedef struct XdapTypeText { char bytes[XDAP_TYPE_TEXT_BYTES];size_t length; } 
 XR_FUNC XrXirValueStatus xdap_value_shape(const XdapValueView *,XdapValueShape *);
 XR_FUNC XrXirValueStatus xdap_value_child(const XdapValueView *,uint64_t,
     XrXirValue *,XdapValueChildInfo *);
+/* Named nominal fields require the authentic frame member permission.
+ * Missing and hidden members publish no value or write selector. */
+XR_FUNC XrXirValueStatus xdap_value_member(const XdapValueView *,const char *,size_t,XrXirValue *);
 /* Static display from retained type metadata; failure preserves output. Hidden
  * nominal names are redacted with the authentic frame's TYPE permission. */
 XR_FUNC XrXirValueStatus xdap_value_type_text(const XdapValueView *,XdapTypeText *);
