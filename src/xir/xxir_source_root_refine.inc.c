@@ -64,17 +64,11 @@ static bool source_root_reference(SourceContext *ctx, uint32_t f, uint32_t i,
     const XrXirRootEffects *facts = xr_xir_effects_root(effects,target);
     XrXirRootEffects contextual={0};
     XrXirDeclarations declarations;XrXirModule view=source_module_view(ctx,&declarations);
-    XrXirStatus status=xir_effects_context_refresh(&ctx->compile,&view,effects);
-    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"context generation rebuild failed");
-    if (xir_effects_context_available(&ctx->compile,effects) &&
-        (!ctx->has_generics || !ctx->generics[f].parameter_count)) {
-        uint32_t mask=0;
-        status=xir_effects_reference_root(&ctx->compile,effects,&view,f,i,&mask);
-        if (status==XR_XIR_OK) {
-            contextual=(XrXirRootEffects){!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
-                !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)};facts=&contextual;
-        } else return source_fail(ctx,NULL,status,"authentic reference context is unavailable");
-    }
+    uint32_t mask=0;
+    XrXirStatus status=xir_effects_source_reference_root(&ctx->compile,effects,&view,f,i,&mask);
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"authentic reference context is unavailable");
+    contextual=(XrXirRootEffects){!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
+        !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)};facts=&contextual;
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types,op->type);
     if (!facts || !signature) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"inferred reference lost its authentic target");
     XrXirTypeNode refined = *signature;

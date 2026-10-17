@@ -63,8 +63,9 @@ typedef struct LifetimeOperation {
     XrXirInstruction *operations;
     EffectBodyMaterial *retained;
     size_t fail,sites;
+    uint64_t combined,strict,bounds;
     uint32_t calls;
-    bool refined,require_retirement,injected,retired,certificate_intact,keep;
+    bool refined,compound,require_retirement,injected,retired,certificate_intact,keep;
 } LifetimeOperation;
 typedef struct LifetimeBorrow {
     LifetimeOperation *operation;
@@ -75,6 +76,9 @@ static XrXirStatus lifetime_borrowed_refresh(void *opaque,XirEffectContextScope 
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(op->context);
     CHECK(xir_effects_context_refresh(op->context,&op->source,borrow->effects)==XR_XIR_BAD_STRUCTURE);
     CHECK(effect_context_owner_refresh(op->context,&op->source,borrow->effects,NULL)==XR_XIR_BAD_STRUCTURE);
+    uint32_t mask=UINT32_MAX;
+    CHECK(xir_effects_source_reference_root(op->context,borrow->effects,&op->source,
+        op->fixture->function,op->fixture->instruction,&mask)==XR_XIR_BAD_STRUCTURE && mask==UINT32_MAX);
     CHECK(rp_attempts==attempts && rp_stats(op->context).work==before.work);
     return XR_XIR_BAD_STRUCTURE;
 }
@@ -87,7 +91,36 @@ static void lifetime_controls(LifetimeOperation *op,XrXirEffects *effects) {
     attempts=rp_attempts;XrCompileResourceStats before=rp_stats(&foreign);
     CHECK(xir_effects_context_refresh(&foreign,&op->source,effects)==XR_XIR_BAD_STRUCTURE &&
         rp_attempts==attempts && rp_stats(&foreign).work==before.work);
+    uint32_t rejected=UINT32_MAX;
+    CHECK(xir_effects_source_reference_root(&foreign,effects,&op->source,op->fixture->function,
+        op->fixture->instruction,&rejected)==XR_XIR_BAD_STRUCTURE && rejected==UINT32_MAX &&
+        rp_attempts==attempts && rp_stats(&foreign).work==before.work);
     rp_owner_free(&foreign,live);
+    XrXirFunction functions[32];XrXirInstruction instructions[128];
+    memcpy(functions,op->source.functions,op->source.function_count*sizeof(*functions));
+    uint32_t count=functions[op->fixture->function].instruction_count;
+    memcpy(instructions,op->operations,count*sizeof(*instructions));
+    instructions[op->fixture->instruction].type=op->fixture->narrow;
+    functions[op->fixture->function].instructions=instructions;
+    XrXirModule stale=op->source;stale.functions=functions;
+    XrXirProvenance wrong_kind={.kind=XR_XIR_EVIDENCE_INSTANCE};
+    XrXirDeclarations missing=*stale.declarations;missing.functions=NULL;
+    for (uint32_t kind=0;kind<3;++kind) {
+        XrXirModule wrong=stale;
+        if (!kind) wrong.provenance=NULL;
+        else if (kind==1) wrong.provenance=&wrong_kind;
+        else wrong.declarations=&missing;
+        size_t header_attempts=rp_attempts;XrCompileResourceStats paid=rp_stats(op->context);
+        XrXirStatus status=xir_effects_context_refresh(op->context,&wrong,effects);
+        if (status!=XR_XIR_BAD_STRUCTURE) fprintf(stderr,"WRITER_HEADER mode%u kind%u status%u context_available%u\n",
+            op->refined,kind,status,(unsigned)xir_effects_context_available(op->context,effects));
+        CHECK(status==XR_XIR_BAD_STRUCTURE && xir_effects_context_available(op->context,effects) &&
+            rp_attempts==header_attempts && rp_stats(op->context).work==paid.work);
+        uint32_t mask=UINT32_MAX;
+        CHECK(xir_effects_source_reference_root(op->context,effects,&wrong,op->fixture->function,
+            op->fixture->instruction,&mask)==XR_XIR_BAD_STRUCTURE && mask==UINT32_MAX &&
+            rp_attempts==header_attempts && rp_stats(op->context).work==paid.work);
+    }
     if (!op->refined) return;
     XrXirFunctionIdentity identities[32];
     memcpy(identities,op->source.declarations->functions,op->source.function_count*sizeof(*identities));
@@ -96,6 +129,31 @@ static void lifetime_controls(LifetimeOperation *op,XrXirEffects *effects) {
     identities[op->fixture->function].cleanup_owner=op->fixture->function+1;
     CHECK(xir_effects_context_refresh(op->context,&wrong,effects)==XR_XIR_BAD_STRUCTURE &&
         xir_effects_context_available(op->context,effects));
+}
+
+/* The generic reference API remains the independent strict-read oracle. */
+static XrXirStatus lifetime_source_read(LifetimeOperation *op,XrXirEffects *effects,uint32_t *mask) {
+    return xir_effects_source_reference_root(op->context,effects,&op->source,
+        op->fixture->function,op->fixture->instruction,mask);
+}
+static XrXirStatus lifetime_reference_cost(LifetimeOperation *op,XrXirEffects *effects) {
+    uint32_t mask=UINT32_MAX;uint64_t before=rp_stats(op->context).work;
+    XrXirStatus status=lifetime_source_read(op,effects,&mask);
+    uint64_t combined=rp_stats(op->context).work-before;
+    if (status!=XR_XIR_OK) return status;CHECK(!mask);
+    before=rp_stats(op->context).work;
+    status=xir_effects_reference_root(op->context,effects,&op->source,
+        op->fixture->function,op->fixture->instruction,&mask);
+    uint64_t strict=rp_stats(op->context).work-before;
+    if (status!=XR_XIR_OK) return status;CHECK(!mask);
+    before=rp_stats(op->context).work;
+    if (effects->refinement) status=effect_refinement_match(op->context,&op->source,effects->refinement);
+    uint64_t bounds=rp_stats(op->context).work-before;
+    if (status!=XR_XIR_OK) return status;
+    /* One complete admission plus bounds leaves a fixed scope/output allowance. */
+    if (combined>strict+bounds+128) fprintf(stderr,"REFERENCE_COST refined%u combined%llu strict%llu bounds%llu allowance128\n",
+        op->refined,(unsigned long long)combined,(unsigned long long)strict,(unsigned long long)bounds);
+    CHECK(combined<=strict+bounds+128);op->combined=combined;op->strict=strict;op->bounds=bounds;return XR_XIR_OK;
 }
 
 static XrXirStatus lifetime_refresh(LifetimeOperation *op,XrXirEffects *effects) {
@@ -118,7 +176,10 @@ static XrXirStatus lifetime_refresh(LifetimeOperation *op,XrXirEffects *effects)
     CHECK(effect_body_source_match(op->context,certificate->body,&op->source)==XR_XIR_BAD_STRUCTURE);
     size_t before=rp_attempts;rp_injected=false;
     if (op->fail!=SIZE_MAX) rp_fail_at=before+op->fail;
-    XrXirStatus status=xir_effects_context_refresh(op->context,&op->source,effects);
+    uint32_t mask=UINT32_MAX;
+    XrXirStatus status=op->compound?lifetime_source_read(op,effects,&mask):
+        xir_effects_context_refresh(op->context,&op->source,effects);
+    if (op->compound) CHECK(status==XR_XIR_OK?!mask:mask==UINT32_MAX);
     op->sites=rp_attempts-before;op->injected=rp_injected;rp_fail_at=SIZE_MAX;
     op->retired=!effects->contexts;
     op->certificate_intact=effects->invocations==certificate && !memcmp(certificate,&saved,sizeof(saved));
@@ -127,12 +188,7 @@ static XrXirStatus lifetime_refresh(LifetimeOperation *op,XrXirEffects *effects)
     CHECK(op->certificate_intact);
     if (op->require_retirement) CHECK(status==XR_XIR_OUT_OF_MEMORY && op->retired &&
         !xir_effects_context_available(op->context,effects));
-    if (status==XR_XIR_OK) {
-        uint32_t mask=UINT32_MAX;
-        status=xir_effects_reference_root(op->context,effects,&op->source,fixture->function,fixture->instruction,&mask);
-        if (status==XR_XIR_OK) CHECK(!mask);
-        else if (status!=XR_XIR_BUDGET) fprintf(stderr,"LIFETIME_QUERY status%u mask%u\n",status,mask);
-    }
+    if (status==XR_XIR_OK) status=lifetime_reference_cost(op,effects);
     return status;
 }
 static XrXirStatus lifetime_refine(void *opaque,const XrXirEffects *effects,bool *changed) {
@@ -149,16 +205,16 @@ static XrXirStatus lifetime_operation(const XrXirCompileContext *context,const L
     XrXirInstruction *instructions=status==XR_XIR_OK?xir_compile_copy(context,source->functions[fixture->function].instructions,
         (size_t)count*sizeof(*instructions),&status):NULL;
     LifetimeOperation op={.context=context,.fixture=fixture,.source=*source,.operations=instructions,
-        .fail=fail,.refined=mode==0,.require_retirement=require_retirement,.keep=record && record->keep};
+        .fail=fail,.refined=mode!=1,.compound=mode==2,.require_retirement=require_retirement,.keep=record && record->keep};
     if (status==XR_XIR_OK) {
         op.source.functions=functions;functions[fixture->function].instructions=instructions;
         instructions[fixture->instruction].type=fixture->wide;
         XrXirEffects *effects=NULL;XrXirRootRefiner refiner={&op,lifetime_refine};
-        status=mode==0?xr_xir_compile_effects_refine_verified(context,&op.source,&refiner,&effects):
+        status=mode!=1?xr_xir_compile_effects_refine_verified(context,&op.source,&refiner,&effects):
             xr_xir_compile_effects_infer_verified(context,&op.source,&effects);
         if (status==XR_XIR_OK && mode==1) status=lifetime_refresh(&op,effects);
         if (status==XR_XIR_OK) CHECK(effects && op.certificate_intact);
-        else if (mode==0) CHECK(!effects);
+        else if (mode!=1) CHECK(!effects);
         xr_xir_compile_effects_free(effects);
     }
     xr_compile_resources_free(instructions);xr_compile_resources_free(functions);if (record) *record=op;return status;
@@ -172,6 +228,8 @@ static size_t lifetime_resources(const LifetimeFixture *fixture,uint32_t mode,bo
     CHECK(status==XR_XIR_OK && census.sites);XrCompileResourceStats required=rp_stats(&context);
     printf("Lifetime mode%u refresh_sites=%zu work=%llu peak=%llu\n",mode,census.sites,
         (unsigned long long)required.work,(unsigned long long)required.peak_bytes);
+    printf("Reference mode%u combined=%llu strict=%llu bounds=%llu allowance128\n",mode,
+        (unsigned long long)census.combined,(unsigned long long)census.strict,(unsigned long long)census.bounds);
     rp_owner_free(&context,baseline);rp_balanced(physical);
     for (size_t i=0;i<census.sites;++i) {
         if (!all && i && i+1!=census.sites) continue;
@@ -198,7 +256,7 @@ static size_t lifetime_resources(const LifetimeFixture *fixture,uint32_t mode,bo
 int main(int argc,char **argv) {
     bool all=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || all);
     RootParameterMark physical=rp_mark();LifetimeFixture fixture;lifetime_fixture(&fixture);
-    size_t sites=lifetime_resources(&fixture,0,all);lifetime_resources(&fixture,1,all);
+    size_t sites=lifetime_resources(&fixture,0,all);lifetime_resources(&fixture,1,all);lifetime_resources(&fixture,2,all);
     XrXirCompileContext receiver=rp_owner(rp_caps());uint64_t baseline=rp_stats(&receiver).live_bytes;
     LifetimeOperation escaped={.keep=true};
     const XrXirModule *source=xr_xir_compile_artifact_module(fixture.result.checked);

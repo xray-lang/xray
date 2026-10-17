@@ -164,7 +164,8 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *co
     const XrXirModule *source, const struct XrXirEffects *effects);
 XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
     const struct XrXirEffects *effects);
-/* A refresh cannot retire an active lexical reader. While pre-bottom bounds
+/* An existing context refresh requires the genuine TEMPLATE writer and cannot
+ * retire an active lexical reader. While pre-bottom bounds
  * remain owned, unmatched contexts are consumed before a rebuild; subsequent
  * failure permits cleanup only. Source retains all input storage independently.
  * Without those bounds, a failed replacement keeps the previous owner. */
@@ -186,6 +187,11 @@ XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *con
     XirEffectContextOperation operation,void *data);
 XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
     const XirEffectContextInput *input,XirEffectContextView *output);
+/* The Source producer may advance before this call. Complete current matching
+ * and any required rebuild precede one immutable, fully admitted edge read. */
+XR_FUNC XrXirStatus xir_effects_source_reference_root(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,const XrXirModule *source,
+    uint32_t function,uint32_t instruction,uint32_t *output);
 /* The common verifier calls this with its freshly derived owner and the same
  * verified module. It consumes the real reference edge, never a target hint. */
 XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,

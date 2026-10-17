@@ -25,7 +25,8 @@ static XrXirStatus effect_context_owner_refresh(const XrXirCompileContext *conte
     const XrXirModule *source, XrXirEffects *effects,EffectBodyMaterial *initial) {
     if (effects->contexts && effects->contexts->borrows) return XR_XIR_BAD_STRUCTURE;
     if (!source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
-        !source->declarations || !source->declarations->functions) return XR_XIR_OK;
+        !source->declarations || !source->declarations->functions)
+        return effects->contexts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     EffectContextOwner *fresh=NULL;
     XrXirStatus status=effect_context_owner_build(context,source,effects->refinement,initial,&fresh);
     if (status!=XR_XIR_OK) return status;
@@ -49,7 +50,11 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
     if (!normalized.types) normalized.types=&effect_empty_types;
     source=&normalized;
     if (!effects->contexts) return XR_XIR_OK;
-    if (effects->contexts->borrows) return XR_XIR_BAD_STRUCTURE;
+    /* An existing context needs its real writer. Unsupported evidence must
+     * not turn a required rebuild into a successful no-op after retirement. */
+    if (effects->contexts->borrows || !source->provenance ||
+        source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE ||
+        !source->declarations || !source->declarations->functions) return XR_XIR_BAD_STRUCTURE;
     if (effects->refinement) {
         XrXirStatus bound_status=effect_refinement_match(context,source,effects->refinement);
         if (bound_status!=XR_XIR_OK) return bound_status;
@@ -70,7 +75,8 @@ XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *conte
             EffectContextOwner *old=owner->contexts;owner->contexts=NULL;
             effect_context_owner_free(old);
         }
-        return effect_context_owner_refresh(context,source,owner,NULL);
+        status=effect_context_owner_refresh(context,source,owner,NULL);
+        return status==XR_XIR_OK && !owner->contexts?XR_XIR_BAD_STRUCTURE:status;
     }
     return status;
 }
@@ -239,6 +245,18 @@ static XrXirStatus effect_context_scope_failure(XirEffectContextScope *scope,XrX
     return scope->status;
 }
 
+static XrXirStatus effect_context_scope_call(XirEffectContextScope *scope,
+    XirEffectContextOperation operation,void *data) {
+    EffectContextOwner *owner=scope->effects->contexts;
+    /* The immutable callback owns this lexical borrow. Prepay its release so
+     * every callback status can unwind without allowing an overlapping refresh. */
+    if (owner->borrows==UINT32_MAX ||
+        !xir_compile_work(scope->context,sizeof(*scope)+2*sizeof(owner->borrows)+2)) return XR_XIR_BUDGET;
+    ++owner->borrows;
+    XrXirStatus status=operation(data,scope);
+    --owner->borrows;
+    return scope->status!=XR_XIR_OK?scope->status:status;
+}
 /* This operation never borrows a dynamic-array element or memoizes a query.
  * Source and actual pools stay immutable for this lexical call; only private
  * derived storage may grow. A new call must repeat the complete admission. */
@@ -248,17 +266,8 @@ XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *con
     if (!xir_compile_context_valid(context) || !effects || effects->resources!=context->resources ||
         !effects->contexts || !source || !source->functions || !source->function_count ||
         !operation || effects->count!=source->function_count) return XR_XIR_BAD_STRUCTURE;
-    XirEffectContextScope selection_scope={context,effects,source,types,XR_XIR_OK,
-        EFFECT_CONTEXT_ADMISSION_PENDING};
-    EffectContextOwner *owner=effects->contexts;
-    /* The immutable callback owns this lexical borrow. Prepay its release so
-     * every callback status can unwind without allowing an overlapping refresh. */
-    if (owner->borrows==UINT32_MAX ||
-        !xir_compile_work(context,sizeof(selection_scope)+2*sizeof(owner->borrows)+2)) return XR_XIR_BUDGET;
-    ++owner->borrows;
-    XrXirStatus status=operation(data,&selection_scope);
-    --owner->borrows;
-    return selection_scope.status!=XR_XIR_OK ? selection_scope.status : status;
+    XirEffectContextScope scope={context,effects,source,types,XR_XIR_OK,EFFECT_CONTEXT_ADMISSION_PENDING};
+    return effect_context_scope_call(&scope,operation,data);
 }
 
 XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
@@ -334,6 +343,60 @@ static XrXirStatus effect_context_base_owner_origins(const XrXirCompileContext *
     if (status==XR_XIR_OK && identities[current].cleanup_owner) status=XR_XIR_BAD_STRUCTURE;
     if (status!=XR_XIR_OK) { xr_compile_resources_free(owners);return status; }
     *output=owners;*output_count=count;return XR_XIR_OK;
+}
+
+typedef struct EffectSourceReferenceRead {
+    uint32_t function,instruction;
+    uint32_t *output;
+} EffectSourceReferenceRead;
+static XrXirStatus effect_source_reference_read(void *opaque,XirEffectContextScope *scope) {
+    EffectSourceReferenceRead *read=opaque;XrXirOrigin origin={.function=read->function};
+    XrXirOrigin *owners=NULL;uint32_t owner_count=0;
+    XrXirStatus status=effect_context_base_owner_origins(scope->context,scope->source,read->function,&owners,&owner_count);
+    XirEffectContextInput input={scope->source,scope->types,&origin,read->instruction,owners,owner_count};
+    XirEffectContextView selected={0};
+    if (status==XR_XIR_OK) status=xir_effects_context_select_scoped(scope,&input,&selected);
+    xr_compile_resources_free(owners);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(scope->context,sizeof(*read->output)+1)) return XR_XIR_BUDGET;
+    *read->output=(selected.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+        (selected.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);return XR_XIR_OK;
+}
+/* Source can advance between calls, never during one complete admission and
+ * reference read. The completed local scope retains no fact for another call. */
+XR_FUNC XrXirStatus xir_effects_source_reference_root(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirModule *source,uint32_t function,uint32_t instruction,uint32_t *output) {
+    if (!output || !source || !source->functions || !xir_effects_context_matches(context,effects,source->function_count) ||
+        !effects->root || function>=source->function_count || !source->functions[function].instructions ||
+        instruction>=source->functions[function].instruction_count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&source->functions[function].instructions[instruction];
+    if (op->op!=XR_XIR_FUNCTION_REF || op->immediate<0 || (uint64_t)op->immediate>=effects->count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (effects->contexts && (effects->contexts->borrows || !source->provenance ||
+        source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !source->declarations ||
+        !source->declarations->functions)) return XR_XIR_BAD_STRUCTURE;
+    if (!effects->contexts || (source->generics && source->generics[function].parameter_count)) {
+        XrXirStatus status=xir_effects_context_refresh(context,source,effects);
+        if (status!=XR_XIR_OK) return status;
+        const XrXirRootEffects *facts=&effects->root[op->immediate];
+        if (!xir_compile_work(context,sizeof(*output)+1)) return XR_XIR_BUDGET;
+        *output=(facts->requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+            (facts->unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);return XR_XIR_OK;
+    }
+    XrXirModule normalized=*source;if (!normalized.types) normalized.types=&effect_empty_types;
+    source=&normalized;
+    XrXirStatus status=effects->refinement?effect_refinement_match(context,source,effects->refinement):XR_XIR_OK;
+    if (status!=XR_XIR_OK) return status;
+    status=effect_context_admission(context,effects,source,source->types);
+    if (status==XR_XIR_BAD_TYPE || status==XR_XIR_BAD_STRUCTURE) {
+        status=xir_effects_context_refresh(context,source,effects);
+        if (status==XR_XIR_OK) status=effect_context_admission(context,effects,source,source->types);
+    }
+    if (status!=XR_XIR_OK) return status;
+    EffectSourceReferenceRead read={function,instruction,output};
+    if (!xir_compile_work(context,sizeof(read))) return XR_XIR_BUDGET;
+    XirEffectContextScope scope={context,effects,source,source->types,XR_XIR_OK,EFFECT_CONTEXT_ADMISSION_COMPLETE};
+    return effect_context_scope_call(&scope,effect_source_reference_read,&read);
 }
 
 XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
