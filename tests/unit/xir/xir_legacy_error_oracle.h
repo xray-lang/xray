@@ -37,7 +37,7 @@ static XrXirStatus oracle_root_seed_record(const EffectRootSeedRecord *request,X
     }
     return effect_root_seed_output(request,&effects->outcomes_work.root[request->function],
         &effects->outcomes_work.root_witnesses[request->function],
-        &effects->outcomes_work.unresolved_witnesses[request->function],work);
+        &effects->outcomes_work.unresolved_witnesses[request->function],work,NULL);
 }
 static inline XrXirStatus oracle_root_seed(const XrXirModule *module,XrXirEffects *effects,
     uint32_t function,uint32_t instruction,const XrXirCompileContext *work) {
@@ -46,7 +46,7 @@ static inline XrXirStatus oracle_root_seed(const XrXirModule *module,XrXirEffect
         return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=&module->functions[function].instructions[instruction];
     XirMetadataDomain domain=xir_metadata_domain_from_module(module);
-    EffectRootSeedRecord request={&domain,op,function,instruction,XR_XIR_UNIT,NULL};
+    EffectRootSeedRecord request={&domain,op,function,instruction,XR_XIR_UNIT};
     if(op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT)
         request.callable_type=xr_xir_operand_type(&module->functions[function],(uint32_t)op->immediate);
     return oracle_root_seed_record(&request,effects,work);

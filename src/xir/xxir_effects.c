@@ -173,7 +173,6 @@ typedef struct EffectRootSeedRecord {
     const XrXirInstruction *instruction;
     uint32_t function,ordinal;
     XrXirType callable_type;
-    XirReadScratch *memory;
 } EffectRootSeedRecord;
 
 static XrXirStatus effect_invocation_primitive_frame(const XrXirCompileContext *work,

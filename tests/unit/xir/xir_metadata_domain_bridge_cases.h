@@ -63,7 +63,7 @@ static XrXirStatus conditional_metadata_roots(const XrXirCompileContext *context
         const XrXirFunction *body=&module->functions[f];
         for (uint32_t i=0;i<body->instruction_count && status==XR_XIR_OK;++i) {
             const XrXirInstruction *op=&body->instructions[i];
-            EffectRootSeedRecord record={&domain,op,f,i,XR_XIR_UNIT,NULL};
+            EffectRootSeedRecord record={&domain,op,f,i,XR_XIR_UNIT};
             if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT)
                 record.callable_type=xr_xir_operand_type(body,(uint32_t)op->immediate);
             status=oracle_root_seed(module,&raw,f,i,context);
@@ -75,7 +75,7 @@ static XrXirStatus conditional_metadata_roots(const XrXirCompileContext *context
         CHECK(ar[0].requires_root && !ar[0].unresolved && ar[1].unresolved);
         CHECK(!ar[2].requires_root && !ar[2].unresolved && ar[3].requires_root);
         XrXirInstruction invalid={.op=(XrXirOp)UINT16_MAX};
-        EffectRootSeedRecord record={&domain,&invalid,0,0,XR_XIR_UNIT,NULL};
+        EffectRootSeedRecord record={&domain,&invalid,0,0,XR_XIR_UNIT};
         CHECK(oracle_root_seed_record(&record,&metadata,context)==XR_XIR_BAD_STRUCTURE);
         record.function=4;CHECK(oracle_root_seed_record(&record,&metadata,context)==XR_XIR_BAD_STRUCTURE);
     }

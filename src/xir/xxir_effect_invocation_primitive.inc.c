@@ -54,8 +54,8 @@ static XrXirStatus effect_invocation_primitive_attempt(const XrXirCompileContext
                 if (!decls || !decls->slots || op.immediate<0 || (uint64_t)op.immediate>=decls->slot_count)
                     return XR_XIR_BAD_STRUCTURE;
             }
-            const EffectRootSeedRecord request={&body->domain,&op,function,i,XR_XIR_UNIT,memory};
-            status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
+            const EffectRootSeedRecord request={&body->domain,&op,function,i,XR_XIR_UNIT};
+            status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work,memory);
             if (status!=XR_XIR_OK) return status;
             if (op.op==XR_XIR_CALL_REQUIREMENT) { facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0}; }
         }

@@ -528,11 +528,11 @@ static XrXirStatus effect_invocation_local_run(EffectInvocationLocalRead *read,
             return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(work,sizeof(EffectRootSeedRecord))) return XR_XIR_BUDGET;
         XirReadScratch memory={.resources=work->resources};
-        EffectRootSeedRecord seed={&body->domain,op,f,run->first+offset,XR_XIR_UNIT,&memory};
+        EffectRootSeedRecord seed={&body->domain,op,f,run->first+offset,XR_XIR_UNIT};
         if (op->op==XR_XIR_SLOT_LOAD && !xir_compile_work(work,
             sizeof(output->facts)+sizeof(output->witnesses[0]))) return XR_XIR_BUDGET;
         status=effect_root_seed_output(&seed,&output->facts,&output->witnesses[0],
-            &output->witnesses[1],work);
+            &output->witnesses[1],work,&memory);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
