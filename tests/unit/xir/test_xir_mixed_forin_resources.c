@@ -55,8 +55,15 @@ int main(int argc,char **argv) {
     CHECK(begin<end && end<=expected && normal.sites==expected);
     for(unsigned site=begin;site<end;++site) {
         printf("For-in FI start backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u site=%u of%u\n",spec.backend,spec.scenario,spec.mode,spec.prefix,spec.close,spec.drop,site,expected);fflush(stdout);
-        ForinResourceResult failed=forin_resource_operation(&spec,site,NULL,0);CHECK(!failed.complete && failed.hit && failed.fault==XR_XIR_CALL_OOM);
+        ForinResourceResult failed=forin_resource_operation(&spec,site,NULL,0);
+        printf("For-in FI result backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u site=%u sites=%zu hit=%u fault=%u faultOwner=%u faultPhase=%u faultObserved=%u publishedMask=%u unaffected0=%u unaffected1=%u value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu physical0/0\n",
+            spec.backend,spec.scenario,spec.mode,spec.prefix,spec.close,spec.drop,site,failed.sites,(unsigned)failed.hit,failed.fault,failed.fault_owner,failed.fault_phase,failed.fault_observed,failed.published_mask,(unsigned)failed.unaffected[0],(unsigned)failed.unaffected[1],(unsigned long long)failed.cost[0].requested_bytes,(unsigned long long)failed.cost[0].requested_call_bytes,(unsigned long long)failed.cost[0].work,(unsigned long long)failed.cost[1].requested_bytes,(unsigned long long)failed.cost[1].requested_call_bytes,(unsigned long long)failed.cost[1].work);fflush(stdout);
+        CHECK(!failed.complete && failed.hit && failed.fault==XR_XIR_CALL_OOM);
         CHECK(failed.fault_owner<2 && failed.unaffected[1-failed.fault_owner]);
+        unsigned healthy=1-failed.fault_owner;
+        CHECK(failed.cost[healthy].requested_bytes==normal.cost[healthy].requested_bytes);
+        CHECK(failed.cost[healthy].requested_call_bytes==normal.cost[healthy].requested_call_bytes);
+        CHECK(failed.cost[healthy].work==normal.cost[healthy].work);
     }
     printf("For-in completeFI backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u range=%u:%u of%u everyOriginalOrdinal typedOOM physical0/0\n",spec.backend,spec.scenario,spec.mode,spec.prefix,spec.close,spec.drop,begin,end,expected);
     return 0;
