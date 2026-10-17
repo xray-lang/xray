@@ -118,13 +118,27 @@ struct EffectFinalFunctions {
     XrCompileResources *resources;
     uint32_t count,capacity,term_count;
     EffectFinalFunction *functions;
-    XrXirRootEffects *facts;
     XrXirRootEffectWitness *witnesses;
 };
 
 /* The complete semantic inventory survives construction without a solver,
  * queue, compile callback, mutable receiver or edge lookup workspace. */
+#include "xxir_effect_role_types.inc.c"
+
+/* Value and initial-key coordinates share a finite positive cause order.
+ * The complete relation remains in the sole owning Final. */
+typedef struct EffectCaptureFact {
+    uint32_t node,value,word,bit;
+    uint64_t rank;
+} EffectCaptureFact;
+typedef struct EffectCaptureProof {
+    EffectCaptureFact *facts;
+    uint32_t count,capacity;
+} EffectCaptureProof;
+
 typedef struct EffectInvocationFinal {
+    EffectCaptureProof capture;
+    EffectRoleProof role_proof;
     EffectFinalFunctions summary;
     EffectFinalOutcomes *outcomes;
     EffectPhysicalDomain *physical;
@@ -145,15 +159,24 @@ typedef struct EffectInvocationFinal {
 /* A verification request borrows the sole Final and immutable Input. Its
  * incoming index is fresh request scratch; no solver state or semantic copy
  * exists in this view. The builder supplies the same view of its live Final. */
+typedef struct EffectInvocationRoles {
+    const XrXirEffects *construction;
+    const EffectInvocationCertificate *sealed;
+} EffectInvocationRoles;
+
 typedef struct EffectInvocationRead {
     const XrXirCompileContext *work;
     const EffectInvocationFinal *final;
-    const XrXirEffects *effects;
+    EffectInvocationRoles roles;
     const EffectInvocationDeclaredBounds *declared;
     EffectBodyRequest body;
     uint32_t *consumers;
     bool producer_enabled,class_enabled;
 } EffectInvocationRead;
+
+static bool effect_invocation_roles_shape(const EffectInvocationRead *read);
+static XrXirStatus effect_invocation_role(const EffectInvocationRead *read,
+    uint32_t function,uint32_t parameter,uint32_t *output);
 
 typedef struct EffectInvocationWorkspace {
     EffectInvocationFinal final;
@@ -218,6 +241,7 @@ static XrXirStatus effect_invocation_shape(const EffectInvocationRead *owner,uin
     return effect_body_request_shape(&request,function,instruction,output);
 }
 
+static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final);
 static void effect_invocation_result_clear(EffectFinalFunctions *result);
 static void effect_invocation_result_free(EffectFinalFunctions *result);
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
@@ -225,6 +249,7 @@ static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
 
 #include "xxir_effect_invocation_class_nodes.inc.c"
 #include "xxir_effect_invocation_nodes.inc.c"
+#include "xxir_effect_invocation_root_seeds.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
 #include "xxir_effect_invocation_flow.inc.c"
 #include "xxir_effect_invocation_class_flow.inc.c"

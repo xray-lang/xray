@@ -11,8 +11,8 @@
  */
 static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
     const EffectBodyRequest *body) {
-    if (!owner || !body || !owner->work || !owner->effects || !owner->final->cells ||
-        !xir_effects_context_matches(owner->work,owner->effects,body->domain.function_count))
+    if (!owner || !body || !owner->work || !effect_invocation_roles_shape(owner) || !owner->final->cells ||
+        body->domain.function_count!=effect_body_count(owner->final->material))
         return XR_XIR_BAD_STRUCTURE;
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     XrXirStatus status=effect_cell_body_request(owner->work,body,&adapter,&read);
@@ -52,7 +52,7 @@ static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *fl
 static XrXirStatus effect_invocation_class_cell_view(EffectInvocationFlow *flow,
     uint32_t value,XrXirCellOriginView *output) {
     const EffectInvocationRead *owner=flow->read;
-    if (!output || !owner || !owner->work || !owner->effects || !owner->final->cells ||
+    if (!output || !owner || !owner->work || !effect_invocation_roles_shape(owner) || !owner->final->cells ||
         flow->node>=owner->final->count || value>=flow->values) return XR_XIR_BAD_STRUCTURE;
     XrXirCellClassOriginView view={0};
     XrXirStatus status=xr_xir_compile_cell_class_origin_view(owner->work,owner->final->cells,

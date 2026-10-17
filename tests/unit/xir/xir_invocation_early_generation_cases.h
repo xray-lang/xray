@@ -239,7 +239,8 @@ static void conditional_generation_alias_fixture(InvocationDeferredFixture *fixt
 
 static void conditional_generation_projected_controls(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner) {
-    CHECK(!owner->read.producer_enabled && !owner->pending);
+    CHECK(owner->read.producer_enabled==(owner->final.site_count!=0) && !owner->pending);
+    CHECK(owner->final.site_count==1);
     EffectBodyRequest read=effect_body_owned_request(context,owner->final.material);
     read.shape=conditional_generation_counted_shape;
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
@@ -266,9 +267,15 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
         if (owner->final.nodes[n].root!=owner->final.nodes[n].body) ++dimensions;
     conditional_generation_full_heads=conditional_generation_dimension_heads=0;
     conditional_generation_dimensions_refused=false;
-    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_OK &&
-        conditional_generation_full_heads==read.domain.function_count &&
-        conditional_generation_dimension_heads==dimensions);
+    XrXirStatus producer_status=effect_invocation_producers_verify_read(&owner->read,&read);
+    fprintf(stderr,"generation real producer replay status%u full%u functions%u dimensions%u expected%u\n",
+        (unsigned)producer_status,conditional_generation_full_heads,read.domain.function_count,
+        conditional_generation_dimension_heads,dimensions);
+    /* All three literal fixtures have four declarations and seven real keys.
+     * Genuine site replay reads additional full heads and target dimensions. */
+    CHECK(read.domain.function_count==4 && owner->final.count==7 && dimensions==11);
+    CHECK(producer_status==XR_XIR_OK && conditional_generation_full_heads==47 &&
+        conditional_generation_dimension_heads==15);
     size_t attempts=rp_attempts;uint32_t count=owner->final.count;
     conditional_generation_dimensions_refused=true;
     CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_BAD_STRUCTURE &&
@@ -334,9 +341,9 @@ static void conditional_generation_publication_controls(const XrXirCompileContex
     CHECK(owner->local_roots==certificate->body->local_roots &&
         owner->local_witnesses==certificate->body->local_witnesses);
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
-    XrXirRootEffects *facts=certificate->final->summary.facts;XrXirRootEffectWitness *witnesses=certificate->final->summary.witnesses;
+    XrXirRootEffectWitness *witnesses=certificate->final->summary.witnesses;
     CHECK(effect_invocation_certificate_project(context,certificate,NULL,NULL)==XR_XIR_BAD_STRUCTURE &&
-        certificate->final->summary.facts==facts && certificate->final->summary.witnesses==witnesses);
+        certificate->final->summary.witnesses==witnesses);
     EffectFinalFunctions occupied={0};EffectFinalFunctions *output=&occupied;
     CHECK(conditional_generation_publication_stage(context,certificate,&output)==XR_XIR_BAD_STRUCTURE &&
         output==&occupied && !occupied.functions && !occupied.witnesses && !occupied.count &&
@@ -379,7 +386,7 @@ static void conditional_generation_sink_boundary(const XrXirCompileContext *cont
     CHECK(effect_invocation_result_read_new(context,certificate,&publication)==XR_XIR_OK);
     XrCompileResourceStats before=rp_stats(context);size_t attempts=rp_attempts;
     EffectInvocationCertificate probe={.resources=certificate->resources,.body=certificate->body,
-        .origins=certificate->origins,.declarations=certificate->declarations,.parameter_kinds=certificate->parameter_kinds,
+        .origins=certificate->origins,.declarations=certificate->declarations,
         .declared=certificate->declared};
     EffectFinalFunctions *staged=publication;EffectInvocationFinal final=*certificate->final;
     final.summary=*staged;publication=&final.summary;probe.final=&final;
@@ -395,12 +402,12 @@ static void conditional_generation_sink_boundary(const XrXirCompileContext *cont
     CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE);
     sink.owner=&publication;sink.write=NULL;
     CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!publication->facts && !publication->witnesses &&
+    CHECK(!publication->witnesses &&
         !conditional_generation_sink_calls && rp_attempts==attempts && rp_stats(context).work==before.work);
     sink.write=conditional_generation_counted_publication;
     CHECK(effect_invocation_certificate_project(context,&probe,publication,&sink)==XR_XIR_BAD_STRUCTURE &&
-        conditional_generation_sink_calls==2 && publication->facts && publication->witnesses);
-    CHECK(certificate->final->summary.facts && certificate->final->summary.witnesses);
+        conditional_generation_sink_calls==2 && publication->witnesses);
+    CHECK(certificate->final->summary.witnesses);
     *staged=final.summary;publication=staged;
     effect_invocation_result_free(publication);effect_terms_free(&probe.terms);
     CHECK(rp_stats(context).live_bytes==entry_live);rp_balanced(physical);
@@ -445,9 +452,10 @@ static void conditional_generation_result_rejections(const XrXirCompileContext *
         CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
         storage[0].index=index;
     }
-    XrXirRootEffects facts=result->facts[0];result->facts[0].unresolved=!facts.unresolved;
+    XrXirRootEffectWitness unknown=result->witnesses[count];
+    result->witnesses[count].cause=unknown.cause==XR_XIR_ROOT_CAUSE_NONE?XR_XIR_ROOT_CAUSE_CALL:XR_XIR_ROOT_CAUSE_NONE;
     CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
-    result->facts[0]=facts;
+    result->witnesses[count]=unknown;
     XrXirRootEffectWitness witness=result->witnesses[0];result->witnesses[0].distance^=1;
     CHECK(effect_invocation_publication_match(context,certificate,result)==XR_XIR_BAD_STRUCTURE);
     result->witnesses[0]=witness;
@@ -585,13 +593,20 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
     EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;EffectBodyMaterial *material=NULL;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:8 status%u XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:10 status%u if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);\n",(unsigned)status);
     const XrXirModule *source=checked?xr_xir_compile_artifact_module(checked):NULL;
     if (status==XR_XIR_OK) status=invocation_core_storage(context,source,&effects);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:13 status%u if (status==XR_XIR_OK) status=invocation_core_storage(context,source,&effects);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=effect_parameters_derive(source,&effects,&graph,context);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:15 status%u if (status==XR_XIR_OK) status=effect_parameters_derive(source,&effects,&graph,context);\n",(unsigned)status);
     if (status==XR_XIR_OK) material=graph.material;
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:17 status%u if (status==XR_XIR_OK) material=graph.material;\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) conditional_generation_control_boundary(context,source,&effects,&graph);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:19 status%u if (status==XR_XIR_OK && oracle) conditional_generation_control_boundary(context,source,&effects,&graph);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=effect_graph_build_material(source,&effects,&graph,(XrXirCompileContext *)context);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:21 status%u if (status==XR_XIR_OK) status=effect_graph_build_material(source,&effects,&graph,(XrXirCompileContext *)context);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) {
         CHECK(material==effects.generation && material==graph.material && !graph.physical_owned &&
             effects.cells==material->cells && material->cells);
@@ -603,7 +618,9 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
         XrXirInstruction *operations=(XrXirInstruction *)source->functions[0].instructions;
         int64_t immediate=operations[0].immediate;operations[0].immediate=43;
         EffectBodyMaterial *later=NULL;status=effect_body_material_create(context,source,&later);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:33 status%u EffectBodyMaterial *later=NULL;status=effect_body_material_create(context,source,&later);\n",(unsigned)status);
         if (status==XR_XIR_OK) status=effect_body_source_match(context,later,source);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:35 status%u if (status==XR_XIR_OK) status=effect_body_source_match(context,later,source);\n",(unsigned)status);
         if (status==XR_XIR_OK && oracle) {
             CHECK(later!=material && later->cells!=material->cells && later->declared!=material->declared);
             EffectBodyRequest old=effect_body_owned_request(context,material);
@@ -615,24 +632,34 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
         operations[0].immediate=immediate;effect_body_material_free(later);
     }
     if (status==XR_XIR_OK && oracle) conditional_generation_owned_input_controls(context,source,&effects,&graph);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:47 status%u if (status==XR_XIR_OK && oracle) conditional_generation_owned_input_controls(context,source,&effects,&graph);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=effect_invocations_receive(context,source,&effects,&graph,material->declared,&owner);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:49 status%u if (status==XR_XIR_OK) status=effect_invocations_receive(context,source,&effects,&graph,material->declared,&owner);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) conditional_generation_reserved_controls(context,owner);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:51 status%u if (status==XR_XIR_OK && oracle) conditional_generation_reserved_controls(context,owner);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) status=conditional_generation_decoded_controls(context,owner);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:53 status%u if (status==XR_XIR_OK && oracle) status=conditional_generation_decoded_controls(context,owner);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=effect_invocations_solve(owner);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:55 status%u if (status==XR_XIR_OK) status=effect_invocations_solve(owner);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) conditional_generation_projected_controls(context,owner);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:57 status%u if (status==XR_XIR_OK && oracle) conditional_generation_projected_controls(context,owner);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=effect_invocation_stage(owner,&solution);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:59 status%u if (status==XR_XIR_OK) status=effect_invocation_stage(owner,&solution);\n",(unsigned)status);
     EffectInvocationSealRequest request={&owner,&solution,NULL};
     EffectInvocationProjectionSink sink;
     if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(sink))) status=XR_XIR_BUDGET;
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:63 status%u if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(sink))) status=XR_XIR_BUDGET;\n",(unsigned)status);
     if (status==XR_XIR_OK) {
         sink=(EffectInvocationProjectionSink){context->resources,source->function_count,
             &solution,effect_invocation_publication_write};
         status=effect_invocation_seal(context,&request,&certificate,&sink);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:68 status%u status=effect_invocation_seal(context,&request,&certificate,&sink);\n",(unsigned)status);
     }
     if (status==XR_XIR_OK && oracle) CHECK(!owner && !solution && certificate->body==material &&
         certificate->declared==material->declared && !effects.generation &&
         certificate->final->material==material && certificate->final->cells==material->cells);
     if (status==XR_XIR_OK && oracle) conditional_generation_raw_callback_controls(context,source,certificate);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:74 status%u if (status==XR_XIR_OK && oracle) conditional_generation_raw_callback_controls(context,source,certificate);\n",(unsigned)status);
     EffectFinalFunctions *publication=certificate?(&certificate->final->summary):NULL;
     effect_invocation_free(owner);effect_invocation_result_free(solution);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
@@ -641,12 +668,16 @@ static XrXirStatus conditional_generation_case(const XrXirCompileContext *contex
         EffectBodyRequest read=effect_body_owned_request(context,certificate->body);
         XrXirInstruction storage;const XrXirInstruction *operation=NULL;
         status=effect_body_request_instruction(&read,0,0,&storage,&operation);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:83 status%u status=effect_body_request_instruction(&read,0,0,&storage,&operation);\n",(unsigned)status);
         if (status==XR_XIR_OK && oracle) CHECK(operation->op==(mode==1?XR_XIR_SLOT_LOAD:XR_XIR_CONST_INT) &&
             (mode==1 || operation->immediate==42));
         if (status==XR_XIR_OK) status=effect_body_physical_match(context,material->physical,material);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:87 status%u if (status==XR_XIR_OK) status=effect_body_physical_match(context,material->physical,material);\n",(unsigned)status);
         EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead cells={0};
         if (status==XR_XIR_OK) status=effect_cell_body_owned(context,material,&adapter,&cells);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:90 status%u if (status==XR_XIR_OK) status=effect_cell_body_owned(context,material,&adapter,&cells);\n",(unsigned)status);
         if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,material->cells,&cells,NULL);
+    fprintf(stderr,"DIAG xir_invocation_early_generation_cases.h:92 status%u if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,material->cells,&cells,NULL);\n",(unsigned)status);
         if (status==XR_XIR_OK && oracle) {
             conditional_generation_publication_controls(context,certificate);
             conditional_generation_sink_boundary(context,certificate);

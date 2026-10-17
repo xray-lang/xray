@@ -384,7 +384,7 @@ static void extent_foreign_and_work(void) {
         unsigned exact = mode % 2;
         reset_observer();
         XrCompileResourceLimits limits = unlimited;
-        limits.work = 4 + exact;
+        limits.work = (mode < 2 ? 21u : 4u) + exact;
         owner = NULL;
         void *first = NULL, *last = NULL;
         OK(xr_compile_resources_new(&limits, &owner));
@@ -393,7 +393,7 @@ static void extent_foreign_and_work(void) {
         XrCompileResourceStatus status = mode < 2 ? xr_compile_resources_extent(owner, first, 8) :
             xr_compile_resources_allocation(owner, first, 8);
         CHECK(status == (exact ? XR_COMPILE_RESOURCE_OK : XR_COMPILE_RESOURCE_BUDGET));
-        CHECK(snapshot(owner).work == limits.work && attempts == 3);
+        CHECK(snapshot(owner).work == (mode < 2 && !exact ? 16u : limits.work) && attempts == 3);
         CHECK(xr_compile_resources_extent(owner, last, 8) == XR_COMPILE_RESOURCE_BUDGET);
         xr_compile_resources_free(first);
         xr_compile_resources_free(last);
@@ -401,8 +401,12 @@ static void extent_foreign_and_work(void) {
         CHECK(!live_count && !physical_bytes);
     }
 }
+#include "compile_resources_extent_cases.h"
+#include "compile_resources_locality_cases.h"
 
 int main(void) {
+    allocation_extent_cases();
+    allocation_locality_cases();
     creation_and_arguments();
     exact_and_faults();
     resize_and_transfer();

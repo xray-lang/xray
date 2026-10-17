@@ -38,6 +38,11 @@ static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *w
 static XrXirStatus effect_context_owner_trace(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, XrXirRootCauseTrace **output);
 
+typedef struct EffectErrorFinite EffectErrorFinite;
+static void error_finite_release(EffectErrorFinite *proof);
+typedef struct EffectControlProof EffectControlProof;
+static void effect_control_proof_free(EffectControlProof *proof);
+
 typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectErrorAtom;
 typedef struct EffectFinalOutcomes {
     XrCompileResources *resources;
@@ -45,6 +50,8 @@ typedef struct EffectFinalOutcomes {
     XrXirFunctionEffects *functions;
     XrXirEffectWitness *witnesses;
     EffectErrorAtom *atoms;
+    EffectErrorFinite *error_proof;
+    EffectControlProof *control_proof;
     uint64_t *errors;
     XrXirStatus *task_errors,*go_safe;
     XrXirEffect *task_creation;
@@ -54,6 +61,10 @@ typedef struct EffectFinalOutcomes {
     XirEffectEntryRootView *entry_roots;
     EffectContextOwner *contexts;
 } EffectFinalOutcomes;
+static XrXirStatus effect_control_proof_build(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *claims,EffectControlProof **output);
+static XrXirStatus effect_control_proof_check(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *claims);
 
 /* Formula storage belongs to the canonical summary after ROOT publication.
  * Partial constructors alone own their provisional formula allocations. */
@@ -74,6 +85,8 @@ static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) 
             xr_compile_resources_free((void *)outcomes->entry_roots[f].parameters);
         xr_compile_resources_free(outcomes->entry_roots);
     }
+    error_finite_release(outcomes->error_proof);
+    effect_control_proof_free(outcomes->control_proof);
     effect_context_owner_free(outcomes->contexts);
     effect_contracts_clear(outcomes->contracts,count,false);
     xr_compile_resources_free(outcomes->functions);xr_compile_resources_free(outcomes->witnesses);
@@ -694,6 +707,11 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 #include "xxir_effect_invocations.inc.c"
 #include "xxir_effect_invocation_public_trace.inc.c"
 #include "xxir_effect_invocation_publish.inc.c"
+#include "xxir_effect_error_equation_read.inc.c"
+#include "xxir_effect_error_finite.inc.c"
+#include "xxir_effect_error_markers.inc.c"
+#include "xxir_effect_error_marker_build.inc.c"
+#include "xxir_effect_error_finite_build.inc.c"
 #include "xxir_effect_error_invocations.inc.c"
 
 /* A breadth-first forest over final facts cannot inherit a cyclic cause chain
@@ -839,9 +857,13 @@ XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
     *output=final->entry_roots[function];return XR_XIR_OK;
 }
 
+static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *outcomes);
 #include "xxir_effect_outcomes.inc.c"
 #include "xxir_effect_control_verify.inc.c"
-#include "xxir_effect_error_empty_current.inc.c"
+#include "xxir_effect_role_check.inc.c"
+#include "xxir_effect_invocation_inventory.inc.c"
+#include "xxir_effect_error_context_final_read.inc.c"
 #include "xxir_effect_source_terminal.inc.c"
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_context,

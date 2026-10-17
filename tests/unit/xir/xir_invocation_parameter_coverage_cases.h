@@ -168,8 +168,8 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) {
         EffectInvocationRead replay={0};
-        status=effect_invocation_read_open(context,published,certificate->declared,certificate->final,&replay);
-        replay.work=context;replay.effects=published;
+        status=effect_invocation_read_open(context,certificate,certificate->final,&replay);
+        replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};
         replay.declared=certificate->declared;
         EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
         if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&replay,&request);

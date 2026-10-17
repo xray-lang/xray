@@ -28,7 +28,7 @@ static XrXirStatus conditional_invocation_publish(const XrXirCompileContext *con
         CHECK(effects->result_borrow==result);
         CHECK(effects->formula_terminals==result->witnesses &&
             effects->constant_witnesses==result->witnesses+(size_t)result->count*2 &&
-            effect_roots_read(effects)->root!=result->facts && effect_roots_read(effects)->root_witnesses!=result->witnesses &&
+            effect_roots_read(effects)->root && effect_roots_read(effects)->root_witnesses!=result->witnesses &&
             effect_roots_read(effects)->unresolved_witnesses!=result->witnesses+result->count);
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(context,effects,1,&entry)==XR_XIR_OK &&
@@ -98,17 +98,12 @@ static XrXirStatus conditional_invocation_template_publish(const XrXirCompileCon
     if (status==XR_XIR_OK && oracle) {
         CHECK(effect_contexts_read(effects) && !effects->refinement && effects->invocations &&
             effect_contexts_read(effects)->forest->invocations && !effect_contexts_read(effects)->dense->uses.invocations);
-        const XrXirEffects *summary=&effect_contexts_read(effects)->dense->uses;
-        const EffectFinalFunctions *borrowed=(&effect_contexts_read(effects)->forest->invocations->final->summary);
-        CHECK(effects->result_borrow==(&effects->invocations->final->summary) && summary->result_borrow==borrowed &&
-            summary->formula_terminals==borrowed->witnesses &&
-            summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
-        for (uint32_t f=0;f<summary->count;++f) {
-            const XrXirRootFormula *view=&effect_roots_read(summary)->contracts[f].formula;
-            const XrXirRootFormula *actual=&borrowed->functions[f].formula;
-            CHECK(view->terms==actual->terms && view->term_count==actual->term_count &&
-                view->constant_mask==actual->constant_mask);
-        }
+        const EffectContextOwner *owner=effect_contexts_read(effects);
+        CHECK(effect_ordinary_work_empty(owner->ordinary) && effect_ordinary_work_empty(owner->dense));
+        const EffectFinalFunctions *result=&owner->forest->invocations->final->summary;
+        CHECK(effects->result_borrow==&effects->invocations->final->summary &&
+            result->resources==context->resources && result->count==owner->dense->count &&
+            result->functions && result->witnesses);
         const XrXirModule *module=xr_xir_compile_artifact_module(checked);
         uint32_t mask=UINT32_MAX;
         CHECK(effect_invocation_bounds_mask(context,effects->invocations->declared,0,1,&mask)==XR_XIR_OK &&

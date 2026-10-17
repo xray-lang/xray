@@ -274,7 +274,7 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     if (status==XR_XIR_OK) status=error_invocation_storage(flow,certificate,&contexts);
     EffectInvocationRead owner={0};
     if (status==XR_XIR_OK) status=effect_invocation_read_open(flow->remaining,
-        flow->effects,certificate->declared,sealed,&owner);
+        certificate,sealed,&owner);
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final->count;++n) {
         EffectInvocationFlow replay={.read=&owner,.node=n,.instruction=UINT32_MAX};
         status=effect_invocation_origins(&replay);

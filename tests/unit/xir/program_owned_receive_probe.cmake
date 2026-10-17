@@ -118,7 +118,7 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(test_xir_program_owned_final_storage PRIVATE /experimental:c11atomics)
 endif()
-foreach(final_storage_attack RANGE 0 32)
+foreach(final_storage_attack RANGE 0 38)
     add_test(NAME test_xir_program_owned_final_storage_${final_storage_attack}
         COMMAND test_xir_program_owned_final_storage ${final_storage_attack})
     set_tests_properties(test_xir_program_owned_final_storage_${final_storage_attack} PROPERTIES TIMEOUT 60)

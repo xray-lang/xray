@@ -101,7 +101,6 @@ static XrXirStatus effect_runtime_original_none(const EffectInvocationCertificat
     const XrXirInstruction *op=&decoded;
     if (!bounds || bounds->resources!=certificate->resources ||
         bounds->count!=effect_body_count(certificate->body) || !bounds->functions ||
-        !certificate->parameter_kinds || !certificate->parameter_kinds[request->target] ||
         parameter>=request->count || op->args[0]>caller->operand_count ||
         op->args[1]>caller->operand_count-op->args[0] || !caller->operands)
         return XR_XIR_BAD_STRUCTURE;
@@ -124,7 +123,11 @@ static XrXirStatus effect_runtime_original_none(const EffectInvocationCertificat
     uint32_t valid=XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     if (!provided->callable || !expected->callable || (provided->mask&~valid) || (expected->mask&~valid))
         return XR_XIR_BAD_STRUCTURE;
-    bool fixed=certificate->parameter_kinds[request->target][parameter]==XR_XIR_EFFECT_PARAMETER_FIXED;
+    uint32_t parameter_kind=UINT32_MAX;
+    status=effect_role_parameter_value(&read,certificate->body,&certificate->final->role_proof,
+        request->target,parameter,&parameter_kind);
+    if (status!=XR_XIR_OK) return status;
+    bool fixed=parameter_kind==XR_XIR_EFFECT_PARAMETER_FIXED;
     const XrXirTypeNode *signature=xr_xir_callable_signature(&certificate->terms.types,
         certificate->body->functions[request->target].parameters[parameter]);
     if (!signature) return XR_XIR_BAD_STRUCTURE;

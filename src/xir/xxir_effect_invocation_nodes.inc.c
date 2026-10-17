@@ -111,6 +111,8 @@ static void effect_invocation_final_clear(EffectInvocationFinal *final) {
     if (final->outcomes) {
         effect_outcomes_clear(final->outcomes,final->outcomes->count);xr_compile_resources_free(final->outcomes);
     }
+    xr_compile_resources_free(final->capture.facts);
+    effect_role_proof_clear(&final->role_proof);
     effect_invocation_result_clear(&final->summary);
     for (uint32_t n=0;n<final->count;++n) {
         xr_compile_resources_free(final->nodes[n].causes);

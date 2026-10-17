@@ -84,6 +84,19 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_admit(XrCompileResources *r
 XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,
     const char *source, size_t length, unsigned char delimiter, size_t *advanced, bool *found);
 
+/* Check a nonempty byte range against this ledger's current live payloads.
+ * Foreign, interior-out-of-range, released and arbitrary addresses are rejected
+ * without reading through the proposed pointer or its preceding bytes. Interior
+ * ranges are accepted only when completely contained in one actual allocation.
+ * One work unit admits the query and six are charged per live header examined.
+ * A successful non-head match consumes six more units before moving that actual
+ * live registration to the head. Failed or budget-rejected queries never change
+ * the registry order, and completed work remains consumed. No allocation, callback or payload read
+ * occurs. The check reserves nothing: payload access, resize/free and its lifetime
+ * still require caller exclusion and a live ledger reference throughout. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
+    const void *memory, size_t bytes);
+
 /* Outputs must be empty and payload sizes nonzero. Failure preserves output.
  * Actual allocator calls consume one work unit, including failed calls.
  * Zeroing additionally consumes payload bytes. Headers and alignment padding

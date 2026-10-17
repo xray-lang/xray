@@ -284,8 +284,11 @@ static void concurrent_extents(void) {
     for (unsigned i = 0; i < WORKERS; ++i) worker_init(&workers[i], owner, EXTENT_STRESS);
     start_all(workers, threads); join_all(threads);
     XrCompileResourceStats final = stats(owner);
-    CHECK(final.work >= 1 + WORKERS * ITERATIONS * 48);
-    CHECK(final.work <= 1 + WORKERS * ITERATIONS * (46 + 2 * WORKERS));
+    /* Each serialized query sees at most one payload per worker. Extent pays
+     * one admission, six per visited header and six for a non-head move.
+     * Allocation/resize/free stay under the same lock, including replacement. */
+    CHECK(final.work >= 1 + WORKERS * ITERATIONS * (46 + 2 * 7));
+    CHECK(final.work <= 1 + WORKERS * ITERATIONS * (46 + 2 * (1 + 6 * WORKERS + 6)));
     CHECK(final.allocation_count == 1 + WORKERS * ITERATIONS * 3);
     check_physical(owner); CHECK(observation().count == 1);
     xr_compile_resources_release(owner); check_zero();

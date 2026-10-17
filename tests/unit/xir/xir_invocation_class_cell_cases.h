@@ -58,9 +58,9 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
     XrXirEffects *effects,uint32_t place,uint32_t project,uint32_t mode) {
     EffectInvocationCertificate *certificate=effects->invocations;
     EffectInvocationRead replay={0};
-    XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
+    XrXirStatus opening=effect_invocation_read_open(context,certificate,certificate->final,&replay);
     CHECK(opening==XR_XIR_OK);
-    replay.work=context;replay.effects=effects;replay.declared=certificate->declared;
+    replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};replay.declared=certificate->declared;
     EffectInvocationFlow flow={.read=&replay,.node=replay.final->roots[3]};
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
     CHECK(effect_invocation_origins_read(&flow,&body)==XR_XIR_OK);

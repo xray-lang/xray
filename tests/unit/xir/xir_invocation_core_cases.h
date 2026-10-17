@@ -84,10 +84,11 @@ static void invocation_final_initializer_erasure(const XrXirCompileContext *work
     const uint32_t function=3;
     EffectFinalFunctions *summary=&certificate->final->summary;
     EffectInvocationNode *node=&certificate->final->nodes[certificate->final->roots[function]];
-    CHECK(node->cause_count==3 && summary->facts[function].requires_root);
+    XrXirRootEffects current;CHECK(effect_invocation_certificate_facts(work,certificate,function,&current)==XR_XIR_OK);
+    CHECK(node->cause_count==3 && current.requires_root);
     uint32_t intrinsic=node->intrinsic_mask,local=node->local_mask;
     EffectInvocationCause causes[6];memcpy(causes,node->causes,sizeof(causes));
-    XrXirRootEffects facts=summary->facts[function],seed=certificate->body->local_roots[function];
+    XrXirRootEffects seed=certificate->body->local_roots[function];
     uint32_t constant=summary->functions[function].formula.constant_mask;
     XrXirRootEffectWitness witnesses[4],local_witnesses[2];
     for (uint32_t d=0;d<4;++d) {
@@ -101,14 +102,14 @@ static void invocation_final_initializer_erasure(const XrXirCompileContext *work
     node->intrinsic_mask=node->local_mask=0;
     for (uint32_t a=0;a<6;++a) node->causes[a]=(EffectInvocationCause){
         .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
-    summary->facts[function]=(XrXirRootEffects){0};summary->functions[function].formula.constant_mask=0;
+    summary->functions[function].formula.constant_mask=0;
     certificate->body->local_roots[function]=(XrXirRootEffects){0};
     XrXirStatus status=effect_invocation_publication_match(work,certificate,summary);
     fprintf(stderr,"general Input initializer erasure status%u declaration%u\n",status,
         certificate->body->declarations->modules[0].initializer);
     CHECK(status==XR_XIR_BAD_STRUCTURE);
     node->intrinsic_mask=intrinsic;node->local_mask=local;memcpy(node->causes,causes,sizeof(causes));
-    summary->facts[function]=facts;summary->functions[function].formula.constant_mask=constant;
+    summary->functions[function].formula.constant_mask=constant;
     certificate->body->local_roots[function]=seed;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+function]=witnesses[d];
     for (uint32_t d=0;d<2;++d) certificate->body->local_witnesses[(size_t)d*summary->count+function]=local_witnesses[d];
@@ -126,7 +127,7 @@ static void invocation_trace_allocation_erase(void *memory) {
     node->intrinsic_mask=node->local_mask=0;
     for (uint32_t a=0;a<node->cause_count*2;++a) node->causes[a]=(EffectInvocationCause){
         .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
-    summary->facts[3]=(XrXirRootEffects){0};summary->functions[3].formula.constant_mask=0;
+    summary->functions[3].formula.constant_mask=0;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=(XrXirRootEffectWitness){0};
 }
 
@@ -138,7 +139,8 @@ static void invocation_final_trace_callback(const XrXirCompileContext *work,
     EffectInvocationNode *node=&certificate->final->nodes[certificate->final->roots[3]];
     EffectInvocationNode saved=*node;EffectInvocationCause causes[6];
     CHECK(node->cause_count==3);memcpy(causes,node->causes,sizeof(causes));
-    XrXirRootEffects facts=summary->facts[3];uint32_t constant=summary->functions[3].formula.constant_mask;
+    XrXirRootEffects facts;CHECK(effect_invocation_certificate_facts(work,certificate,3,&facts)==XR_XIR_OK);
+    uint32_t constant=summary->functions[3].formula.constant_mask;
     XrXirRootEffectWitness witnesses[4];
     for (uint32_t d=0;d<4;++d) witnesses[d]=summary->witnesses[(size_t)d*summary->count+3];
     RootParameterMark retained=rp_mark();XrCompileResourceStats before=rp_stats(work);
@@ -149,7 +151,7 @@ static void invocation_final_trace_callback(const XrXirCompileContext *work,
     invocation_trace_callback_target=NULL;rp_balanced(retained);
     XrCompileResourceStats paid=rp_stats(work);CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes);
     *node=saved;memcpy(node->causes,causes,sizeof(causes));
-    summary->facts[3]=facts;summary->functions[3].formula.constant_mask=constant;
+    summary->functions[3].formula.constant_mask=constant;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=witnesses[d];
     CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_OK && output);
     CHECK(output->counts[0]==1 && !output->counts[1] && output->facts.requires_root);
@@ -192,6 +194,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     }
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
+    fprintf(stderr,"DIAG core check mode%u status%u reason%u types%u slotCount%u\n",mode,(unsigned)status,(unsigned)diagnostic.reason,fixture.types.count,fixture.declarations.slot_count);
     uint32_t phase=0;
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
@@ -229,8 +232,11 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             certificate->final->roots[1],&formal_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_edge_mask(context,certificate,0,2,1,&edge_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,1,&certificate->final->summary.facts[1],&public_trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,3,&certificate->final->summary.facts[3],&root_trace);
+        XrXirRootEffects public_facts,root_facts;
+        if (status==XR_XIR_OK) status=effect_invocation_certificate_facts(context,certificate,1,&public_facts);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,1,&public_facts,&public_trace);
+        if (status==XR_XIR_OK) status=effect_invocation_certificate_facts(context,certificate,3,&root_facts);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,3,&root_facts,&root_trace);
         if (status==XR_XIR_OK && oracle) {
             if (primitive_slot) invocation_nonroot_slot_erasure(context,certificate);
             invocation_final_initializer_erasure(context,certificate);
@@ -238,11 +244,12 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             EffectInvocationFinal damaged=*certificate->final;
             damaged.physical=NULL;EffectInvocationRead refused={0};size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
-            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
+            EffectInvocationFinal *saved_final=certificate->final;certificate->final=&damaged;
+            CHECK(effect_invocation_read_open(context,certificate,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
                 !refused.work && !refused.consumers && !refused.final && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
-            refused.work=context;
-            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
+            certificate->final=saved_final;refused.work=context;
+            CHECK(effect_invocation_read_open(context,certificate,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
                 refused.work==context && !refused.consumers && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             CHECK(caller_mask==(primitive_slot && !(mode&1)?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&

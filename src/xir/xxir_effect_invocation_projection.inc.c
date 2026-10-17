@@ -36,9 +36,11 @@ static XrXirStatus effect_invocation_projection_atom(const XrXirCompileContext *
         XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     if (atom>=2 && atom-2<parameters) {
         uint32_t p=atom-2;
-        if (!certificate->parameter_kinds || !certificate->parameter_kinds[node->root] ||
-            certificate->parameter_kinds[node->root][p]!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
-            return XR_XIR_BAD_STRUCTURE;
+        uint32_t parameter_kind=UINT32_MAX;
+        XrXirStatus role_status=effect_role_parameter_read(work,certificate->body,
+            &certificate->final->role_proof,node->root,p,&parameter_kind);
+        if (role_status!=XR_XIR_OK) return role_status;
+        if (parameter_kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE) return XR_XIR_BAD_STRUCTURE;
         status=effect_invocation_bounds_mask(work,certificate->declared,node->root,p,&mask);
         if (status!=XR_XIR_OK) return status;
     }
@@ -211,18 +213,22 @@ static XrXirStatus effect_invocation_selected_witness(const XrXirCompileContext 
     return XR_XIR_OK;
 }
 
-/* These final values belong to the one result owner. A caller subsequently
- * proves each domain against actual causes; these fields alone grant nothing. */
+/* A fact value is the presence of its canonical witness, not another stored
+ * permission row. Receiving admission independently compares every witness
+ * with the actual selected atom and rooted cause before using either value. */
 static XrXirStatus effect_invocation_certificate_facts(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,uint32_t function,XrXirRootEffects *output) {
     if (!xir_compile_context_valid(work) || !certificate || !output ||
         !effect_body_material_shape(certificate->body) || certificate->resources!=work->resources ||
         certificate->body->resources!=work->resources ||
         !certificate->final || certificate->final->summary.resources!=work->resources ||
-        certificate->final->summary.count!=effect_body_count(certificate->body) || !certificate->final->summary.facts ||
+        certificate->final->summary.count!=effect_body_count(certificate->body) || !certificate->final->summary.witnesses ||
         function>=certificate->final->summary.count) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=certificate->final->summary.facts[function];return XR_XIR_OK;
+    if (!xir_compile_work(work,2+sizeof(*output))) return XR_XIR_BUDGET;
+    const EffectFinalFunctions *summary=&certificate->final->summary;
+    *output=(XrXirRootEffects){summary->witnesses[function].cause!=XR_XIR_ROOT_CAUSE_NONE,
+        summary->witnesses[summary->count+function].cause!=XR_XIR_ROOT_CAUSE_NONE};
+    return XR_XIR_OK;
 }
 
 /* The caller provides a freshly proved domain selection. Compare the unique
@@ -236,14 +242,13 @@ static XrXirStatus effect_invocation_projection_result_match(const XrXirCompileC
         return XR_XIR_BAD_STRUCTURE;
     const EffectFinalFunctions *result=(&certificate->final->summary);
     if (result->resources!=work->resources || result->count!=effect_body_count(certificate->body) ||
-        result->capacity!=result->count || function>=result->count || !result->facts ||
+        result->capacity!=result->count || function>=result->count ||
         !result->witnesses || !result->functions) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,3+sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
     size_t at=(size_t)domain*result->count+function;
     uint32_t bit=(domain&1)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
-    bool fact=(domain&2)?!!(result->functions[function].formula.constant_mask&bit):
-        (domain&1)?result->facts[function].unresolved:result->facts[function].requires_root;
-    if (fact!=(atom!=UINT32_MAX)) return XR_XIR_BAD_STRUCTURE;
+    if ((domain&2) && !!(result->functions[function].formula.constant_mask&bit)!=(atom!=UINT32_MAX))
+        return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationProjectedCause selected={atom,witness};
     XrXirRootEffectWitness expected;bool symbolic=false;
     XrXirStatus status=effect_invocation_public_transform(work,certificate,function,&selected,&expected,&symbolic);
@@ -258,15 +263,13 @@ static XrXirStatus effect_invocation_certificate_project(const XrXirCompileConte
     if (!xir_compile_context_valid(work) || !certificate || !certificate->final || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources ||
         certificate->terms.remaining!=work || !result || (&certificate->final->summary)!=result ||
-        result->resources!=work->resources || result->facts || result->witnesses)
+        result->resources!=work->resources || result->witnesses)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(certificate->body);uint64_t records=(uint64_t)count*4;
     if (!effect_invocation_projection_sink_matches(work,sink,count) || !count ||
         count!=result->count || result->capacity!=count || !result->functions ||
         records>SIZE_MAX/sizeof(*result->witnesses)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;
-    result->facts=xir_compile_alloc(work,(size_t)count*sizeof(*result->facts),&status);
-    if (!result->facts) return status==XR_XIR_OK?XR_XIR_OUT_OF_MEMORY:status;
     result->witnesses=xir_compile_alloc(work,(size_t)records*sizeof(*result->witnesses),&status);
     if (!result->witnesses) return status==XR_XIR_OK?XR_XIR_OUT_OF_MEMORY:status;
     for (uint32_t f=0;f<count;++f) {
@@ -278,8 +281,6 @@ static XrXirStatus effect_invocation_certificate_project(const XrXirCompileConte
             if (domain>=2 && (selected[domain]!=UINT32_MAX)!=
                 !!(result->functions[f].formula.constant_mask&bit)) return XR_XIR_BAD_STRUCTURE;
         }
-        if (!xir_compile_work(work,sizeof(*result->facts))) return XR_XIR_BUDGET;
-        result->facts[f]=(XrXirRootEffects){selected[0]!=UINT32_MAX,selected[1]!=UINT32_MAX};
         status=sink?sink->write(work,certificate,f,selected,result,sink->owner):
             effect_invocation_publication_write(work,certificate,f,selected,result,&result);
         if (status!=XR_XIR_OK) return status;

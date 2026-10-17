@@ -41,6 +41,7 @@ static inline XrXirStatus xir_fixture_check(const XrXirCompileContext *context,
     XrXirStatus status = xir_fixture_construction(context, module->types, &facts);
     if (status == XR_XIR_OK) status = xr_xir_compile_check_v2(context, module, facts, output, diagnostic);
     else xir_fixture_preparation_diagnostic(status,diagnostic);
+    if(status!=XR_XIR_OK) fprintf(stderr,"DIAG fixture check status%u stage%u linkage%u functions%u facts%u\n",(unsigned)status,(unsigned)module->stage,(unsigned)module->linkage_kind,module->function_count,facts!=NULL);
     xr_xir_compile_construction_free(facts);
     if (diagnostic) diagnostic->status = status;
     return status;

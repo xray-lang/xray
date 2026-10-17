@@ -77,7 +77,9 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
             const EffectInvocationNode *node=&certificate->final->nodes[selected.node];
             uint32_t opaque=certificate->final->site_count+
                 certificate->body->functions[node->root].parameter_count;
-            CHECK(certificate->parameter_kinds[1][0]==XR_XIR_EFFECT_PARAMETER_FIXED &&
+            uint32_t role=UINT32_MAX;
+            CHECK(effect_role_parameter_read(context,certificate->body,&certificate->final->role_proof,1,0,&role)==XR_XIR_OK &&
+                role==XR_XIR_EFFECT_PARAMETER_FIXED &&
                 certificate->declared->functions[1].count &&
             certificate->declared->functions[1].bounds[0].value==0 &&
             !certificate->declared->functions[1].bounds[0].mask &&
