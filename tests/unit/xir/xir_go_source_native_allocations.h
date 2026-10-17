@@ -143,6 +143,7 @@ static void *runtime_realloc(void *pointer, size_t size, const char *file, unsig
 #include "xir/xxir_type_arena.c"
 #include "xir/xxir_value.c"
 #include "xir/xxir_scalar.c"
+#include "xir/xxir_scalar_core.c"
 #include "xir/xxir_float.c"
 #include "xir/xxir_call.c"
 #include "xir/xxir_generic.c"
