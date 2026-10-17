@@ -132,18 +132,60 @@ static XrXirStatus program_copy_entries(XrXirProgram *program, const XrXirProgra
     }
     return status;
 }
+static XrXirStatus program_owned_storage(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, XrXirCallEntry *entries, const XrXirProgramInput *input,
+    const XrXirArtifact *artifact) {
+    if (!spec || !entries || spec->entries!=entries || !spec->entry_count ||
+        (uintptr_t)entries%_Alignof(XrXirCallEntry)) return XR_XIR_BAD_STRUCTURE;
+    if (spec->entry_count>65535 || spec->entry_count>context->limits.functions) return XR_XIR_BUDGET;
+    uint64_t bytes=(uint64_t)spec->entry_count*sizeof(*entries);
+    if (bytes>SIZE_MAX) return XR_XIR_BUDGET;
+    XrXirStatus status=xir_compile_resource_status(xr_compile_resources_allocation(
+        context->resources,entries,(size_t)bytes));
+    if (status!=XR_XIR_OK) return status;
+    for (uint32_t i=0;i<spec->entry_count;++i) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        const XrXirCallEntry *entry=&entries[i];
+        if (!entry->parameter_count) {
+            if (entry->parameters) return XR_XIR_BAD_STRUCTURE;
+            continue;
+        }
+        if (entry->parameter_count>context->limits.parameters) return XR_XIR_BUDGET;
+        if (!entry->parameters || (uintptr_t)entry->parameters%_Alignof(XrXirType) ||
+            (const void *)entry->parameters==(const void *)entries ||
+            (const void *)entry->parameters==(const void *)input ||
+            (const void *)entry->parameters==(const void *)artifact) return XR_XIR_BAD_STRUCTURE;
+        bytes=(uint64_t)entry->parameter_count*sizeof(*entry->parameters);
+        if (bytes>SIZE_MAX) return XR_XIR_BUDGET;
+        status=xir_compile_resource_status(xr_compile_resources_allocation(
+            context->resources,entry->parameters,(size_t)bytes));
+        if (status!=XR_XIR_OK) return status;
+        for (uint32_t p=0;p<i;++p) {
+            if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+            if (entries[p].parameters==entry->parameters) return XR_XIR_BAD_STRUCTURE;
+        }
+    }
+    return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec,XrXirProgramInput **input,
     XrXirCallEntry **owned_entries,XrXirProgram **output) {
     if (!output || *output || !input || !*input || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirProgramInput *original_input=*input;
     if ((uintptr_t)original_input%_Alignof(XrXirProgramInput)) return XR_XIR_BAD_STRUCTURE;
-    XrCompileResourceStatus input_extent=xr_compile_resources_extent(context->resources,
+    XrCompileResourceStatus input_extent=xr_compile_resources_allocation(context->resources,
         original_input,sizeof(*original_input));
     if (input_extent!=XR_COMPILE_RESOURCE_OK)
         return input_extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *original_artifact=original_input->artifact;
-    XrXirStatus status = program_shape(context, spec);
+    if (!original_artifact || (uintptr_t)original_artifact%_Alignof(XrXirArtifact)) return XR_XIR_BAD_STRUCTURE;
+    input_extent=xr_compile_resources_allocation(context->resources,original_artifact,sizeof(*original_artifact));
+    if (input_extent!=XR_COMPILE_RESOURCE_OK)
+        return input_extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=owned_entries?program_owned_storage(context,spec,*owned_entries,
+        original_input,original_artifact):XR_XIR_OK;
+    if (status!=XR_XIR_OK) return status;
+    status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
     const XrXirProgramSpec physical = *spec;
     const XrXirCodeLease code = physical.code;
@@ -169,13 +211,8 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     program->context = *context;
     program->entry_count = permissions->function_count;
     if (owned_entries) {
-        if (*owned_entries!=physical.entries) { status=XR_XIR_BAD_STRUCTURE;goto failed; }
-        XrCompileResourceStatus extent=xr_compile_resources_extent(context->resources,
-            *owned_entries,(size_t)physical.entry_count*sizeof(**owned_entries));
-        if (extent!=XR_COMPILE_RESOURCE_OK) {
-            status=extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
-            goto failed;
-        }
+        status=program_owned_storage(context,&physical,*owned_entries,original_input,original_artifact);
+        if (status!=XR_XIR_OK) goto failed;
         /* The same current descriptor proof checks both copied and moved rows.
          * This slot transfers physical storage only; it grants no permission. */
         program->entries=*owned_entries;
@@ -218,13 +255,9 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
         status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK) status=xr_xir_compile_program_body_match(context,permissions,original_artifact);
     if (status==XR_XIR_OK && owned_entries) {
-        if (*owned_entries!=physical.entries) status=XR_XIR_BAD_STRUCTURE;
-        else {
-            XrCompileResourceStatus extent=xr_compile_resources_extent(context->resources,
-                *owned_entries,(size_t)physical.entry_count*sizeof(**owned_entries));
-            if (extent!=XR_COMPILE_RESOURCE_OK)
-                status=extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
-        }
+        if (spec->entries!=physical.entries || spec->entry_count!=physical.entry_count)
+            status=XR_XIR_BAD_STRUCTURE;
+        else status=program_owned_storage(context,&physical,*owned_entries,original_input,original_artifact);
     }
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,spec,permissions);
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,&owned,permissions);

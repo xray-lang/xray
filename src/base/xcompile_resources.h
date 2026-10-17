@@ -59,6 +59,12 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *re
 XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
     const void *memory, size_t bytes);
 
+/* Prove a releasable payload starts at this address and contains at least bytes.
+ * Interior ranges remain valid extents but cannot transfer allocation ownership.
+ * This has the same charging and exclusion rules as the extent observation. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_allocation(XrCompileResources *resources,
+    const void *memory, size_t bytes);
+
 /* Check one prospective payload allocation and its specified payload work at
  * this instant, without allocating, charging, or reserving resources. Actual
  * allocators must still perform their own admission and charge exactly once;

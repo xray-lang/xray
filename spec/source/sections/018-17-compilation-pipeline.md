@@ -143,6 +143,7 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
 成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
 准备期只借用调用者拥有的入口表和参数块；失败保留同一 Input、表与参数，可在不重置账本下重试，成功无回调提交时才一并清空拥有槽。VM失败清理按实际分配的固定数量遍历，不能采用末次回调改变的模块计数。
+拥有型 Input、Artifact、入口表和非空参数块须分别位于原账本中的存活分配起点，不能将可读的内部区间当成可释放的拥有指针。拥有表及其参数在深读前检查物理范围，发布前再检查当前表、参数、数量及归属；零参数行的拥有指针须为空，多个拥有行不能重复转交同一参数块。失败不分配新的接收对象来修补畸形的物理输入，检查所用 work 仍计入原账本。
 Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
 内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
 旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。
@@ -728,7 +729,14 @@ inputs and publishes no Program. Preparation borrows a caller-owned entry table
 and its parameter blocks. Refusal retains the same Input, table and parameters
 for retry without ledger refill; only the final callback-free commit clears both
 owning slots. VM failure cleanup uses the actual fixed allocation count rather
-than a module count changed by a preparation callback. The Program uses the immutable declarations
+than a module count changed by a preparation callback. Owning Input, Artifact,
+entry tables and nonempty parameter blocks must start at live allocations on
+the receiving ledger; a readable interior extent cannot transfer a releasable
+owner. Check table and parameter storage before deep reads and again before
+publication, including current pointers and counts. Empty parameter rows have
+null owning pointers, and rows cannot transfer the same parameter block twice.
+Malformed physical input creates no new receiving objects; its actual checking
+work remains charged to the original ledger. The Program uses the immutable declarations
 owned by its transferred canonical Input without a second deep clone. Failed
 Program disposal leaves caller-owned Input declarations live. The runtime type
 arena keeps its independent ownership for escaping values. Internal packet destruction before reception

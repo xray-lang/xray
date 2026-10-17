@@ -331,6 +331,10 @@ static void extent_ranges_and_retirement(void) {
     CHECK(snapshot(owner).work == before.work);
     OK(xr_compile_resources_extent(owner, first, 64));
     OK(xr_compile_resources_extent(owner, (char *)first + 63, 1));
+    OK(xr_compile_resources_allocation(owner, first, 64));
+    CHECK(xr_compile_resources_allocation(owner, (char *)first + 63, 1) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    CHECK(xr_compile_resources_allocation(owner, first, 65) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    CHECK(xr_compile_resources_allocation(owner, (const void *)(uintptr_t)1, 1) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     CHECK(xr_compile_resources_extent(owner, (char *)first + 64, 1) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     CHECK(xr_compile_resources_extent(owner, (char *)first + 63, 2) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     CHECK(xr_compile_resources_extent(owner, (const void *)((uintptr_t)first - 1), 1) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
@@ -344,6 +348,7 @@ static void extent_ranges_and_retirement(void) {
     uintptr_t retired = (uintptr_t)middle;
     xr_compile_resources_free(middle);
     CHECK(xr_compile_resources_extent(owner, (const void *)retired, 1) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    CHECK(xr_compile_resources_allocation(owner, (const void *)retired, 1) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     OK(xr_compile_resources_extent(owner, first, 64));
     OK(xr_compile_resources_extent(owner, last, 16));
     retired = (uintptr_t)first;
@@ -368,12 +373,15 @@ static void extent_foreign_and_work(void) {
     void *memory = NULL;
     OK(xr_compile_resources_alloc(foreign, 8, &memory));
     CHECK(xr_compile_resources_extent(owner, memory, 8) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    CHECK(xr_compile_resources_allocation(owner, memory, 8) == XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     OK(xr_compile_resources_extent(foreign, memory, 8));
+    OK(xr_compile_resources_allocation(foreign, memory, 8));
     xr_compile_resources_free(memory);
     xr_compile_resources_release(foreign);
     xr_compile_resources_release(owner);
     CHECK(!live_count && !physical_bytes);
-    for (unsigned exact = 0; exact < 2; ++exact) {
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        unsigned exact = mode % 2;
         reset_observer();
         XrCompileResourceLimits limits = unlimited;
         limits.work = 4 + exact;
@@ -382,7 +390,8 @@ static void extent_foreign_and_work(void) {
         OK(xr_compile_resources_new(&limits, &owner));
         OK(xr_compile_resources_alloc(owner, 8, &first));
         OK(xr_compile_resources_alloc(owner, 8, &last));
-        XrCompileResourceStatus status = xr_compile_resources_extent(owner, first, 8);
+        XrCompileResourceStatus status = mode < 2 ? xr_compile_resources_extent(owner, first, 8) :
+            xr_compile_resources_allocation(owner, first, 8);
         CHECK(status == (exact ? XR_COMPILE_RESOURCE_OK : XR_COMPILE_RESOURCE_BUDGET));
         CHECK(snapshot(owner).work == limits.work && attempts == 3);
         CHECK(xr_compile_resources_extent(owner, last, 8) == XR_COMPILE_RESOURCE_BUDGET);

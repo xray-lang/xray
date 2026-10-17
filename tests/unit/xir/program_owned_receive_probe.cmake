@@ -34,6 +34,25 @@ foreach(owned_consumer xir_owned_input_emit test_xir_program_owned_transports)
     endif()
 endforeach()
 
+add_executable(test_xir_program_owned_storage "${CMAKE_CURRENT_LIST_DIR}/test_xir_program_owned_storage.c")
+target_include_directories(test_xir_program_owned_storage PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_LIST_DIR}")
+target_link_libraries(test_xir_program_owned_storage PRIVATE xray_xir_vm)
+target_compile_features(test_xir_program_owned_storage PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_xir_program_owned_storage PRIVATE /W4 /WX /utf-8)
+endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_xir_program_owned_storage PRIVATE /experimental:c11atomics)
+endif()
+foreach(storage_case valid table-short table-interior parameter-pointer parameter-foreign
+        parameter-interior zero-count-alias input-interior artifact-interior
+        late-table-free late-table-alloc late-parameter-free late-parameter-alloc)
+    add_test(NAME test_xir_program_owned_storage_${storage_case}
+        COMMAND test_xir_program_owned_storage ${storage_case})
+    set_tests_properties(test_xir_program_owned_storage_${storage_case}
+        PROPERTIES TIMEOUT 60 LABELS "unit;xir;program;ownership;physical-storage")
+endforeach()
+
 add_executable(test_xir_program_owned_suspension "${CMAKE_CURRENT_LIST_DIR}/test_xir_program_owned_suspension.c")
 target_include_directories(test_xir_program_owned_suspension PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_LIST_DIR}")
 target_link_libraries(test_xir_program_owned_suspension PRIVATE xray_xir_vm)

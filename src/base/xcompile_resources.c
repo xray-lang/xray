@@ -133,8 +133,8 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *re
     return status;
 }
 
-XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
-    const void *memory, size_t bytes) {
+static XrCompileResourceStatus compile_storage(XrCompileResources *resources,
+    const void *memory, size_t bytes, bool owning) {
     if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     uintptr_t address = (uintptr_t)memory;
     XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
@@ -144,7 +144,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *
         status = compile_work_locked(resources, 1);
         if (status != XR_COMPILE_RESOURCE_OK) break;
         uintptr_t start = (uintptr_t)(allocation + 1);
-        if (address >= start && address - start <= allocation->info.bytes &&
+        if ((!owning || address == start) && address >= start && address - start <= allocation->info.bytes &&
             bytes <= allocation->info.bytes - (size_t)(address - start)) {
             status = XR_COMPILE_RESOURCE_OK;
             break;
@@ -153,6 +153,16 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *
     }
     compile_unlock(resources);
     return status;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
+    const void *memory, size_t bytes) {
+    return compile_storage(resources, memory, bytes, false);
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_allocation(XrCompileResources *resources,
+    const void *memory, size_t bytes) {
+    return compile_storage(resources, memory, bytes, true);
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,

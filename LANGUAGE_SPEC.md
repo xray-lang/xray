@@ -7270,7 +7270,14 @@ inputs and publishes no Program. Preparation borrows a caller-owned entry table
 and its parameter blocks. Refusal retains the same Input, table and parameters
 for retry without ledger refill; only the final callback-free commit clears both
 owning slots. VM failure cleanup uses the actual fixed allocation count rather
-than a module count changed by a preparation callback. The Program uses the immutable declarations
+than a module count changed by a preparation callback. Owning Input, Artifact,
+entry tables and nonempty parameter blocks must start at live allocations on
+the receiving ledger; a readable interior extent cannot transfer a releasable
+owner. Check table and parameter storage before deep reads and again before
+publication, including current pointers and counts. Empty parameter rows have
+null owning pointers, and rows cannot transfer the same parameter block twice.
+Malformed physical input creates no new receiving objects; its actual checking
+work remains charged to the original ledger. The Program uses the immutable declarations
 owned by its transferred canonical Input without a second deep clone. Failed
 Program disposal leaves caller-owned Input declarations live. The runtime type
 arena keeps its independent ownership for escaping values. Internal packet destruction before reception

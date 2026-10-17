@@ -46,6 +46,7 @@ static void receive_parts(const XrXirCompileContext *context,XrXirProgramInput *
     CHECK(xir_program_input_take(context,&artifact,input)==XR_XIR_OK && !artifact);
 }
 
+#ifndef XR_OWNED_ENTRIES_FIXTURE_ONLY
 int main(int argc,char **argv) {
     CHECK(argc==2 && (!strcmp(argv[1],"free") || !strcmp(argv[1],"alloc")));
     const XrCompileResourceLimits caps={67108864,8388608,128000000};
@@ -78,3 +79,4 @@ int main(int argc,char **argv) {
     printf("original entry ownership preserved=%u; input same-owner recovery42; physical baseline recovered; expected1\n",preserved);
     return preserved?0:1;
 }
+#endif

@@ -23,7 +23,7 @@ XR_FUNC XrXirProgramPacket xir_program_packet_borrow(const XrXirArtifact *artifa
 static XrXirStatus input_storage(const XrXirCompileContext *context,
     const void *memory,size_t bytes,size_t alignment) {
     if (!memory || (uintptr_t)memory%alignment) return XR_XIR_BAD_STRUCTURE;
-    XrCompileResourceStatus status=xr_compile_resources_extent(context->resources,memory,bytes);
+    XrCompileResourceStatus status=xr_compile_resources_allocation(context->resources,memory,bytes);
     return status==XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
         status==XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;
 }

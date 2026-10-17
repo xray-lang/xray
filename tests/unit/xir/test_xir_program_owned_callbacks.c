@@ -19,6 +19,7 @@ static size_t probe_calls, probe_at=SIZE_MAX;
 static unsigned probe_attack;
 static bool probe_seedless_cycle,probe_error_seed;
 static XrXirArtifact *probe_artifact;
+static void (*probe_storage_callback)(void);
 static void correspondence_callback(bool allocation) {
     if (!probe_armed || allocation!=probe_allocations) return;
     size_t ordinal=probe_calls++;
@@ -43,6 +44,7 @@ static void correspondence_callback(bool allocation) {
     if (probe_attack==9)
         ((XrXirFunction *)module->functions)[1].instructions=(const XrXirInstruction *)(uintptr_t)1;
     if (probe_attack==18) ++module->function_count;
+    if (probe_attack==19 && probe_storage_callback) probe_storage_callback();
     if (probe_attack>=10 && probe_attack<=17) final_callback(probe_attack);
     probe_injected=true;
 }
