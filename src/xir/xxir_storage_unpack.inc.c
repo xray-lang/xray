@@ -22,8 +22,12 @@ typedef struct StorageUnpack {
 static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
     XrXirValueAdmission *admission, XrXirValue *output) {
     XrXirLayout layout = {0};
-    if (!xr_xir_compile_type_arena_layout(admission->arena, span.type, &layout) ||
-        !layout.size || layout.size > sizeof(uint64_t) || !span.bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_compile_type_arena_layout(admission->arena,span.type,&layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (span.type==XR_XIR_UNIT) {
+        const XrXirValue unit={0};
+        return layout.size ? XR_XIR_VALUE_BAD_ARGUMENT : xr_xir_value_copy(&unit,output);
+    }
+    if (!layout.size || layout.size>sizeof(uint64_t) || !span.bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValue value = {0};
     if (!storage_leaf_value(admission->arena,span.type,span.bytes,layout.size,&value))
         return XR_XIR_VALUE_BAD_ARGUMENT;

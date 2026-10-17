@@ -21,6 +21,7 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
 }
 static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
     SourceFunction *body = &ctx->bodies[ctx->function];
+    if (!source_recipe_unit_array_operands(ctx,&op)) return false;
     if (!body->error_context || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT &&
         op.op != XR_XIR_CALL_DEFAULT))
         return source_recipe_append(ctx,op,result);

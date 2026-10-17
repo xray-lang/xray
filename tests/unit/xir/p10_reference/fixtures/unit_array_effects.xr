@@ -1,0 +1,4 @@
+var calls:i64=0
+fn make(){calls+=1}
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{var items:Array<()>=[make(),make()];items[0]=make();items.push(make());return finish(calls*10+len(items)-1)}

@@ -807,3 +807,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/product_patterns.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/product_match.cmake")
 
 include(${CMAKE_CURRENT_LIST_DIR}/array_match.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/unit_array.cmake)

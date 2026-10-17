@@ -1,0 +1,3 @@
+fn id<T>(value:T)->T{return value}
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{const items:Array<()>=[(),()];return finish(len(id(items))+40)}

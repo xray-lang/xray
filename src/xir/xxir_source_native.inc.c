@@ -63,7 +63,8 @@ static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrX
     XrXirDeclarations declarations;
     XrXirModule module = source_module_view(ctx,&declarations);
     XrXirStatus status;
-    if (ctx->type_scope.active) {
+    if (element==XR_XIR_UNIT) status=XR_XIR_OK;
+    else if (ctx->type_scope.active) {
         AstNode *node = ctx->type_scope.node;
         const char *name = node->type == AST_INTERFACE_DECL ? node->as.interface_decl.name :
             node->type == AST_CLASS_DECL ? node->as.class_decl.name :

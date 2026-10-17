@@ -118,6 +118,9 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
     } else if (*inlined) {
         const XirArray *array = (const XirArray *)frame->boxed.object;
         *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
+        if (array->element==XR_XIR_UNIT) {
+            *inlined=false;*tuple_field=true;*value=(XrXirValue){0};
+        }
     } else if (*tuple_field) *value=((XirTuple *)frame->boxed.object)->fields[index];
     else *value = ((XirNominalValue *)frame->boxed.object)->fields[index];
 }

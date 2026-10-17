@@ -608,7 +608,9 @@ static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
 static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     EMIT_STATIC(buffer, es_0eecdf36a03e6314, " { XrXirCallStatus status; XrXirFaultDetail fault = {0};\n");
-    if (op->type != XR_XIR_UNIT) EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
+    /* A read API needs a real output location even for an empty result. */
+    if (op->type != XR_XIR_UNIT || op->op == XR_XIR_ARRAY_GET)
+        EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
     if (op->op == XR_XIR_ARRAY_NEW) {
         for (uint32_t i = 0; i < op->args[1] && emit_work(buffer, 1); ++i) {
             EMIT_U_SHAPE(buffer, et_285705dd6fffa699, " state->arguments[%u] = ", " state->arguments[", "] = ", i);

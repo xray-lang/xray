@@ -1,0 +1,2 @@
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{const original:Array<()>=[()];var copy=original;copy.push(());copy.push(());return finish(len(original)+len(copy)+38)}
