@@ -17,7 +17,7 @@ class CompleteFilesystemIO(unittest.TestCase):
             'io_system_direct':[True]*10+[5,True,True,2,'hello','world',True,1,'alpha',True,3,'a',True,'b',True,3,65,0,255]+[True]*32}
         self.assertEqual(sum(map(len,expected.values())),141)
         self.assertEqual({k:v['observations'] for k,v in traces.items()},expected)
-        rows=m.expected_rows();self.assertEqual(len(rows),8);self.assertEqual(sum(x['observation_count'] for x in rows),141)
+        rows=[row for row in m.expected_rows() if row['id']!=m._DYLIB_ID];self.assertEqual(len(rows),8);self.assertEqual(sum(x['observation_count'] for x in rows),141)
         for row in rows:
             name=Path(row['source']).stem
             self.assertEqual(row['expected']['stdout_utf8'],''.join(m.render({'expected':x})+'\n' for x in expected[name]))
@@ -127,11 +127,61 @@ class CompleteFilesystemIO(unittest.TestCase):
 
     def test_actual_products_keep_whole_original_sources_and_all_arguments(self):
         folder=Path(__file__).parent;cases={x['id']:x for x in json.loads((folder/'product_driver_cases.json').read_text())['cases']}
-        for row in m.expected_rows():
+        for row in (row for row in m.expected_rows() if row['id']!=m._DYLIB_ID):
             case=cases[row['id']];self.assertEqual(case['source'],row['source']);self.assertEqual(case['source'],case['preserved_original_identity']['source'])
             self.assertEqual(case['entry'],'run');self.assertEqual(case['source_context'],'original_absolute')
             self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8']);self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'')
             self.assertIn('descriptor release',case['independent_execution_model'])
 
+
+    def test_complete_dylib_all_ten_observations_and_single_provider_close(self):
+        trace=m.dylib_handle_trace()
+        self.assertEqual(trace['observations'],[True]*10)
+        self.assertEqual(trace['provider_calls'],[
+            ('open','kernel32.dll'),('symbol',1,'GetCurrentProcessId'),
+            ('symbol',1,'__xray_missing_symbol_for_dylib_test__'),('close',1),
+            ('open','__xray_missing_library_for_dylib_test__')])
+        self.assertEqual((trace['logical_handle'],trace['logical_open']),(0,False))
+        self.assertFalse(trace['function_address_invoked'])
+        self.assertFalse(trace['host_provider_orphysical_release_qualified'])
+
+    def test_dylib_idempotent_close_is_true_even_after_first_failure(self):
+        provider=m.DylibSymbols(close_ok=False);handle=m.DylibHandle(provider,1)
+        self.assertFalse(handle.close());self.assertTrue(handle.close())
+        self.assertIsNone(handle.symbol('GetCurrentProcessId'))
+        self.assertEqual(provider.calls,[('close',1)])
+        self.assertEqual((handle.handle,handle.is_open),(0,False))
+
+    def test_dylib_missing_host_facts_cannot_silently_reuse_positive_outputs(self):
+        for changes in ({'available':False},{'exported':False},{'missing_export':True},
+                        {'missing_library':True},{'error_text':''},{'close_ok':False}):
+            with self.subTest(changes=changes):
+                self.assertNotEqual(m.dylib_handle_trace(m.DylibSymbols(**changes))['observations'],[True]*10)
+
+    def test_dylib_changed_original_or_any_reviewed_authority_fails_closed(self):
+        saved=Path.read_bytes
+        for name in m._DYLIB_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==m.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):m.expected_rows()
+        with mock.patch.object(m,'_DYLIB_INPUTS',{}),self.assertRaises(ValueError):m.expected_rows()
+
+    def test_dylib_whole_original_and_public_product_keep_every_call_and_output(self):
+        original=(m.ROOT/m._DYLIB_SOURCE).read_text(encoding='utf-8')
+        self.assertEqual(original.count('print('),10)
+        self.assertEqual(original.count('import '),5)
+        self.assertEqual(original.count('lib!.close()'),2)
+        self.assertIn('var symPtr: Ptr<u8> = sym!',original)
+        self.assertIn('print(mem.addr(symPtr) != 0)',original)
+        self.assertEqual(original.count('sys.Dylib.open('),2)
+        self.assertEqual(original.count('lib!.symbol('),3)
+        row=next(row for row in m.expected_rows() if row['id']==m._DYLIB_ID)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':('true'+chr(10))*10,'stderr_utf8':''})
+        self.assertEqual(row['source'],row['original_source']);self.assertEqual(row['observation_count'],10)
+        cases=json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']
+        case=next(case for case in cases if case['id']==row['id'])
+        self.assertEqual((case['source'],case['entry'],case['source_context']),(m._DYLIB_SOURCE,'run','original_absolute'))
+        self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+        self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
 
 if __name__=='__main__':unittest.main()

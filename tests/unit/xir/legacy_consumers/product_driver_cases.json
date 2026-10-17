@@ -33089,6 +33089,35 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 3
+    },
+    {
+      "id": "complete_filesystem_io_sys_dylib_direct",
+      "oracle_id": "complete_filesystem_io_sys_dylib_direct",
+      "source": "tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr",
+      "source_lf_sha256": "6d3d4c872de3993d70ee8fc113c76d1616f71879ee37335dcfdd1ee7e679aa27",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P13",
+        "P08",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged Windows dynamic-library original; all five imports and ten print expressions retained. Symbolic handle and symbol availability, missing-name errors, first close and idempotent true second close, closed-symbol null. Host normal-operation preconditions remain runtime duties; no foreign function invocation, failure injection, physical release, lifetime, safety or provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr",
+        "source_lf_sha256": "6d3d4c872de3993d70ee8fc113c76d1616f71879ee37335dcfdd1ee7e679aa27"
+      },
+      "remaining_gates": [
+        "Complete Windows original and normal host prerequisites; legal Source refusal remains positive failure. No physical release/lifetime/FI/safety/provider/mixed qualification inferred from symbolic trace or independent host probe."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 10
     }
   ]
 }

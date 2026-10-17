@@ -236,4 +236,88 @@ def expected_rows():
             'VM_source_clears_readonly':True,'legacy_AOT_source_clears_readonly':False,
             'qualification':'SOURCE_AND_HOST_OPERATION_ONLY;current_generated_native_route_not_proved'}
         rows.append(row)
-    return rows
+    return rows + [dylib_expected_row()]
+
+_DYLIB_SOURCE = 'tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr'
+_DYLIB_ID = 'complete_filesystem_io_sys_dylib_direct'
+_DYLIB_INPUTS = {'tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr': '6d3d4c872de3993d70ee8fc113c76d1616f71879ee37335dcfdd1ee7e679aa27', 'stdlib/sys/sys.xr': '8e508319d317801403b633b8f27c7fb6154be5f0743ea2bdb6f1fca52bba3471', 'stdlib/os/os.xr': '32733efee3a175b97087a6750d7c37447b58ede1aa0359d04877b81462331098', 'stdlib/path/path.xr': 'c6d1721f27e93a385053105cfbf33d88dae8e038c79e29085b11dd70e08225a1', 'stdlib/mem/mem.xr': '9750e120d6b22f5c2caffd2d59d13238393ac6939c17827090a3829c33fa9dab', 'src/coro/xsys_provider.c': '2d05ef5bed8783936782127ccf59b480b9321eb86d94d2cc0e0b04cef77c3410', 'src/os/win/dylib_win.c': '4c950d9ebe81dd5d86df9fca4b01827694879c83301786af3fe5b30cd8e212a6', 'src/aot/xrt_sys.h': '40edd10a2a61514a031a795797622b254ff88e1f195003397c588f017252f24e'}
+
+class DylibSymbols:
+    """Explicit normal host facts; symbolic addresses never call foreign code."""
+    def __init__(self, available=True, exported=True, missing_export=False,
+                 missing_library=False, error_text='host error', close_ok=True):
+        self.available=available;self.exported=exported
+        self.missing_export=missing_export;self.missing_library=missing_library
+        self.error_text=error_text;self.close_ok=close_ok
+        self.last_error='';self.calls=[]
+
+    def open(self, name):
+        self.calls.append(('open',name))
+        found=self.available if name=='kernel32.dll' else self.missing_library
+        self.last_error='' if found else self.error_text
+        return 1 if found else 0
+
+    def symbol(self, handle, name):
+        self.calls.append(('symbol',handle,name))
+        found=self.exported if name=='GetCurrentProcessId' else self.missing_export
+        self.last_error='' if found else self.error_text
+        return 17 if found else None
+
+    def close(self, handle):
+        self.calls.append(('close',handle))
+        return self.close_ok
+
+
+class DylibHandle:
+    """Public close is idempotently true; a closed symbol avoids the provider."""
+    def __init__(self, provider, handle):
+        self.provider=provider;self.handle=handle;self.is_open=handle!=0
+
+    def symbol(self, name):
+        if not self.is_open:return None
+        return self.provider.symbol(self.handle,name)
+
+    def close(self):
+        if not self.is_open:return True
+        ok=self.provider.close(self.handle)
+        self.handle=0;self.is_open=False
+        return ok
+
+
+def dylib_handle_trace(provider=None):
+    if provider is None:provider=DylibSymbols()
+    handle=provider.open('kernel32.dll')
+    lib=DylibHandle(provider,handle) if handle else None
+    out=[lib is not None]
+    if lib is not None:
+        symbol=lib.symbol('GetCurrentProcessId')
+        out.append(symbol is not None)
+        if symbol is not None:out.append(symbol!=0)
+        missing=lib.symbol('__xray_missing_symbol_for_dylib_test__')
+        out.extend([missing is None,len(provider.last_error)>0])
+        out.extend([lib.close(),lib.close(),lib.symbol('GetCurrentProcessId') is None])
+    missing_lib=provider.open('__xray_missing_library_for_dylib_test__')
+    out.extend([missing_lib==0,len(provider.last_error)>0])
+    return {'observations':out,'provider_calls':provider.calls,
+            'logical_handle':None if lib is None else lib.handle,
+            'logical_open':False if lib is None else lib.is_open,
+            'original_print_expressions':10,
+            'host_preconditions':['Windows x64','kernel32.dll opens',
+                'GetCurrentProcessId has nonzero address','both reserved missing names are absent',
+                'normal first FreeLibrary succeeds','failure diagnostics are nonempty'],
+            'function_address_invoked':False,'host_provider_orphysical_release_qualified':False}
+
+
+def dylib_expected_row():
+    expected={_DYLIB_SOURCE,'stdlib/sys/sys.xr','stdlib/os/os.xr','stdlib/path/path.xr',
+              'stdlib/mem/mem.xr','src/coro/xsys_provider.c','src/os/win/dylib_win.c','src/aot/xrt_sys.h'}
+    if set(_DYLIB_INPUTS)!=expected:raise ValueError('Dynamic library complete inputs changed')
+    for name,digest in _DYLIB_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Dynamic library original or reviewed authority changed: '+name)
+    trace=dylib_handle_trace()
+    return {'id':_DYLIB_ID,'source':_DYLIB_SOURCE,'original_source':_DYLIB_SOURCE,
+            'required_target':'windows-x86_64','expected':{'exit_code':0,'stderr_utf8':'',
+                'stdout_utf8':''.join(render({'expected':value})+'\n' for value in trace['observations'])},
+            'model':'Complete unchanged Windows dynamic-library original; all five imports and ten print expressions retained. Symbolic handle and symbol availability, missing-name errors, first close and idempotent true second close, closed-symbol null. Host normal-operation preconditions remain runtime duties; no foreign function invocation, failure injection, physical release, lifetime, safety or provider qualification.',
+            'observation_count':len(trace['observations']),'required_semantic_trace':trace}
