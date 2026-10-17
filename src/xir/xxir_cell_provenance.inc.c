@@ -400,6 +400,10 @@ static bool cell_proof_roles_range(CellProofBuild *build,uint32_t f,
 }
 
 /* Only actual references assign a capture or lexical-cleanup role. */
+static bool cell_proof_role_receive(CellProofBuild *build,uint32_t f,uint32_t i,
+    const XrXirCellProofBodyHead *head,const XrXirInstruction *operation) {
+    (void)head;return cell_proof_role_row(build,f,i,operation);
+}
 static bool cell_proof_roles(CellProofBuild *build) {
     XrXirCellProvenance *proof = build->proof;
     const XirMetadataDomain *module = &build->body->domain;
@@ -421,12 +425,7 @@ static bool cell_proof_roles(CellProofBuild *build) {
             if (!cell_proof_run(build,function,&cursor,&run) ||
                 !cell_proof_roles_range(build,f,&run,&handled)) return false;
             if (handled) continue;
-            for (uint32_t i=run.first;i-run.first<run.count;++i) {
-                if (!cell_proof_work(build,1)) return false;
-                XrXirInstruction operation;const XrXirInstruction *op=
-                    cell_proof_run_operation(build,f,&run,i,&operation);
-                if (!op || !cell_proof_role_row(build,f,i,op)) return false;
-            }
+            if (!cell_proof_run_walk(build,f,function,&run,cell_proof_role_receive,1)) return false;
         }
     }
     size_t words = 0; uint64_t scopes = 0;
@@ -507,24 +506,38 @@ static bool cell_proof_project_root(CellProofBuild *build,uint32_t f,uint32_t va
 
 /* The existing uses byte records exact projected OBJECT_PLACE membership.
  * Bit8 cannot overlap parameter capture/scoped/cleanup uses1/2/4. */
+static bool cell_proof_class_collect_row(CellProofBuild *build,uint32_t f,uint32_t i,
+    const XrXirCellProofBodyHead *function,const XrXirInstruction *op) {
+    (void)i;
+    if (op->op!=XR_XIR_CELL_PROJECT) return true;
+    uint32_t root=0;
+    if (!cell_proof_project_root(build,f,op->args[0],&root)) return false;
+    XrXirInstruction root_operation={0};const XrXirInstruction *root_op=
+        cell_proof_instruction(build,f,root-function->parameter_count,&root_operation);
+    if (!root_op) return false;
+    if (root_op->op!=XR_XIR_OBJECT_PLACE) return true;
+    if (!cell_proof_work(build,2)) return false;
+    build->uses[build->proof->functions[f].begin+root]|=8u;return true;
+}
 static bool cell_proof_class_collect(CellProofBuild *build) {
     if (!build->proof->project_count) return true;
     for (uint32_t f=0;f<build->body->domain.function_count;++f) {
         XrXirCellProofBodyHead head={0};if (!cell_proof_head(build,f,&head)) return false;
         const XrXirCellProofBodyHead *function=&head;
-        for (uint32_t i=0;i<function->instruction_count;++i) {
-            if (!cell_proof_work(build,1)) return false;
-            XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_instruction(build,f,i,&operation);
-            if (!op) return false;
-            if (op->op!=XR_XIR_CELL_PROJECT) continue;
-            uint32_t root=0;
-            if (!cell_proof_project_root(build,f,op->args[0],&root)) return false;
-            XrXirInstruction root_operation={0};const XrXirInstruction *root_op=
-                cell_proof_instruction(build,f,root-function->parameter_count,&root_operation);
-            if (!root_op) return false;
-            if (root_op->op!=XR_XIR_OBJECT_PLACE) continue;
-            if (!cell_proof_work(build,2)) return false;
-            build->uses[build->proof->functions[f].begin+root]|=8u;
+        if (!build->body->range) {
+            for (uint32_t i=0;i<function->instruction_count;++i) {
+                if (!cell_proof_work(build,1)) return false;
+                XrXirInstruction operation={0};const XrXirInstruction *op=cell_proof_instruction(build,f,i,&operation);
+                if (!op || !cell_proof_class_collect_row(build,f,i,function,op)) return false;
+            }
+            continue;
+        }
+        if (!cell_proof_work(build,sizeof(XrXirCellProofRunCursor))) return false;
+        XrXirCellProofRunCursor cursor={.function=f};
+        while (cursor.next<function->instruction_count) {
+            XrXirCellProofRun run;
+            if (!cell_proof_run(build,function,&cursor,&run) ||
+                !cell_proof_run_walk(build,f,function,&run,cell_proof_class_collect_row,1)) return false;
         }
     }
     return true;
@@ -743,12 +756,7 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
             if (!cell_proof_run(build,&head,&cursor,&run) ||
                 !cell_proof_edges_range(build,f,&head,&run,&handled)) return false;
             if (handled) continue;
-            for (uint32_t i=run.first;i-run.first<run.count;++i) {
-                if (!cell_proof_work(build,3)) return false;
-                XrXirInstruction operation;const XrXirInstruction *op=
-                    cell_proof_run_operation(build,f,&run,i,&operation);
-                if (!op || !cell_proof_edge_row(build,f,i,&head,op)) return false;
-            }
+            if (!cell_proof_run_walk(build,f,&head,&run,cell_proof_edge_row,3)) return false;
         }
     }
     return true;
@@ -899,12 +907,7 @@ static bool cell_proof_validate(CellProofBuild *build) {
             if (!cell_proof_run(build,function,&cursor,&run) ||
                 !cell_proof_zero_operands(build,f,function,&run,&zero)) return false;
             if (zero) continue;
-            for (uint32_t i=run.first;i-run.first<run.count;++i) {
-                if (!cell_proof_work(build,1)) return false;
-                XrXirInstruction operation;const XrXirInstruction *op=
-                    cell_proof_run_operation(build,f,&run,i,&operation);
-                if (!op || !cell_proof_validate_row(build,f,i,function,op)) return false;
-            }
+            if (!cell_proof_run_walk(build,f,function,&run,cell_proof_validate_row,1)) return false;
         }
     }
     return true;

@@ -162,6 +162,35 @@ static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,ui
     *storage=value;return storage;
 }
 
+typedef bool (*CellProofRunReceiver)(CellProofBuild *,uint32_t,uint32_t,
+    const XrXirCellProofBodyHead *,const XrXirInstruction *);
+
+/* A complete synchronous literal walk validates every current opcode before
+ * its first receiver. All original semantic row receivers still run. No fact,
+ * decoded value or eligibility flag survives this immutable input lifetime;
+ * independent selected-row reads retain their own complete literal checks. */
+static bool cell_proof_run_walk(CellProofBuild *build,uint32_t f,
+    const XrXirCellProofBodyHead *head,const XrXirCellProofRun *run,
+    CellProofRunReceiver receiver,uint64_t row_work) {
+    if (!head || !run || !run->operation || !receiver || !run->count ||
+        run->first>=head->instruction_count || run->count>head->instruction_count-run->first)
+        return cell_proof_error(build,f,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    if (run->literal_tail && !cell_proof_literal_run(build,f,run->first,run)) return false;
+    for (uint32_t i=run->first;i-run->first<run->count;++i) {
+        if (!cell_proof_work(build,row_work)) return false;
+        XrXirInstruction storage;const XrXirInstruction *operation;
+        if (run->literal_tail) {
+            if (!cell_proof_work(build,3+sizeof(operation))) return false;
+            operation=i==run->first?run->operation:&run->literal_tail[i-run->first-1];
+        } else operation=cell_proof_run_operation(build,f,run,i,&storage);
+        if (!operation || !receiver(build,f,i,head,operation)) {
+            if (build->status==XR_XIR_OK) cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+            return false;
+        }
+    }
+    return build->status==XR_XIR_OK;
+}
+
 static bool cell_proof_shape(CellProofBuild *build,uint32_t f,uint32_t i,
     XrXirCellProofInstructionShape *output) {
     if (build->status!=XR_XIR_OK || !output) return false;
