@@ -50,7 +50,9 @@ typedef struct XrXirSourceDeclaration {
 } XrXirSourceDeclaration;
 typedef enum XrXirSourceAccess {
     XR_XIR_SOURCE_READ, XR_XIR_SOURCE_WRITE, XR_XIR_SOURCE_READ_WRITE,
-    XR_XIR_SOURCE_CALL, XR_XIR_SOURCE_FUNCTION_VALUE, XR_XIR_SOURCE_TYPE_USE
+    XR_XIR_SOURCE_CALL, XR_XIR_SOURCE_FUNCTION_VALUE, XR_XIR_SOURCE_TYPE_USE,
+    /* A directive selects an export without executing or using it in code. */
+    XR_XIR_SOURCE_IMPORT_SELECTOR
 } XrXirSourceAccess;
 typedef struct XrXirSourceReference {
     XrXirSourceRange range;

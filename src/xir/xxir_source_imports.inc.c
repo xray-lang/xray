@@ -78,7 +78,7 @@ static bool source_import_selectors(SourceContext *ctx,SourceName *binding) {
         if(!member->name_span.line)return true;
         XrXirSourceRange range=source_query_name_span(ctx,member->name_span,member->name);
         return ctx->diagnostic.status==XR_XIR_OK&&
-            source_query_target_reference(ctx,range,target->declaration,XR_XIR_SOURCE_TYPE_USE);
+            source_query_target_reference(ctx,range,target->declaration,XR_XIR_SOURCE_IMPORT_SELECTOR);
     }
     return source_fail(ctx,binding->node,XR_XIR_BAD_STRUCTURE,"import binding has no parser member");
 }

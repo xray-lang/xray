@@ -21,7 +21,7 @@ static void import_owner(void) {
         {.id=2,.kind=XR_XIR_SOURCE_FUNCTION,.name="target",.range={1,1,11,1,17},.exported=true},
         {.id=3,.kind=XR_XIR_SOURCE_MODULE,.name="lib",.range={0,0,0,0,0}}
     };
-    XrXirSourceReference refs[]={{{0,1,9,1,15},2,2,XR_XIR_SOURCE_TYPE_USE}};
+    XrXirSourceReference refs[]={{{0,1,9,1,15},2,2,XR_XIR_SOURCE_IMPORT_SELECTOR}};
     XrXirSourceDeclarationSyntax facts[]={
         {.name={0,1,9,1,15},.role=XR_XIR_SOURCE_SYNTAX_NAME},
         {.name={1,1,11,1,17},.role=XR_XIR_SOURCE_SYNTAX_NAME},

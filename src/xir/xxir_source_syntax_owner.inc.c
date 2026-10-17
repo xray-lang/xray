@@ -79,7 +79,7 @@ static XrXirStatus query_syntax_import(SourceQueryCopy *copy,const XrXirSourceSy
         if(!query_work(copy,sizeof(view->references[i])+sizeof(syntax->references[i])))return copy->status;
         const XrXirSourceReference *ref=&view->references[i];
         if(!query_syntax_same_range(syntax->references[i],marker->range))continue;
-        if(ref->declaration!=decl->target||ref->target!=decl->target||ref->access!=XR_XIR_SOURCE_TYPE_USE)
+        if(ref->declaration!=decl->target||ref->target!=decl->target||ref->access!=XR_XIR_SOURCE_IMPORT_SELECTOR)
             return XR_XIR_BAD_STRUCTURE;
         selected=true;
     }
