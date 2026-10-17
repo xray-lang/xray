@@ -373,13 +373,15 @@ done:
 /* All failure paths keep both input owners and the occupied output intact.
  * Ownership moves only after complete copied correspondence and closure proof;
  * construction-only pointers are then removed from the published certificate. */
+#include "xxir_effect_invocation_final_vectors.inc.c"
+
 static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     const EffectInvocationSealRequest *request,EffectInvocationCertificate **output,
     const EffectInvocationProjectionSink *sink) {
     if (!xir_compile_context_valid(work) || !request || !output || *output || !request->equations ||
         !*request->equations || !request->result || !*request->result) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationWorkspace *owner=*request->equations;EffectFinalFunctions *result=*request->result;
-    EffectFinalFunctions *staged=result;bool summary_moved=false;
+    EffectFinalFunctions *staged=result;bool summary_moved=false,final_copied=false;
     if (!effect_body_request_owned_matches(owner->work,&owner->body,owner->final.material) ||
         owner->work->resources!=work->resources || result->resources!=work->resources ||
         result->count!=effect_body_count(owner->final.material) ||
@@ -422,7 +424,10 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) {
         certificate->final=xir_compile_alloc(work,sizeof(*certificate->final),&status);
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*certificate->final))) status=XR_XIR_BUDGET;
-        if (status==XR_XIR_OK) *certificate->final=owner->final;
+        if (status==XR_XIR_OK) {
+            *certificate->final=owner->final;final_copied=true;
+            status=effect_invocation_final_vectors_copy(work,&owner->final,certificate->final);
+        }
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(certificate->final->summary)+2*sizeof(void *)))
             status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) {
@@ -439,6 +444,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status!=XR_XIR_OK) {
         if (summary_moved) { *staged=*result;*request->result=staged; }
         if (certificate) {
+            if (final_copied) effect_invocation_final_vectors_release(certificate->final,&owner->final);
             if (certificate->final) *certificate->final=(EffectInvocationFinal){0};
             certificate->body=NULL;
         }
@@ -449,6 +455,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     certificate->terms.remaining=NULL;certificate->body->terms.remaining=NULL;
     /* Move the exact inventory, then destroy every solver allocation. Readers
      * retain only Final; later proof requests own independent temporary scratch. */
+    effect_invocation_final_vectors_release(&owner->final,certificate->final);
     owner->final=(EffectInvocationFinal){0};
     effect_invocation_free(owner);
     xr_compile_resources_free(staged);
