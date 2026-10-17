@@ -1,7 +1,7 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #ifndef LSP_RENAME_RESOURCE_CASES_H
 #define LSP_RENAME_RESOURCE_CASES_H
-static bool rename_resource_scenario(unsigned scenario){return scenario==0||scenario==13||scenario==14||scenario==15;}
+static bool rename_resource_scenario(unsigned scenario){return scenario==0||scenario==13||scenario==14||scenario==15||scenario==19||scenario==21;}
 static int rename_task_before(const RenameTaskOptions *options) {
     RenameTaskFixture f;rename_task_fixture(&f,options);rename_task_start(&f);
     size_t before=runtime_attempts;XlspPendingRequest *pending=xlsp_pending_request_find(&f.server.pending_requests,&f.id);
@@ -46,7 +46,7 @@ static int rename_task_main(int argc,char **argv) {
         fprintf(stderr,"RENAME_AXES method=%u scenario=%u checked=9 physical0/0 JSON0/0 app0/0\n",o.method,o.scenario);return 0;
     }
     CHECK(argc==8);o.scenario=(unsigned)strtoul(argv[7],NULL,10);
-    CHECK(o.scenario<=18);
+    CHECK(o.scenario<=22);
     return rename_task_once(&o,&metrics);
 }
 #endif // LSP_RENAME_RESOURCE_CASES_H

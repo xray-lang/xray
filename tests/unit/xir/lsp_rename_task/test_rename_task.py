@@ -34,17 +34,19 @@ with tempfile.TemporaryDirectory(prefix="rename-task-😀-#-",dir=exe.parent) as
         return r
     def check(value,method,scenario):
         if method:
-            name="target" if scenario==13 else "lib" if scenario==14 else "alias"
-            expected=span(0,10,16) if scenario==13 else span(1,21,24 if scenario==14 else 26)
+            name="counter" if scenario==19 else "value" if scenario==21 else "target" if scenario==13 else "lib" if scenario==14 else "alias"
+            expected=span(0,4,11) if scenario==19 else span(4,32,37) if scenario==21 else span(0,10,16) if scenario==13 else span(1,21,24 if scenario==14 else 26)
             assert value==dict(range=expected,placeholder=name),(method,scenario,value)
             return
         changes=value["documentChanges"];assert len(changes)==(3 if scenario==13 else 1)
         found={row["textDocument"]["uri"]:row for row in changes};assert len(found)==len(changes)
-        new="changed😀" if scenario==15 else "changed"
+        new="payload" if scenario==21 else "changed😀" if scenario==15 else "changed"
         if scenario==13:
             expected={uri:(7,[dict(range=span(0,8,14),newText="changed")]),
                 library:(9,[dict(range=span(0,10,16),newText="changed")]),
                 closed:(None,[dict(range=span(0,9,15),newText="changed as target")])}
+        elif scenario==21:
+            expected={uri:(7,[dict(range=span(line,start,start+5),newText="payload: value" if line==6 else "payload") for line,start in [(6,16),(4,32),(1,9)]])}
         else:
             declaration=span(0,14,14) if scenario==14 else span(0,27,32) if scenario==15 else span(0,18,23)
             expected={uri:(7,[dict(range=span(1,21,24 if scenario==14 else 26),newText=new),
@@ -62,9 +64,11 @@ with tempfile.TemporaryDirectory(prefix="rename-task-😀-#-",dir=exe.parent) as
         rows=[]
         if mode=="--normal":
             for method in (0,1):
-                for scenario in [*range(13),13,14,15,17,18,*([16] if method==0 else [])]:
+                for scenario in [*range(13),13,14,15,17,18,21,*([16] if method==0 else [19,20,22])]:
                     r=invoke(method,scenario)
-                    if scenario in (9,11,12):
+                    if scenario in (20,22):
+                        assert not r.stdout and f"RENAME_ORIGINAL_REJECT scenario={scenario}".encode() in r.stderr
+                    elif scenario in (9,11,12):
                         check(json.loads(r.stdout),method,scenario)
                         assert (b"captured_owner_dead=1" if scenario in (9,11) else b"server_poisoned=1 one_shot=1") in r.stderr
                         if scenario==11:assert b"cached_AST_ledger_preserved=1" in r.stderr
@@ -84,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix="rename-task-😀-#-",dir=exe.parent) as
                     print(json.dumps(dict(method=method,scenario=scenario,stderr=r.stderr.decode("utf-8"),stdout=r.stdout.decode("utf-8")),ensure_ascii=False))
         baselines=[]
         for method in (0,1):
-            for scenario in (0,13,14,15):
+            for scenario in (0,13,14,15,21,*([19] if method else [])):
                 r=invoke(method,"--resource",maximum,maximum,scenario);m=metric.search(r.stderr);assert m,r.stderr
                 values=unpack(r.stdout);assert len(values)==1 and "result" in values[0];check(values[0]["result"],method,scenario)
                 row=dict(method=method,scenario=scenario,source=int(m[3]),json=int(m[4]),allocated=int(m[7]),peak=int(m[8]),work=int(m[9]))
@@ -120,7 +124,7 @@ with tempfile.TemporaryDirectory(prefix="rename-task-😀-#-",dir=exe.parent) as
             assert len(set(done))==len(plans)
             for method,scenario,domain,start,count in done:checked[domain]+=count
             assert all(checked[d]==sum(row[d] for row in baselines) for d in checked)
-            assert axes==72
+            assert axes==99
         print(json.dumps(dict(normal_cases=len(rows),baselines=baselines,full_FI=mode=="--resources",
             checked=checked,axes=axes,original_limits=True,workers=8,deadline_seconds=290,image_sha256=image)))
     finally:

@@ -14,6 +14,7 @@
 #include "app/lsp/xlsp_hierarchy_request.h"
 #include "app/lsp/xlsp_source_syntax.h"
 #include "toolchain/xcompiler_session.h"
+#include "../../lsp/test_lsp_rename_params.h"
 #include "rename_handlers.inc.c"
 typedef struct RenameTaskOptions {
     const char *uri,*library,*closed,*root;
@@ -44,18 +45,26 @@ static void rename_task_fixture(RenameTaskFixture *f,const RenameTaskOptions *o)
     const char *text="import {target as alias} from \"./lib\"\nfn run()->i64{return alias(1)}\n";
     if(o->scenario==14)text="import \"./lib\"\nfn run()->i64{return lib.target(1)}\n";
     if(o->scenario==15)text="/* \xf0\x9f\x98\x80 */ import {target as alias} from \"./lib\"\r\nfn run()->i64{return alias(1)}\r\n";
+    if(o->scenario==19)text="var counter = 0\n";
+    if(o->scenario==20)text="var x = 42\n";
+    if(o->scenario==21)text="enum Result {\n"
+        "    Ok { value: i64, code: i64 },\n"
+        "    Err { value: string }\n"
+        "}\n"
+        "var made = Result.Ok { code: 7, value: 42 }\n"
+        "var selected = match (made) {\n"
+        "    Result.Ok { value, code: _ } -> value\n"
+        "    Result.Err { value: message } -> 0\n"
+        "}\n";
     add_document(&f->server,o->uri,text,7);
     add_document(&f->server,o->library,"export fn target(value:i64)->i64{return value}\n",9);
     xlsp_document_store_get(f->server.doc_table,o->uri)->sem_token_result_id=UINT32_MAX;
     xlsp_document_store_get(f->server.doc_table,o->library)->sem_token_result_id=UINT32_MAX;
-    f->params=xjson_new_object();XrJsonValue *doc=xjson_new_object();CHECK(f->params&&doc);
-    CHECK(index_json_member(doc,"uri",xjson_new_string(o->scenario==13?o->library:o->uri)));
-    CHECK(index_json_member(f->params,"textDocument",doc));
-    const char *point=o->scenario==13?"{\"line\":0,\"character\":12}":
-        o->scenario==17?"{\"line\":99,\"character\":0}":"{\"line\":1,\"character\":22}";
-    CHECK(index_json_member(f->params,"position",xjson_parse(point,strlen(point))));
-    if(!o->method)CHECK(index_json_member(f->params,"newName",xjson_new_string(
-        o->scenario==15?"changed\xf0\x9f\x98\x80":o->scenario==16?"run":"changed")));
+    XrLspPosition point=o->scenario==19?(XrLspPosition){0,4}:o->scenario==20?(XrLspPosition){0,0}:
+        o->scenario==21?(XrLspPosition){4,33}:o->scenario==13?(XrLspPosition){0,12}:
+        o->scenario==17?(XrLspPosition){99,0}:(XrLspPosition){1,22};
+    const char *name=o->scenario==21?"payload":o->scenario==15?"changed\xf0\x9f\x98\x80":o->scenario==16?"run":"changed";
+    f->params=rename_test_params(o->scenario==13?o->library:o->uri,point,o->method?NULL:name);CHECK(f->params);
     f->id=identity();XlspRequestId owned={0};CHECK(xlsp_request_id_clone(&f->id,&owned)==XLSP_PROTOCOL_OK);
     CHECK(xlsp_pending_request_add(&f->server.pending_requests,owned,
         o->method?"textDocument/prepareRename":"textDocument/rename",99));
@@ -121,6 +130,12 @@ static void rename_task_death(RenameTaskFixture *f) {
 #include "admission_cases.h"
 static int rename_task_once(const RenameTaskOptions *o,RenameTaskMetrics *metrics) {
     RenameTaskFixture f;rename_task_fixture(&f,o);
+    if(o->scenario==20||o->scenario==22) {
+        CHECK(o->method==1);
+        CHECK(!xlsp_handle_td_prepare_rename(o->scenario==22?NULL:&f.server,o->scenario==22?NULL:f.params));
+        if(o->scenario==20)CHECK(f.server.source_failure.stage&&f.server.source_failure.status==XR_XIR_UNRESOLVED);
+        rename_task_close(&f);fprintf(stderr,"RENAME_ORIGINAL_REJECT scenario=%u physical0/0 JSON0/0 app0/0\n",o->scenario);return 0;
+    }
     if(o->scenario==9||o->scenario==11){rename_task_sync(&f,o->scenario==11);return 0;}
     if(o->scenario==12){rename_task_death(&f);return 0;}
     rename_task_start(&f);

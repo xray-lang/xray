@@ -23,7 +23,7 @@
 #include "../../../src/app/lsp/xlsp_inlay_hints.h"
 #include "../../../src/app/lsp/xlsp_imports.h"
 #include "../../../src/app/lsp/xlsp_navigation.h"
-#include "../../../src/app/lsp/xlsp_rename.h"
+#include "test_lsp_rename_params.h"
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
 #include "../../../src/app/lsp/xlsp_index_pool.h"
 #include "../../../src/app/lsp/xlsp_workspace.h"
@@ -1302,12 +1302,22 @@ TEST(enum_record_fields_share_one_semantic_identity) {
     ASSERT(strstr(hover_text, "Result.Ok.value: i64") != NULL);
     xjson_free(hover);
 
-    XrJsonValue *rename = xlsp_analyze_rename(server, doc, construct_pos, "payload");
+    XrJsonValue *rename_params=rename_test_params(uri,construct_pos,"payload");ASSERT(rename_params != NULL);
+    XrJsonValue *rename = xlsp_handle_td_rename(server,rename_params);xjson_free(rename_params);
     ASSERT(rename != NULL);
-    XrJsonValue *changes = xjson_get_object(rename, "changes");
-    XrJsonValue *edits = changes ? xjson_get_array(changes, uri) : NULL;
+    XrJsonValue *changes = xjson_get_array(rename, "documentChanges");
+    ASSERT(changes != NULL);ASSERT_EQ(xjson_array_len(changes),1);
+    XrJsonValue *change=xjson_array_get(changes,0),*text_document=xjson_get_object(change,"textDocument");
+    ASSERT(text_document != NULL);ASSERT_STR_EQ(xjson_get_string(text_document,"uri"),uri);
+    ASSERT_EQ(xjson_get_int(text_document,"version"),1);
+    XrJsonValue *edits = xjson_get_array(change,"edits");
     ASSERT(edits != NULL);
     ASSERT_EQ(xjson_array_len(edits), 3);
+    for(int i=0;i<3;++i) {
+        XrJsonValue *edit=xjson_array_get(edits,i),*start=xjson_get_object(xjson_get_object(edit,"range"),"start");
+        ASSERT(start != NULL);
+        ASSERT_STR_EQ(xjson_get_string(edit,"newText"),xjson_get_int(start,"line")==pattern_line?"payload: value":"payload");
+    }
     xjson_free(rename);
 
     XrJsonValue *tokens = semantic_tokens_for_test(server,doc);
