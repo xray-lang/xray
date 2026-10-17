@@ -198,10 +198,35 @@ XR_FUNC XrXirStatus xdap_launch_function_rules(const XdapLaunch *launch,const Xd
         return XR_XIR_BUDGET;
     if (matches) memcpy(output,fresh,(size_t)matches*sizeof(*output));*count=matches;return XR_XIR_OK;
 }
+static XrXirStatus launch_program(const XdapLaunchRequest *request,const XrXirSourceProduct *source,
+    XrXirArtifact **lowered,XrXirVmDebug *debug,XdapLaunch *launch,XrXirProgram **output) {
+    if (!request->native.load) return xr_xir_compile_vm_debug_program_take(lowered,debug,output);
+    XdapNativeCode native={0};
+    XrXirStatus status=request->native.load(request->native.context,source,*lowered,&native);
+    if (status==XR_XIR_OK) {
+        XrXirVmDebugNative input={&native.program,native.source,native.mask,native.count};
+        status=xr_xir_compile_vm_debug_mixed_program_take(lowered,&input,debug,output);
+        if (status==XR_XIR_OK) {
+            const XrXirDeclarations *declarations=native.program.declarations;
+            const XrXirCompileContext *context=xr_xir_compile_source_product_context(source);
+            if (xr_compile_resources_work(context->resources,(uint64_t)native.count+declarations->module_count+1)!=XR_COMPILE_RESOURCE_OK)
+                status=XR_XIR_BUDGET;
+            if (status==XR_XIR_OK) {
+                launch->native_startup=native.mask[launch->entry]!=0;launch->native_only=true;
+                for(uint32_t m=0;m<declarations->module_count;++m)
+                    if(native.mask[declarations->modules[m].initializer]) launch->native_startup=true;
+                for(uint32_t f=0;f<native.count;++f) if(!native.mask[f]) launch->native_only=false;
+            }
+        }
+    }
+    if (native.program.code.release) native.program.code.release(native.program.code.owner);
+    return status;
+}
 XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunch **output,
     XrSourceCompileDiagnostic *diagnostic) {
     if (!request || !request->compiler || !output || *output || !diagnostic ||
-        (!!request->absolute_file == !!request->text) || !xr_xir_domain_current(request->observer_metadata))
+        (!!request->absolute_file == !!request->text) || (!request->native.load && request->native.context) ||
+        !xr_xir_domain_current(request->observer_metadata))
         return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context=xr_source_compiler_context(request->compiler);
     if (!context) return XR_XIR_BAD_STRUCTURE;
@@ -240,7 +265,7 @@ XR_FUNC XrXirStatus xdap_launch_build(const XdapLaunchRequest *request,XdapLaunc
     status=launch_code(launch,module);if (status!=XR_XIR_OK) goto done;
     status=launch_value_status(xr_xir_vm_debug_new(request->observer_metadata,request->instance.depth_limit,&debug));
     if (status!=XR_XIR_OK) goto done;
-    status=xr_xir_compile_vm_debug_program_take(&lowered,debug,&program);if (status!=XR_XIR_OK) goto done;
+    status=launch_program(request,launch->source,&lowered,debug,launch,&program);if (status!=XR_XIR_OK) goto done;
     status=xir_vm_debug_source_map(debug,context,xr_xir_compile_source_product_debug(launch->source));if (status!=XR_XIR_OK) goto done;
     status=launch_value_status(xdap_current_new(request->observer_metadata,&debug,program,&request->instance,&launch->control));
     if (status==XR_XIR_OK) { *output=launch;launch=NULL; }

@@ -1046,3 +1046,49 @@ set_tests_properties(test_dap_native_routes_lifecycle PROPERTIES TIMEOUT 120 RUN
 
 add_test(NAME test_dap_native_routes_controls COMMAND test_dap_native_routes --controls)
 set_tests_properties(test_dap_native_routes_controls PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;filters")
+
+add_executable(test_dap_native_provider test_native_provider.c
+    "${XR_DAP_NATIVE_ROUTES_DIR}/native_task.c" "${XR_DAP_NATIVE_ROUTES_DIR}/native_task.h")
+target_link_libraries(test_dap_native_provider PRIVATE xray_dap_current xray_xir_source)
+target_include_directories(test_dap_native_provider PRIVATE "${XR_DAP_NATIVE_ROUTES_DIR}")
+target_compile_definitions(test_dap_native_provider PRIVATE
+    XR_NATIVE_TASK_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/native-routes" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_dap_native_provider PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_native_provider PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_native_provider COMMAND test_dap_native_provider)
+set_tests_properties(test_dap_native_provider PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;provider")
+
+add_executable(test_dap_native_provider_producer test_native_provider_producer.c)
+target_link_libraries(test_dap_native_provider_producer PRIVATE xray_source_compile xray_xir_cgen)
+set(XR_DAP_NATIVE_PROVIDER_DIR "${CMAKE_CURRENT_BINARY_DIR}/native-provider")
+target_compile_definitions(test_dap_native_provider_producer PRIVATE
+    XR_NATIVE_PROVIDER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/native-provider/program.xr" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+add_custom_command(OUTPUT "${XR_DAP_NATIVE_PROVIDER_DIR}/native_provider.c" "${XR_DAP_NATIVE_PROVIDER_DIR}/native_provider.h"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XR_DAP_NATIVE_PROVIDER_DIR}"
+    COMMAND $<TARGET_FILE:test_dap_native_provider_producer> "${XR_DAP_NATIVE_PROVIDER_DIR}"
+    DEPENDS test_dap_native_provider_producer "${CMAKE_CURRENT_SOURCE_DIR}/native-provider/program.xr" VERBATIM)
+add_executable(test_dap_native_provider_json test_native_provider_json.c
+    "${XR_DAP_NATIVE_PROVIDER_DIR}/native_provider.c" "${XR_DAP_NATIVE_PROVIDER_DIR}/native_provider.h"
+    ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_native_provider_json PRIVATE xray_dap_current)
+target_include_directories(test_dap_native_provider_json PRIVATE "${XR_DAP_NATIVE_PROVIDER_DIR}")
+target_compile_definitions(test_dap_native_provider_json PRIVATE
+    XR_NATIVE_PROVIDER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/native-provider/program.xr" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_dap_native_provider_producer PRIVATE /W4 /WX /utf-8)
+    target_compile_options(test_dap_native_provider_json PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_native_provider_producer PRIVATE -Wall -Wextra -Werror)
+    target_compile_options(test_dap_native_provider_json PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_native_provider_json COMMAND test_dap_native_provider_json)
+set_tests_properties(test_dap_native_provider_json PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;provider;json")
+
+add_test(NAME test_dap_native_provider_json_census COMMAND test_dap_native_provider_json --census)
+add_test(NAME test_dap_native_provider_json_boundary COMMAND test_dap_native_provider_json --boundary)
+add_test(NAME test_dap_native_provider_json_resources COMMAND test_dap_native_provider_json --resources)
+set_tests_properties(test_dap_native_provider_json_census test_dap_native_provider_json_boundary PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;provider;ownership;resources;boundary")
+set_tests_properties(test_dap_native_provider_json_resources PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "dap;native;provider;ownership;resources;fault-injection")

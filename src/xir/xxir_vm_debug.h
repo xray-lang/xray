@@ -66,7 +66,8 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_debug_program_take(XrXirArtifact **artifac
  * selected callback and frame region; missing or old protocols are rejected.
  * Descriptor inputs are borrowed synchronously; receiving owns copied offsets.
  * Success moves artifact and native->program->code; failure preserves all
- * inputs and output. At least one entry of each kind is required. */
+ * inputs and output. At least one native entry is required; a native-only
+ * selection does not introduce unused VM callbacks. */
 XR_FUNC XrXirStatus xr_xir_compile_vm_debug_mixed_program_take(XrXirArtifact **,
     const XrXirVmDebugNative *,XrXirVmDebug *,XrXirProgram **);
 /* Construct only the Instance of this observer's authenticated Program.
@@ -74,7 +75,8 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_debug_mixed_program_take(XrXirArtifact **,
 XR_FUNC XrXirCallStatus xr_xir_vm_debug_instance_new(XrXirVmDebug *debug,
     XrXirProgram *program, const XrXirInstanceConfig *config, XrXirInstance **output);
 /* Locations are verified function/instruction ordinals. They are not source
- * lines. Changes require a stopped observer or no live execution frames. */
+ * lines. Changes require a stopped observer or no live execution frames.
+ * Native instruction locations return UNSUPPORTED without changing rules. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
     uint32_t function, uint32_t instruction, bool enabled);
 /* Atomically replaces the bounded breakpoint set after validating every

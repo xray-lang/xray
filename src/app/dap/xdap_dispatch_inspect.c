@@ -94,7 +94,7 @@ static XrXirStatus inspect_stack(XdapAdapter *s,const XdapRequest *r) {
         if (shown++) XDAP_TEXT(&body,",");XDAP_TEXT(&body,"{\"id\":");xdap_json_unsigned(&body,s->frames[i].handle);
         XDAP_TEXT(&body,",\"name\":");xdap_json_quote(&body,text,length);
         if (!inspect_source_position(s,&body,info.function,
-            info.code==XR_XIR_VM_DEBUG_VM ? info.instruction : UINT32_MAX,true)) { xr_xir_value_drop(&name);break; }
+            info.instruction,true)) { xr_xir_value_drop(&name);break; }
         if (!inspect_source(s,&body,info.function,false)) { xr_xir_value_drop(&name);break; }
         if (info.code==XR_XIR_VM_DEBUG_VM && info.instruction!=UINT32_MAX) {
             XDAP_TEXT(&body,",\"instructionPointerReference\":");inspect_position(s,&body,info.function,info.instruction);

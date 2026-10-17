@@ -87,7 +87,7 @@ static void mixed_rejections(void) {
     CHECK(fixture.lowered==artifact && !fixture.program && !fixture.releases);native=before;
     mask[0]=2;
     CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);mask[0]=0;
-    memset(mask,1,sizeof(mask));
+    memset(mask,0,sizeof(mask));
     CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program)==XR_XIR_UNSUPPORTED);
     CHECK(fixture.lowered==artifact && !fixture.program && !memcmp(&native,&before,sizeof(native)) && !fixture.releases);
     mixed_constructor_close(&fixture);

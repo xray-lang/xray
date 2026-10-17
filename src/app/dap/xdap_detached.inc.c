@@ -92,8 +92,9 @@ XR_FUNC XrXirCallStatus xdap_detached_free(XdapDetached *target) {
     xr_xir_call_result_drop(&target->outcome);xr_compile_resources_free(target);return status;
 }
 static XrXirStatus dispatch_prepare_end(XdapAdapter *s,XdapJsonWriter *event) {
+    if (xr_compile_resources_work(s->resources,11)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     *event=xdap_json_writer(s->resources,s->config.message_limit);
-    XDAP_TEXT(event,"{\"seq\":");xdap_json_unsigned(event,s->seq+1);
+    XDAP_TEXT(event,"{\"seq\":");xdap_json_unsigned(event,INT32_MAX);
     XDAP_TEXT(event,",\"type\":\"event\",\"event\":\"terminated\"}");return event->status;
 }
 static XrXirStatus dispatch_detach(XdapAdapter *s,const XdapRequest *r) {
@@ -102,7 +103,7 @@ static XrXirStatus dispatch_detach(XdapAdapter *s,const XdapRequest *r) {
     if (s->seq>INT32_MAX-2) return XR_XIR_BUDGET;
     XdapDetached *target=NULL;
     XdapJsonWriter response={0},event={0};
-    XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
+    XrXirStatus status=xdap_dispatch_stage_response(s,r,true,NULL,NULL,&response);
     if (status!=XR_XIR_OK) goto done;
     status=dispatch_prepare_end(s,&event);if (status!=XR_XIR_OK) goto done;
     XrXirCallStatus detached=xdap_current_detach(s->launch->control,s->config.detach_commit,s->config.detach_context);
@@ -116,8 +117,8 @@ static XrXirStatus dispatch_detach(XdapAdapter *s,const XdapRequest *r) {
     target->wait_start=s->wait_start;target->wait_duration=s->wait_duration;
     *s->config.detached=target;s->execution=NULL;s->launch=NULL;
     xdap_dispatch_clear_stop(s);s->running=false;s->wait_wake=0;s->closed=true;
-    status=xdap_dispatch_send_prepared(s,&response);
-    if (status==XR_XIR_OK) status=xdap_dispatch_send_prepared(s,&event);
+    status=xdap_dispatch_send_staged(s,&response);
+    if (status==XR_XIR_OK) status=xdap_dispatch_send_staged(s,&event);
 done:
     if (target) target->driving=false;
     xdap_json_writer_free(&response);xdap_json_writer_free(&event);return status;

@@ -1041,7 +1041,7 @@ static XrXirStatus debug_native_admit(const XrXirArtifact *artifact,const XrXirV
             layout->frame_bytes>actual->state_bytes-code->offsets[i])
             return XR_XIR_BAD_STRUCTURE;
     }
-    if (!natives || natives==count) return XR_XIR_UNSUPPORTED;
+    if (!natives) return XR_XIR_UNSUPPORTED;
     XrXirProgramPermissions *permissions=NULL;
     XrXirStatus status=xr_xir_compile_program_proof_verify(context,native,&native->proof,&permissions);
     xir_program_permissions_free(permissions);return status;

@@ -30,6 +30,7 @@ typedef struct XdapAdapterConfig {
     bool retain_output;
     const char *stdout_path,*stderr_path;
     uint64_t process_id;
+    XdapNativeProvider native;
 } XdapAdapterConfig;
 /* Success takes compiler; failure preserves both owners. Every method belongs
  * to the sole control/drive owner. Callback reentry cannot mutate the adapter.

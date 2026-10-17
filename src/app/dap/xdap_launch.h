@@ -9,6 +9,7 @@
 #ifndef XDAP_LAUNCH_H
 #define XDAP_LAUNCH_H
 #include "xdap_current.h"
+#include "xdap_native_provider.h"
 #include "../../api/xsource_compiler.h"
 typedef struct XdapCodeFunction {
     char *name,*source_name;
@@ -30,6 +31,7 @@ typedef struct XdapLaunch {
     XdapCodeModule *modules;
     XrXirInstruction *instructions;
     uint32_t entry, function_count, instruction_count,module_count;
+    bool native_startup,native_only;
 } XdapLaunch;
 typedef struct XdapLaunchRequest {
     XrSourceCompiler *compiler;
@@ -37,6 +39,7 @@ typedef struct XdapLaunchRequest {
     const XrSourceCompilerText *text;
     XrXirDomain *observer_metadata;
     XrXirInstanceConfig instance;
+    XdapNativeProvider native;
 } XdapLaunchRequest;
 typedef struct XdapFunctionSelection {
     const char *name;

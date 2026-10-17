@@ -266,10 +266,11 @@ XR_FUNC void xir_vm_debug_unbind(XrXirVmDebug *debug) {
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
     uint32_t function, uint32_t instruction, bool enabled) {
     if (!debug_valid(debug) || !debug->artifact ||
-        (debug->count && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
+        ((debug->count || debug->calls.count) && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirModule *module = xr_xir_compile_artifact_module(debug->artifact);
     if (!module || function >= module->function_count ||
         instruction >= module->functions[function].instruction_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (debug->native_code && debug->native_code->offsets[function]!=UINT32_MAX) return XR_XIR_VALUE_UNSUPPORTED;
     if (!xr_xir_domain_work(debug->domain, 96)) return XR_XIR_VALUE_LIMIT;
     DebugBreakpoint *empty = NULL,*selected=NULL;
     for (unsigned i = 0; i < 32; ++i) {
@@ -294,20 +295,21 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoint(XrXirVmDebug *debug,
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *debug,
     const XrXirVmDebugLocation *locations, uint32_t count) {
     if (!debug_valid(debug) || !debug->artifact || count>32 || (!locations && count) ||
-        (debug->count && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
+        ((debug->count || debug->calls.count) && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
     DebugBreakpoint fresh[32]={{0}};
     if (!xr_xir_domain_work(debug->domain,(uint64_t)count+2*sizeof(fresh)+sizeof(debug->hits))) return XR_XIR_VALUE_LIMIT;
     for (uint32_t i=0;i<count;++i) {
         if (locations[i].function>=module->function_count || locations[i].instruction>=
             module->functions[locations[i].function].instruction_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (debug->native_code && debug->native_code->offsets[locations[i].function]!=UINT32_MAX) return XR_XIR_VALUE_UNSUPPORTED;
         fresh[i]=(DebugBreakpoint){.function=locations[i].function,.instruction=locations[i].instruction,.enabled=true,.counter=i};
     }
     memcpy(debug->breakpoints,fresh,sizeof(fresh));memset(debug->hits,0,sizeof(debug->hits));return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_rules_replace(XrXirVmDebug *debug,const XrXirVmDebugRule *rules,uint32_t count) {
     if (!debug_valid(debug) || !debug->artifact || count>32 || (!rules && count) || debug->disabled ||
-        (debug->count && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
+        ((debug->count || debug->calls.count) && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);DebugBreakpoint fresh[32]={{0}};
     if (!xr_xir_domain_work(debug->domain,(uint64_t)count*count+2*sizeof(fresh)+sizeof(debug->hits))) return XR_XIR_VALUE_LIMIT;
     for (uint32_t i=0;i<count;++i) {
@@ -316,6 +318,7 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_rules_replace(XrXirVmDebug *debug,const
             (unsigned)rule->hit_kind>XR_XIR_VM_DEBUG_HIT_MULTIPLE ||
             (rule->hit_kind==XR_XIR_VM_DEBUG_HIT_ALWAYS && rule->hit_value) ||
             (rule->hit_kind==XR_XIR_VM_DEBUG_HIT_MULTIPLE && !rule->hit_value) || rule->group>32) return XR_XIR_VALUE_BAD_ARGUMENT;
+        if (debug->native_code && debug->native_code->offsets[rule->location.function]!=UINT32_MAX) return XR_XIR_VALUE_UNSUPPORTED;
         fresh[i]=(DebugBreakpoint){.function=rule->location.function,.instruction=rule->location.instruction,.enabled=true,
             .hit_kind=rule->hit_kind,.hit_value=rule->hit_value,.counter=i,.group=rule->group};
         for (uint32_t j=0;rule->group && j<i;++j) if (rules[j].group==rule->group) {

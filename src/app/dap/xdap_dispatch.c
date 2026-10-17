@@ -103,7 +103,8 @@ static XrXirOutputStatus dispatch_output(void *context,XrXirOutputStream stream,
 XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapterConfig *config,XdapAdapter **output) {
     if (!compiler || !*compiler || !config || !output || *output || !config->write ||
         !config->message_limit || config->message_limit>1048576 || !config->instance.depth_limit ||
-        config->instance.depth_limit>64 || !xr_xir_domain_current(config->observer_metadata)) return XR_XIR_BAD_STRUCTURE;
+        config->instance.depth_limit>64 || (!config->native.load && config->native.context) ||
+        !xr_xir_domain_current(config->observer_metadata)) return XR_XIR_BAD_STRUCTURE;
     if (config->detached && (*config->detached || !config->instance.output.write ||
         !xr_xir_output_provider_valid(&config->instance.output))) return XR_XIR_BAD_STRUCTURE;
     if ((config->detach_commit || config->retain_output || config->stdout_path || config->stderr_path) && !config->detached)
@@ -183,9 +184,9 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
         "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,\"supportsHitConditionalBreakpoints\":true,"
         "\"supportsConditionalBreakpoints\":true,\"supportsLogPoints\":true,"
         "\"supportsSetVariable\":true,\"supportsEvaluateForHovers\":true,\"supportsPauseRequest\":true,"
-        "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false},"
-        "{\"filter\":\"caught\",\"label\":\"Handled language throws in observed VM\",\"default\":false},"
-        "{\"filter\":\"uncaught\",\"label\":\"Language throws escaping the current VM flow\",\"default\":false}]}");
+        "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Source language throws\",\"default\":false},"
+        "{\"filter\":\"caught\",\"label\":\"Handled Source language throws\",\"default\":false},"
+        "{\"filter\":\"uncaught\",\"label\":\"Language throws escaping the current execution flow\",\"default\":false}]}");
     if (s->config.detached) {
         if (body.length && body.bytes[body.length-1]=='}') --body.length;
         XDAP_TEXT(&body,",\"supportTerminateDebuggee\":true}");
@@ -227,7 +228,7 @@ static XrXirStatus dispatch_source(XdapAdapter *s,const XdapRequest *r) {
     status=xdap_dispatch_argument(r,"stopOnEntry",&stop);if (status!=XR_XIR_OK) return status;
     if (stop && r->document.nodes[stop].kind!=XDAP_JSON_BOOL) return xdap_dispatch_response(s,r,false,NULL,"Invalid stopOnEntry");
     XdapLaunchRequest input={.compiler=s->compiler,.absolute_file=r->document.nodes[file].text,
-        .observer_metadata=s->config.observer_metadata,.instance=s->config.instance};
+        .observer_metadata=s->config.observer_metadata,.instance=s->config.instance,.native=s->config.native};
     XdapLaunch *launch=NULL;XrSourceCompileDiagnostic diagnostic={0};
     status=xdap_launch_build(&input,&launch,&diagnostic);
     if (status!=XR_XIR_OK) {
@@ -239,6 +240,9 @@ static XrXirStatus dispatch_source(XdapAdapter *s,const XdapRequest *r) {
     if (xdap_current_break_on_throw(launch->control,s->break_throw)!=XR_XIR_VALUE_OK) {
         xdap_launch_free(launch);return xdap_dispatch_response(s,r,false,NULL,"Exception filter admission failed");
     }
+    if (launch->native_startup && stop && r->document.nodes[stop].boolean) {
+        xdap_launch_free(launch);return xdap_dispatch_response(s,r,false,NULL,"Native startup pause is unsupported");
+    }
     status=xdap_dispatch_response(s,r,true,NULL,NULL);
     if (status!=XR_XIR_OK) { xdap_launch_free(launch);return status; }
     s->launch=launch;s->stop_entry=stop && r->document.nodes[stop].boolean;
@@ -249,7 +253,7 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     if (!s->initialized || !s->launch || !s->launch->absolute_file)
         return xdap_dispatch_response(s,r,false,NULL,"No restartable source launch");
     XdapLaunchRequest input={.compiler=s->compiler,.absolute_file=s->launch->absolute_file,
-        .observer_metadata=s->config.observer_metadata,.instance=s->config.instance};
+        .observer_metadata=s->config.observer_metadata,.instance=s->config.instance,.native=s->config.native};
     XdapLaunch *candidate=NULL;XrSourceCompileDiagnostic diagnostic={0};
     XrXirStatus status=xdap_launch_build(&input,&candidate,&diagnostic);
     if (status!=XR_XIR_OK) {
@@ -257,6 +261,9 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
         xr_source_compile_diagnostic_free(&diagnostic);return xdap_dispatch_response(s,r,false,NULL,message);
     }
     xr_source_compile_diagnostic_free(&diagnostic);
+    if (candidate->native_startup && s->stop_entry) {
+        xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Native startup pause is unsupported");
+    }
     XrXirVmDebugRule rules[32]={{0}};uint32_t count=0;
     XdapBreakpointSet breakpoints={s->function_breakpoints,s->function_rules,s->function_breakpoint_count,
         s->source_breakpoints,s->source_breakpoint_count};
@@ -270,7 +277,7 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     }
     XrXirCallStatus started=xdap_current_start(candidate->control,candidate->entry,NULL,0);
     if (started!=XR_XIR_CALL_READY) { xdap_launch_free(candidate);return xdap_dispatch_response(s,r,false,NULL,"Restart start rejected"); }
-    XdapJsonWriter response={0};status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
+    XdapJsonWriter response={0};status=xdap_dispatch_stage_response(s,r,true,NULL,NULL,&response);
     if (status!=XR_XIR_OK) { xdap_launch_free(candidate);return status; }
     XrXirCallStatus retired=xdap_launch_free(s->launch);s->launch=NULL;
     if (retired!=XR_XIR_CALL_READY) {
@@ -281,7 +288,7 @@ static XrXirStatus dispatch_restart(XdapAdapter *s,const XdapRequest *r) {
     s->launch=candidate;s->terminal=false;s->configured=true;s->running=true;s->wait_wake=0;
     s->stop_reason=s->stop_entry ? "entry" : s->source_breakpoint_count ? "breakpoint" : "function breakpoint";
     if (s->stop_entry) xdap_current_pause(candidate->control);
-    status=xdap_dispatch_send_prepared(s,&response);xdap_json_writer_free(&response);return status;
+    status=xdap_dispatch_send_staged(s,&response);xdap_json_writer_free(&response);return status;
 }
 static XrXirStatus dispatch_start(XdapAdapter *s,const XdapRequest *r) {
     if (!s->launch || s->configured) return xdap_dispatch_response(s,r,false,NULL,"No unstarted launch");
@@ -293,6 +300,7 @@ static XrXirStatus dispatch_start(XdapAdapter *s,const XdapRequest *r) {
 }
 static XrXirStatus dispatch_pause(XdapAdapter *s,const XdapRequest *r,uint64_t thread) {
     if (!s->running) return xdap_dispatch_response(s,r,false,NULL,"Thread is already stopped");
+    if (s->launch->native_only) return xdap_dispatch_response(s,r,false,NULL,"Native instruction pause is unsupported");
     uint64_t ids[65];uint32_t count=0;
     XrXirValueStatus observed=xdap_current_threads(s->launch->control,ids,65,&count);
     if (observed==XR_XIR_VALUE_UNSUPPORTED)
@@ -353,7 +361,7 @@ static XrXirStatus dispatch_terminate(XdapAdapter *s,const XdapRequest *r,bool d
     }
     bool notify=disconnect && !s->terminal;
     if (notify && s->seq>INT32_MAX-2) return XR_XIR_BUDGET;
-    XdapJsonWriter response={0},event={0};XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
+    XdapJsonWriter response={0},event={0};XrXirStatus status=xdap_dispatch_stage_response(s,r,true,NULL,NULL,&response);
     if (status!=XR_XIR_OK) goto done;
     if (notify) { status=dispatch_prepare_end(s,&event);if (status!=XR_XIR_OK) goto done; }
     if (s->launch && !s->terminal) {
@@ -366,8 +374,8 @@ static XrXirStatus dispatch_terminate(XdapAdapter *s,const XdapRequest *r,bool d
             status=xdap_dispatch_response(s,r,false,NULL,"Target cleanup failed");goto done;
         }
     }
-    status=xdap_dispatch_send_prepared(s,&response);
-    if (status==XR_XIR_OK && notify) status=xdap_dispatch_send_prepared(s,&event);
+    status=xdap_dispatch_send_staged(s,&response);
+    if (status==XR_XIR_OK && notify) status=xdap_dispatch_send_staged(s,&event);
     if (disconnect && status==XR_XIR_OK) s->closed=true;
 done:
     xdap_json_writer_free(&response);xdap_json_writer_free(&event);return status;

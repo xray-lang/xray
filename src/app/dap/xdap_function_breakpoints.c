@@ -59,7 +59,14 @@ XR_FUNC XrXirStatus xdap_dispatch_function_breakpoints(XdapAdapter *s,const Xdap
     XdapBreakpointSet combined={names,saved,count,s->source_breakpoints,s->source_breakpoint_count};
     if (status==XR_XIR_OK) status=xdap_breakpoints_collect(s->launch,&combined,rules,&locations);
     if (status==XR_XIR_OK) status=xdap_dispatch_prepare_response(s,r,true,&body,NULL,&response);
-    if (status==XR_XIR_OK && xdap_current_rules_replace(s->launch->control,rules,locations)!=XR_XIR_VALUE_OK) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK) {
+        XrXirValueStatus admitted=xdap_current_rules_replace(s->launch->control,rules,locations);
+        if (admitted==XR_XIR_VALUE_UNSUPPORTED) {
+            status=xdap_dispatch_response(s,r,false,NULL,"Native instruction breakpoints are unsupported");
+            goto done;
+        }
+        if (admitted!=XR_XIR_VALUE_OK) status=XR_XIR_BUDGET;
+    }
     if (status==XR_XIR_OK) {
         for (uint32_t i=0;i<s->function_breakpoint_count;++i) {
             xr_compile_resources_free(s->function_breakpoints[i]);xdap_predicate_free(&s->function_predicates[i]);
