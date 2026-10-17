@@ -38,13 +38,13 @@ def main():
             for name,expected_line in [('read_loan',b'read-loan-sdk-ok\n'),('view_types',b'view-types-sdk-ok\n'),
                                        ('view_storage',b'view-storage-sdk-ok\n'),('view_values',b'view-values-sdk-ok\n'),
                                        ('view_retire',b'view-retire-sdk-ok\n'),('return_move',b'return-move-sdk-ok\n'),
-                                       ('view_origin_pin',b'view-origin-pin-sdk-ok\n')]:
+                                       ('view_origin_pin',b'view-origin-pin-sdk-ok\n'),('call_views',b'call-views-sdk-ok\n')]:
                 source=root/('tests/unit/xir/xir_sdk_'+name+'_consumer.c')
                 object_file=work/(name+'.obj');executable=work/(name+'.exe')
                 compile_source(args,sdk,source,object_file)
                 link(args,executable,[str(object_file)],libraries)
                 assert checked([str(executable)]).replace(b'\r\n',b'\n')==expected_line
-            print(args.provider+': shared read root, non-LIFO release, COW, borrowed descriptors, scoped view values and '+str(len(expected))+' independent ABI fields PASS',flush=True)
+            print(args.provider+': shared read root, non-LIFO release, COW, borrowed descriptors, actual Call scope retirement and '+str(len(expected))+' independent ABI fields PASS',flush=True)
     finally:
         if lease.poll() is None:
             lease.stdin.write('q');lease.stdin.flush()

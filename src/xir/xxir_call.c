@@ -16,6 +16,7 @@
 #include "xxir_call.h"
 #include "xxir_call_internal.h"
 #include "xxir_call_move_internal.h"
+#include "xxir_call_view_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_task_internal.h"
 #include "xxir_type_arena.h"
@@ -46,6 +47,7 @@ typedef struct CallCellLoan {
     XrXirCellLoan loan;
     uint32_t parameter;
 } CallCellLoan;
+typedef struct CallViewBinding CallViewBinding;
 typedef struct CallFrame {
     struct CallFrame *parent;
     const XrXirCallEntry *entry;
@@ -54,6 +56,7 @@ typedef struct CallFrame {
     void *state;
     XrXirValue *arguments;
     CallCellLoan *loans;
+    CallViewBinding *views;
     uint64_t epoch;
     uint32_t loan_count, cell_capacity;
     XirEffectInvocationSelection invocation,pending_invocation;
@@ -338,6 +341,7 @@ static uint64_t state_offset(void) {
 }
 #include "xxir_call_cell_loans.inc.c"
 #include "xxir_call_class_access.inc.c"
+#include "xxir_call_view.inc.c"
 
 XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
     XrXirValue *source, XrXirAction *action) {
@@ -496,6 +500,7 @@ static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
         frame->entry->release(&view, reason);
         call->cleaning = false;
     }
+    frame_view_release(call,frame);
     frame_cell_release(frame);
     call->top = frame->parent;
     for (uint32_t i = 0; i < frame->entry->parameter_count; ++i)
@@ -526,8 +531,6 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
         return XR_XIR_CALL_BAD_ABI;
     if (config->admission.domain && !xr_xir_domain_current(config->admission.domain))
         return XR_XIR_CALL_BAD_ARGUMENT;
-    /* Metadata and physical view handles never supply an execution proof. */
-    if (xr_xir_compile_type_arena_has_borrowed(config->admission.arena)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_output_provider_valid(&config->output)) return XR_XIR_CALL_BAD_ABI;
     if (!config->entries || !config->entry_count || config->entry_count > 65536 ||
         !config->accounting || config->accounting->live_bytes || config->accounting->depth ||
@@ -537,6 +540,8 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
     if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
         return XR_XIR_CALL_LIMIT;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(config->admission.arena);
+    /* Unused borrowed descriptors are metadata. Executable entry signatures
+     * still require the complete cross-frame borrow proof before admission. */
     for (uint32_t i = 0; i < config->entry_count; ++i) {
         const XrXirCallEntry *entry = &config->entries[i];
         if (entry->abi_version != XR_XIR_CALL_ABI_VERSION)
@@ -546,6 +551,7 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
              !(config->entries[entry->cleanup_owner - 1].flags & XR_XIR_ENTRY_EXIT)))) return XR_XIR_CALL_BAD_ARGUMENT;
         if (!entry->resume || entry->parameter_count > 65536 ||
             (entry->parameter_count && !entry->parameters) ||
+            xr_xir_compile_type_arena_borrowed(config->admission.arena,entry->result) ||
             xr_xir_type_is_cell(types, entry->result) ||
             (entry->result != XR_XIR_UNIT && entry->result != XR_XIR_BOOL && entry->result != XR_XIR_RUNE &&
              !xr_xir_type_is_number((XrXirType) entry->result) && !xr_xir_type_is_owned(types, entry->result)))
@@ -554,8 +560,9 @@ static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes
         if (*bytes > config->byte_limit || *bytes > SIZE_MAX)
             return XR_XIR_CALL_LIMIT;
         for (uint32_t p = 0; p < entry->parameter_count; ++p)
-            if (entry->parameters[p] != XR_XIR_BOOL && entry->parameters[p] != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
-                !xr_xir_type_is_owned(types, entry->parameters[p]))
+            if (xr_xir_compile_type_arena_borrowed(config->admission.arena,entry->parameters[p]) ||
+                (entry->parameters[p] != XR_XIR_BOOL && entry->parameters[p] != XR_XIR_RUNE && !xr_xir_type_is_number((XrXirType) entry->parameters[p]) &&
+                !xr_xir_type_is_owned(types, entry->parameters[p])))
                 return XR_XIR_CALL_BAD_ARGUMENT;
     }
     return XR_XIR_CALL_READY;

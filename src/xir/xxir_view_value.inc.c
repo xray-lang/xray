@@ -127,6 +127,46 @@ XR_FUNC void xr_xir_view_origin_unpin(XrXirViewOriginPin *pin) {
     --view->children;*pin=(XrXirViewOriginPin){0};
     xr_xir_value_drop(&value);xr_xir_value_graph_end();
 }
+XR_FUNC void xr_xir_view_scope_pin_created(const XrXirValue *value,
+    const XrXirCellAuthority *authority,XrXirViewOriginPin *output) {
+    xr_xir_value_graph_begin();
+    XR_CHECK(xr_xir_value_valid(value) && output && !output->body &&
+        !output->authority.activation && !output->authority.frame && !output->authority.epoch &&
+        cell_authority_valid(authority),"a prepaid scope pin follows successful view construction");
+    XirObject *object=object_pointer(value);
+    XR_CHECK(view_value_kind(object->kind),"a scope pin only retains a created view body");
+    XirView *view=(XirView *)object;
+    const XrXirCellAuthority *actual=view->storage.kind==XR_XIR_TYPE_SLICE ?
+        &view->storage.loan.shared.authority : &view->storage.loan.exclusive.authority;
+    XR_CHECK(view_value_kind(view->object.kind) && view->state==XIR_VIEW_ACTIVE &&
+        !view->children && atomic_load_explicit(&view->object.references,memory_order_acquire)==1 &&
+        cell_authority_equal(actual,authority),"only the exact newly created view enters its scope registry");
+    XR_CHECK(graph_object_retain(&view->object),"a unique created view has room for one physical scope pin");
+    ++view->children;*output=(XrXirViewOriginPin){view,*authority};xr_xir_value_graph_end();
+}
+XR_FUNC void xr_xir_view_scope_close(XrXirViewOriginPin *pin) {
+    if (!pin || !pin->body) {xr_xir_view_origin_unpin(pin);return;}
+    xr_xir_value_graph_begin();XirView *view=pin->body;XrXirValue value=view_value_handle(view);
+    XR_CHECK(xr_xir_value_valid(&value) && view_value_kind(view->object.kind) && view->children,
+        "scope retirement owns a physical pin until permission is revoked");
+    if (view->state==XIR_VIEW_ACTIVE) {
+        const XrXirCellAuthority *actual=view->storage.kind==XR_XIR_TYPE_SLICE ?
+            &view->storage.loan.shared.authority : &view->storage.loan.exclusive.authority;
+        bool revoked=view->storage.kind==XR_XIR_TYPE_SLICE && !view->storage.loan.shared.previous;
+        XR_CHECK(revoked || cell_authority_equal(actual,&pin->authority),"scope closing never revokes another authority");
+        view_value_detach(view);
+    }
+    xr_xir_view_origin_unpin(pin);xr_xir_value_graph_end();
+}
+XR_FUNC bool xr_xir_view_scope_active(const XrXirViewOriginPin *pin) {
+    if (!pin || !pin->body) return false;
+    xr_xir_value_graph_begin();const XirView *view=pin->body;XrXirValue value=view_value_handle(view);
+    XR_CHECK(xr_xir_value_valid(&value) && view_value_kind(view->object.kind) && view->children,
+        "scope metadata owns an exact physical view pin");
+    bool active=view->state==XIR_VIEW_ACTIVE &&
+        (view->storage.kind==XR_XIR_TYPE_MUT_SLICE || view->storage.loan.shared.previous);
+    xr_xir_value_graph_end();return active;
+}
 static XrXirValueStatus view_value_new_operation(XrXirType type,const XrXirValue *root,
     const XrXirCellAuthority *parent,const XrXirViewStorageSpec *spec,
     XrXirValueAdmission *admission,XrXirValue *output) {

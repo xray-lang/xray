@@ -40,7 +40,7 @@ typedef struct XrXirViewOriginInfo {
     int64_t offset, length;
     bool logical_active;
 } XrXirViewOriginInfo;
-/* Only pin creation authenticates the current logical binding. The metadata
+/* Input pin creation authenticates the current logical binding. The metadata
  * snapshot never proves a live origin; root is borrowed until pin drop. */
 XR_FUNC XrXirValueStatus xr_xir_view_origin_pin(const XrXirValue *value,
     const XrXirViewAccess *access, XrXirViewOriginPin *output);
@@ -48,6 +48,16 @@ XR_FUNC XrXirValueStatus xr_xir_view_origin_info(const XrXirViewOriginPin *pin,
     XrXirValueAdmission *admission, XrXirViewOriginInfo *output);
 /* Empty release is idempotent; terminal pin retirement cannot allocate or fail. */
 XR_FUNC void xr_xir_view_origin_unpin(XrXirViewOriginPin *pin);
+/* The trusted creator prepays the physical pin and terminal retirement before
+ * constructing a unique, unpublished-to-user view. This cannot grant access.
+ * The exact origin authority must already belong to the real enclosing scope. */
+XR_FUNC void xr_xir_view_scope_pin_created(const XrXirValue *value,
+    const XrXirCellAuthority *authority, XrXirViewOriginPin *output);
+/* Closing the actual scope revokes permission even if logical owners escaped.
+ * The physical identity remains safe for late drops; empty close is idempotent. */
+XR_FUNC void xr_xir_view_scope_close(XrXirViewOriginPin *pin);
+/* Read-only retirement metadata never authenticates or extends a scope. */
+XR_FUNC bool xr_xir_view_scope_active(const XrXirViewOriginPin *pin);
 
 /* Only the authenticated root producer constructs a view. The caller preserves
  * the actual origin scope and any parent frame until logical retirement;

@@ -348,7 +348,16 @@ static void view_values_guards(XrCompileResources *resources) {
     const XrXirCallEntry entry={.abi_version=XR_XIR_CALL_ABI_VERSION,.result=XR_XIR_I64,.resume=view_native};
     CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.entries=&entry;config.entry_count=1;config.accounting=&accounting;config.admission=admission;
-    CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ARGUMENT && !call && !view_native_calls);
+    XrXirCallBudget call_budget={.byte_limit=65536,.requested_limit=65536,.resume_limit=32,.work_domain=domain};
+    const XrXirCallRequest call_request={0,NULL,0,NULL,NULL};
+    CHECK(xr_xir_call_new_budgeted(&config,&call_request,&call_budget,&call)==XR_XIR_CALL_READY && call && !view_native_calls);
+    CHECK(xr_xir_call_poll_bounded(call,32).status==XR_XIR_CALL_RETURNED && view_native_calls==1);
+    CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY && !accounting.live_bytes);call=NULL;
+    XrXirCallEntry rejected_entry=entry;rejected_entry.result=(XrXirType)259;config.entries=&rejected_entry;
+    CHECK(xr_xir_call_new(&config,0,NULL,0,&call)==XR_XIR_CALL_BAD_ARGUMENT && !call && view_native_calls==1);
+    XrXirType borrowed_parameter=(XrXirType)260;rejected_entry=entry;
+    rejected_entry.parameters=&borrowed_parameter;rejected_entry.parameter_count=1;
+    CHECK(xr_xir_call_new(&config,0,&some,1,&call)==XR_XIR_CALL_BAD_ARGUMENT && !call && view_native_calls==1);
     xr_xir_value_drop(&some);xr_xir_value_drop(&cell);xr_xir_value_drop(&array);xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);
     const unsigned char retired25[8]={0x58,0x52,0x44,0x4d,0x19,0,0,1};
     CHECK(!xr_xir_domain_current((const XrXirDomain *)retired25));
