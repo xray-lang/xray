@@ -71,10 +71,10 @@ static void library_native_code_release(void *opaque) {
     xr_compile_resources_free(owner->vm_entries);owner->vm_entries=NULL;
     xr_xir_compile_artifact_free(owner->lowered);owner->lowered=NULL;++owner->releases;
 }
-int main(int argc,char **argv) {
-    CHECK(argc==2);LibraryNativeOwner owner={0};library_observed=&owner;
-    owner.mode=!strcmp(argv[1],"native")?0:!strcmp(argv[1],"native-vm")?1:2;
-    CHECK(owner.mode!=2 || !strcmp(argv[1],"vm-native"));
+static XrXirProgram *library_native_prepare(LibraryNativeOwner *owner,const char *mode) {
+    library_observed=owner;
+    owner->mode=!strcmp(mode,"native")?0:!strcmp(mode,"native-vm")?1:2;
+    CHECK(owner->mode!=2 || !strcmp(mode,"vm-native"));
     XrXirCompileContext context={0};XrCompileResourceLimits caps={UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     const XrXirProgramSpec *native=&p11_library_native_program;
@@ -84,35 +84,46 @@ int main(int argc,char **argv) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(closed,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length==native->proof.length && !memcmp(packet.bytes,native->proof.bytes,packet.length));
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_lower(closed,&native->target,&owner.lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
-    XrXirProgramProof proof=xr_xir_compile_program_proof(owner.lowered);
+    CHECK(xr_xir_compile_lower(closed,&native->target,&owner->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    XrXirProgramProof proof=xr_xir_compile_program_proof(owner->lowered);
     CHECK(proof.length==native->proof.length && !memcmp(proof.identity,native->proof.identity,32) && !memcmp(proof.bytes,native->proof.bytes,proof.length));
-    const XrXirModule *module=xr_xir_compile_artifact_module(owner.lowered);owner.count=module->function_count;owner.run=UINT32_MAX;
-    CHECK(owner.count==native->entry_count && owner.count==p11_library_callback_count);
-    for(uint32_t f=0;f<owner.count;++f) if(module->functions[f].name_length==3 && !memcmp(module->functions[f].name,"run",3)) {CHECK(owner.run==UINT32_MAX);owner.run=f;}
-    CHECK(owner.run<owner.count && module->declarations->functions[owner.run].exported);
-    CHECK(xr_xir_compile_vm_bind_table(owner.lowered,&owner.bindings,&owner.vm_entries)==XR_XIR_OK);
-    CHECK(xr_compile_resources_calloc(context.resources,owner.count,sizeof(*owner.entries),(void **)&owner.entries)==XR_COMPILE_RESOURCE_OK);
-    for(uint32_t f=0;f<owner.count;++f) {
-        owner.entries[f]=library_native_function(&owner,f)?native->entries[f]:owner.vm_entries[f];
-        CHECK(owner.entries[f].resume && owner.entries[f].release);
-        owner.entries[f].resume=p11_library_resume_callbacks[f];owner.entries[f].release=p11_library_release_callbacks[f];
+    const XrXirModule *module=xr_xir_compile_artifact_module(owner->lowered);owner->count=module->function_count;owner->run=UINT32_MAX;
+    CHECK(owner->count==native->entry_count && owner->count==p11_library_callback_count);
+    for(uint32_t f=0;f<owner->count;++f) if(module->functions[f].name_length==3 && !memcmp(module->functions[f].name,"run",3)) {CHECK(owner->run==UINT32_MAX);owner->run=f;}
+    CHECK(owner->run<owner->count && module->declarations->functions[owner->run].exported);
+    CHECK(xr_xir_compile_vm_bind_table(owner->lowered,&owner->bindings,&owner->vm_entries)==XR_XIR_OK);
+    CHECK(xr_compile_resources_calloc(context.resources,owner->count,sizeof(*owner->entries),(void **)&owner->entries)==XR_COMPILE_RESOURCE_OK);
+    for(uint32_t f=0;f<owner->count;++f) {
+        owner->entries[f]=library_native_function(owner,f)?native->entries[f]:owner->vm_entries[f];
+        CHECK(owner->entries[f].resume && owner->entries[f].release);
+        owner->entries[f].resume=p11_library_resume_callbacks[f];owner->entries[f].release=p11_library_release_callbacks[f];
     }
-    XrXirProgramSpec spec=*native;spec.entries=owner.entries;spec.code=(XrXirCodeLease){&owner,library_native_code_release};
+    XrXirProgramSpec spec=*native;spec.entries=owner->entries;spec.code=(XrXirCodeLease){owner,library_native_code_release};
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&spec,&program)==XR_XIR_OK);
     xr_compile_resources_release(context.resources);
-    for(unsigned i=0;i<2;++i) {XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);CHECK(xr_xir_instance_new(program,&config,&owner.instances[i])==XR_XIR_CALL_READY);}
+    return program;
+}
+static void library_native_normal(LibraryNativeOwner *owner,XrXirProgram *program,const char *mode) {
+    for(unsigned i=0;i<2;++i) {XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);CHECK(xr_xir_instance_new(program,&config,&owner->instances[i])==XR_XIR_CALL_READY);}
     xr_xir_compile_program_drop(program);
     for(unsigned i=0;i<2;++i) {
-        CHECK(xr_xir_instance_start(owner.instances[i],owner.run,NULL,0)==XR_XIR_CALL_READY);
-        CHECK(xr_xir_instance_poll_bounded(owner.instances[i],UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
-        XrXirValue value={0};CHECK(xr_xir_instance_take_result(owner.instances[i],&value)==XR_XIR_CALL_RETURNED && value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
-        CHECK(owner.steps[i][1] && (!owner.mode || (owner.steps[i][0] && owner.crossings[i]>=2)));
-        CHECK(owner.mode || !owner.steps[i][0]);
-        CHECK(xr_xir_instance_stop(owner.instances[i])==XR_XIR_CALL_READY && xr_xir_instance_free(owner.instances[i])==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_start(owner->instances[i],owner->run,NULL,0)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_poll_bounded(owner->instances[i],UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+        XrXirValue value={0};CHECK(xr_xir_instance_take_result(owner->instances[i],&value)==XR_XIR_CALL_RETURNED && value.type==XR_XIR_I64 && value.payload==42);xr_xir_value_drop(&value);
+        CHECK(owner->steps[i][1] && (!owner->mode || (owner->steps[i][0] && owner->crossings[i]>=2)));
+        CHECK(owner->mode || !owner->steps[i][0]);
+        CHECK(xr_xir_instance_stop(owner->instances[i])==XR_XIR_CALL_READY && xr_xir_instance_free(owner->instances[i])==XR_XIR_CALL_READY);
     }
     if(runtime_live || runtime_bytes) runtime_report_residuals(stderr);
     instance_compile_report();
-    CHECK(owner.releases==1 && !runtime_live && !runtime_bytes && !instance_compile_live && !instance_compile_bytes);
-    fprintf(stderr,"Library %s authentic generated C and complete proof, two Instances42 real crossings%llu/%llu physical0\n",argv[1],(unsigned long long)owner.crossings[0],(unsigned long long)owner.crossings[1]);return 0;
+    CHECK(owner->releases==1 && !runtime_live && !runtime_bytes && !instance_compile_live && !instance_compile_bytes);
+    fprintf(stderr,"Library %s authentic generated C and complete proof, two Instances42 real crossings%llu/%llu physical0\n",mode,(unsigned long long)owner->crossings[0],(unsigned long long)owner->crossings[1]);
+}
+#include "library_runtime.h"
+int main(int argc,char **argv) {
+    CHECK(argc==2 || argc==3);LibraryNativeOwner owner={0};
+    XrXirProgram *program=library_native_prepare(&owner,argv[1]);
+    if(argc==2) library_native_normal(&owner,program,argv[1]);
+    else library_native_runtime_resources(&owner,program,argv[1],argv[2]);
+    return 0;
 }

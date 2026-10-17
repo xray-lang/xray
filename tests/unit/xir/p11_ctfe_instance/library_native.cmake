@@ -20,5 +20,13 @@ foreach(kind array private multi method nested mixed builtin none local fresh du
         add_test(NAME test_xir_p11_library_${mode}_${kind} COMMAND ${consumer} ${mode})
         set_tests_properties(test_xir_p11_library_${mode}_${kind} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE
             LABELS "unit;xir;library;comptime;native;mixed;ownership")
+        foreach(control runtime-prefix runtime-bounds cancel)
+            add_test(NAME test_xir_p11_library_${mode}_${kind}_${control} COMMAND ${consumer} ${mode} --${control})
+            set_tests_properties(test_xir_p11_library_${mode}_${kind}_${control} PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE
+                LABELS "unit;xir;library;comptime;native;mixed;ownership")
+        endforeach()
+        add_test(NAME test_xir_p11_library_${mode}_${kind}_runtime_FI COMMAND ${consumer} ${mode} --runtime-faults)
+        set_tests_properties(test_xir_p11_library_${mode}_${kind}_runtime_FI PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+            LABELS "resource;xir;library;native;mixed;runtime-FI" COST 120)
     endforeach()
 endforeach()
