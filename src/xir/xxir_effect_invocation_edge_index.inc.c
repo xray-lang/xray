@@ -48,8 +48,13 @@ static XrXirStatus effect_invocation_edge_slot(EffectInvocationWorkspace *owner,
 static XrXirStatus effect_invocation_edge_index_reserve(EffectInvocationWorkspace *owner) {
     if (!!owner->edge_index!=!!owner->edge_index_capacity ||
         (owner->final.edge_count && !owner->edge_index)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
-    if (owner->edge_index_capacity && owner->final.edge_count<owner->edge_index_capacity/2)
+    if (!xir_compile_work(owner->work,4+sizeof(size_t))) return XR_XIR_BUDGET;
+    /* Keep a quarter of a large table vacant, and at least eight buckets in
+     * small tables. Complete keys and bounded probes still decide lookup. */
+    size_t vacant=owner->edge_index_capacity/4;
+    if (vacant<8) vacant=8;
+    if (owner->edge_index_capacity>=vacant &&
+        owner->final.edge_count<owner->edge_index_capacity-vacant)
         return XR_XIR_OK;
     if (owner->edge_index_capacity>SIZE_MAX/2) return XR_XIR_BUDGET;
     if (!xir_compile_work(owner->work,sizeof(size_t)+2)) return XR_XIR_BUDGET;
