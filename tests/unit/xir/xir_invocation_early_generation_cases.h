@@ -267,7 +267,7 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
         if (owner->final.nodes[n].root!=owner->final.nodes[n].body) ++dimensions;
     conditional_generation_full_heads=conditional_generation_dimension_heads=0;
     conditional_generation_dimensions_refused=false;
-    XrXirStatus producer_status=effect_invocation_producers_verify_read(&owner->read,&read);
+    XrXirStatus producer_status=effect_invocation_discovery_verify(owner,&read);
     fprintf(stderr,"generation real producer replay status%u full%u functions%u dimensions%u expected%u\n",
         (unsigned)producer_status,conditional_generation_full_heads,read.domain.function_count,
         conditional_generation_dimension_heads,dimensions);
@@ -278,14 +278,14 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
         conditional_generation_dimension_heads==15);
     size_t attempts=rp_attempts;uint32_t count=owner->final.count;
     conditional_generation_dimensions_refused=true;
-    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_discovery_verify(owner,&read)==XR_XIR_BAD_STRUCTURE &&
         owner->final.count==count && !owner->pending && rp_attempts==attempts);
     conditional_generation_dimensions_refused=false;
     uint32_t root=owner->final.nodes[0].root;owner->final.nodes[0].root=UINT32_MAX;
-    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_discovery_verify(owner,&read)==XR_XIR_BAD_STRUCTURE &&
         owner->final.count==count && !owner->pending && rp_attempts==attempts);
     owner->final.nodes[0].root=root;
-    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_OK);
+    CHECK(effect_invocation_discovery_verify(owner,&read)==XR_XIR_OK);
 }
 
 /* This independent literal request selects all four domains freshly through

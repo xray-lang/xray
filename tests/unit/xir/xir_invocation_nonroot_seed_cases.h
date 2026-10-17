@@ -50,6 +50,11 @@ static void invocation_nonroot_slot_erasure(const XrXirCompileContext *work,
     final->nodes[caller].causes[0]=parent_causes[0];effect_invocation_local_causes(&final->nodes[caller])[0]=parent_causes[1];
     summary->functions[0].formula.constant_mask=mask;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count]=witnesses[d];
-    CHECK(effect_invocation_publication_match(work,certificate,summary)==XR_XIR_OK);
+    status=effect_invocation_publication_match(work,certificate,summary);
+    if(status!=XR_XIR_OK) {
+        XrCompileResourceStats stats=rp_stats(work);
+        fprintf(stderr,"nonroot restored status%u work%llu\n",status,(unsigned long long)stats.work);
+    }
+    CHECK(status==XR_XIR_OK);
 }
 #endif // XIR_INVOCATION_NONROOT_SEED_CASES_H

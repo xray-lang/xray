@@ -22,6 +22,8 @@ typedef struct EffectInvocationFlow {
     void *memory;
     bool changed,precision;
 } EffectInvocationFlow;
+static XrXirStatus effect_invocation_final_return_join(EffectInvocationFlow *flow,
+    uint32_t node,uint32_t returned,uint32_t destination);
 
 /* Requests borrow only for this one replay. Every failed field read is
  * returned before it can be interpreted as a type, origin or permission. */
@@ -440,10 +442,21 @@ static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
         if (head_status!=XR_XIR_OK) return head_status;
         const EffectBodyFunctionHead *target=&target_head;
         uint64_t returned=(uint64_t)target->parameter_count+target->instruction_count;
-        for (uint32_t p=0;p<child->producer_count;++p) {
+        if(!owner->discovery) {
+            if(owner->roles.construction || returned>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+            bool supported=false;
+            XrXirStatus status=effect_invocation_return_supported(owner->work,flow->body.domain.types,target->result,&supported);
+            if(status!=XR_XIR_OK) return status;
+            if(supported) status=effect_invocation_final_return_join(flow,edge.target,(uint32_t)returned,destination);
+            if(status!=XR_XIR_OK) return status;
+            continue;
+        }
+        const EffectInvocationProducerSet *records=effect_invocation_discovery_read(owner,edge.target);
+        if(!records) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t p=0;p<records->count;++p) {
             if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-            if (child->producers[p].value!=returned) continue;
-            const EffectInvocationProducer *fact=&child->producers[p];
+            if (records->facts[p].value!=returned) continue;
+            const EffectInvocationProducer *fact=&records->facts[p];
             XrXirStatus status=effect_invocation_origin_bit(flow,destination,fact->site);
             if (status!=XR_XIR_OK) return status;
             if (fact->atom) {

@@ -31,6 +31,10 @@ typedef struct EffectInvocationProducer {
     uint64_t distance;
     uint32_t atom;
 } EffectInvocationProducer;
+typedef struct EffectInvocationProducerSet {
+    EffectInvocationProducer *facts;
+    uint32_t count,capacity;
+} EffectInvocationProducerSet;
 enum { EFFECT_CLASS_KNOWN=1u, EFFECT_CLASS_ROOT=2u, EFFECT_CLASS_UNKNOWN=4u,
     EFFECT_CLASS_VALID=7u };
 /* Masks preserve residual uncertainty. Only a complete local relation has a
@@ -45,8 +49,6 @@ typedef struct EffectInvocationNode {
     uint32_t intrinsic_mask,local_mask,cause_count;
     EffectInvocationCause *causes;
     uint64_t *input,*cells,*local_cells;
-    EffectInvocationProducer *producers;
-    uint32_t producer_count,producer_capacity;
     EffectInvocationClassFact *classes;
     uint32_t class_count,class_return_mask;
     uint64_t class_return_rank;
@@ -56,9 +58,17 @@ typedef struct EffectInvocationNode {
 
 /* Construction history belongs only to the solver's finite scratch owner.
  * It cannot qualify any receiving Final fact or survive publication. */
-typedef struct EffectInvocationState { bool queued,expanded; } EffectInvocationState;
-_Static_assert(_Alignof(EffectInvocationState)<=_Alignof(uint32_t),
-    "Invocation state follows aligned reverse-index storage");
+typedef struct EffectInvocationState {
+    EffectInvocationProducerSet producers;
+    bool queued,expanded;
+} EffectInvocationState;
+static uint64_t effect_invocation_state_offset(uint32_t capacity) {
+    uint64_t bytes=(uint64_t)capacity*sizeof(uint32_t),alignment=_Alignof(EffectInvocationState);
+    return (bytes+alignment-1)/alignment*alignment;
+}
+static uint64_t effect_invocation_state_bytes(uint32_t capacity) {
+    return effect_invocation_state_offset(capacity)+(uint64_t)capacity*sizeof(EffectInvocationState);
+}
 
 /* The two output copies and cause copies share one payload lifetime. These
  * views store no permission facts and are checked against the real root and
@@ -168,6 +178,7 @@ typedef struct EffectInvocationRead {
     const EffectInvocationDeclaredBounds *declared;
     EffectBodyRequest body;
     uint32_t *consumers;
+    const struct EffectInvocationWorkspace *discovery;
     bool producer_enabled,class_enabled;
 } EffectInvocationRead;
 
@@ -188,6 +199,17 @@ typedef struct EffectInvocationWorkspace {
     uint32_t front,back,pending;
 } EffectInvocationWorkspace;
 
+/* Discovery rows have only the workspace lifetime. A sealed reader has no
+ * workspace pointer and cannot recover this constructor capability. */
+static const EffectInvocationProducerSet *effect_invocation_discovery_read(
+    const EffectInvocationRead *read,uint32_t node) {
+    const EffectInvocationWorkspace *owner=read?read->discovery:NULL;
+    if(!owner || read->roles.sealed || !read->roles.construction ||
+        read->final!=&owner->final || !owner->states || node>=owner->final.count ||
+        !read->work || read->work->resources!=owner->read.work->resources) return NULL;
+    return &owner->states[node].producers;
+}
+
 static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
     uint32_t function,uint32_t instruction,const XrXirCompileContext *work);
 
@@ -195,6 +217,8 @@ static inline XrXirStatus effect_invocation_producer_column(const EffectInvocati
     const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
 static XrXirStatus effect_invocation_class_verify(EffectInvocationWorkspace *owner);
+static XrXirStatus effect_invocation_return_supported(const XrXirCompileContext *work,
+    const XrXirTypes *types,XrXirType type,bool *output);
 static XrXirStatus effect_final_callable_complete(const XrXirCompileContext *work,
     const EffectInvocationFinal *final,uint32_t node,uint32_t value,bool *complete);
 

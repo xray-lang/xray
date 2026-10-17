@@ -360,7 +360,7 @@ static void pc_local_final_mutations(const XrXirCompileContext *c,
         if (mode==6) node->class_return_mask=EFFECT_CLASS_ROOT;
         if (mode==7) node->edge_head=0;
         if (mode==8) node->deferred=true;
-        if (mode==9) node->producer_count=1;
+        if (mode==9) node->local_deferred=true;
         CHECK(effect_invocation_local_equations_match(c,equations,inputs)==XR_XIR_BAD_STRUCTURE);
         *node=saved;
         CHECK(effect_invocation_local_equations_match(c,equations,inputs)==XR_XIR_OK);

@@ -213,7 +213,6 @@ static XrXirStatus effect_source_relations(const XrXirCompileContext *work,
     }
     if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final->physical,owner.final->material);
     if (status==XR_XIR_OK) status=effect_role_proof_match(work,certificate->body,&certificate->final->role_proof);
-    if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);

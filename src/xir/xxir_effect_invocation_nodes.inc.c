@@ -116,7 +116,6 @@ static void effect_invocation_final_clear(EffectInvocationFinal *final) {
     effect_invocation_result_clear(&final->summary);
     for (uint32_t n=0;n<final->count;++n) {
         xr_compile_resources_free(final->nodes[n].causes);
-        xr_compile_resources_free(final->nodes[n].producers);
         xr_compile_resources_free(final->nodes[n].classes);
     }
     for (uint32_t d=0;d<final->deferred_count;++d)
@@ -133,9 +132,17 @@ static void effect_invocation_final_free(EffectInvocationFinal *final) {
     effect_invocation_final_clear(final);xr_compile_resources_free(final);
 }
 
+static void effect_invocation_discovery_clear(EffectInvocationWorkspace *owner) {
+    if(owner->states) for(uint32_t n=0;n<owner->final.count;++n) {
+        xr_compile_resources_free(owner->states[n].producers.facts);
+        owner->states[n].producers=(EffectInvocationProducerSet){0};
+    }
+    owner->read.discovery=NULL;
+}
 static void effect_invocation_free(EffectInvocationWorkspace *owner) {
     if (!owner) return;
     effect_invocation_result_free(owner->prepared_result);
+    effect_invocation_discovery_clear(owner);
     effect_invocation_final_clear(&owner->final);
     xr_compile_resources_free(owner->edge_index);xr_compile_resources_free(owner->read.consumers);
     xr_compile_resources_free(owner);
@@ -154,7 +161,7 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
     else if (owner->final.capacity) capacity=capacity>owner->maximum/2 ?
         owner->maximum : capacity*2;
     uint64_t node_bytes=(uint64_t)capacity*sizeof(*owner->final.nodes);
-    uint64_t index_bytes=(uint64_t)capacity*(sizeof(*owner->read.consumers)+sizeof(*owner->states));
+    uint64_t index_bytes=effect_invocation_state_bytes(capacity);
     if (capacity<=owner->final.count || node_bytes>SIZE_MAX ||
         index_bytes>SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
@@ -165,7 +172,8 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
      * Only the base is freed; neither view is transferred into Final. */
     uint32_t *consumers=status==XR_XIR_OK ?
         xir_compile_alloc(owner->read.work,(size_t)index_bytes,&status) : NULL;
-    EffectInvocationState *states=consumers ? (EffectInvocationState *)(consumers+capacity) : NULL;
+    EffectInvocationState *states=consumers ?
+        (EffectInvocationState *)((uint8_t *)consumers+(size_t)effect_invocation_state_offset(capacity)) : NULL;
     uint32_t *queue=status==XR_XIR_OK ?
         xir_compile_alloc(owner->read.work,(size_t)capacity*sizeof(*queue),&status) : NULL;
     if (!nodes || !consumers || !queue) {
@@ -173,7 +181,7 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
         xr_compile_resources_free(queue);return status;
     }
     uint64_t work=(uint64_t)owner->final.count*(sizeof(*nodes)+sizeof(*consumers)+sizeof(*states))+
-        (uint64_t)owner->pending*sizeof(*queue)+(uint64_t)capacity*3;
+        (uint64_t)owner->pending*sizeof(*queue)+(uint64_t)capacity*(sizeof(*consumers)+sizeof(*states));
     if (!xir_compile_work(owner->read.work,work)) {
         xr_compile_resources_free(nodes);xr_compile_resources_free(consumers);
         xr_compile_resources_free(queue);return XR_XIR_BUDGET;

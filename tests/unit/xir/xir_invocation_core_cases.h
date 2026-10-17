@@ -31,8 +31,22 @@ static void invocation_core_storage_free(XrXirEffects *effects) {
  * The certificate remains private and cannot admit a Program or runtime call. */
 static void *invocation_retired_blocks[3];
 static uint32_t invocation_retired_counts[3];
+static void *invocation_discovery_blocks[8192];
+static uint32_t invocation_discovery_counts[8192],invocation_discovery_count;
+static bool invocation_discovery_reused[8192];
+/* A new physical allocation can reuse an already released discovery address.
+ * Its later release belongs to a different lifetime, not to the retired row. */
+static void invocation_discovery_allocated(void *memory) {
+    for(uint32_t i=0;i<invocation_discovery_count;++i)
+        if(memory==invocation_discovery_blocks[i] && invocation_discovery_counts[i]) invocation_discovery_reused[i]=true;
+}
+static void invocation_discovery_observe(void *memory) {
+    for(uint32_t i=0;i<invocation_discovery_count;++i)
+        if(memory==invocation_discovery_blocks[i] && !invocation_discovery_reused[i]) ++invocation_discovery_counts[i];
+}
 static void invocation_retired_observe(void *memory) {
     for (uint32_t i=0;i<3;++i) if (memory==invocation_retired_blocks[i]) ++invocation_retired_counts[i];
+    invocation_discovery_observe(memory);
 }
 /* Locate the payload only within extents recorded by our real allocator.
  * No allocation prefix or runtime metadata is guessed or inspected. */
@@ -45,6 +59,23 @@ static void *invocation_retired_block(const void *payload) {
     }
     CHECK(false);return NULL;
 }
+static void invocation_discovery_begin(const EffectInvocationWorkspace *workspace) {
+    invocation_discovery_count=0;
+    for(uint32_t n=0;n<workspace->final.count;++n) {
+        const EffectInvocationProducerSet *records=&workspace->states[n].producers;
+        if(!records->facts) continue;
+        CHECK(invocation_discovery_count<8192);
+        void *block=invocation_retired_block(records->facts);
+        for(uint32_t i=0;i<invocation_discovery_count;++i) CHECK(block!=invocation_discovery_blocks[i]);
+        invocation_discovery_blocks[invocation_discovery_count]=block;
+        invocation_discovery_reused[invocation_discovery_count]=false;
+        invocation_discovery_counts[invocation_discovery_count++]=0;
+    }
+}
+static void invocation_discovery_finished(bool retired) {
+    for(uint32_t i=0;i<invocation_discovery_count;++i)
+        CHECK(invocation_discovery_counts[i]==(retired?1u:0u));
+}
 static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *input,
     EffectInvocationCertificate **output,EffectFinalFunctions **receiving) {
     EffectInvocationWorkspace *workspace=NULL;
@@ -53,7 +84,7 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
     if (status==XR_XIR_OK) status=effect_invocations_solve(workspace);
     if (status==XR_XIR_OK) status=effect_invocation_stage(workspace,receiving);
     if (status==XR_XIR_OK) {
-        CHECK(!rp_release_observer);
+        CHECK(!rp_release_observer && !rp_allocation_observer);
         invocation_retired_blocks[0]=invocation_retired_block(workspace);
         invocation_retired_blocks[1]=invocation_retired_block(workspace->read.consumers);
         invocation_retired_blocks[2]=invocation_retired_block(workspace->edge_index);
@@ -61,17 +92,22 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
         for (uint32_t n=0;n<workspace->final.count;++n)
             CHECK(workspace->states[n].expanded && !workspace->states[n].queued);
         memset(invocation_retired_counts,0,sizeof(invocation_retired_counts));
+        invocation_discovery_begin(workspace);
         rp_release_observer=invocation_retired_observe;
+        rp_allocation_observer=invocation_discovery_allocated;
         EffectInvocationSealRequest request={&workspace,receiving,input->dense};
         status=effect_invocation_seal(input->work,&request,output,NULL);
         rp_release_observer=NULL;
+        rp_allocation_observer=NULL;
         if (status==XR_XIR_OK) {
             CHECK(!workspace && !*receiving && *output && (*output)->final);
             for (uint32_t i=0;i<3;++i)
                 CHECK(invocation_retired_counts[i]==(invocation_retired_blocks[i]?1u:0u));
+            invocation_discovery_finished(true);
         } else {
             CHECK(workspace && !*output);
             for (uint32_t i=0;i<3;++i) CHECK(!invocation_retired_counts[i]);
+            invocation_discovery_finished(!workspace->read.discovery);
         }
     }
     effect_invocation_free(workspace);return status;

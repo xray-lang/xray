@@ -71,7 +71,7 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
         certificate->resources!=work->resources || certificate->final!=final ||
         certificate->body!=final->material || !certificate->declared ||
         !effect_body_material_shape(final->material) || final->material->resources!=work->resources ||
-        read->work || read->consumers || read->final ||
+        read->work || read->consumers || read->final || read->discovery ||
         !final->physical || final->physical!=final->material->physical ||
         final->physical->resources!=work->resources ||
         final->physical->count!=effect_body_count(final->material) || !final->physical->functions ||
@@ -523,6 +523,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK) status=effect_role_proof_build(work,certificate->body,&certificate->final->role_proof);
         if (status==XR_XIR_OK) status=effect_role_contracts_match(work,certificate->body,
             &certificate->final->role_proof,effect_contracts_read(owner->effects),owner->effects->count);
+        if (status==XR_XIR_OK) effect_invocation_discovery_clear(owner);
         if (status==XR_XIR_OK) status=effect_capture_build(work,certificate->final);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_project(work,certificate,result,sink);
     }
