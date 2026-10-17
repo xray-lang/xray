@@ -127,6 +127,8 @@ static XrXirStatus binding_lens_count(BindingLenses *w,BindingLensRow *row) {
     BindingLensSite *sites=NULL;size_t count=0,capacity=0;XrXirStatus status=XR_XIR_OK;
     for(size_t root=0;root<w->count&&status==XR_XIR_OK;++root){const XrXirSourceView *view=xlsp_source_bindings_view(w->bindings,root);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(w->bindings,root);
         for(uint32_t i=0;i<view->reference_count;++i){const XrXirSourceReference *reference=&view->references[i];uint32_t id=reference->target?reference->target:reference->declaration;
+            status=binding_lens_work(w,1);if(status!=XR_XIR_OK)break;
+            if(reference->access==XR_XIR_SOURCE_IMPORT_SELECTOR)continue;
             status=binding_lens_target(w,view,&id);if(status!=XR_XIR_OK)break;const XrXirSourceDeclaration *decl=&view->declarations[id-1];const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[id-1];
             if(decl->kind!=row->kind||!binding_lens_range_same(row->source,fact->name))continue;
             if(fact->name.module>=view->module_count){status=XR_XIR_BAD_STRUCTURE;break;}

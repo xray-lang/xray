@@ -67,6 +67,14 @@ static void import_semantic(const char *uri,const char *library,const char *prog
     if(status==XR_XIR_OK)status=xlsp_source_workspace_tokens(workspace,uri,strlen(uri),NULL,&tokens);
     if(status!=XR_XIR_OK)fprintf(stderr,"Import semantic mode=%u status=%u stage=%u %s\n",mode,(unsigned)status,stage,failure.diagnostic.message);
     CHECK(status==XR_XIR_OK&&tokens);
+    XrXirSourceDeclarationKind direct=XR_XIR_SOURCE_INTRINSIC;
+    XrLspPosition named={0,mode==2||mode==3?8u:mode==4?14u:mode==5?27u:18u};
+    status=xlsp_source_workspace_declaration_kind(workspace,uri,strlen(uri),named,&direct);
+    if(mode==4)CHECK(status==XR_XIR_UNRESOLVED&&direct==XR_XIR_SOURCE_INTRINSIC);
+    else CHECK(status==XR_XIR_OK&&direct==(mode==1?XR_XIR_SOURCE_MODULE:XR_XIR_SOURCE_IMPORT));
+    direct=XR_XIR_SOURCE_INTRINSIC;
+    CHECK(xlsp_source_workspace_declaration_kind(workspace,uri,strlen(uri),(XrLspPosition){1,22},&direct)==XR_XIR_UNRESOLVED);
+    CHECK(direct==XR_XIR_SOURCE_INTRINSIC);
     size_t count=0;const XlspSourceToken *items=xlsp_source_tokens_items(tokens,&count);CHECK(count);
     bool qualifier=false;
     for(size_t i=0;i<count;++i) {

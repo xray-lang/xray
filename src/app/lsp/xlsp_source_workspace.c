@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
-#include "xlsp_source_workspace.h"
+#include "xlsp_source_workspace_internal.h"
 #include "xlsp_source_signature.h"
 #include "xlsp_source_inlay.h"
 #include "../../api/xsource_paths.h"
@@ -8,15 +8,6 @@
 #include "../../xir/xxir_library_catalog.h"
 #include <string.h>
 #include <limits.h>
-struct XlspSourceWorkspace {
-    XrXirCompileContext context;
-    XrCompilerSession *session;
-    XrStdlibPath stdlib;
-    XrXirLibraryCatalog *catalog;
-    XrSourceAuthority **authorities;
-    XlspSourceSnapshot **snapshots;
-    size_t count;
-};
 static XrXirStatus workspace_resource(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
         status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:

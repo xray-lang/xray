@@ -45,6 +45,10 @@ XR_FUNC XrXirStatus xlsp_source_snapshot_matches(const XlspSourceSnapshot *snaps
  * All calls charge the snapshot's original live compiler ledger. */
 XR_FUNC XrXirStatus xlsp_source_definition(const XlspSourceSnapshot *snapshot,
     const char *uri, size_t uri_length, XrLspPosition position, XlspSourceLocation *output);
+/* The actual lexical declaration kind, without following an import target.
+ * Failure preserves output; selector navigation remains independent. */
+XR_FUNC XrXirStatus xlsp_source_declaration_kind(const XlspSourceSnapshot *,
+    const char *,size_t,XrLspPosition,XrXirSourceDeclarationKind *);
 XR_FUNC XrXirStatus xlsp_source_references(const XlspSourceSnapshot *snapshot,
     const char *uri, size_t uri_length, XrLspPosition position, bool include_declaration,
     XlspSourceLocations *output);

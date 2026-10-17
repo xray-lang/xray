@@ -21,6 +21,9 @@ XR_FUNC XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *,
     const char *,size_t,XrLspPosition,unsigned,bool,XrJsonValue **);
 XR_FUNC XrXirStatus xlsp_source_workspace_tokens(XlspSourceWorkspace *,const char *,size_t,
     const XrLspRange *,XlspSourceTokens **);
+/* All containing roots must agree on the actual lexical declaration kind. */
+XR_FUNC XrXirStatus xlsp_source_workspace_declaration_kind(XlspSourceWorkspace *,
+    const char *,size_t,XrLspPosition,XrXirSourceDeclarationKind *);
 /* Prepared binding type/parameter projection; complete public inlay includes effects. */
 XR_FUNC XrXirStatus xlsp_source_workspace_inlay_bindings(XlspSourceWorkspace *,const char *,size_t,
     const XlspSourceInlayOptions *,XrJsonValue **);

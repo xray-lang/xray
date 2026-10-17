@@ -61,6 +61,11 @@ XR_FUNC XrXirStatus xlsp_source_code_lens_json(XrCompileResources *resources,
             token->type!=XLSP_TOKEN_CLASS&&token->type!=XLSP_TOKEN_STRUCT))continue;
         if(!token->length||token->line>INT32_MAX||token->column>INT32_MAX||
            token->length>INT32_MAX-token->column){status=XR_XIR_BAD_STRUCTURE;goto done;}
+        XrXirSourceDeclarationKind direct=XR_XIR_SOURCE_FUNCTION;
+        status=xlsp_source_workspace_declaration_kind(workspace,uri,length,
+            (XrLspPosition){token->line,token->column},&direct);
+        if(status!=XR_XIR_OK)goto done;
+        if(direct==XR_XIR_SOURCE_IMPORT||direct==XR_XIR_SOURCE_MODULE)continue;
         status=xlsp_source_workspace_navigation(workspace,uri,length,
             (XrLspPosition){token->line,token->column},1,false,&references);
         if(status!=XR_XIR_OK)goto done;
