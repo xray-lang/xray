@@ -191,6 +191,7 @@ static void sdk_repl_inspection_cases(const char *stdlib_path) {
 #include "source_sdk_repl_array_consumer.inc.c"
 #include "source_sdk_repl_write_consumer.inc.c"
 #include "source_sdk_repl_hosted_consumer.inc.c"
+#include "source_sdk_task_result_consumer.inc.c"
 
 int main(int argc,char **argv) {
     CHECK(argc==4);
@@ -262,5 +263,6 @@ int main(int argc,char **argv) {
     sdk_repl_array_cases(argv[1]);
     sdk_repl_write_cases(argv[1]);
     sdk_repl_hosted_cases(argv[1]);
-    puts("Installed owning AST, typed values, persistent state, callable authority and producer death PASS");return 0;
+    puts("Installed owning AST, typed values, persistent state, callable authority and producer death PASS");
+    sdk_terminal_task_cases(argv[1]);return 0;
 }

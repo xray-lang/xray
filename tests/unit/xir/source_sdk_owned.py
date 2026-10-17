@@ -60,6 +60,8 @@ def main():
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fragment = 'source_sdk_repl_hosted_consumer.inc.c'
     (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
+    fragment = 'source_sdk_task_result_consumer.inc.c'
+    (out/fragment).write_bytes((root/'tests/unit/xir'/fragment).read_bytes())
     fixtures = out/'fixtures'
     fixtures.mkdir()
     for name in ('source_public_repl_rooted', 'source_public_repl_file'):
@@ -84,7 +86,8 @@ def main():
                 b'Installed Class history control: independent later field read PASS\n'
                 b'Installed typed binding writes: birth authority, scalar/String/Unit/Array/struct/Class, foreign refusal, busy and owned survivor PASS\n'
                 b'Installed hosted lifecycle: explicit owners, child and root yields, busy drop, defaults reset and owned survivors PASS\n'
-                b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n')
+                b'Installed owning AST, typed values, persistent state, callable authority and producer death PASS\n'
+                b'Installed terminal Task outcomes: repeated owned data, nested Task42, thrown and NUL/UTF8 panic after all producers PASS\n')
     for index, compiler in enumerate(compilers):
         for language in ('c', 'cpp'):
             label = f'provider{index}-{language}'
@@ -148,6 +151,9 @@ def main():
                    callback_drop_BUSY_preserves_pointer_and_event=True,
                    call_options_reinit_and_bad_size_preserve_outputs=True,
                    owned_results_survive_both_owners=True,
+                   owned_terminal_Task_results_after_producer_death=True,
+                   terminal_Task_nested42_typed_error_and_exact_NUL_UTF8_panic=True,
+                   terminal_Task_repeated_copies_and_occupied_output_refusal=True,
                    manifest_sha256=hashlib.sha256((sdk/'source_sdk_manifest.json').read_bytes()).hexdigest(),
                    scope='Source embedding host consumers; not Target AOT/mixed or complete FI/safety qualification',
                    production_release=False)
