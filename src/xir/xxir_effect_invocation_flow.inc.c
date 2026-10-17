@@ -581,6 +581,64 @@ static bool effect_invocation_origins_unused(const EffectInvocationFlow *flow,
 /* Each fixed-point pass independently reaches current canonical EOF. Only
  * actual constant opcode/type fields share an early-return classification;
  * every active physical transfer enters the unchanged complete handler. */
+typedef struct EffectInvocationOriginRun {
+    EffectInvocationFlow *flow;
+    uint32_t record;
+} EffectInvocationOriginRun;
+
+/* The current complete canonical walk precedes every independent pass.
+ * Actual opcodes, types and operands are still read for this invocation. */
+static XrXirStatus effect_invocation_origins_run(void *owner,const EffectBodyRun *ref) {
+    EffectInvocationOriginRun *input=owner;EffectInvocationFlow *flow=input->flow;
+    EffectInvocationWorkspace *work_owner=flow->owner;uint32_t *r=&input->record;
+    uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
+    if (!xir_compile_work(work_owner->work,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    XrXirStatus status=XR_XIR_OK;
+    bool constant=!(ref->mask&UINT32_C(3)),unused=false;
+    if (!xir_compile_work(work_owner->work,sizeof(constant)+sizeof(unused))) return XR_XIR_BUDGET;
+    if (constant) {
+        status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
+        if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,ref->first,1,&type);
+        if (status!=XR_XIR_OK) return status;
+        if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        unused=effect_invocation_origins_unused(flow,(XrXirOp)opcode,(XrXirType)type);
+    }
+    while (*r<flow->physical->count &&
+        flow->physical->records[*r].value-flow->function->parameter_count<ref->first+ref->count) {
+        if (!xir_compile_work(work_owner->work,1)) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=flow->physical->records[(*r)++];
+        if (record.value<flow->function->parameter_count || record.value>=flow->values ||
+            record.value-flow->function->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
+        if (!(record.mask&EFFECT_PHYSICAL_TRANSFER)) continue;
+        if (!xir_compile_work(work_owner->work,1)) return XR_XIR_BUDGET;
+        uint32_t i=record.value-flow->function->parameter_count;
+        if (!constant) {
+            status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
+            if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,i,1,&type);
+            if (status!=XR_XIR_OK) return status;
+            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            unused=effect_invocation_origins_unused(flow,(XrXirOp)opcode,(XrXirType)type);
+        }
+        if (unused) continue;
+        if (!xir_compile_work(work_owner->work,1)) return XR_XIR_BUDGET;
+        if (effect_invocation_origin_transfer_opcode((XrXirOp)opcode)) {
+            /* Every pass retains current canonical range, mask, delta and
+             * EOF checks. A transfer consumes only its two operand words;
+             * full Source/physical correspondence remains independent. */
+            uint32_t first=0,second=0;
+            status=effect_body_run_word(&flow->body.read,ref,i,2,&first);
+            if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,i,3,&second);
+            if (status==XR_XIR_OK) status=effect_invocation_origin_transfer(flow,i,(XrXirOp)opcode,first,second);
+        } else {
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
+            if (status==XR_XIR_OK) status=effect_invocation_origins_decoded(flow,i,op);
+        }
+        if (status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
     EffectInvocationWorkspace *owner=flow->owner;
     if (flow->body.instruction!=effect_body_owned_instruction ||
@@ -615,62 +673,19 @@ static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
     const EffectBodyFunction *body=&material->functions[f];
     if (body->parameter_count!=flow->function->parameter_count ||
         body->instruction_count!=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=0;
-    if (!xir_compile_work(owner->work,sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
+    uint32_t r=0;
+    if (!xir_compile_work(owner->work,sizeof(r))) return XR_XIR_BUDGET;
     while (r<flow->physical->count && flow->physical->records[r].value<flow->function->parameter_count) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         if (flow->physical->records[r++].mask&EFFECT_PHYSICAL_TRANSFER) return XR_XIR_BAD_STRUCTURE;
     }
-    for (uint32_t run=0;run<body->run_count;++run) {
-        const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
-        if (!xir_compile_work(owner->work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
-        XrXirStatus status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
-        if (status!=XR_XIR_OK) return status;
-        bool constant=!(ref->mask&UINT32_C(3)),unused=false;
-        if (!xir_compile_work(owner->work,sizeof(constant)+sizeof(unused))) return XR_XIR_BUDGET;
-        if (constant) {
-            status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
-            if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,ref->first,1,&type);
-            if (status!=XR_XIR_OK) return status;
-            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-            unused=effect_invocation_origins_unused(flow,(XrXirOp)opcode,(XrXirType)type);
-        }
-        while (r<flow->physical->count &&
-            flow->physical->records[r].value-flow->function->parameter_count<ref->first+ref->count) {
-            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            EffectPhysicalRecord record=flow->physical->records[r++];
-            if (record.value<flow->function->parameter_count || record.value>=flow->values ||
-                record.value-flow->function->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
-            if (!(record.mask&EFFECT_PHYSICAL_TRANSFER)) continue;
-            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            uint32_t i=record.value-flow->function->parameter_count;
-            if (!constant) {
-                status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
-                if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,i,1,&type);
-                if (status!=XR_XIR_OK) return status;
-                if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-                unused=effect_invocation_origins_unused(flow,(XrXirOp)opcode,(XrXirType)type);
-            }
-            if (unused) continue;
-            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            if (effect_invocation_origin_transfer_opcode((XrXirOp)opcode)) {
-                /* Every pass retains current canonical range, mask, delta and
-                 * EOF checks. A transfer consumes only its two operand words;
-                 * full Source/physical correspondence remains independent. */
-                uint32_t first=0,second=0;
-                status=effect_body_run_word(&flow->body.read,ref,i,2,&first);
-                if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,i,3,&second);
-                if (status==XR_XIR_OK) status=effect_invocation_origin_transfer(flow,i,(XrXirOp)opcode,first,second);
-            } else {
-                XrXirInstruction storage;const XrXirInstruction *op=NULL;
-                status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
-                if (status==XR_XIR_OK) status=effect_invocation_origins_decoded(flow,i,op);
-            }
-            if (status!=XR_XIR_OK) return status;
-        }
-    }
-    return r==flow->physical->count && cursor.first==body->instruction_count &&
-        cursor.run==body->run_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,sizeof(EffectInvocationOriginRun)+sizeof(EffectBodyRunVisitor)))
+        return XR_XIR_BUDGET;
+    EffectInvocationOriginRun input={flow,r};
+    EffectBodyRunVisitor visitor={&input,effect_invocation_origins_run};
+    XrXirStatus status=effect_body_runs_visit(&flow->body.read,body,&visitor);
+    if (status!=XR_XIR_OK) return status;
+    return input.record==flow->physical->count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 /* Classification locates a real FnRef, whose complete row is still read.

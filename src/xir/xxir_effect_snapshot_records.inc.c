@@ -243,16 +243,12 @@ static inline XrXirStatus effect_body_records_copy(const XrXirCompileContext *wo
     return effect_body_records_write(work,source,target,NULL);
 }
 
-/* The same bounded reader serves compile and runtime ledger callbacks. A
- * local run reference cannot outlive this request or acquire body permission. */
-static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
-    const EffectBodyFunction *function,uint32_t index,uint32_t first,const EffectBodyRun **output) {
-    if (!read || !output || !function || !function->runs ||
-        function->run_count>function->run_capacity || function->run_count>function->instruction_count ||
-        index>=function->run_count || first>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+/* Canonical physical fields share one check for random and complete walks. */
+static XrXirStatus effect_body_run_check(const EffectBodyRead *read,
+    const EffectBodyRun *run,uint32_t first,uint32_t instructions) {
+    if (!read || !run || first>=instructions) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
-    const EffectBodyRun *run=&function->runs[index];
-    if (run->first!=first || !run->count || run->count>function->instruction_count-first ||
+    if (run->first!=first || !run->count || run->count>instructions-first ||
         run->mask&~EFFECT_BODY_MASK || (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
     /* A selected physical delta must be nonzero. The array is full length,
      * so there is no packed-column directory or rank to reconstruct. */
@@ -261,6 +257,19 @@ static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
         uint32_t w=(uint32_t)__builtin_ctz(selected);
         if (!run->delta[w]) return XR_XIR_BAD_STRUCTURE;
     }
+    return XR_XIR_OK;
+}
+
+/* The same bounded reader serves compile and runtime ledger callbacks. A
+ * local run reference cannot outlive this request or acquire body permission. */
+static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
+    const EffectBodyFunction *function,uint32_t index,uint32_t first,const EffectBodyRun **output) {
+    if (!read || !output || !function || !function->runs ||
+        function->run_count>function->run_capacity || function->run_count>function->instruction_count ||
+        index>=function->run_count || first>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *run=&function->runs[index];
+    XrXirStatus status=effect_body_run_check(read,run,first,function->instruction_count);
+    if (status!=XR_XIR_OK) return status;
     if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=run;return XR_XIR_OK;
 }
@@ -361,6 +370,41 @@ static XrXirStatus effect_body_range_ref(const EffectBodyRead *read,
     }
     if (!effect_body_read_work(read,sizeof(*output)+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
     cursor->first=ref->first+ref->count;++cursor->run;*output=ref;return XR_XIR_OK;
+}
+
+typedef struct EffectBodyRunVisitor {
+    void *owner;
+    XrXirStatus (*run)(void *,const EffectBodyRun *);
+} EffectBodyRunVisitor;
+
+/* The immutable material is retained throughout this synchronous call.
+ * Validate the complete current directory before any consumer runs, including
+ * every selected delta, adjacent boundary and exact EOF. Only actual current
+ * run references enter the visitor; no completed flag survives this call. */
+static XrXirStatus effect_body_runs_visit(const EffectBodyRead *read,
+    const EffectBodyFunction *function,const EffectBodyRunVisitor *visitor) {
+    if (!read || !function || !visitor || !visitor->owner || !visitor->run ||
+        (!function->instruction_count && (function->runs || function->run_count || function->run_capacity)) ||
+        (function->instruction_count && (!function->runs || !function->run_count)) ||
+        function->run_count>function->run_capacity || function->run_count>function->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t first=0;
+    if (!effect_body_read_work(read,7+sizeof(first))) return XR_XIR_BUDGET;
+    for (uint32_t r=0;r<function->run_count;++r) {
+        const EffectBodyRun *run=&function->runs[r];
+        XrXirStatus status=effect_body_run_check(read,run,first,function->instruction_count);
+        if (status!=XR_XIR_OK) return status;
+        if (!effect_body_read_work(read,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        first+=run->count;
+    }
+    if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+    if (first!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t r=0;r<function->run_count;++r) {
+        if (!effect_body_read_work(read,2+sizeof(void *))) return XR_XIR_BUDGET;
+        XrXirStatus status=visitor->run(visitor->owner,&function->runs[r]);
+        if (status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
 }
 
 static XrXirStatus effect_body_record_cursor_ref(const EffectBodyRead *read,

@@ -36,6 +36,72 @@ static XrXirInstruction mask_expected(uint32_t mask) {
             (mask&64?UINT32_C(0xffffffff):UINT32_C(0xfffffffb))),
         .type_arguments={mask&256?51:11,mask&512?74:12}};
 }
+typedef struct MaskVisit {
+    const EffectBodyRun *runs;
+    uint32_t count,calls,next,refuse;
+    uint32_t observed[3];
+} MaskVisit;
+static XrXirStatus mask_visit_run(void *owner,const EffectBodyRun *run) {
+    MaskVisit *visit=owner;
+    CHECK(visit->calls<visit->count && run==&visit->runs[visit->calls] && run->first==visit->next);
+    if (visit->calls<3)visit->observed[visit->calls]=run->base.args[0];
+    visit->next+=run->count;++visit->calls;
+    return visit->calls==visit->refuse?XR_XIR_IO:XR_XIR_OK;
+}
+static void mask_visit_walks(const XrXirCompileContext *context) {
+    EffectBodyRun runs[3];memset(runs,0xa5,sizeof(runs));
+    const uint32_t deltas[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
+    for(uint32_t r=0;r<3;++r) {
+        runs[r].first=2*r;runs[r].count=2;runs[r].mask=1023;runs[r].base=mask_expected(0);
+        for(uint32_t w=0;w<10;++w)runs[r].delta[w]=deltas[w];
+    }
+    EffectBodyFunction body={.instruction_count=6,.runs=runs,.run_count=3,.run_capacity=3};
+    MaskVisit visit={.runs=runs,.count=3};EffectBodyRunVisitor visitor={&visit,mask_visit_run};
+    MaskRead observation={context,0,UINT64_MAX};EffectBodyRead read={&observation,mask_read_work};
+    CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==3 && visit.next==6 &&
+        visit.observed[0]==7 && visit.observed[1]==7 && visit.observed[2]==7);
+    uint64_t points=observation.calls;
+    for(uint64_t n=0;n<points;++n) {
+        visit.calls=visit.next=0;observation.calls=0;observation.reject=n;
+        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_BUDGET && observation.calls==n+1);
+        visit.calls=visit.next=0;observation.calls=0;observation.reject=UINT64_MAX;
+        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==3 && visit.next==6);
+    }
+    for(unsigned r=0;r<3;++r)for(unsigned field=0;field<4;++field) {
+        EffectBodyRun saved=runs[r];
+        if(!field)++runs[r].first;
+        else if(field==1)runs[r].count=0;
+        else if(field==2)runs[r].mask|=1024;
+        else runs[r].delta[9]=0;
+        visit.calls=visit.next=0;
+        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_BAD_STRUCTURE && !visit.calls && !visit.next);
+        runs[r]=saved;
+    }
+    --body.instruction_count;visit.calls=visit.next=0;
+    CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_BAD_STRUCTURE && !visit.calls);
+    ++body.instruction_count;--body.run_count;
+    CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_BAD_STRUCTURE && !visit.calls);
+    ++body.run_count;runs[2].base.args[0]=444;
+    CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==3 && visit.observed[2]==444);
+    for(uint32_t n=1;n<=3;++n) {
+        visit.calls=visit.next=0;visit.refuse=n;
+        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_IO && visit.calls==n);
+    }
+    visit.refuse=0;visit.calls=visit.next=0;
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK);
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+    uint64_t exact=after.work-before.work+1;
+    for(unsigned minus=0;minus<2;++minus) {
+        XrCompileResourceLimits caps={8388608,4194304,exact-minus};XrXirCompileContext finite={0};
+        CHECK(xr_compile_resources_new(&caps,&finite.resources)==XR_COMPILE_RESOURCE_OK);
+        finite.limits=xr_xir_compile_default_limits();EffectBodyRead finite_read=effect_body_compile_read(&finite);
+        visit.calls=visit.next=0;
+        CHECK(effect_body_runs_visit(&finite_read,&body,&visitor)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        xr_compile_resources_release(finite.resources);
+    }
+    fprintf(stderr,"Complete physical visit: all canonical damage before callbacks, current changed row, every read-failure prefix/same-ledger retry, actual callback IO and exact%llu/minusone work PASS\n",(unsigned long long)exact);
+}
 static void mask_prefixes(const XrXirCompileContext *context,const EffectBodyFunction *body,
     uint32_t instruction,const XrXirInstruction *expected) {
     MaskRead observation={context,0,UINT64_MAX};EffectBodyRead read={&observation,mask_read_work};
@@ -75,6 +141,8 @@ static void mask_matrix(const XrXirCompileContext *context) {
         const uint32_t deltas[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
         for(uint32_t w=0;w<10;++w)if(mask&(1u<<w))run.delta[w]=deltas[w];
         EffectBodyFunction body={.instruction_count=2,.runs=&run,.run_count=1,.run_capacity=1};
+        MaskVisit visit={.runs=&run,.count=1};EffectBodyRunVisitor visitor={&visit,mask_visit_run};
+        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==1 && visit.next==2);
         const EffectBodyRun *ref=NULL;
         CHECK(effect_body_record_ref(&read,&body,1,&ref)==XR_XIR_OK && ref==&run);
         XrXirInstruction expected=mask_expected(mask),output={0};
@@ -96,6 +164,8 @@ static void mask_matrix(const XrXirCompileContext *context) {
             XrXirInstruction held={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.immediate=INT64_MIN};output=held;
             CHECK(effect_body_instruction_get(&read,&body,1,&output)==XR_XIR_BAD_STRUCTURE && mask_same(&output,&held));
             CHECK(effect_body_instruction_ref_prepare(&read,&run,1)==XR_XIR_BAD_STRUCTURE);
+            visit.calls=visit.next=0;
+            CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_BAD_STRUCTURE && !visit.calls);
             view_storage=held_view;view=&held_view;
             CHECK(effect_body_instruction_ref_read(&read,&run,0,&view_storage,&view)==XR_XIR_BAD_STRUCTURE &&
                 view==&held_view && mask_same(&view_storage,&held_view));
@@ -199,7 +269,7 @@ int main(void) {
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
-    mask_matrix(&context);mask_boundaries(&context);mask_work_bounds(&context);mask_cell_values(&context);
+    mask_matrix(&context);mask_boundaries(&context);mask_work_bounds(&context);mask_cell_values(&context);mask_visit_walks(&context);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK &&
         after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
     fprintf(stderr,"Snapshot no-allocation read matrix work%llu cap4000000 live%llu/%llu\n",

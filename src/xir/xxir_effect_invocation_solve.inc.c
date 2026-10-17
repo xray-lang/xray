@@ -83,55 +83,72 @@ static XrXirStatus effect_invocation_dispatch_constant(EffectInvocationFlow *flo
 /* The first selected row used the complete scalar path. Only a second real
  * invocation starts this fresh owning walk, so unused and singleton requests
  * never initialize an unused 40-byte row or scan the rest of their body. */
+typedef struct EffectInvocationDispatchRun {
+    EffectInvocationFlow *flow;
+    const EffectBodyFunction *body;
+    bool *changed;
+    uint32_t record;
+} EffectInvocationDispatchRun;
+
+/* The enclosing synchronous walk has read every current canonical run.
+ * Every actual selected row still enters the unchanged complete handler. */
+static XrXirStatus effect_invocation_dispatch_run(void *owner,const EffectBodyRun *ref) {
+    EffectInvocationDispatchRun *input=owner;EffectInvocationFlow *flow=input->flow;
+    const EffectBodyFunction *body=input->body;uint32_t r=input->record;
+    const XrXirCompileContext *work=flow->owner->work;
+    if (!xir_compile_work(work,2+sizeof(r))) return XR_XIR_BUDGET;
+    XrXirStatus status=XR_XIR_OK;
+    if (!ref->mask) {
+        while (r<flow->physical->count &&
+            flow->physical->records[r].value-body->parameter_count<ref->first+ref->count &&
+            !(flow->physical->records[r].mask&EFFECT_PHYSICAL_INVOCATION)) {
+            if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+            uint32_t value=flow->physical->records[r++].value;
+            if (value<body->parameter_count || value>=flow->values ||
+                value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
+        }
+        if (r<flow->physical->count &&
+            flow->physical->records[r].value-body->parameter_count<ref->first+ref->count)
+            status=effect_invocation_dispatch_constant(flow,ref,&r,input->changed);
+    } else while (r<flow->physical->count &&
+        flow->physical->records[r].value-body->parameter_count<ref->first+ref->count) {
+        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=flow->physical->records[r++];
+        if (record.value<body->parameter_count || record.value>=flow->values ||
+            record.value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
+        if (!(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;
+        uint32_t i=record.value-body->parameter_count;
+        if (!flow->precision && !xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
+        if (status!=XR_XIR_OK) return status;
+        if (flow->precision) {
+            if (!effect_invocation_dispatch_precision(op->op)) continue;
+            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        }
+        flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,op,input->changed);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (status!=XR_XIR_OK) return status;
+    if (r!=input->record) {
+        if (!xir_compile_work(work,sizeof(input->record))) return XR_XIR_BUDGET;
+        input->record=r;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus effect_invocation_dispatch_range(EffectInvocationFlow *flow,
     uint32_t start,bool *changed) {
     EffectInvocationWorkspace *owner=flow->owner;
     const EffectBodyFunction *body=&owner->final.material->functions[owner->final.nodes[flow->node].body];
     if (start>=flow->physical->count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=start;
-    if (!xir_compile_work(owner->work,8+sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
-    for (uint32_t run=0;run<body->run_count;++run) {
-        const EffectBodyRun *ref;XrXirStatus status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
-        if (status!=XR_XIR_OK) return status;
-        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-        if (!ref->mask) {
-            while (r<flow->physical->count &&
-                flow->physical->records[r].value-body->parameter_count<ref->first+ref->count &&
-                !(flow->physical->records[r].mask&EFFECT_PHYSICAL_INVOCATION)) {
-                if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-                uint32_t value=flow->physical->records[r++].value;
-                if (value<body->parameter_count || value>=flow->values ||
-                    value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
-            }
-            if (r<flow->physical->count &&
-                flow->physical->records[r].value-body->parameter_count<ref->first+ref->count) {
-                status=effect_invocation_dispatch_constant(flow,ref,&r,changed);
-                if (status!=XR_XIR_OK) return status;
-            }
-            continue;
-        }
-        while (r<flow->physical->count &&
-            flow->physical->records[r].value-body->parameter_count<ref->first+ref->count) {
-            if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-            EffectPhysicalRecord record=flow->physical->records[r++];
-            if (record.value<body->parameter_count || record.value>=flow->values ||
-                record.value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
-            if (!(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;
-            uint32_t i=record.value-body->parameter_count;
-            if (!flow->precision && !xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
-            if (status!=XR_XIR_OK) return status;
-            if (flow->precision) {
-                if (!effect_invocation_dispatch_precision(op->op)) continue;
-                if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            }
-            flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,op,changed);
-            if (status!=XR_XIR_OK) return status;
-        }
-    }
-    return r==flow->physical->count && cursor.first==body->instruction_count &&
-        cursor.run==body->run_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,8+sizeof(EffectInvocationDispatchRun)+sizeof(EffectBodyRunVisitor)))
+        return XR_XIR_BUDGET;
+    EffectInvocationDispatchRun input={flow,body,changed,start};
+    EffectBodyRunVisitor visitor={&input,effect_invocation_dispatch_run};
+    XrXirStatus status=effect_body_runs_visit(&flow->body.read,body,&visitor);
+    if (status!=XR_XIR_OK) return status;
+    return input.record==flow->physical->count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
 /* Canonical ownership selects a representation reader, not an effect fact.
