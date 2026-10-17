@@ -1,5 +1,6 @@
 import unittest
 import complete_async_events_model as model
+import complete_channel_model as sleep_model
 
 class AsyncEventTraces(unittest.TestCase):
     def test_complete_traces(self):
@@ -51,5 +52,52 @@ class AsyncEventTraces(unittest.TestCase):
     def test_barrier_paths_and_semaphore_integer_result(self):
         paths=model.condvar_observation_paths();self.assertEqual(len(paths),96);self.assertTrue(all(path==[42,3,'done'] for path in paths))
         semaphore=model.Semaphore(1);self.assertTrue(semaphore.acquire());self.assertEqual(semaphore.release(),1)
+
+
+    def test_complete_sleep_channel_preserves_all_four_observations_and_operations(self):
+        trace=sleep_model.sleep_channel_trace()
+        self.assertEqual(trace['observations'],['Recv.Value(11)','sent','recv-value','empty-timeout'])
+        self.assertEqual([row for row in trace['events'] if row[0]=='sleep_complete'],[('sleep_complete',5,x) for x in range(1,5)])
+        self.assertEqual([row for row in trace['events'] if row[0]=='discard_sleep_status'],[('discard_sleep_status',x) for x in range(1,5)])
+        self.assertEqual([row for row in trace['events'] if row[0]=='channel_enter'],[('channel_enter',x) for x in ('send','recv','sendTimeout','recvTimeout','recvTimeout')])
+        self.assertIn(('channel_wait_timeout',10,5),trace['events']);self.assertEqual(trace['events'][-1],('close',))
+        self.assertEqual(trace['final_queue'],[]);self.assertTrue(trace['closed'])
+        self.assertEqual((trace['original_prints'],trace['original_match_expressions']),(4,3))
+        self.assertFalse(trace['actual_scheduler_timeout_latency_cleanup_FI_safety_providers_or_mixed_qualified'])
+
+    def test_stale_sleep_status_and_dropped_real_timeout_are_distinct_negative_controls(self):
+        class RetainSleep(sleep_model.SleepChannelBoundary):
+            def enter(self,operation):self.events.append(('channel_enter',operation))
+        stale=RetainSleep();stale.sleep(5)
+        self.assertEqual(stale.send_timeout(22,50),'Timeout');self.assertEqual(stale.channel.queue,[])
+        stale=RetainSleep();stale.channel.send(22);stale.sleep(5)
+        self.assertEqual(stale.recv_timeout(50),('Timeout',None));self.assertEqual(stale.channel.queue,[22])
+        with self.assertRaises(sleep_model.WouldBlock):sleep_model.sleep_channel_trace(RetainSleep)
+        class DropEveryTimeout(sleep_model.SleepChannelBoundary):
+            def channel_wait_result(self):return 'Empty',None
+        wrong=sleep_model.sleep_channel_trace(DropEveryTimeout)['observations']
+        self.assertEqual(wrong[:3],sleep_model.sleep_channel_trace()['observations'][:3])
+        self.assertEqual(wrong[3],'empty-value');self.assertNotEqual(wrong,sleep_model.sleep_channel_trace()['observations'])
+
+    def test_sleep_channel_original_andevery_authority_is_additively_pinned(self):
+        from pathlib import Path
+        from unittest import mock
+        saved=Path.read_bytes
+        for name in sleep_model._SLEEP_CHANNEL_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==sleep_model.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):sleep_model.sleep_channel_expected_row()
+        with mock.patch.object(sleep_model,'_SLEEP_CHANNEL_INPUTS',{}),self.assertRaises(ValueError):sleep_model.sleep_channel_expected_row()
+
+    def test_sleep_channel_product_keeps_the_direct_enum_print_andwhole_original(self):
+        import json
+        row=sleep_model.sleep_channel_expected_row()
+        case=next(x for x in json.loads((sleep_model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases'] if x['id']==row['id'])
+        self.assertEqual((case['source'],case['entry'],case['source_context']),(sleep_model._SLEEP_CHANNEL_SOURCE,'run','original_absolute'))
+        self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+        self.assertEqual((case['expected_exit_code'],case['stderr_utf8'],case['stdout_utf8']),(0,'','Recv.Value(11)\nsent\nrecv-value\nempty-timeout\n'))
+        self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8']);self.assertIsNone(row['required_target'])
+        self.assertEqual(sleep_model.channel_recv_text(('Value',11)),'Recv.Value(11)')
+        self.assertEqual(sleep_model.channel_recv_text(('Timeout',None)),'Recv.Timeout')
 
 if __name__=='__main__':unittest.main()

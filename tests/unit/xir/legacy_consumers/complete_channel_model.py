@@ -435,4 +435,112 @@ def expected_rows():
                      'expected': {'exit_code': 0, 'stdout_utf8': '', 'stderr_utf8': ''},
                      'model': 'The original standalone route declares named bodies without calling them. Empty stdout requires successful actual execution but grants no named-body, Channel transfer, scheduling, allocation or cleanup qualification.',
                      'observation_count': 0})
-    return rows
+    return rows+[sleep_channel_expected_row()]
+
+_SLEEP_CHANNEL_SOURCE = 'tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr'
+_SLEEP_CHANNEL_ID = 'complete_channel_timeout_after_sleep'
+_SLEEP_CHANNEL_INPUTS = {'tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr': '71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd', 'stdlib/types/channel.xr': 'ff2be02bcc28be44f7927b746d316eec7fef4e815f2693207ef07176bbbf1284', 'stdlib/time/time.xr': 'd2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72', 'spec/source/sections/011-10-concurrency-and-coroutines.md': '27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea', 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e', 'spec/source/sections/018-17-compilation-pipeline.md': '91e9ef4bc0ce560d6621a1dbf8bd6a3f23c58e073e97469b10b7dece5866e440', 'tests/unit/xir/legacy_consumers/complete_aggregate_model.py': '30bcd4ade65f445ba9cdfeb9de9145bc1f248262c977199b642f5b8a2ac317e2', 'src/shared/xr_value_format_core.h': '88e14ed234554322f60c1a8694a920c4e7990dd04b4bed1a4ed8d9517a333207', 'tests/unit/xir/legacy_consumers/complete_async_events_model.py': '45a54d201c792ed69189e26e3e3f759a7bca543719324fa72ce4ed81d257cd8f'}
+
+
+from complete_async_events_model import Channel,WouldBlock
+
+
+class SleepChannelBoundary:
+    """Finite completion provenance for one coroutine and one buffered channel."""
+    def __init__(self):
+        self.channel=Channel(1);self.resume=None;self.next_ticket=0;self.events=[]
+
+    def sleep(self,milliseconds):
+        if milliseconds!=5:raise ValueError('The complete original sleeps for five milliseconds')
+        self.next_ticket+=1;self.resume=('sleep',self.next_ticket,'Timeout')
+        self.events.append(('sleep_complete',milliseconds,self.next_ticket))
+
+    def enter(self,operation):
+        if self.resume is not None and self.resume[0]=='sleep':
+            self.events.append(('discard_sleep_status',self.resume[1]));self.resume=None
+        self.events.append(('channel_enter',operation))
+
+    def send(self,value):
+        self.enter('send')
+        if self.resume is not None:raise WouldBlock('stale sleep status before untimed send')
+        self.channel.send(value);self.events.append(('sent',value))
+
+    def recv(self):
+        self.enter('recv')
+        if self.resume is not None:raise WouldBlock('stale sleep status before untimed recv')
+        result=self.channel.recv();self.events.append(('recv',*result));return result
+
+    def send_timeout(self,value,milliseconds):
+        if milliseconds!=50:raise ValueError('Original timed send budget changed')
+        self.enter('sendTimeout')
+        if self.resume is not None:return 'Timeout'
+        result=self.channel.timed_send_without_partner(value)
+        self.events.append(('send_timeout_result',milliseconds,result));return result
+
+    def channel_wait_result(self):
+        if self.resume is None or self.resume[0]!='channel_recv' or self.resume[2]!='Timeout':
+            raise ValueError('A genuine channel timeout needs its own completion')
+        return 'Timeout',None
+
+    def recv_timeout(self,milliseconds):
+        if milliseconds not in (50,10):raise ValueError('Original timed receive budget changed')
+        self.enter('recvTimeout')
+        if self.resume is not None:return 'Timeout',None
+        result=self.channel.try_recv()
+        if result[0]=='Empty':
+            self.next_ticket+=1;self.resume=('channel_recv',self.next_ticket,'Timeout')
+            self.events.append(('channel_wait_timeout',milliseconds,self.next_ticket))
+            result=self.channel_wait_result();self.resume=None
+        self.events.append(('recv_timeout_result',milliseconds,*result));return result
+
+    def close(self):
+        self.channel.close();self.events.append(('close',))
+
+
+def channel_recv_text(result):
+    from complete_aggregate_model import EnumType,enum_text
+    declaration=EnumType('stdlib/types/channel.xr','Recv',(('Value',(('value','i64'),)),('Empty',()),('Timeout',()),('Closed',())))
+    state,value=result
+    return enum_text(declaration.construct(state,**({'value':value} if state=='Value' else {})))
+
+
+def sleep_channel_trace(boundary_class=SleepChannelBoundary):
+    boundary=boundary_class();out=[]
+    boundary.sleep(5);boundary.send(11);out.append(channel_recv_text(boundary.recv()))
+    boundary.sleep(5);sent=boundary.send_timeout(22,50)
+    out.append('sent' if sent=='Sent' else 'send-timeout' if sent=='Timeout' else 'send-closed')
+    boundary.sleep(5);got=boundary.recv_timeout(50)
+    out.append('recv-timeout' if got[0]=='Timeout' else 'recv-closed' if got[0]=='Closed' else 'recv-value')
+    boundary.sleep(5);empty=boundary.recv_timeout(10)
+    out.append('empty-timeout' if empty[0]=='Timeout' else 'empty-closed' if empty[0]=='Closed' else 'empty-value')
+    boundary.close()
+    return {'observations':out,'events':boundary.events,'final_queue':list(boundary.channel.queue),
+            'closed':boundary.channel.closed,'original_sleep_milliseconds':[5,5,5,5],
+            'original_send_timeout_milliseconds':50,'original_recv_timeout_milliseconds':[50,10],
+            'original_prints':4,'original_match_expressions':3,'first_print_is_whole_Recv_enum':True,
+            'original_send_values':[11,22],'capacity':1,
+            'logical_sleep_completion_tickets':[1,2,3,4],'logical_channel_timeout_ticket':5,
+            'normal_progress_premise':'Original Channel allocation andfour sleeps complete normally;no other actors,cancellation or close races are introduced',
+            'host_clock_orXray_queries':0,'physical_timer_count_orlayout_inferred':False,
+            'actual_scheduler_timeout_latency_cleanup_FI_safety_providers_or_mixed_qualified':False}
+
+
+def sleep_channel_expected_row():
+    required={_SLEEP_CHANNEL_SOURCE,'stdlib/types/channel.xr','stdlib/time/time.xr',
+              'spec/source/sections/011-10-concurrency-and-coroutines.md',
+              'spec/source/sections/015-14-built-in-type-methods.md',
+              'spec/source/sections/018-17-compilation-pipeline.md',
+              'tests/unit/xir/legacy_consumers/complete_aggregate_model.py','src/shared/xr_value_format_core.h',
+              'tests/unit/xir/legacy_consumers/complete_async_events_model.py'}
+    if set(_SLEEP_CHANNEL_INPUTS)!=required or _SLEEP_CHANNEL_SOURCE!='tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr':
+        raise ValueError('Whole sleep/channel original or authorities changed')
+    for name,digest in _SLEEP_CHANNEL_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Whole sleep/channel input changed: '+name)
+    trace=sleep_channel_trace()
+    if len(trace['observations'])!=4:raise ValueError('Whole sleep/channel observations lost')
+    return {'id':_SLEEP_CHANNEL_ID,'source':_SLEEP_CHANNEL_SOURCE,'original_source':_SLEEP_CHANNEL_SOURCE,
+            'required_target':None,'expected':{'exit_code':0,'stderr_utf8':'',
+                'stdout_utf8':''.join(value+chr(10) for value in trace['observations'])},
+            'observation_count':4,'required_semantic_trace':trace,
+            'model':'Complete unchanged sleep/channel original:capacity1,all four sleep5calls,untimed11send/wholeRecvprint,timed22send50,queuedrecv50,emptyrecv10,all threematches/fourprints/finalclose. Independent finite FIFO andcompletion provenance drop only preceding sleep status before a channel operation while preserving a genuine newchannel timeout. Canonical recv returns Recv<i64>,so first direct print is Recv.Value(11),not an unwrapped scalar. No host clock orproduct output oracle;logical tickets do not prove physical timer count,scheduler latency,cleanup,cancel,lifetime,FI,safety,providers or mixed execution.'}

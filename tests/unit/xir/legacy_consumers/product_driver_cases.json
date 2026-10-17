@@ -33324,6 +33324,35 @@
         "Complete eight-byte255base/refhelper/Slotu64view/twoliterals/twofieldprints retained. Real inlining andwidth regression needsactualVM/C/native;logical independent trace doesnotqualifyphysicalborrow/alignment/FI/resources/safety/providers/mixed."
       ],
       "independent_observation_count": 2
+    },
+    {
+      "id": "complete_channel_timeout_after_sleep",
+      "oracle_id": "complete_channel_timeout_after_sleep",
+      "source": "tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr",
+      "source_lf_sha256": "71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "Recv.Value(11)\nsent\nrecv-value\nempty-timeout\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P13"
+      ],
+      "independent_execution_model": "Complete unchanged sleep/channel original:capacity1,all four sleep5calls,untimed11send/wholeRecvprint,timed22send50,queuedrecv50,emptyrecv10,all threematches/fourprints/finalclose. Independent finite FIFO andcompletion provenance drop only preceding sleep status before a channel operation while preserving a genuine newchannel timeout. Canonical recv returns Recv<i64>,so first direct print is Recv.Value(11),not an unwrapped scalar. No host clock orproduct output oracle;logical tickets do not prove physical timer count,scheduler latency,cleanup,cancel,lifetime,FI,safety,providers or mixed execution.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/channel_timeout_after_sleep.xr",
+        "source_lf_sha256": "71cc40e3420391c1d780aa191d8bd218ff196fa62501b33392099c0c14611edd"
+      },
+      "remaining_gates": [
+        "Complete four sleeps/untimed andtimedchanneloperations/directRecvprint/threematches/finalclose retained. New genuineChannel timeout must remain distinct from preceding sleep status;actualscheduler/latency/cancel/cleanup/lifetime/FI/resources/safety/providers/mixed remainopen."
+      ],
+      "independent_observation_count": 4
     }
   ]
 }
