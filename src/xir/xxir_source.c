@@ -529,6 +529,12 @@ static bool source_query_reference(SourceContext *ctx, AstNode *node, SourceName
     *record = (XrXirSourceReference) {source_query_range(ctx, node, NULL), binding->declaration, target->declaration, access};
     return source_query_syntax_reference(ctx, source_query_token_range(ctx, node));
 }
+static bool source_query_module_qualifier(SourceContext *ctx,AstNode *node,SourceName *binding) {
+    if(!binding||binding->kind!=SOURCE_MODULE||!node||node->type!=AST_MEMBER_ACCESS)return true;
+    AstNode *qualifier=node->as.member_access.object;
+    return !qualifier||qualifier->type!=AST_VARIABLE||
+        source_query_reference(ctx,qualifier,binding,binding,XR_XIR_SOURCE_READ);
+}
 static bool source_query_expression(SourceContext *ctx, AstNode *node, XrXirType type) {
     XrXirSourceExpression *records = source_query_append(ctx, ctx->query.expressions,
         &ctx->query.expression_count, &ctx->expression_capacity, sizeof(*records));
@@ -1223,7 +1229,10 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (!source_static_select(ctx, callee, &selected)) return false;
         if (selected.method) {
             binding = target = selected.method;
-        } else if (base && base->kind == SOURCE_MODULE) { binding = base; target = imported_declaration(ctx, base, member->name); }
+        } else if (base && base->kind == SOURCE_MODULE) {
+            if(!source_query_module_qualifier(ctx,callee,base))return false;
+            binding = base; target = imported_declaration(ctx, base, member->name);
+        }
         else if (source_constructor_receiver(ctx, member->object) &&
             !source_method_find(ctx, ctx->functions[ctx->function].result, member->name)) {
             if (!expression(ctx, callee, &indirect)) return false;
@@ -1628,7 +1637,10 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceE
     else if (callee && callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx,member->object->as.variable.name) : NULL;
-        if (base && base->kind == SOURCE_MODULE) { binding = base; symbol = imported_declaration(ctx,base,member->name); }
+        if (base && base->kind == SOURCE_MODULE) {
+            if(!source_query_module_qualifier(ctx,callee,base))return false;
+            binding = base; symbol = imported_declaration(ctx,base,member->name);
+        }
         else {
             SourceTypeArguments arguments = {node->as.function_ref.type_args, (uint32_t)node->as.function_ref.type_arg_count, {0}};
             return source_member_value(ctx, callee, &arguments, expected, value);
@@ -1703,6 +1715,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
         SourceName *base = member->object->type == AST_VARIABLE ? visible_name(ctx, member->object->as.variable.name) : NULL;
         SourceTypeArguments arguments = {0};
         if (!base || base->kind != SOURCE_MODULE) return source_member_value(ctx, node, &arguments, context, value);
+        if(!source_query_module_qualifier(ctx,node,base))return false;
         return source_function_value(ctx, node, base, imported_declaration(ctx, base, member->name), context, value);
     }
     case AST_THIS_EXPR: case AST_VARIABLE: {
@@ -2228,35 +2241,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
         source_text_same(ctx, NULL, spec->authority.physical_root, id->authority.physical_root) &&
         (spec->embedded_source ? !id->source_path : source_text_same(ctx, NULL, spec->source_path, id->source_path));
 }
-static bool declare_import(SourceContext *ctx, AstNode *node) {
-    ImportStmtNode *decl = &node->as.import_stmt;
-    XrModuleSpec *spec = &ctx->graph->specs[ctx->module];
-    XrModuleId id = {0}; char *error = NULL;
-    XrModuleStatus resolved = xr_compile_module_resolver_resolve(ctx->graph->resolver, decl->module_name, spec->source_path, &spec->authority, &id, &error);
-    int target = -1;
-    if (resolved == XR_MODULE_OK && id.canonical && id.logical_path)
-        resolved = xr_compile_module_graph_find(ctx->graph, id.canonical, &target);
-    if (target >= 0 && !source_resolved_identity(ctx, &ctx->graph->specs[target], &id)) target = -1;
-    xr_compile_resources_free(error); xr_compile_module_id_cleanup(&id);
-    if (target < 0) {
-        ctx->query_ready = false;
-        return resolved != XR_MODULE_OK ?
-            source_module_fail(ctx, node, resolved, "import resolution failed") :
-            source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "import does not resolve to the parsed graph");
-    }
-    for (int i = 0; i < (decl->member_count ? decl->member_count : 1); ++i) {
-        const char *name = decl->member_count ? (decl->members[i].alias ? decl->members[i].alias : decl->members[i].name) : decl->alias;
-        SourceName *symbol = add_name(ctx, &ctx->names[ctx->module], name, node);
-        if (!symbol) return false;
-        symbol->kind = decl->member_count ? SOURCE_IMPORT : SOURCE_MODULE;
-        symbol->module = (uint32_t) target;
-        symbol->imported = decl->member_count ? decl->members[i].name : NULL;
-        /* Import aliases do not yet have individual parser token locations. */
-        if (!source_query_declare(ctx, symbol, decl->member_count ? XR_XIR_SOURCE_IMPORT : XR_XIR_SOURCE_MODULE,
-            0, (XrXirSourceRange) {ctx->module, 0, 0, 0, 0})) return false;
-    }
-    return true;
-}
+#include "xxir_source_imports.inc.c"
 #include "xxir_source_function_inventory.inc.c"
 #include "xxir_source_library.inc.c"
 #include "xxir_source_declaration_storage.inc.c"
@@ -2407,7 +2392,7 @@ static bool collect_declarations(SourceContext *ctx) {
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         for (SourceName *p = ctx->names[m]; p; p = p->next)
-            if (p->kind == SOURCE_IMPORT && !imported_declaration(ctx, p, p->imported)) return false;
+            if (p->kind == SOURCE_IMPORT && !source_import_selectors(ctx,p)) return false;
     }
     return true;
 }

@@ -102,7 +102,12 @@ typedef enum XrXirSourceMarkerRole {
     XR_XIR_SOURCE_MARKER_REF = 1, XR_XIR_SOURCE_MARKER_MOVE, XR_XIR_SOURCE_MARKER_REF_ARGUMENT,
     /* One parser token both selects a payload field and declares this binding.
      * Its same-range MEMBER reference identifies the field independently. */
-    XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING
+    XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING,
+    /* An unaliased selector also declares a local binding. Its target reference
+     * retains the independent export identity. Bare modules preserve their path. */
+    XR_XIR_SOURCE_MARKER_IMPORT_BINDING,
+    /* Parser-certified insertion point after a quoted module specifier. */
+    XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT
 } XrXirSourceMarkerRole;
 typedef struct XrXirSourceMarker {
     XrXirSourceRange range;

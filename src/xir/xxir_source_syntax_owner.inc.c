@@ -52,6 +52,39 @@ static XrXirStatus query_syntax_pattern_binding(SourceQueryCopy *copy,const XrXi
     }
     return field&&declared?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
+static XrXirStatus query_syntax_import(SourceQueryCopy *copy,const XrXirSourceSyntaxView *syntax,
+    const XrXirSourceMarker *marker) {
+    const XrXirSourceView *view=&copy->snapshot->view;
+    const XrXirSourceDeclaration *decl=&view->declarations[marker->declaration-1];
+    const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[marker->declaration-1];
+    for(uint32_t i=0;i<syntax->marker_count;++i) {
+        if(!query_work(copy,sizeof(syntax->markers[i])))return copy->status;
+        const XrXirSourceMarker *other=&syntax->markers[i];
+        if(other!=marker&&(other->declaration==marker->declaration||query_syntax_same_range(other->range,marker->range))&&
+            (other->role==XR_XIR_SOURCE_MARKER_IMPORT_BINDING||other->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT))
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    if(marker->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT) {
+        return decl->kind==XR_XIR_SOURCE_MODULE&&fact->role==XR_XIR_SOURCE_SYNTAX_NONE&&
+            query_syntax_range(view,fact->name,true)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    }
+    if(fact->role!=XR_XIR_SOURCE_SYNTAX_NAME||!query_syntax_same_range(fact->name,marker->range))
+        return XR_XIR_BAD_STRUCTURE;
+    if(decl->kind==XR_XIR_SOURCE_MODULE)return XR_XIR_OK;
+    if(decl->kind!=XR_XIR_SOURCE_IMPORT||!decl->target||decl->target>view->declaration_count||
+        !view->declarations[decl->target-1].exported)
+        return XR_XIR_BAD_STRUCTURE;
+    bool selected=false;
+    for(uint32_t i=0;i<view->reference_count;++i) {
+        if(!query_work(copy,sizeof(view->references[i])+sizeof(syntax->references[i])))return copy->status;
+        const XrXirSourceReference *ref=&view->references[i];
+        if(!query_syntax_same_range(syntax->references[i],marker->range))continue;
+        if(ref->declaration!=decl->target||ref->target!=decl->target||ref->access!=XR_XIR_SOURCE_TYPE_USE)
+            return XR_XIR_BAD_STRUCTURE;
+        selected=true;
+    }
+    return selected?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapshot *snapshot,
     const XrXirSourceSyntaxView *syntax) {
     if(!snapshot||!syntax||snapshot->syntax_ready)return XR_XIR_BAD_STRUCTURE;
@@ -96,11 +129,21 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(!marker->declaration||marker->declaration>view->declaration_count||
             (marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT&&
-                marker->role!=XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING)||
+                marker->role!=XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING&&
+                marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_BINDING&&marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT))
+            return XR_XIR_BAD_STRUCTURE;
+        bool insertion=marker->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT;
+        if(insertion?marker->range.module>=view->module_count||marker->range.line<=0||marker->range.column<=0||
+            marker->range.end_line!=marker->range.line||marker->range.end_column!=marker->range.column:
             !query_syntax_range(view,marker->range,false))return XR_XIR_BAD_STRUCTURE;
         const XrXirSourceDeclaration *decl=&view->declarations[marker->declaration-1];
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[marker->declaration-1];
         if(marker->range.module!=decl->range.module)return XR_XIR_BAD_STRUCTURE;
+        if(marker->role==XR_XIR_SOURCE_MARKER_IMPORT_BINDING||insertion) {
+            XrXirStatus status=query_syntax_import(&copy,syntax,marker);
+            if(status!=XR_XIR_OK)return status;
+            continue;
+        }
         if(marker->role==XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING) {
             XrXirStatus status=query_syntax_pattern_binding(&copy,syntax,marker);
             if(status!=XR_XIR_OK)return status;

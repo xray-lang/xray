@@ -16,6 +16,33 @@
 #include "../../base/xchecks.h"
 #include "../../base/xutf8.h"
 #include "../lexer/xquoted_literal.h"
+#include <limits.h>
+
+static bool import_token_end(Parser *parser, Token token, XrNameSpan *out) {
+    if (!token.start || token.length < 0 || token.line <= 0 || token.column <= 0) {
+        xr_parser_error(parser, "import specifier has no valid source position");
+        return false;
+    }
+    XrNameSpan end = {token.line, token.column};
+    for (int i = 0; i < token.length; ++i) {
+        char byte = xr_parser_read_byte(parser, token.start + i);
+        if (!xr_parser_healthy(parser)) return false;
+        if (byte == '\n') {
+            if (end.line == INT_MAX) {
+                xr_parser_error(parser, "import source line exceeds the supported range");
+                return false;
+            }
+            ++end.line; end.column = 1;
+        } else {
+            if (end.column == INT_MAX) {
+                xr_parser_error(parser, "import source column exceeds the supported range");
+                return false;
+            }
+            ++end.column;
+        }
+    }
+    return ast_copy(parser->compiler_session, out, &end, sizeof(end));
+}
 
 /*
  * Validate a QUOTED import specifier and report errors for disallowed
@@ -262,6 +289,8 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
             if (!xr_parser_healthy(parser)) return false;
         } while (0);
         int name_len = parser->previous.length;
+        XrNameSpan name_span = {parser->previous.line, parser->previous.column};
+        if (!ast_copy(parser->compiler_session, &members[count].name_span, &name_span, sizeof(name_span))) return false;
         do {
             members[count].name = (char *) ast_alloc(parser->compiler_session, (size_t) name_len + 1);
             if (!xr_parser_healthy(parser)) return false;
@@ -278,6 +307,8 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
                 if (!xr_parser_healthy(parser)) return false;
             } while (0);
             int alias_len = parser->previous.length;
+            XrNameSpan alias_span = {parser->previous.line, parser->previous.column};
+            if (!ast_copy(parser->compiler_session, &members[count].alias_span, &alias_span, sizeof(alias_span))) return false;
             do {
                 members[count].alias =
                 (char *) ast_alloc(parser->compiler_session, (size_t) alias_len + 1);
@@ -324,6 +355,7 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
     bool is_quoted = false;
     ImportMember *members = NULL;
     int member_count = 0;
+    XrNameSpan alias_span = {0}, module_name_span = {0}, specifier_end = {0};
 
     // ========== 1. Named import: import { a, b } from "module" ==========
     if (xr_parser_check(parser, TK_LBRACE)) {
@@ -391,6 +423,9 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
         parse_bare_module_name(parser, &module_name);
     }
 
+    if (!xr_parser_healthy(parser) || !import_token_end(parser, parser->previous, &specifier_end)) return NULL;
+    if (!is_quoted) module_name_span = (XrNameSpan){parser->previous.line, parser->previous.column};
+
     // Detect JS-style default import: import fs from "fs"
     // In Xray, use: import "fs" or import { readFile } from "fs"
     if (xr_parser_check_name(parser, "from")) {
@@ -411,6 +446,7 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
                 xr_parser_consume(parser, TK_NAME, "expected alias");
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
+            alias_span = (XrNameSpan){parser->previous.line, parser->previous.column};
             do {
                 alias =
                 (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
@@ -442,6 +478,9 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
                                           members, member_count, line);
     if (!xr_parser_healthy(parser)) return NULL;
     if (node) {
+        if (!ast_copy(parser->compiler_session, &node->as.import_stmt.alias_span, &alias_span, sizeof(alias_span)) ||
+            !ast_copy(parser->compiler_session, &node->as.import_stmt.module_name_span, &module_name_span, sizeof(module_name_span)) ||
+            !ast_copy(parser->compiler_session, &node->as.import_stmt.specifier_end, &specifier_end, sizeof(specifier_end))) return NULL;
         node->column = column;
         node->end_line = parser->previous.line;
         node->end_column = parser->previous.column + parser->previous.length;
