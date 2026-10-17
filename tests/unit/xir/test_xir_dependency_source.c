@@ -52,15 +52,33 @@ static void ready_compiler_faults(void){
  printf("ready source %zu real Source-check OOM ordinals; max allocated=%llu peak=%llu work=%llu; every physical baseline restored\n",sites,(unsigned long long)max_allocated,(unsigned long long)max_peak,(unsigned long long)max_work);
 }
 int main(int argc,char **argv){
- CHECK(argc==1||argc==2);ready_compiler_faults();
+ CHECK(argc==1||argc==2);
+ if (argc==2) {
+  const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
+  XrCompilerSession *session=NULL;
+  CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
+  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
+  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+  CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,NULL)==XR_XIR_OK && result.checked && result.snapshot);
+  XrXirCheckedPacket packet={0};
+  CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK && packet.length<=262144);
+  xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+  FILE *file=fopen(argv[1],"wb");
+  CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+  xr_xir_compile_checked_packet_free(&packet);effects_source_owners_free();
+  puts("Real dependency Checked packet generated; complete compiler/runtime FI not run");
+  return 0;
+ }
+ ready_compiler_faults();
  const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
  XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compile.resources,&session)==XR_COMPILER_SESSION_OK);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compile,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
  SourceContext context={0};context.compile=compile;SourceConversionRecipe conversion={0};
- CHECK(source_conversion_plan(&context,NULL,XR_XIR_UNIT,(SourceExpectedType){true,XR_XIR_UNIT,false},&conversion)&&!conversion.needed);
- CHECK(source_conversion_plan(&context,NULL,XR_XIR_I8,(SourceExpectedType){false,XR_XIR_UNIT,false},&conversion)&&conversion.target==XR_XIR_I8);
- CHECK(!source_conversion_plan(&context,NULL,XR_XIR_I8,(SourceExpectedType){true,XR_XIR_UNIT,false},&conversion));
+ CHECK(source_conversion_plan(&context,NULL,XR_XIR_UNIT,(SourceExpectedType){true,XR_XIR_UNIT,false,false},&conversion)&&!conversion.needed);
+ CHECK(source_conversion_plan(&context,NULL,XR_XIR_I8,(SourceExpectedType){false,XR_XIR_UNIT,false,false},&conversion)&&conversion.target==XR_XIR_I8);
+ CHECK(!source_conversion_plan(&context,NULL,XR_XIR_I8,(SourceExpectedType){true,XR_XIR_UNIT,false,false},&conversion));
  XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
  XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
  if(status!=XR_XIR_OK)fprintf(stderr,"%u %d %s\n",status,diagnostic.line,diagnostic.message);

@@ -9,7 +9,7 @@
  * KEY CONCEPT:
  *   Real checked bodies and bound VM entries survive source and packet destruction.
  */
-#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
 #ifndef XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 #define XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 
@@ -81,10 +81,8 @@ static void pce_release(XrXirCallView *view, XrXirCallStatus reason);
 
 static void pce_code_release(void *opaque) {
     PceFixture *f = opaque;
-    CHECK(f->lowered && !f->code_releases);
+    CHECK(!f->lowered && !f->code_releases);
     ++f->code_releases;
-    xr_xir_compile_artifact_free(f->lowered);
-    f->lowered = NULL;
 }
 
 static uint32_t pce_function(const XrXirModule *m, const char *name) {
@@ -222,8 +220,14 @@ static void pce_build(PceFixture *f, PceMode mode) {
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, f->functions,
-        m->declarations, {f,pce_code_release}, m->types, xir_program_packet_borrow(f->lowered)};
-    CHECK(xr_xir_compile_program_seal(&f->compiler, &spec, &f->program) == XR_XIR_OK);
+        m->declarations, {f,pce_code_release}, m->types, {0}};
+    XrXirArtifact *pending = f->lowered;
+    XrXirProgramInput *input = NULL;
+    XrXirStatus received = xir_program_input_take(&f->compiler, &pending, &input);
+    if (received == XR_XIR_OK) received = xir_program_receive(&f->compiler, &spec, &input, NULL, &f->program);
+    if (received == XR_XIR_OK) f->lowered = NULL;
+    else if (input) { input->artifact = NULL; xir_program_input_free(input); }
+    CHECK(received == XR_XIR_OK && !input && !f->lowered && !f->code_releases);
     pce_check_facts(f);
 }
 #endif // XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
