@@ -12,6 +12,7 @@
  */
 #include "xir/xxir_internal.h"
 #include "xir/xxir_source.h"
+#include "xir/xxir_source_query.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_nominal.h"
@@ -26,7 +27,9 @@ static const char *const error_contract_sources[]={
     "fn plain()->i64{return 7}\nfn worker()->i64{const f=plain;return f()}\n",
     "enum Failure{Bad}\nfn opaque(error:Error)->i64{throw error}\nfn worker()->i64{const f=opaque;return f(Failure.Bad)}\n",
     "enum Failure{Bad}\nfn plain()->i64{throw Failure.Bad}\nfn worker()->i64{const f=plain;return f()}\n",
-    "fn plain()->i64{return 7}\nfn worker()->i64{const f:fn()->i64=plain;return f()}\n"
+    "fn plain()->i64{return 7}\nfn worker()->i64{const f:fn()->i64=plain;return f()}\n",
+    "enum E{Bad}\nfn worker()->i64{\ntry{throw E.Bad}catch(e:E){return 7}\n}\n",
+    "enum E{Bad}\nfn worker()->i64{try{\ntry{throw E.Bad}\ncatch(e:E){throw e}\n}catch(e:E){return 11}}\n"
 };
 typedef struct ErrorContractExpected {
     bool root_unknown,error_unknown,error_unidentified,known_variant;
@@ -124,8 +127,55 @@ static XrXirStatus error_contract_retry(const XrXirCompileContext *context,void 
     return status;
 }
 
+static XrXirStatus throw_facts_operation(const XrXirCompileContext *context,void *opaque) {
+    (void)opaque;
+    for (uint32_t which=4;which<6;++which) {
+        XrXirSourceResult source={0};XrXirStatus status=error_contract_program(context,which,false,&source);
+        if (status!=XR_XIR_OK) { xr_xir_compile_source_result_free(&source);return status; }
+        const XrXirModule *module=xr_xir_compile_artifact_module(source.checked);uint32_t worker=UINT32_MAX;
+        for (uint32_t f=0;f<module->function_count;++f)
+            if (module->functions[f].name_length==6 && !memcmp(module->functions[f].name,"worker",6)) worker=f;
+        CHECK(worker!=UINT32_MAX);
+        const XrXirSourceDebugView *debug=xr_xir_compile_source_snapshot_debug(source.snapshot);CHECK(debug);
+        const XrXirSourceDebugFunction *function=&debug->functions[worker];
+        uint32_t expected=which==4 ? 1 : 2;CHECK(function->throw_count==expected);
+        for (uint32_t t=0;t<function->throw_count;++t) {
+            XrXirOp op=module->functions[worker].instructions[function->throw_sites[t].instruction].op;
+            CHECK(op==XR_XIR_JUMP || op==XR_XIR_CLEANUP_ERROR);
+        }
+        xr_xir_compile_artifact_free(source.checked);source.checked=NULL;
+        uint32_t lines=0;
+        for (uint32_t t=0;t<function->throw_count;++t) {
+            const XrXirSourceDebugThrow *site=&function->throw_sites[t];
+            CHECK(site->instruction<function->instruction_count &&
+                (uint64_t)site->operand<(uint64_t)function->parameter_count+function->instruction_count);
+            CHECK(!t || function->throw_sites[t-1].instruction<site->instruction);
+            const XrXirSourceDebugPoint *point=&function->points[site->instruction];
+            CHECK(point->statement && point->range.line>=3 && point->range.line<=4);
+            lines|=UINT32_C(1)<<(uint32_t)(point->range.line-3);
+        }
+        CHECK(lines==(expected==1 ? 1u : 3u));xr_xir_compile_source_result_free(&source);
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus throw_facts_retry(const XrXirCompileContext *context,void *opaque) {
+    size_t blocks=source_program_compile_live,bytes=source_program_compile_bytes;
+    XrXirStatus status=throw_facts_operation(context,opaque);
+    CHECK(source_program_compile_live==blocks && source_program_compile_bytes==bytes);
+    if (status==XR_XIR_OUT_OF_MEMORY && source_program_compile_injected && source_program_compile_fail_at!=SIZE_MAX) {
+        size_t failed=source_program_compile_fail_at;XrCompileResourceStats paid=library_compile_stats(context);
+        source_program_compile_fail_at=SIZE_MAX;CHECK(throw_facts_operation(context,opaque)==XR_XIR_OK);
+        XrCompileResourceStats retried=library_compile_stats(context);
+        CHECK(retried.live_bytes==paid.live_bytes && retried.allocated_bytes>paid.allocated_bytes && retried.work>paid.work);
+        CHECK(source_program_compile_live==blocks && source_program_compile_bytes==bytes);
+        source_program_compile_fail_at=failed;
+    }
+    return status;
+}
 int main(int argc,char **argv) {
-    if (argc==3 && !strcmp(argv[1],"--compiler")) {
+    if (argc==2 && !strcmp(argv[1],"--source-throws")) {
+        library_compile_operation_cases("Source local throws and rethrow observations, producer death and same-owner retry",throw_facts_retry,NULL);
+    } else if (argc==3 && !strcmp(argv[1],"--compiler")) {
         char *end=NULL;unsigned long index=strtoul(argv[2],&end,10);CHECK(end && end!=argv[2] && !*end && index<4);
         ErrorContractCase fixture={(uint32_t)index,false};
         library_compile_operation_cases("Source independent ROOT/error facts, Checked replay and same-owner retry",error_contract_retry,&fixture);
@@ -136,6 +186,12 @@ int main(int argc,char **argv) {
             CHECK(error_contract_operation(&owner.context,&fixture)==XR_XIR_OK);
             printf("error contract%u census=%zu actual allocation sites\n",which,source_program_compile_attempts);
             if (argc==1) error_contract_go_verdict(&owner.context,which);
+            library_compile_owner_drop(&owner);
+        }
+        if (argc==1) {
+            LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);
+            source_program_compile_attempts=0;CHECK(throw_facts_operation(&owner.context,NULL)==XR_XIR_OK);
+            printf("Source local/rethrow observations after producer death census=%zu actual allocation sites\n",source_program_compile_attempts);
             library_compile_owner_drop(&owner);
         }
     } else return 2;

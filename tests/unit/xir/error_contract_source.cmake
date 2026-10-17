@@ -15,3 +15,6 @@ foreach(XR_ERROR_CONTRACT_CASE RANGE 0 3)
  set_tests_properties(test_xir_error_contract_source_compiler_${XR_ERROR_CONTRACT_CASE} PROPERTIES
   TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;source;errors;compiler-fault;ownership")
 endforeach()
+add_test(NAME test_xir_source_throw_facts_compiler COMMAND test_xir_error_contract_source --source-throws)
+set_tests_properties(test_xir_source_throw_facts_compiler PROPERTIES
+ TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;source;errors;compiler-fault;ownership")

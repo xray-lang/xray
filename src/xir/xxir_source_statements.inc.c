@@ -6,8 +6,8 @@
  *
  * xxir_source_statements.inc.c - Executable statements and their source sites
  */
+#include "xxir_source_throw.inc.c"
 static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
-    SourceConversionRecipe checked_conversion;
     if (!node || !source_work(ctx, node)) return false;
     if (ctx->returned) return source_unreachable_statement(ctx, node);
     switch (node->type) {
@@ -49,22 +49,7 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
         plan->statement_match=true;
         return source_plan_complete(ctx,plan,&value);
     }
-    case AST_THROW_STMT: {
-        SourceValue value = {0};
-        if (!expression(ctx, node->as.throw_stmt.expression, &value)) return false;
-        XrXirDeclarations declarations;
-        XrXirModule module = source_module_view(ctx,&declarations);
-        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
-        XrXirStatus status = xr_xir_compile_type_markers_prove(&ctx->compile, &context, value.type, XR_XIR_CONSTRAINT_ERROR);
-        if (status != XR_XIR_OK)
-            return source_fail(ctx, node, status, "throw requires a proved enum error value");
-        if (ctx->bodies[ctx->function].error_context) {
-            if (!(source_conversion_plan(ctx,node,(&value)->type,(SourceExpectedType){XR_XIR_ERROR != XR_XIR_UNIT,XR_XIR_ERROR, false, false},&checked_conversion) && source_conversion_emit(ctx,&checked_conversion,&value)) || !source_error_edge(ctx,value)) return false;
-            ctx->returned = true; return true;
-        }
-        ctx->returned = true;
-        return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {value.id, 0}, {0, 0}, 0, {0}}, NULL);
-    }
+    case AST_THROW_STMT: return source_throw(ctx,node);
     case AST_RETURN_STMT: {
         if (ctx->identities[ctx->function].cleanup_owner)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "E0395: defer cannot return from its owning function");

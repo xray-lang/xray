@@ -16,6 +16,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
+#include "xxir_constraint_proof.h"
 #include <string.h>
 typedef struct SourceQueryMemory { struct SourceQueryMemory *next; } SourceQueryMemory;
 struct XrXirSourceSnapshot {

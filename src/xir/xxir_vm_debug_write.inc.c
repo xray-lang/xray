@@ -137,7 +137,7 @@ static XrXirValueStatus debug_write_apply(XrXirVmDebug *debug,const XirVmDebugPo
         }
     }
     XrXirVmDebugSnapshot *fresh=NULL,*reserved=NULL;
-    if (status==XR_XIR_VALUE_OK) status=capture_prepare(debug,point->view,NULL,debug->snapshot->cause,&fresh);
+    if (status==XR_XIR_VALUE_OK) status=capture_prepare(debug,point->view,UINT32_MAX,debug->snapshot->cause,&fresh);
     if (status==XR_XIR_VALUE_OK && debug->snapshot->exception.type)
         status=xr_xir_value_copy(&debug->snapshot->exception,&fresh->exception);
     XrXirValuePath field={&class_write.field,1};

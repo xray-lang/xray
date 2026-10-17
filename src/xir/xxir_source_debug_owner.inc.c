@@ -6,6 +6,31 @@
  *
  * xxir_source_debug_owner.inc.c - Owned source instruction observations
  */
+static XrXirStatus source_debug_throw_validate(SourceQueryCopy *copy,
+    const XrXirSourceDebugFunction *function,const XrXirModule *module,uint32_t f) {
+    if (function->throw_count>function->instruction_count || (!!function->throw_count!=!!function->throw_sites) ||
+        (function->throw_count && !function->points)) return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *body=&module->functions[f];
+    if (function->throw_count && (!body->instructions || !module->types ||
+        (body->parameter_count && !body->parameters))) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t t=0;t<function->throw_count;++t) {
+        if (!query_work(copy,sizeof(*function->throw_sites))) return copy->status;
+        const XrXirSourceDebugThrow *site=&function->throw_sites[t];
+        if (site->instruction>=body->instruction_count ||
+            (uint64_t)site->operand>=(uint64_t)body->parameter_count+body->instruction_count ||
+            (t && site->instruction<=function->throw_sites[t-1].instruction) ||
+            !function->points[site->instruction].statement) return XR_XIR_BAD_STRUCTURE;
+        const XrXirInstruction *op=&body->instructions[site->instruction];
+        if ((op->op!=XR_XIR_THROW && op->op!=XR_XIR_JUMP && op->op!=XR_XIR_CLEANUP_ERROR) ||
+            (op->op!=XR_XIR_JUMP && op->args[0]!=site->operand)) return XR_XIR_BAD_STRUCTURE;
+        XrXirProofContext proof={module,{XR_XIR_CONTEXT_FUNCTION,f,0}};
+        XrXirStatus status=xr_xir_compile_type_markers_prove(&copy->snapshot->context,&proof,
+            xr_xir_operand_type(body,site->operand),XR_XIR_CONSTRAINT_ERROR);
+        if (status!=XR_XIR_OK)
+            return status==XR_XIR_BUDGET || status==XR_XIR_OUT_OF_MEMORY ? status : XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapshot *snapshot,
     const XrXirSourceDebugView *debug,const XrXirModule *module) {
     if (!snapshot || snapshot->debug_ready || !debug || !module || !snapshot->view.complete ||
@@ -53,6 +78,8 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
                 ((binding->flags & (XR_XIR_SOURCE_DEBUG_UNIT|XR_XIR_SOURCE_DEBUG_UNAVAILABLE)) ? binding->value!=UINT32_MAX :
                  (uint64_t)binding->value>=(uint64_t)function->parameter_count+function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
         }
+        XrXirStatus throws=source_debug_throw_validate(&copy,function,module,f);
+        if (throws!=XR_XIR_OK) return throws;
         if (!function->points) continue;
         for (uint32_t i=0;i<function->instruction_count;++i) {
             if (!query_work(&copy,1)) return copy.status;
@@ -75,6 +102,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         if (debug->functions[f].binding_count)
             functions[f].bindings=query_copy(&copy,debug->functions[f].bindings,
                 debug->functions[f].binding_count,sizeof(*functions[f].bindings));
+        if (debug->functions[f].throw_count)
+            functions[f].throw_sites=query_copy(&copy,debug->functions[f].throw_sites,
+                debug->functions[f].throw_count,sizeof(*functions[f].throw_sites));
     }
     if (!query_work(&copy,sizeof(snapshot->debug)+sizeof(snapshot->debug_ready))) {
         while (snapshot->memory!=previous) {

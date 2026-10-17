@@ -76,7 +76,9 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *,
  * never count a stopped PC again on resume. Overflow fails without wrapping. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_rules_replace(XrXirVmDebug *,const XrXirVmDebugRule *,uint32_t count);
 /* Stop before an observed VM language throw. This does not predict whether
- * ordinary Call propagation will find a handler and does not intercept faults. */
+ * ordinary Call propagation will find a handler and does not intercept faults.
+ * Source-owned throw sites include local jumps and cleanup error continuations;
+ * an unmapped IR function observes its actual THROW operation. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *, bool enabled);
 /* Pause requests may arrive from the control thread. The sole execution driver
  * polls one quantum at a time and stops polling while paused. No language

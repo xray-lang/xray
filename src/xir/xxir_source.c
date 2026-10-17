@@ -147,6 +147,10 @@ typedef struct SourceInstructionRecipe {
 } SourceInstructionRecipe;
 typedef struct SourceBlockRecipe { XrXirBlock block; uint32_t owner, identity, runtime; } SourceBlockRecipe;
 typedef struct SourceRecipeStorage { struct SourceRecipeStorage *next; } SourceRecipeStorage;
+typedef struct SourceThrowRecipe {
+    struct SourceThrowRecipe *next;
+    uint32_t instruction,operand;
+} SourceThrowRecipe;
 typedef struct SourceFunction {
     AstNode *node, *type_owner;
     bool checked_library;
@@ -165,6 +169,9 @@ typedef struct SourceFunction {
     SourceRecipeStorage *recipe_storage;
     bool region_sealed;
     const XrXirSourceDebugPoint *debug_points;
+    SourceThrowRecipe *throw_recipes;
+    XrXirSourceDebugThrow *debug_throws;
+    uint32_t throw_count;
     XrXirSourceDebugBinding *debug_bindings;
     uint32_t debug_binding_count, debug_binding_capacity;
     SourceRootValue *root_values;

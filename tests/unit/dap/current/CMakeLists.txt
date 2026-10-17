@@ -141,6 +141,20 @@ add_test(NAME test_dap_source_handlers_resources COMMAND test_dap_source_handler
 set_tests_properties(test_dap_source_handlers PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;exceptions")
 set_tests_properties(test_dap_source_handlers_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;exceptions;resources;fault-injection")
 
+add_executable(test_dap_source_throw_sites test_source_throw_sites.c)
+target_link_libraries(test_dap_source_throw_sites PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_source_throw_sites PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_dap_source_throw_sites PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_source_throw_sites PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_source_throw_sites COMMAND test_dap_source_throw_sites)
+add_test(NAME test_dap_source_throw_sites_resources COMMAND test_dap_source_throw_sites --resources)
+set_tests_properties(test_dap_source_throw_sites test_dap_source_throw_sites_resources PROPERTIES
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;source;ownership;exceptions")
+set_property(TEST test_dap_source_throw_sites_resources APPEND PROPERTY LABELS "resources;fault-injection")
+
 add_executable(test_dap_dispatch test_dispatch.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_dispatch PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_dispatch PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib" XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr")
@@ -217,6 +231,7 @@ set_tests_properties(test_dap_values PROPERTIES TIMEOUT 120 LABELS "dap;values;j
 if(XR_BUILD_DAP)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py COPYONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_full_session.py ${CMAKE_CURRENT_BINARY_DIR}/test_full_session.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_throw_sites.py ${CMAKE_CURRENT_BINARY_DIR}/test_throw_sites.py COPYONLY)
     foreach(XR_DAP_FULL_TRANSPORT stdio tcp)
         set(XR_DAP_FULL_START launch)
         if(XR_DAP_FULL_TRANSPORT STREQUAL "tcp")
@@ -227,6 +242,13 @@ if(XR_BUILD_DAP)
             --scenario full-session --start-request ${XR_DAP_FULL_START} --transcript ${CMAKE_CURRENT_BINARY_DIR}/full-session-${XR_DAP_FULL_TRANSPORT}.json)
         set_tests_properties(dap_current_full_${XR_DAP_FULL_TRANSPORT}_${XR_DAP_FULL_START} PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;cli;source;execution;ownership;full-session")
+    endforeach()
+    foreach(XR_DAP_THROW_TRANSPORT stdio tcp)
+        add_test(NAME dap_current_${XR_DAP_THROW_TRANSPORT}_throw_sites COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+            --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/throw_sites.xr --transport ${XR_DAP_THROW_TRANSPORT}
+            --scenario throw-sites --transcript ${CMAKE_CURRENT_BINARY_DIR}/throw-sites-${XR_DAP_THROW_TRANSPORT}.json)
+        set_tests_properties(dap_current_${XR_DAP_THROW_TRANSPORT}_throw_sites PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;cli;source;ownership;exceptions")
     endforeach()
     add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr)

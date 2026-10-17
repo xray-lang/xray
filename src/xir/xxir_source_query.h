@@ -44,11 +44,17 @@ typedef struct XrXirSourceDebugPoint {
     uint32_t statement, flags, environment;
 } XrXirSourceDebugPoint;
 
+/* A source throw may lower to a local error jump. The operand is observed
+ * before routing or cleanup; synthetic propagation is not a new source throw. */
+typedef struct XrXirSourceDebugThrow { uint32_t instruction, operand; } XrXirSourceDebugThrow;
+
 typedef struct XrXirSourceDebugFunction {
     uint32_t function, declaration, parameter_count, instruction_count;
     const XrXirSourceDebugPoint *points;
     const XrXirSourceDebugBinding *bindings;
     uint32_t binding_count;
+    const XrXirSourceDebugThrow *throw_sites;
+    uint32_t throw_count;
 } XrXirSourceDebugFunction;
 
 /* A producer-selected slot is a display coordinate, never a module grant. */
