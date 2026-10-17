@@ -1,0 +1,27 @@
+import time
+
+enum ProducerError { Bad }
+
+export fn failed() -> Iterator<string> {
+    var first = "cedar"
+    fn values() -> Iterator<string> {
+        defer { first = "closed"; print(701) }
+        time.sleep(5)
+        yield first
+        time.sleep(7)
+        throw ProducerError.Bad
+    }
+    return values()
+}
+
+export fn units() -> Iterator<()> {
+    var count = 0
+    fn values() -> Iterator<()> {
+        defer { count = count + 1; print(701) }
+        time.sleep(5)
+        yield ()
+        time.sleep(7)
+        yield ()
+    }
+    return values()
+}

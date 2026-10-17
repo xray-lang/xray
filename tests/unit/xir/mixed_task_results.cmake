@@ -12035,3 +12035,78 @@ foreach(cycle_resource_backend IN ITEMS 0 1 vm native)
         endforeach()
     endforeach()
 endforeach()
+
+add_executable(test_xir_mixed_forin_producer xir/test_xir_mixed_forin_producer.c)
+target_link_libraries(test_xir_mixed_forin_producer PRIVATE xray_xir_source xray_xir_cgen)
+target_compile_definitions(test_xir_mixed_forin_producer PRIVATE
+    XR_ITERATOR_LIFETIME_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_forin"
+    XR_ITERATOR_FORIN_AUTHORITY="${PROJECT_SOURCE_DIR}/tests/fixtures"
+    XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set(XIR_MIXED_FORIN_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_mixed_forin.c")
+add_custom_command(OUTPUT "${XIR_MIXED_FORIN_C}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_mixed_forin_producer> "${XIR_MIXED_FORIN_C}"
+    DEPENDS test_xir_mixed_forin_producer
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_forin/root.xr"
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_forin/worker.xr"
+        "${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_iterators/worker.xr"
+    VERBATIM)
+add_executable(test_xir_mixed_forin_lifetime xir/test_xir_mixed_forin_lifetime.c "${XIR_MIXED_FORIN_C}")
+target_link_libraries(test_xir_mixed_forin_lifetime PRIVATE xray_xir_vm xray_xir_scalar)
+foreach(forin_target IN ITEMS test_xir_mixed_forin_producer test_xir_mixed_forin_lifetime)
+    set_target_properties(${forin_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${forin_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${forin_target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endforeach()
+foreach(forin_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_forin_lifetime_${forin_backend} COMMAND test_xir_mixed_forin_lifetime ${forin_backend})
+    set_tests_properties(test_xir_mixed_forin_lifetime_${forin_backend} PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;forin;cleanup;timer")
+endforeach()
+
+add_executable(test_xir_mixed_forin_prefixes xir/test_xir_mixed_forin_prefixes.c "${XIR_MIXED_FORIN_C}")
+target_link_libraries(test_xir_mixed_forin_prefixes PRIVATE xray_xir_vm xray_xir_scalar)
+set_target_properties(test_xir_mixed_forin_prefixes PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_forin_prefixes PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_forin_prefixes PRIVATE -Wall -Wextra -Werror)
+endif()
+set(forin_prefix_polls 52 88 50 95 66 64 118 102 130 129 116 143)
+foreach(forin_prefix_backend IN ITEMS 0 1 vm native)
+    foreach(forin_prefix_scenario RANGE 0 11)
+        list(GET forin_prefix_polls ${forin_prefix_scenario} forin_prefix_last)
+        foreach(forin_prefix_mode RANGE 0 2)
+            foreach(forin_prefix_close RANGE 0 1)
+                foreach(forin_prefix_drop RANGE 0 1)
+                    set(forin_prefix_name test_xir_mixed_forin_prefixes_${forin_prefix_backend}_${forin_prefix_scenario}_${forin_prefix_mode}_${forin_prefix_close}_${forin_prefix_drop})
+                    add_test(NAME ${forin_prefix_name} COMMAND test_xir_mixed_forin_prefixes ${forin_prefix_backend} suite ${forin_prefix_scenario} ${forin_prefix_mode} ${forin_prefix_last} ${forin_prefix_close} ${forin_prefix_drop})
+                    set_tests_properties(${forin_prefix_name} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST 20
+                        LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;forin;cleanup;timer;cancel;prefix")
+                endforeach()
+            endforeach()
+        endforeach()
+    endforeach()
+endforeach()
+
+add_executable(test_xir_mixed_forin_source_compiler xir/test_xir_mixed_forin_source_compiler.c "${XIR_MIXED_FORIN_C}")
+target_link_libraries(test_xir_mixed_forin_source_compiler PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm xray_xir_scalar)
+target_compile_definitions(test_xir_mixed_forin_source_compiler PRIVATE
+    XR_ITERATOR_LIFETIME_FIXTURES="${PROJECT_SOURCE_DIR}/tests/fixtures/xir_p20_forin"
+    XR_ITERATOR_FORIN_AUTHORITY="${PROJECT_SOURCE_DIR}/tests/fixtures"
+    XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_xir_mixed_forin_source_compiler PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_forin_source_compiler PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_forin_source_compiler PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(forin_compiler_backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_forin_source_compiler_${forin_compiler_backend}_axes
+        COMMAND test_xir_mixed_forin_source_compiler ${forin_compiler_backend} axes)
+    set_tests_properties(test_xir_mixed_forin_source_compiler_${forin_compiler_backend}_axes PROPERTIES
+        TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;forin;compiler;resource")
+endforeach()
