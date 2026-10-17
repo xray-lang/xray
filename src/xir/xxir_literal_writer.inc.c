@@ -39,7 +39,8 @@ static bool literal_provider(SourceContext *ctx,const XirCtfeInstanceView *view,
     if (!finish_body(ctx)) return false;
     binding->provider=f;return true;
 }
-static bool literal_construction(SourceContext *ctx,const XrXirConstruction *original) {
+static bool literal_construction(SourceContext *ctx,const XrXirConstruction *original,
+    const XirLiteralBinding *binding,const XrXirComptimeSite *site) {
     XrXirMaterializationBinding *appended=NULL;uint32_t added=0;
     if (!source_materialization_bindings(ctx,&appended,&added)) return false;
     uint32_t before=original->materialization_count;
@@ -48,13 +49,16 @@ static bool literal_construction(SourceContext *ctx,const XrXirConstruction *ori
     XrXirMaterializationBinding *all=before+added?source_alloc(ctx,before+added,sizeof(*all)):NULL;
     if ((before+added && !all) || !source_copy_bytes(ctx,NULL,all,original->materializations,(size_t)before*sizeof(*all)) ||
         !source_copy_bytes(ctx,NULL,all?all+before:NULL,appended,(size_t)added*sizeof(*all))) return false;
-    XrXirConstructionSpec input={original->rows,original->count,all,before+added,&original->comptime};
+    XrXirComptimeTable table={0};
+    if (!literal_site_bind(ctx,original,binding,site,&table)) return false;
+    XrXirConstructionSpec input={original->rows,original->count,all,before+added,&table};
     XrXirStatus status=xr_xir_compile_construction_new_v3(&ctx->compile,&ctx->types,&input,&ctx->construction);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"literal construction receiving failed");
 }
-static XrXirStatus literal_check(SourceContext *ctx,const XrXirArtifact *original,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
+static XrXirStatus literal_check(SourceContext *ctx,const XrXirArtifact *original,const XirLiteralBinding *binding,
+    const XrXirComptimeSite *site,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
     if (!source_materialization_finish(ctx) || !source_effect_prepare(ctx) ||
-        !literal_construction(ctx,original->construction)) return ctx->diagnostic.status;
+        !literal_construction(ctx,original->construction,binding,site)) return ctx->diagnostic.status;
     XrXirDeclarations declarations=*original->module.declarations;
     declarations.functions=ctx->identities;declarations.literals=ctx->literals;declarations.literal_count=ctx->literal_count;
     XrXirModule built=original->module;built.stage=XR_XIR_BUILT;built.provenance=ctx->effect_evidence;

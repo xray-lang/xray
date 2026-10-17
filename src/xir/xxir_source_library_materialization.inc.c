@@ -24,7 +24,7 @@ static bool source_library_materializations(SourceContext *ctx,const SourceLibra
         if (!source_work_units(ctx,NULL,2*sizeof(*rows))) return false;
         const XrXirMaterializationBinding *from=xr_xir_compile_construction_materialization(unit->construction,i);
         if (!from || from->caller>=map->function_count || from->function>=map->function_count ||
-            !unit->library->types->nominals || from->nominal>=unit->library->types->nominals->count)
+            !unit->library->types || !unit->library->types->nominals || from->nominal>=unit->library->types->nominals->count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library literal edge has no mapped declaration");
         if (map->functions[from->caller]==UINT32_MAX) continue;
         if (map->functions[from->function]==UINT32_MAX)

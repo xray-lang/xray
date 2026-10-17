@@ -14,6 +14,7 @@
 #ifndef XXIR_LITERAL_INTERNAL_H
 #define XXIR_LITERAL_INTERNAL_H
 #include "xxir_ctfe_instance_internal.h"
+#include "xxir_construction.h"
 
 typedef struct XirLiteralRequest {
     const XrXirCompileContext *context;
@@ -39,5 +40,10 @@ typedef struct XirLiteralDefinitions {
  * Failure preserves an entirely zero output and never refunds consumed fees. */
 XR_FUNC XrXirStatus xr_xir_compile_instance_literals(const XirLiteralRequest *request,
     XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic);
+/* A genuine compiler-only pending root supplies the exact site. Its binding
+ * enters construction before complete declaration checking, so closed opaque
+ * substitutions retain their proven generic origin without field authority. */
+XR_FUNC XrXirStatus xr_xir_compile_instance_literals_at(const XirLiteralRequest *request,
+    const XrXirComptimeSite *site,XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_instance_literals_free(XirLiteralDefinitions *result);
 #endif // XXIR_LITERAL_INTERNAL_H

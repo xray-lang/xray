@@ -89,6 +89,49 @@ static bool materialization_opcode(XrXirOp op) {
     default:return false;
     }
 }
+XR_FUNC XrXirStatus xir_literal_type_names(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,uint32_t function,bool *output) {
+    *output=false;
+    if (!xir_compile_work(context,sizeof(XrXirFunction)+sizeof(XrXirFunctionIdentity))) return XR_XIR_BUDGET;
+    if (!construction || !module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !module->declarations)
+        return XR_XIR_OK;
+    const XrXirFunction *body=&module->functions[function];
+    const XrXirFunctionIdentity *id=&module->declarations->functions[function];
+    if (id->exported || id->member_access || id->cleanup_owner || id->test_role || id->promises ||
+        body->parameter_count || body->parameters || body->result==XR_XIR_UNIT ||
+        body->block_count!=1 || !body->blocks || !body->instruction_count || !body->instructions ||
+        function==module->declarations->entry_function ||
+        (id->method_kind!=XR_XIR_NON_MEMBER && id->method_kind!=XR_XIR_MEMBER_HELPER && id->method_kind!=XR_XIR_MATERIALIZER) ||
+        (module->generics && (module->generics[function].parameter_count || module->generics[function].argument_count))) return XR_XIR_OK;
+    bool bound=false;
+    for (uint32_t b=0;b<construction->comptime.binding_count;++b) {
+        if (!xir_compile_work(context,sizeof(XrXirComptimeBinding))) return XR_XIR_BUDGET;
+        bound|=construction->comptime.bindings[b].provider==function;
+    }
+    for (uint32_t b=0;id->method_kind==XR_XIR_MATERIALIZER && b<construction->materialization_count;++b) {
+        if (!xir_compile_work(context,sizeof(XrXirMaterializationBinding))) return XR_XIR_BUDGET;
+        bound|=construction->materializations[b].function==function;
+    }
+    if (!bound) return XR_XIR_OK;
+    if (body->instruction_count>context->limits.instructions) return XR_XIR_BUDGET;
+    if (body->blocks[0].first || body->blocks[0].count!=body->instruction_count || body->blocks[0].panic) return XR_XIR_OK;
+    XrXirStatus status=materialization_data_type(context,module->types,body->result);
+    for (uint32_t i=0;status==XR_XIR_OK && i<body->instruction_count;++i) {
+        if (!xir_compile_work(context,sizeof(XrXirInstruction))) return XR_XIR_BUDGET;
+        const XrXirInstruction *op=&body->instructions[i];
+        if (!materialization_opcode(op->op)) return XR_XIR_OK;
+        XrXirType type=op->type;
+        if (xr_xir_type_is_cell(module->types,type)) {
+            type=xr_xir_cell_element(module->types,type);
+            if (!xr_xir_type_is_array(module->types,type)) return XR_XIR_OK;
+        }
+        status=materialization_data_type(context,module->types,type);
+        if (op->op==XR_XIR_CALL && (op->immediate<0 || (uint64_t)op->immediate>=module->function_count ||
+            op->args[1] || module->declarations->functions[op->immediate].method_kind!=XR_XIR_MATERIALIZER)) return XR_XIR_OK;
+    }
+    if (status==XR_XIR_OK) *output=true;
+    return status==XR_XIR_BAD_TYPE?XR_XIR_OK:status;
+}
 static XrXirStatus materialization_target(const XrXirCompileContext *context,
     const XrXirModule *module,const XrXirMaterializationBinding *binding) {
     const XrXirFunction *body=&module->functions[binding->function];

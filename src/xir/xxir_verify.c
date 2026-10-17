@@ -57,6 +57,7 @@ typedef struct VerifyContext {
     /* Function graph views borrow this fully cleared verifier-local storage. */
     void *graph_storage;
     size_t graph_capacity;
+    bool literal_type_names;
 } VerifyContext;
 
 typedef struct Graph {
@@ -334,7 +335,7 @@ static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, X
     XrXirStatus status = xr_xir_compile_type_use_verify_scratch(&context->remaining, &proof, type, &context->scratch);
     /* Naming checks for substituted types are discharged by original-definition
      * verification and complete correspondence before this module can publish. */
-    if (status != XR_XIR_OK || xir_effect_evidence_is_closed(context->module)) return status;
+    if (status != XR_XIR_OK || xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return status;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module, function, type, &context->pending);
 }
 
@@ -344,7 +345,7 @@ static XrXirStatus signature_type_use_context(VerifyContext *context, uint32_t f
     XrXirType type, bool constraints_proved) {
     if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
     if (!constraints_proved) return type_use_context(context, function, type);
-    if (xir_effect_evidence_is_closed(context->module)) return XR_XIR_OK;
+    if (xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return XR_XIR_OK;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module,
         function, type, &context->pending);
 }
@@ -705,7 +706,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
     if (op->op == XR_XIR_CELL_PLACE && xr_xir_type_is_nominal(types, array))
         return role_operand(function, graph, context, instruction, 0, cell);
     XrXirType element = xr_xir_array_element(types, array);
-    XrXirStatus status = xir_effect_evidence_is_closed(context->module) ?
+    XrXirStatus status = xir_effect_evidence_is_closed(context->module) || context->literal_type_names ?
         xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, element, (XrXirConstraint){0}) :
         xr_xir_compile_type_satisfies(&context->remaining, context->module, context->location.function, element, (XrXirConstraint){0});
     if (status != XR_XIR_OK) return status;
@@ -1149,7 +1150,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
         return XR_XIR_BAD_STRUCTURE;
     }
     VerifyContext context = {*remaining,
-                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0};
+                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false};
     XrXirStatus status = XR_XIR_OK;
     bool signature_constraints_proved = false;
     if (!module || !module->functions || !module->function_count)
@@ -1224,7 +1225,8 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
                 status = XR_XIR_BAD_TYPE;
                 break;
             }
-            status = verify_function(&module->functions[f], module->stage, &context, signature_constraints_proved);
+            status=xir_literal_type_names(&context.remaining,module,construction,f,&context.literal_type_names);
+            if (status==XR_XIR_OK) status = verify_function(&module->functions[f], module->stage, &context, signature_constraints_proved);
             if (status != XR_XIR_OK)
                 break;
         }

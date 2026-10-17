@@ -11,6 +11,7 @@ struct SourceLibraryUnit {
     XrXirImplementationTable implementations;
     XrXirMaterializationBinding *materializations;
     uint32_t materialization_count;
+    XrXirComptimeTable comptime;
 };
 static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,
     const char *b, uint32_t count) {
@@ -65,21 +66,20 @@ static char *source_library_name(SourceContext *ctx, XrXirLiteral literal) {
 static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     const XrXirModule *library=xr_xir_compile_artifact_module(resource->checked);
-    if (!library->types) return true;
     SourceLibraryUnit *unit=source_alloc(ctx,1,sizeof(*unit));
     if (!unit) return false;
     unit->library=library; unit->artifact=resource->checked;
     unit->construction=xr_xir_compile_artifact_construction(unit->artifact);
-    const XrXirNominalTable *source_nominals=library->types->nominals;
+    const XrXirNominalTable *source_nominals=library->types?library->types->nominals:NULL;
     uint32_t source_count=source_nominals ? source_nominals->count : 0;
     if (!unit->construction || xr_xir_compile_construction_count(unit->construction)!=source_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library construction owner is missing or incomplete");
     unit->next=ctx->library_units; ctx->library_units=unit;
-    const XrXirNominalTable *nt=library->types->nominals;
-    const XrXirInterfaceTable *it=library->types->interfaces;
+    const XrXirNominalTable *nt=library->types?library->types->nominals:NULL;
+    const XrXirInterfaceTable *it=library->types?library->types->interfaces:NULL;
     unit->nominals=nt && nt->count ? source_alloc(ctx,nt->count,sizeof(*unit->nominals)) : NULL;
     unit->interfaces=it && it->count ? source_alloc(ctx,it->count,sizeof(*unit->interfaces)) : NULL;
-    unit->type_count=library->types->count;
+    unit->type_count=library->types?library->types->count:0;
     unit->types=unit->type_count ? source_alloc(ctx,unit->type_count,sizeof(*unit->types)) : NULL;
     if ((nt && nt->count && !unit->nominals) || (it && it->count && !unit->interfaces) ||
         (unit->type_count && !unit->types)) return false;
@@ -407,9 +407,9 @@ static bool source_library_metadata(SourceContext *ctx) {
     for (SourceLibraryUnit *u=ctx->library_units; u && ok; u=u->next)
         ok=source_library_intern_types(ctx,u);
     for (SourceLibraryUnit *u=ctx->library_units; u && ok; u=u->next)
-        ok=source_library_declaration_constraints(ctx,u);
+        if (u->library->types) ok=source_library_declaration_constraints(ctx,u);
     for (SourceLibraryUnit *u=ctx->library_units; u && ok; u=u->next)
-        ok=source_library_fields(ctx,u) && source_library_interfaces(ctx,u);
+        if (u->library->types) ok=source_library_fields(ctx,u) && source_library_interfaces(ctx,u);
     ctx->module=module;ctx->function=function;ctx->type_scope=scope;
     return ok;
 }

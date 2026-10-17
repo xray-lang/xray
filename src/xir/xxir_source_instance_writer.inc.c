@@ -45,7 +45,25 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         if (node.kind==XR_XIR_TYPE_CALLABLE && !source_instance_argument(input,node.result,depth+1,&node.result)) return false;
     } else if (!source_instance_argument(input,node.element,depth+1,&node.element)) return false;
     if (!source_intern_type(ctx,node,output)) return false;
-    input->mapped[index]=*output;return true;
+    input->mapped[index]=*output;
+    if (node.kind==XR_XIR_TYPE_NOMINAL) {
+        /* Only nominal field edges may refer back to an established identity.
+         * Complete current declaration matching above precedes receiving the
+         * actual closed fields; common checking rederives every substitution. */
+        uint32_t count=found->nominal.field_count;
+        if (count!=ctx->nominals.declarations[node.nominal.declaration].field_count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"instance nominal field closure is incomplete");
+        XrXirType *fields=count?source_alloc(ctx,count,sizeof(*fields)):NULL;
+        if (count && !fields) return false;
+        for (uint32_t f=0;f<count;++f) {
+            if (!source_work_units(ctx,NULL,sizeof(*fields)) ||
+                !source_instance_argument(input,found->nominal.fields[f],depth+1,&fields[f])) return false;
+        }
+        /* Receiving field types can move the mutable pool. */
+        XrXirTypeNode *owned=(XrXirTypeNode *)&ctx->types.nodes[(uint32_t)*output-XR_XIR_CONSTRUCTED_TYPE_BASE];
+        owned->nominal.fields=fields;owned->nominal.field_count=count;
+    }
+    return true;
 }
 static bool source_instance_literal(SourceContext *ctx,uint32_t index) {
     const XirCtfeInstanceView *view=&ctx->instance_constants->views[index];

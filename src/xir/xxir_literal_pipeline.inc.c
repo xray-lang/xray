@@ -12,6 +12,7 @@
  *   Final ordinary checking owns all definitions, types, strings and bindings.
  */
 #include "xxir_literal_seed.inc.c"
+#include "xxir_literal_sites.inc.c"
 #include "xxir_literal_writer.inc.c"
 static XrXirStatus literal_status(XrXirDiagnostic *diagnostic,XrXirStatus status) {
     if (diagnostic) diagnostic->status=status;
@@ -41,10 +42,11 @@ static XrXirStatus literal_verify_bindings(const XrXirCompileContext *context,co
     }
     return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_instance_literals(const XirLiteralRequest *request,
+static XrXirStatus literal_receive(const XirLiteralRequest *request,const XrXirComptimeSite *site,
     XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic) {
     if (!request || !xir_compile_context_valid(request->context) || !request->instances || !request->count ||
-        request->count>request->context->limits.functions || !output || output->definition || output->bindings || output->count)
+        request->count>request->context->limits.functions || (site && request->count!=1) ||
+        !output || output->definition || output->bindings || output->count)
         return literal_status(diagnostic,XR_XIR_BAD_STRUCTURE);
     const XrXirCompileContext *context=request->context;XrXirStatus status=XR_XIR_OK;
     XirCtfeInstanceView *views=xir_compile_calloc(context,request->count,sizeof(*views),&status);
@@ -57,6 +59,8 @@ XR_FUNC XrXirStatus xr_xir_compile_instance_literals(const XirLiteralRequest *re
     }
     SourceContext ctx={0};ctx.compile=*context;XirLiteralDefinitions result={0};
     const XrXirArtifact *original=views[0].definition;
+    status=literal_site_verify(context,&views[0],site);
+    if (status!=XR_XIR_OK) goto done;
     for (uint32_t i=0;i<request->count;++i) {
         if (!xir_compile_work(context,sizeof(*views))) { status=XR_XIR_BUDGET;goto done; }
         if (views[i].definition!=original || views[i].definition->context.resources!=context->resources) {
@@ -72,11 +76,19 @@ XR_FUNC XrXirStatus xr_xir_compile_instance_literals(const XirLiteralRequest *re
             status=ctx.diagnostic.status;goto done;
         }
     }
-    status=literal_check(&ctx,original,&result.definition,diagnostic);
+    status=literal_check(&ctx,original,result.bindings,site,&result.definition,diagnostic);
     if (status==XR_XIR_OK) status=literal_verify_bindings(context,views,&result);
     if (status==XR_XIR_OK) { *output=result;result=(XirLiteralDefinitions){0}; }
 done:
     xr_xir_compile_instance_literals_free(&result);source_comptime_context_free(&ctx);xr_compile_resources_free(views);
     if (diagnostic) diagnostic->status=status;
     return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_instance_literals(const XirLiteralRequest *request,
+    XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic) {
+    return literal_receive(request,NULL,output,diagnostic);
+}
+XR_FUNC XrXirStatus xr_xir_compile_instance_literals_at(const XirLiteralRequest *request,
+    const XrXirComptimeSite *site,XirLiteralDefinitions *output,XrXirDiagnostic *diagnostic) {
+    return site?literal_receive(request,site,output,diagnostic):literal_status(diagnostic,XR_XIR_BAD_STRUCTURE);
 }

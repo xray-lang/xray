@@ -125,3 +125,21 @@ foreach(kind array foreign)
     add_test(NAME test_xir_p11_ctfe_instance_batch_FI_${kind} COMMAND test_xir_p11_ctfe_instance batch-faults ${kind})
     set_tests_properties(test_xir_p11_ctfe_instance_batch_FI_${kind} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "resource;ctfe_instance_batch" COST 60)
 endforeach()
+
+foreach(kind array private multi method nested mixed builtin none local fresh dual known closed closed-method text)
+    add_test(NAME test_xir_p11_library_comptime_${kind} COMMAND test_xir_p11_ctfe_instance library ${kind})
+    set_tests_properties(test_xir_p11_library_comptime_${kind} PROPERTIES TIMEOUT 30)
+endforeach()
+
+foreach(kind array private dual)
+    add_test(NAME test_xir_p11_library_comptime_prefix_${kind} COMMAND test_xir_p11_ctfe_instance library-prefix ${kind})
+    set_tests_properties(test_xir_p11_library_comptime_prefix_${kind} PROPERTIES TIMEOUT 30)
+    add_test(NAME test_xir_p11_library_comptime_FI_${kind} COMMAND test_xir_p11_ctfe_instance library-faults ${kind})
+    set_tests_properties(test_xir_p11_library_comptime_FI_${kind} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "resource;ctfe_library_comptime" COST 120)
+endforeach()
+
+add_test(NAME test_xir_p11_library_comptime_controls COMMAND test_xir_p11_ctfe_instance library-controls)
+set_tests_properties(test_xir_p11_library_comptime_controls PROPERTIES TIMEOUT 30)
+
+add_test(NAME test_xir_p11_library_comptime_site_controls COMMAND test_xir_p11_ctfe_instance library-site-controls)
+set_tests_properties(test_xir_p11_library_comptime_site_controls PROPERTIES TIMEOUT 30)

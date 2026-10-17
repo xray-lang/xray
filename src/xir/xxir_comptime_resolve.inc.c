@@ -29,38 +29,18 @@ static XrXirStatus resolution_ctfe_status(XrXirCtfeStatus status) {
 static XrXirStatus resolution_bind(const XirLiteralDefinitions *literal,const XrXirComptimeSite *wanted,
     XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
     if (literal->count!=1 || !literal->definition || !literal->bindings) return XR_XIR_BAD_STRUCTURE;
-    const XrXirArtifact *definition=literal->definition;const XrXirCompileContext *context=&definition->context;
-    const XrXirConstruction *original=definition->construction;XrXirComptimeTable table=original->comptime;
-    const XrXirComptimeSite *site=xir_comptime_site(original,wanted->caller,wanted->instruction);
-    const XirLiteralBinding *provider=&literal->bindings[0];
-    if (!site || site->helper!=wanted->helper || provider->definition!=site->helper ||
-        !provider->arguments || !provider->argument_count) return XR_XIR_BAD_STRUCTURE;
-    if (table.binding_count>=context->limits.instructions) return XR_XIR_BUDGET;
-    XrXirStatus status=XR_XIR_OK;
-    XrXirComptimeBinding *rows=xir_compile_calloc(context,(uint64_t)table.binding_count+1,sizeof(*rows),&status);
-    if (!rows) return status;
-    XrXirComptimeBinding row={(uint32_t)(site-table.sites),provider->arguments,provider->argument_count,provider->provider};
-    if (!xir_compile_work(context,(uint64_t)table.binding_count*sizeof(*rows))) status=XR_XIR_BUDGET;
-    if (status==XR_XIR_OK && table.binding_count) memcpy(rows,table.bindings,(size_t)table.binding_count*sizeof(*rows));
-    uint32_t at=table.binding_count;
-    while (status==XR_XIR_OK && at) {
-        if (!xir_compile_work(context,4+2*(uint64_t)row.argument_count+2*(uint64_t)rows[at-1].argument_count)) { status=XR_XIR_BUDGET;break; }
-        int order=xir_comptime_key_order(&rows[at-1],&row);
-        if (!order) { status=XR_XIR_BAD_STRUCTURE;break; }
-        if (order<0) break;
-        if (!xir_compile_work(context,sizeof(*rows))) { status=XR_XIR_BUDGET;break; }
-        rows[at]=rows[at-1];--at;
-    }
-    XrXirConstruction *construction=NULL;
-    if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(row))) status=XR_XIR_BUDGET;
-    if (status==XR_XIR_OK) {
-        rows[at]=row;table.bindings=rows;++table.binding_count;
-        XrXirConstructionSpec spec={original->rows,original->count,original->materializations,original->materialization_count,&table};
-        status=xr_xir_compile_construction_new_v3(context,definition->module.types,&spec,&construction);
-    }
-    if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(context,&definition->module,construction,output,diagnostic);
-    xr_xir_compile_construction_free(construction);xr_compile_resources_free(rows);return status;
+    const XrXirArtifact *definition=literal->definition;const XirLiteralBinding *provider=&literal->bindings[0];
+    if (!provider->argument_count || !provider->arguments || provider->definition!=wanted->helper) return XR_XIR_BAD_STRUCTURE;
+    XirComptimeSelection selection={&definition->module,definition->module.types,wanted->caller,wanted->instruction,
+        provider->arguments,provider->argument_count};
+    const XrXirComptimeBinding *binding=NULL;
+    XrXirStatus status=xir_comptime_select(&definition->context,definition->construction,&selection,&binding);
+    if (status==XR_XIR_OK && (!binding || binding->provider!=provider->provider)) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK) status=xr_xir_compile_recheck_v2(&definition->context,&definition->module,
+        definition->construction,output,diagnostic);
+    return status;
 }
+
 static XrXirStatus resolution_execute(const XirComptimeResolveRequest *request,const XirComptimePending *pending,
     XrXirArtifact **output,XirComptimeResolveFailure *failure,XrXirDiagnostic *diagnostic) {
     XrXirArtifact *checked=NULL;XirCtfeInstanceBatch *batch=NULL;XirLiteralDefinitions literal={0};
@@ -81,7 +61,7 @@ static XrXirStatus resolution_execute(const XirComptimeResolveRequest *request,c
     }
     if (status==XR_XIR_OK) {
         XirLiteralRequest receiving={&checked->context,batch,1};
-        status=xr_xir_compile_instance_literals(&receiving,&literal,diagnostic);
+        status=xr_xir_compile_instance_literals_at(&receiving,&site,&literal,diagnostic);
     }
     if (status==XR_XIR_OK) status=resolution_bind(&literal,&site,output,diagnostic);
     xr_xir_compile_instance_literals_free(&literal);xr_xir_compile_ctfe_instance_batch_free(batch);

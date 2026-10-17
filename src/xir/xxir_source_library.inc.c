@@ -123,7 +123,7 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"library literal inventory exhausted");
     SourceLibraryMap map = {0};
     map.unit = source_library_unit(ctx,library);
-    if (library->types && !map.unit)
+    if (!map.unit)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library declaration map is missing");
     map.module_count = d->module_count; map.function_count = library->function_count;
     map.literal_begin = ctx->literal_count; map.literal_count = d->literal_count;
@@ -508,6 +508,7 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
 }
 
 #include "xxir_source_library_materialization.inc.c"
+#include "xxir_source_library_comptime.inc.c"
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
     if (!source_library_slots(ctx,library,map) || !source_library_literals(ctx, library, map)) return false;
@@ -515,6 +516,7 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
     }
     if (!source_library_initializers(ctx,library,map) || !source_library_materializations(ctx,map) ||
+        !source_library_comptime(ctx,map) ||
         !source_library_implementations(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {

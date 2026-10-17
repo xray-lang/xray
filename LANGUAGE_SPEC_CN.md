@@ -7954,7 +7954,7 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked原子切到schema30/contract75；construction C接口revision3只提供xr_xir_compile_construction_new_v3，旧无版本和v2构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
 
-本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Program逐实例常量接回见17.78。Library导入尚未实现站点和键的完整重定位，带非空表的Library明确拒绝，不能丢弃表而保留运行期helper调用。未来Library实例、完整FI与正式安全仍须分别完成，不能将本机制或定向验证视为P11/C0/C1完成。
+本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Program逐实例常量接回见17.78。Library规范站点、完整键与未来实例接回按17.81执行，不得丢弃表而保留运行期helper调用。完整Library资格、全FI与正式安全仍须分别取得，不能将本机制或定向验证视为P11/C0/C1完成。
 
 ### 17.77 无AST的拥有式实例字面量接收
 
@@ -7964,7 +7964,7 @@ Source对依赖词法类型实参的comptime表达式生成真实普通泛型hel
 
 Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原配方语义。私有字段值在其实际声明库存中解析唯一模块及nominal owner，通过17.67同一literal materializer及精确调用绑定接收；不伪造AST/query声明，不由结果类型授予一般私有访问。既有materializer绑定和comptime表完整复制。最终Checked拥有全部函数、类型、字符串、契约及构造信息，批次和生产者死亡后仍可独立packet写读、普通特化、Lowered和唯一CTFE。知道私有provider ordinal仍不授外部运行期入口权限。
 
-整个操作、当前复验、类型接收、配方、契约和最终检查计入原work128000000、累计分配64MiB、live8MiB；不重置、退款或提高steps/frame65536、depth128、policy2/8MiB输出及替换深度128。任一失败不发布部分结果，所有前缀可回收，最后析构不分配。公开布局、schema30/contract75、construction C3和opcode保持。本内部核只负责literal接收；公共Program组合流程见17.78，Library未来实例收集与重定位仍未完成。完整FI、原owner重试、当前全矩阵、正式安全/provider及原C0/C1退出门仍各需真实固定输入证据。
+整个操作、当前复验、类型接收、配方、契约和最终检查计入原work128000000、累计分配64MiB、live8MiB；不重置、退款或提高steps/frame65536、depth128、policy2/8MiB输出及替换深度128。任一失败不发布部分结果，所有前缀可回收，最后析构不分配。公开布局、schema30/contract75、construction C3和opcode保持。本内部核只负责literal接收；公共Program组合流程见17.78，Library未来实例收集与重定位另见17.81。完整FI、原owner重试、当前全矩阵、正式安全/provider及原C0/C1退出门仍各需真实固定输入证据。
 
 ### 17.78 公共Program的完整逐实例comptime接回
 
@@ -7976,7 +7976,7 @@ Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原�
 
 普通特化只在真实站点和完整关闭键下选择provider；缺当前键编译失败，不留下运行期helper替代comptime。嵌套外层literal可消除内层运行期调用，但原Source仍保留完整站点和实际收集键。根局部CTFE失败报告真实批次选择位置，再对应原语法站点；不通过重执行猜失败位置。批次准备前的全局失败不伪造根编号。错误、预算或OOM不发布部分Source，失败/重试使用同一原ledger，所有前缀可清理，最终释放不分配。
 
-原work128000000、累计分配64MiB、live8MiB、steps/frame65536、depth128、policy2/8MiB输出、替换深度128和显式支持target保持。公开布局、schema30/contract75、construction C3及opcode不变。本节实现公共Program接回；Library泛型模板的未来调用、无原AST站点的完整收集及函数/类型/nominal/站点/键重定位仍未实现，非空表Library导入继续明确拒绝。不得丢表后执行helper，也不以本流程或定向门替代完整C0/C1、全FI、原限额、VM/native/mixed、正式安全/provider及生产资格。
+原work128000000、累计分配64MiB、live8MiB、steps/frame65536、depth128、policy2/8MiB输出、替换深度128和显式支持target保持。公开布局、schema30/contract75、construction C3及opcode不变。本节实现公共Program接回；Library规范站点搬移和未来键接回另见17.81，完整类型证明与资格须独立闭合。不得丢表后执行helper，也不以本流程或定向门替代完整C0/C1、全FI、原限额、VM/native/mixed、正式安全/provider及生产资格。
 
 ### 17.79 拥有式泛型comptime缺键观察
 
@@ -7984,7 +7984,7 @@ Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原�
 
 接收方独立拥有完整Source、必要新增关闭类型和完整有序实参；类型ID原前缀保持，新生描述符随完整共同Checker重新检查。每次查询重新完整验证当前Source及其逐字packet对应，再重复真实普通专化发现并核对站点和完整有序类型结构。原生产者、session和packet字节死亡后仍可查询；修改当前body、类型、名称或实参不能凭缓存PASS获得视图。实参必须关闭并满足原helper的完整约束，不按实例解释AST，不清空规范表或TEMPLATE，不把已有绑定重新求值。
 
-所有准备、复制、复验和重试共用原有限compiler ledger；预算或OOM原子失败，最后释放不分配。17.78的缺键普通特化拒绝保持。本观察接点不执行helper；17.80另行提供真实helper求值及Source键接回。Library表重定位与完整P11资格仍未完成。原schema30/contract75、construction接口3、Value24/Call29/Program30、opcode和所有预算保持。
+所有准备、复制、复验和重试共用原有限compiler ledger；预算或OOM原子失败，最后释放不分配。17.78的缺键普通特化拒绝保持。本观察接点不执行helper；17.80另行提供真实helper求值及Source键接回。Library表重定位由17.81接续，完整P11资格仍须独立取得。原schema30/contract75、construction接口3、Value24/Call29/Program30、opcode和所有预算保持。
 
 ### 17.80 编译器专用求值与无AST的Source规范键闭合
 
@@ -7996,7 +7996,19 @@ Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原�
 
 内部Source接回入口只接受真实Checked Program Source，以原ledger独立接收输入，反复收集实际缺键、构造编译器专用关闭图、按原限额执行唯一CTFE，再由普通无AST literal核接收provider。新键以共同规范顺序插入原construction，有序类型向量完整拥有，原所有站点和已有键/provider意义保持。完整共同Checker复验新增Source后才继续收集；无实际缺键、未实例化或已由外层literal消除的内层调用不制造求值。已有provider可与当前helper body不同，甚至helper当前会陷阱，仍不得清表或重新求值已有键。最终Source仍保留原泛型和TEMPLATE，按普通packet、严格INSTANCE特化、Lowered及VM/AOT管线继续。
 
-任意准备、接收、执行、重定位或预算/OOM失败均不发布部分Source，不退款或重置原账本。真实根局部CTFE失败报告原站点及实际状态，不执行重试猜位置；全局失败不虚构根索引。原work128M、allocated64MiB、live8MiB、steps/frame65536、depth128、policy2/output8MiB以及Value24/Call29/Program30、153opcodes保持；最后释放不分配。此入口实现无AST的Program Source缺键求值与接回，尚不授予完整Library表重定位/公开导入、全FI、VM/native/mixed或正式安全资格。
+任意准备、接收、执行、重定位或预算/OOM失败均不发布部分Source，不退款或重置原账本。真实根局部CTFE失败报告原站点及实际状态，不执行重试猜位置；全局失败不虚构根索引。原work128M、allocated64MiB、live8MiB、steps/frame65536、depth128、policy2/output8MiB以及Value24/Call29/Program30、153opcodes保持；最后释放不分配。此入口实现无AST的Program Source缺键求值与接回，Library表重定位/公开接回另见17.81，本入口不授予全FI、VM/native/mixed或正式安全资格。
+
+### 17.81 Library规范表重定位与公开未来键接回
+
+Library Source保留开放泛型comptime的真实helper、符号调用、原泛型/约束/private witness及TEMPLATE，并将规范站点封入最终construction与独立query快照。Library本身不变为可执行Program。已有关闭表达式仍在原有限ledger上从同一不可变图独立构造真实Program、执行唯一CTFE并接收关闭值；开放预期/结果类型按完整有序binder身份对应，不以零实参关闭匹配误判。未来关闭类型不依赖Library AST、query或原session存活。
+
+普通Checked packet/Catalog接收先完整检查当前产物及全部construction。导入按真实选中module视图映射全部函数，包括仅由规范绑定引用、没有普通CALL入边的provider；映射caller/helper/provider、module/nominal/interface owner、类型头与完整有序类型实参、private witness及精确materializer边。原instruction坐标保持；类型经共同结构intern而非算术偏移。builtin-only且无类型池的Library也拥有规范表接收者。越出实际选择闭包的helper/provider/owner拒绝，不能凭空添加初始化依赖。
+
+导入表和本地开放站点共同按caller/instruction排序，既有绑定以映射后站点和完整有序键重新规范排序；冲突拒绝，不覆盖已有provider。construction独立拥有全部数据，完整普通Checker先证明当前表、类型、约束、body/效果和词法权限后才发布。开放泛型私有member helper须由真实规范站点或结果绑定对应；关闭comptime thunk没有泛型站点，只以私有、零运行参数、非泛型且无额外entry承诺的函数接收，普通词法/调用/效果验证保持，其余准入仍须独立满足。无泛型表的完整Library同样处理，不以空指针代替空泛型库存。只有当前完整construction已证明的规范provider或精确绑定materializer，且满足私有、无运行期参数/泛型/导出或root承诺的关闭纯数据字面配方，才可命名已描述的opaque替换类型；真实EVALUATION根的原站点和有序结果键必须先接入construction，再完整核验provider声明；无站点、错误目的/站点、已有键和只复制结果类型不取得该证明。当前完整body限定为普通literal opcode与精确materializer调用，完整类型约束、CFG、来源/效果及每个字段/构造权限仍须分别通过。不能把该命名规则授给普通调用、字段观察/写入、身份数据或公开入口。关闭实参中的普通数值/Rune类型不因不属于旧直接函数签名子集而被当作未知类型；类型实参不授予字段、方法或执行权限。
+
+公开Program入口以17.80的同一缺键管线接回本地及导入的实际键，不再保留另一套开放调用结果收集路径。已知键保留原provider意义，当前helper body即使不同也不得重算；未实例化或被外层literal消除的内层站点不制造求值。关闭表达式的独立Source接收仍必须完整核验符号库存和最终query类型前缀。新增关闭类型的命名和词法证明必须在结果声明接回时闭合，不能靠公开私有类型、伪造依赖、清TEMPLATE或放宽字段访问绕过。任何失败均不发布部分Program，真实根失败保留原坐标与CTFE状态；没有Library AST时不能伪造语法位置。
+
+所有重定位、排序、完整复验、执行、失败和重试计入原同一ledger；不重置或提高work128M、allocated64MiB、live8MiB、steps/frame65536、depth128、policy2/output8MiB或替换深度128。普通schema30/contract75、construction C3、Value24/Call29/Program30、153opcodes及私有XRCEV revision1保持。最后析构不分配。功能、当前完整类型证明、完整FI、原C0/C1、VM/native/mixed与正式安全/provider须各有固定证据，不能由定向接回推导完整P11资格。
 
 ---
 

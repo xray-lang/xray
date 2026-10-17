@@ -2944,6 +2944,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         source_fail(ctx, NULL, status, failure);
     }
 }
+#include "xxir_source_comptime_table.inc.c"
 #include "xxir_core_source.inc.c"
 #include "xxir_source_comptime_pipeline.inc.c"
 #include "xxir_source_instance_pipeline.inc.c"

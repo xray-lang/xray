@@ -42,7 +42,8 @@ static XrXirStatus pending_source(XrXirCompileContext *context,const char *kind,
     XrXirConstruction *construction=NULL;
     if (status==XR_XIR_OK) {
         XrXirComptimeTable table=source.checked->construction->comptime;
-        if (mode!=1 && table.binding_count) table.binding_count=mode==2?0:table.binding_count-1;
+        if (mode!=1 && table.binding_count && (mode || strcmp(kind,"nested-open")))
+            table.binding_count=mode==2?0:table.binding_count-1;
         if (!table.binding_count) table.bindings=NULL;
         XrXirConstructionSpec spec={source.checked->construction->rows,source.checked->construction->count,
             source.checked->construction->materializations,source.checked->construction->materialization_count,&table};

@@ -34,7 +34,8 @@ static void program_normal(const char *kind) {
     if (status!=XR_XIR_OK) fprintf(stderr,"Public comptime %s status%u %d:%d %s\n",kind,status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
     const XrXirComptimeTable *table=xr_xir_compile_construction_comptime(source.checked->construction);
-    uint32_t sites=!strcmp(kind,"multiple") || !strcmp(kind,"nested-open")?2:1,bindings=!strcmp(kind,"unused")?0:sites*2;
+    uint32_t sites=!strcmp(kind,"multiple") || !strcmp(kind,"nested-open")?2:1;
+    uint32_t bindings=!strcmp(kind,"unused")?0:!strcmp(kind,"nested-open")?2:sites*2;
     CHECK(table->site_count==sites && table->binding_count==bindings);
     const XrXirConstruction *query=xr_xir_compile_source_snapshot_construction(source.snapshot);
     CHECK(xr_xir_compile_construction_comptime(query)->site_count==sites && xr_xir_compile_construction_comptime(query)->binding_count==bindings);

@@ -36,6 +36,12 @@ XR_FUNC XrXirStatus xir_construction_verify(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction);
 XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction);
+/* Only closed private data recipes need to name substituted opaque types.
+ * This classification grants no construction, field or execution authority;
+ * the same current verification still checks every instruction and binding.
+ * Complete current construction verification must precede this classification. */
+XR_FUNC XrXirStatus xir_literal_type_names(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,uint32_t function,bool *output);
 XR_FUNC const XrXirMaterializationBinding *xir_materialization_binding(
     const XrXirConstruction *construction, uint32_t caller, uint32_t instruction);
 XR_FUNC XrXirStatus xir_construction_lower(const XrXirCompileContext *context,

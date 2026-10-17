@@ -180,8 +180,16 @@ static void instance_limits(void) {
 #include "resolution_cases.h"
 #include "resolution_controls.h"
 #include "resolution_resources.h"
+#include "library_cases.h"
+#include "library_resources.h"
+#include "library_controls.h"
 int main(int argc,char **argv) {
     CHECK(argc>=2 && argc<=4);
+    if (!strcmp(argv[1],"library-site-controls")) { CHECK(argc==2);library_comptime_site_controls();return 0; }
+    if (!strcmp(argv[1],"library-controls")) { CHECK(argc==2);library_comptime_controls();return 0; }
+    if (!strcmp(argv[1],"library-prefix")) { CHECK(argc==3);library_comptime_resources(argv[2],false);return 0; }
+    if (!strcmp(argv[1],"library-faults")) { CHECK(argc==3);library_comptime_resources(argv[2],true);return 0; }
+    if (!strcmp(argv[1],"library")) { CHECK(argc==3);library_comptime_normal(argv[2]);return 0; }
     if (!strcmp(argv[1],"resolution")) { CHECK(argc==3);resolution_normal(argv[2]);return 0; }
     if (!strcmp(argv[1],"resolution-controls")) { CHECK(argc==2);resolution_controls();return 0; }
     if (!strcmp(argv[1],"resolution-prefix")) { CHECK(argc==3);resolution_resources(argv[2],false);return 0; }
