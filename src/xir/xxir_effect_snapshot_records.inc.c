@@ -30,15 +30,15 @@ static XrXirStatus effect_body_literal_opcodes_check(const EffectBodyRead *read,
 
 /* A literal tag selects complete physical rows, never constant columns. All
  * actual opcodes are bounded here; full correspondence reads every word. */
-static XrXirStatus effect_body_run_payload_check(const EffectBodyRead *read,
-    const EffectBodyRun *run) {
-    if (!read || !run || !run->count ||
+static XrXirStatus effect_body_run_payload_view_check(const EffectBodyRead *read,
+    const EffectBodyRun *run,const XrXirInstruction *base) {
+    if (!read || !run || !base || !run->count ||
         (run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_ROWS)) ||
         (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
     uint32_t selected=run->mask&EFFECT_BODY_MASK;
     if (run->mask&EFFECT_BODY_LITERAL_ROWS) {
         if (run->count<2 || run->count>EFFECT_BODY_LITERAL_CAPACITY || selected) return XR_XIR_BAD_STRUCTURE;
-        return effect_body_literal_opcodes_check(read,run->count,&run->base,run->literal_tail);
+        return effect_body_literal_opcodes_check(read,run->count,base,run->literal_tail);
     }
     if (run->count==2 && selected) return XR_XIR_BAD_STRUCTURE;
     for (;selected;selected&=selected-1) {
@@ -46,6 +46,12 @@ static XrXirStatus effect_body_run_payload_check(const EffectBodyRead *read,
         if (!run->delta[(uint32_t)__builtin_ctz(selected)]) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
+}
+
+/* An owning run binds its native base to the same physical payload kernel. */
+static XrXirStatus effect_body_run_payload_check(const EffectBodyRead *read,
+    const EffectBodyRun *run) {
+    return effect_body_run_payload_view_check(read,run,run?&run->base:NULL);
 }
 
 /* Both growth and immutable receiving copy initialized fields only. Inactive
@@ -213,7 +219,8 @@ typedef struct EffectBodyWriteSink {
 
 typedef struct EffectBodyRecordSink {
     void *owner;
-    XrXirStatus (*run)(const XrXirCompileContext *,const XrXirFunction *,EffectBodyRun *,void *);
+    XrXirStatus (*run)(const XrXirCompileContext *,const XrXirFunction *,EffectBodyRun *,
+        const XrXirInstruction *,void *);
 } EffectBodyRecordSink;
 typedef struct EffectBodyRecordCensus { uint32_t next,count,tail; } EffectBodyRecordCensus;
 typedef struct EffectBodyRecordReceiver {
@@ -244,25 +251,25 @@ static XrXirStatus effect_body_record_prepare(const XrXirCompileContext *work,
  * literal opcode gate but no discarded native copy or tag write. The view
  * borrows only this synchronous Source row; receiving still scans afresh. */
 static XrXirStatus effect_body_record_census_check(const XrXirCompileContext *work,
-    const XrXirFunction *source,const EffectBodyRun *run) {
-    if (!effect_body_record_shape(source,run)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+    const XrXirFunction *source,const EffectBodyRun *run,const XrXirInstruction *base) {
+    if (!effect_body_record_shape(source,run) || !base) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
     EffectBodyRead read=effect_body_compile_read(work);
     if (run->count==2 && run->mask) {
         if (!xir_compile_work(work,2+sizeof(const XrXirInstruction *))) return XR_XIR_BUDGET;
         const XrXirInstruction *tail=&source->instructions[run->first+1];
-        return effect_body_literal_opcodes_check(&read,2,&run->base,tail);
+        return effect_body_literal_opcodes_check(&read,2,base,tail);
     }
-    return effect_body_run_payload_check(&read,run);
+    return effect_body_run_payload_view_check(&read,run,base);
 }
 
 /* This pass measures only physical capacity. The same scanner runs afresh
  * for receiving, and neither its count nor its discarded payload proves IR,
  * permission, semantic shape or correspondence to the current source. */
 static XrXirStatus effect_body_record_count(const XrXirCompileContext *work,
-    const XrXirFunction *source,EffectBodyRun *run,void *owner) {
+    const XrXirFunction *source,EffectBodyRun *run,const XrXirInstruction *base,void *owner) {
     EffectBodyRecordCensus *census=owner;
-    XrXirStatus status=effect_body_record_census_check(work,source,run);
+    XrXirStatus status=effect_body_record_census_check(work,source,run,base);
     if (status!=XR_XIR_OK) return status;
     if (!census || census->next!=run->first || census->count>census->next ||
         census->tail>EFFECT_BODY_LITERAL_CAPACITY) return XR_XIR_BAD_STRUCTURE;
@@ -287,6 +294,23 @@ static XrXirStatus effect_body_record_count(const XrXirCompileContext *work,
         ++census->count;census->tail=0;
     }
     census->next+=run->count;return XR_XIR_OK;
+}
+
+/* Only the pure count closure borrows Source. Every data receiver keeps its
+ * original native seed, and no view outlives the scanner or escapes in counts. */
+static XrXirStatus effect_body_record_seed(const XrXirCompileContext *work,EffectBodyRun *run,
+    const XrXirInstruction *source,uint32_t first,const EffectBodyRecordSink *sink,
+    const XrXirInstruction **base) {
+    if (!run || !source || !sink || !sink->run || !base) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+    if (sink->run==effect_body_record_count) {
+        if (!xir_compile_work(work,3*sizeof(uint32_t)+sizeof(*base))) return XR_XIR_BUDGET;
+        run->first=first;run->count=1;run->mask=0;*base=source;return XR_XIR_OK;
+    }
+    XrXirStatus status=effect_body_run_seed(work,run,source,first);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(work,sizeof(*base))) return XR_XIR_BUDGET;
+    *base=&run->base;return XR_XIR_OK;
 }
 
 static XrXirStatus effect_body_run_deliver(const XrXirCompileContext *work,
@@ -335,9 +359,10 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
 }
 
 static XrXirStatus effect_body_record_receive(const XrXirCompileContext *work,
-    const XrXirFunction *source,EffectBodyRun *run,void *owner) {
+    const XrXirFunction *source,EffectBodyRun *run,const XrXirInstruction *base,void *owner) {
     const EffectBodyRecordReceiver *receiver=owner;
-    if (!receiver) return XR_XIR_BAD_STRUCTURE;
+    if (!receiver || !run || base!=&run->base) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
     return effect_body_run_submit(work,source,receiver->target,run,receiver->semantic);
 }
 
@@ -359,15 +384,16 @@ static XrXirStatus effect_body_single_column(const EffectBodyRead *read,uint32_t
 
 /* A matching constant opcode equals the already validated run base. A
  * varying opcode and every new row still pass the same range gate. On a
- * field mismatch the new seed copies all ten words before semantic intake;
+ * field mismatch a data receiver copies all ten words before semantic intake;
  * partial comparisons never publish an instruction or authority product. */
 static XrXirStatus effect_body_records_scan(const XrXirCompileContext *work,
     const XrXirFunction *source,const EffectBodyRecordSink *sink) {
     if (!source || !sink || !sink->owner || !sink->run || (source->instruction_count && !source->instructions))
         return XR_XIR_BAD_STRUCTURE;
     if (!source->instruction_count) return XR_XIR_OK;
-    if (!xir_compile_work(work,sizeof(uint32_t)+sizeof(EffectBodyRun *))) return XR_XIR_BUDGET;
-    uint32_t column=UINT32_MAX;EffectBodyRun pending,*run=NULL;
+    if (!xir_compile_work(work,sizeof(uint32_t)+sizeof(EffectBodyRun *)+sizeof(const XrXirInstruction *)))
+        return XR_XIR_BUDGET;
+    uint32_t column=UINT32_MAX;EffectBodyRun pending,*run=NULL;const XrXirInstruction *base=NULL;
     for (uint32_t i=0;i<source->instruction_count;++i) {
         const XrXirInstruction *op=&source->instructions[i];
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
@@ -378,13 +404,13 @@ static XrXirStatus effect_body_records_scan(const XrXirCompileContext *work,
         if (!run) {
             if (!xir_compile_work(work,sizeof(run))) return XR_XIR_BUDGET;
             run=&pending;
-            XrXirStatus status=effect_body_run_seed(work,run,op,i);
+            XrXirStatus status=effect_body_record_seed(work,run,op,i,sink,&base);
             if (status!=XR_XIR_OK) return status;
         } else if (run->count==1) {
             if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
             for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
                 if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-                uint32_t delta=xir_instruction_word(op,w)-xir_instruction_word(&run->base,w);
+                uint32_t delta=xir_instruction_word(op,w)-xir_instruction_word(base,w);
                 if (delta) {
                     if (!xir_compile_work(work,sizeof(delta))) return XR_XIR_BUDGET;
                     run->delta[w]=delta;run->mask|=UINT32_C(1)<<w;
@@ -401,22 +427,22 @@ static XrXirStatus effect_body_records_scan(const XrXirCompileContext *work,
             if (column<=EFFECT_BODY_WORDS) {
                 for (uint32_t w=0;w<column;++w) {
                     if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-                    if (xir_instruction_word(op,w)!=xir_instruction_word(&run->base,w)) goto new_run;
+                    if (xir_instruction_word(op,w)!=xir_instruction_word(base,w)) goto new_run;
                 }
                 if (column<EFFECT_BODY_WORDS) {
                     if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-                    uint32_t expected=xir_instruction_word(&run->base,column)+run->delta[column]*run->count;
+                    uint32_t expected=xir_instruction_word(base,column)+run->delta[column]*run->count;
                     if (xir_instruction_word(op,column)!=expected) goto new_run;
                 }
                 for (uint32_t w=column+1;w<EFFECT_BODY_WORDS;++w) {
                     if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-                    if (xir_instruction_word(op,w)!=xir_instruction_word(&run->base,w)) goto new_run;
+                    if (xir_instruction_word(op,w)!=xir_instruction_word(base,w)) goto new_run;
                 }
             } else {
                 for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
                     bool varying=!!(run->mask&(UINT32_C(1)<<w));
                     if (!xir_compile_work(work,2+(varying?2:0))) return XR_XIR_BUDGET;
-                    uint32_t expected=xir_instruction_word(&run->base,w);
+                    uint32_t expected=xir_instruction_word(base,w);
                     if (varying) expected+=run->delta[w]*run->count;
                     if (xir_instruction_word(op,w)!=expected) goto new_run;
                 }
@@ -428,14 +454,14 @@ static XrXirStatus effect_body_records_scan(const XrXirCompileContext *work,
                 if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
                 if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             }
-            XrXirStatus status=sink->run(work,source,run,sink->owner);
+            XrXirStatus status=sink->run(work,source,run,base,sink->owner);
             if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(run))) status=XR_XIR_BUDGET;
             if (status==XR_XIR_OK) { run=&pending;
-                status=effect_body_run_seed(work,run,op,i); }
+                status=effect_body_record_seed(work,run,op,i,sink,&base); }
             if (status!=XR_XIR_OK) return status;
         }
     }
-    return sink->run(work,source,run,sink->owner);
+    return sink->run(work,source,run,base,sink->owner);
 }
 
 /* Capacity is measured before allocation, then every current source word
@@ -985,9 +1011,10 @@ static XrXirStatus effect_body_records_match(const EffectBodyRead *read,
 }
 
 static XrXirStatus effect_body_record_replay(const XrXirCompileContext *work,
-    const XrXirFunction *source,EffectBodyRun *run,void *owner) {
+    const XrXirFunction *source,EffectBodyRun *run,const XrXirInstruction *base,void *owner) {
     const EffectBodyRecordReceiver *receiver=owner;
-    if (!receiver) return XR_XIR_BAD_STRUCTURE;
+    if (!receiver || !run || base!=&run->base) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
     XrXirStatus status=effect_body_record_prepare(work,source,run);
     return status==XR_XIR_OK?effect_body_run_deliver(work,source,run,receiver->semantic):status;
 }
