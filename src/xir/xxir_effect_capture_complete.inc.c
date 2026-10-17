@@ -278,12 +278,13 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
                     if(status!=XR_XIR_OK) return status;
                     read->node_view=borrowed;
                 }
-                EffectCaptureNode node={0};XrXirStatus status=effect_capture_node(read,n,&node);
+                const EffectCaptureNode *node=NULL;
+                XrXirStatus status=effect_capture_node_borrow(read,n,borrowed,&node);
                 if(status!=XR_XIR_OK) return status;
-                end=(uint64_t)node.values+1+node.head.parameter_count;
+                end=(uint64_t)node->values+1+node->head.parameter_count;
                 if(value>=end) break;
                 present=true;
-                status=effect_capture_complete_value(read,&node,value,column,&result);if(status!=XR_XIR_OK) return status;
+                status=effect_capture_complete_value(read,node,value,column,&result);if(status!=XR_XIR_OK) return status;
             }
             EffectCaptureFact key={n,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE+column,result.rank};
             const EffectCaptureFact *stored=NULL;XrXirStatus status=effect_capture_find(read,key,&stored);
