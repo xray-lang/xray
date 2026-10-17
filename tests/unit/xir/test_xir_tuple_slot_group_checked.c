@@ -13,11 +13,12 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#c);exit(1);}} while(0)
 #include "xir_source_program_compile_owner.h"
 #include "xir_runtime_allocations.h"
+#include "slot_group81_golden.h"
 #include "slot_group65_golden.h"
 #include "xir_checked_scalar64_golden.h"
 
 _Static_assert(XR_XIR_SLOT_GROUP_INIT==145 && XR_XIR_TUPLE_NEW==143 && XR_XIR_RETURN==33,"independent opcode roles");
-_Static_assert(XR_XIR_CHECKED_SCHEMA==25 && XR_XIR_CHECKED_CONTRACT==65,"current single reader identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==33 && XR_XIR_CHECKED_CONTRACT==81,"current single reader identity");
 static void group_digest(uint8_t *bytes,size_t length) {
     XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,bytes,32);
     xr_sha256_update(&sha,bytes+64,length-64);xr_sha256_final(&sha,bytes+32);
@@ -40,7 +41,7 @@ static XrXirStatus group_packet_pipeline(const uint8_t *bytes,size_t length,XrCo
     if(status==XR_XIR_OK)status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
     if(status==XR_XIR_OK) {
         const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(lowered,0);
-        CHECK(layout && layout->outgoing_count==(length==sizeof(slot_group_unit65_golden)?0u:2u));
+        CHECK(layout && layout->outgoing_count==(length==sizeof(slot_group_unit81_golden)?0u:2u));
         status=xr_xir_compile_vm_program_take(&lowered,&program);
     }
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(lowered);
@@ -90,9 +91,11 @@ static void group_rejected(const uint8_t *bytes,size_t length,XrXirStatus expect
 static void group_wire_rejections(void) {
     /* Complete prior current packet, with its original valid digest and body. */
     group_rejected(checked_scalar64_golden,sizeof(checked_scalar64_golden),XR_XIR_BAD_STRUCTURE,true);
-    enum {GROUP_OFFSET=356,PAYLOAD_OFFSET=456};
+    group_rejected(slot_group_mixed65_golden,sizeof(slot_group_mixed65_golden),XR_XIR_BAD_STRUCTURE,true);
+    group_rejected(slot_group_unit65_golden,sizeof(slot_group_unit65_golden),XR_XIR_BAD_STRUCTURE,true);
+    enum {GROUP_OFFSET=SLOT_GROUP81_MIXED_GROUP_OFFSET,PAYLOAD_OFFSET=SLOT_GROUP81_MIXED_PAYLOAD_OFFSET};
     /* init instructions begin116: CONST1/2, Tuple, CONST3/4, Tuple, group. */
-    CHECK(slot_group_mixed65_golden[GROUP_OFFSET]==145 && slot_group_mixed65_golden[PAYLOAD_OFFSET]==2);
+    CHECK(slot_group_mixed81_golden[GROUP_OFFSET]==145 && slot_group_mixed81_golden[PAYLOAD_OFFSET]==2);
     const struct {size_t offset;uint32_t value;XrXirStatus expected;} cases[]={
         {GROUP_OFFSET+24,0,XR_XIR_BAD_STRUCTURE},
         {GROUP_OFFSET+28,1,XR_XIR_BAD_STRUCTURE},
@@ -107,20 +110,20 @@ static void group_wire_rejections(void) {
         {GROUP_OFFSET+4,XR_XIR_I64,XR_XIR_BAD_TYPE},
         {PAYLOAD_OFFSET,0,XR_XIR_BAD_TYPE}};
     for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
-        uint8_t raw[sizeof(slot_group_mixed65_golden)];memcpy(raw,slot_group_mixed65_golden,sizeof(raw));
+        uint8_t raw[sizeof(slot_group_mixed81_golden)];memcpy(raw,slot_group_mixed81_golden,sizeof(raw));
         group_word(raw,cases[i].offset,cases[i].value);group_digest(raw,sizeof(raw));
         group_rejected(raw,sizeof(raw),cases[i].expected,false);
     }
     for(unsigned which=0;which<2;++which) {
-        uint8_t raw[sizeof(slot_group_unit65_golden)];memcpy(raw,slot_group_unit65_golden,sizeof(raw));
-        group_word(raw,116+(which?12:8),1);group_digest(raw,sizeof(raw));
+        uint8_t raw[sizeof(slot_group_unit81_golden)];memcpy(raw,slot_group_unit81_golden,sizeof(raw));
+        group_word(raw,SLOT_GROUP81_UNIT_INSTRUCTION_OFFSET+(which?12:8),1);group_digest(raw,sizeof(raw));
         group_rejected(raw,sizeof(raw),XR_XIR_BAD_STRUCTURE,false);
     }
 }
 int main(void) {
-    size_t faults=group_packet_owner(slot_group_mixed65_golden,sizeof(slot_group_mixed65_golden));
-    faults+=group_packet_owner(slot_group_unit65_golden,sizeof(slot_group_unit65_golden));
+    size_t faults=group_packet_owner(slot_group_mixed81_golden,sizeof(slot_group_mixed81_golden));
+    faults+=group_packet_owner(slot_group_unit81_golden,sizeof(slot_group_unit81_golden));
     group_wire_rejections();
-    puts("Independent full wire25/65 group KAT2/current write/read/Lowered m2,m0/14forged+old64 early reject PASS");
-    printf("All group packet compiler faults=%zu; unchanged Value21/Call26/Program29, physical0\n",faults);return 0;
+    puts("Independent full wire33/81 group KAT2/current write/read/Lowered m2,m0/14forged+old64/65 early reject PASS");
+    printf("All group packet compiler faults=%zu; current Value27/Call29/Program36, physical0\n",faults);return 0;
 }

@@ -1,0 +1,4 @@
+fn step(value:i64)->i64 { return value }
+fn finish(value:i64)->i64 { return step(value) }
+fn read<T:{n:i64,items:(i64,i64)}>(value:T)->i64 { const {items:(a,b),n}=value; return a+b+n }
+export fn referenceAnswer()->i64 { return finish(read({extra:true,items:(1,2),n:39})) }

@@ -23,8 +23,8 @@ static void default_tuple_u32(uint8_t *bytes,uint32_t n) {
 static void default_tuple_case(bool constructor,unsigned mode) {
     XrXirType symbolic[]={XR_XIR_TYPE_PARAMETER_BASE,XR_XIR_TYPE_PARAMETER_BASE+1};
     XrXirType actual[]={XR_XIR_I64,XR_XIR_STRING,XR_XIR_BOOL,XR_XIR_F64,XR_XIR_I64,XR_XIR_STRING,XR_XIR_BOOL,XR_XIR_F64};
-    XrXirConstraint parent[2]={{XR_XIR_CONSTRAINT_SENDABLE,NULL,0},{0}};
-    XrXirConstraint owner[4]={{XR_XIR_CONSTRAINT_SENDABLE,NULL,0},{0},{XR_XIR_CONSTRAINT_SENDABLE,NULL,0},{0}};
+    XrXirConstraint parent[2]={{.markers=XR_XIR_CONSTRAINT_SENDABLE,.interfaces=NULL,.interface_count=0},{0}};
+    XrXirConstraint owner[4]={{.markers=XR_XIR_CONSTRAINT_SENDABLE,.interfaces=NULL,.interface_count=0},{0},{.markers=XR_XIR_CONSTRAINT_SENDABLE,.interfaces=NULL,.interface_count=0},{0}};
     XrXirConstraint helper[4];memcpy(helper,owner,sizeof(owner));
     XrXirNominalDeclaration nominal={.module={"root",4},.name={"Box",3},.constraints=parent,.parameter_count=2,.kind=XR_XIR_NOMINAL_STRUCT};
     XrXirNominalTable nt={&nominal,1,NULL};

@@ -1,0 +1,2 @@
+fn read<T:{n:i64}>(value:ref T)->i64 { value.n=42; return value.n }
+export fn referenceAnswer()->i64 { var value={n:1}; return read(ref value) }

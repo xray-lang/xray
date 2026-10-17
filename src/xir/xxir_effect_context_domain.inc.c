@@ -118,7 +118,8 @@ static XrXirStatus effect_terms_domain_match(EffectTerms *pool, const XrXirTypes
     for (uint32_t i=0;interfaces && i<interfaces->count && status==XR_XIR_OK;++i) {
         const XrXirInterfaceDeclaration *a=&interfaces->declarations[i],*b=&source->interfaces->declarations[i];
         status=effect_terms_domain_constraints(pool,source,a->constraints,b->constraints,a->parameter_count);
-        XrXirConstraint parents_a={0,a->parents,a->parent_count},parents_b={0,b->parents,b->parent_count};
+        XrXirConstraint parents_a={.interfaces=a->parents,.interface_count=a->parent_count};
+        XrXirConstraint parents_b={.interfaces=b->parents,.interface_count=b->parent_count};
         if (status==XR_XIR_OK) status=xr_xir_compile_constraint_records_match(pool->remaining,
             &pool->types,parents_a,source,parents_b,a->parameter_count);
         for (uint32_t m=0;m<a->method_count && status==XR_XIR_OK;++m) {
@@ -178,7 +179,8 @@ static XrXirStatus effect_terms_projected_domain(EffectTerms *pool, const XrXirT
             for (uint32_t p=0;p<original->parameter_count && status==XR_XIR_OK;++p) {
                 if (!original->constraints || !projected->constraints ||
                     original->constraints[p].markers!=projected->constraints[p].markers ||
-                    projected->constraints[p].interfaces || projected->constraints[p].interface_count)
+                    projected->constraints[p].interfaces || projected->constraints[p].interface_count ||
+                    projected->constraints[p].structural_requirements || projected->constraints[p].structural_count)
                     return XR_XIR_BAD_TYPE;
             }
             for (uint32_t f=0;f<original->field_count && status==XR_XIR_OK;++f)

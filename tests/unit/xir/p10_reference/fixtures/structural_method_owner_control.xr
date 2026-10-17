@@ -1,0 +1,2 @@
+struct Reader<A> { read<T>(value:T)->i64 { return 42 } }
+export fn referenceAnswer()->i64 { return Reader<i64>{}.read({extra:true,n:1}) }

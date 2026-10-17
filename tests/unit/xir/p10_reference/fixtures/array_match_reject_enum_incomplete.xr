@@ -1,0 +1,3 @@
+enum Packet{Data{items:Array<i64>},Empty}
+fn bad(packet:Packet)->i64{return match(packet){Packet.Data{items:[]}->0,Packet.Empty->0}}
+export fn referenceAnswer()->i64{return 42}

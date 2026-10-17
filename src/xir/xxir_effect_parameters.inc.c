@@ -278,7 +278,7 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     case XR_XIR_NULLABLE_SOME:
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
     case XR_XIR_CELL_READ: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_PLACE_READ:
-    case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD:
+    case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT:
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_COPY);
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {
         XrXirType type;XrXirStatus status=effect_parameter_type(flow,op->args[0],&type);

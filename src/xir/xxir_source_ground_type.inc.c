@@ -106,6 +106,15 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
             return source_fail(ctx,member,XR_XIR_BAD_TYPE,"Tuple field index exceeds its ordered arity");
         *output=(SourceExpectedType){true,tuple->parameters[field].type,false, false};return true;
     }
+    if (receiver.present) {
+        SourceStructuralField field={0};bool found=false;
+        if (!source_structural_field_select(ctx,member,receiver.type,member->as.member_access.name,&field,&found)) return false;
+        if (found) {
+            const XrXirTypeNode *signature=call ? xr_xir_callable_signature(&ctx->types,field.type) : NULL;
+            if (!call || signature) *output=(SourceExpectedType){true,call ? signature->result : field.type,false,false};
+            return true;
+        }
+    }
     if (!receiver.present || !xr_xir_type_is_nominal(&ctx->types,receiver.type)) return true;
     const XrXirTypeNode *found=xr_xir_type_node(&ctx->types,receiver.type);
     SourceSubstitution substitution={found->nominal.arguments,found->nominal.argument_count};

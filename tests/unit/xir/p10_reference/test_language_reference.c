@@ -97,6 +97,15 @@ static void execute_answer(XrXirProgram *program, uint32_t entry, int64_t expect
     }
 }
 
+static void source_ledger_checkpoint(SourceFixtureOwner *owner,const char *label) {
+    if (!getenv("XR_SOURCE_STAGE_DIAGNOSTICS")) return;
+    XrCompileResourceStats stats={0};
+    CHECK(xr_compile_resources_stats(owner->context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
+    fprintf(stderr,"source stage=%s live=%llu baseline=%llu allocations=%llu work=%llu\n",label,
+        (unsigned long long)stats.live_bytes,(unsigned long long)owner->baseline.live_bytes,
+        (unsigned long long)stats.allocation_count,(unsigned long long)stats.work);
+}
+
 static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, XrCompilerSession *session, int64_t expected, const char *output, unsigned suspensions) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(source->checked, &packet, NULL) == XR_XIR_OK);
@@ -111,6 +120,7 @@ static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, 
         CHECK(xr_xir_compile_types_structure_verify(&owner->context,view->types)==XR_XIR_OK);
         xr_xir_compile_source_snapshot_free(record_snapshot);
     }
+    source_ledger_checkpoint(owner,"source-producers-destroyed");
     XrXirArtifact *decoded = NULL, *specialized = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&owner->context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
@@ -121,6 +131,7 @@ static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, 
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(specialized, &target, &lowered, &diagnostic) == XR_XIR_OK && lowered);
     xr_xir_compile_artifact_free(specialized);
+    source_ledger_checkpoint(owner,"lowered-only");
     if (output) {
         XrXirCSource emitted = {0};
         CHECK(xr_xir_compile_emit_c(lowered, "language_reference", 1048576, &emitted) == XR_XIR_OK);
@@ -129,9 +140,11 @@ static void accept_packet(SourceFixtureOwner *owner, XrXirSourceResult *source, 
         CHECK(file && fwrite(emitted.text, 1, emitted.length, file) == emitted.length && !fclose(file));
         xr_xir_compile_c_source_free(&emitted);
     }
+    source_ledger_checkpoint(owner,"emission-destroyed");
     uint32_t entry = answer_entry(lowered); XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
     execute_answer(program, entry, expected, suspensions);
+    source_ledger_checkpoint(owner,"all-consumers-destroyed");
 }
 
 int main(int argc, char **argv) {

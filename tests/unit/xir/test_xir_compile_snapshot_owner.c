@@ -86,7 +86,7 @@ static XrXirStatus snapshot_fixture(const XrXirCompileContext *context, XrXirSou
     node.parameters=&parameter_type; node.parameter_count=1; node.result=XR_XIR_STRING;
     XrXirType argument=XR_XIR_I64;
     XrXirInterfaceApplication application={0,&argument,1};
-    XrXirConstraint constraint={0,&application,1};
+    XrXirConstraint constraint={.markers=0,.interfaces=&application,.interface_count=1};
     uint32_t binder=XR_XIR_BINDER_TYPE;
     declaration.generic_constraints=&constraint; declaration.generic_parameter_count=1;
     declaration.type_parameter_kinds=&binder;

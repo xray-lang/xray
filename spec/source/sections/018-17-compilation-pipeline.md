@@ -868,7 +868,7 @@ native声明编号与XIR类型种类是独立的编号域。Array/string/Atomic/
 
 匿名记录使用独立XIR kind11，具名类型及Tuple的身份保持独立。TypeNode按kind选择nominal或record描述；记录描述拥有按规范序排列的标识符字段名，普通parameter表保存对应准确字段类型，mode为0。空记录保留独立身份，不变成Unit。字段名称在克隆、Checked重读、类型接收、特化、查询快照和生成C中由接收方拥有；不得保留AST字符串或读取非活动union成员。
 
-现行统一身份为Checked schema32/semantic80、Value26、Call29、Program35，新增RECORD_NEW/RECORD_FIELD/RECORD_SET操作。公共TypeNode保持72字节、8字节对齐；RecordType为8字节，描述偏移32。独立全布局模型包含385项，旧381项保持原序，新增四项描述记录布局。完整旧32/79包与SDK前像继续在入口拒绝，不提供旧reader或别名。完整独立字段模型产生新向量，不能用产品writer刷新预期。
+记录执行接入时使用Checked schema32/semantic80、Value26、Call29、Program35及RECORD_NEW/RECORD_FIELD/RECORD_SET操作；结构字段扩展后的现行身份见17.73。公共TypeNode保持72字节、8字节对齐；RecordType为8字节，描述偏移32。独立全布局模型包含385项，旧381项保持原序，新增四项描述记录布局。完整旧32/79包与SDK前像继续在入口拒绝，不提供旧reader或别名。完整独立字段模型产生新向量，不能用产品writer刷新预期。
 
 Source已接准确记录类型/别名、标识符字面量、字段简写、展开、点读写、泛型值参数、记录数组及当前可重建的编译期结果。字段表达式按书写顺序各求值一次，再按规范序构造；显式重复字段拒绝。字符串键由parser拒绝，Map保留独立语法。构造、字段路径、Cell根与Array内记录沿现有失败原子发布/COW；旧快照不被新写入污染。Tuple公开操作不能准入记录，记录操作也不能准入Tuple。逻辑Unit字段不授予const根写权限。函数字段沿原唯一Final与显式FUNCTION_WEAKEN保持声明接收上界，不从形状或存储推导执行权限。
 
@@ -877,6 +877,18 @@ Source已接准确记录类型/别名、标识符字面量、字段简写、展�
 普通库状态族和闭合类型接收显式包含Record，复用完整Checked复验、拥有式字段名及准确类型重定位。真实Source多代用例使出生记录258在当前池成为259：记录同时携带Array与捕获Cell的函数，当前代COW修改副本后调用原出生函数；VM、真实生成C和双向mixed分别保42、43、失败候选写44与撤销后45。另一路从函数字段返回闭包，保发布前与foreign Instance拒绝、发布后调用、Source与外部Program引用销毁后的继续执行及最终capture44。该有限Program执行证明不替代完整结构约束、视图借用来源或资源/取消/安全资格。
 
 VM、真实生成C及双向mixed已覆盖上述有限路径，真实Checked独立包另覆盖空记录、Unit字段、开放泛型描述和直接字段替换。编译期记录沿原预算、类型准入、字段路径与拥有式重建，不产生第二evaluator。结构约束的定义处只读字段/借用来源、完整模式、其余跨池字段/捕获族、全部FI/预算/取消/安全与完整provider资格仍未完成。Readonly字段注解当前明确拒绝，仍是待实现的合法目标。普通Iterable/Lengthable/FromLiteral、union、views及完整公共REPL不由此获得资格。
+
+### 17.73 定义处绑定的结构字段要求
+
+泛型结构约束保存独立的拥有式结构要求列表，不构造伪接口。每项引用本类型池、原声明绑定器作用域中的准确Record形状；策略必须为显式的只读/原接收者来源策略，零值及未知策略拒绝。具名struct/class不能作为满足该要求的实际类型。多个要求的同名字段类型须准确一致；额外字段不授予方法、用户接口、Hashable或整个T的Sendable。
+
+定义处字段读取绑定具体要求序号及该要求中的规范字段序号，结果类型来自声明中的准确字段类型表达式。FIELD_REQUIREMENT编号157、OP_COUNT为158，仅可出现在Built/Checked；Unit字段保留逻辑值验证。used与unused非法泛型体均须在特化前拒绝，实际参数的额外字段不得修补越权访问。定义处只读沿值语义字段传播；class身份处按普通规则停止，字段访问、模块可见性和ref权限仍分别检查。
+
+特化只按已绑定要求选字段，用规范名称在实际Record中重定位，再产生现行RECORD_FIELD。实例来源接收独立复验原要求、策略、名称和准确类型替换；不能仅接受opcode变化或同一字段序号。Lowered、VM和C后端不增加结构字段动态解释器，唯一Final只增加必要的类型/操作归纳，函数字段的完整声明上界保持。
+
+现行身份为Checked schema33/semantic81、Value27、Call29、Program36。XrXirConstraint大小40、对齐8，结构列表指针偏移24、数量偏移32；要求项大小8、对齐4，shape/policy偏移0/4。独立SDK全字段模型为396项，原385项保持原序，再追加完整约束记录与要求项的11项布局事实。完整旧32/80输入及旧SDK必须早拒，不提供旧reader、别名或迁移旗标；完整新模型明确编码每个结构列表，包括空列表和递归provenance。产品writer不产生独立预期。
+
+当前源码测试覆盖标量/String、多个要求、别名与泛型转发、Array/Fn/Unit、编译期计算以及class边界；每项仍须通过包拥有关系、VM、真实生成C、双向mixed及相应完整资源和安全门，构建本身不授予完整资格。准确Record的readonly字段注解、Slice/MutSlice及其借用来源、完整模式和其余普通库协议继续保留各自完成条件，不得由默认只读策略推断完成。
 
 <!-- /xr-spec:cn -->
 
@@ -1857,7 +1869,7 @@ Prepared fields now feed exact record types, Source construction and canonical l
 
 Anonymous records use independent XIR kind11; named types and Tuples retain distinct identities. A TypeNode selects its nominal or record descriptor by kind. The record owns canonical identifier names and stores corresponding exact field types with mode0 in the ordinary parameter table. An empty record remains distinct from Unit. Cloning, Checked reading, type receiving, specialization, query snapshots and generated C own received name bytes; no AST strings or inactive union members may be retained or read.
 
-The current unified identity is Checked schema32/semantic80, Value26, Call29 and Program35, with RECORD_NEW/RECORD_FIELD/RECORD_SET operations. Public TypeNode remains72 bytes aligned8; RecordType is8 bytes and its descriptor offset is32. The independent full layout model contains385 rows, retaining the original381 in order and appending four record measurements. Complete old32/79 packets and SDK preimages reject at entry without an old reader or alias. Complete independent field models derive new vectors; product writer output never refreshes expectations.
+Record execution introduced Checked schema32/semantic80, Value26, Call29 and Program35, with RECORD_NEW/RECORD_FIELD/RECORD_SET operations; Section17.73 defines the current structural-field extension. Public TypeNode remains72 bytes aligned8; RecordType is8 bytes and its descriptor offset is32. The independent full layout model contains385 rows, retaining the original381 in order and appending four record measurements. Complete old32/79 packets and SDK preimages reject at entry without an old reader or alias. Complete independent field models derive new vectors; product writer output never refreshes expectations.
 
 Source admits exact record types and aliases, identifier literals, field shorthand, spreads, dot reads and writes, generic value arguments, record arrays and currently reconstructible compiler-execution results. Each expression evaluates once in spelling order before canonical construction; duplicate explicit fields reject. The parser rejects quoted keys, while Map retains its separate syntax. Construction, field paths, Cell roots and records inside Arrays use existing failure-atomic publication and COW; writes preserve earlier snapshots. Public Tuple operations reject records and record operations reject Tuples. Logical Unit fields grant no mutation of a const root. Function fields retain declared receiving bounds through the unique Final and explicit FUNCTION_WEAKEN; shape and storage grant no execution authority.
 
@@ -1866,5 +1878,17 @@ Deep admission first authenticates a boxed child against its parent field declar
 Ordinary library state and closed-type admission explicitly include Record, preserving complete Checked verification, owned names and exact type relocation. Real Source generations place the birth record at258 and its current counterpart at259. The record carries an Array and a Cell-capturing function: the current generation mutates a COW copy and invokes the actual birth function. VM, real generated C and both mixed directions independently preserve42,43,failed-candidate write44 and retry45 after abort. A separate field-return path preserves pending and foreign-Instance refusal, published calls, execution after Source and external Program references are destroyed, and final capture44. This bounded Program execution proof does not replace structural constraints, view origins or full resource, cancellation and safety qualification.
 
 VM, actual generated C and both mixed directions cover these bounded paths. Independent complete Checked packets additionally cover empty records, Unit fields, open generic descriptions and direct replacement. Compiler execution uses the original budget, admission, field paths and owned reconstruction, without a second evaluator. Definition-time structural constraints with read-only fields and borrow origins, complete patterns, additional cross-arena field/capture families, all FI/budget/cancellation/safety and complete provider qualification remain unfinished. Readonly field annotations currently reject and remain required legal targets. Ordinary Iterable/Lengthable/FromLiteral, unions, views and complete public REPL execution receive no qualification from this extension.
+
+### 17.73 Declaration-bound structural field requirements
+
+Generic structural constraints own a separate requirement list rather than inventing an interface. Each entry names an exact Record shape in its owning type pool and original declaration binder scope. The explicit readonly/receiver-origin policy is mandatory; zero and unknown policies reject. Named struct/class actual types do not satisfy these requirements. Overlapping required fields have exactly equal types. Extra fields grant no methods, user interfaces, Hashable or whole-T Sendable authority.
+
+Field reads bind a requirement ordinal and its canonical field ordinal at the generic definition. Their result uses the exact declared field type expression. FIELD_REQUIREMENT is157 and OP_COUNT is158; it exists only in Built/Checked. Unit fields retain logical-value admission. Invalid used and unused generic bodies reject before specialization, and extra actual fields cannot repair an unauthorized selection. Readonly propagates through value-semantic fields and stops at class identity under ordinary rules; access, module visibility and ref permissions remain independent.
+
+Specialization relocates the bound field by its canonical name in the actual Record, then emits ordinary RECORD_FIELD. Instance provenance independently checks the original requirement, policy, name and exact type substitution. An opcode change or matching ordinal alone is insufficient. Lowered, VM and C emission add no dynamic structural-field interpreter. The unique Final receives only necessary type/operation induction, preserving complete declared function bounds.
+
+The current identity is Checked schema33/semantic81, Value27, Call29 and Program36. XrXirConstraint is40 bytes aligned8, with structural-list pointer/count at24/32; a requirement is8 bytes aligned4 with shape/policy at0/4. The independent complete SDK model has396 rows, preserving all385 prior rows in order and appending11 complete constraint/requirement measurements. Complete old32/80 inputs and SDK identities must reject at entry without an old reader, alias or migration flag. Full new field models encode every structural list, including empty lists and recursive provenance. Product writer output never supplies independent expectations.
+
+Current source fixtures cover scalar/String fields, multiple requirements, aliases and generic forwarding, Array/Fn/Unit, compiler execution and class boundaries. Each still requires owned-packet, VM, actual generated C, both mixed directions and its full resource/safety gates; a successful build alone grants no complete qualification. Exact Record readonly annotations, Slice/MutSlice receiver origins, complete patterns and remaining ordinary protocols retain separate completion conditions.
 
 <!-- /xr-spec:en -->

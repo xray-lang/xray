@@ -137,6 +137,12 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     }
     if ((uint32_t)receiver.type >= XR_XIR_TYPE_PARAMETER_BASE &&
         (uint32_t)receiver.type < XR_XIR_TYPE_PARAMETER_LIMIT) {
+        SourceStructuralField field={0};bool found=false;
+        if (!source_structural_field_select(ctx,node,receiver.type,node->as.member_access.name,&field,&found)) return false;
+        if (found) {
+            if (type_arguments->count) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"field value has no method type parameters");
+            return source_structural_field_value(ctx,receiver,field,value);
+        }
         SourceRequirementValueRequest request = {receiver,type_arguments,expected};
         return source_requirement_value(ctx,node,&request,value);
     }

@@ -24,7 +24,7 @@ static void constraint_record_equality_cases(void) {
     XrXirType from_arg = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
     XrXirType to_arg = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
     XrXirInterfaceApplication from_app = {0,&from_arg,1}, to_app = {0,&to_arg,1};
-    XrXirConstraint from = {0,&from_app,1}, to = {0,&to_app,1};
+    XrXirConstraint from = {.markers=0,.interfaces=&from_app,.interface_count=1}, to = {.markers=0,.interfaces=&to_app,.interface_count=1};
     XrXirCompileContext budget = consumer_context_default();
     CHECK(xr_xir_compile_constraint_records_match(&budget, &from_types, from, &to_types, to, 1) == XR_XIR_OK);
     to_nodes[1].result = XR_XIR_I64; to_nodes[1].parameter_span = 0; budget = consumer_context_default();

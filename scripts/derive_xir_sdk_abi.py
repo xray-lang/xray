@@ -103,6 +103,9 @@ PUBLIC_STRUCTURES = [
  (4700, 'XrXirFunctionIdentity', [('module','u32'),('exported','u32'),('nominal_owner','u32'),('member_access','u32'),('cleanup_owner','u32'),('promises','u32'),('method_kind','u32'),('test_role','u32'),('test_timeout_seconds','u32'),('variadic','u32')]),
  (4600, 'XrXirSlot', [('module','u32'),('type','enum'),('mutable','u32'),('exported','u32'),('name','u32')]),
  (4800, 'XrXirRecordType', [('names','ptr')]),
+ (4900, 'XrXirConstraint', [('markers','u32'),('interfaces','ptr'),('interface_count','u32'),
+                            ('structural_requirements','ptr'),('structural_count','u32')]),
+ (5000, 'XrXirStructuralRequirement', [('shape','enum'),('policy','u32')]),
 ]
 
 # The tagged payload retains the nominal member's natural size/alignment.
@@ -173,7 +176,11 @@ def prepare(output: Path) -> None:
     record_rows=[row for row in rows if 4800<=row['id']<4804]
     assert len(record_rows)==4
     record_rows.sort(key=lambda row:row['id'])
-    rows=[row for row in rows if not (4700<=row['id']<4712 or 4800<=row['id']<4804)]+declaration_rows+record_rows
+    structural_ids=set(range(4900,4907))|set(range(5000,5004))
+    structural_rows=sorted((row for row in rows if row['id'] in structural_ids),key=lambda row:row['id'])
+    assert len(structural_rows)==11
+    rows=[row for row in rows if not (4700<=row['id']<4712 or 4800<=row['id']<4804 or row['id'] in structural_ids)]
+    rows+=declaration_rows+record_rows+structural_rows
     assert len({row['id'] for row in rows}) == len(rows), 'ABI field IDs must be unique'
     document = {'recipe':'xray:xir-runtime-abi-measurements:v1','rows':rows,
                 'basis':'Independent natural Windows x86_64 C layout: pointer/size_t/u64 align8, '

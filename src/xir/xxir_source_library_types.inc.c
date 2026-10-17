@@ -181,6 +181,15 @@ static bool source_library_constraints(SourceContext *ctx,const SourceLibraryUni
         if (!source_work(ctx,NULL)) return false;
         constraints[p].markers=input[p].markers;
         constraints[p].interface_count=input[p].interface_count;
+        uint32_t requirement_count=input[p].structural_count;
+        XrXirStructuralRequirement *requirements=requirement_count ? source_alloc(ctx,requirement_count,sizeof(*requirements)) : NULL;
+        if (requirement_count && !requirements) return false;
+        for (uint32_t r=0;r<requirement_count;++r) {
+            if (!source_work(ctx,NULL)) return false;
+            requirements[r]=input[p].structural_requirements[r];
+            if (!source_library_type(ctx,unit,requirements[r].shape,&requirements[r].shape)) return false;
+        }
+        constraints[p].structural_requirements=requirements;constraints[p].structural_count=requirement_count;
         if (!source_library_applications(ctx,unit,input[p].interfaces,input[p].interface_count,
             &constraints[p].interfaces)) return false;
     }

@@ -15,8 +15,8 @@
 #include "xir/xxir_types.h"
 #include "xir_source_fixture_owner.h"
 static void generic_storage_cases(void) {
-    XrXirConstraint facts[2]={{XR_XIR_CONSTRAINT_SENDABLE,NULL,0},{0}};
-    XrXirConstraint requirements[2]={{0},{XR_XIR_CONSTRAINT_SENDABLE,NULL,0}};
+    XrXirConstraint facts[2]={{.markers=XR_XIR_CONSTRAINT_SENDABLE,.interfaces=NULL,.interface_count=0},{0}};
+    XrXirConstraint requirements[2]={{0},{.markers=XR_XIR_CONSTRAINT_SENDABLE,.interfaces=NULL,.interface_count=0}};
     XrXirGeneric generic={0}; generic.constraints=facts; generic.parameter_count=2;
     XrXirFunction function={0};
     XrXirNominalDeclaration declarations[2]={0};

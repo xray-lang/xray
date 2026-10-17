@@ -9,6 +9,7 @@
 #include "xxir_constraints.h"
 #include "xxir_compile_memory.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
@@ -44,8 +45,10 @@ XrXirStatus xr_xir_compile_interface_applications_copy_verified(const XrXirCompi
 }
 void xr_xir_compile_constraint_array_free(XrXirConstraint *constraints, uint32_t count) {
     if (!constraints) return;
-    for (uint32_t i = 0; i < count; ++i)
+    for (uint32_t i = 0; i < count; ++i) {
         xr_xir_compile_interface_applications_free((XrXirInterfaceApplication *)constraints[i].interfaces, constraints[i].interface_count);
+        xr_compile_resources_free((void *)constraints[i].structural_requirements);
+    }
     xr_compile_resources_free(constraints);
 }
 XrXirStatus xr_xir_compile_constraint_array_copy_verified(const XrXirCompileContext *compile_context, const XrXirConstraint *source, uint32_t count, XrXirConstraint **output) {
@@ -63,7 +66,19 @@ XrXirStatus xr_xir_compile_constraint_array_copy_verified(const XrXirCompileCont
         XrXirInterfaceApplication *applications = NULL;
         XrXirStatus status = xr_xir_compile_interface_applications_copy_verified(compile_context, source[i].interfaces, source[i].interface_count, &applications);
         if (status != XR_XIR_OK) { xr_xir_compile_constraint_array_free(copy, count); return status; }
-        copy[i] = (XrXirConstraint){source[i].markers, applications, source[i].interface_count};
+        copy[i] = (XrXirConstraint){.markers=source[i].markers, .interfaces=applications,
+            .interface_count=source[i].interface_count};
+        if (!!source[i].structural_requirements != !!source[i].structural_count) {
+            xr_xir_compile_constraint_array_free(copy,count); return XR_XIR_BAD_STRUCTURE;
+        }
+        uint64_t bytes=(uint64_t)source[i].structural_count * sizeof(*source[i].structural_requirements);
+        if (bytes>SIZE_MAX) {xr_xir_compile_constraint_array_free(copy,count);return XR_XIR_BUDGET;}
+        copy[i].structural_requirements=xir_compile_copy(compile_context,source[i].structural_requirements,
+            (size_t)bytes,&allocation_status);
+        if (bytes && !copy[i].structural_requirements) {
+            xr_xir_compile_constraint_array_free(copy,count);return allocation_status;
+        }
+        copy[i].structural_count=source[i].structural_count;
     }
     *output = copy; return XR_XIR_OK;
 }
@@ -94,12 +109,15 @@ XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *c
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
-    if (!budget || (!!from.interfaces != !!from.interface_count) || (!!to.interfaces != !!to.interface_count))
+    if (!budget || (!!from.interfaces != !!from.interface_count) || (!!to.interfaces != !!to.interface_count) ||
+        (!!from.structural_requirements != !!from.structural_count) ||
+        (!!to.structural_requirements != !!to.structural_count))
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
 
-    if (from.markers != to.markers || from.interface_count != to.interface_count) return XR_XIR_BAD_TYPE;
-    if (!from.interface_count) return XR_XIR_OK;
+    if (from.markers != to.markers || from.interface_count != to.interface_count ||
+        from.structural_count != to.structural_count) return XR_XIR_BAD_TYPE;
+    if (!from.interface_count && !from.structural_count) return XR_XIR_OK;
     if (parameter_count > XR_XIR_TYPE_PARAMETER_LIMIT - XR_XIR_TYPE_PARAMETER_BASE) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes = (uint64_t)parameter_count * sizeof(XrXirType);
     if (bytes > SIZE_MAX ||!xir_compile_work(budget, parameter_count)) return XR_XIR_BUDGET;
@@ -115,6 +133,16 @@ XrXirStatus xr_xir_compile_constraint_records_match(const XrXirCompileContext *c
         status = constraint_record_identity(from_types,a,to_types,b,budget);
         for (uint32_t p = 0; p < a->argument_count && status == XR_XIR_OK; ++p)
             status = xr_xir_compile_type_substitution_matches_between(budget, from_types, to_types, parameters, parameter_count, a->arguments[p], b->arguments[p]);
+    }
+    for (uint32_t i=0;i<from.structural_count && status==XR_XIR_OK;++i) {
+        if (!xir_compile_work(budget,1)) {status=XR_XIR_BUDGET;break;}
+        const XrXirStructuralRequirement *a=&from.structural_requirements[i],*b=&to.structural_requirements[i];
+        if (a->policy!=b->policy || a->policy!=XR_XIR_STRUCTURAL_READONLY_RECEIVER ||
+            !xr_xir_record_signature(from_types,a->shape) || !xr_xir_record_signature(to_types,b->shape)) {
+            status=XR_XIR_BAD_TYPE;break;
+        }
+        status=xr_xir_compile_type_substitution_matches_between(budget,from_types,to_types,parameters,
+            parameter_count,a->shape,b->shape);
     }
     xr_compile_resources_free(parameters);  return status;
 }

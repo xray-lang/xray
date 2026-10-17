@@ -26,7 +26,7 @@ static void generic_runtime_retiring(void *pointer);
 #include "xir_runtime_allocations.h"
 #undef XIR_RUNTIME_BEFORE_FREE
 #include "xir_generic_fixture.h"
-#include "xir_error_marker80_golden.h"
+#include "xir_error_marker81_golden.h"
 #define error_marker73_previous error_marker73_via74_previous
 #include "xir_error_marker74_golden.h"
 #undef error_marker73_previous
@@ -316,17 +316,17 @@ static void error_marker_definition(void) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     _Static_assert(XR_XIR_THROW==30 && XR_XIR_TYPE_PARAMETER_BASE==65536u &&
         XR_XIR_CONSTRAINT_ERROR==2u,"independent ERROR definition fields");
-    CHECK(packet.length==sizeof(error_marker80_golden) &&
-        !memcmp(packet.bytes,error_marker80_golden,packet.length));
-    CHECK(!packet.bytes[ERROR_MARKER80_KINDS_PRESENT] &&
-        packet.bytes[ERROR_MARKER80_MARKER]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==sizeof(error_marker81_golden) &&
+        !memcmp(packet.bytes,error_marker81_golden,packet.length));
+    CHECK(!packet.bytes[ERROR_MARKER81_KINDS_PRESENT] &&
+        packet.bytes[ERROR_MARKER81_MARKER]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_compile_checked_read(suite_context,error_marker73_previous,
         sizeof(error_marker73_previous),&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
     for (unsigned i=0;i<sizeof(forged);++i) {
-        packet.bytes[ERROR_MARKER80_MARKER]=forged[i]; rehash_generic(&packet);
+        packet.bytes[ERROR_MARKER81_MARKER]=forged[i]; rehash_generic(&packet);
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
     xr_xir_compile_checked_packet_free(&packet);

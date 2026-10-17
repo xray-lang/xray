@@ -1,0 +1,2 @@
+fn size(items:Array<()>)->i64{return len(items)}
+export fn referenceAnswer()->i64{return 42}

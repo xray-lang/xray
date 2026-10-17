@@ -1,0 +1,2 @@
+fn read<T:{inner:{n:i64}}>(value:T)->i64 { var copy=value.inner; copy.n=42; return copy.n + value.inner.n - 7 }
+export fn referenceAnswer()->i64 { return read({extra:true,inner:{n:7}}) }

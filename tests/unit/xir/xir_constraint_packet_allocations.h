@@ -14,7 +14,7 @@ static void constraint_copy_allocation_failures(void) {
     for (size_t site = 0; site <= sites; ++site) {
         XrXirType arguments[] = {XR_XIR_I64,XR_XIR_STRING};
         XrXirInterfaceApplication applications[] = {{3,arguments,2},{4,NULL,0}};
-        XrXirConstraint constraints[] = {{0,applications,2},{XR_XIR_CONSTRAINT_SENDABLE,applications,2},{0}};
+        XrXirConstraint constraints[] = {{.markers=0,.interfaces=applications,.interface_count=2},{.markers=XR_XIR_CONSTRAINT_SENDABLE,.interfaces=applications,.interface_count=2},{0}};
         AllocationCompileOwner owner={0};allocation_compile_owner_new(&owner,&allocation_compile_limits);
         allocation_calls = 0; fail_at = site ? site - 1 : SIZE_MAX;
         XrXirConstraint *copy=NULL;

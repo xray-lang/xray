@@ -116,7 +116,7 @@ static void method_owner_cases(void) {
     identities[2].method_kind = XR_XIR_STATIC_METHOD;
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_OK && checked); xr_xir_compile_artifact_free(checked); checked = NULL;
-    XrXirConstraint parent_condition = {XR_XIR_CONSTRAINT_SENDABLE,NULL,0};
+    XrXirConstraint parent_condition = {.markers=XR_XIR_CONSTRAINT_SENDABLE,.interfaces=NULL,.interface_count=0};
     nominal[0].constraints = &parent_condition;
     CHECK(xir_fixture_check(&stage_context, &module, &checked, NULL) == XR_XIR_BAD_TYPE && !checked);
     constraints[0].markers = XR_XIR_CONSTRAINT_SENDABLE;

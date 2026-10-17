@@ -14,7 +14,7 @@ static void constraint_query_allocations(void) {
         for(size_t site=allocation_first();allocation_more(site,sites);site=allocation_next(site)) {
             XrXirType argument = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
             XrXirInterfaceApplication application = {0,&argument,1};
-            XrXirConstraint constraint = {mixed ? XR_XIR_CONSTRAINT_SENDABLE : 0,&application,1};
+            XrXirConstraint constraint = {.markers=mixed ? XR_XIR_CONSTRAINT_SENDABLE : 0,.interfaces=&application,.interface_count=1};
             XrXirSourceDeclaration declaration = {0}; declaration.name = "generic";
             declaration.generic_constraints = &constraint; declaration.generic_parameter_count = 1;
             XrXirNominalDeclaration nominal = {

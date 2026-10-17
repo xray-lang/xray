@@ -1,0 +1,5 @@
+enum Event { Data {row:{a:bool,b:bool}}, Empty }
+fn bad(value:Event)->i64 {
+ return match(value) { Event.Data {row:{a:true,b:true}}->1, Event.Data {row:{a:false,b:false}}->2, Event.Empty->3 }
+}
+export fn referenceAnswer()->i64 { return 42 }

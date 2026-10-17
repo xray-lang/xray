@@ -71,7 +71,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_ARRAY_WITH_CAPACITY:
     case XR_XIR_ARRAY_RESERVE:
     case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW:
-    case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD:
+    case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT:
     case XR_XIR_NULLABLE_NONE:
     case XR_XIR_NULLABLE_SOME:
     case XR_XIR_NULLABLE_IS_SOME:

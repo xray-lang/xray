@@ -19,4 +19,7 @@
 #include "retired_type_packets_part4.h"
 #include "retired_type_packets_part5.h"
 #include "retired_type_packets_part6.h"
+#include "retired_type_packets_part7.h"
+#include "retired_type_packets_part8.h"
+#include "retired_type_packets_part9.h"
 #endif // RETIRED_TYPE_PACKETS_H

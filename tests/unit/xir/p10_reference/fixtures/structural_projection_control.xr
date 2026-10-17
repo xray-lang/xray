@@ -1,0 +1,3 @@
+struct Padding {}
+fn read<A>(value:{n:A})->A { return value.n }
+export fn referenceAnswer()->i64 { return read<i64>({n:42}) }

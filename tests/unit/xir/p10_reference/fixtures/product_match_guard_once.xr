@@ -1,0 +1,5 @@
+fn finish(value:i64)->i64 { return value }
+fn useUnit(value:())->i64 { return 2 }
+var guards:i64=0
+fn gate()->bool { guards+=1; return false }
+export fn referenceAnswer()->i64 { const answer=match((true,(),42)) { (true,unit,n),(_,unit,n) if(gate()) -> n+useUnit(unit)-2, _ -> 41 }; return finish(answer+guards) }

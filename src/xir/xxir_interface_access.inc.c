@@ -41,12 +41,19 @@ static XrXirStatus interface_parent_access(const XrXirModule *module,
 }
 static XrXirStatus interface_constraint_access(const XrXirModule *module, uint32_t owner,
     const XrXirConstraint *constraints, uint32_t count, XrXirCompileContext *remaining) {
-    for (uint32_t p = 0; p < count; ++p)
+    for (uint32_t p = 0; p < count; ++p) {
+        for (uint32_t r=0;r<constraints[p].structural_count;++r) {
+            if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
+            XrXirStatus status=xr_xir_compile_type_access(remaining,module,
+                module->declarations->modules[owner].initializer,constraints[p].structural_requirements[r].shape);
+            if (status!=XR_XIR_OK) return status;
+        }
         for (uint32_t a = 0; a < constraints[p].interface_count; ++a) {
             if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
             XrXirStatus status = interface_parent_access(module, owner, &constraints[p].interfaces[a], remaining);
             if (status != XR_XIR_OK) return status;
         }
+    }
     return XR_XIR_OK;
 }
 /* Descriptor and module structure must be verified before naming authority. */

@@ -92,6 +92,22 @@ static uint32_t source_predicate_marker(SourceContext *ctx, const char *name) {
 #undef XR_XIR_PREDICATE_ATOMIC_BOOLEAN
     return 0;
 }
+static bool source_structural_append(SourceContext *ctx,AstNode *node,
+    XrXirStructuralRequirement *requirements,uint32_t *count,XrXirStructuralRequirement requirement) {
+    for (uint32_t r=0;r<*count;++r) {
+        if (!source_work(ctx,node)) return false;
+        if (requirements[r].shape==requirement.shape && requirements[r].policy==requirement.policy) return true;
+    }
+    if (!source_work(ctx,node)) return false;
+    requirements[(*count)++]=requirement;return true;
+}
+static bool source_structural_constraints_check(SourceContext *ctx,AstNode *node,XrXirConstraint value) {
+    if (!value.structural_count) return true;
+    value.markers=0;value.interfaces=NULL;value.interface_count=0;
+    int count=0;(void)source_type_parameters(ctx,&count);
+    XrXirStatus status=xr_xir_compile_constraint_structure(&ctx->compile,&ctx->types,value,(uint32_t)count);
+    return status==XR_XIR_OK || source_fail(ctx,node,status,"structural fields require exact types and readonly receiver origins");
+}
 static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
     const XrGenericParam *parameter, XrXirConstraint *output) {
     if (!parameter || !parameter->name || !*parameter->name ||
@@ -100,6 +116,7 @@ static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
         (parameter->constraint_count && !parameter->constraints))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "generic parameter contract is not admitted");
     XrXirConstraint result = {0};
+    XrXirStructuralRequirement *requirements=NULL;
     XrXirInterfaceApplication *applications = parameter->constraint_count ?
         source_alloc(ctx, (uint32_t)parameter->constraint_count, sizeof(*applications)) : NULL;
     if (parameter->constraint_count && !applications) return false;
@@ -110,6 +127,19 @@ static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
             uint32_t marker = source_text_same(ctx, NULL, ref->name, "Sendable") ? XR_XIR_CONSTRAINT_SENDABLE :
                 source_text_same(ctx, NULL, ref->name, "Error") ? XR_XIR_CONSTRAINT_ERROR : source_predicate_marker(ctx,ref->name);
             if (marker) { result.markers |= marker; continue; }
+        }
+        SourceName *interface=ref && (ref->kind==XR_TREF_NAMED || ref->kind==XR_TREF_GENERIC) ?
+            source_interface_name(ctx,node,ref->name) : NULL;
+        if (ctx->diagnostic.status!=XR_XIR_OK) return false;
+        if (!interface) {
+            XrXirType shape;
+            if (!source_type(ctx,(XrTypeRef *)ref,&shape)) return false;
+            if (!xr_xir_type_is_record(&ctx->types,shape))
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"structural constraints require an anonymous Record shape");
+            if (!requirements) requirements=source_alloc(ctx,(uint32_t)parameter->constraint_count,sizeof(*requirements));
+            if (!requirements || !source_structural_append(ctx,node,requirements,&result.structural_count,
+                (XrXirStructuralRequirement){shape,XR_XIR_STRUCTURAL_READONLY_RECEIVER})) return false;
+            continue;
         }
         XrXirInterfaceApplication application = {0};
         if (!source_interface_application(ctx, node, ref, &application)) return false;
@@ -122,6 +152,8 @@ static bool source_parameter_constraints(SourceContext *ctx, AstNode *node,
         if (!duplicate) applications[result.interface_count++] = application;
     }
     result.interfaces = result.interface_count ? applications : NULL;
+    result.structural_requirements=result.structural_count ? requirements : NULL;
+    if (!source_structural_constraints_check(ctx,node,result)) return false;
     *output = result; return true;
 }
 static bool source_constraint_conjunction(SourceContext *ctx, AstNode *node,
@@ -145,5 +177,17 @@ static bool source_constraint_conjunction(SourceContext *ctx, AstNode *node,
         if (!duplicate) applications[result.interface_count++] = *application;
     }
     result.interfaces = result.interface_count ? applications : NULL;
+    if (right.structural_count>UINT32_MAX-left.structural_count)
+        return source_fail(ctx,node,XR_XIR_BUDGET,"structural requirement count exhausted");
+    uint32_t structures=left.structural_count+right.structural_count;
+    XrXirStructuralRequirement *requirements=structures ? source_alloc(ctx,structures,sizeof(*requirements)) : NULL;
+    if (structures && !requirements) return false;
+    for (uint32_t r=0;r<structures;++r) {
+        XrXirStructuralRequirement requirement=r<left.structural_count ? left.structural_requirements[r] :
+            right.structural_requirements[r-left.structural_count];
+        if (!source_structural_append(ctx,node,requirements,&result.structural_count,requirement)) return false;
+    }
+    result.structural_requirements=result.structural_count ? requirements : NULL;
+    if (!source_structural_constraints_check(ctx,node,result)) return false;
     *output = result; return true;
 }

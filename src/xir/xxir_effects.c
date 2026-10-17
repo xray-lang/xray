@@ -381,7 +381,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
     case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
-    case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT:
         return EFFECT_SEED_LOCAL;
     default: return EFFECT_SEED_INVALID;
     }

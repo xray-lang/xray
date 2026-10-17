@@ -154,6 +154,22 @@ static bool source_root_instruction(SourceContext *ctx, uint32_t f, uint32_t i,
     case XR_XIR_ARRAY_GET:
         type = xr_xir_array_element(&ctx->types,source_root_operand(ctx,f,op->args[0])); break;
     case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: return source_root_tuple(ctx,f,i,changed);
+    case XR_XIR_FIELD_REQUIREMENT: {
+        XrXirType receiver=source_root_operand(ctx,f,op->args[0]);uint32_t id=(uint32_t)receiver;
+        const XrXirGeneric *generic=&ctx->generics[f];
+        if (id<XR_XIR_TYPE_PARAMETER_BASE || id>=XR_XIR_TYPE_PARAMETER_LIMIT ||
+            id-XR_XIR_TYPE_PARAMETER_BASE>=generic->parameter_count || !generic->constraints || op->immediate<0)
+            return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"structural flow lost its declaration binder");
+        const XrXirConstraint *constraint=&generic->constraints[id-XR_XIR_TYPE_PARAMETER_BASE];
+        uint64_t selected=(uint64_t)op->immediate;uint32_t r=(uint32_t)(selected>>32),field=(uint32_t)selected;
+        if (r>=constraint->structural_count || !constraint->structural_requirements ||
+            constraint->structural_requirements[r].policy!=XR_XIR_STRUCTURAL_READONLY_RECEIVER)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"structural flow lost its field requirement");
+        const XrXirTypeNode *shape=xr_xir_record_signature(&ctx->types,constraint->structural_requirements[r].shape);
+        if (!shape || field>=shape->parameter_count)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"structural flow lost its exact field");
+        type=shape->parameters[field].type;break;
+    }
     case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: {
         const XrXirTypeNode *tuple = xir_product_signature(&ctx->types,source_root_operand(ctx,f,op->args[0]));
         if (!tuple || (uint64_t)op->immediate >= tuple->parameter_count) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"tuple flow lost its field");

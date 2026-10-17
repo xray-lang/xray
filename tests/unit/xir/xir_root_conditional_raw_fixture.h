@@ -54,7 +54,7 @@ static void conditional_raw_fixture(ConditionalRawFixture *f, uint32_t mode) {
     f->interfaces=(XrXirInterfaceTable){&f->interface,1};
     f->types=(XrXirTypes){f->nodes,6,&f->nominals,&f->interfaces};
     f->application=(XrXirInterfaceApplication){0,NULL,0};
-    f->bound=(XrXirConstraint){0,&f->application,1};
+    f->bound=(XrXirConstraint){.markers=0,.interfaces=&f->application,.interface_count=1};
     f->method_parameters[0]=f->receiver;f->method_parameters[1]=(XrXirType)257;
     f->forward_parameters[0]=XR_XIR_TYPE_PARAMETER_BASE;f->forward_parameters[1]=(XrXirType)257;
     f->method_operands[0]=1;f->forward_operands[0]=f->caller_operands[0]=0;

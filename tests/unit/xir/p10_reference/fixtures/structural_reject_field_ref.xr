@@ -1,0 +1,3 @@
+fn change(value:ref i64) { value=42 }
+fn read<T:{n:i64}>(value:T)->i64 { change(ref value.n); return value.n }
+export fn referenceAnswer()->i64 { return read({n:1}) }

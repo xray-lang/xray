@@ -261,7 +261,7 @@ static void constraint_proof_interface_identity_work(void) {
     XrXirInterfaceTable interfaces = {&declaration,1};
     XrXirTypes types = {&signature,1,NULL,&interfaces};
     XrXirInterfaceApplication application = {0,NULL,0};
-    XrXirConstraint constraints[COUNT] = {0}; constraints[0] = (XrXirConstraint){0,&application,1};
+    XrXirConstraint constraints[COUNT] = {0}; constraints[0] = (XrXirConstraint){.markers=0,.interfaces=&application,.interface_count=1};
     XrXirGeneric generic = {constraints,COUNT,NULL,0, NULL}; XrXirFunction function = {0};
     XrXirModule module = {XR_XIR_BUILT,&function,1,NULL,&generic,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,0,0}};

@@ -105,7 +105,7 @@ typedef struct XrAttribute {
     uint32_t derive_flags;
 } XrAttribute;
 
-// Destructuring pattern structure (flat only, no nesting)
+// Parser-owned recursive product binding pattern.
 typedef struct XrDestructurePattern {
     PatternType type;
 
@@ -128,6 +128,8 @@ typedef struct XrDestructurePattern {
             uint32_t symbol_id;
         } identifier;
     } as;
+    /* An object field selection is distinct from the local binding token. */
+    XrNameSpan field_span;
     /* Parser-owned exact binding token span; never grants type permissions. */
     int line, column, end_line, end_column;
 } XrDestructurePattern;

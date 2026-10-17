@@ -1,0 +1,4 @@
+fn read<T:{n:i64}>(value:T)->i64 { return value.n }
+fn prepare()->i64 { return read({extra:true,n:42}) }
+fn runtimeIdentity(value:i64)->i64 { return value }
+export fn referenceAnswer()->i64 { const result=comptime prepare(); return runtimeIdentity(result) }

@@ -1,0 +1,4 @@
+fn finish(value:i64)->i64 { return value }
+var calls:i64=0
+fn make()->{z:i64,n:i64} { calls+=1; return {z:7,n:35} }
+export fn referenceAnswer()->i64 { const answer=match(make()) { {n:35,z:value}->value+34, _->0 }; return finish(answer+calls) }

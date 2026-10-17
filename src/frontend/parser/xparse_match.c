@@ -108,6 +108,7 @@ static AstNode *parse_object_pattern(Parser *parser) {
     } while (0);
 
     char **field_names = NULL;
+    XrNameSpan *field_name_spans = NULL;
     AstNode **patterns = NULL;
     int count = 0;
     int capacity = 0;
@@ -140,6 +141,8 @@ static AstNode *parse_object_pattern(Parser *parser) {
             /* Shorthand `{ x }`: bind field `x` to a fresh local `x`. */
             AstNode *var = xr_ast_variable(parser->compiler_session, field, name_tok.line);
             if (!xr_parser_healthy(parser)) return NULL;
+            var->column=name_tok.column;var->end_line=name_tok.line;
+            var->end_column=name_tok.column+name_tok.length;
             do {
                 sub = xr_ast_pattern_literal(parser->compiler_session, var, name_tok.line);
                 if (!xr_parser_healthy(parser)) return NULL;
@@ -158,6 +161,11 @@ static AstNode *parse_object_pattern(Parser *parser) {
             AstNode **np = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
                                                         (size_t) capacity);
             if (!xr_parser_healthy(parser)) return NULL;
+            XrNameSpan *ns=(XrNameSpan *)ast_alloc_array(parser->compiler_session,sizeof(*ns),(size_t)capacity);
+            if (!xr_parser_healthy(parser)) return NULL;
+            if (old_capacity>0 && !ast_copy(parser->compiler_session,ns,field_name_spans,
+                sizeof(*ns)*(size_t)old_capacity)) return NULL;
+            field_name_spans=ns;
             if (old_capacity > 0) {
                 do { if (!ast_copy(parser->compiler_session, nf, field_names, sizeof(char *) * (size_t) old_capacity)) return NULL; } while (0);
                 do { if (!ast_copy(parser->compiler_session, np, patterns, sizeof(AstNode *) * (size_t) old_capacity)) return NULL; } while (0);
@@ -165,6 +173,7 @@ static AstNode *parse_object_pattern(Parser *parser) {
             field_names = nf;
             patterns = np;
         }
+        field_name_spans[count]=(XrNameSpan){name_tok.line,name_tok.column};
         field_names[count] = field;
         patterns[count] = sub;
         count++;
@@ -184,7 +193,9 @@ static AstNode *parse_object_pattern(Parser *parser) {
         xr_parser_consume(parser, TK_RBRACE, "expected '}' to close object pattern");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
-    return xr_ast_pattern_object(parser->compiler_session, field_names, patterns, count, line);
+    AstNode *result=xr_ast_pattern_object(parser->compiler_session,field_names,patterns,count,line);
+    if (!xr_parser_healthy(parser) || !result) return NULL;
+    result->as.pattern_object.field_name_spans=field_name_spans;return result;
 }
 
 /* Parse an array match pattern: `[a, b, ..rest]`. Positional elements use
@@ -204,6 +215,7 @@ static AstNode *parse_array_pattern(Parser *parser) {
     int capacity = 0;
     bool has_rest = false;
     char *rest_name = NULL;
+    AstNode *rest_binding = NULL;
 
     while (xr_parser_healthy(parser) && !xr_parser_check(parser, TK_RBRACKET) && !xr_parser_check(parser, TK_EOF)) {
         if (xr_parser_check(parser, TK_RANGE)) {
@@ -220,6 +232,10 @@ static AstNode *parse_array_pattern(Parser *parser) {
                 do {
                     rest_name = pattern_copy_token(parser, &rt);
                     if (!xr_parser_healthy(parser)) return NULL;
+                    rest_binding = xr_ast_variable(parser->compiler_session, rest_name, rt.line);
+                    if (!rest_binding || !xr_parser_healthy(parser)) return NULL;
+                    rest_binding->column=rt.column;rest_binding->end_line=rt.line;
+                    rest_binding->end_column=rt.column+rt.length;
                 } while (0);
             }
             has_rest = true;
@@ -267,8 +283,9 @@ static AstNode *parse_array_pattern(Parser *parser) {
         xr_parser_consume(parser, TK_RBRACKET, "expected ']' to close array pattern");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
-    return xr_ast_pattern_array(parser->compiler_session, patterns, count, has_rest, rest_name,
-                                line);
+    AstNode *result=xr_ast_pattern_array(parser->compiler_session,patterns,count,has_rest,rest_name,line);
+    if (result) result->as.pattern_array.rest_binding=rest_binding;
+    return result;
 }
 
 static AstNode *parse_adt_record_pattern(Parser *parser, AstNode *variant, int line) {
@@ -491,9 +508,20 @@ static AstNode *parse_pattern_single(Parser *parser) {
         } while (0);
         return NULL;
     }
+    Token first=parser->current;
     AstNode *result = parse_pattern_single_inner(parser);
     if (!xr_parser_healthy(parser)) return NULL;
     parser->recursion_depth--;
+    if (result) {
+        result->column=first.column;result->end_line=parser->previous.line;
+        result->end_column=parser->previous.column+parser->previous.length;
+        if (result->type==AST_PATTERN_LITERAL && result->as.pattern_literal.value &&
+            result->as.pattern_literal.value->type==AST_VARIABLE) {
+            AstNode *binding=result->as.pattern_literal.value;
+            binding->column=first.column;binding->end_line=first.line;
+            binding->end_column=first.column+first.length;
+        }
+    }
     return result;
 }
 

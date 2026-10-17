@@ -799,3 +799,11 @@ foreach(function_kind IN ITEMS call value)
     endforeach()
 endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/record.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/structural.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/product_patterns.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/product_match.cmake")
+
+include(${CMAKE_CURRENT_LIST_DIR}/array_match.cmake)

@@ -21,7 +21,7 @@ static const XrCompileResourceLimits limits={UINT64_C(67108864),UINT64_C(8388608
 static const XrXirType arguments[]={XR_XIR_I64,XR_XIR_STRING};
 static const uint32_t kinds[]={XR_XIR_BINDER_TYPE,XR_XIR_BINDER_RESULT_VARIABLE};
 static const XrXirInterfaceApplication application={0,arguments,2};
-static const XrXirConstraint constraints[]={{0,&application,1},{0}};
+static const XrXirConstraint constraints[]={{.markers=0,.interfaces=&application,.interface_count=1},{0}};
 static const XrXirGeneric generics[]={
     {constraints,2,arguments,2,kinds},{constraints,2,arguments,2,kinds}
 };

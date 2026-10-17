@@ -25,7 +25,7 @@ static bool source_native_task_declaration(SourceContext *ctx) {
     ctx->task_declaration = symbol.declaration;
     XrXirConstraint *constraints = source_alloc(ctx, 1, sizeof(*constraints));
     if (!constraints) return false;
-    *constraints = (XrXirConstraint) {XR_XIR_CONSTRAINT_SENDABLE, NULL, 0};
+    *constraints = (XrXirConstraint) {.markers=XR_XIR_CONSTRAINT_SENDABLE};
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
     record->native_identity = native->id; record->exported = true;
     record->generic_parameter_count = 1; record->generic_constraints = constraints;

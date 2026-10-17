@@ -41,6 +41,9 @@ static bool source_path_type(SourceContext *ctx, AstNode *node, XrXirType *type)
         if (step->type == AST_INDEX_GET) {
             *type = xr_xir_type_is_array(&ctx->types,*type) ? xr_xir_array_element(&ctx->types,*type) : XR_XIR_UNIT;
         } else {
+            SourceStructuralField selected={0};bool structural=false;
+            if (!source_structural_field_select(ctx,step,*type,step->as.member_access.name,&selected,&structural)) return false;
+            if (structural) {*type=selected.type;continue;}
             const XrXirTypeNode *container = xr_xir_type_node(&ctx->types,*type);
             if (container && container->kind == XR_XIR_TYPE_RECORD) {
                 uint32_t field;

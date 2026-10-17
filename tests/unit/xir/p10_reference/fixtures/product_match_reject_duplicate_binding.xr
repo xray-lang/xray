@@ -1,0 +1,4 @@
+fn bad(value:(i64,{n:i64}))->i64 {
+ return match(value) { (n,{n})->n }
+}
+export fn referenceAnswer()->i64 { return 42 }

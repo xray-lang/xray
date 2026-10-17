@@ -13,14 +13,18 @@ typedef struct SourceMatchPattern {
     AstNode *node, *binding, *literal;
     SourceEnumSelection selection;
     SourceName *symbol;
+    struct SourcePatternProduct *product;
     struct SourceMatchPattern **fields;
     XrXirType type;
     uint32_t count;
     bool any, boolean, truth;
-    bool interval, empty;
+    bool interval, empty, array;
+    uint32_t array_prefix;
     uint64_t low, high;
     int64_t literal_payload;
 } SourceMatchPattern;
+static bool source_match_pattern(SourceContext *,AstNode *,XrXirType,SourceMatchPattern *,uint32_t);
+#include "xxir_source_pattern_product.inc.c"
 static uint64_t source_pattern_integer_max(XrXirType type) {
     uint32_t width=xr_xir_integer_bits(type);
     return width==64?UINT64_MAX:(UINT64_C(1)<<width)-1;
@@ -40,6 +44,7 @@ static bool source_pattern_binding(AstNode *node) {
     return node && node->type == AST_PATTERN_LITERAL && node->as.pattern_literal.value &&
         node->as.pattern_literal.value->type == AST_VARIABLE;
 }
+static bool source_pattern_array(SourceContext *,AstNode *,XrXirType,SourceMatchPattern *,uint32_t);
 static bool source_pattern_field_types(SourceContext *ctx, XrXirType type, uint32_t variant,
     XrXirType **output, uint32_t *count) {
     XrXirNominalType nominal=xr_xir_type_node(&ctx->types,type)->nominal;
@@ -75,6 +80,9 @@ static bool source_match_pattern(SourceContext *ctx, AstNode *node, XrXirType ty
         if (source_pattern_binding(node)) out->binding=node->as.pattern_literal.value;
         return true;
     }
+    if (node->type==AST_PATTERN_ARRAY) return source_pattern_array(ctx,node,type,out,depth);
+    if (node->type==AST_PATTERN_TUPLE || node->type==AST_PATTERN_OBJECT)
+        return source_pattern_product(ctx,node,type,out,depth);
     AstNode *path=NULL; PatternAdtNode *payload=NULL;
     if (node->type==AST_PATTERN_ADT) {payload=&node->as.pattern_adt;path=payload->variant;}
     else if (node->type==AST_PATTERN_LITERAL) path=node->as.pattern_literal.value;

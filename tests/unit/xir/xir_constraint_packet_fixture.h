@@ -15,7 +15,7 @@
 static XrXirStatus constraint_packet_fixture(const XrXirCompileContext *context,uint32_t markers,XrXirArtifact **output) {
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInterfaceApplication requirement = {0,&parameter,1};
-    XrXirConstraint unconstrained = {0}, constraint = {markers,&requirement,1};
+    XrXirConstraint unconstrained = {0}, constraint = {.markers=markers,.interfaces=&requirement,.interface_count=1};
     XrXirInterfaceDeclaration interfaces[] = {
         {{"alpha",5},{"Base",4},1,&unconstrained,1,NULL,0,NULL,0},
         {{"alpha",5},{"Needs",5},1,&constraint,1,NULL,0,NULL,0}};

@@ -335,7 +335,7 @@ static void rp_conditional_known(void) {
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&one,.block_count=1,.instructions=&init,.instruction_count=1},
         {.name="conditional",.name_length=11,.result=XR_XIR_I64,.parameters=parameters,.parameter_count=2,
             .blocks=&three,.block_count=1,.instructions=ops,.instruction_count=3,.operands=operands,.operand_count=2}};
-    XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={0,&application,1};
+    XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={.markers=0,.interfaces=&application,.interface_count=1};
     XrXirGeneric generics[3]={{0}};generics[2].constraints=&constraint;generics[2].parameter_count=1;
     XrXirSourceModule source={"probe",5,NULL,0,1, 0};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};

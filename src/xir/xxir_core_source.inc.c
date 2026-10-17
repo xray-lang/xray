@@ -55,10 +55,12 @@ static bool source_core_contract(SourceContext *ctx) {
         owner->result != XR_XIR_UNIT || strcmp(owner->name,"assertEqual") || generic->parameter_count != 1 ||
         xr_xir_binder_kind(generic,0) != XR_XIR_BINDER_TYPE ||
         generic->constraints[0].markers != XR_XIR_CONSTRAINT_EQUAL || generic->constraints[0].interface_count ||
+        generic->constraints[0].structural_count || generic->constraints[0].structural_requirements ||
         binding->owner_kind != XR_XIR_DEFAULT_PARAMETER || binding->owner != 3 || binding->ordinal != 2 ||
         binding->function != 6 || helper->parameter_count || helper->parameters || helper->result != XR_XIR_STRING ||
         ctx->generics[6].parameter_count != 1 ||
         ctx->generics[6].constraints[0].markers != XR_XIR_CONSTRAINT_EQUAL ||
+        ctx->generics[6].constraints[0].structural_count || ctx->generics[6].constraints[0].structural_requirements ||
         node->as.function_decl.body->type != AST_BLOCK || node->as.function_decl.body->as.block.count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"core equality declaration is invalid");
     declaration = &declarations[ctx->bodies[3].declaration-1];

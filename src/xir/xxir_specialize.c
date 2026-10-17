@@ -13,6 +13,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_operand_roles.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
 #include "xxir_record_names_internal.h"
 #include "xxir_internal.h"
 #include "xxir_defaults_internal.h"
@@ -388,6 +389,41 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
     if (!spec_index_place(c, c->instance_index, c->index_capacity, (SpecIndexEntry){index + 1, hash})) return UINT32_MAX;
     return index;
 }
+static bool spec_structural_field(SpecContext *c,const SpecInstance *instance,
+    const XrXirFunction *function,XrXirInstruction *op) {
+    if (!spec_work(c,1)) return false;
+    const XrXirFunction *original=&c->source->functions[instance->declaration];
+    XrXirType formal=xr_xir_operand_type(original,op->args[0]);uint32_t id=(uint32_t)formal;
+    const XrXirGeneric *generic=c->source->generics ? &c->source->generics[instance->declaration] : NULL;
+    if (!generic || id<XR_XIR_TYPE_PARAMETER_BASE || id>=XR_XIR_TYPE_PARAMETER_LIMIT ||
+        id-XR_XIR_TYPE_PARAMETER_BASE>=generic->parameter_count || !generic->constraints || op->immediate<0) {
+        c->diagnostic.status=XR_XIR_BAD_TYPE;return false;
+    }
+    const XrXirConstraint *constraint=&generic->constraints[id-XR_XIR_TYPE_PARAMETER_BASE];
+    uint64_t selection=(uint64_t)op->immediate;uint32_t requirement=(uint32_t)(selection>>32),field=(uint32_t)selection;
+    if (requirement>=constraint->structural_count || !constraint->structural_requirements ||
+        constraint->structural_requirements[requirement].policy!=XR_XIR_STRUCTURAL_READONLY_RECEIVER) {
+        c->diagnostic.status=XR_XIR_BAD_STRUCTURE;return false;
+    }
+    XrXirType wanted=spec_type(c,instance,constraint->structural_requirements[requirement].shape);
+    if (c->diagnostic.status!=XR_XIR_OK) return false;
+    XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
+    const XrXirTypeNode *shape=xr_xir_record_signature(&c->types,wanted);
+    const XrXirTypeNode *actual=xr_xir_record_signature(&c->types,receiver);
+    if (!shape || !actual || field>=shape->parameter_count) {c->diagnostic.status=XR_XIR_BAD_TYPE;return false;}
+    uint32_t found=UINT32_MAX;
+    for (uint32_t f=0;f<actual->parameter_count;++f) {
+        int comparison=0;
+        c->diagnostic.status=xir_record_name_compare(&c->remaining,shape->record.names[field],actual->record.names[f],&comparison);
+        if (c->diagnostic.status!=XR_XIR_OK) return false;
+        if (!comparison) {found=f;break;}
+    }
+    if (found==UINT32_MAX) {c->diagnostic.status=XR_XIR_BAD_TYPE;return false;}
+    c->diagnostic.status=xr_xir_compile_type_substitution_matches(&c->remaining,&c->types,NULL,0,
+        shape->parameters[field].type,actual->parameters[found].type);
+    if (c->diagnostic.status!=XR_XIR_OK) return false;
+    op->op=XR_XIR_RECORD_FIELD;op->immediate=found;return true;
+}
 static bool spec_calls(SpecContext *c, uint32_t index) {
     const SpecInstance *instance = &c->instances[index];
     const XrXirGeneric *generic = c->source->generics ? &c->source->generics[instance->declaration] : NULL;
@@ -398,6 +434,7 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         c->diagnostic.instruction = i;
         if (!spec_work(c, 1)) return false;
         XrXirInstruction *op = &ops[i];
+        if (op->op==XR_XIR_FIELD_REQUIREMENT && !spec_structural_field(c,instance,function,op)) return false;
         if (!xr_xir_op_uses_type_arguments(op->op)) continue;
         uint32_t count = op->type_arguments[1];
         XrXirType *types = spec_alloc(c, count, sizeof(*types));

@@ -170,6 +170,7 @@ static void pipeline_failures(unsigned kind) {
         (unsigned long long)measured.work);
 }
 #include "resource_cases.h"
+#include "structural_copy_cases.h"
 #include "../root_construction72_cases.h"
 #include "reader_lower_cases.h"
 #include "checked_sizing_cases.h"
@@ -180,6 +181,7 @@ int main(void) {
     mandatory_context();
     reader_lower_cases();
     constraint_formula();
+    structural_copy_formula();
     exhausted_owner();
     structural_caps();
     inference_failures();

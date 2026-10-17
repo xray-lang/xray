@@ -17,7 +17,7 @@ static void generic_method_self_bound_cases(void) {
     GenericMethodProofFixture g; generic_method_proof_fixture(&g);
     ImplementationSemanticFixture *f = &g.base;
     /* Measure.map<U:Measure>(U)->U is a finite symbolic self bound. */
-    g.own = (XrXirConstraint){0,&f->application,1};
+    g.own = (XrXirConstraint){.markers=0,.interfaces=&f->application,.interface_count=1};
     g.function_constraints[1] = g.own;
     CHECK(implementation_semantic_status(f)==XR_XIR_OK);
     XrXirProofContext context = {&f->module,{XR_XIR_CONTEXT_CONFORMANCE_METHOD,1,0}};
@@ -38,7 +38,7 @@ static void generic_method_self_bound_cases(void) {
 }
 static void generic_method_sibling_cases(void) {
     GenericMethodProofFixture g; generic_method_proof_fixture(&g);
-    XrXirConstraint other_own = {XR_XIR_CONSTRAINT_ERROR,NULL,0};
+    XrXirConstraint other_own = {.markers=XR_XIR_CONSTRAINT_ERROR,.interfaces=NULL,.interface_count=0};
     XrXirInterfaceMethod methods[2] = {g.base.method,g.base.method};
     methods[1].name = (XrXirLiteral){"other",5}; methods[1].constraints = &other_own;
     g.base.interface.methods = methods; g.base.interface.method_count = 2;

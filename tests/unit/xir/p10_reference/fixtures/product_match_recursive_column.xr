@@ -1,0 +1,6 @@
+fn finish(value:i64)->i64 { return value }
+enum Tree { Leaf, Pair {node:TreeNode} }
+class TreeNode { left:Tree; right:Tree; init(left,right) { this.left=left; this.right=right } }
+enum Event { Data {row:(Tree,bool)} }
+fn read(value:Event)->i64 { return match(value) { Event.Data {row:(_,true)}->42, Event.Data {row:(_,false)}->41 } }
+export fn referenceAnswer()->i64 { return finish(read(Event.Data {row:(Tree.Leaf,true)})) }

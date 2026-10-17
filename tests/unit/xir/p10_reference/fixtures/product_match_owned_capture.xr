@@ -1,0 +1,2 @@
+fn finish(value:i64)->i64 { return value }
+export fn referenceAnswer()->i64 { const original={items:[1]}; const action=match(original) { {items}->fn()->i64 { var copy=items; copy[0]=41; return copy[0]+original.items[0] } }; return finish(action()) }

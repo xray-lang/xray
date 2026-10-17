@@ -252,7 +252,7 @@ static XrXirStatus effect_scalar_instruction(EffectScalarFlow *flow, uint32_t in
     case XR_XIR_COPY: case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ:
         return effect_scalar_transfer(flow,destination,op.args[0]);
     case XR_XIR_CELL_READ: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_STRUCT_GET:
-    case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD:
+    case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT:
     case XR_XIR_ARRAY_GET: case XR_XIR_PLACE_READ:
         if (op.args[0]>=flow->value_count) return XR_XIR_BAD_VALUE;
         if ((flow->fixed[op.args[0]]&EFFECT_SCALAR_OPAQUE) && !(flow->fixed[destination]&EFFECT_SCALAR_OPAQUE)) {

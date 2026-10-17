@@ -39,7 +39,7 @@ SIGNATURE(xr_xir_compile_vm_program_take,Take);
 SIGNATURE(xr_xir_compile_emit_c,Emit);
 SIGNATURE(xr_xir_compile_source_product_tests,Tests);
 SIGNATURE(xr_xir_instance_start_test,StartTest);
-_Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==80,"test declaration wire semantics");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==33 && XR_XIR_CHECKED_CONTRACT==81,"test declaration wire semantics");
 _Static_assert(sizeof(XrXirSlot)==20 && _Alignof(XrXirSlot)==4 &&
     offsetof(XrXirSlot,module)==0 && offsetof(XrXirSlot,type)==4 && offsetof(XrXirSlot,mutable)==8 &&
     offsetof(XrXirSlot,exported)==12 && offsetof(XrXirSlot,name)==16,"owned constant slot declaration layout");
@@ -54,6 +54,6 @@ _Static_assert(offsetof(XrXirCompileLimits,functions)==0 && offsetof(XrXirCompil
     offsetof(XrXirCompileLimits,frame_bytes)==16,"compile limits offsets");
 _Static_assert(sizeof(XrXirCompileContext)==32 && _Alignof(XrXirCompileContext)==8 &&
     offsetof(XrXirCompileContext,resources)==0 && offsetof(XrXirCompileContext,limits)==8,"compile context layout");
-_Static_assert(XR_XIR_PROGRAM_ABI_VERSION==35 && XR_XIR_CALL_ABI_VERSION==29 &&
-    XR_XIR_VALUE_ABI_VERSION==26,"compile owner admission ABI");
+_Static_assert(XR_XIR_PROGRAM_ABI_VERSION==36 && XR_XIR_CALL_ABI_VERSION==29 &&
+    XR_XIR_VALUE_ABI_VERSION==27,"compile owner admission ABI");
 int main(void) { return 0; }

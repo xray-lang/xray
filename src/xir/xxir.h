@@ -126,10 +126,21 @@ typedef struct XrXirFunction {
 #define XR_XIR_CONSTRAINT_MASK (XR_XIR_CONSTRAINT_SENDABLE | XR_XIR_CONSTRAINT_ERROR | XR_XIR_CONSTRAINT_EQUAL | \
     XR_XIR_CONSTRAINT_ATOMIC_VALUE | XR_XIR_CONSTRAINT_ATOMIC_NUMBER | XR_XIR_CONSTRAINT_ATOMIC_BOOLEAN | XR_XIR_CONSTRAINT_HASHABLE)
 typedef struct XrXirInterfaceApplication XrXirInterfaceApplication;
+#define XR_XIR_STRUCTURAL_READONLY_RECEIVER 1u
+/* The owned Record shape uses this declaration's binder scope. Projection is
+ * read-only and keeps the receiver as its borrow origin; it grants no methods
+ * or capabilities of the complete subject type. Zero and unknown policies fail. */
+typedef struct XrXirStructuralRequirement {
+    XrXirType shape;
+    uint32_t policy;
+} XrXirStructuralRequirement;
+
 typedef struct XrXirConstraint {
     uint32_t markers;
     const XrXirInterfaceApplication *interfaces;
     uint32_t interface_count;
+    const XrXirStructuralRequirement *structural_requirements;
+    uint32_t structural_count;
 } XrXirConstraint;
 
 typedef enum XrXirTypeBinderKind {

@@ -1,0 +1,4 @@
+fn finish(value:i64)->i64 { return value }
+enum Event { Data {row:{a:bool,b:bool}}, Empty }
+fn read(value:Event)->i64 { return match(value) { Event.Data {row:{a:true,b:_}}->42, Event.Data {row:{a:false,b:_}}->43, Event.Empty->41 } }
+export fn referenceAnswer()->i64 { return finish(read(Event.Data {row:{b:false,a:true}})) }

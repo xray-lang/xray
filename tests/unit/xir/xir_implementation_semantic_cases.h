@@ -43,7 +43,7 @@ static void implementation_semantic_fixture(ImplementationSemanticFixture *f) {
     f->interface = (XrXirInterfaceDeclaration){{"m",1},{"Measure",7},1,NULL,0,NULL,0,&f->method,1};
     f->interfaces = (XrXirInterfaceTable){&f->interface,1};
     f->application = (XrXirInterfaceApplication){0,NULL,0};
-    f->bound = (XrXirConstraint){0,&f->application,1};
+    f->bound = (XrXirConstraint){.markers=0,.interfaces=&f->application,.interface_count=1};
     for (uint32_t n = 0; n < 2; ++n) {
         f->nominals[n].module = (XrXirLiteral){"m",1}; f->nominals[n].exported = 1;
         f->nodes[n+1].kind = XR_XIR_TYPE_NOMINAL; f->nodes[n+1].nominal.declaration = n;

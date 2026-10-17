@@ -1,0 +1,6 @@
+fn step(value:i64)->i64 { return value }
+fn finish(value:i64)->i64 { return step(value) }
+var calls:i64=0
+fn make()->{z:i64,nested:(i64,{n:i64})} { calls+=1; return {z:7,nested:(5,{n:30})} }
+var {z:last,nested:(first,{n:second})}=make()
+export fn referenceAnswer()->i64 { first+=1; second-=1; return finish(first+second+last+calls-1) }

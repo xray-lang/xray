@@ -1,0 +1,4 @@
+type Need = {n:i64}
+fn read<T:Need>(value:T)->i64 { return value.n }
+fn relay<T:Need & {name:string}>(value:T)->i64 { return read<T>(value) + len(value.name) }
+export fn referenceAnswer()->i64 { return relay({name:"hi",n:40,extra:true}) }

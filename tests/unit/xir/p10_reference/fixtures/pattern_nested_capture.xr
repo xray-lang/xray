@@ -1,0 +1,4 @@
+fn step(value:i64)->i64 { return value }
+fn finish(value:i64)->i64 { return step(value) }
+fn make()->fn()->i64 { var (a,{n:b})=(1,{n:40}); return fn()->i64 { a+=1; return a+b } }
+export fn referenceAnswer()->i64 { const action=make(); return finish(action()) }

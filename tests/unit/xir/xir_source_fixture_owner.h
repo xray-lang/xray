@@ -32,11 +32,11 @@ static inline void source_fixture_owner_new(SourceFixtureOwner *owner) {
 static inline void source_fixture_owner_free(SourceFixtureOwner *owner) {
     XrCompileResourceStats stats = {0};
     CHECK(xr_compile_resources_stats(owner->context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
-    CHECK(stats.live_bytes == owner->baseline.live_bytes);
     CHECK(stats.allocated_bytes > owner->baseline.allocated_bytes && stats.work > owner->baseline.work);
     fprintf(stderr, "source fixture compiler ledger: work=%llu allocated=%llu peak=%llu live=%llu\n",
         (unsigned long long) stats.work, (unsigned long long) stats.allocated_bytes,
         (unsigned long long) stats.peak_bytes, (unsigned long long) stats.live_bytes);
+    CHECK(stats.live_bytes == owner->baseline.live_bytes);
     xr_compile_resources_release(owner->context.resources);
     *owner = (SourceFixtureOwner) {0};
 }

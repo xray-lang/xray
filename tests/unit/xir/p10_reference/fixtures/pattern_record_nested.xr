@@ -1,0 +1,4 @@
+fn step(value:i64)->i64 { return value }
+fn finish(value:i64)->i64 { return step(value) }
+fn make()->{z:i64,nested:(i64,{v:i64})} { return {z:7,nested:(5,{v:30})} }
+export fn referenceAnswer()->i64 { const {z:last,nested:(first,{v:second})}=make(); return finish(first+second+last) }

@@ -63,7 +63,7 @@ static XrXirStatus bound_requirement(const XrXirCompileContext *context,uint32_t
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"caller",6,&parameter,1,XR_XIR_I64,&two,1,call,2,&operand,1}};
-    XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={0,&application,1};
+    XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={.markers=0,.interfaces=&application,.interface_count=1};
     XrXirGeneric generics[3]={{0}};generics[2].constraints=&constraint;generics[2].parameter_count=1;
     XrXirSourceModule source={"alpha",5,NULL,0,1, 0};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};

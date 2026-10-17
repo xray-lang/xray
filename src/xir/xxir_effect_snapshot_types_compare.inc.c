@@ -22,6 +22,7 @@ static XrXirStatus effect_body_constraints_compare(const XrXirCompileContext *wo
         if ((a->interface_count && !a->interfaces) || (b->interface_count && !b->interfaces))
             return XR_XIR_BAD_STRUCTURE;
         if (a->markers!=b->markers || a->interface_count!=b->interface_count) return effect_body_difference(same);
+        status=effect_body_structural_match(work,a,b,same);
         for (uint32_t i=0;i<a->interface_count && status==XR_XIR_OK;++i)
             status=effect_body_application_match(work,&a->interfaces[i],&b->interfaces[i],same);
     }

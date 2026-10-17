@@ -41,6 +41,7 @@ XrXirStatus xr_xir_compile_type_constraints(const XrXirCompileContext *compile_c
     if (!remaining || !xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
 
     if (!module || constraints.interface_count || constraints.interfaces ||
+        constraints.structural_count || constraints.structural_requirements ||
         constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,function,0}};

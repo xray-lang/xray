@@ -1,0 +1,2 @@
+fn read<T:{inner:{n:i64}}>(value:T)->i64 { value.inner.n=42; return value.inner.n }
+export fn referenceAnswer()->i64 { return read({inner:{n:1}}) }

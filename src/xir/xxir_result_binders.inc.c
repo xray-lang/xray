@@ -87,6 +87,7 @@ XR_FUNCDEF XrXirStatus xr_xir_compile_result_binders_verify(const XrXirCompileCo
         if (g->parameter_count != 1 || !g->constraints || g->argument_count || g->arguments ||
             g->parameter_kinds[0] != XR_XIR_BINDER_RESULT_VARIABLE || g->constraints[0].markers ||
             g->constraints[0].interface_count || g->constraints[0].interfaces ||
+            g->constraints[0].structural_count || g->constraints[0].structural_requirements ||
             (!result_panic_recipe(m,f) && !result_default_recipe(m,f))) return XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;

@@ -15,6 +15,7 @@
 #include "xxir_compile_memory.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
 #include "xxir_key.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_implementation.h"
@@ -146,12 +147,15 @@ static bool constraint_argument_shape(const XrXirTypes *types, XrXirType type, u
     return node ? node->parameter_span <= count : type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) ||
         type == XR_XIR_STRING || type == XR_XIR_ERROR || type == XR_XIR_PANIC_INFO;
 }
+#include "xxir_structural_constraints.inc.c"
 XrXirStatus xr_xir_compile_constraint_structure(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirConstraint constraint, uint32_t count) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
     if (!budget || (!!constraint.interfaces != !!constraint.interface_count)) return XR_XIR_BAD_STRUCTURE;
     if (constraint.markers & ~XR_XIR_CONSTRAINT_MASK) return XR_XIR_BAD_TYPE;
+    XrXirStatus structural=constraint_structural_structure(compile_context,types,constraint,count);
+    if (structural!=XR_XIR_OK) return structural;
     if (!constraint_charge(budget, (uint64_t)constraint.interface_count * sizeof(*constraint.interfaces),
         (uint64_t)constraint.interface_count + 1)) return XR_XIR_BUDGET;
     const XrXirInterfaceTable *table = types ? types->interfaces : NULL;
@@ -426,12 +430,54 @@ static XrXirStatus proof_concrete_closure(ConstraintProof *proof, const Constrai
     if (status == XR_XIR_OK) status = proof_nominal(proof,task->declaration_domain,node);
     return status;
 }
+static XrXirStatus proof_structural_field(ConstraintProof *proof,const ConstraintObligation *task,
+    const XrXirTypeNode *required,uint32_t field,const XrXirTypeNode *actual) {
+    uint32_t found=0;
+    XrXirStatus status=constraint_structural_find(proof->budget,actual,required->record.names[field],&found);
+    if (status!=XR_XIR_OK) return status;
+    const XrXirTypes *formal=task->requirement_types ? task->requirement_types : task->declaration_domain->types;
+    return xr_xir_compile_type_substitution_matches_between(proof->budget,formal,proof->environment.types,
+        task->arguments,task->argument_count,required->parameters[field].type,actual->parameters[found].type);
+}
+static XrXirStatus proof_structural(ConstraintProof *proof,const ConstraintObligation *task) {
+    if (!task->requirement.structural_count) return XR_XIR_OK;
+    const XrXirTypes *formal=task->requirement_types ? task->requirement_types : task->declaration_domain->types;
+    const XrXirTypeNode *actual=xr_xir_record_signature(proof->environment.types,task->subject);
+    const XrXirConstraint *facts=NULL;
+    uint32_t id=(uint32_t)task->subject;
+    if (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
+        facts=constraint_fact(&proof->environment,id-XR_XIR_TYPE_PARAMETER_BASE);
+        if (!facts || !facts->structural_count) return XR_XIR_BAD_TYPE;
+        XrXirStatus status=xr_xir_compile_constraint_structure(proof->budget,proof->environment.types,
+            *facts,proof->environment.parameter_count);
+        if (status!=XR_XIR_OK) return status;
+    } else if (!actual) return XR_XIR_BAD_TYPE;
+    for (uint32_t r=0;r<task->requirement.structural_count;++r) {
+        if (!xir_compile_work(proof->budget,1)) return XR_XIR_BUDGET;
+        const XrXirTypeNode *shape=xr_xir_record_signature(formal,task->requirement.structural_requirements[r].shape);
+        if (!shape) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t f=0;f<shape->parameter_count;++f) {
+            XrXirStatus status=XR_XIR_BAD_TYPE;
+            if (actual) status=proof_structural_field(proof,task,shape,f,actual);
+            else for (uint32_t a=0;a<facts->structural_count;++a) {
+                if (!xir_compile_work(proof->budget,1)) return XR_XIR_BUDGET;
+                const XrXirTypeNode *provided=xr_xir_record_signature(proof->environment.types,
+                    facts->structural_requirements[a].shape);
+                status=proof_structural_field(proof,task,shape,f,provided);
+                if (status!=XR_XIR_BAD_TYPE) break;
+            }
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus proof_requirement_task(ConstraintProof *proof, const ConstraintObligation *task) {
     if (!constraint_argument_shape(proof->environment.types,task->subject,proof->environment.parameter_count))
         return XR_XIR_BAD_TYPE;
     XrXirStatus status = xr_xir_compile_constraint_structure(proof->budget, task->requirement_types ? task->requirement_types : task->declaration_domain->types, task->requirement, task->argument_count);
     if (status != XR_XIR_OK) return status;
     status = constraint_markers(&proof->environment,task->subject,task->requirement.markers,proof->budget);
+    if (status==XR_XIR_OK) status=proof_structural(proof,task);
     if (status != XR_XIR_OK || !task->requirement.interface_count) return status;
     XrXirInterfaceClosure *closure = NULL;
     uint32_t id = (uint32_t)task->subject;
@@ -538,7 +584,8 @@ static XrXirStatus proof_prepare_arguments(ConstraintProof *proof,
     for (uint32_t a = 0; status == XR_XIR_OK && a < use->argument_count; ++a) {
         bool result = proof_result_binder(use,a);
         const XrXirConstraint *fact = constraint_fact(formal,a);
-        if (result && (fact->markers || fact->interface_count || fact->interfaces)) status = XR_XIR_BAD_TYPE;
+        if (result && (fact->markers || fact->interface_count || fact->interfaces ||
+            fact->structural_count || fact->structural_requirements)) status = XR_XIR_BAD_TYPE;
         else if (result && use->arguments[a] == XR_XIR_UNIT) continue;
         else if (!constraint_argument_shape(proof->environment.types,use->arguments[a],proof->environment.parameter_count))
             status = XR_XIR_BAD_TYPE;
@@ -652,7 +699,7 @@ static XrXirStatus metadata_interface_prove(const XrXirCompileContext *compile_c
     XrXirTypes actual = proof.environment.types ? *proof.environment.types : (XrXirTypes){0};
     actual.interfaces = declaration_domain->types ? declaration_domain->types->interfaces : NULL;
     ConstraintObligation task = {0}; task.declaration_domain = declaration_domain;
-    task.requirement_types = &actual; task.requirement = (XrXirConstraint){0,&application,1};
+    task.requirement_types = &actual; task.requirement = (XrXirConstraint){.interfaces=&application,.interface_count=1};
     task.subject = subject; task.arguments = arguments; task.argument_count = count;
     status = proof_type(&proof,subject);
     for (uint32_t a = 0; status == XR_XIR_OK && a < application.argument_count; ++a) {
@@ -684,6 +731,10 @@ XR_FUNC XrXirStatus xir_metadata_context_constraints_verify(const XrXirCompileCo
         XrXirConstraint constraint = *constraint_fact(&environment,p);
         status = xr_xir_compile_constraint_structure(budget, environment.types, constraint, environment.parameter_count);
         if (status != XR_XIR_OK) return status;
+        for (uint32_t r=0;r<constraint.structural_count;++r) {
+            status=metadata_type_use_verify(budget,context,constraint.structural_requirements[r].shape);
+            if (status!=XR_XIR_OK) return status;
+        }
         if (!constraint.interface_count) continue;
         for (uint32_t a = 0; a < constraint.interface_count; ++a) {
             status = metadata_application_use(context,constraint.interfaces[a],budget);
@@ -822,7 +873,8 @@ static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirCom
 
     bool required = false;
     for (uint32_t a = 0; a < count; ++a)
-        required |= owner->constraints[a].markers != 0 || owner->constraints[a].interface_count != 0;
+        required |= owner->constraints[a].markers != 0 || owner->constraints[a].interface_count != 0 ||
+            owner->constraints[a].structural_count != 0;
     if (!required) return XR_XIR_OK;
     uint64_t bytes = (uint64_t)count*sizeof(XrXirType);
     uint64_t work = (uint64_t)count*2; /* Fill plus complete obligation scan. */
@@ -833,7 +885,8 @@ static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirCom
     for (uint32_t a = 0; a < count; ++a) arguments[a] = (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a);
     XrXirStatus status = XR_XIR_OK;
     for (uint32_t a = 0; status == XR_XIR_OK && a < count; ++a) {
-        if (!owner->constraints[a].markers && !owner->constraints[a].interface_count) continue;
+        if (!owner->constraints[a].markers && !owner->constraints[a].interface_count &&
+            !owner->constraints[a].structural_count) continue;
         XrXirConstraintUse use = {module,{XR_XIR_CONTEXT_NOMINAL,identity->nominal_owner-1,0},a,arguments,count};
         status = xr_xir_compile_constraints_prove(budget, context, &use);
     }

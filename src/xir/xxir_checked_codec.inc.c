@@ -276,13 +276,28 @@ static XrXirInterfaceApplication *checked_applications(CheckedCursor *c,
     }
     return applications;
 }
+static XrXirStructuralRequirement *checked_structural_requirements(CheckedCursor *c,
+    const XrXirStructuralRequirement *source,uint32_t *count) {
+    uint32_t size=checked_u32(c,*count);
+    XrXirStructuralRequirement *requirements=checked_array(c,source,size,sizeof(*requirements),8);
+    *count=requirements ? size : 0;
+    for (uint32_t i=0;i<*count && c->status==XR_XIR_OK;++i) {
+        XrXirStructuralRequirement requirement=requirements[i];
+        requirement.shape=(XrXirType)checked_u32(c,(uint32_t)requirement.shape);
+        requirement.policy=checked_u32(c,requirement.policy);
+        if (c->reading) requirements[i]=requirement;
+    }
+    return requirements;
+}
 static XrXirConstraint *checked_constraints(CheckedCursor *c,
     const XrXirConstraint *source, uint32_t count) {
-    XrXirConstraint *constraints = checked_array(c, source, count, sizeof(*constraints), 8);
+    XrXirConstraint *constraints = checked_array(c, source, count, sizeof(*constraints), 12);
     for (uint32_t p = 0; constraints && p < count && c->status == XR_XIR_OK; ++p) {
         XrXirConstraint constraint = constraints[p];
         constraint.markers = checked_u32(c, constraint.markers);
         constraint.interfaces = checked_applications(c, constraint.interfaces, &constraint.interface_count);
+        constraint.structural_requirements=checked_structural_requirements(c,constraint.structural_requirements,
+            &constraint.structural_count);
         if (c->reading) constraints[p] = constraint;
     }
     return constraints;
@@ -291,11 +306,11 @@ static void checked_generics(CheckedCursor *c, XrXirModule *m) {
     uint32_t present = checked_u32(c, m->generics ? 1u : 0u);
     if (c->status == XR_XIR_OK && present > 1) c->status = XR_XIR_BAD_STRUCTURE;
     if (!present || c->status != XR_XIR_OK) return;
-    XrXirGeneric *generics = checked_array(c, m->generics, m->function_count, sizeof(*generics), 8);
+    XrXirGeneric *generics = checked_array(c, m->generics, m->function_count, sizeof(*generics), 12);
     m->generics = generics;
     for (uint32_t f = 0; f < m->function_count && c->status == XR_XIR_OK; ++f) {
         XrXirGeneric g = generics[f];
-        g.parameter_count = checked_count(c, g.parameter_count, &c->structural.parameters, 8);
+        g.parameter_count = checked_count(c, g.parameter_count, &c->structural.parameters, 12);
         uint32_t kinds_present = checked_u32(c, g.parameter_kinds ? 1u : 0u);
         if (kinds_present > 1 || (kinds_present && !g.parameter_count)) {
             c->status = XR_XIR_BAD_STRUCTURE; break;
@@ -353,7 +368,7 @@ static void checked_nominals(CheckedCursor *c, XrXirTypes *types, uint32_t count
         d.native.native_id = checked_u32(c, d.native.native_id);
         for (unsigned n = 0; n < sizeof(d.native.source_fingerprint); ++n)
             d.native.source_fingerprint[n] = (uint8_t)checked_integer(c, d.native.source_fingerprint[n], 1);
-        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters, 8);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters, 12);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         uint32_t fields = checked_u32(c, d.field_count);
@@ -395,7 +410,7 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
         d.module = checked_nominal_name(c, d.module);
         d.name = checked_nominal_name(c, d.name);
         d.exported = checked_u32(c, d.exported);
-        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters, 8);
+        uint32_t parameters = checked_count(c, d.parameter_count, &c->structural.parameters, 12);
         XrXirConstraint *constraints = checked_constraints(c, d.constraints, parameters);
         d.constraints = constraints; d.parameter_count = constraints ? parameters : 0;
         checked_interface_parents(c, &d);
@@ -407,7 +422,7 @@ static void checked_interfaces(CheckedCursor *c, XrXirTypes *types, uint32_t cou
             method.name = checked_nominal_name(c, method.name);
             method.signature = (XrXirType) checked_u32(c, (uint32_t) method.signature);
             method.receiver = checked_u32(c, method.receiver);
-            uint32_t own = checked_count(c,method.own_parameter_count,&c->structural.parameters, 8);
+            uint32_t own = checked_count(c,method.own_parameter_count,&c->structural.parameters, 12);
             XrXirConstraint *own_constraints = checked_constraints(c,method.constraints,own);
             method.constraints = own_constraints;
             method.own_parameter_count = own_constraints ? own : 0;

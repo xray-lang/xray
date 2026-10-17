@@ -13,6 +13,7 @@
 #include "xxir_interface_members.h"
 #include "xxir_compile_memory.h"
 #include "xxir_types.h"
+#include "xxir_record.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
@@ -272,8 +273,36 @@ static void member_application(MemberContext *c, uint32_t declaration, XrXirType
     c->tail = app;
 }
 static void member_roots(MemberContext *c, const XrXirInterfaceApplication *roots, uint32_t count);
+static bool member_structural_contains(MemberContext *c,XrXirConstraint facts,XrXirConstraint required) {
+    if (!required.structural_count) return true;
+    if (!facts.structural_count) return false;
+    for (uint32_t r=0;r<required.structural_count;++r) {
+        if (!member_work(c,1)) return false;
+        const XrXirStructuralRequirement *requirement=&required.structural_requirements[r];
+        const XrXirTypeNode *wanted=xr_xir_record_signature(&c->types,requirement->shape);
+        if (requirement->policy!=XR_XIR_STRUCTURAL_READONLY_RECEIVER || !wanted) {c->status=XR_XIR_BAD_TYPE;return false;}
+        for (uint32_t f=0;f<wanted->parameter_count;++f) {
+            bool found=false;
+            for (uint32_t a=0;a<facts.structural_count && !found;++a) {
+                if (!member_work(c,1)) return false;
+                const XrXirStructuralRequirement *fact=&facts.structural_requirements[a];
+                const XrXirTypeNode *shape=xr_xir_record_signature(&c->types,fact->shape);
+                if (fact->policy!=XR_XIR_STRUCTURAL_READONLY_RECEIVER || !shape) {c->status=XR_XIR_BAD_TYPE;return false;}
+                for (uint32_t p=0;p<shape->parameter_count && !found;++p) {
+                    XrXirLiteral name=wanted->record.names[f],other=shape->record.names[p];
+                    if (!member_work(c,name.length==other.length ? (uint64_t)name.length+1 : 1)) return false;
+                    if (name.length==other.length && !memcmp(name.bytes,other.bytes,name.length))
+                        found=member_equal(c,wanted->parameters[f].type,shape->parameters[p].type);
+                }
+            }
+            if (!found) return false;
+        }
+    }
+    return true;
+}
 static bool member_condition_contains(MemberContext *c, XrXirConstraint facts, XrXirConstraint required) {
-    if (!member_work(c,1) || (facts.markers & required.markers) != required.markers) return false;
+    if (!member_work(c,1) || (facts.markers & required.markers) != required.markers ||
+        !member_structural_contains(c,facts,required)) return false;
     MemberContext parents = {0}; parents.table = c->table; parents.source = c->source;
     XrXirTypes input = c->types; parents.base = &input; parents.remaining = c->remaining;
     parents.ambient_count = c->root_count;
@@ -301,7 +330,14 @@ static bool member_condition_contains(MemberContext *c, XrXirConstraint facts, X
 }
 static XrXirConstraint member_constraint(MemberContext *c, const MemberApplication *substitution,
     MemberTypeMap *map, XrXirConstraint input) {
-    XrXirConstraint output = {input.markers,NULL,input.interface_count};
+    XrXirConstraint output = {.markers=input.markers,.interface_count=input.interface_count,
+        .structural_count=input.structural_count};
+    XrXirStructuralRequirement *requirements=member_alloc(c,input.structural_count,sizeof(*requirements));
+    output.structural_requirements=requirements;
+    for (uint32_t r=0;r<input.structural_count && member_work(c,1);++r) {
+        requirements[r]=input.structural_requirements[r];
+        requirements[r].shape=member_resolve(c,substitution,map,requirements[r].shape);
+    }
     XrXirInterfaceApplication *apps = member_alloc(c,input.interface_count,sizeof(*apps));
     output.interfaces = apps;
     for (uint32_t i = 0; i < input.interface_count && member_work(c,1); ++i) {

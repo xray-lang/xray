@@ -87,13 +87,13 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [32, 80, 26, 29, 35]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [33, 81, 27, 29, 36]
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         expected=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    assert len(expected)==369 and len({row['id'] for row in expected})==369
+    assert len(expected)==396 and len({row['id'] for row in expected})==396
     assert manifest['abi_measurements']==[dict(id=row['id'],value=row['value']) for row in expected]
     assert [row['path'] for row in manifest['files'] if row['kind'] == 5] == sorted('lib/' + name + '.lib' for name in ARCHIVES)
     def status(name, document, expected, sdk_root=bundle):
@@ -122,6 +122,9 @@ def main():
     status('old-layout-recipe', changed, 1)
     changed=json.loads(json.dumps(manifest));changed['abi_measurements']=changed['abi_measurements'][:233]
     status('prior-233-layout-recipe',changed,1)
+    for count in (369, 381, 385):
+        changed=json.loads(json.dumps(manifest));changed['abi_measurements']=changed['abi_measurements'][:count]
+        status('prior-'+str(count)+'-layout-current-labels',changed,1)
     # Keeping current ABI labels cannot make an old archive the same source bundle.
     changed = json.loads(json.dumps(manifest))
     old_scalar = next(row for row in old_manifest['files'] if row['path'] == 'lib/xray_xir_scalar.lib')

@@ -4,7 +4,7 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=80, value_abi=26, call_abi=29, wire=32, program_abi=35):
+def current_preimage(rows, semantic=81, value_abi=27, call_abi=29, wire=33, program_abi=36):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -32,9 +32,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix='xir-current-sdk-kat-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    assert len(rows)==385 and len({row['id'] for row in rows})==385
+    assert len(rows)==396 and len({row['id'] for row in rows})==396
     current_rows=rows
-    prior79_rows=[row for row in rows if row['id'] not in range(4800,4804)]
+    structural_ids=set(range(4900,4907))|set(range(5000,5004))
+    prior80_rows=[row for row in rows if row['id'] not in structural_ids]
+    assert len(prior80_rows)==385
+    prior79_rows=[row for row in prior80_rows if row['id'] not in range(4800,4804)]
     assert len(prior79_rows)==381
     rows=[row for row in prior79_rows if row['id'] not in range(4700,4712)]
     assert len(rows)==369
@@ -95,7 +98,8 @@ def main():
         ('sdk_previous74_identity_golden.h',previous_rows,74,24,28,30),
         ('retired_hash75/sdk_current_identity_golden.h',previous_rows,75,25,28,30),
         ('sdk_previous78_identity_golden.h',prior79_rows,78,24,31,33),
-        ('sdk_previous79_identity_golden.h',prior79_rows,79,25,32,34)):
+        ('sdk_previous79_identity_golden.h',prior79_rows,79,25,32,34),
+        ('retired_semantic80/sdk_current_identity_golden.h',prior80_rows,80,26,32,35)):
         image_old,file_old,digest_old=current_preimage(prior_rows,semantic,value,29,wire,program)
         text_old=(Path(__file__).parent/filename).read_text(encoding='utf-8')
         for name,data in (('current_sdk_kat_preimage',image_old),('current_sdk_kat_file_digest',file_old),('current_sdk_kat_digest',digest_old)):
@@ -106,9 +110,9 @@ def main():
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(32,80,26,29,35)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(33,81,27,29,36)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3370 and len(previous76_image)==3186 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3458 and len(previous76_image)==3186 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest)):

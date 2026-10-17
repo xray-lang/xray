@@ -37,7 +37,7 @@ static bool source_pattern_integer_cuts(SourceContext *ctx, SourcePatternMatrix 
     uint64_t *cuts=source_alloc(ctx,(size_t)input.rows*2+1,sizeof(*cuts));
     if (!cuts) return false;
     *count=1; cuts[0]=0;
-    uint64_t maximum=source_pattern_integer_max(input.types[0]);
+    uint64_t maximum=xr_xir_type_is_array(&ctx->types,input.types[0]) ? INT64_MAX : source_pattern_integer_max(input.types[0]);
     for (uint32_t r=0;r<input.rows;++r) {
         if (!source_work(ctx,NULL)) return false;
         SourceMatchPattern *head=input.patterns[(size_t)r*input.width];
@@ -64,18 +64,44 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
         }
         if (any) {*complete=true;return true;}
     }
+    bool unconstrained_head=true;
+    for (uint32_t r=0;r<rows;++r) {
+        if (!source_work(ctx,NULL)) return false;
+        if (!source_pattern_any(matrix[(size_t)r*width])) {unconstrained_head=false;break;}
+    }
+    /* An unrestricted column cannot affect correlations in the remaining row. */
+    if (unconstrained_head) {
+        uint32_t next_width=width-1;
+        if (next_width && rows>SIZE_MAX/next_width)
+            return source_fail(ctx,NULL,XR_XIR_BUDGET,"pattern default matrix size overflow");
+        SourceMatchPattern **next=next_width ? source_alloc(ctx,(size_t)rows*next_width,sizeof(*next)) : NULL;
+        if (next_width && !next) return false;
+        for (uint32_t r=0;r<rows;++r)
+            for (uint32_t c=0;c<next_width;++c) {
+                if (!source_work(ctx,NULL)) return false;
+                next[(size_t)r*next_width+c]=matrix[(size_t)r*width+c+1];
+            }
+        return source_pattern_coverage(ctx,(SourcePatternMatrix){types+1,next,next_width,rows},depth+1,complete);
+    }
     bool enumeration=xr_xir_type_is_enum(&ctx->types,types[0]);
     bool boolean=types[0]==XR_XIR_BOOL;
     bool integer=xr_xir_type_is_integer(types[0]);
+    bool array=xr_xir_type_is_array(&ctx->types,types[0]);
+    bool product=source_pattern_product_kind(ctx,types[0])!=XR_XIR_OP_COUNT;
     uint64_t *cuts=NULL;
     uint32_t constructors=1;
     if (enumeration) constructors=ctx->nominals.declarations[xr_xir_type_node(&ctx->types,types[0])->nominal.declaration].variant_count;
     else if (boolean) constructors=2;
-    else if (integer && !source_pattern_integer_cuts(ctx,input,&cuts,&constructors)) return false;
+    else if ((integer || array) && !source_pattern_integer_cuts(ctx,input,&cuts,&constructors)) return false;
     for (uint32_t v=0;v<constructors;++v) {
         if (!source_work(ctx,NULL)) return false;
         uint32_t fields=0; XrXirType *field_types=NULL;
         if (enumeration && !source_pattern_field_types(ctx,types[0],v,&field_types,&fields)) return false;
+        SourcePatternProduct *description=NULL;
+        if (product) {
+            if (!source_pattern_product_description(ctx,types[0],&description)) return false;
+            fields=description->count;
+        }
         if (fields>UINT32_MAX-(width-1)) return source_fail(ctx,NULL,XR_XIR_BUDGET,"pattern matrix width overflow");
         uint32_t next_width=fields+width-1, next_rows=0;
         if (next_width && rows>SIZE_MAX/next_width)
@@ -85,16 +111,17 @@ static bool source_pattern_coverage(SourceContext *ctx, SourcePatternMatrix inpu
         if (next_width && (!next_types || !next)) return false;
         for (uint32_t c=0;c<next_width;++c) {
             if (!source_work(ctx,NULL)) return false;
-            next_types[c]=c<fields?field_types[c]:types[c-fields+1];
+            next_types[c]=c<fields?(product?description->fields[c].type:field_types[c]):types[c-fields+1];
         }
         for (uint32_t r=0;r<rows;++r) {
             if (!source_work(ctx,NULL)) return false;
             SourceMatchPattern *head=matrix[(size_t)r*width]; bool any=source_pattern_any(head);
             bool selected=any;
             if (!any && enumeration) selected=head->selection.variant==v;
+            else if (!any && product) selected=head->product!=NULL;
             else if (!any && boolean) selected=head->boolean && head->truth==(v!=0);
-            else if (!any && integer) {
-                uint64_t high=v+1<constructors?cuts[v+1]-1:source_pattern_integer_max(types[0]);
+            else if (!any && (integer || array)) {
+                uint64_t high=v+1<constructors?cuts[v+1]-1:(array?INT64_MAX:source_pattern_integer_max(types[0]));
                 selected=head->interval && !head->empty && head->low<=cuts[v] && head->high>=high;
             }
             if (!selected) continue;

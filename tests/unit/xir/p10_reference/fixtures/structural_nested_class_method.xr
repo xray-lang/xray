@@ -1,0 +1,3 @@
+class Box { value:i64; init(value) { this.value=value }; bump()->i64 { this.value+=1; return this.value } }
+fn read<T:{inner:{items:Array<Box>}}>(value:T)->i64 { return value.inner.items[0].bump() }
+export fn referenceAnswer()->i64 { return read({extra:true,inner:{items:[Box(41)]}}) }

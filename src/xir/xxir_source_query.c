@@ -86,8 +86,12 @@ static XrXirConstraint *query_constraints(SourceQueryCopy *copy,
     if (copy->status != XR_XIR_OK) return NULL;
     if (!!source != !!count) { copy->status = XR_XIR_BAD_STRUCTURE; return NULL; }
     XrXirConstraint *constraints = query_copy(copy, source, count, sizeof(*constraints));
-    for (uint32_t i = 0; constraints && i < count && query_work(copy, 1); ++i)
+    for (uint32_t i = 0; constraints && i < count && query_work(copy, 1); ++i) {
         constraints[i].interfaces = query_applications(copy, source[i].interfaces, source[i].interface_count);
+        if (!!source[i].structural_requirements!=!!source[i].structural_count) {copy->status=XR_XIR_BAD_STRUCTURE;break;}
+        constraints[i].structural_requirements=query_copy(copy,source[i].structural_requirements,
+            source[i].structural_count,sizeof(*source[i].structural_requirements));
+    }
     return constraints;
 }
 static void query_application(SourceQueryCopy *copy, XrXirInterfaceApplication *app) {

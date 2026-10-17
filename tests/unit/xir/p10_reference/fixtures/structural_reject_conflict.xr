@@ -1,0 +1,2 @@
+fn read<T:{n:i64} & {n:string}>(value:T)->i64 { return 42 }
+export fn referenceAnswer()->i64 { return 42 }

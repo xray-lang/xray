@@ -111,6 +111,19 @@ static XrXirStatus lower_type_uses(XrXirModule *module, const uint32_t *map, uin
     }
     return lower_provenance(module, map, count, budget);
 }
+static void lower_type_discard(XrXirTypeNode *node) {
+    xr_compile_resources_free((void *)node->parameters);
+    if (node->kind==XR_XIR_TYPE_NOMINAL) {
+        xr_compile_resources_free((void *)node->nominal.arguments);
+        xr_compile_resources_free((void *)node->nominal.fields);
+    } else if (node->kind==XR_XIR_TYPE_RECORD) {
+        for (uint32_t p=0;node->record.names && p<node->parameter_count;++p)
+            xr_compile_resources_free((void *)node->record.names[p].bytes);
+        xr_compile_resources_free((void *)node->record.names);
+    }
+    memset(node,0,sizeof(*node));
+}
+
 static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext *budget) {
     XrXirStatus allocation_status = XR_XIR_OK;
     XrXirTypes *types = (XrXirTypes *) module->types;
@@ -141,10 +154,11 @@ static XrXirStatus lower_nominal_types(XrXirModule *module, XrXirCompileContext 
         XrXirTypeNode *node = &nodes[i];
         if (map[i] == UINT32_MAX) {
             if (!lower_type_work(budget, sizeof(*node))) { status = XR_XIR_BUDGET; break; }
-            xr_compile_resources_free((void *) node->parameters); xr_compile_resources_free((void *) node->nominal.arguments); xr_compile_resources_free((void *) node->nominal.fields);
-            memset(node, 0, sizeof(*node)); continue;
+            lower_type_discard(node);continue;
         }
-        if (!lower_type_work(budget, (uint64_t) node->parameter_count + node->nominal.argument_count + node->nominal.field_count + 1)) {
+        uint64_t slots=(uint64_t)node->parameter_count+1;
+        if (node->kind==XR_XIR_TYPE_NOMINAL) slots+=(uint64_t)node->nominal.argument_count+node->nominal.field_count;
+        if (!lower_type_work(budget,slots)) {
             status = XR_XIR_BUDGET; break;
         }
         if (!lower_type_node(node, map, count)) { status = XR_XIR_BAD_TYPE; break; }

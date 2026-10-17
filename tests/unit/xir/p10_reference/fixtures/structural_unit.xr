@@ -1,0 +1,2 @@
+fn empty<T:{empty:()}>(value:T)->() { return value.empty }
+export fn referenceAnswer()->i64 { empty({n:7,empty:()}); return 42 }

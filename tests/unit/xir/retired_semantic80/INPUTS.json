@@ -1,0 +1,10 @@
+{
+  "product_base": "ef5ddba4f3e0180d30c88a20357ac4e815424d46",
+  "sdk_raw": {
+    "path": "sdk_current_identity_golden.h",
+    "sha256": "4d39ca5ca284542c53b37dcabcf3a04253abd94e19c5fbfe8bb3ba0f42e50198"
+  },
+  "complete_packet_registry": "../semantic81_inputs.json",
+  "complete_packet_count": 27,
+  "old65_packets_untouched": true
+}

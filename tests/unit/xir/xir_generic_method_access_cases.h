@@ -48,7 +48,7 @@ static void generic_method_access_cases(void) {
         nodes[3].parameter_span = 1;
         XrXirType argument = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
         XrXirInterfaceApplication application = {1,&argument,1};
-        XrXirConstraint own = {0,&application,1}, outer = {0};
+        XrXirConstraint own = {.markers=0,.interfaces=&application,.interface_count=1}, outer = {0};
         XrXirInterfaceMethod method = {{"get",3},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+3),0,1,&own};
         XrXirInterfaceDeclaration interfaces[] = {
             {{"alpha",5},{"Child",5},1,NULL,0,NULL,0,&method,1},

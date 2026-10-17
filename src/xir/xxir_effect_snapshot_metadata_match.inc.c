@@ -104,6 +104,22 @@ static XrXirStatus effect_body_declarations_match(const XrXirCompileContext *wor
     return status;
 }
 
+static XrXirStatus effect_body_structural_match(const XrXirCompileContext *work,
+    const XrXirConstraint *left,const XrXirConstraint *right,bool *same) {
+    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+    if ((!!left->structural_requirements!=!!left->structural_count) ||
+        (!!right->structural_requirements!=!!right->structural_count)) return XR_XIR_BAD_STRUCTURE;
+    if (left->structural_count!=right->structural_count) return effect_body_difference(same);
+    for (uint32_t r=0;r<left->structural_count;++r) {
+        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+        const XrXirStructuralRequirement *a=&left->structural_requirements[r],*b=&right->structural_requirements[r];
+        if (a->shape!=b->shape || a->policy!=b->policy) {
+            XrXirStatus status=effect_body_difference(same);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus effect_body_generics_match(const XrXirCompileContext *work,
     const XrXirGeneric *left,const XrXirGeneric *right,uint32_t functions,bool *same) {
     if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
@@ -126,6 +142,7 @@ static XrXirStatus effect_body_generics_match(const XrXirCompileContext *work,
             if ((x->interface_count && !x->interfaces) || (y->interface_count && !y->interfaces))
                 return XR_XIR_BAD_STRUCTURE;
             if (x->markers!=y->markers || x->interface_count!=y->interface_count) return effect_body_difference(same);
+            status=effect_body_structural_match(work,x,y,same);
             for (uint32_t i=0;i<x->interface_count && status==XR_XIR_OK;++i)
                 status=effect_body_application_match(work,&x->interfaces[i],&y->interfaces[i],same);
         }
