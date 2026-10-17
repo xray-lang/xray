@@ -33,10 +33,13 @@ typedef struct XirVmDebugExceptionLocal {
 } XirVmDebugExceptionLocal;
 typedef enum XirVmDebugExceptionRouteKind {
     XIR_VM_DEBUG_EXCEPTION_ROUTE_UNKNOWN,
-    XIR_VM_DEBUG_EXCEPTION_ROUTE_SELECTED
+    XIR_VM_DEBUG_EXCEPTION_ROUTE_SELECTED,
+    XIR_VM_DEBUG_EXCEPTION_ROUTE_ROOT_ESCAPE,
+    XIR_VM_DEBUG_EXCEPTION_ROUTE_TASK_ESCAPE
 } XirVmDebugExceptionRouteKind;
-/* A selected handler on the authenticated synchronous VM ancestor chain.
- * UNKNOWN includes native/Task/root boundaries, not a claim of global uncaught. */
+/* Selection and escape refer to the current authenticated execution flow.
+ * Task escape stores an outcome and does not predict a future await handler.
+ * UNKNOWN retains native or missing-source boundaries without guessing. */
 typedef struct XirVmDebugExceptionRoute {
     XirVmDebugExceptionRouteKind kind;
     uint32_t function,handler,accepted;
@@ -51,7 +54,7 @@ typedef struct XirVmDebugPendingCall {
 } XirVmDebugPendingCall;
 XR_FUNC bool xir_vm_debug_retain(XrXirVmDebug *debug);
 XR_FUNC bool xir_vm_debug_bind(XrXirVmDebug *debug, const XrXirArtifact *artifact);
-XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program);
+XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program,bool mixed);
 XR_FUNC void xir_vm_debug_unbind(XrXirVmDebug *debug);
 XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     const XirVmDebugPoint *point, bool *stopped);
@@ -73,6 +76,7 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *,const XrXirCompileCon
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot *,XirVmDebugStopCause *);
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_local(const XrXirVmDebugSnapshot *,XirVmDebugExceptionLocal *);
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_route(const XrXirVmDebugSnapshot *,XirVmDebugExceptionRoute *);
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_filter(const XrXirVmDebugSnapshot *,uint32_t *);
 /* Copies only the captured payload of a published, admitted module slot. A
  * retained snapshot never supplies a live frame or module permission. */
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_slot(const XrXirVmDebugSnapshot *,uint32_t,uint32_t,XrXirValue *);

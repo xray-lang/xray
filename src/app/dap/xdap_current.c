@@ -151,9 +151,9 @@ XR_FUNC XrXirValueStatus xdap_current_snapshot(XdapCurrent *session,
     XrXirVmDebugSnapshot **output) {
     return session && !session->driving ? xr_xir_vm_debug_snapshot(session->debug, output) : XR_XIR_VALUE_BAD_ARGUMENT;
 }
-XR_FUNC XrXirValueStatus xdap_current_break_on_throw(XdapCurrent *session,bool enabled) {
+XR_FUNC XrXirValueStatus xdap_current_break_on_throw(XdapCurrent *session,uint32_t filters) {
     return session && !session->driving && !session->ended ?
-        xr_xir_vm_debug_break_on_throw(session->debug,enabled) : XR_XIR_VALUE_BAD_ARGUMENT;
+        xr_xir_vm_debug_break_on_throw(session->debug,filters) : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 XR_FUNC XrXirValueStatus xdap_current_rules_replace(XdapCurrent *session,const XrXirVmDebugRule *rules,uint32_t count) {
     return session && !session->driving && !session->ended ?

@@ -47,7 +47,7 @@ XR_FUNC XrXirValueStatus xdap_current_breakpoint(XdapCurrent *session,
 XR_FUNC XrXirValueStatus xdap_current_breakpoints_replace(XdapCurrent *,
     const XrXirVmDebugLocation *,uint32_t count);
 XR_FUNC XrXirValueStatus xdap_current_rules_replace(XdapCurrent *,const XrXirVmDebugRule *,uint32_t count);
-XR_FUNC XrXirValueStatus xdap_current_break_on_throw(XdapCurrent *,bool enabled);
+XR_FUNC XrXirValueStatus xdap_current_break_on_throw(XdapCurrent *,uint32_t filters);
 XR_FUNC XrXirValueStatus xdap_current_snapshot(XdapCurrent *session,
     XrXirVmDebugSnapshot **output);
 /* Actual live activation identities between polls. A not-yet-polled admitted

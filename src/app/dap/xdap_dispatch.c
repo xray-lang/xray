@@ -179,7 +179,9 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
         "\"supportsValueFormattingOptions\":false,\"supportsExceptionInfoRequest\":true,\"supportsHitConditionalBreakpoints\":true,"
         "\"supportsConditionalBreakpoints\":true,\"supportsLogPoints\":true,"
         "\"supportsSetVariable\":true,\"supportsEvaluateForHovers\":true,\"supportsPauseRequest\":true,"
-        "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false}]}");
+        "\"exceptionBreakpointFilters\":[{\"filter\":\"all\",\"label\":\"Language throws in observed VM\",\"default\":false},"
+        "{\"filter\":\"caught\",\"label\":\"Handled language throws in observed VM\",\"default\":false},"
+        "{\"filter\":\"uncaught\",\"label\":\"Language throws escaping the current VM flow\",\"default\":false}]}");
     if (s->config.detached) {
         if (body.length && body.bytes[body.length-1]=='}') --body.length;
         XDAP_TEXT(&body,",\"supportTerminateDebuggee\":true}");

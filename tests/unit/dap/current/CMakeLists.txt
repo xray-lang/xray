@@ -141,6 +141,19 @@ add_test(NAME test_dap_source_handlers_resources COMMAND test_dap_source_handler
 set_tests_properties(test_dap_source_handlers PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;exceptions")
 set_tests_properties(test_dap_source_handlers_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;exceptions;resources;fault-injection")
 
+add_executable(test_dap_exception_policy test_exception_policy.c)
+target_link_libraries(test_dap_exception_policy PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_exception_policy PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_dap_exception_policy PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_exception_policy PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_exception_policy COMMAND test_dap_exception_policy)
+add_test(NAME test_dap_exception_policy_resources COMMAND test_dap_exception_policy --resources)
+set_tests_properties(test_dap_exception_policy_resources PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;source;errors;ownership;metadata;filters;resources;fault-injection")
+set_tests_properties(test_dap_exception_policy PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;source;errors;ownership;metadata;filters")
+
 add_executable(test_dap_source_routes test_source_routes.c)
 target_link_libraries(test_dap_source_routes PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_source_routes PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
@@ -260,6 +273,17 @@ if(XR_BUILD_DAP)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py COPYONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_full_session.py ${CMAKE_CURRENT_BINARY_DIR}/test_full_session.py COPYONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_throw_sites.py ${CMAKE_CURRENT_BINARY_DIR}/test_throw_sites.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_exception_filters.py ${CMAKE_CURRENT_BINARY_DIR}/test_exception_filters.py COPYONLY)
+    foreach(XR_DAP_FILTER_TRANSPORT stdio tcp)
+        set(XR_DAP_FILTER_START launch)
+        if(XR_DAP_FILTER_TRANSPORT STREQUAL "tcp")
+            set(XR_DAP_FILTER_START attach)
+        endif()
+        add_test(NAME dap_current_${XR_DAP_FILTER_TRANSPORT}_exception_filters COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+            --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/exception_flows.xr --transport ${XR_DAP_FILTER_TRANSPORT}
+            --scenario exception-filters --start-request ${XR_DAP_FILTER_START} --transcript ${CMAKE_CURRENT_BINARY_DIR}/exception-filters-${XR_DAP_FILTER_TRANSPORT}.json)
+        set_tests_properties(dap_current_${XR_DAP_FILTER_TRANSPORT}_exception_filters PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;cli;source;execution;ownership;filters;task")
+    endforeach()
     foreach(XR_DAP_FULL_TRANSPORT stdio tcp)
         set(XR_DAP_FULL_START launch)
         if(XR_DAP_FULL_TRANSPORT STREQUAL "tcp")
@@ -317,6 +341,25 @@ if(XR_BUILD_DAP)
         set_tests_properties(dap_original_stdio_${XR_DAP_WIRE_SCENARIO} PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;source;execution;ownership;original-oracle")
     endforeach()
 endif()
+
+
+
+add_executable(test_dap_exception_filter_requests test_exception_filter_requests.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
+target_link_libraries(test_dap_exception_filter_requests PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_exception_filter_requests PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_DAP_PRIVATE_FIXTURE="${XR_DAP_FIXTURE_DIR}/type_private_main.xr"
+    XR_DAP_FIXTURE="${XR_DAP_FIXTURE_DIR}/wire_fixture.xr"
+    XR_DAP_CAUGHT_FIXTURE="${XR_DAP_FIXTURE_DIR}/caught_error.xr"
+    XR_DAP_UNCAUGHT_FIXTURE="${XR_DAP_FIXTURE_DIR}/uncaught_error.xr"
+    XR_DAP_PANIC_FIXTURE="${XR_DAP_FIXTURE_DIR}/panic_fixture.xr")
+if(MSVC)
+    target_compile_options(test_dap_exception_filter_requests PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_dap_exception_filter_requests PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_exception_filter_requests COMMAND test_dap_exception_filter_requests)
+add_test(NAME test_dap_exception_filter_requests_resources COMMAND test_dap_exception_filter_requests --resources)
+set_tests_properties(test_dap_exception_filter_requests test_dap_exception_filter_requests_resources PROPERTIES TIMEOUT 120 LABELS "dap;exceptions;source;ownership;resources")
 
 add_executable(test_dap_exceptions test_exceptions.c ${PROJECT_SOURCE_DIR}/src/base/xjson.c ${PROJECT_SOURCE_DIR}/src/base/xutf8.c)
 target_link_libraries(test_dap_exceptions PRIVATE xray_dap_current)

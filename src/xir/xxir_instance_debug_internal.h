@@ -11,6 +11,15 @@
 #include "xxir_program.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_call_internal.h"
+typedef struct XirInstanceDebugActivation {
+    bool child;
+    uint32_t driver;
+    uint64_t epoch;
+} XirInstanceDebugActivation;
+/* Exact active VM ingress only. Root/Task identity comes from the real executor,
+ * and a root driver is checked against its actual private entry. No state or
+ * value borrow is returned; failure preserves the complete output. */
+XR_FUNC XrXirCallStatus xir_instance_debug_activation(XrXirCallView *,XirInstanceDebugActivation *);
 XR_FUNC XrXirCallStatus xir_instance_visit_vm(XrXirInstance *,const XrXirExecutorBinding *,uint64_t,bool *);
 /* A display slot is admitted only for a real entered VM ancestor in the exact
  * current activation. Publication, module readiness and worker rules remain. */

@@ -1066,7 +1066,7 @@ static XrXirStatus debug_program_take(XrXirArtifact **artifact,XrXirVmDebug *deb
     if (status == XR_XIR_OK) {
         owner->artifact = *artifact; *artifact = NULL;
         if (native) { owner->native=native->code;native->code=(XrXirCodeLease){0}; }
-        xir_vm_debug_program(debug, *output);
+        xir_vm_debug_program(debug, *output,native!=NULL);
     }
 finish:
     xr_compile_resources_free(entries);

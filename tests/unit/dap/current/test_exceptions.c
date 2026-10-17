@@ -86,24 +86,25 @@ static void exception_requests_fi(XdapAdapter *adapter) {
     }
 }
 static void exception_case(bool caught,bool enabled,bool resources) {
+    uint32_t configured=enabled ? XR_XIR_VM_DEBUG_EXCEPTION_ALL : XR_XIR_VM_DEBUG_EXCEPTION_NONE;
     XrCompileResources *ledger=NULL;XrXirDomain *domain=NULL;XrCompileResourceStats baseline={0};
     XdapAdapter *adapter=exception_setup(&ledger,&domain,&baseline);
     request(adapter,"{\"seq\":1,\"type\":\"request\",\"command\":\"initialize\"}");
     XrJsonValue *reply=last_response("initialize",true);XrJsonValue *body=xjson_get_object(reply,"body");
-    CHECK(xjson_get_bool(body,"supportsExceptionInfoRequest"));CHECK(xjson_array_len(xjson_get_array(body,"exceptionBreakpointFilters"))==1);xjson_free(reply);
+    CHECK(xjson_get_bool(body,"supportsExceptionInfoRequest"));CHECK(xjson_array_len(xjson_get_array(body,"exceptionBreakpointFilters"))==3);xjson_free(reply);
     if (enabled) { request(adapter,"{\"seq\":2,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[\"all\"]}}");exception_reply("setExceptionBreakpoints",true); }
-    request(adapter,"{\"seq\":3,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[\"uncaught\"]}}");
-    exception_reply("setExceptionBreakpoints",false);CHECK(adapter->break_throw==enabled);
+    request(adapter,"{\"seq\":3,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[\"native\"]}}");
+    exception_reply("setExceptionBreakpoints",false);CHECK(adapter->break_throw==configured);
     request(adapter,"{\"seq\":33,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[\"all\",\"all\"]}}");exception_reply("setExceptionBreakpoints",false);
     request(adapter,"{\"seq\":34,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[7]}}");exception_reply("setExceptionBreakpoints",false);
     request(adapter,"{\"seq\":35,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\"}");exception_reply("setExceptionBreakpoints",false);
     request(adapter,"{\"seq\":36,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[\"all\"],\"filterOptions\":[{\"filterId\":\"all\",\"condition\":\"true\"}]}}");exception_reply("setExceptionBreakpoints",false);
-    CHECK(adapter->break_throw==enabled);
+    CHECK(adapter->break_throw==configured);
     char message[4096];snprintf(message,sizeof(message),
         "{\"seq\":4,\"type\":\"request\",\"command\":\"launch\",\"arguments\":{\"program\":\"%s\"}}",caught ? XR_DAP_CAUGHT_FIXTURE : XR_DAP_UNCAUGHT_FIXTURE);
     request(adapter,message);exception_reply("launch",true);
     request(adapter,"{\"seq\":5,\"type\":\"request\",\"command\":\"configurationDone\"}");
-    request(adapter,"{\"seq\":37,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[]}}");exception_reply("setExceptionBreakpoints",false);CHECK(adapter->break_throw==enabled);
+    request(adapter,"{\"seq\":37,\"type\":\"request\",\"command\":\"setExceptionBreakpoints\",\"arguments\":{\"filters\":[]}}");exception_reply("setExceptionBreakpoints",false);CHECK(adapter->break_throw==configured);
     CHECK(xdap_adapter_step(adapter,1000)==XR_XIR_OK);
     XrXirVmDebugSnapshot *escaped=NULL;XrXirValue value={0};
     if (enabled) {
@@ -245,7 +246,10 @@ static void exception_erased_case(bool resources) {
     if (resources) for (size_t i=0;i<sites;++i) exception_erased_fault(i);
     printf("Erased Error rethrow: two real stops, caller private names, escaped concrete payload; %zu capture sites injection=%s\n",sites,resources ? "ALL" : "NOT_RUN");
 }
-int main(int argc,char **argv) {
+#ifndef XR_DAP_EXCEPTION_ENTRY
+#define XR_DAP_EXCEPTION_ENTRY main
+#endif
+int XR_DAP_EXCEPTION_ENTRY(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     exception_case(true,true,resources);exception_case(false,true,false);exception_case(true,false,false);exception_case(false,false,false);
     exception_panic();exception_erased_case(resources);

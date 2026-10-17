@@ -52,6 +52,8 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 - 正常路径不分配对象、不展开栈；在需传播或捕获错误的调用边界只经过可预测的错误标志分支
 - 未捕获的顶层错误打印 `[Uncaught Error] <enum value>`，退出码 = 1
 
+调试器对值返回错误的 caught／uncaught 分类以当前逻辑执行流的同步调用链为边界：选中本流中的 catch 为 caught，错误逃出真实 Instance 根入口或当前 Task 根入口为 uncaught。Task 保存的错误随后经另一执行流 await 再抛出时，在该 await 所在流重新分类；这不把 Task 失败等同于整个程序失败。观察点位于实际 throw 交付、handler 和清理效果执行之前。分类要求完整的 Source 路由事实及经过认证的执行边界；native 或缺失事实保持未知，不能据此报告 uncaught。
+
 #### 8.1.2 `try` / `catch`
 
 ```xray
@@ -622,6 +624,8 @@ throw point → deliver an independently owned error value → return up the cal
 - No stack frame unwinding (unlike traditional exception unwinding)
 - No object allocation and no stack unwinding on the happy path; call boundaries that may propagate or catch errors go through only a predictable error-flag branch
 - Unhandled top-level errors print `[Uncaught Error] <enum value>`, exit code = 1
+
+Debugger caught/uncaught classification of value-return errors uses the synchronous call chain of the current logical execution flow. Selection of a catch in that flow is caught; escape from the authenticated Instance root or current Task root is uncaught. A stored Task error rethrown by await in another flow is classified again in that awaiting flow. A Task failure therefore does not imply whole-program failure. Observation precedes actual throw delivery, handler execution, and cleanup effects. Classification requires complete Source route facts and authenticated execution boundaries; native or missing facts remain unknown and cannot establish uncaught.
 
 #### 8.1.2 `try` / `catch`
 

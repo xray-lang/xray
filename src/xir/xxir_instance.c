@@ -726,6 +726,7 @@ static bool value_unit(XrXirValue value) {
 }
 #include "xxir_instance_cell_access.inc.c"
 #include "xxir_instance_class_access.inc.c"
+#include "xxir_instance_debug_activation.inc.c"
 static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
     const XrXirValueReceiver *receiver, bool writable, XrXirValueAdmission *admission,
     XrXirValuePlace *place) {

@@ -80,14 +80,15 @@ static XirVmDebugExceptionRoute route_snapshot(XrXirVmDebugSnapshot *snapshot,co
     CHECK(xir_vm_debug_snapshot_exception_local(snapshot,&local)==XR_XIR_VALUE_OK);
     XrXirVmDebugFrameInfo current={0};XrXirValue name={0};
     CHECK(xr_xir_vm_debug_snapshot_frame(snapshot,0,&current,&name)==XR_XIR_VALUE_OK);xr_xir_value_drop(&name);
-    CHECK(local.function==current.function && local.kind==XIR_VM_DEBUG_EXCEPTION_LOCAL_PROPAGATE);
+    CHECK(local.function==current.function && local.kind==(expected->accepted[stop] && !expected->ancestors[stop] ?
+        XIR_VM_DEBUG_EXCEPTION_LOCAL_MATCH : XIR_VM_DEBUG_EXCEPTION_LOCAL_PROPAGATE));
     CHECK(expected->child ? current.thread>1 : current.thread==1);
     if (!expected->accepted[stop]) {
-        CHECK(route.kind==XIR_VM_DEBUG_EXCEPTION_ROUTE_UNKNOWN && !route.frame && !route.handler &&
-            route.function==UINT32_MAX && route.accepted==UINT32_MAX);return route;
+        CHECK(route.kind==(expected->child ? XIR_VM_DEBUG_EXCEPTION_ROUTE_TASK_ESCAPE : XIR_VM_DEBUG_EXCEPTION_ROUTE_ROOT_ESCAPE));
+        CHECK(route.frame && !route.handler && route.function!=UINT32_MAX && route.accepted==UINT32_MAX);return route;
     }
     CHECK(route.kind==XIR_VM_DEBUG_EXCEPTION_ROUTE_SELECTED && route.handler && route.frame &&
-        route.ancestors==expected->ancestors[stop] && route.frame!=current.id);
+        route.ancestors==expected->ancestors[stop] && (route.ancestors ? route.frame!=current.id : route.frame==current.id));
     bool found=false;
     for (uint32_t i=0;i<count;++i) if (points[i].function==route.function && points[i].instruction==route.accepted)
         found=points[i].line==handler_line(expected->text,expected->accepted[stop]);
@@ -199,7 +200,10 @@ static void route_budgets(void) {
         (unsigned long long)high,(unsigned long long)baseline.stats.metadata_peak);
 }
 #include "route_write_fixture.h"
-int main(int argc,char **argv) {
+#ifndef XR_DAP_ROUTE_ENTRY
+#define XR_DAP_ROUTE_ENTRY main
+#endif
+int XR_DAP_ROUTE_ENTRY(int argc,char **argv) {
     xr_test_suppress_dialogs();
     if (argc==3 && (!strcmp(argv[1],"--case") || !strcmp(argv[1],"--plain-case"))) {
         char *end=NULL;unsigned long which=strtoul(argv[2],&end,10);
@@ -217,6 +221,6 @@ int main(int argc,char **argv) {
     else { route_write_fault(0);route_write_fault(writes-1); }
     printf("Route stop write retains selection and old/new Cell5/7 through producer/Program death; write sites=%zu injection=%s physical0/0 PASS\n",
         writes,resources ? "ALL" : "FIRST_LAST_ONLY");
-    printf("VM ancestor routes: direct/relay/rejected/recursive/indirect/rethrow, root/Task unknown; capture sites=%zu injection=%s physical0/0 PASS\n",
+    printf("VM ancestor routes: direct/relay/rejected/recursive/indirect/rethrow, authenticated root/Task escape; capture sites=%zu injection=%s physical0/0 PASS\n",
         sites,resources ? "ALL" : "FIRST_LAST_ONLY");return 0;
 }

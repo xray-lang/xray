@@ -137,11 +137,12 @@ static XrXirValueStatus debug_write_apply(XrXirVmDebug *debug,const XirVmDebugPo
         }
     }
     XrXirVmDebugSnapshot *fresh=NULL,*reserved=NULL;
-    if (status==XR_XIR_VALUE_OK) status=capture_prepare(debug,point->view,UINT32_MAX,debug->snapshot->cause,&fresh);
+    if (status==XR_XIR_VALUE_OK) status=capture_prepare(debug,point->view,NULL,debug->snapshot->cause,&fresh);
     if (status==XR_XIR_VALUE_OK && debug->snapshot->exception.type)
         status=xr_xir_value_copy(&debug->snapshot->exception,&fresh->exception);
     if (status==XR_XIR_VALUE_OK) {
         fresh->exception_local=debug->snapshot->exception_local;fresh->exception_route=debug->snapshot->exception_route;
+        fresh->exception_filter=debug->snapshot->exception_filter;
     }
     XrXirValuePath field={&class_write.field,1};
     if (status==XR_XIR_VALUE_OK) status=identity ? debug_write_aliases(debug,fresh,&class_write.root,&field,&class_write.candidate,admission) :

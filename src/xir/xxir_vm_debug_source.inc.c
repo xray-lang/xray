@@ -30,6 +30,16 @@ static void debug_source_throw(const XrXirVmDebug *debug,uint32_t function,uint3
         if (site->instruction<instruction) first=middle+1;else end=middle;
     }
 }
+static const XrXirSourceDebugRoute *debug_source_route(const XrXirVmDebug *debug,uint32_t function,uint32_t instruction) {
+    if (!debug->source_memory || function>=debug->source_functions) return NULL;
+    uint32_t first=debug->source_route_offsets[function],end=debug->source_route_offsets[function+1];
+    while (first<end) {
+        uint32_t middle=first+(end-first)/2;const XrXirSourceDebugRoute *route=&debug->source_routes[middle];
+        if (route->instruction==instruction) return route;
+        if (route->instruction<instruction) first=middle+1;else end=middle;
+    }
+    return NULL;
+}
 static DebugSourcePoint debug_source_point(const XrXirVmDebug *debug,uint32_t function,uint32_t instruction) {
     if (!debug->source_memory || function>=debug->source_functions ||
         instruction>=debug->source_offsets[function+1]-debug->source_offsets[function]) return (DebugSourcePoint){0};

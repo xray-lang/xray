@@ -16,12 +16,12 @@ parser.add_argument('--fixture',type=Path,required=True)
 parser.add_argument('--start-request',choices=('launch','attach'),default='launch')
 parser.add_argument('--transport',choices=('stdio','tcp'),default='stdio')
 parser.add_argument('--scenario',choices=('legacy','disconnect-clean','stop-on-entry','line-breakpoint','logpoint','mutate-oracle','owned-oracle',
-    'full-session','throw-sites','source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle',
+    'full-session','throw-sites','exception-filters','source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle',
     'detach-running','detach-stopped','detach-unstarted','detach-timer','detach-attach','detach-output-closed'),default='legacy')
 parser.add_argument('--oracle',type=Path)
 parser.add_argument('--transcript',type=Path)
 args=parser.parse_args()
-if args.scenario not in ('legacy','disconnect-clean','full-session','throw-sites') and not args.scenario.startswith('detach-'):assert args.oracle
+if args.scenario not in ('legacy','disconnect-clean','full-session','throw-sites','exception-filters') and not args.scenario.startswith('detach-'):assert args.oracle
 
 if args.transport=='tcp':
     for flags in [('--stdio','--port','0'),('--port','65536'),('--port','4294967296'),('--port','-1')]:
@@ -492,7 +492,10 @@ def detached_tcp_wire():
             client.process.kill();client.process.wait(timeout=20)
 
 
-if args.scenario=='throw-sites':
+if args.scenario=='exception-filters':
+    from test_exception_filters import exception_filters
+    exception_filters(Client,args)
+elif args.scenario=='throw-sites':
     from test_throw_sites import throw_sites
     throw_sites(Client,args)
 elif args.scenario=='full-session':

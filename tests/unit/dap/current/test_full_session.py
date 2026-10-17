@@ -66,10 +66,10 @@ def full_session(Client,args):
         missing=[name for name in ORIGINAL_CAPABILITIES if not capabilities.get(name)]
         assert missing==(['supportTerminateDebuggee'] if args.transport=='stdio' else []),missing
         record['missing_original_capabilities']=missing
-        record['open_exception_filters']=['caught','uncaught','native']
+        record['open_exception_filters']=['native']
         client.event('initialized')
         send('setExceptionBreakpoints',{'filters':['all']})
-        send('setExceptionBreakpoints',{'filters':['uncaught']},False)
+        send('setExceptionBreakpoints',{'filters':['caught','uncaught']})
         send(args.start_request,{'program':str(args.fixture.resolve())})
         functions=send('setFunctionBreakpoints',{'breakpoints':[{'name':'outer'}]})['breakpoints']
         assert len(functions)==1 and functions[0]['verified'],functions

@@ -19,24 +19,40 @@ static XrXirValueStatus debug_route_error(XrXirVmDebug *debug,XrXirCallView *vie
     if (consumed<=actual->work) actual->work-=consumed;
     return status==XR_XIR_VALUE_OK && !paid ? XR_XIR_VALUE_LIMIT : status;
 }
+static XrXirValueStatus debug_route_escape(XrXirVmDebug *debug,XrXirCallView *view,
+    const XirDebugCallFrame *call,const XirDebugCallFrame *parent,XirVmDebugExceptionRoute *output,uint32_t ancestors) {
+    if (!xr_xir_domain_work(debug->domain,sizeof(XirInstanceDebugActivation)+1)) return XR_XIR_VALUE_LIMIT;
+    XirInstanceDebugActivation activation={0};XrXirCallStatus status=xir_instance_debug_activation(view,&activation);
+    if (status!=XR_XIR_CALL_READY) return status==XR_XIR_CALL_LIMIT ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
+    bool task=activation.child && !parent && !call->event.parent && call->event.depth==1;
+    bool root=!activation.child && parent && parent->event.entry==activation.driver &&
+        activation.driver==debug->calls.functions && !parent->event.parent && parent->event.depth==1 &&
+        parent->event.code==XR_XIR_CALL_CODE_NATIVE && parent->event.phase==XR_XIR_CALL_NORMAL && call->event.depth==2;
+    if (task || root) *output=(XirVmDebugExceptionRoute){task ? XIR_VM_DEBUG_EXCEPTION_ROUTE_TASK_ESCAPE :
+        XIR_VM_DEBUG_EXCEPTION_ROUTE_ROOT_ESCAPE,call->event.entry,0,UINT32_MAX,call->id,ancestors};
+    return XR_XIR_VALUE_OK;
+}
 static XrXirValueStatus debug_exception_route(XrXirVmDebug *debug,XrXirCallView *view,
-    const SnapshotFrame *frame,uint32_t operand,const XirVmDebugExceptionLocal *local,XirVmDebugExceptionRoute *output) {
+    const XrXirVmDebugFrameInfo *frame,const XrXirValue *error,const XirVmDebugExceptionLocal *local,XirVmDebugExceptionRoute *output) {
     XirVmDebugExceptionRoute result={.function=UINT32_MAX,.accepted=UINT32_MAX};
     const XirDebugCallFrame *call=xir_debug_calls_current(&debug->calls);
-    if (!call || call->event.entry!=frame->info.function || call->id!=frame->info.id)
+    if (!call || call->event.entry!=frame->function || call->id!=frame->id)
         return XR_XIR_VALUE_BAD_ARGUMENT;
-    XirVmDebugExceptionLocal selection=*local;XrXirValue error={0};XrXirValueStatus status=XR_XIR_VALUE_OK;
+    XirVmDebugExceptionLocal selection=*local;XrXirValueStatus status=XR_XIR_VALUE_OK;
     uint32_t ancestors=0;
     while (selection.kind!=XIR_VM_DEBUG_EXCEPTION_LOCAL_UNKNOWN) {
         if (selection.kind==XIR_VM_DEBUG_EXCEPTION_LOCAL_MATCH) {
             result=(XirVmDebugExceptionRoute){XIR_VM_DEBUG_EXCEPTION_ROUTE_SELECTED,
                 selection.function,selection.handler,selection.accepted,call->id,ancestors};break;
         }
-        if (!xr_xir_domain_work(debug->domain,(uint64_t)debug->calls.capacity+debug->count+1)) {
+        if (!xr_xir_domain_work(debug->domain,(uint64_t)debug->calls.capacity+debug->count+call->event.depth+1)) {
             status=XR_XIR_VALUE_LIMIT;break;
         }
         const XirDebugCallFrame *parent=xir_debug_calls_parent(&debug->calls,call);
-        if (!parent || parent->event.entry==debug->calls.functions || parent->event.code!=XR_XIR_CALL_CODE_VM) break;
+        if (!parent || parent->event.entry==debug->calls.functions) {
+            status=debug_route_escape(debug,view,call,parent,&result,ancestors);break;
+        }
+        if (parent->event.code!=XR_XIR_CALL_CODE_VM) break;
         if (parent->thread!=call->thread || parent->event.depth+1!=call->event.depth || ancestors>=debug->capacity) {
             status=XR_XIR_VALUE_BAD_ARGUMENT;break;
         }
@@ -56,13 +72,10 @@ static XrXirValueStatus debug_exception_route(XrXirVmDebug *debug,XrXirCallView 
         if (live->pending.invoked!=(op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT)) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
         /* The original VM callback owned the pending ordinal and resolved
          * callee. This real child ENTER now proves that proposal was admitted. */
-        if (!error.type) status=debug_route_error(debug,view,&frame->values[operand],&error);
-        if (status!=XR_XIR_VALUE_OK) break;
-        status=debug_exception_function(debug,view,(XrXirVmDebugLocation){parent->event.entry,instruction},&error,&selection);
+        status=debug_exception_function(debug,view,(XrXirVmDebugLocation){parent->event.entry,instruction},error,&selection);
         if (status!=XR_XIR_VALUE_OK) break;
         call=parent;++ancestors;
     }
-    xr_xir_value_drop(&error);
     if (status==XR_XIR_VALUE_OK) *output=result;
     return status;
 }

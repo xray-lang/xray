@@ -127,6 +127,10 @@ static XrXirVmDebugFrameInfo mixed_frame(XrXirVmDebugSnapshot *snapshot,uint32_t
 }
 static void mixed_run(bool root_native,bool cancel) {
     MixedFixture fixture;mixed_new(&fixture,root_native);
+    CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_ALL)==XR_XIR_VALUE_OK);
+    CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_CAUGHT)==XR_XIR_VALUE_UNSUPPORTED);
+    CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_UNCAUGHT)==XR_XIR_VALUE_UNSUPPORTED);
+    CHECK(xdap_current_break_on_throw(fixture.session,XR_XIR_VM_DEBUG_EXCEPTION_NONE)==XR_XIR_VALUE_OK);
     uint64_t threads[2]={0};uint32_t thread_count=77;
     CHECK(xdap_current_threads(fixture.session,threads,2,&thread_count)==XR_XIR_VALUE_OK && !thread_count);
     uint32_t stop=root_native ? MIX_PURE : MIX_RELAY;

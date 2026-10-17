@@ -58,12 +58,8 @@ static XrXirValueStatus debug_exception_function(XrXirVmDebug *debug,XrXirCallVi
     if (!xr_xir_call_admission(view) || view->instance!=debug->target || function>=debug->source_functions)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_domain_work(debug->domain,33)) return XR_XIR_VALUE_LIMIT;
-    uint32_t first=debug->source_route_offsets[function],end=debug->source_route_offsets[function+1],handler=0;
-    while (first<end) {
-        uint32_t middle=first+(end-first)/2;const XrXirSourceDebugRoute *site=&debug->source_routes[middle];
-        if (site->instruction==instruction) { handler=site->handler;break; }
-        if (site->instruction<instruction) first=middle+1;else end=middle;
-    }
+    const XrXirSourceDebugRoute *site=debug_source_route(debug,function,instruction);
+    uint32_t handler=site ? site->handler : 0;
     XirVmDebugExceptionLocal result={XIR_VM_DEBUG_EXCEPTION_LOCAL_PROPAGATE,function,0,UINT32_MAX};
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
     XrXirOp op=module->functions[function].instructions[instruction].op;
@@ -90,10 +86,4 @@ static XrXirValueStatus debug_exception_function(XrXirVmDebug *debug,XrXirCallVi
         handler=route->parent;
     }
     *output=result;return XR_XIR_VALUE_OK;
-}
-
-static XrXirValueStatus debug_exception_local(XrXirVmDebug *debug,XrXirCallView *view,
-    const SnapshotFrame *frame,uint32_t operand,XirVmDebugExceptionLocal *output) {
-    XrXirVmDebugLocation location={frame->info.function,frame->info.instruction};
-    return debug_exception_function(debug,view,location,&frame->values[operand],output);
 }

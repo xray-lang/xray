@@ -75,11 +75,17 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_breakpoints_replace(XrXirVmDebug *,
  * encounter counts. Counts cover actual VM visits across the bound target and
  * never count a stopped PC again on resume. Overflow fails without wrapping. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_rules_replace(XrXirVmDebug *,const XrXirVmDebugRule *,uint32_t count);
-/* Stop before an observed VM language throw. This does not predict whether
- * ordinary Call propagation will find a handler and does not intercept faults.
+typedef enum XrXirVmDebugExceptionFilter {
+    XR_XIR_VM_DEBUG_EXCEPTION_NONE=0, XR_XIR_VM_DEBUG_EXCEPTION_ALL=1,
+    XR_XIR_VM_DEBUG_EXCEPTION_CAUGHT=2, XR_XIR_VM_DEBUG_EXCEPTION_UNCAUGHT=4
+} XrXirVmDebugExceptionFilter;
+/* Select first-chance language throws in the current logical execution flow.
+ * Caught/uncaught require complete Source facts and a pure observed VM Program;
+ * a Task escape is uncaught in that flow, regardless of a future await. Faults
+ * and native-origin throws are not silently classified by these VM filters.
  * Source-owned throw sites include local jumps and cleanup error continuations;
  * an unmapped IR function observes its actual THROW operation. */
-XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *, bool enabled);
+XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *,uint32_t filters);
 /* Pause requests may arrive from the control thread. The sole execution driver
  * polls one quantum at a time and stops polling while paused. No language
  * suspension or wake token is fabricated for a debugger stop. */

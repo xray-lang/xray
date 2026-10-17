@@ -72,7 +72,7 @@ struct XdapAdapter {
     uint64_t wait_epoch, wait_wake, wait_start, wait_duration;
     bool initialized, configured, running, closed, busy, terminal, stop_entry, variable_types, variable_paging, attached;
     const char *stop_reason;
-    bool break_throw;
+    uint32_t break_throw;
 };
 typedef struct XdapRequest {
     XdapJsonDocument document;
