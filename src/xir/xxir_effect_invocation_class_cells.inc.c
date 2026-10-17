@@ -50,14 +50,10 @@ static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *fl
 
 /* A bottom delays this real terminal on the one equation queue. It is not an
  * UNKNOWN seed and cannot certify None. Quiet residual filling stays intact. */
-static XrXirStatus effect_invocation_class_cell_view(EffectInvocationFlow *flow,
-    uint32_t value,XrXirCellClassOriginView *storage,const XrXirCellOriginView **output) {
-    EffectInvocationWorkspace *owner=flow->owner;
-    if (!storage || !output || !owner || !owner->work || !owner->effects || !owner->final.cells ||
-        flow->node>=owner->final.count || value>=flow->values) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=xr_xir_compile_cell_class_origin_view(owner->work,owner->final.cells,
-        owner->final.nodes[flow->node].body,value,storage);
-    if (status!=XR_XIR_OK) return status;
+static XrXirStatus effect_invocation_class_cell_intrinsic(EffectInvocationFlow *flow,
+    const XrXirCellClassOriginView *storage,uint32_t *output) {
+    EffectInvocationWorkspace *owner=flow->owner;XrXirStatus status=XR_XIR_OK;
+    if (!storage || !output || !owner || !owner->work) return XR_XIR_BAD_STRUCTURE;
     uint32_t intrinsic=storage->residual_intrinsic_mask;
     for (uint32_t w=0;w<storage->word_count;++w) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
@@ -74,10 +70,21 @@ static XrXirStatus effect_invocation_class_cell_view(EffectInvocationFlow *flow,
             if (mask&EFFECT_CLASS_UNKNOWN) intrinsic|=XR_XIR_CELL_ACCESS_UNKNOWN;
         }
     }
-    if (!xir_compile_work(owner->work,sizeof(*output)+sizeof(storage->cells.intrinsic_mask)))
+    if (!xir_compile_work(owner->work,sizeof(const XrXirCellOriginView *)+sizeof(*output)))
         return XR_XIR_BUDGET;
-    /* Scratch belongs to this synchronous caller. Failed scratch is never
-     * published; every subject mask/rank succeeds before this view appears. */
+    *output=intrinsic;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_class_cell_view(EffectInvocationFlow *flow,
+    uint32_t value,XrXirCellClassOriginView *storage,const XrXirCellOriginView **output) {
+    EffectInvocationWorkspace *owner=flow->owner;
+    if (!storage || !output || !owner || !owner->work || !owner->effects || !owner->final.cells ||
+        flow->node>=owner->final.count || value>=flow->values) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xr_xir_compile_cell_class_origin_view(owner->work,owner->final.cells,
+        owner->final.nodes[flow->node].body,value,storage);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t intrinsic=0;status=effect_invocation_class_cell_intrinsic(flow,storage,&intrinsic);
+    if (status!=XR_XIR_OK) return status;
     storage->cells.intrinsic_mask=intrinsic;*output=&storage->cells;return XR_XIR_OK;
 }
 

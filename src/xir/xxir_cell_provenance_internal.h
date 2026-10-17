@@ -162,6 +162,15 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_origin_view(const XrXirCompileContext *c
  * current equation mask/rank; these facts alone never grant permission. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileContext *context,
     const XrXirCellProvenance *proof,uint32_t function,uint32_t value,XrXirCellClassOriginView *output);
+/* The complete current view is borrowed only during this synchronous
+ * receiver. It carries physical data, never a saved semantic conclusion. */
+typedef struct XrXirCellClassOriginConsumer {
+    void *owner;
+    XrXirStatus (*view)(void *,const XrXirCellClassOriginView *);
+} XrXirCellClassOriginConsumer;
+XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_consume(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t function,uint32_t value,
+    const XrXirCellClassOriginConsumer *consumer);
 /* NULL owners is the open definition context; every actual parameter dependency
  * then contributes UNKNOWN. Explicit owners cover the complete physical prefix. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_access(const XrXirCompileContext *context,

@@ -18,6 +18,7 @@
 #include "xir/xxir_verify.c"
 #include "xir/xxir_effects.c"
 #include "xir_cell_class_view_data_cases.h"
+#include "xir_cell_borrow_view_cases.h"
 
 typedef struct MaskRead {const XrXirCompileContext *context;uint64_t calls,reject;} MaskRead;
 static bool mask_read_work(const void *owner,uint64_t units) {
@@ -287,6 +288,7 @@ int main(void) {
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
     mask_matrix(&context);mask_boundaries(&context);mask_work_bounds(&context);mask_cell_values(&context);mask_visit_walks(&context);
     class_view_data_controls(&context);
+    cell_borrow_view_controls();
     literal_pair_controls();
     mask_literal_cell_blocks(&context);
     complete_cell_run_walk_controls(&context);

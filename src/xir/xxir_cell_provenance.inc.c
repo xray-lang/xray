@@ -1214,13 +1214,10 @@ static XrXirStatus cell_class_view_publish(const XrXirCompileContext *context,
 
 /* The legacy view remains conservative. Only the unique equation replay
  * may substitute every real Class subject and retain actual MODULE checks. */
-XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileContext *context,
-    const XrXirCellProvenance *proof,uint32_t function,uint32_t value,XrXirCellClassOriginView *output) {
+static XrXirStatus cell_class_origin_read(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t function,uint32_t value,XrXirCellClassOriginView *view) {
     if (!xir_compile_context_valid(context) || !proof || proof->resources!=context->resources ||
-        !output || function>=proof->function_count || value>=proof->functions[function].count ||
-        output->cells.intrinsic_mask || output->cells.dependencies || output->cells.word_count ||
-        output->cells.parameters || output->cells.parameter_count || output->residual_intrinsic_mask ||
-        output->dependencies || output->word_count || output->roots || output->root_count)
+        !view || function>=proof->function_count || value>=proof->functions[function].count)
         return XR_XIR_BAD_STRUCTURE;
     const CellProofFunction *f=&proof->functions[function];
     if (!xir_compile_work(context,10)) return XR_XIR_BUDGET;
@@ -1250,14 +1247,36 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileCont
     }
     uint8_t origin=f->stored ? proof->origins[f->begin+value] : 0;
     if (!!(origin&XR_XIR_CELL_ORIGIN_ROOT_UNRESOLVED)!=present) return XR_XIR_BAD_STRUCTURE;
-    XrXirCellClassOriginView view={0};
-    XrXirStatus status=xr_xir_compile_cell_origin_view(context,proof,function,value,&view.cells);
+    XrXirStatus status=xr_xir_compile_cell_origin_view(context,proof,function,value,&view->cells);
     if (status!=XR_XIR_OK) return status;
-    view.residual_intrinsic_mask=(origin&XR_XIR_CELL_ORIGIN_MODULE ? XR_XIR_CELL_ACCESS_ROOT:0) |
+    view->residual_intrinsic_mask=(origin&XR_XIR_CELL_ORIGIN_MODULE ? XR_XIR_CELL_ACCESS_ROOT:0) |
         (origin&XR_XIR_CELL_ORIGIN_UNKNOWN ? XR_XIR_CELL_ACCESS_UNKNOWN:0);
-    view.dependencies=row;view.word_count=f->class_words;
-    view.roots=f->class_count ? proof->class_roots+f->class_begin : NULL;view.root_count=f->class_count;
-    return cell_class_view_publish(context,&view,output);
+    view->dependencies=row;view->word_count=f->class_words;
+    view->roots=f->class_count ? proof->class_roots+f->class_begin : NULL;view->root_count=f->class_count;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t function,uint32_t value,XrXirCellClassOriginView *output) {
+    if (!xir_compile_context_valid(context) || !proof || proof->resources!=context->resources ||
+        !output || function>=proof->function_count || value>=proof->functions[function].count ||
+        output->cells.intrinsic_mask || output->cells.dependencies || output->cells.word_count ||
+        output->cells.parameters || output->cells.parameter_count || output->residual_intrinsic_mask ||
+        output->dependencies || output->word_count || output->roots || output->root_count)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirCellClassOriginView view={0};
+    XrXirStatus status=cell_class_origin_read(context,proof,function,value,&view);
+    return status==XR_XIR_OK?cell_class_view_publish(context,&view,output):status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_consume(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t function,uint32_t value,
+    const XrXirCellClassOriginConsumer *consumer) {
+    if (!consumer || !consumer->owner || !consumer->view) return XR_XIR_BAD_STRUCTURE;
+    XrXirCellClassOriginView view={0};
+    XrXirStatus status=cell_class_origin_read(context,proof,function,value,&view);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(context,1+sizeof(&view))) return XR_XIR_BUDGET;
+    return consumer->view(consumer->owner,&view);
 }
 XR_FUNC XrXirStatus xr_xir_compile_cell_access(const XrXirCompileContext *context,
     const XrXirCellProvenance *proof, const XrXirCellAccessRequest *request, uint32_t *output) {

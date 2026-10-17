@@ -849,40 +849,35 @@ static XrXirStatus effect_invocation_origins(EffectInvocationFlow *flow) {
 /* This operation consumes the common Cell proof. It does not infer a second
  * set of Cell roles or origins: each compact provider dependency is projected
  * through the already-owned physical input row of this exact equation. */
-static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
-    uint32_t value,uint64_t *output,bool *changed) {
-    EffectInvocationWorkspace *owner=flow->owner;
-    if (flow->node>=owner->final.count || !output || value>=flow->values)
-        return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,sizeof(uint32_t)+sizeof(const uint64_t *))) return XR_XIR_BUDGET;
-    uint32_t key_body=owner->final.nodes[flow->node].body;
-    const uint64_t *key_input=owner->final.nodes[flow->node].input;
-    XrXirCellOriginView legacy={0};XrXirCellClassOriginView storage={0};
-    const XrXirCellOriginView *view=NULL;XrXirStatus status=XR_XIR_OK;
-    if (owner->class_enabled) status=effect_invocation_class_cell_view(flow,value,&storage,&view);
-    else {
-        status=xr_xir_compile_cell_origin_view(owner->work,owner->final.cells,key_body,value,&legacy);
-        if (status==XR_XIR_OK && !xir_compile_work(owner->work,sizeof(view))) status=XR_XIR_BUDGET;
-        if (status==XR_XIR_OK) view=&legacy;
-    }
-    if (status!=XR_XIR_OK) return status;
+/* The projection and provider view live only on this synchronous stack.
+ * Every semantic origin is read and projected anew for the current value. */
+typedef struct EffectInvocationCellProjection {
+    EffectInvocationFlow *flow;
+    const uint64_t *input;
+    uint64_t *output;
+    bool *changed;
+} EffectInvocationCellProjection;
+static XrXirStatus effect_invocation_cell_project(const EffectInvocationCellProjection *projection,
+    const XrXirCellOriginView *view,uint32_t intrinsic) {
+    EffectInvocationFlow *flow=projection->flow;EffectInvocationWorkspace *owner=flow->owner;
+    const uint64_t *key_input=projection->input;uint64_t *output=projection->output;bool *changed=projection->changed;
     if (!view) return XR_XIR_BAD_STRUCTURE;
     if (view->word_count!=((uint64_t)view->parameter_count+63)/64 ||
         (!!view->dependencies!=!!view->word_count) ||
         (!!view->parameters!=!!view->parameter_count) ||
-        (view->intrinsic_mask&~(XR_XIR_CELL_ACCESS_ROOT|XR_XIR_CELL_ACCESS_UNKNOWN)))
+        (intrinsic&~(XR_XIR_CELL_ACCESS_ROOT|XR_XIR_CELL_ACCESS_UNKNOWN)))
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
     uint32_t known=flow->basis.parameters+2;
     uint64_t known_bit=UINT64_C(1)<<(known%64);
     if (changed && !(output[known/64]&known_bit)) *changed=true;
     output[known/64]|=known_bit;
-    if (view->intrinsic_mask&XR_XIR_CELL_ACCESS_ROOT) {
+    if (intrinsic&XR_XIR_CELL_ACCESS_ROOT) {
         uint64_t root_bit=UINT64_C(1)<<(flow->basis.parameters%64);
         if (changed && !(output[flow->basis.parameters/64]&root_bit)) *changed=true;
         output[flow->basis.parameters/64]|=root_bit;
     }
-    if (view->intrinsic_mask&XR_XIR_CELL_ACCESS_UNKNOWN) {
+    if (intrinsic&XR_XIR_CELL_ACCESS_UNKNOWN) {
         uint32_t bit=flow->basis.parameters+1;
         uint64_t unknown_bit=UINT64_C(1)<<(bit%64);
         if (changed && !(output[bit/64]&unknown_bit)) *changed=true;
@@ -913,6 +908,39 @@ static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
         }
     }
     return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_cell_class_receive(void *owner,const XrXirCellClassOriginView *view) {
+    EffectInvocationCellProjection *projection=owner;uint32_t intrinsic=0;
+    XrXirStatus status=effect_invocation_class_cell_intrinsic(projection->flow,view,&intrinsic);
+    return status==XR_XIR_OK?effect_invocation_cell_project(projection,&view->cells,intrinsic):status;
+}
+
+static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
+    uint32_t value,uint64_t *output,bool *changed) {
+    EffectInvocationWorkspace *owner=flow->owner;
+    if (flow->node>=owner->final.count || !output || value>=flow->values)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,sizeof(uint32_t)+sizeof(const uint64_t *))) return XR_XIR_BUDGET;
+    uint32_t key_body=owner->final.nodes[flow->node].body;
+    const uint64_t *key_input=owner->final.nodes[flow->node].input;
+    EffectInvocationCellProjection projection={flow,key_input,output,changed};
+    if (owner->class_enabled && flow->types_ready && effect_body_request_sequence_owned(&flow->body)) {
+        if (!owner->effects || !owner->final.cells) return XR_XIR_BAD_STRUCTURE;
+        XrXirCellClassOriginConsumer consumer={&projection,effect_invocation_cell_class_receive};
+        return xr_xir_compile_cell_class_origin_consume(owner->work,owner->final.cells,key_body,value,&consumer);
+    }
+    XrXirCellOriginView legacy={0};XrXirCellClassOriginView storage={0};
+    const XrXirCellOriginView *view=NULL;XrXirStatus status=XR_XIR_OK;
+    if (owner->class_enabled) status=effect_invocation_class_cell_view(flow,value,&storage,&view);
+    else {
+        status=xr_xir_compile_cell_origin_view(owner->work,owner->final.cells,key_body,value,&legacy);
+        if (status==XR_XIR_OK && !xir_compile_work(owner->work,sizeof(view))) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) view=&legacy;
+    }
+    if (status!=XR_XIR_OK) return status;
+    if (!view) return XR_XIR_BAD_STRUCTURE;
+    return effect_invocation_cell_project(&projection,view,view->intrinsic_mask);
 }
 
 static XrXirStatus effect_invocation_cell_consume(EffectInvocationFlow *flow,
