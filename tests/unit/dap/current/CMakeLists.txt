@@ -13,6 +13,16 @@ if(WIN32)
     add_subdirectory(process_handoff)
 endif()
 
+add_executable(test_dap_native_throw_boundary test_native_throw_boundary.c ${XIR_CALL_GENERATED})
+target_link_libraries(test_dap_native_throw_boundary PRIVATE xray_xir_scalar)
+if(MSVC)
+    target_compile_options(test_dap_native_throw_boundary PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_native_throw_boundary PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_native_throw_boundary COMMAND test_dap_native_throw_boundary)
+set_tests_properties(test_dap_native_throw_boundary PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;ownership;execution")
+
 add_executable(test_xir_effects_compile_prefix test_effects_compile_prefix.c)
 target_link_libraries(test_xir_effects_compile_prefix PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_effects_compile_prefix PRIVATE

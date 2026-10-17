@@ -15,6 +15,7 @@
 #include "xxir_cell_owner_internal.h"
 #include "xxir_effect_contract_internal.h"
 typedef struct XrXirCallObserver XrXirCallObserver;
+typedef struct XirCallNativeObserver XirCallNativeObserver;
 typedef struct XrXirCallBudget {
     uint64_t byte_limit, requested_limit, requested_bytes, live_bytes, peak_bytes, allocations, frees;
     uint64_t resume_limit, resumes;
@@ -25,6 +26,9 @@ typedef struct XrXirCallBudget {
     const XrXirCallObserver *observer;
     const void *observer_instance;
     bool notifying;
+    const XirCallNativeObserver *native_observer;
+    const void *native_instance;
+    XrXirCall *native_hold;
 } XrXirCallBudget;
 typedef enum XrXirCellParameterRole {
     XR_XIR_CELL_ROLE_UNKNOWN, XR_XIR_CELL_ROLE_OWNED_CAPTURE,

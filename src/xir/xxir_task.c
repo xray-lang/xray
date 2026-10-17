@@ -474,8 +474,9 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor || !quantum) return XR_XIR_CALL_BAD_ARGUMENT;
     if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
+    if (executor->budget->native_hold) return XR_XIR_CALL_READY;
     executor->driving = true;
-    while (quantum-- && executor->ready_head) {
+    while (quantum-- && executor->ready_head && !executor->budget->native_hold) {
         XirTaskActivation *activation = task_core_dequeue(executor);
         XirTask *task = activation->task;
         if (task) task->state = XIR_TASK_RUNNING;
@@ -486,7 +487,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
         executor->current = NULL;
         task_core_dispatch_result(executor,activation,result);
     }
-    task_core_reject_closed_wait(executor);
+    if (!executor->budget->native_hold) task_core_reject_closed_wait(executor);
     executor->driving = false;
     bool root_waiting = executor->root.call && xr_xir_call_state(executor->root.call) == XR_XIR_CALL_SUSPENDED;
     return executor->ready_head ? XR_XIR_CALL_READY : executor->active || root_waiting ? XR_XIR_CALL_SUSPENDED : XR_XIR_CALL_RETURNED;
@@ -558,6 +559,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_root(XrXirTaskExecutor *exec
     if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     XrXirCallStatus status = xr_xir_call_request_cancel(executor->root.call);
     if (status != XR_XIR_CALL_CANCEL_REQUESTED) return status;
+    executor->budget->native_hold=NULL;
     if (executor->external == &executor->root) {
         executor->external = NULL; executor->external_call_wake = 0;
     }
