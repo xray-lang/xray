@@ -33294,6 +33294,36 @@
         "Complete three-allocation/readonly/mutable-loan/resize original andall19outputs;legalSourcefailure stayspositivefailure. Symbolic bytes andsuccessfulnormalpreconditionsdoNOTqualifyactualborrow/lifetime,allocationfailure,reclamation,FI,resources,safety,providersormixed."
       ],
       "independent_observation_count": 19
+    },
+    {
+      "id": "complete_memory_primitives_mem_view_int_literal_store",
+      "oracle_id": "complete_memory_primitives_mem_view_int_literal_store",
+      "source": "tests/diff/cases/semantics/oop/mem_view_int_literal_store.xr",
+      "source_lf_sha256": "ccb39aaeb92445c0775ad5e2faff3f7162a7068a8939ec3ae570bb1800845d73",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "0\n4096\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13",
+        "P08",
+        "P07"
+      ],
+      "independent_execution_model": "Complete unchanged Slot u64 view original:all eight initial255bytes,one mutPtr andone withSliceMut<Slot> count1,original storeSlot refhelper called with0then4096,andboth fullu64field reads/prints retained. Independent exact unsigned64-bit stores replace all eight bytes,so narrow32-bit stores leave observable255tail;both explicit byte orders yield0/4096. No host orproduct-output oracle;logical scoped view andoutput traces do not prove actual compiler inlining,ABI width,physical pointer alignment,borrow lifetime,FI,resources,safety,providers or mixed execution.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/oop/mem_view_int_literal_store.xr",
+        "source_lf_sha256": "ccb39aaeb92445c0775ad5e2faff3f7162a7068a8939ec3ae570bb1800845d73"
+      },
+      "remaining_gates": [
+        "Complete eight-byte255base/refhelper/Slotu64view/twoliterals/twofieldprints retained. Real inlining andwidth regression needsactualVM/C/native;logical independent trace doesnotqualifyphysicalborrow/alignment/FI/resources/safety/providers/mixed."
+      ],
+      "independent_observation_count": 2
     }
   ]
 }

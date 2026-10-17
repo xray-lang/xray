@@ -15,7 +15,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
             'mem_volatile_shared_core':[305419896,120,255,43981,72623859790382856,'ok']}
         self.assertEqual({name:m.observations()[name] for name in expected},expected)
         self.assertEqual(sum(map(len,expected.values())),82)
-        self.assertEqual(len([row for row in m.expected_rows() if row['id'] not in {m._UNALIGNED_ID,m._ALLOCATION_ID} and row['original_source'] not in m._LAYOUT_PROGRAMS.values()]),5)
+        self.assertEqual(len([row for row in m.expected_rows() if row['id'] not in {m._UNALIGNED_ID,m._ALLOCATION_ID,m._LITERAL_SLOT_ID} and row['original_source'] not in m._LAYOUT_PROGRAMS.values()]),5)
 
     def test_uninitialized_and_dead_bytes_never_supply_observations(self):
         memory=m.Region(4)
@@ -106,7 +106,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
           '3e9 is i32=false is i64=true','3e9 as i32?=null','-5 is u8=false is i16=true',
           '1.5 is f32=true is f64=true','1.5 as f32?=1.5','0.1 is f32=false is f64=true','0.1 as f32?=null','"s" is i32=false is f32=false']}
         self.assertEqual(sum(map(len,expected.values())),35);self.assertEqual(m.fixed_layout_observations(),expected)
-        self.assertEqual(len([row for row in m.expected_rows() if row['id'] not in {m._UNALIGNED_ID,m._ALLOCATION_ID}]),10);self.assertEqual(sum(map(len,m.observations().values())),117)
+        self.assertEqual(len([row for row in m.expected_rows() if row['id'] not in {m._UNALIGNED_ID,m._ALLOCATION_ID,m._LITERAL_SLOT_ID}]),10);self.assertEqual(sum(map(len,m.observations().values())),117)
 
     def test_packing_and_requested_alignment_do_not_change_member_order(self):
         fields=[(1,1),(4,4)]
@@ -257,5 +257,51 @@ class CompleteMemoryPrimitives(unittest.TestCase):
         self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
         self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8']);self.assertEqual(len(case['stdout_utf8'].splitlines()),19)
         self.assertEqual((case['expected_exit_code'],case['stderr_utf8']),(0,''))
+
+
+    def test_complete_slot_view_preserves_filled_base_helper_andboth_reads(self):
+        trace=m.literal_slot_trace()
+        self.assertEqual(trace['observations'],[0,4096]);self.assertEqual(trace['initial_bytes'],[255]*8)
+        self.assertEqual(trace['events'],[('array',8),('fill',255),('mut_ptr',),('with_slice_mut_enter','Slot',1),
+            ('storeSlot',0,'u64'),('field_read','Slot.ptr','u64'),('storeSlot',4096,'u64'),
+            ('field_read','Slot.ptr','u64'),('with_slice_mut_end',)])
+        self.assertEqual(trace['backing_byte_snapshots'],[[0]*8,[0,16,0,0,0,0,0,0]])
+        self.assertEqual((trace['field_type'],trace['field_bytes'],trace['view_count']),('u64',8,1))
+        self.assertEqual((trace['original_helper_calls'],trace['original_field_reads'],trace['original_print_expressions']),(2,2,2))
+        self.assertFalse(trace['actual_inlining_ABI_borrow_lifetime_FI_safety_provider_or_mixed_qualified'])
+
+    def test_narrow_store_corruption_is_detected_with_both_explicit_byte_orders(self):
+        class Narrow(m.U64SlotView):
+            def store(self,value):self.region.store_int(0,4,value,endian=self.endian)
+        for endian in ('little','big'):
+            with self.subTest(endian=endian):
+                self.assertEqual(m.literal_slot_trace(endian=endian)['observations'],[0,4096])
+                wrong=m.literal_slot_trace(Narrow,endian=endian)
+                self.assertNotEqual(wrong['observations'],[0,4096])
+                self.assertEqual(wrong['backing_byte_snapshots'][0],[0]*4+[255]*4)
+        view=m.U64SlotView(m.Region(8,zeroed=True),'little')
+        for value in (-1,1<<64,True):
+            with self.assertRaises(ValueError):view.store(value)
+        view.active=False
+        with self.assertRaises(ValueError):view.read()
+        with self.assertRaises(ValueError):view.store(0)
+
+    def test_complete_slot_source_andeach_normative_input_remain_fixed(self):
+        saved=Path.read_bytes
+        for name in m._LITERAL_SLOT_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==m.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):m.literal_slot_expected_row()
+        with mock.patch.object(m,'_LITERAL_SLOT_INPUTS',{}),self.assertRaises(ValueError):m.literal_slot_expected_row()
+
+    def test_complete_slot_product_keeps_original_helper_literals_andtwo_outputs(self):
+        import json
+        row=m.literal_slot_expected_row()
+        case=next(x for x in json.loads((m.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases'] if x['id']==row['id'])
+        self.assertEqual((case['source'],case['entry'],case['source_context']),(m._LITERAL_SLOT_SOURCE,'run','original_absolute'))
+        self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+        self.assertEqual((row['source'],row['original_source'],row['required_target']),(m._LITERAL_SLOT_SOURCE,m._LITERAL_SLOT_SOURCE,'windows-x86_64'))
+        self.assertEqual((case['expected_exit_code'],case['stderr_utf8'],case['stdout_utf8']),(0,'','0\n4096\n'))
+        self.assertEqual(row['expected'],{'exit_code':0,'stderr_utf8':'','stdout_utf8':'0\n4096\n'})
 
 if __name__=='__main__':unittest.main()

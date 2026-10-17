@@ -387,7 +387,7 @@ def expected_rows():
     for row in rows:
         if row['original_source'] in _LAYOUT_PROGRAMS.values():
             row['model']='Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.'
-    return rows+[unaligned_expected_row(),allocation_expected_row()]
+    return rows+[unaligned_expected_row(),allocation_expected_row(),literal_slot_expected_row()]
 
 _UNALIGNED_SOURCE = 'tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr'
 _UNALIGNED_ID = 'complete_memory_primitives_mem_load_store_unaligned_shared_core'
@@ -543,3 +543,60 @@ def allocation_expected_row():
                 'stdout_utf8':''.join(render({'expected':value})+chr(10) for value in trace['observations'])},
             'observation_count':19,'required_semantic_trace':trace,
             'model':'Complete unchanged managed Buffer original:three allocations16/128aligned64/8zeroed,all five borrowPtr calls,readonly byte-view scope,one scoped mutable loan andpost-loan alias read,all128-byte set,zeroed bytes andwrite,resize64 with preserved initialized prefix andfresh reborrow,all19prints. Independent symbolic bytes under the original successful allocation/resize prerequisites;new bytes remain uninitialized andno physical pointer movement,allocation count,reclamation,real borrow lifetime,FI/resource failure,safety,provider or mixed qualification is inferred.'}
+
+_LITERAL_SLOT_SOURCE = 'tests/diff/cases/semantics/oop/mem_view_int_literal_store.xr'
+_LITERAL_SLOT_ID = 'complete_memory_primitives_mem_view_int_literal_store'
+_LITERAL_SLOT_INPUTS = {'tests/diff/cases/semantics/oop/mem_view_int_literal_store.xr': 'ccb39aaeb92445c0775ad5e2faff3f7162a7068a8939ec3ae570bb1800845d73', 'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677', 'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915', 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e', 'src/frontend/analyzer/xa_intrinsic_registry.def': 'b82d2d08038fe71e60bda2f3d9f88b1bb7711be72b28f11a8d15eb635c7ccc4b'}
+
+
+class U64SlotView:
+    """Logical scoped view of the original one-field eight-byte Slot."""
+    def __init__(self,region,endian):
+        self.region=region;self.endian=endian;self.active=True
+
+    def store(self,value):
+        if not self.active:raise ValueError('Logical Slot view has ended')
+        if type(value) is not int or not 0<=value<1<<64:raise ValueError('Exact u64 field value required')
+        self.region.store_int(0,8,value,endian=self.endian)
+
+    def read(self):
+        if not self.active:raise ValueError('Logical Slot view has ended')
+        return self.region.load_int(0,8,endian=self.endian)
+
+
+def literal_slot_trace(view_class=U64SlotView,*,endian='little'):
+    if endian not in ('little','big'):raise ValueError('Explicit byte order required')
+    memory=Region(8);memory.write(0,bytes([255])*8)
+    events=[('array',8),('fill',255),('mut_ptr',),('with_slice_mut_enter','Slot',1)]
+    view=view_class(memory,endian);out=[];snapshots=[]
+    def store_slot(slots,value):
+        events.append(('storeSlot',value,'u64'));slots.store(value)
+    try:
+        for value in (0,4096):
+            store_slot(view,value);out.append(view.read());snapshots.append(list(memory.read(0,8)))
+            events.append(('field_read','Slot.ptr','u64'))
+    finally:view.active=False;events.append(('with_slice_mut_end',))
+    return {'observations':out,'events':events,'backing_byte_snapshots':snapshots,
+            'initial_bytes':[255]*8,'field_type':'u64','field_bytes':8,'view_count':1,
+            'original_helper_calls':2,'original_field_reads':2,'original_print_expressions':2,
+            'helper_body_preserved':True,'byte_order':endian,'host_queries':0,
+            'normal_preconditions':['Original Array allocation succeeds','Original unsafe view storage is suitable for Slot'],
+            'actual_inlining_ABI_borrow_lifetime_FI_safety_provider_or_mixed_qualified':False}
+
+
+def literal_slot_expected_row():
+    required={_LITERAL_SLOT_SOURCE,'spec/source/sections/003-2-type-system.md',
+              'spec/source/sections/005-4-statements.md','spec/source/sections/015-14-built-in-type-methods.md',
+              'src/frontend/analyzer/xa_intrinsic_registry.def'}
+    if set(_LITERAL_SLOT_INPUTS)!=required or _LITERAL_SLOT_SOURCE!='tests/diff/cases/semantics/oop/mem_view_int_literal_store.xr':
+        raise ValueError('Complete Slot view original or authorities changed')
+    for name,digest in _LITERAL_SLOT_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Complete Slot view input changed: '+name)
+    trace=literal_slot_trace()
+    if len(trace['observations'])!=2:raise ValueError('Complete Slot view observations lost')
+    return {'id':_LITERAL_SLOT_ID,'source':_LITERAL_SLOT_SOURCE,'original_source':_LITERAL_SLOT_SOURCE,
+            'required_target':TARGET,'expected':{'exit_code':0,'stderr_utf8':'',
+                'stdout_utf8':''.join(str(x)+chr(10) for x in trace['observations'])},
+            'observation_count':2,'required_semantic_trace':trace,
+            'model':'Complete unchanged Slot u64 view original:all eight initial255bytes,one mutPtr andone withSliceMut<Slot> count1,original storeSlot refhelper called with0then4096,andboth fullu64field reads/prints retained. Independent exact unsigned64-bit stores replace all eight bytes,so narrow32-bit stores leave observable255tail;both explicit byte orders yield0/4096. No host orproduct-output oracle;logical scoped view andoutput traces do not prove actual compiler inlining,ABI width,physical pointer alignment,borrow lifetime,FI,resources,safety,providers or mixed execution.'}
