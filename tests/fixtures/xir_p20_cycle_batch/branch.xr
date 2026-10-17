@@ -1,0 +1,22 @@
+export fn make_branch(mode: i64) -> fn(i64) -> i64 {
+    var left: fn(i64) -> i64 = fn(value: i64) -> i64 { return value + 100 }
+    var right: fn(i64) -> i64 = fn(value: i64) -> i64 { return value + 200 }
+    const joint = fn(command: i64) -> i64 {
+        if (command == 0) {
+            left = fn(value: i64) -> i64 { return value + 300 }
+            right = fn(value: i64) -> i64 { return value + 400 }
+            return 17
+        }
+        if (command == 2) {
+            return left(1) + right(1)
+        }
+        return 42
+    }
+    left = joint
+    right = joint
+    Coro.yield()
+    if (mode != 0) {
+        joint(0)
+    }
+    return joint
+}
