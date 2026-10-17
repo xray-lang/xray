@@ -659,7 +659,7 @@ def expected_rows():
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
-    return rows+[stack_entry_expected_row()]
+    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]
 
 
 def named_expected_rows():
@@ -674,7 +674,7 @@ def named_expected_rows():
             'required_original_assertion_results':body.get('assertion_results',[]),
             'model':'Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.'})
         if name in _NAMED_CHANNEL_PROGRAMS or name in _CANCEL_NAMED:rows[-1]['required_semantic_trace']=body['semantic_trace']
-    return rows+[stack_named_expected_row()]
+    return rows+[stack_named_expected_row(),plain_scope_named_expected_row()]
 
 _STACK_SOURCE = 'tests/regression/11_coroutine/1149_module_call_stack_grow.xr'
 _STACK_HELPER = 'tests/regression/11_coroutine/modules/big_stack.xr'
@@ -764,3 +764,149 @@ def stack_named_expected_row():
             'observation_count':38,'required_original_assertion_results':trace['assertion_results'],
             'required_semantic_trace':trace,
             'model':'Complete threeoriginalnamed bodies andunchanged importedChain/wide/middle helper:all30/16/10locals remaininSource,36worker/middle/widecalls,35go/awaits,all36originalassertionsand32reuseiterations retained. Independent exact sums giveworker(n)=56n+1464forselectedbounded inputs. Addprints ofresolvedscalarlocalsafteroriginalassertions:5firstbody/1directbody/32loop=38observations;nohelpercallorsideeffectisduplicated. RealCLI discoveryandfullVM/C/nativebodyinvocationsareseparate. Original64stack/4frames comments arehistoricalpurpose,notcurrentframe/slab/physicalreuse/FI/resource/lifetime/safety/provider/mixedqualification.'}
+
+_PLAIN_SCOPE_SOURCE = 'tests/regression/11_coroutine/1135_scope_child_errors.xr'
+_PLAIN_SCOPE_FIXTURE = 'tests/unit/xir/legacy_consumers/fixtures/plain_scope_child_errors_observed/root.xr'
+_PLAIN_SCOPE_ENTRY_ID = 'complete_plain_scope_child_errors_run'
+_PLAIN_SCOPE_NAMED_ID = 'complete_plain_scope_child_errors_named'
+_PLAIN_SCOPE_TEST = 'test_scope_child_errors'
+_PLAIN_SCOPE_AUTHORITIES = ('spec/source/sections/003-2-type-system.md',
+ 'spec/source/sections/005-4-statements.md',
+ 'spec/source/sections/006-5-declarations.md',
+ 'spec/source/sections/009-8-error-handling.md',
+ 'spec/source/sections/011-10-concurrency-and-coroutines.md',
+ 'spec/source/sections/014-13-built-in-functions.md',
+ 'spec/source/sections/015-14-built-in-type-methods.md',
+ 'stdlib/time/time.xr',
+ 'stdlib/types/coroutine.xr')
+_PLAIN_SCOPE_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
+ 'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
+ 'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
+ 'spec/source/sections/009-8-error-handling.md': '3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b',
+ 'spec/source/sections/011-10-concurrency-and-coroutines.md': '27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea',
+ 'spec/source/sections/014-13-built-in-functions.md': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380',
+ 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
+ 'stdlib/time/time.xr': 'd2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72',
+ 'stdlib/types/coroutine.xr': 'f85c868bf12b2b90988ead5cf746fd8e522d5c2d6398a64882b47637c72dc7a6',
+ 'tests/regression/11_coroutine/1135_scope_child_errors.xr': 'bfcbcf10ab7238cafe5eabda39d1e04b227e229b641e1af0c0a88834a2af7a95',
+ 'tests/unit/xir/legacy_consumers/fixtures/plain_scope_child_errors_observed/root.xr': 'a51500915b51daacdde6dee4f45ebc736a14db5b296f4b49deafbdd48cd2846b'}
+_PLAIN_SCOPE_TRANSFORMS = [('    assertEqual(recv_sum(ch, 3), 111)\n',
+  '    var p19PlainScopeSum = recv_sum(ch, 3)\n'
+  '    assertEqual(p19PlainScopeSum, 111)\n'
+  '    print(p19PlainScopeSum)\n'),
+ ('        match (result) {\n'
+  '            TaskResult.Failed { error: _ } -> {}\n'
+  '            _ -> { assert(false, "failed task should be observed through TaskResult") }\n'
+  '        }\n',
+  '        match (result) {\n'
+  '            TaskResult.Failed { error: _ } -> {}\n'
+  '            _ -> { assert(false, "failed task should be observed through TaskResult") }\n'
+  '        }\n'
+  '        print(match (result) {\n'
+  '            TaskResult.Failed { error: _ } -> true\n'
+  '            _ -> false\n'
+  '        })\n'),
+ ('    assertEqual(recv_sum(ch, 1), 5)\n',
+  '    var p19PlainScopeFive = recv_sum(ch, 1)\n'
+  '    assertEqual(p19PlainScopeFive, 5)\n'
+  '    print(p19PlainScopeFive)\n'),
+ ('        match (result) {\n'
+  '            TaskResult.Cancelled -> {}\n'
+  '            _ -> { assert(false, "cancelled task should report TaskResult.Cancelled") }\n'
+  '        }\n',
+  '        match (result) {\n'
+  '            TaskResult.Cancelled -> {}\n'
+  '            _ -> { assert(false, "cancelled task should report TaskResult.Cancelled") }\n'
+  '        }\n'
+  '        print(match (result) {\n'
+  '            TaskResult.Cancelled -> true\n'
+  '            _ -> false\n'
+  '        })\n')]
+
+
+def plain_scope_child_error_trace(order=(1,10,100),cancel_siblings=False,
+                                 failure_escapes_scope=False,failed_tag='Failed',
+                                 cancel_tag='Cancelled',cancel_position='not_started'):
+    if any(type(value) is not int for value in order) or tuple(sorted(order))!=(1,10,100) or len(order)!=3:
+        raise ValueError('Plain scope requires all three original reports exactly once')
+    if cancel_position not in {'not_started','sleeping'}:
+        raise ValueError('Outside the two selected pending-child cancellation shapes')
+    delivered=[]
+    states=[]
+    failed=False
+    for value in order:
+        if cancel_siblings and failed:
+            states.append({'value':value,'terminal':'Cancelled','sent':False})
+            continue
+        delivered.append(value)
+        status='Failed' if value==10 else 'Success'
+        states.append({'value':value,'terminal':status,'sent':True})
+        failed|=status=='Failed'
+    settled=len(delivered)==3 and not failure_escapes_scope
+    scope_sum=sum(delivered) if settled else None
+    explicit_delivered=[5]
+    observes_failed=failed_tag=='Failed'
+    observes_cancelled=cancel_tag=='Cancelled'
+    values=[scope_sum,observes_failed,sum(explicit_delivered),observes_cancelled] if settled else []
+    return {'values':values,'root_can_terminate':settled,
+        'plain_scope_reports':states,'all_three_sibling_reports_complete':len(delivered)==3,
+        'first_scope_sum':scope_sum,'explicit_failure_report_before_throw':explicit_delivered,
+        'explicit_awaitResult_tag':failed_tag,'cancelled_awaitResult_tag':cancel_tag,
+        'cancel_position':cancel_position,'plain_scope_failure_propagates':failure_escapes_scope,
+        'semantic_postconditions':[settled and scope_sum==111,observes_failed,
+                                   sum(explicit_delivered)==5,observes_cancelled],
+        'original_positive_assertion_executions':2,
+        'original_failure_assertion_branches_avoided':2,
+        'original_static_assertions':4,
+        'source_go_calls':5,'source_awaitResult_calls':2,'source_plain_scopes':3,
+        'original_send_values':[1,10,100,5],'original_receive_count':4,
+        'original_Channel_capacities':[3,1],'original_close_calls':2,
+        'original_slow_sleep_ms':1000,
+        'source_error_payloads_before_runtime_projection':['SvErr.Msg(error_10)','SvErr.Msg(error_5)'],
+        'TaskResult_Failed_payload_layout_or_Error_PanicInfo_conversion_qualified':False,
+        'real_scheduling_cancel_checkpoints_cleanup_FI_resource_lifetime_safety_provider_mixed_qualified':False}
+
+
+def validate_plain_scope_inputs():
+    required=set(_PLAIN_SCOPE_AUTHORITIES)|{_PLAIN_SCOPE_SOURCE,_PLAIN_SCOPE_FIXTURE}
+    if set(_PLAIN_SCOPE_INPUTS)!=required or len(_PLAIN_SCOPE_TRANSFORMS)!=4:
+        raise ValueError('Plain scope lost a complete source, authority or observation transform')
+    for name,digest in _PLAIN_SCOPE_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Complete plain-scope input changed: '+name)
+    original=(ROOT/_PLAIN_SCOPE_SOURCE).read_text(encoding='utf-8')
+    observed=original
+    for before,after in _PLAIN_SCOPE_TRANSFORMS:
+        if observed.count(before)!=1:
+            raise ValueError('Plain-scope observation lost its exact original call or match')
+        observed=observed.replace(before,after,1)
+    if observed!=(ROOT/_PLAIN_SCOPE_FIXTURE).read_text(encoding='utf-8'):
+        raise ValueError('Plain-scope fixture changed a body beyond single-evaluation observations')
+    if re.findall(r'@test\s+fn\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(',original)!=[_PLAIN_SCOPE_TEST]:
+        raise ValueError('Plain-scope original named body or order changed')
+
+
+def plain_scope_entry_expected_row():
+    validate_plain_scope_inputs()
+    return {'id':_PLAIN_SCOPE_ENTRY_ID,'source':_PLAIN_SCOPE_SOURCE,
+        'original_source':_PLAIN_SCOPE_SOURCE,'required_target':None,
+        'expected':{'exit_code':0,'stdout_utf8':'','stderr_utf8':''},'observation_count':0,
+        'separate_named_body_obligation':{'names':[_PLAIN_SCOPE_TEST],'executed_by_run':False,
+            'qualification':'OPEN_REQUIRES_WHOLE_ORIGINAL_NAMED_BODY_AND4_EXTERNAL_VALUES'},
+        'model':'Complete unchanged original only declares the named wrapper and all seven helpers;no root call or output. Empty entry success does not execute or qualify any scope,Task/error/cancel operation or assertion.'}
+
+
+def plain_scope_named_expected_row():
+    validate_plain_scope_inputs()
+    trace=plain_scope_child_error_trace()
+    if not all(trace['semantic_postconditions']) or not trace['root_can_terminate']:
+        raise ValueError('Independent complete plain-scope postcondition failed')
+    values=trace['values']
+    return {'id':_PLAIN_SCOPE_NAMED_ID,'source':_PLAIN_SCOPE_FIXTURE,
+        'original_source':_PLAIN_SCOPE_SOURCE,'required_target':None,
+        'expected':{'exit_code':0,'stdout_utf8':''.join(render(value)+'\n' for value in values),
+                    'stderr_utf8':'','required_test_names':[_PLAIN_SCOPE_TEST],
+                    'per_test_observations':{_PLAIN_SCOPE_TEST:{'values':values}}},
+        'observation_count':4,'required_semantic_trace':trace,
+        'required_original_assertion_results':trace['semantic_postconditions'],
+        'model':'Complete original wrapper and all seven helpers;all fivego/twoawaitResult/three plain scopes,four sends/four receives/two closes and originalslow sleep1000 remain. Plain-scope joining keeps successful siblings after a failure;state observations use existing immutable TaskResult values. Two channel-draining recv_sum expressions are evaluated once before the unchanged assertions and prints. Six complete report permutations yield111/true/5/true. Failed payload layout,Error/PanicInfo representation,actual cancellation/scheduler/cleanup/FI/resources/lifetime/safety/provider/mixed remain unqualified.'}

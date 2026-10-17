@@ -33646,6 +33646,94 @@
           }
         ]
       }
+    },
+    {
+      "id": "complete_plain_scope_child_errors_run",
+      "oracle_id": "complete_plain_scope_child_errors_run",
+      "source": "tests/regression/11_coroutine/1135_scope_child_errors.xr",
+      "source_lf_sha256": "bfcbcf10ab7238cafe5eabda39d1e04b227e229b641e1af0c0a88834a2af7a95",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete unchanged original only declares the named wrapper and all seven helpers;no root call or output. Empty entry success does not execute or qualify any scope,Task/error/cancel operation or assertion.",
+      "remaining_gates": [
+        "Whole original source and wrapper/all helpers with exact independent outputs and termination;script-empty success does not qualify body",
+        "All applicable full compiler/runtime FI/resources/lifetime/cancel/physical/safety/provider/mixed and final integrated-tree qualification"
+      ]
+    },
+    {
+      "id": "complete_plain_scope_child_errors_named",
+      "oracle_id": "complete_plain_scope_child_errors_named",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/plain_scope_child_errors_observed/root.xr",
+      "source_lf_sha256": "a51500915b51daacdde6dee4f45ebc736a14db5b296f4b49deafbdd48cd2846b",
+      "entry": "test",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "111\ntrue\n5\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P13",
+        "P14"
+      ],
+      "independent_execution_model": "Complete original wrapper and all seven helpers;all fivego/twoawaitResult/three plain scopes,four sends/four receives/two closes and originalslow sleep1000 remain. Plain-scope joining keeps successful siblings after a failure;state observations use existing immutable TaskResult values. Two channel-draining recv_sum expressions are evaluated once before the unchanged assertions and prints. Six complete report permutations yield111/true/5/true. Failed payload layout,Error/PanicInfo representation,actual cancellation/scheduler/cleanup/FI/resources/lifetime/safety/provider/mixed remain unqualified.",
+      "remaining_gates": [
+        "Whole original source and wrapper/all helpers with exact independent outputs and termination;script-empty success does not qualify body",
+        "All applicable full compiler/runtime FI/resources/lifetime/cancel/physical/safety/provider/mixed and final integrated-tree qualification"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/11_coroutine/1135_scope_child_errors.xr",
+        "selected_complete_source": "tests/regression/11_coroutine/1135_scope_child_errors.xr",
+        "selected_source_lf_sha256": "bfcbcf10ab7238cafe5eabda39d1e04b227e229b641e1af0c0a88834a2af7a95",
+        "method": "Preserve every original helper/statement;two channel-draining calls each execute exactly once before original assertions,then print their stored scalars;project existing immutable TaskResult tags after original matches without any second await.",
+        "values": [
+          {
+            "test": "test_scope_child_errors",
+            "expression": "p19PlainScopeSum",
+            "expected": 111,
+            "projection": null
+          },
+          {
+            "test": "test_scope_child_errors",
+            "expression": "match(result):Failed",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_scope_child_errors",
+            "expression": "p19PlainScopeFive",
+            "expected": 5,
+            "projection": null
+          },
+          {
+            "test": "test_scope_child_errors",
+            "expression": "match(result):Cancelled",
+            "expected": true,
+            "projection": null
+          }
+        ]
+      }
     }
   ]
 }

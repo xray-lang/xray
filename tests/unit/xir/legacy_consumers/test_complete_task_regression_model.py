@@ -82,7 +82,7 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(rows['complete_task_regression_1128_yield']['required_original_yield_checkpoints'],39)
 
     def test_declaration_only_modules_have_separate_full_named_body_requirements(self):
-        entries={x['id']:x for x in model.expected_rows()};named=[row for row in model.named_expected_rows() if row['id']!=model._STACK_NAMED_ID];self.assertEqual(len(named),13)
+        entries={x['id']:x for x in model.expected_rows()};named=[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID}];self.assertEqual(len(named),13)
         for row in named:
             name=row['id'].removeprefix('complete_task_named_')
             self.assertEqual(entries['complete_task_regression_'+name]['expected']['stdout_utf8'],'')
@@ -107,7 +107,7 @@ class TaskRegressionTraces(unittest.TestCase):
 
     def test_complete_entries_and_named_bodies_use_their_own_real_routes(self):
         cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
-        for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id']!=model._STACK_NAMED_ID])]:
+        for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID}])]:
             for expected in rows:
                 with self.subTest(case=expected['id']):
                     case=cases[expected['id']]
@@ -371,5 +371,87 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual([x['expected'] for x in test['independent_observations']['values']],[v for values in model.stack_call_trace()['per_test_values'].values() for v in values])
         self.assertEqual(test['companions'],[{'path':model._STACK_FIXTURE_HELPER,'lf_sha256':model._STACK_INPUTS[model._STACK_FIXTURE_HELPER]}])
         self.assertEqual(run['companions'],[{'path':model._STACK_HELPER,'lf_sha256':model._STACK_INPUTS[model._STACK_HELPER]}])
+
+
+    def test_plain_scope_all_six_report_orders_preserve_failure_and_success_siblings(self):
+        for order in __import__('itertools').permutations((1,10,100)):
+            trace=model.plain_scope_child_error_trace(order)
+            self.assertEqual(trace['values'],[111,True,5,True])
+            self.assertEqual(trace['semantic_postconditions'],[True]*4)
+            self.assertTrue(trace['root_can_terminate'])
+            self.assertEqual([x['value'] for x in trace['plain_scope_reports']],list(order))
+            self.assertEqual([x['terminal'] for x in trace['plain_scope_reports']].count('Failed'),1)
+        trace=model.plain_scope_child_error_trace()
+        self.assertEqual((trace['source_go_calls'],trace['source_awaitResult_calls'],trace['source_plain_scopes']),(5,2,3))
+        self.assertEqual((trace['original_receive_count'],trace['original_close_calls']),(4,2))
+        self.assertEqual(trace['original_send_values'],[1,10,100,5])
+        self.assertEqual(trace['original_Channel_capacities'],[3,1])
+        self.assertEqual(trace['original_slow_sleep_ms'],1000)
+        self.assertEqual((trace['original_static_assertions'],trace['original_positive_assertion_executions'],trace['original_failure_assertion_branches_avoided']),(4,2,2))
+
+    def test_linked_failure_policy_cannot_replace_the_complete_plain_scope(self):
+        wrong=[model.plain_scope_child_error_trace(order,cancel_siblings=True)
+               for order in __import__('itertools').permutations((1,10,100))]
+        self.assertEqual(sum(not trace['root_can_terminate'] for trace in wrong),4)
+        self.assertEqual(sum(trace['root_can_terminate'] for trace in wrong),2)
+        for trace in wrong:
+            if not trace['root_can_terminate']:
+                self.assertEqual(trace['values'],[])
+                self.assertFalse(trace['semantic_postconditions'][0])
+        escaped=model.plain_scope_child_error_trace(failure_escapes_scope=True)
+        self.assertFalse(escaped['root_can_terminate'])
+        self.assertEqual(escaped['values'],[])
+
+    def test_plain_scope_task_result_tags_and_parent_completion_are_not_interchangeable(self):
+        failed=model.plain_scope_child_error_trace(failed_tag='Success')
+        self.assertEqual(failed['values'],[111,False,5,True])
+        cancelled=model.plain_scope_child_error_trace(cancel_tag='Success')
+        self.assertEqual(cancelled['values'],[111,True,5,False])
+        for where in ('not_started','sleeping'):
+            trace=model.plain_scope_child_error_trace(cancel_position=where)
+            self.assertEqual(trace['values'],[111,True,5,True])
+            self.assertFalse(trace['TaskResult_Failed_payload_layout_or_Error_PanicInfo_conversion_qualified'])
+            self.assertFalse(trace['real_scheduling_cancel_checkpoints_cleanup_FI_resource_lifetime_safety_provider_mixed_qualified'])
+        with self.assertRaises(ValueError):model.plain_scope_child_error_trace((1,10))
+        with self.assertRaises(ValueError):model.plain_scope_child_error_trace(cancel_position='completed')
+
+    def test_plain_scope_every_original_and_observation_authority_is_pinned(self):
+        saved=Path.read_bytes
+        for name in model._PLAIN_SCOPE_INPUTS:
+            def changed(path):return saved(path)+b'changed' if path==model.ROOT/name else saved(path)
+            with self.subTest(path=name),mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):
+                model.validate_plain_scope_inputs()
+        with mock.patch.object(model,'_PLAIN_SCOPE_INPUTS',{}),self.assertRaises(ValueError):
+            model.validate_plain_scope_inputs()
+        with mock.patch.object(model,'_PLAIN_SCOPE_TRANSFORMS',[]),self.assertRaises(ValueError):
+            model.validate_plain_scope_inputs()
+
+    def test_plain_scope_observer_keeps_all_calls_and_does_not_drain_a_channel_twice(self):
+        import re
+        original=(model.ROOT/model._PLAIN_SCOPE_SOURCE).read_text(encoding='utf-8')
+        observed=(model.ROOT/model._PLAIN_SCOPE_FIXTURE).read_text(encoding='utf-8')
+        self.assertEqual(original.count('print('),0)
+        self.assertEqual(observed.count('print('),4)
+        self.assertEqual(re.findall(r'^fn\s+(\w+)',original,re.M),re.findall(r'^fn\s+(\w+)',observed,re.M))
+        for text in (original,observed):
+            self.assertEqual(len(re.findall(r'\bassert(?:Equal)?\(',text)),4)
+            self.assertEqual(text.count('recv_sum(ch, 3)'),1)
+            self.assertEqual(text.count('recv_sum(ch, 1)'),1)
+            self.assertIn('time.sleep(1000)',text)
+            self.assertIn('for (var i = 0; i < count; i++)',text)
+            self.assertEqual(text.count('@test'),1)
+
+    def test_plain_scope_empty_entry_and_complete_named_body_have_separate_routes(self):
+        cases={row['id']:row for row in json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases']}
+        entry=model.plain_scope_entry_expected_row()
+        named=model.plain_scope_named_expected_row()
+        self.assertEqual(cases[entry['id']]['source'],model._PLAIN_SCOPE_SOURCE)
+        self.assertEqual((cases[entry['id']]['entry'],cases[entry['id']]['source_context']),('run','original_absolute'))
+        self.assertEqual(entry['expected']['stdout_utf8'],'')
+        self.assertFalse(entry['separate_named_body_obligation']['executed_by_run'])
+        self.assertEqual((cases[named['id']]['source'],cases[named['id']]['entry']),(model._PLAIN_SCOPE_FIXTURE,'test'))
+        self.assertEqual(named['expected']['stdout_utf8'],'111\ntrue\n5\ntrue\n')
+        self.assertEqual(named['expected']['required_test_names'],[model._PLAIN_SCOPE_TEST])
+        self.assertEqual([x['expected'] for x in cases[named['id']]['independent_observations']['values']],[111,True,5,True])
 
 if __name__=='__main__':unittest.main()
