@@ -36,6 +36,11 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
  * This proves input provenance only, never moves, liveness or access authority. */
 XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirDiagnostic *diagnostic);
+/* Requires ordinary type, structure and SSA admission. Independently checks
+ * logical affine transfers, simultaneous PHIs and availability on all CFG paths.
+ * This grants neither root/NLL permissions nor executable move semantics. */
+XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *context,
+    const XrXirModule *module, XrXirDiagnostic *diagnostic);
 /* Requires a structurally and semantically admitted module. No executable
  * borrowed value is admitted without independent CFG proof. */
 XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *context,

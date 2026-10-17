@@ -138,6 +138,7 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *
     XrXirStatus status=view_flags_build(context,module->types,&flags);
     if (status!=XR_XIR_OK || !flags) return status;
     status=view_origins_verify(context,module,flags,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(context,module,diagnostic);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];
         if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
