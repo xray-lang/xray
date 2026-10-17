@@ -123,7 +123,7 @@ static void effect_invocation_final_clear(EffectInvocationFinal *final) {
     xr_compile_resources_free(final->nodes);xr_compile_resources_free(final->edges);
     xr_compile_resources_free(final->sites);
     xr_compile_resources_free(final->roots);xr_compile_resources_free(final->root_spaces);
-    /* Local seeds, physical rows and Cell proof share the material lifetime. */
+    /* Physical rows and Cell proof share the material lifetime. */
 }
 
 static void effect_invocation_final_free(EffectInvocationFinal *final) {
@@ -132,6 +132,9 @@ static void effect_invocation_final_free(EffectInvocationFinal *final) {
 }
 
 static void effect_invocation_discovery_clear(EffectInvocationWorkspace *owner) {
+    EffectInvocationPrimitive *primitives=owner->primitives;
+    owner->primitives=NULL;owner->primitive_count=0;
+    xr_compile_resources_free(primitives);
     if(owner->states) for(uint32_t n=0;n<owner->final.count;++n) {
         xr_compile_resources_free(owner->states[n].producers.facts);
         owner->states[n].producers=(EffectInvocationProducerSet){0};

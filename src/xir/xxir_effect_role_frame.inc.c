@@ -79,3 +79,8 @@ static XrXirStatus effect_role_frame(EffectRoleCheck *check) {
     }
     return XR_XIR_OK;
 }
+static XrXirStatus effect_invocation_primitive_frame(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material) {
+    EffectRoleCheck check={.work=work,.material=material};
+    return effect_role_frame(&check);
+}

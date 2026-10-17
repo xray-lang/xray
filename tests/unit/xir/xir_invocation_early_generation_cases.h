@@ -316,8 +316,18 @@ static XrXirStatus conditional_generation_publication_stage(const XrXirCompileCo
  * must be completely initialized before its ordinal enters count or queue. */
 static void conditional_generation_reserved_controls(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner) {
-    CHECK(owner->final.local_roots==owner->final.material->local_roots &&
-        owner->final.local_witnesses==owner->final.material->local_witnesses && owner->final.count<owner->final.capacity);
+    CHECK(owner->primitives && owner->primitive_count==effect_body_count(owner->final.material) &&
+        owner->final.count<owner->final.capacity);
+    EffectInvocationPrimitive saved=owner->primitives[0],actual={0};
+    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&actual)==XR_XIR_OK);
+    owner->primitives[0]=(EffectInvocationPrimitive){.facts={true,true}};
+    EffectInvocationPrimitive current={0};
+    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&current)==XR_XIR_OK &&
+        current.facts.requires_root==actual.facts.requires_root && current.facts.unresolved==actual.facts.unresolved &&
+        effect_invocation_witness_equal(&current.witnesses[0],&actual.witnesses[0]) &&
+        effect_invocation_witness_equal(&current.witnesses[1],&actual.witnesses[1]));
+    owner->primitives[0]=saved;
+    invocation_primitive_allocation_controls(context,owner->final.material);
     size_t bytes=(size_t)(owner->final.capacity-owner->final.count)*sizeof(*owner->final.nodes);
     memset(owner->final.nodes+owner->final.count,0xA5,bytes);
     uint32_t count=owner->final.count,pending=owner->pending;size_t attempts=rp_attempts;
@@ -338,8 +348,7 @@ static void conditional_generation_reserved_controls(const XrXirCompileContext *
 static void conditional_generation_publication_controls(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
     EffectInvocationFinal *owner=certificate->final;
-    CHECK(owner->local_roots==certificate->body->local_roots &&
-        owner->local_witnesses==certificate->body->local_witnesses);
+    CHECK(owner->material==certificate->body && owner->physical==certificate->body->physical);
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
     XrXirRootEffectWitness *witnesses=certificate->final->summary.witnesses;
     CHECK(effect_invocation_certificate_project(context,certificate,NULL,NULL)==XR_XIR_BAD_STRUCTURE &&

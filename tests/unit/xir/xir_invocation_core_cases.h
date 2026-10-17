@@ -35,6 +35,10 @@ static void *invocation_discovery_blocks[8192];
 static uint32_t invocation_discovery_counts[8192],invocation_discovery_count;
 static uint32_t invocation_discovery_class_count;
 static bool invocation_discovery_reused[8192];
+static void *invocation_primitive_payload,*invocation_primitive_block;
+static size_t invocation_primitive_bytes;
+static bool invocation_primitive_poisoned;
+static const EffectInvocationWorkspace *invocation_primitive_workspace;
 /* A new physical allocation can reuse an already released discovery address.
  * Its later release belongs to a different lifetime, not to the retired row. */
 static void invocation_discovery_allocated(void *memory) {
@@ -42,6 +46,13 @@ static void invocation_discovery_allocated(void *memory) {
         if(memory==invocation_discovery_blocks[i] && invocation_discovery_counts[i]) invocation_discovery_reused[i]=true;
 }
 static void invocation_discovery_observe(void *memory) {
+    if(memory==invocation_primitive_block && !invocation_primitive_poisoned) {
+        CHECK(invocation_primitive_payload && invocation_primitive_bytes);
+        CHECK(invocation_primitive_workspace && !invocation_primitive_workspace->primitives &&
+            !invocation_primitive_workspace->primitive_count);
+        memset(invocation_primitive_payload,0xA5,invocation_primitive_bytes);
+        invocation_primitive_poisoned=true;
+    }
     for(uint32_t i=0;i<invocation_discovery_count;++i)
         if(memory==invocation_discovery_blocks[i] && !invocation_discovery_reused[i]) ++invocation_discovery_counts[i];
 }
@@ -62,6 +73,17 @@ static void *invocation_retired_block(const void *payload) {
 }
 static void invocation_discovery_begin(const EffectInvocationWorkspace *workspace) {
     invocation_discovery_count=0;invocation_discovery_class_count=0;
+    invocation_primitive_payload=workspace->primitives;
+    invocation_primitive_workspace=workspace;
+    invocation_primitive_block=invocation_retired_block(workspace->primitives);
+    invocation_primitive_bytes=(size_t)workspace->primitive_count*sizeof(*workspace->primitives);
+    invocation_primitive_poisoned=false;
+    CHECK(!!invocation_primitive_payload==!!invocation_primitive_bytes);
+    if(invocation_primitive_block) {
+        invocation_discovery_blocks[0]=invocation_primitive_block;
+        invocation_discovery_reused[0]=false;invocation_discovery_counts[0]=0;
+        ++invocation_discovery_count;
+    }
     for(uint32_t n=0;n<workspace->final.count;++n) {
         const void *payloads[2]={workspace->states[n].producers.facts,workspace->states[n].classes.facts};
         for(uint32_t kind=0;kind<2;++kind) {
@@ -77,6 +99,7 @@ static void invocation_discovery_begin(const EffectInvocationWorkspace *workspac
     }
 }
 static void invocation_discovery_finished(bool retired) {
+    CHECK(invocation_primitive_poisoned==(retired && !!invocation_primitive_payload));
     for(uint32_t i=0;i<invocation_discovery_count;++i)
         CHECK(invocation_discovery_counts[i]==(retired?1u:0u));
 }
@@ -128,31 +151,23 @@ static void invocation_final_initializer_erasure(const XrXirCompileContext *work
     CHECK(node->cause_count==3 && current.requires_root);
     uint32_t intrinsic=node->intrinsic_mask,local=node->local_mask;
     EffectInvocationCause causes[6];memcpy(causes,node->causes,sizeof(causes));
-    XrXirRootEffects seed=certificate->body->local_roots[function];
     uint32_t constant=summary->functions[function].formula.constant_mask;
-    XrXirRootEffectWitness witnesses[4],local_witnesses[2];
+    XrXirRootEffectWitness witnesses[4];
     for (uint32_t d=0;d<4;++d) {
         size_t at=(size_t)d*summary->count+function;witnesses[d]=summary->witnesses[at];
         summary->witnesses[at]=(XrXirRootEffectWitness){0};
-    }
-    for (uint32_t d=0;d<2;++d) {
-        size_t at=(size_t)d*summary->count+function;local_witnesses[d]=certificate->body->local_witnesses[at];
-        certificate->body->local_witnesses[at]=(XrXirRootEffectWitness){0};
     }
     node->intrinsic_mask=node->local_mask=0;
     for (uint32_t a=0;a<6;++a) node->causes[a]=(EffectInvocationCause){
         .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
     summary->functions[function].formula.constant_mask=0;
-    certificate->body->local_roots[function]=(XrXirRootEffects){0};
     XrXirStatus status=effect_invocation_publication_match(work,certificate,summary);
     fprintf(stderr,"general Input initializer erasure status%u declaration%u\n",status,
         certificate->body->declarations->modules[0].initializer);
     CHECK(status==XR_XIR_BAD_STRUCTURE);
     node->intrinsic_mask=intrinsic;node->local_mask=local;memcpy(node->causes,causes,sizeof(causes));
     summary->functions[function].formula.constant_mask=constant;
-    certificate->body->local_roots[function]=seed;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+function]=witnesses[d];
-    for (uint32_t d=0;d<2;++d) certificate->body->local_witnesses[(size_t)d*summary->count+function]=local_witnesses[d];
     CHECK(effect_invocation_publication_match(work,certificate,summary)==XR_XIR_OK);
 }
 

@@ -44,6 +44,7 @@
 #include "xir_invocation_class_cell_cases.h"
 #include "xir_invocation_class_lifetime_cases.h"
 #include "xir_invocation_compact_snapshot_cases.h"
+#include "xir_invocation_primitive_cases.h"
 #include "xir_invocation_early_generation_cases.h"
 #include "xir_invocation_generation_range_cases.h"
 #include "xir_ordinary_initial_role_cases.h"

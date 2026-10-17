@@ -159,8 +159,6 @@ typedef struct EffectInvocationFinal {
     EffectInvocationSite *sites;
     EffectInvocationDeferred *deferred_calls;
     uint32_t *roots,*root_spaces;
-    const XrXirRootEffects *local_roots;
-    const XrXirRootEffectWitness *local_witnesses;
     uint32_t site_count,binding_count;
     uint32_t deferred_count,deferred_capacity;
     uint32_t count,capacity,edge_count,edge_capacity;
@@ -189,6 +187,13 @@ static bool effect_invocation_roles_shape(const EffectInvocationRead *read);
 static XrXirStatus effect_invocation_role(const EffectInvocationRead *read,
     uint32_t function,uint32_t parameter,uint32_t *output);
 
+typedef struct EffectInvocationPrimitive {
+    XrXirRootEffects facts;
+    XrXirRootEffectWitness witnesses[2];
+} EffectInvocationPrimitive;
+static XrXirStatus effect_invocation_primitive_frame(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material);
+
 typedef struct EffectInvocationWorkspace {
     EffectInvocationFinal final;
     EffectInvocationRead read;
@@ -198,6 +203,8 @@ typedef struct EffectInvocationWorkspace {
     uint32_t *edge_index;
     size_t edge_index_capacity;
     EffectInvocationState *states;
+    EffectInvocationPrimitive *primitives;
+    uint32_t primitive_count;
     uint32_t maximum;
     uint32_t front,back,pending;
 } EffectInvocationWorkspace;
@@ -287,6 +294,7 @@ static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
 #include "xxir_effect_invocation_class_nodes.inc.c"
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_root_seeds.inc.c"
+#include "xxir_effect_invocation_primitive.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
 #include "xxir_effect_invocation_flow.inc.c"
 #include "xxir_effect_invocation_class_flow.inc.c"

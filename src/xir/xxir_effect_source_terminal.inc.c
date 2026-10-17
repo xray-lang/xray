@@ -89,9 +89,7 @@ static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
         certificate->terms.types.nodes!=certificate->body->terms.types.nodes ||
         certificate->terms.types.count!=certificate->body->terms.types.count ||
         certificate->terms.types.nominals!=certificate->body->terms.types.nominals ||
-        certificate->terms.types.interfaces!=certificate->body->terms.types.interfaces ||
-        owner->local_roots!=certificate->body->local_roots ||
-        owner->local_witnesses!=certificate->body->local_witnesses) return XR_XIR_BAD_STRUCTURE;
+        certificate->terms.types.interfaces!=certificate->body->terms.types.interfaces) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<count;++f) {
         if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
         const XrXirOrigin *origin=&certificate->origins[f];

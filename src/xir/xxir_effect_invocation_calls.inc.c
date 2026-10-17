@@ -272,8 +272,10 @@ static XrXirStatus effect_invocation_mask(EffectInvocationFlow *flow,
     for (uint32_t unknown=0;unknown<2;++unknown) {
         uint32_t bit=unknown?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
         if (!(mask&bit)) continue;
+        if(flow->instruction==UINT32_MAX && (!flow->owner || !flow->owner->primitives ||
+            body>=flow->owner->primitive_count)) return XR_XIR_BAD_STRUCTURE;
         XrXirRootEffectWitness witness=flow->instruction==UINT32_MAX ?
-            flow->read->final->local_witnesses[(size_t)unknown*flow->body.domain.function_count+body] :
+            flow->owner->primitives[body].witnesses[unknown] :
             (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT,flow->instruction,UINT32_MAX,UINT32_MAX,0};
         XrXirStatus status=effect_invocation_local(flow->owner,flow->node,unknown,witness);
         if (status!=XR_XIR_OK) return status;

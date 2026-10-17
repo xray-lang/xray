@@ -36,8 +36,9 @@ static void invocation_nonroot_slot_erasure(const XrXirCompileContext *work,
     final->nodes[caller].causes[0]=absent;
     summary->functions[0].formula.constant_mask&=~XR_XIR_CALLABLE_ROOT_REQUIRED;
     CHECK(final->nodes[symbolic].intrinsic_mask&XR_XIR_CALLABLE_ROOT_REQUIRED);
-    CHECK(certificate->body->local_roots[1].requires_root &&
-        certificate->body->declarations->slots[0].mutable);
+    XrXirRootEffects primitive={0};
+    CHECK(effect_invocation_input_seed(work,certificate->body,1,&primitive)==XR_XIR_OK &&
+        primitive.requires_root && certificate->body->declarations->slots[0].mutable);
     /* The receiving rows still form an exact union. Only current primitive
      * Input distinguishes this erased key from its intact symbolic root. */
     CHECK(effect_invocation_closed_read(work,final)==XR_XIR_OK);

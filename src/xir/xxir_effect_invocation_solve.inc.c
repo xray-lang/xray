@@ -195,10 +195,10 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
     if (status==XR_XIR_OK) {
         uint32_t body=owner->final.nodes[node].body;
-        if (!owner->final.local_roots) status=XR_XIR_BAD_STRUCTURE;
+        if (!owner->primitives || body>=owner->primitive_count) status=XR_XIR_BAD_STRUCTURE;
         else status=effect_invocation_mask(&flow,
-            (owner->final.local_roots[body].requires_root ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0)|
-            (owner->final.local_roots[body].unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0),changed);
+            (owner->primitives[body].facts.requires_root ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0)|
+            (owner->primitives[body].facts.unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0),changed);
     }
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->read.producer_enabled)
@@ -285,22 +285,25 @@ static XrXirStatus effect_invocations_solve(EffectInvocationWorkspace *owner) {
     return XR_XIR_OK;
 }
 
-/* This is the existing exhaustive local opcode classifier. Only indirect
- * calls are removed from its advertisement seed and consumed as authenticated
- * invocation equations instead. Requirement UNKNOWN remains intrinsic. */
+/* Constructor proposals come from actual owned Input after allocation.
+ * They die before finite proof construction and never enter sealed reads. */
 static XrXirStatus effect_invocation_intrinsics(EffectInvocationWorkspace *owner) {
-    if (!owner || !effect_body_material_shape(owner->final.material) || owner->final.local_roots ||
-        owner->final.local_witnesses || !owner->final.material->local_roots || !owner->final.material->local_witnesses)
+    if(!owner || !effect_body_material_shape(owner->final.material) ||
+        owner->primitives || owner->primitive_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t count=effect_body_count(owner->final.material);XrXirStatus status=XR_XIR_OK;
+    if((uint64_t)count>SIZE_MAX/sizeof(*owner->primitives)) return XR_XIR_BUDGET;
+    owner->primitives=count?xir_compile_alloc(owner->read.work,(size_t)count*sizeof(*owner->primitives),&status):NULL;
+    if(count && !owner->primitives) return status;
+    owner->primitive_count=count;
+    status=effect_invocation_primitive_frame(owner->read.work,owner->final.material);
+    if(status!=XR_XIR_OK) return status;
+    if(effect_body_count(owner->final.material)!=count ||
+        !effect_body_request_owned_matches(owner->read.work,&owner->read.body,owner->final.material))
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t count=owner->read.body.domain.function_count;
-    if ((uint64_t)count>SIZE_MAX/sizeof(*owner->final.local_roots) ||
-        (uint64_t)count*2>SIZE_MAX/sizeof(*owner->final.local_witnesses)) return XR_XIR_BUDGET;
-    /* The generation owns these immutable seeds before any equation is built.
-     * The equation owner dies before its transferred material on every path. */
-    if (!xir_compile_work(owner->read.work,sizeof(owner->final.local_roots)+sizeof(owner->final.local_witnesses)))
-        return XR_XIR_BUDGET;
-    owner->final.local_roots=owner->final.material->local_roots;
-    owner->final.local_witnesses=owner->final.material->local_witnesses;
+    for(uint32_t f=0;f<count;++f) {
+        status=effect_invocation_primitive_read(owner->read.work,owner->final.material,f,&owner->primitives[f]);
+        if(status!=XR_XIR_OK) return status;
+    }
     return XR_XIR_OK;
 }
 
@@ -666,8 +669,8 @@ static XrXirStatus effect_invocation_local_node_write(EffectInvocationWorkspace 
 static XrXirStatus effect_invocation_local_nodes(EffectInvocationWorkspace *owner,
     const EffectInvocationLocalInput *inputs) {
     if (!owner || !inputs || !owner->read.work || owner->final.count || owner->final.nodes || owner->final.roots ||
-        owner->final.root_spaces || owner->read.consumers || owner->states || !owner->final.material->local_roots ||
-        !owner->final.material->local_witnesses) return XR_XIR_BAD_STRUCTURE;
+        owner->final.root_spaces || owner->read.consumers || owner->states ||
+        !effect_body_material_shape(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=effect_body_count(owner->final.material);XrXirStatus status=XR_XIR_OK;
     if (count>owner->maximum || (uint64_t)count>SIZE_MAX/sizeof(*owner->final.nodes)) return XR_XIR_BUDGET;
     if (!xir_compile_work(owner->read.work,5*sizeof(void *))) return XR_XIR_BUDGET;
@@ -679,16 +682,17 @@ static XrXirStatus effect_invocation_local_nodes(EffectInvocationWorkspace *owne
         (size_t)effect_invocation_state_bytes(count),&status);
     if (status!=XR_XIR_OK) return status;
     owner->states=(EffectInvocationState *)((uint8_t *)owner->read.consumers+(size_t)effect_invocation_state_offset(count));
-    if (!xir_compile_work(owner->read.work,sizeof(owner->final.capacity)+
-        sizeof(owner->final.local_roots)+sizeof(owner->final.local_witnesses))) return XR_XIR_BUDGET;
-    owner->final.capacity=count;owner->final.local_roots=owner->final.material->local_roots;
-    owner->final.local_witnesses=owner->final.material->local_witnesses;
+    if (!xir_compile_work(owner->read.work,sizeof(owner->final.capacity))) return XR_XIR_BUDGET;
+    owner->final.capacity=count;
     for (uint32_t f=0;f<count;++f) {
         if (!xir_compile_work(owner->read.work,2+2*5)) return XR_XIR_BUDGET;
-        if (inputs[f].facts.requires_root!=owner->final.local_roots[f].requires_root ||
-            inputs[f].facts.unresolved!=owner->final.local_roots[f].unresolved ||
-            !effect_invocation_witness_equal(&inputs[f].witnesses[0],&owner->final.local_witnesses[f]) ||
-            !effect_invocation_witness_equal(&inputs[f].witnesses[1],&owner->final.local_witnesses[count+f]))
+        EffectInvocationPrimitive actual={0};
+        status=effect_invocation_primitive_read(owner->read.work,owner->final.material,f,&actual);
+        if(status!=XR_XIR_OK) return status;
+        if (inputs[f].facts.requires_root!=actual.facts.requires_root ||
+            inputs[f].facts.unresolved!=actual.facts.unresolved ||
+            !effect_invocation_witness_equal(&inputs[f].witnesses[0],&actual.witnesses[0]) ||
+            !effect_invocation_witness_equal(&inputs[f].witnesses[1],&actual.witnesses[1]))
             return XR_XIR_BAD_STRUCTURE;
         status=effect_invocation_local_node_write(owner,f,&inputs[f]);
         if (status!=XR_XIR_OK) return status;
