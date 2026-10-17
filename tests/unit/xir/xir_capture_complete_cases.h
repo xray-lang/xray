@@ -37,6 +37,49 @@ static void complete_oracle(const XrXirCompileContext *work,const EffectInvocati
     effect_invocation_read_close(&read);
 }
 
+static EffectBodyFunction *complete_growth_head;
+static EffectCaptureFact *complete_growth_facts;
+static uint32_t complete_growth_callbacks;
+static bool complete_growth_attack;
+static void complete_growth_free(void *memory,size_t bytes) {
+    uintptr_t first=(uintptr_t)memory,query=(uintptr_t)complete_growth_facts;
+    if(query<first || query-first>=bytes) return;
+    ++complete_growth_callbacks;pc_free_hook=NULL;
+    if(complete_growth_attack) complete_growth_head->runs=(void *)(uintptr_t)1;
+}
+
+/* Reconstruct COMPLETE facts in a full capacity relation. The first growth's
+ * real release callback replaces an actual Input run pointer. A stack view
+ * opened before that callback must not authorize any later payload read. */
+static void complete_growth_boundary(const XrXirCompileContext *work,EffectInvocationFinal *final) {
+    EffectCaptureProof saved=final->capture;uint32_t count=0;
+    for(uint32_t p=0;p<saved.count;++p)
+        if(saved.facts[p].word!=EFFECT_CAPTURE_FLAGS || saved.facts[p].bit<EFFECT_CAPTURE_COMPLETE) ++count;
+    CHECK(count && count<saved.count);
+    complete_growth_head=&final->material->functions[final->nodes[final->roots[1]].body];
+    EffectBodyRun *runs=complete_growth_head->runs;CHECK(runs);
+    for(uint32_t attack=0;attack<2;++attack) {
+        XrXirStatus status=XR_XIR_OK;uint32_t at=0;
+        EffectCaptureFact *facts=xir_compile_alloc(work,(size_t)count*sizeof(*facts),&status);CHECK(facts);
+        for(uint32_t p=0;p<saved.count;++p)
+            if(saved.facts[p].word!=EFFECT_CAPTURE_FLAGS || saved.facts[p].bit<EFFECT_CAPTURE_COMPLETE) facts[at++]=saved.facts[p];
+        final->capture=(EffectCaptureProof){.facts=facts,.count=count,.capacity=count};
+        EffectCaptureRead read={.work=work,.final=final};
+        CHECK(effect_capture_frame(&read)==XR_XIR_OK);
+        read.builder=&final->capture;complete_growth_facts=facts;
+        complete_growth_callbacks=0;complete_growth_attack=attack!=0;pc_free_hook=complete_growth_free;
+        do { read.changed=false;status=effect_capture_complete_clauses(&read); } while(status==XR_XIR_OK && read.changed);
+        pc_free_hook=NULL;
+        CHECK(complete_growth_callbacks==1 && !read.body.current && !read.node_view);
+        CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+        complete_growth_head->runs=runs;
+        if(!attack) complete_verify(work,final,XR_XIR_OK);
+        xr_compile_resources_free(final->capture.facts);final->capture=saved;
+        complete_verify(work,final,XR_XIR_OK);
+    }
+    complete_growth_head=NULL;complete_growth_facts=NULL;
+}
+
 static void complete_case(uint32_t mode) {
     CHECK(mode<10);XrXirType callback=256;
     XrXirTypeNode type={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE};
@@ -111,6 +154,7 @@ static void complete_case(uint32_t mode) {
     CHECK(status==XR_XIR_OK);EffectInvocationFinal *final=effects->invocations->final;
     CHECK(xr_xir_effects_error_unknown(effects,0)==(mode==2 || mode==4 || mode==5 || mode==8 || mode==9));
     CHECK(xr_xir_effects_error_unknown(effects,3));complete_oracle(&work,effects->invocations);
+    if(!mode) complete_growth_boundary(&work,final);
     xr_xir_compile_artifact_free(checked);memset(factory,0xCC,sizeof(factory));memset(functions,0xCC,sizeof(functions));
     complete_verify(&work,final,XR_XIR_OK);
     for(uint32_t n=0;n<final->count;++n) {

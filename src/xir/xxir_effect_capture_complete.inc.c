@@ -257,15 +257,27 @@ static XrXirStatus effect_capture_complete_value(const EffectCaptureRead *read,
     return effect_capture_complete_selected(read,node,value,EFFECT_FINAL_SELECT_WRITE,column,result);
 }
 
-static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
+static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
+    EffectBodyCurrentRead *current,EffectCaptureNode *borrowed) {
     if(read->final->binding_count>UINT32_MAX-EFFECT_CAPTURE_COMPLETE) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t n=0;n<read->final->count;++n) for(uint32_t value=0;;++value) {
         uint32_t column=0;bool present=false;
         for(;;) {
-            /* Construction emits only after the borrowed Input head and
-             * result have been consumed. Every candidate opens a fresh head. */
+            if(read->builder && !read->body.current) {
+                *current=(EffectBodyCurrentRead){0};
+                XrXirStatus status=effect_body_current_open(read->work,read->final->material,current);
+                if(status!=XR_XIR_OK) return status;
+                read->body.current=current;
+            }
+            /* Heads remain borrowed only until an emit can invoke allocation
+             * or release. No borrowed field survives that callback boundary. */
             EffectCaptureComplete result={0};uint64_t end=0;
             {
+                if(!read->node_view || read->node_view->node!=n) {
+                    read->node_view=NULL;XrXirStatus status=effect_capture_node(read,n,borrowed);
+                    if(status!=XR_XIR_OK) return status;
+                    read->node_view=borrowed;
+                }
                 EffectCaptureNode node={0};XrXirStatus status=effect_capture_node(read,n,&node);
                 if(status!=XR_XIR_OK) return status;
                 end=(uint64_t)node.values+1+node.head.parameter_count;
@@ -277,7 +289,17 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
             const EffectCaptureFact *stored=NULL;XrXirStatus status=effect_capture_find(read,key,&stored);
             if(status!=XR_XIR_OK) return status;
             if(!read->builder && stored && (!result.complete || stored->rank!=result.rank)) return XR_XIR_BAD_STRUCTURE;
-            if(result.complete) { status=effect_capture_emit(read,key);if(status!=XR_XIR_OK) return status; }
+            if(result.complete) {
+                bool growing=read->builder && read->builder->count==read->builder->capacity && !stored;
+                if(growing) {
+                    read->node_view=NULL;read->body.current=NULL;
+                    *borrowed=(EffectCaptureNode){0};*current=(EffectBodyCurrentRead){0};
+                }
+                status=effect_capture_emit(read,key);if(status!=XR_XIR_OK) return status;
+                if(growing) {
+                    status=effect_capture_frame(read);if(status!=XR_XIR_OK) return status;
+                }
+            }
             if(column==read->final->binding_count) break;
             ++column;
         }
@@ -285,4 +307,19 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
         if(value==UINT32_MAX) return XR_XIR_BUDGET;
     }
     return XR_XIR_OK;
+}
+
+/* The view contains current Input identity only. In-place fact writes have no
+ * external callback; a possible growth discards both views before emitting and
+ * frames the actual Input and Final again afterwards. The caller receives no
+ * retained stack address, on either success or failure. */
+static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
+    const EffectBodyCurrentRead *saved_current=read->body.current;
+    const EffectCaptureNode *saved_node=read->node_view;
+    if(read->builder && (saved_current || saved_node)) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0};
+    read->node_view=NULL;
+    XrXirStatus status=effect_capture_complete_walk(read,&current,&borrowed);
+    read->body.current=saved_current;read->node_view=saved_node;
+    return status;
 }
