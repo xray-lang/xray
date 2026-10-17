@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#if !defined(_MSC_VER) || !defined(_WIN64)
+#if !defined(_MSC_VER) || !defined(_M_X64)
 #error This probe requires the selected MSVC x64 UCRT provider
 #endif
 

@@ -16,7 +16,7 @@ _PENDING_NOARG_FFI_INPUTS={'spec/source/sections/003-2-type-system.md': 'b53fe65
  'tests/diff/cases/semantics/ffi/extern_no_arg_void_and_unused.xr': '038419eb18ee48e7ee1d4417241515330379b0f43b4709afc8eda9cf0c6d5aa2',
  'tests/diff/cases/semantics/ffi/xray.toml': '3076508db88c5906218c3c464b740aeb52b25f9d9bc8e757289201a03a327f94',
  'tests/unit/xir/legacy_consumers/fixtures/msvc_ucrt_noarg_provider/CMakeLists.txt': 'cb7d311101c3c76ae16b66737f31104e7e3728b0b36db08ff42c1c2e94324923',
- 'tests/unit/xir/legacy_consumers/fixtures/msvc_ucrt_noarg_provider/probe.c': '6d3b2b90a47f87e5866eaf2171882c7b70716b2948e3fa6f6e2d0b47778a7dd4',
+ 'tests/unit/xir/legacy_consumers/fixtures/msvc_ucrt_noarg_provider/probe.c': 'a64f7f0e2b96403800b203f9c96105144f8f0d202b6fd5d8f281a24c32f0c589',
  'tests/unit/xir/legacy_consumers/fixtures/msvc_ucrt_noarg_provider/provider-facts.json': '0583c424a22170ea0d813dc28227eadcb998e69ccb835aff388ee07cd4303ca3'}
 _UCRT_PROFILE='msvc-x64-ucrt-source-10.0.22621.0'
 
