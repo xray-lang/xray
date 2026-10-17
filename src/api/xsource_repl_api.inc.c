@@ -133,7 +133,8 @@ static XrSourceStatus api_repl_prepare(XrSourceRepl *owner,const XrSourceText *i
         source_diagnostic) : xr_source_submission_prepare_repl_ast(owner->submission,&repl,source_diagnostic);
     if((status==XR_SOURCE_BAD_ARGUMENT || status==XR_SOURCE_REJECTED) &&
         source_diagnostic->status==XR_XIR_BAD_STRUCTURE &&
-        source_diagnostic->origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE)status=XR_SOURCE_INVALID;
+        (source_diagnostic->origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
+         source_diagnostic->origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_INVALID;
     if(failure_path) {
         xr_compile_resources_free(detail->detail.source.source_path);
         detail->detail.source.source_path=failure_path;

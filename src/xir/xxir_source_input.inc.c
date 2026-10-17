@@ -30,6 +30,22 @@ typedef struct SourceInput {
     const char *module_scope;
     const SourceHistoryUnit *history, *self;
 } SourceInput;
+static void source_input_nul(SourceContext *ctx,const char *path,size_t line,size_t column,char **failure_path) {
+    if(line>INT_MAX || column>INT_MAX) {
+        source_fail(ctx,NULL,XR_XIR_BUDGET,"source location is not representable");return;
+    }
+    char *owned_path=NULL;
+    if(failure_path && path) {
+        size_t length=0;if(!source_text_length(ctx,NULL,path,&length))return;
+        XrXirStatus status=XR_XIR_OK;
+        owned_path=xir_compile_copy(&ctx->compile,path,length+1,&status);
+        if(!owned_path){source_fail(ctx,NULL,status,"source failure path copy failed");return;}
+    }
+    source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source text contains an embedded NUL");
+    ctx->diagnostic.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT;
+    ctx->diagnostic.line=(int)line;ctx->diagnostic.column=(int)column;
+    if(failure_path)*failure_path=owned_path;
+}
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
     const bool supplied = input.supplied;
@@ -90,11 +106,13 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         }
         char *terminated = source_alloc(&ctx, length + 1, 1);
         if (!terminated) goto done;
+        size_t line=1,line_start=0;
         for (size_t i = 0; i < length; ++i) {
             if (!source_work(&ctx, NULL)) goto done;
             if (!text[i]) {
-                source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source text contains an embedded NUL"); goto done;
+                source_input_nul(&ctx,request->entry_path,line,i-line_start+1,failure_path);goto done;
             }
+            if(text[i]=='\n'){++line;line_start=i+1;}
         }
         if (!source_copy_bytes(&ctx, NULL, terminated, text, length)) goto done;
         module_status = xr_compile_module_graph_build_logical_source(ctx.graph,
@@ -115,12 +133,14 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         module_status = xr_compile_module_graph_build(ctx.graph, request->entry_path, request->authority, &error);
     }
     if (module_status != XR_MODULE_OK) {
-        const XrModuleParseDiagnostic *parse=&ctx.graph->parse_diagnostic;
-        source_module_fail(&ctx, NULL, module_status, parse->present && parse->message[0] ?
-            parse->message : error ? error : "module graph build failed");
-        if(parse->present) {
-            ctx.diagnostic.origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;
-            ctx.diagnostic.module=parse->module;ctx.diagnostic.line=parse->line;ctx.diagnostic.column=parse->column;
+        const XrModuleSourceDiagnostic *source=&ctx.graph->source_diagnostic;
+        source_module_fail(&ctx, NULL, module_status, source->present && source->message[0] ?
+            source->message : error ? error : "module graph build failed");
+        if(source->present) {
+            ctx.diagnostic.origin=source->origin==XR_MODULE_DIAGNOSTIC_PARSE ?
+                XR_XIR_SOURCE_DIAGNOSTIC_PARSE : source->origin==XR_MODULE_DIAGNOSTIC_INPUT ?
+                XR_XIR_SOURCE_DIAGNOSTIC_INPUT : XR_XIR_SOURCE_DIAGNOSTIC_DEFAULT;
+            ctx.diagnostic.module=source->module;ctx.diagnostic.line=source->line;ctx.diagnostic.column=source->column;
         }
         goto done;
     }
@@ -142,7 +162,8 @@ done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
     if (!result.snapshot) source_query_publish(&ctx, &result);
-    if (failure_path && (semantic_started || ctx.diagnostic.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE) &&
+    if (failure_path && (semantic_started || ctx.diagnostic.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
+        ctx.diagnostic.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT) &&
         ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
         ctx.diagnostic.module < (uint32_t)ctx.graph->spec_count) {

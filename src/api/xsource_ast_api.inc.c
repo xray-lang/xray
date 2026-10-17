@@ -6,6 +6,7 @@
  *
  * xsource_ast_api.inc.c - Exact parser ownership at the public AST boundary
  */
+#include <limits.h>
 typedef struct ApiParseDiagnostic {
     XrCompileState *state;
     XrSourceDiagnostic *output;
@@ -40,16 +41,21 @@ static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceT
         status=api_resource(xr_compile_state_strdup(state,text->namespace_id,&ast->namespace_id));
     if(status==XR_SOURCE_OK && diagnostic && ast->path)
         status=api_resource(xr_compile_state_strdup(state,ast->path,&diagnostic->detail.source.source_path));
+    size_t line=1,line_start=0;
     for(size_t i=0;status==XR_SOURCE_OK && i<text->length;++i) {
         status=api_resource(xr_compile_state_work(state,1));
         if(status==XR_SOURCE_OK && !ast->source[i]) {
+            if(line>INT_MAX || i-line_start>=INT_MAX){status=XR_SOURCE_BUDGET;break;}
             status=XR_SOURCE_INVALID;
             if(diagnostic) {
                 static const char message[]="source text contains an embedded NUL";
-                XrCompileResourceStatus copied=xr_compile_state_copy(state,diagnostic->detail.source.source.message,message,sizeof(message));
+                XrXirSourceDiagnostic *detail=&diagnostic->detail.source.source;
+                detail->origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT;detail->line=(int)line;detail->column=(int)(i-line_start)+1;
+                XrCompileResourceStatus copied=xr_compile_state_copy(state,detail->message,message,sizeof(message));
                 if(copied!=XR_COMPILE_RESOURCE_OK)status=api_resource(copied);
             }
         }
+        if(status==XR_SOURCE_OK && ast->source[i]=='\n'){++line;line_start=i+1;}
     }
     if(status!=XR_SOURCE_OK)return status;
     ApiParseDiagnostic capture={state,diagnostic};

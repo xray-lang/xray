@@ -275,6 +275,40 @@ endif()
 add_test(NAME source_public_diagnostics COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_LIST_DIR}/source_public/run_source_diagnostics.py" $<TARGET_FILE:test_source_public_diagnostics>)
 set_tests_properties(source_public_diagnostics PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;diagnostic")
+add_executable(test_source_input_diagnostics "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_input_diagnostics.c")
+target_link_libraries(test_source_input_diagnostics PRIVATE xray_source_api)
+target_compile_definitions(test_source_input_diagnostics PRIVATE
+    XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_INPUT_DIAGNOSTIC_FIXTURE="${PROJECT_SOURCE_DIR}/tests/fixtures/public_source_nul")
+set_target_properties(test_source_input_diagnostics PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_input_diagnostics PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_input_diagnostics PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME source_input_diagnostics COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/source_public/run_source_input_diagnostics.py" $<TARGET_FILE:test_source_input_diagnostics>)
+set_tests_properties(source_input_diagnostics PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;diagnostic")
+add_test(NAME source_input_cli_diagnostics COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/source_public/run_source_input_cli.py"
+    --root "${PROJECT_SOURCE_DIR}" --cli $<TARGET_FILE:xray>
+    --record "${CMAKE_CURRENT_BINARY_DIR}/source-input-cli-record.json")
+set_tests_properties(source_input_cli_diagnostics PROPERTIES TIMEOUT 180 LABELS "cli;source;ownership;diagnostic")
+add_executable(test_source_input_resources "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_input_resources.c")
+target_link_libraries(test_source_input_resources PRIVATE xray_source_api)
+target_include_directories(test_source_input_resources PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
+target_compile_definitions(test_source_input_resources PRIVATE
+    XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_INPUT_DIAGNOSTIC_FIXTURE="${PROJECT_SOURCE_DIR}/tests/fixtures/public_source_nul")
+set_target_properties(test_source_input_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_input_resources PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_input_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME source_input_resources COMMAND test_source_input_resources)
+set_tests_properties(source_input_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+    LABELS "unit;api;source;ownership;diagnostic;allocations;budget")
 add_executable(test_source_diagnostic_resources "${CMAKE_CURRENT_LIST_DIR}/source_public/test_source_diagnostic_resources.c")
 target_link_libraries(test_source_diagnostic_resources PRIVATE xray_source_api)
 target_include_directories(test_source_diagnostic_resources PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")

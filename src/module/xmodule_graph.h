@@ -85,12 +85,16 @@ typedef struct XrModuleSpec {
 
 /* ========== Module Graph ========== */
 
-typedef struct XrModuleParseDiagnostic {
+typedef enum XrModuleSourceDiagnosticOrigin {
+    XR_MODULE_DIAGNOSTIC_PARSE, XR_MODULE_DIAGNOSTIC_INPUT
+} XrModuleSourceDiagnosticOrigin;
+typedef struct XrModuleSourceDiagnostic {
     bool present;
+    XrModuleSourceDiagnosticOrigin origin;
     uint32_t module;
     int line, column;
     char message[192];
-} XrModuleParseDiagnostic;
+} XrModuleSourceDiagnostic;
 
 typedef struct XrModuleGraph {
     XrCompileResources *resources; /* Shared with the borrowed session and resolver. */
@@ -130,9 +134,9 @@ typedef struct XrModuleGraph {
     int entry_index;
     /* Failure remains observable even when allocating its diagnostic fails. */
     XrModuleStatus resolution_status;
-    /* First parser callback, copied on the same ledger before parser teardown.
+    /* First parser or input failure, copied on the original ledger.
      * Its module selects this graph's independently owned source_path. */
-    XrModuleParseDiagnostic parse_diagnostic;
+    XrModuleSourceDiagnostic source_diagnostic;
 } XrModuleGraph;
 
 /* ========== API ========== */

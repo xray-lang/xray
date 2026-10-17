@@ -15,6 +15,7 @@
 #include "../../os/os_dir.h"
 #include "../../os/os_fs.h"
 #include <stdio.h>
+#include <limits.h>
 #if XR_OS_WINDOWS
 #include <fcntl.h>
 #include <io.h>
@@ -99,11 +100,17 @@ static void check_syntax(CheckWork *work, const char *path) {
     XrOsIoStatus status = xr_os_io_read_regular_file(&work->policy, path, SIZE_MAX - 1, &bytes, &length);
     XrIoContext io = {&work->policy, status};
     bool nul = false;
+    size_t line=1,line_start=0,column=0;
     for (size_t i = 0; i < length && io_work(&io, 1); ++i) {
-        if (!bytes[i]) { nul = true; break; }
+        if (!bytes[i]) {
+            if(line>INT_MAX || i-line_start>=INT_MAX)io_status(&io,XR_OS_IO_BUDGET);
+            else {nul=true;column=i-line_start+1;}
+            break;
+        }
+        if(bytes[i]=='\n'){++line;line_start=i+1;}
     }
     if (nul) {
-        fprintf(stderr, "%s: error: source contains a NUL byte\n", path);
+        fprintf(stderr, "%s:%zu:%zu: error: source text contains an embedded NUL\n", path,line,column);
         check_failure(work, XR_CLI_EXIT_FAIL, false);
     } else if (io.status == XR_OS_IO_OK) {
         void *terminated = bytes;

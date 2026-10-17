@@ -7641,6 +7641,12 @@ Pending 只返回 BAD_STATE，不分配结果外壳、不推进、等待、取�
 
 坏宿主请求仍返回 BAD_ARGUMENT。解析或诊断接收中的真实 OOM/BUDGET/IO 保留资源失败，不映为语法错误。普通语法失败不发布 Program 或新 REPL 声明，且同一 Compiler/REPL 可继续接受合法输入；资源失败保持既有累计额度与粘滞状态。
 
+### 17.53 公共 Source 的 NUL 字节拒绝
+
+显式输入长度中的 NUL 和实际源文件中的 NUL 在解析前被拒绝，合法宿主请求返回 INVALID。诊断使用真实验证位置的一基行号和字节列、固定消息 `source text contains an embedded NUL` 以及拥有型失败文件路径；MEMORY 根路径为 NULL。导入错误指向该被导入文件。诊断可在源字节、路径、AST、Compiler 和 REPL 销毁后继续使用，同 owner 后续合法输入仍可成功。
+
+NUL 验证具有独立的 SOURCE_INPUT 来源，不伪称 parser 回调。根文本、rooted overlay、真实文件和 AST/REPL 扫描继续使用各自原累计账本；诊断或路径接收失败保真实 OOM/BUDGET。不可表示的行列返回 BUDGET。失败不发布 Program、新声明或 authority，不回退 SCRIPT，不在清理时分配。run、check、check --syntax-only 和 REPL .load 报告实际失败位置；语法检查仍只检查被指定文件。
+
 ---
 
 ## 18. 错误码 (Error Codes)

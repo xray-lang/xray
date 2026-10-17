@@ -172,7 +172,8 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
             request->target};
         status = source_xir_status(xr_xir_compile_source_product_build(&source, &product, &detail.source));
         if(detail.source.status==XR_XIR_BAD_STRUCTURE &&
-            detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE)status=XR_SOURCE_COMPILE_INVALID;
+            (detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
+             detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
         if (status == XR_SOURCE_COMPILE_OK) {
             XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
             status = source_xir_status(admitted);

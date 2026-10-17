@@ -16,6 +16,7 @@
 #include "../toolchain/xcompiler_session.h"
 #include "../toolchain/xcompiler_arena_backing.h"
 #include "../os/os_file_read.h"
+#include <limits.h>
 #define GRAPH_INITIAL_CAP 16
 #define GRAPH_EMBEDDED_STDLIB_PREFIX "<embedded stdlib>/"
 extern void xr_program_destroy(struct AstNode *ast);
@@ -224,13 +225,11 @@ typedef struct GraphParseCapture {
     XrModuleGraph *graph;
     uint32_t module;
 } GraphParseCapture;
-static void graph_parse_diagnostic(void *context,int line,int column,int end_line,int end_column,
-    const char *message) {
-    (void)end_line;(void)end_column;
-    GraphParseCapture *capture=context;
-    XrModuleParseDiagnostic *diagnostic=&capture->graph->parse_diagnostic;
+static void graph_source_diagnostic(GraphParseCapture *capture,XrModuleSourceDiagnosticOrigin origin,
+    int line,int column,const char *message) {
+    XrModuleSourceDiagnostic *diagnostic=&capture->graph->source_diagnostic;
     if(diagnostic->present)return;
-    diagnostic->present=true;diagnostic->module=capture->module;
+    diagnostic->present=true;diagnostic->origin=origin;diagnostic->module=capture->module;
     diagnostic->line=line;diagnostic->column=column;
     if(!message){module_status(capture->work,XR_MODULE_INVALID);return;}
     size_t length=0;
@@ -239,6 +238,11 @@ static void graph_parse_diagnostic(void *context,int line,int column,int end_lin
         ++length;
     }
     if(module_copy(capture->work,diagnostic->message,message,length))diagnostic->message[length]=0;
+}
+static void graph_parse_diagnostic(void *context,int line,int column,int end_line,int end_column,
+    const char *message) {
+    (void)end_line;(void)end_column;
+    graph_source_diagnostic(context,XR_MODULE_DIAGNOSTIC_PARSE,line,column,message);
 }
 static XrModuleStatus read_status(XrFileReadStatus status) {
     switch (status) {
@@ -312,8 +316,20 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             if (!text) module_status(work,XR_MODULE_INVALID);
         } else if (!supplied) {
             module_status(work,read_status(xr_os_io_read_under_root(&policy,spec->authority.physical_root,spec->logical_path,SIZE_MAX-1,&bytes)));
-            for (size_t i = 0; i < bytes.size && module_work(work,1); ++i)
-                if (!bytes.data[i]) { module_status(work,XR_MODULE_INVALID); break; }
+            size_t line=1,line_start=0;
+            for (size_t i = 0; i < bytes.size && module_work(work,1); ++i) {
+                if (!bytes.data[i]) {
+                    if(line>INT_MAX || i-line_start>=INT_MAX)module_status(work,XR_MODULE_BUDGET);
+                    else {
+                        GraphParseCapture capture={work,graph,(uint32_t)index};
+                        graph_source_diagnostic(&capture,XR_MODULE_DIAGNOSTIC_INPUT,(int)line,(int)(i-line_start)+1,
+                            "source text contains an embedded NUL");
+                        module_status(work,XR_MODULE_INVALID);
+                    }
+                    break;
+                }
+                if(bytes.data[i]=='\n'){++line;line_start=i+1;}
+            }
             text = bytes.data;
         }
         AstNode *ast = NULL;

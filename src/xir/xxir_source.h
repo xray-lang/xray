@@ -30,8 +30,10 @@ typedef struct XrXirSourceRequest {
     const struct XrXirLibraryCatalog *libraries;
 } XrXirSourceRequest;
 /* Failure preserves output. Optional failure_path must point to NULL. A
- * semantic or parser failure with a known location transfers its owned UTF-8
- * module path without allocating or consuming work during failure cleanup.
+ * semantic, parser or source-input failure with a known location receives an
+ * owned UTF-8 module path. Supplied text copies its explicit root path while
+ * validating input; graph failures transfer their existing owned path. No
+ * allocation or work occurs during failure cleanup.
  * Release that path with xr_compile_resources_free. Graph failures without
  * an actual located diagnostic leave failure_path unchanged. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,

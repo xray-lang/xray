@@ -7804,6 +7804,12 @@ A valid host request with invalid source syntax returns INVALID from file, text 
 
 Invalid host requests still return BAD_ARGUMENT. Actual OOM/BUDGET/IO during parsing or diagnostic receiving retain their resource failure classification. Syntax failure publishes no Program or new REPL declaration, and the same Compiler or REPL can accept subsequent valid input. Resource failure retains the existing cumulative limits and sticky state.
 
+### 17.53 Public Source NUL-byte rejection
+
+A NUL within an explicit input span or an actual source file is rejected before parsing; a valid host request returns INVALID. Diagnostics report the actual validator's one-based line and byte column, the fixed message `source text contains an embedded NUL`, and the owned failing file path. A MEMORY root has a NULL path. Import failure identifies the imported file. Diagnostic data survives caller bytes, paths, AST, Compiler and REPL destruction, and the same owner can accept subsequent valid input.
+
+NUL validation carries a distinct SOURCE_INPUT origin. Root text, rooted overlays, actual files and AST/REPL scans retain their original cumulative ledgers. Diagnostic or path receiving retains actual OOM/BUDGET failures; an unrepresentable location returns BUDGET. Failure publishes no Program, declaration or authority, performs no SCRIPT fallback, and allocates nothing during cleanup. Run, check, check --syntax-only and REPL .load report the actual failing location; syntax-only checking still examines only the selected file.
+
 ---
 
 ## 18. Error Codes
