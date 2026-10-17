@@ -591,7 +591,7 @@ static XrXirStatus effect_invocation_local_run(EffectInvocationLocalRead *read,
     if (run->base.op==XR_XIR_SLOT_LOAD) semantic|=UINT32_C(192);
     if (effect_physical_opcode(run->base.op)&EFFECT_PHYSICAL_BARRIER)
         semantic|=UINT32_C(12)|UINT32_C(192);
-    uint32_t points=(run->mask&semantic)?run->count:1;
+    uint32_t points=(run->mask&(semantic|EFFECT_BODY_LITERAL_PAIR))?run->count:1;
     for (uint32_t offset=0;offset<points;++offset) {
         if (!xir_compile_work(work,2+sizeof(void *))) return XR_XIR_BUDGET;
         XrXirInstruction storage;const XrXirInstruction *op=&run->base;

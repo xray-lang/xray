@@ -416,7 +416,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
         status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        if (!(ref->mask&UINT32_C(1))) {
+        if (!(ref->mask&(UINT32_C(1)|EFFECT_BODY_LITERAL_PAIR))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
             if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
@@ -428,7 +428,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
                 record.value-function->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
             if (!(record.mask&(EFFECT_PHYSICAL_CONTROL|EFFECT_PHYSICAL_DIRECT|
                 EFFECT_PHYSICAL_GO|EFFECT_PHYSICAL_REFERENCE))) continue;
-            if (ref->mask&UINT32_C(1)) {
+            if (ref->mask&(UINT32_C(1)|EFFECT_BODY_LITERAL_PAIR)) {
                 status=effect_body_run_word(&request.read,ref,record.value-function->parameter_count,0,&opcode);
                 if (status!=XR_XIR_OK) return status;
                 if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;

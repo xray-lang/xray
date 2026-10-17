@@ -594,7 +594,7 @@ static XrXirStatus effect_invocation_origins_run(void *owner,const EffectBodyRun
     uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
     if (!xir_compile_work(work_owner->work,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    bool constant=!(ref->mask&UINT32_C(3)),unused=false;
+    bool constant=!(ref->mask&(UINT32_C(3)|EFFECT_BODY_LITERAL_PAIR)),unused=false;
     if (!xir_compile_work(work_owner->work,sizeof(constant)+sizeof(unused))) return XR_XIR_BUDGET;
     if (constant) {
         status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);

@@ -99,6 +99,14 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
         (output->count==1 && output->varying) ||
         !output->operation || output->operation->op<=XR_XIR_INVALID || output->operation->op>=XR_XIR_OP_COUNT)
         return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
+    if (output->second) {
+        if (output->count!=2 || output->varying) return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
+        if (!cell_proof_work(build,2)) return false;
+        if (output->second->op<=XR_XIR_INVALID || output->second->op>=XR_XIR_OP_COUNT)
+            return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
+        return true;
+    }
+    if (output->count==2 && output->varying) return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
     for (uint32_t selected=output->varying;selected;selected&=selected-1) {
         if (!cell_proof_work(build,3)) return false;
         if (!output->delta[(uint32_t)__builtin_ctz(selected)])
@@ -111,10 +119,23 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
 static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,uint32_t f,
     const XrXirCellProofRun *run,uint32_t i,XrXirInstruction *storage) {
     if (!run || !run->operation || !storage || !run->count || run->varying&~UINT32_C(1023) ||
-        (run->count==1 && run->varying) || i<run->first || i-run->first>=run->count) {
+        (run->count==1 && run->varying) || (run->second && (run->count!=2 || run->varying)) ||
+        (!run->second && run->count==2 && run->varying) ||
+        i<run->first || i-run->first>=run->count) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }
     if (i==run->first) return run->operation;
+    if (run->second) {
+        if (!cell_proof_work(build,4+sizeof(const XrXirInstruction *))) return NULL;
+        if (run->operation->op<=XR_XIR_INVALID || run->operation->op>=XR_XIR_OP_COUNT ||
+            run->second->op<=XR_XIR_INVALID || run->second->op>=XR_XIR_OP_COUNT) {
+            cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
+        }
+        return run->second;
+    }
+    if (run->count==2 && run->varying) {
+        cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
+    }
     uint64_t units=10+sizeof(*storage)+2+10;
     if (!cell_proof_work(build,1+sizeof(uint32_t)+((run->varying&1)?3:0))) return NULL;
     for (uint32_t selected=run->varying;selected;selected&=selected-1) {

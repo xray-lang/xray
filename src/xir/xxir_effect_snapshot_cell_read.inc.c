@@ -115,7 +115,11 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
             if (status!=XR_XIR_OK) return status;
         }
         if (count && current.next==first) {
-            if (ref->count!=count || (ref->mask&UINT32_C(3))) return XR_XIR_BAD_TYPE;
+            if (ref->count!=count) return XR_XIR_BAD_TYPE;
+            if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
+                if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+                if (ref->base.op!=ref->second.op || ref->base.type!=ref->second.type) return XR_XIR_BAD_TYPE;
+            } else if (ref->mask&UINT32_C(3)) return XR_XIR_BAD_TYPE;
             if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             if (!xir_compile_work(work,2+sizeof(current.shape))) return XR_XIR_BUDGET;
             current.shape=(XrXirCellProofInstructionShape){(XrXirOp)ref->base.op,(XrXirType)ref->base.type};
@@ -165,6 +169,13 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (!xir_compile_work(work,1+sizeof(uint32_t)+sizeof(const XrXirInstruction *))) return XR_XIR_BUDGET;
     const XrXirInstruction *operation=&ref->base;
     if (operation->op<=XR_XIR_INVALID || operation->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
+        if (!xir_compile_work(work,sizeof(*output)-sizeof(output->delta)+2*sizeof(uint32_t)))
+            return XR_XIR_BUDGET;
+        output->first=ref->first;output->count=ref->count;
+        output->varying=0;output->operation=operation;output->second=&ref->second;
+        cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;
+    }
     uint32_t delta[10];
     uint64_t publication=sizeof(*output)-sizeof(output->delta)+2*sizeof(uint32_t);
     for (uint32_t selected=ref->mask;selected;selected&=selected-1) {
@@ -175,6 +186,7 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     }
     if (!xir_compile_work(work,publication)) return XR_XIR_BUDGET;
     output->first=ref->first;output->count=ref->count;output->varying=ref->mask;output->operation=operation;
+    output->second=NULL;
     for (uint32_t selected=ref->mask;selected;selected&=selected-1)
         output->delta[(uint32_t)__builtin_ctz(selected)]=delta[(uint32_t)__builtin_ctz(selected)];
     cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;

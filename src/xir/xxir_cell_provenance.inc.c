@@ -227,7 +227,7 @@ static bool cell_proof_inventory_storage(CellProofBuild *build,uint64_t values) 
         XrXirCellProofRunCursor cursor={.function=f};
         while (cursor.next<head.instruction_count) {
             XrXirCellProofRun run;if (!cell_proof_run(build,&head,&cursor,&run)) return false;
-            if (!(run.varying&UINT32_C(2))) {
+            if (!run.second && !(run.varying&UINT32_C(2))) {
                 if (!cell_proof_inventory_store(build,f,head.parameter_count+run.first,run.count,run.operation->type))
                     return false;
             } else for (uint32_t i=run.first;i-run.first<run.count;++i) {
@@ -247,7 +247,7 @@ static bool cell_proof_inventory_run(CellProofBuild *build,uint32_t f,
     if (!cell_proof_work(build,6)) return false;
     if (run->first>=head->instruction_count || run->count>head->instruction_count-run->first)
         return cell_proof_error(build,f,run->first,XR_XIR_BAD_STRUCTURE);
-    if (build->body->range && !(run->varying&UINT32_C(3))) {
+    if (build->body->range && !run->second && !(run->varying&UINT32_C(3))) {
         *tracked|=cell_proof_place(run->operation->op) || cell_proof_cell(&build->body->domain,run->operation->type);
         if (run->operation->op==XR_XIR_CELL_PROJECT) {
             if (run->count>UINT32_MAX-build->proof->project_count)
@@ -375,7 +375,7 @@ static bool cell_proof_role_row(CellProofBuild *build,uint32_t f,uint32_t i,cons
 static bool cell_proof_roles_range(CellProofBuild *build,uint32_t f,
     const XrXirCellProofRun *run,bool *handled) {
     *handled=false;
-    if (!build->body->range || run->varying&UINT32_C(1)) return true;
+    if (!build->body->range || run->second || run->varying&UINT32_C(1)) return true;
     if (!cell_proof_work(build,6)) return false;
     const XrXirInstruction *op=run->operation;
     if (op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_CALL &&
@@ -682,7 +682,7 @@ static bool cell_proof_edge_row(CellProofBuild *build,uint32_t f,uint32_t i,
 static bool cell_proof_zero_operands(CellProofBuild *build,uint32_t f,
     const XrXirCellProofBodyHead *head,const XrXirCellProofRun *run,bool *zero) {
     *zero=false;
-    if (!build->body->range || run->varying&UINT32_C(1)) return true;
+    if (!build->body->range || run->second || run->varying&UINT32_C(1)) return true;
     const XrXirInstruction *op=run->operation;
     if (!cell_proof_work(build,9)) return false;
     if (op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_CELL_WRITE ||

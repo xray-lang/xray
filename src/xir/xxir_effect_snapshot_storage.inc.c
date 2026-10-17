@@ -522,13 +522,17 @@ static XrXirStatus effect_body_physical_run(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,uint32_t function,const EffectPhysicalFunction *physical,const EffectBodyRun *run,
     EffectBodyPhysicalReplay *state) {
     const EffectBodyFunction *body=&material->functions[function];
-    bool constant=!(run->mask&UINT32_C(3));
+    bool constant=!(run->mask&(UINT32_C(3)|EFFECT_BODY_LITERAL_PAIR));
     if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
     uint32_t points=constant?1:run->count;
     for (uint32_t offset=0;offset<points;++offset) {
         if (!xir_compile_work(work,4+(constant?0:6))) return XR_XIR_BUDGET;
         uint32_t opcode=run->base.op,type=run->base.type,mask=0;
-        if (!constant) {
+        if (!constant && (run->mask&EFFECT_BODY_LITERAL_PAIR)) {
+            if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+            const XrXirInstruction *row=offset?&run->second:&run->base;
+            opcode=row->op;type=row->type;
+        } else if (!constant) {
             if (run->mask&UINT32_C(1)) opcode+=run->delta[0]*offset;
             if (run->mask&UINT32_C(2)) type+=run->delta[1]*offset;
         }

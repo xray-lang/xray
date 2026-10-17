@@ -13,13 +13,17 @@
 #include "xxir_metadata_domain_internal.h"
 
 enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023 };
-/* The sole owned representation is an actual affine record. Inactive delta
- * slots are neither initialized nor read. No summary, authority or pointer to
- * the generating Module is retained by a record. */
+#define EFFECT_BODY_LITERAL_PAIR UINT32_C(2147483648)
+/* A changing two-row record owns both complete instructions. Longer affine
+ * records own only selected deltas. The two physical payloads share storage;
+ * neither carries a semantic summary or a generating Module pointer. */
 typedef struct EffectBodyRun {
     uint32_t first,count,mask;
     XrXirInstruction base;
-    uint32_t delta[EFFECT_BODY_WORDS];
+    union {
+        uint32_t delta[EFFECT_BODY_WORDS];
+        XrXirInstruction second;
+    };
 } EffectBodyRun;
 /* This request borrows the actual generating contexts only during construction.
  * Its owned ordinal products contain no caller-supplied role or authority bit. */

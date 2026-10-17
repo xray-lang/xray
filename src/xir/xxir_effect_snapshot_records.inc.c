@@ -4,13 +4,37 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_effect_snapshot_records.inc.c - Lossless affine physical instruction runs
+ * xxir_effect_snapshot_records.inc.c - Lossless physical instruction records
  *
  * KEY CONCEPT:
- *   Unsigned arithmetic preserves all ten physical words, including unused
- *   words and the exact immediate bits. No type or opcode selects a codec.
+ *   Literal pairs and unsigned affine arithmetic preserve all ten physical
+ *   words, including unused and immediate bits. Types never select a codec.
  */
 #include "xxir_instruction_words_internal.h"
+
+/* A literal tag selects complete physical rows, never constant columns. Both
+ * actual opcodes are bounded here; full correspondence reads every word. */
+static XrXirStatus effect_body_run_payload_check(const EffectBodyRead *read,
+    const EffectBodyRun *run) {
+    if (!read || !run || !run->count ||
+        (run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_PAIR)) ||
+        (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
+    uint32_t selected=run->mask&EFFECT_BODY_MASK;
+    if (run->mask&EFFECT_BODY_LITERAL_PAIR) {
+        if (run->count!=2 || selected) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,4)) return XR_XIR_BUDGET;
+        if (run->base.op<=XR_XIR_INVALID || run->base.op>=XR_XIR_OP_COUNT ||
+            run->second.op<=XR_XIR_INVALID || run->second.op>=XR_XIR_OP_COUNT)
+            return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
+    if (run->count==2 && selected) return XR_XIR_BAD_STRUCTURE;
+    for (;selected;selected&=selected-1) {
+        if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+        if (!run->delta[(uint32_t)__builtin_ctz(selected)]) return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
 
 /* Unused capacity is never read or traversed. A failed growth retains the
  * previous allocation so the unique material destructor can release it. */
@@ -39,6 +63,12 @@ static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
         }
         target->first=source->first;target->count=source->count;target->mask=source->mask;
         target->base=source->base;
+        if (source->mask&EFFECT_BODY_LITERAL_PAIR) {
+            if (!xir_compile_work(work,sizeof(source->second))) {
+                xr_compile_resources_free(storage);return XR_XIR_BUDGET;
+            }
+            target->second=source->second;continue;
+        }
         for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
             if (!xir_compile_work(work,1)) { xr_compile_resources_free(storage);return XR_XIR_BUDGET; }
             if (!(source->mask&(UINT32_C(1)<<w))) continue;
@@ -64,21 +94,20 @@ static inline XrXirStatus effect_body_run_append(const XrXirCompileContext *work
     if (function->runs && address>=begin &&
         (address-begin)/sizeof(*run)<function->run_capacity) return XR_XIR_BAD_STRUCTURE;
     if (!run->count || run->first>=function->instruction_count ||
-        run->count>function->instruction_count-run->first || run->mask&~EFFECT_BODY_MASK)
+        run->count>function->instruction_count-run->first)
         return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        if (!(run->mask&(UINT32_C(1)<<w))) continue;
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        if (run->count==1 || !run->delta[w]) return XR_XIR_BAD_STRUCTURE;
-    }
-    XrXirStatus status=effect_body_runs_reserve(work,function);
+    EffectBodyRead read=effect_body_compile_read(work);
+    XrXirStatus status=effect_body_run_payload_check(&read,run);
+    if (status==XR_XIR_OK) status=effect_body_runs_reserve(work,function);
     if (status!=XR_XIR_OK) return status;
     EffectBodyRun *target=&function->runs[function->run_count];
     if (!xir_compile_work(work,3*sizeof(uint32_t)+sizeof(run->base)+1)) return XR_XIR_BUDGET;
     target->first=run->first;target->count=run->count;target->mask=run->mask;
     target->base=run->base;
-    for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+    if (run->mask&EFFECT_BODY_LITERAL_PAIR) {
+        if (!xir_compile_work(work,sizeof(run->second))) return XR_XIR_BUDGET;
+        target->second=run->second;
+    } else for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         if (!(run->mask&(UINT32_C(1)<<w))) continue;
         if (!xir_compile_work(work,sizeof(uint32_t))) return XR_XIR_BUDGET;
@@ -110,7 +139,7 @@ typedef struct EffectBodyWriteSink {
  * A constant-column mask chooses only the private range reader. That reader
  * independently checks the real fields; all other rows retain scalar intake. */
 static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
-    const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyRun *run,
+    const XrXirFunction *source,EffectBodyFunction *target,EffectBodyRun *run,
     const EffectBodyWriteSink *sink) {
     if (!source || !target || !target->runs || !run || run!=&target->runs[target->run_count] ||
         target->run_count>=target->run_capacity || !run->count ||
@@ -118,11 +147,17 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,1+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t first=run->first,count=run->count,mask=run->mask;
+    if (count==2 && mask) {
+        if (!xir_compile_work(work,2+sizeof(run->second)+sizeof(run->mask)))
+            return XR_XIR_BUDGET;
+        run->second=source->instructions[first+1];run->mask=EFFECT_BODY_LITERAL_PAIR;
+    }
     ++target->run_count;
     if (!sink) return XR_XIR_OK;
     if (!sink->owner || !sink->row || !sink->span) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
-    if (count>1 && !(mask&UINT32_C(3))) return sink->span(sink->owner,first,count);
+    if (count>1 && !(run->mask&EFFECT_BODY_LITERAL_PAIR) && !(mask&UINT32_C(3)))
+        return sink->span(sink->owner,first,count);
     for (uint32_t i=first;i<first+count;++i) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         XrXirStatus status=sink->row(sink->owner,i,&source->instructions[i]);
@@ -249,15 +284,8 @@ static XrXirStatus effect_body_run_check(const EffectBodyRead *read,
     if (!read || !run || first>=instructions) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
     if (run->first!=first || !run->count || run->count>instructions-first ||
-        run->mask&~EFFECT_BODY_MASK || (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
-    /* A selected physical delta must be nonzero. The array is full length,
-     * so there is no packed-column directory or rank to reconstruct. */
-    for (uint32_t selected=run->mask;selected;selected&=selected-1) {
-        if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
-        uint32_t w=(uint32_t)__builtin_ctz(selected);
-        if (!run->delta[w]) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
+        (run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_PAIR))) return XR_XIR_BAD_STRUCTURE;
+    return effect_body_run_payload_check(read,run);
 }
 
 /* The same bounded reader serves compile and runtime ledger callbacks. A
@@ -441,6 +469,12 @@ static XrXirStatus effect_body_run_word(const EffectBodyRead *read,const EffectB
     uint32_t instruction,uint32_t word,uint32_t *output) {
     if (!ref || !output || word>=EFFECT_BODY_WORDS || instruction<ref->first ||
         instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+    if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
+        if (ref->count!=2) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,2+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=xir_instruction_word(instruction==ref->first?&ref->base:&ref->second,word);
+        return XR_XIR_OK;
+    }
     bool delta=!!(ref->mask&(UINT32_C(1)<<word));
     if (!effect_body_read_work(read,1+(delta?3:0)+sizeof(*output))) return XR_XIR_BUDGET;
     *output=xir_instruction_word(&ref->base,word)+(delta?ref->delta[word]*(instruction-ref->first):0);
@@ -462,6 +496,11 @@ static XrXirStatus effect_body_instruction_ref_words(const EffectBodyRead *read,
     if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
 
     for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+        if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
+            if (ref->count!=2) return XR_XIR_BAD_STRUCTURE;
+            if (!effect_body_read_work(read,2+sizeof(words[w]))) return XR_XIR_BUDGET;
+            words[w]=xir_instruction_word(instruction==ref->first?&ref->base:&ref->second,w);continue;
+        }
         bool present=!!(ref->mask&(UINT32_C(1)<<w));
         if (!effect_body_read_work(read,1+(present?4:0)+sizeof(words[w]))) return XR_XIR_BUDGET;
         words[w]=xir_instruction_word(&ref->base,w)+(present?ref->delta[w]*(instruction-ref->first):0);
@@ -484,8 +523,15 @@ static XrXirStatus effect_body_instruction_words_get(const EffectBodyRead *read,
  * selected reads and complete Instruction output remain charged. */
 static XrXirStatus effect_body_instruction_ref_prepare(const EffectBodyRead *read,
     const EffectBodyRun *ref,uint32_t instruction) {
-    if (!read || !ref || (ref->mask&~EFFECT_BODY_MASK) || (ref->count==1 && ref->mask) ||
+    if (!read || !ref || (ref->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_PAIR)) ||
+        (ref->count==1 && ref->mask) ||
         instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+    if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
+        XrXirStatus status=effect_body_run_payload_check(read,ref);
+        if (status!=XR_XIR_OK) return status;
+        return effect_body_read_work(read,1+sizeof(XrXirInstruction))?XR_XIR_OK:XR_XIR_BUDGET;
+    }
+    if (ref->count==2 && ref->mask) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,1+sizeof(uint32_t)+((ref->mask&UINT32_C(1))?3:0)))
         return XR_XIR_BUDGET;
     uint32_t operation=xir_instruction_word(&ref->base,0)+((ref->mask&UINT32_C(1))?
@@ -506,7 +552,8 @@ static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
     if (!output) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_body_instruction_ref_prepare(read,ref,instruction);
     if (status!=XR_XIR_OK) return status;
-    *output=xir_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,instruction-ref->first);
+    if (ref->mask&EFFECT_BODY_LITERAL_PAIR) *output=instruction==ref->first?ref->base:ref->second;
+    else *output=xir_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,instruction-ref->first);
     return XR_XIR_OK;
 }
 
@@ -516,10 +563,17 @@ static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
 static XrXirStatus effect_body_instruction_ref_read(const EffectBodyRead *read,
     const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *storage,
     const XrXirInstruction **output) {
-    if (!read || !ref || !storage || !output || ref->mask&~EFFECT_BODY_MASK ||
+    if (!read || !ref || !storage || !output || (ref->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_PAIR)) ||
         (ref->count==1 && ref->mask) || instruction<ref->first ||
         instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
+    if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
+        XrXirStatus status=effect_body_run_payload_check(read,ref);
+        if (status!=XR_XIR_OK) return status;
+        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+        *output=instruction==ref->first?&ref->base:&ref->second;return XR_XIR_OK;
+    }
+    if (ref->count==2 && ref->mask) return XR_XIR_BAD_STRUCTURE;
     if (instruction!=ref->first && ref->mask) {
         XrXirStatus status=effect_body_instruction_ref_value(read,ref,instruction,storage);
         if (status!=XR_XIR_OK) return status;
@@ -706,8 +760,11 @@ static XrXirStatus effect_body_records_compare(const EffectBodyRead *read,
         } else for (uint32_t i=first;i-first<ref->count;++i) {
             for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
                 bool delta=!!(ref->mask&(UINT32_C(1)<<w));
-                if (!effect_body_read_work(read,3+(delta?4:0))) return XR_XIR_BUDGET;
-                if (xir_instruction_word(&ref->base,w)+(delta?ref->delta[w]*(i-first):0)!=
+                bool pair=!!(ref->mask&EFFECT_BODY_LITERAL_PAIR);
+                if (!effect_body_read_work(read,3+(pair?1:delta?4:0))) return XR_XIR_BUDGET;
+                uint32_t actual=pair?xir_instruction_word(i==first?&ref->base:&ref->second,w):
+                    xir_instruction_word(&ref->base,w)+(delta?ref->delta[w]*(i-first):0);
+                if (actual!=
                     xir_instruction_word(&source->instructions[i],w)) {
                     if (!same) return XR_XIR_BAD_STRUCTURE;
                     if (!effect_body_read_work(read,sizeof(*same))) return XR_XIR_BUDGET;

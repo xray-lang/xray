@@ -117,21 +117,24 @@ static void cell_owned_run_malformed(const XrXirCompileContext *context,
     EffectBodyFunction *body=(EffectBodyFunction *)&material->functions[1];
     CHECK(body->runs && body->run_count>1 && body->run_capacity==body->run_count);
     EffectBodyRun *first=&body->runs[0],*second=&body->runs[1];
-    uint32_t count=body->run_count,column=0;while (!(first->mask&(UINT32_C(1)<<column))) ++column;
-    uint32_t old_mask=first->mask,old_first=first->first,old_delta=first->delta[column],old_neighbor=second->first;
+    bool pair=!!(first->mask&EFFECT_BODY_LITERAL_PAIR);
+    uint32_t count=body->run_count,column=0;
+    while (!pair && column<EFFECT_BODY_WORDS && !(first->mask&(UINT32_C(1)<<column))) ++column;
+    CHECK(pair || column<EFFECT_BODY_WORDS);
+    uint32_t old_mask=first->mask,old_first=first->first,old_delta=pair?0:first->delta[column],old_neighbor=second->first;
     XrXirCellProofRunCursor held={.function=1};
     const XrXirInstruction held_operation={.op=XR_XIR_RETURN,.immediate=INT64_MIN};
     XrXirCellProofRun sentinel={.first=99,.count=3,.operation=&held_operation};
     for (uint32_t mode=0;mode<5;++mode) {
         if (!mode) first->mask|=UINT32_C(1024);
         if (mode==1) first->first=1;
-        if (mode==2) first->delta[column]=0;
+        if (mode==2) {if(pair)first->mask|=1;else first->delta[column]=0;}
         if (mode==3) second->first=0;
         if (mode==4) body->run_capacity=body->run_count-1;
         XrXirCellProofRunCursor cursor=held;XrXirCellProofRun out=sentinel;
         CHECK(read->range(context,read,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
             !memcmp(&cursor,&held,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
-        first->mask=old_mask;first->first=old_first;first->delta[column]=old_delta;
+        first->mask=old_mask;first->first=old_first;if(!pair)first->delta[column]=old_delta;
         second->first=old_neighbor;body->run_capacity=count;
     }
     --body->run_count;

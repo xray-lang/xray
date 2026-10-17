@@ -56,7 +56,9 @@ typedef struct XrXirCellProofRun {
     /* The current complete body-read call retains the immutable row owner.
      * This view never enters a published proof, Artifact or Program. */
     const XrXirInstruction *operation;
-    /* Actual selected physical deltas belong to this stack-local request. */
+    /* A complete literal second row makes no constant-column claim. */
+    const XrXirInstruction *second;
+    /* Selected affine deltas belong to this request when second is NULL. */
     uint32_t delta[10];
 } XrXirCellProofRun;
 

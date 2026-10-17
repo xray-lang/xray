@@ -37,6 +37,14 @@ static XrXirInstruction mask_expected(uint32_t mask) {
             (mask&64?UINT32_C(0xffffffff):UINT32_C(0xfffffffb))),
         .type_arguments={mask&256?51:11,mask&512?74:12}};
 }
+static XrXirInstruction mask_third(uint32_t mask) {
+    return (XrXirInstruction){.op=mask&1?XR_XIR_CONST_INT+4:XR_XIR_CONST_INT,
+        .type=mask&2?XR_XIR_I64+12:XR_XIR_I64,.args={mask&4?27:7,mask&8?UINT32_MAX-2:UINT32_MAX},
+        .targets={mask&16?45:9,mask&32?74:10},
+        .immediate=(int64_t)(((uint64_t)(mask&128?UINT32_C(0x80000008):UINT32_C(0x80000000))<<32)|
+            (mask&64?UINT32_C(3):UINT32_C(0xfffffffb))),
+        .type_arguments={mask&256?91:11,mask&512?136:12}};
+}
 typedef struct MaskVisit {
     const EffectBodyRun *runs;
     uint32_t count,calls,next,refuse;
@@ -53,20 +61,20 @@ static void mask_visit_walks(const XrXirCompileContext *context) {
     EffectBodyRun runs[3];memset(runs,0xa5,sizeof(runs));
     const uint32_t deltas[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
     for(uint32_t r=0;r<3;++r) {
-        runs[r].first=2*r;runs[r].count=2;runs[r].mask=1023;runs[r].base=mask_expected(0);
+        runs[r].first=3*r;runs[r].count=3;runs[r].mask=1023;runs[r].base=mask_expected(0);
         for(uint32_t w=0;w<10;++w)runs[r].delta[w]=deltas[w];
     }
-    EffectBodyFunction body={.instruction_count=6,.runs=runs,.run_count=3,.run_capacity=3};
+    EffectBodyFunction body={.instruction_count=9,.runs=runs,.run_count=3,.run_capacity=3};
     MaskVisit visit={.runs=runs,.count=3};EffectBodyRunVisitor visitor={&visit,mask_visit_run};
     MaskRead observation={context,0,UINT64_MAX};EffectBodyRead read={&observation,mask_read_work};
-    CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==3 && visit.next==6 &&
+    CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==3 && visit.next==9 &&
         visit.observed[0]==7 && visit.observed[1]==7 && visit.observed[2]==7);
     uint64_t points=observation.calls;
     for(uint64_t n=0;n<points;++n) {
         visit.calls=visit.next=0;observation.calls=0;observation.reject=n;
         CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_BUDGET && observation.calls==n+1);
         visit.calls=visit.next=0;observation.calls=0;observation.reject=UINT64_MAX;
-        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==3 && visit.next==6);
+        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==3 && visit.next==9);
     }
     for(unsigned r=0;r<3;++r)for(unsigned field=0;field<4;++field) {
         EffectBodyRun saved=runs[r];
@@ -138,16 +146,18 @@ static void mask_matrix(const XrXirCompileContext *context) {
     EffectBodyRead read=effect_body_compile_read(context);unsigned zeros=0;
     for(uint32_t mask=0;mask<1024;++mask) {
         EffectBodyRun run;memset(&run,0xa5,sizeof(run));
-        run.first=0;run.count=2;run.mask=mask;run.base=mask_expected(0);
+        run.first=0;run.count=3;run.mask=mask;run.base=mask_expected(0);
         const uint32_t deltas[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
         for(uint32_t w=0;w<10;++w)if(mask&(1u<<w))run.delta[w]=deltas[w];
-        EffectBodyFunction body={.instruction_count=2,.runs=&run,.run_count=1,.run_capacity=1};
+        EffectBodyFunction body={.instruction_count=3,.runs=&run,.run_count=1,.run_capacity=1};
         MaskVisit visit={.runs=&run,.count=1};EffectBodyRunVisitor visitor={&visit,mask_visit_run};
-        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==1 && visit.next==2);
+        CHECK(effect_body_runs_visit(&read,&body,&visitor)==XR_XIR_OK && visit.calls==1 && visit.next==3);
         const EffectBodyRun *ref=NULL;
         CHECK(effect_body_record_ref(&read,&body,1,&ref)==XR_XIR_OK && ref==&run);
         XrXirInstruction expected=mask_expected(mask),output={0};
         CHECK(effect_body_instruction_get(&read,&body,1,&output)==XR_XIR_OK && mask_same(&output,&expected));
+        XrXirInstruction third=mask_third(mask);
+        CHECK(effect_body_instruction_get(&read,&body,2,&output)==XR_XIR_OK && mask_same(&output,&third));
         const XrXirInstruction held_view={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.immediate=INT64_MIN};
         XrXirInstruction view_storage=held_view;const XrXirInstruction *view=&held_view;
         CHECK(effect_body_instruction_ref_read(&read,&run,0,&view_storage,&view)==XR_XIR_OK &&
@@ -178,7 +188,7 @@ static void mask_matrix(const XrXirCompileContext *context) {
         CHECK(effect_body_record_ref(&read,&body,1,&ref)==XR_XIR_BAD_STRUCTURE && !ref);
         run.count=2;run.first=1;
         CHECK(effect_body_record_ref(&read,&body,1,&ref)==XR_XIR_BAD_STRUCTURE && !ref);
-        run.first=0;run.count=3;
+        run.first=0;run.count=4;
         CHECK(effect_body_record_ref(&read,&body,1,&ref)==XR_XIR_BAD_STRUCTURE && !ref);
     }
     CHECK(zeros==5120);
@@ -190,22 +200,22 @@ static void mask_boundaries(const XrXirCompileContext *context) {
         EffectBodyRun runs[3];memset(runs,0xa5,sizeof(runs));
         const uint32_t deltas[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
         for(unsigned r=0;r<3;++r) {
-            runs[r].first=2*r;runs[r].count=2;runs[r].mask=masks[m];runs[r].base=mask_expected(0);
+            runs[r].first=3*r;runs[r].count=3;runs[r].mask=masks[m];runs[r].base=mask_expected(0);
             for(unsigned w=0;w<10;++w)if(masks[m]&(1u<<w))runs[r].delta[w]=deltas[w];
         }
-        EffectBodyFunction body={.instruction_count=6,.runs=runs,.run_count=3,.run_capacity=3};
-        for(uint32_t i=0;i<6;++i) {
-            XrXirInstruction expected=mask_expected(i&1?masks[m]:0),output={0};
+        EffectBodyFunction body={.instruction_count=9,.runs=runs,.run_count=3,.run_capacity=3};
+        for(uint32_t i=0;i<9;++i) {
+            XrXirInstruction expected=i%3==2?mask_third(masks[m]):mask_expected(i%3?masks[m]:0),output={0};
             CHECK(effect_body_instruction_get(&read,&body,i,&output)==XR_XIR_OK && mask_same(&output,&expected));
-            if(i&1)mask_prefixes(context,&body,i,&expected);
+            if(i%3)mask_prefixes(context,&body,i,&expected);
         }
         for(unsigned r=0;r<3;++r) {
             ++runs[r].first;
-            for(unsigned i=0;i<6;++i){const EffectBodyRun *ref=NULL;CHECK(effect_body_record_ref(&read,&body,i,&ref)==XR_XIR_BAD_STRUCTURE && !ref);}
+            for(unsigned i=0;i<9;++i){const EffectBodyRun *ref=NULL;CHECK(effect_body_record_ref(&read,&body,i,&ref)==XR_XIR_BAD_STRUCTURE && !ref);}
             --runs[r].first;
             for(unsigned w=0;w<10;++w)if(masks[m]&(1u<<w)) {
                 runs[r].delta[w]=0;
-                for(unsigned i=0;i<6;++i){const EffectBodyRun *ref=NULL;CHECK(effect_body_record_ref(&read,&body,i,&ref)==XR_XIR_BAD_STRUCTURE && !ref);}
+                for(unsigned i=0;i<9;++i){const EffectBodyRun *ref=NULL;CHECK(effect_body_record_ref(&read,&body,i,&ref)==XR_XIR_BAD_STRUCTURE && !ref);}
                 runs[r].delta[w]=deltas[w];
             }
         }
@@ -213,9 +223,9 @@ static void mask_boundaries(const XrXirCompileContext *context) {
     fprintf(stderr,"Snapshot first/middle/last selected and adjacent boundaries, selected delta damage and all read prefixes PASS\n");
 }
 static void mask_work_bounds(const XrXirCompileContext *context) {
-    EffectBodyRun run={.first=0,.count=2,.mask=1023,.base=mask_expected(0),
+    EffectBodyRun run={.first=0,.count=3,.mask=1023,.base=mask_expected(0),
         .delta={2,6,10,UINT32_MAX,18,32,4,4,40,62}};
-    EffectBodyFunction body={.instruction_count=2,.runs=&run,.run_count=1,.run_capacity=1};
+    EffectBodyFunction body={.instruction_count=3,.runs=&run,.run_count=1,.run_capacity=1};
     EffectBodyRead read=effect_body_compile_read(context);XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
     XrXirInstruction expected=mask_expected(1023),output={0};
@@ -239,7 +249,7 @@ static void mask_cell_values(const XrXirCompileContext *context) {
     for(uint32_t mask=0;mask<1024;++mask) {
         XrXirCellProofRun run;memset(&run,0xa5,sizeof(run));
         const XrXirInstruction base=mask_expected(0);
-        run.first=7;run.count=2;run.varying=mask;run.operation=&base;
+        run.first=7;run.count=3;run.varying=mask;run.operation=&base;run.second=NULL;
         const uint32_t delta[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
         for(unsigned w=0;w<10;++w)if(mask&(1u<<w))run.delta[w]=delta[w];
         CellProofBuild build={.context=context,.status=XR_XIR_OK};
@@ -265,6 +275,7 @@ static void mask_cell_values(const XrXirCompileContext *context) {
     CHECK(zeroes==5120);
     fprintf(stderr,"Cell local physical range: all1024 masks/5120 selected zero deltas, poisoned inactive words and exact full instruction oracle PASS\n");
 }
+#include "xir_snapshot_literal_pair_cases.h"
 int main(void) {
     const XrCompileResourceLimits caps={8388608,4194304,4000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -272,6 +283,7 @@ int main(void) {
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
     mask_matrix(&context);mask_boundaries(&context);mask_work_bounds(&context);mask_cell_values(&context);mask_visit_walks(&context);
     class_view_data_controls(&context);
+    literal_pair_controls();
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK &&
         after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
     fprintf(stderr,"Snapshot no-allocation read matrix work%llu cap4000000 live%llu/%llu\n",

@@ -48,20 +48,21 @@ static void conditional_compact_directory_damage(const XrXirCompileContext *cont
     EffectBodyRead read=effect_body_compile_read(context);
     uint32_t index=body->run_count/2;EffectBodyRun *middle=&body->runs[index];
     uint32_t first=middle->first,count=middle->count,mask=middle->mask;
-    uint32_t word=0;while (!(mask&(UINT32_C(1)<<word))) ++word;
-    uint32_t delta=middle->delta[word];
+    bool pair=!!(mask&EFFECT_BODY_LITERAL_PAIR);uint32_t word=0;
+    while (!pair && word<EFFECT_BODY_WORDS && !(mask&(UINT32_C(1)<<word))) ++word;
+    CHECK(pair || word<EFFECT_BODY_WORDS);uint32_t delta=pair?0:middle->delta[word];
     for (uint32_t damage=0;damage<4;++damage) {
         if (!damage) middle->first=first+1;
         else if (damage==1) middle->count=0;
         else if (damage==2) middle->mask=mask|UINT32_C(1024);
-        else middle->delta[word]=0;
+        else {if(pair)middle->mask|=1;else middle->delta[word]=0;}
         CHECK(effect_body_records_match(&read,body,expected)==XR_XIR_BAD_STRUCTURE);
         XrXirInstruction sentinel={.op=XR_XIR_RETURN,.immediate=INT64_MIN},decoded=sentinel;
         XrXirStatus status=effect_body_instruction_get(&read,body,expected->instruction_count-1,&decoded);
         CHECK((status==XR_XIR_OK && conditional_compact_same(&decoded,
             &expected->instructions[expected->instruction_count-1])) ||
             (status==XR_XIR_BAD_STRUCTURE && conditional_compact_same(&decoded,&sentinel)));
-        middle->first=first;middle->count=count;middle->mask=mask;middle->delta[word]=delta;
+        middle->first=first;middle->count=count;middle->mask=mask;if(!pair)middle->delta[word]=delta;
         CHECK(effect_body_records_match(&read,body,expected)==XR_XIR_OK);
     }
     /* A bad first, exact tail or selected adjacent group is a local refusal. */
