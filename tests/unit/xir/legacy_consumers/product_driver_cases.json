@@ -33234,6 +33234,36 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 0
+    },
+    {
+      "id": "complete_memory_primitives_mem_load_store_unaligned_shared_core",
+      "oracle_id": "complete_memory_primitives_mem_load_store_unaligned_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr",
+      "source_lf_sha256": "e0490f8b8648ebdbbadd22087143c1b443b6b1cb9b5bd2aa89031d4aec5fd9e0",
+      "entry": "run",
+      "stdout_utf8": "4660\n16909060\n72623859790382856\n52\n18\n4\n3\n2\n1\n8\n1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13",
+        "P08",
+        "P07"
+      ],
+      "independent_execution_model": "Complete unchanged 16-byte array/Slice/MutPtr original;all three unsafe stores and three loads with explicit LE,including offset1 u16,then all eight original backing-array byte reads. Independent initialized shared-region bytes yield all11outputs without host address,ABI,provider orXray queries. Logical alias andbyte semantics do not qualify real borrow lifetime,alignment fault handling,physical ownership,FI,resources,safety,providers or mixed execution.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr",
+        "source_lf_sha256": "e0490f8b8648ebdbbadd22087143c1b443b6b1cb9b5bd2aa89031d4aec5fd9e0"
+      },
+      "remaining_gates": [
+        "Whole source and all11 original observations retained. Legal Source rejection remains positive failure;symbolic bytes are not real borrow/lifetime/FI/resource/safety/provider/mixed qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 11
     }
   ]
 }

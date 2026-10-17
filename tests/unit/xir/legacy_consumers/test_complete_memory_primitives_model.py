@@ -15,7 +15,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
             'mem_volatile_shared_core':[305419896,120,255,43981,72623859790382856,'ok']}
         self.assertEqual({name:m.observations()[name] for name in expected},expected)
         self.assertEqual(sum(map(len,expected.values())),82)
-        self.assertEqual(len([row for row in m.expected_rows() if row['original_source'] not in m._LAYOUT_PROGRAMS.values()]),5)
+        self.assertEqual(len([row for row in m.expected_rows() if row['id']!=m._UNALIGNED_ID and row['original_source'] not in m._LAYOUT_PROGRAMS.values()]),5)
 
     def test_uninitialized_and_dead_bytes_never_supply_observations(self):
         memory=m.Region(4)
@@ -106,7 +106,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
           '3e9 is i32=false is i64=true','3e9 as i32?=null','-5 is u8=false is i16=true',
           '1.5 is f32=true is f64=true','1.5 as f32?=1.5','0.1 is f32=false is f64=true','0.1 as f32?=null','"s" is i32=false is f32=false']}
         self.assertEqual(sum(map(len,expected.values())),35);self.assertEqual(m.fixed_layout_observations(),expected)
-        self.assertEqual(len(m.expected_rows()),10);self.assertEqual(sum(map(len,m.observations().values())),117)
+        self.assertEqual(len([row for row in m.expected_rows() if row['id']!=m._UNALIGNED_ID]),10);self.assertEqual(sum(map(len,m.observations().values())),117)
 
     def test_packing_and_requested_alignment_do_not_change_member_order(self):
         fields=[(1,1),(4,4)]
@@ -165,5 +165,46 @@ class CompleteMemoryPrimitives(unittest.TestCase):
         self.assertEqual(len(rows),5);self.assertEqual(sum(row['observation_count'] for row in rows),35)
         for row in rows:
             self.assertEqual(row['source'],row['original_source']);self.assertEqual(row['required_target'],'windows-x86_64');self.assertEqual(row['expected']['exit_code'],0)
+
+
+    def test_complete_unaligned_original_has_all_scalar_andbacking_byte_observations(self):
+        trace=m.unaligned_memory_trace()
+        self.assertEqual(trace['observations'],[4660,16909060,72623859790382856,52,18,4,3,2,1,8,1])
+        self.assertEqual(trace['final_array_bytes'],[0,52,18,0,4,3,2,1,8,7,6,5,4,3,2,1])
+        self.assertEqual(trace['events'][:6],[('store',1,2,4660,'LE'),('store',4,4,16909060,'LE'),
+            ('store',8,8,72623859790382856,'LE'),('load',1,2,'LE'),('load',4,4,'LE'),('load',8,8,'LE')])
+        self.assertEqual(trace['events'][6:],[('array_read',x) for x in (1,2,4,5,6,7,8,15)])
+        self.assertEqual((trace['original_store_calls'],trace['original_load_calls'],trace['original_byte_observations']),(3,3,8))
+        self.assertFalse(trace['physical_borrow_lifetime_FI_safety_orprovider_qualified'])
+
+    def test_explicit_LE_is_host_independent_andbyte_suffix_detects_wrong_encoding(self):
+        with mock.patch.object(m,'NATIVE_ENDIAN','big'):
+            self.assertEqual(m.unaligned_memory_trace()['observations'],m.unaligned_expected_row()['required_semantic_trace']['observations'])
+        class WrongEndian(m.Region):
+            def store_int(self,offset,width,value,**kwargs):
+                return super().store_int(offset,width,value,endian='big')
+            def load_int(self,offset,width,**kwargs):
+                return super().load_int(offset,width,endian='big')
+        wrong=m.unaligned_memory_trace(WrongEndian)['observations']
+        self.assertEqual(wrong[:3],[4660,16909060,72623859790382856])
+        self.assertNotEqual(wrong[3:],m.unaligned_memory_trace()['observations'][3:])
+
+    def test_complete_unaligned_source_andauthorities_are_independently_pinned(self):
+        saved=Path.read_bytes
+        for name in m._UNALIGNED_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==m.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):m.expected_rows()
+        with mock.patch.object(m,'_UNALIGNED_INPUTS',{}),self.assertRaises(ValueError):m.expected_rows()
+
+    def test_unaligned_product_retains_whole_original_andall_eleven_observations(self):
+        import json
+        row=m.unaligned_expected_row()
+        case=next(x for x in json.loads((m.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases'] if x['id']==row['id'])
+        self.assertEqual((case['source'],case['entry'],case['source_context']),(m._UNALIGNED_SOURCE,'run','original_absolute'))
+        self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+        self.assertEqual((row['source'],row['original_source'],row['required_target']),(m._UNALIGNED_SOURCE,m._UNALIGNED_SOURCE,None))
+        self.assertEqual((case['expected_exit_code'],case['stderr_utf8'],case['stdout_utf8']),(0,'',row['expected']['stdout_utf8']))
+        self.assertEqual(len(case['stdout_utf8'].splitlines()),11)
 
 if __name__=='__main__':unittest.main()

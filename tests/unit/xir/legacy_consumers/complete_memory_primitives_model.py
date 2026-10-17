@@ -387,4 +387,48 @@ def expected_rows():
     for row in rows:
         if row['original_source'] in _LAYOUT_PROGRAMS.values():
             row['model']='Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.'
-    return rows
+    return rows+[unaligned_expected_row()]
+
+_UNALIGNED_SOURCE = 'tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr'
+_UNALIGNED_ID = 'complete_memory_primitives_mem_load_store_unaligned_shared_core'
+_UNALIGNED_INPUTS = {'tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr': 'e0490f8b8648ebdbbadd22087143c1b443b6b1cb9b5bd2aa89031d4aec5fd9e0', 'stdlib/mem/mem.xr': '9750e120d6b22f5c2caffd2d59d13238393ac6939c17827090a3829c33fa9dab', 'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677', 'spec/source/sections/014-13-built-in-functions.md': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380', 'src/frontend/analyzer/xa_intrinsic_registry.def': 'b82d2d08038fe71e60bda2f3d9f88b1bb7711be72b28f11a8d15eb635c7ccc4b'}
+
+
+def unaligned_memory_trace(region_class=Region):
+    memory=region_class(16,zeroed=True)
+    events=[]
+    stores=((1,2,0x1234),(4,4,0x01020304),(8,8,0x0102030405060708))
+    for offset,width,value in stores:
+        memory.store_int(offset,width,value,endian='little')
+        events.append(('store',offset,width,value,'LE'))
+    outputs=[]
+    for offset,width,value in stores:
+        outputs.append(memory.load_int(offset,width,endian='little'))
+        events.append(('load',offset,width,'LE'))
+    for offset in (1,2,4,5,6,7,8,15):
+        outputs.append(memory.read(offset,1)[0])
+        events.append(('array_read',offset))
+    return {'observations':outputs,'final_array_bytes':list(memory.read(0,16)),
+            'events':events,'allocation_length':16,'same_slice_and_pointer_backing':True,
+            'original_store_calls':3,'original_load_calls':3,'original_byte_observations':8,
+            'unaligned_first_access_offset':1,'explicit_byte_order':'LE',
+            'host_endian_address_alignment_orABI_queries':0,
+            'physical_borrow_lifetime_FI_safety_orprovider_qualified':False}
+
+
+def unaligned_expected_row():
+    required={_UNALIGNED_SOURCE,'stdlib/mem/mem.xr','spec/source/sections/003-2-type-system.md',
+              'spec/source/sections/014-13-built-in-functions.md',
+              'src/frontend/analyzer/xa_intrinsic_registry.def'}
+    if set(_UNALIGNED_INPUTS)!=required or _UNALIGNED_SOURCE!=BASE+'mem_load_store_unaligned_shared_core.xr':
+        raise ValueError('Whole unaligned memory original or authorities changed')
+    for name,digest in _UNALIGNED_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Whole unaligned memory input changed: '+name)
+    trace=unaligned_memory_trace()
+    if len(trace['observations'])!=11:raise ValueError('Whole unaligned memory observations lost')
+    return {'id':_UNALIGNED_ID,'source':_UNALIGNED_SOURCE,'original_source':_UNALIGNED_SOURCE,
+            'required_target':None,'expected':{'exit_code':0,'stderr_utf8':'',
+                'stdout_utf8':''.join(str(x)+chr(10) for x in trace['observations'])},
+            'observation_count':11,'required_semantic_trace':trace,
+            'model':'Complete unchanged 16-byte array/Slice/MutPtr original;all three unsafe stores and three loads with explicit LE,including offset1 u16,then all eight original backing-array byte reads. Independent initialized shared-region bytes yield all11outputs without host address,ABI,provider orXray queries. Logical alias andbyte semantics do not qualify real borrow lifetime,alignment fault handling,physical ownership,FI,resources,safety,providers or mixed execution.'}
