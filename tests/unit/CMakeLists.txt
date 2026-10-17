@@ -4359,6 +4359,7 @@ endif()
 include(xir/atomic_admission_owner.cmake)
 
 include(xir/atomic_a2_source.cmake)
+include(xir/atomic_class.cmake)
 
 include(xir/atomic_a2_retry.cmake)
 

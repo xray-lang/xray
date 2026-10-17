@@ -27,21 +27,26 @@ static void ordering_packet_cases(void) {
     previous=(XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&owner.context,ordering65_golden,sizeof(ordering65_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
     CHECK(source_program_compile_attempts==previous_attempts && source_program_compile_live==previous_live && source_program_compile_bytes==previous_bytes);
-    XrXirArtifact *sentinel=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,ordering72_golden,
-        sizeof(ordering72_golden),&sentinel,NULL)==XR_XIR_OK && sentinel);
+    previous=NULL;
+    CHECK(xr_xir_compile_checked_read(&owner.context,ordering72_golden,sizeof(ordering72_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && !previous);
+    previous=(XrXirArtifact *)(uintptr_t)1;
+    CHECK(xr_xir_compile_checked_read(&owner.context,ordering72_golden,sizeof(ordering72_golden),&previous,NULL)==XR_XIR_BAD_STRUCTURE && previous==(XrXirArtifact *)(uintptr_t)1);
+    CHECK(source_program_compile_attempts==previous_attempts && source_program_compile_live==previous_live && source_program_compile_bytes==previous_bytes);
+    XrXirArtifact *sentinel=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,ordering84_golden,
+        sizeof(ordering84_golden),&sentinel,NULL)==XR_XIR_OK && sentinel);
     XrCompileResourceStats baseline=library_compile_stats(&owner.context);
     XrXirArtifact *empty=NULL;
     CHECK(xr_xir_compile_checked_read(&owner.context,generic_method_golden,
         sizeof(generic_method_golden),&empty,NULL)==XR_XIR_BAD_STRUCTURE && !empty);
     for(unsigned mutation=0;mutation<7;++mutation){
-        uint8_t bytes[sizeof(ordering72_golden)];memcpy(bytes,ordering72_golden,sizeof(bytes));
+        uint8_t bytes[sizeof(ordering84_golden)];memcpy(bytes,ordering84_golden,sizeof(bytes));
         switch(mutation){case 0:bytes[8]=24;bytes[12]=63;break;
-        case 1:bytes[ORDERING25_RECORD_OFFSET]=0;break;
-        case 2:bytes[ORDERING25_RECORD_OFFSET]=3;break;
-        case 3:bytes[ORDERING25_RECORD_OFFSET+4]^=1;break;
-        case 4:bytes[ORDERING25_VARIANT0_OFFSET+4]='X';break;
-        case 5:bytes[ORDERING25_VARIANT0_OFFSET+4+7]=1;break;
-        default:bytes[ORDERING25_RECORD_OFFSET+36+8]=4;break;}
+        case 1:bytes[ORDERING84_RECORD_OFFSET]=0;break;
+        case 2:bytes[ORDERING84_RECORD_OFFSET]=3;break;
+        case 3:bytes[ORDERING84_RECORD_OFFSET+4]^=1;break;
+        case 4:bytes[ORDERING84_VARIANT0_OFFSET+4]='X';break;
+        case 5:bytes[ORDERING84_VARIANT0_OFFSET+4+7]=1;break;
+        default:bytes[ORDERING84_RECORD_OFFSET+36+8]=4;break;}
         ordering_packet_digest(bytes,sizeof(bytes));XrXirArtifact *occupied=sentinel;
         CHECK(xr_xir_compile_checked_read(&owner.context,bytes,sizeof(bytes),&empty,NULL)==XR_XIR_BAD_STRUCTURE && !empty);
         CHECK(xr_xir_compile_checked_read(&owner.context,bytes,sizeof(bytes),&occupied,NULL)==XR_XIR_BAD_STRUCTURE && occupied==sentinel);

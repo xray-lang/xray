@@ -7484,6 +7484,8 @@ Unit 模块声明有真实 owner、slot ordinal、known 类型、mutability 和�
 
 GET 的唯一四参数 runtime 接口显式接收实际 arena、work/scratch 和可选分配域。scalar/string/Array handle 纯读不分配，保留的 metadata 可在 Program/Instance 销毁后使用；inline 快照物化需要调用方 live domain，新字节记在该域，已有叶子仍向原 backing owner 退款，不授执行权限。SET 使用同一拥有式事务准备机制，完成所有可失败步骤后，在无可观察中间态的提交区释放旧字节并发布新值；失败保留字段、别名和旧快照。NEW 不发布部分 this。对象创建时预留释放帧，drop 对实际活动 enum payload 迭代释放、零新分配，退款至真实 owner。该无环子集不证明完整 L0/weak/L2 残余图回收。
 
+运行期 Class 字段还可通过共同拥有式手柄存储持有闭合 Atomic<i64>、Atomic<f64> 与 Atomic<bool>。复制保留同一共享 cell，Class body 不内联复制原子标量；字段读取/替换使用当前 arena/domain 准入和共同事务。保留的 Atomic、类型 arena 及物理 owner 可独立于生产者、Program、Instance 和原 Class 手柄存活。此存储准入不增加 Ordering 策略、CTFE 权限、模块状态权限或 worker 执行授权，既有 Atomic 操作与 Checker/Call 约束继续生效。
+
 唯一当前协议由§17.6实现常量定义；旧 value target、旧有效摘要 Checked 包及同 Program 的旧 embedded proof 必须由实际 seal/read 拒绝，不保留旧 GET、别名或第二 reader。独立 VM/native/packet/mixed 预期、真实旧缓存、逐 OOM、拥有结果寿命、物理释放和完整适用安全须分别验证；本节不声明完整语言、stdlib 同源配对发布、默认产品或跨平台资格通过。
 
 ### 17.30 无入口 Checked Library 与真实导入

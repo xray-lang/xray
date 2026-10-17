@@ -1,0 +1,31 @@
+class Counter {
+    private count: Atomic<i64>
+    private active: Atomic<bool>
+    private ratio: Atomic<f64>
+
+    init(value: i64) {
+        this.count = Atomic<i64>(value)
+        this.active = Atomic<bool>(true)
+        this.ratio = Atomic<f64>(1.5)
+    }
+
+    increment() -> i64 {
+        return this.count.fetchAdd(1, Ordering.AcquireRelease)
+    }
+
+    value() -> i64 {
+        if (this.ratio.load(Ordering.Acquire) != 1.5) { return -3 }
+        return this.active.load(Ordering.Acquire) ? this.count.load() : -1
+    }
+}
+
+export fn main() -> i64 {
+    var counter = Counter(40)
+    var alias = counter
+    if (alias.increment() != 40) { return -1 }
+    return counter.value() + 1
+}
+
+export fn retained() -> Counter {
+    return Counter(41)
+}

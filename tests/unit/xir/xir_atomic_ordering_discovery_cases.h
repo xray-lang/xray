@@ -24,8 +24,9 @@ static void atomic_ordering_dependencies(void) {
     CHECK(view->module_count==3 && module->declarations->module_count==3);
     uint32_t fi=UINT32_MAX,oi=UINT32_MAX;
     for(uint32_t i=0;i<view->module_count;++i){
-        if(strstr(view->modules[i].path,"foreign.xr"))fi=i;
-        if(!strcmp(view->modules[i].identity,"stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def"))oi=i;
+        if(view->modules[i].path && strstr(view->modules[i].path,"foreign.xr"))fi=i;
+        if(view->modules[i].identity &&
+            !strcmp(view->modules[i].identity,"stdlib-module-v1:module=7:prelude:path=27:prelude/builtin_symbols.def"))oi=i;
     }
     CHECK(fi!=UINT32_MAX && oi!=UINT32_MAX && fi!=oi);
     CHECK(module->declarations->modules[fi].dependency_count==0);

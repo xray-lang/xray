@@ -19,6 +19,12 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
     /* Hash containers own separately admitted dense storage. A class field
      * retains only that handle, so recursive identities stop at this edge. */
     if (node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_SET) return XR_XIR_OK;
+    /* Atomic fields retain the same shared cell through ordinary owned storage.
+     * Its closed scalar type carries no recursive inline field obligation. */
+    if (node->kind==XR_XIR_TYPE_ATOMIC)
+        return node->element==XR_XIR_I64 || node->element==XR_XIR_F64 ||
+            node->element==XR_XIR_BOOL ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+
     /* An Array field is a handle whose backing store is its own admitted array; any element the
      * array family admits (scalars, strings, nominal values, nullable values, arrays) is stored there. */
     if (node->kind==XR_XIR_TYPE_ARRAY) {

@@ -10,3 +10,7 @@ else()
 endif()
 add_test(NAME test_xir_atomic_admission_owner COMMAND test_xir_atomic_admission_owner)
 set_tests_properties(test_xir_atomic_admission_owner PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 300)
+add_test(NAME test_xir_atomic_ordering_independent_vector
+    COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_LIST_DIR}/derive_ordering84_vector.py)
+set_tests_properties(test_xir_atomic_ordering_independent_vector PROPERTIES
+    LABELS "unit;xir;metadata;independent;wire" TIMEOUT 30)
