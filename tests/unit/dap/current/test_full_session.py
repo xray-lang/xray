@@ -1,6 +1,7 @@
 """A complete public CLI conversation over owned typed Source state."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 
@@ -64,7 +65,7 @@ def full_session(Client,args):
         record['cli_identity']=json.loads(version.stdout)
         capabilities=send('initialize',{'supportsVariableType':True,'supportsVariablePaging':True})
         missing=[name for name in ORIGINAL_CAPABILITIES if not capabilities.get(name)]
-        assert missing==(['supportTerminateDebuggee'] if args.transport=='stdio' else []),missing
+        assert missing==(['supportTerminateDebuggee'] if args.transport=='stdio' and os.name!='nt' else []),missing
         record['missing_original_capabilities']=missing
         record['open_exception_filters']=['native']
         client.event('initialized')

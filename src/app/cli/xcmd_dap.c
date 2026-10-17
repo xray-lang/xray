@@ -11,11 +11,24 @@
 #include "../dap/xdap_stdio.h"
 #include "../dap/xdap_tcp.h"
 #include "xcli_spec.h"
+#include "xcli_dap_worker.h"
 #include "../../api/xsource_paths.h"
 #include "../../execution/xr_xir_host_time.h"
 #include "../../xir/xxir_value_internal.h"
 #include "../../os/os_time.h"
 #include <stdio.h>
+
+typedef struct DapHost {
+    void *context;
+    XdapDetachCommit commit;
+    XrXirStatus (*retire_control)(void *);
+    XrXirOutputSink sink;
+    const char *stdout_path,*stderr_path;
+    uint64_t process_id;
+} DapHost;
+#ifdef XR_OS_WINDOWS
+#include "xcmd_dap_process_win.inc.c"
+#endif
 typedef struct DapEndpoint { XdapStdio *stdio;XdapTcp *tcp; } DapEndpoint;
 static bool dap_port(const XrCliInvocation *inv,uint32_t *output) {
     const char *text=xr_cli_opt_string(&inv->options,"port",NULL);*output=0;
@@ -64,16 +77,7 @@ static int dap_detached_loop(XdapDetached *target) {
     bool success=copied==XR_XIR_VALUE_OK && result.status==XR_XIR_CALL_RETURNED;
     xr_xir_call_result_drop(&result);return success ? XR_CLI_EXIT_OK : XR_CLI_EXIT_FAIL;
 }
-XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
-    bool tcp=xr_cli_opt_present(&inv->options,"port");uint32_t port=0;
-    if (!dap_port(inv,&port) || (tcp && xr_cli_opt_bool(&inv->options,"stdio"))) {
-        fputs("DAP: select stdio or a TCP port from 0 to 65535\n",stderr);return XR_CLI_EXIT_USAGE;
-    }
-#ifndef XR_ARCH_X86_64
-    fputs("DAP: this host has no supported XIR execution target\n",stderr);return XR_CLI_EXIT_FAIL;
-#endif
-    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
-    if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
+static int dap_run(bool tcp,uint32_t port,XrCompileResources *resources,DapHost *host) {
     XrSourceCompiler *compiler=NULL;XrSourceCompileDiagnostic diagnostic={0};
     XrStdlibPath stdlib={0};XrSourcePathsDiagnostic path_diagnostic={0};
     XrXirDomain *domain=NULL;XdapAdapter *adapter=NULL;XdapDetached *detached=NULL;DapEndpoint io={0};
@@ -92,9 +96,14 @@ XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
     XdapAdapterConfig config={.observer_metadata=domain,.write=dap_write,.context=&io,.message_limit=1048576};
     if (xr_xir_instance_config_init(&config.instance,sizeof(config.instance))!=XR_XIR_CALL_READY) goto done;
     xr_xir_host_time_provider(&config.instance.time);
-    if (tcp) {
+    if (tcp || host) {
         config.detached=&detached;
-        config.instance.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&detached_sink};
+        config.instance.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,host ? &host->sink : &detached_sink};
+        if (host) {
+            config.detach_commit=host->commit;config.detach_context=host->context;config.retain_output=true;
+            config.stdout_path=host->stdout_path;config.stderr_path=host->stderr_path;
+            config.process_id=host->process_id;
+        }
     }
     config.instance.metadata_limit=config.instance.value_limit=config.instance.call_limit=1048576;
     config.instance.requested_value_limit=config.instance.requested_call_limit=1048576;
@@ -104,6 +113,7 @@ XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
     if (detached) {
         if (xdap_adapter_free(adapter)!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
         adapter=NULL;xdap_stdio_free(io.stdio);io.stdio=NULL;xdap_tcp_free(io.tcp);io.tcp=NULL;
+        if (host && host->retire_control(host->context)!=XR_XIR_OK) result=XR_CLI_EXIT_FAIL;
         if (dap_detached_loop(detached)!=XR_CLI_EXIT_OK) result=XR_CLI_EXIT_FAIL;
     }
 
@@ -112,7 +122,31 @@ done:
     if (xdap_detached_free(detached)!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
     xr_source_compiler_free(compiler);xr_source_compile_diagnostic_free(&diagnostic);
     xdap_stdio_free(io.stdio);xdap_tcp_free(io.tcp);xr_xir_domain_drop(domain);xr_source_stdlib_path_free(&stdlib);
-    xr_compile_resources_release(resources);
     if (result!=XR_CLI_EXIT_OK) fputs("DAP: protocol, source admission, resource or cleanup failure\n",stderr);
     return result;
 }
+XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
+    bool tcp=xr_cli_opt_present(&inv->options,"port");uint32_t port=0;
+    if (!dap_port(inv,&port) || (tcp && xr_cli_opt_bool(&inv->options,"stdio"))) {
+        fputs("DAP: select stdio or a TCP port from 0 to 65535\n",stderr);return XR_CLI_EXIT_USAGE;
+    }
+#ifndef XR_ARCH_X86_64
+    fputs("DAP: this host has no supported XIR execution target\n",stderr);return XR_CLI_EXIT_FAIL;
+#endif
+#ifdef XR_OS_WINDOWS
+    if (!tcp) return dap_process_frontend();
+#endif
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
+    int result=dap_run(tcp,port,resources,NULL);xr_compile_resources_release(resources);return result;
+}
+#ifdef XR_OS_WINDOWS
+XR_FUNC int xr_cli_dap_worker_main(int argc,char **argv) {
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
+    DapHost host={0};int result=XR_CLI_EXIT_FAIL;
+    if (dap_process_worker_open(resources,argc,argv,&host)==XR_XIR_OK) result=dap_run(false,0,resources,&host);
+    if (dap_process_worker_close(&host)!=XR_XIR_OK) result=XR_CLI_EXIT_FAIL;
+    xr_compile_resources_release(resources);return result;
+}
+#endif

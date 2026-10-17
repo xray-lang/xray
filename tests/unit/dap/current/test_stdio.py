@@ -17,11 +17,13 @@ parser.add_argument('--start-request',choices=('launch','attach'),default='launc
 parser.add_argument('--transport',choices=('stdio','tcp'),default='stdio')
 parser.add_argument('--scenario',choices=('legacy','disconnect-clean','stop-on-entry','line-breakpoint','logpoint','mutate-oracle','owned-oracle',
     'full-session','throw-sites','exception-filters','source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle',
-    'detach-running','detach-stopped','detach-unstarted','detach-timer','detach-attach','detach-output-closed'),default='legacy')
+    'detach-running','detach-stopped','detach-unstarted','detach-timer','detach-attach','detach-output-closed',
+    'worker-unstarted','worker-stopped','worker-running','worker-timer','worker-attach','worker-output-closed',
+    'worker-frontend-killed','worker-terminate','worker-output-normal','worker-streams','worker-unicode','worker-timer-killed'),default='legacy')
 parser.add_argument('--oracle',type=Path)
 parser.add_argument('--transcript',type=Path)
 args=parser.parse_args()
-if args.scenario not in ('legacy','disconnect-clean','full-session','throw-sites','exception-filters') and not args.scenario.startswith('detach-'):assert args.oracle
+if args.scenario not in ('legacy','disconnect-clean','full-session','throw-sites','exception-filters') and not args.scenario.startswith(('detach-','worker-')):assert args.oracle
 
 if args.transport=='tcp':
     for flags in [('--stdio','--port','0'),('--port','65536'),('--port','4294967296'),('--port','-1')]:
@@ -42,7 +44,7 @@ class SocketInput:
             self.peer.shutdown(socket.SHUT_WR)
 
 class Client:
-    def __init__(self):
+    def __init__(self,read_until=None):
         self.peer=None
         mode=['--port','0'] if args.transport=='tcp' else ['--stdio']
         self.process=subprocess.Popen([str(args.xray),'dap',*mode],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
@@ -66,6 +68,7 @@ class Client:
         self.replies=[]
         self.read_seq=0
         self.transcript=[]
+        self.read_until=read_until
         self.reader=threading.Thread(target=self.read,daemon=True)
         self.reader.start()
     def read(self):
@@ -85,7 +88,8 @@ class Client:
                     part=self.output.read(length-len(body))
                     assert part,'truncated output body'
                     body+=part
-                self.messages.put(json.loads(body))
+                value=json.loads(body);self.messages.put(value)
+                if self.read_until and value.get('type')=='event' and value.get('event')==self.read_until:return
         except BaseException as error:self.messages.put(error)
     def receive(self):
         value=self.messages.get(timeout=20)
@@ -279,7 +283,8 @@ def original_wire():
             frames=client.send('stackTrace',{'threadId':stopped['body']['threadId']})['body']['stackFrames']
             assert frames and all(frame['id']>0 for frame in frames)
             retired_frames=[frame['id'] for frame in frames]
-            for policy in (False,None,1,'true'):
+            policies=(None,1,'true') if os.name=='nt' and args.transport=='stdio' else (False,None,1,'true')
+            for policy in policies:
                 refused=client.send('disconnect',{'terminateDebuggee':policy})
                 assert not refused['success'],refused
                 retained=client.send('stackTrace',{'threadId':stopped['body']['threadId']})
@@ -492,7 +497,10 @@ def detached_tcp_wire():
             client.process.kill();client.process.wait(timeout=20)
 
 
-if args.scenario=='exception-filters':
+if args.scenario.startswith('worker-'):
+    from test_stdio_worker import stdio_worker
+    stdio_worker(Client,args)
+elif args.scenario=='exception-filters':
     from test_exception_filters import exception_filters
     exception_filters(Client,args)
 elif args.scenario=='throw-sites':

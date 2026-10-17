@@ -9,7 +9,11 @@
 #ifndef XDAP_CURRENT_CONTROL_H
 #define XDAP_CURRENT_CONTROL_H
 #include "xdap_current.h"
-/* Disable observation without cancelling the authenticated Instance. A pending
- * controlled write must finish before ownership can leave the debugger. */
-XR_FUNC XrXirCallStatus xdap_current_detach(XdapCurrent *);
+typedef XrXirCallStatus (*XdapDetachCommit)(void *);
+/* Reserve control before committing the host owner. A failed callback leaves
+ * observation intact; READY irrevocably transfers host execution. The callback
+ * cannot reenter target control. A controlled write must finish first.
+ * HOST_ERROR is fatal control I/O: close the session rather than retrying an
+ * indeterminate host transition as though it were a precommit rejection. */
+XR_FUNC XrXirCallStatus xdap_current_detach(XdapCurrent *,XdapDetachCommit,void *);
 #endif // XDAP_CURRENT_CONTROL_H

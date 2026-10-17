@@ -135,7 +135,7 @@ XR_FUNC XrXirCallStatus xdap_current_resume(XdapCurrent *session,uint64_t epoch,
     return !session->ended ? xr_xir_instance_resume(session->instance,epoch,wake) : XR_XIR_CALL_BAD_STATE;
 }
 XR_FUNC void xdap_current_pause(XdapCurrent *session) {
-    if (session && !session->ended) xr_xir_vm_debug_request_pause(session->debug);
+    if (session && !session->driving && !session->ended) xr_xir_vm_debug_request_pause(session->debug);
 }
 XR_FUNC XrXirValueStatus xdap_current_breakpoint(XdapCurrent *session,
     uint32_t function, uint32_t instruction, bool enabled) {
@@ -189,8 +189,11 @@ XR_FUNC XrXirCallStatus xdap_current_stop(XdapCurrent *session) {
     if (status!=XR_XIR_CALL_BUSY) session->ended=true;
     return status;
 }
-XR_FUNC XrXirCallStatus xdap_current_detach(XdapCurrent *session) {
+XR_FUNC XrXirCallStatus xdap_current_detach(XdapCurrent *session,XdapDetachCommit commit,void *context) {
     if (!session || session->ended) return XR_XIR_CALL_BAD_STATE;
     if (session->driving || xir_vm_debug_write_pending(session->debug)) return XR_XIR_CALL_BUSY;
-    xr_xir_vm_debug_disable(session->debug);return XR_XIR_CALL_READY;
+    session->driving=true;
+    XrXirCallStatus status=commit ? commit(context) : XR_XIR_CALL_READY;
+    if (status==XR_XIR_CALL_READY) xr_xir_vm_debug_disable(session->debug);
+    session->driving=false;return status;
 }

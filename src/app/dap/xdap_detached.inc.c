@@ -10,7 +10,13 @@
 static XrXirOutputStatus detached_output(void *context,const XrXirOutputGroup *group) {
     XdapDetached *target=context;
     if (!target) return XR_XIR_OUTPUT_BAD_ARGUMENT;
-    if (target->adapter) return xr_xir_output_render(&target->adapter->sink,group);
+    if (target->adapter) {
+        if (target->retain_output) {
+            XrXirOutputStatus status=target->output.write(target->output.context,group);
+            if (status!=XR_XIR_OUTPUT_OK) return status;
+        }
+        return xr_xir_output_render(&target->adapter->sink,group);
+    }
     return target->output.write ? target->output.write(target->output.context,group) : XR_XIR_OUTPUT_BAD_ARGUMENT;
 }
 static XrXirStatus detached_clock(XdapDetached *target,uint64_t *output) {
@@ -99,9 +105,10 @@ static XrXirStatus dispatch_detach(XdapAdapter *s,const XdapRequest *r) {
     XrXirStatus status=xdap_dispatch_prepare_response(s,r,true,NULL,NULL,&response);
     if (status!=XR_XIR_OK) goto done;
     status=dispatch_prepare_end(s,&event);if (status!=XR_XIR_OK) goto done;
-    XrXirCallStatus detached=xdap_current_detach(s->launch->control);
+    XrXirCallStatus detached=xdap_current_detach(s->launch->control,s->config.detach_commit,s->config.detach_context);
     if (detached!=XR_XIR_CALL_READY) {
-        status=xdap_dispatch_response(s,r,false,NULL,"Target cannot detach while busy");goto done;
+        if (detached==XR_XIR_CALL_HOST_ERROR) { status=XR_XIR_IO;goto done; }
+        status=xdap_dispatch_response(s,r,false,NULL,"Target or host owner cannot detach");goto done;
     }
     target=s->execution;target->driving=true;
     target->adapter=NULL;target->launch=s->launch;target->started=s->configured;

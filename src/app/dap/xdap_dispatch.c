@@ -106,6 +106,9 @@ XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapt
         config->instance.depth_limit>64 || !xr_xir_domain_current(config->observer_metadata)) return XR_XIR_BAD_STRUCTURE;
     if (config->detached && (*config->detached || !config->instance.output.write ||
         !xr_xir_output_provider_valid(&config->instance.output))) return XR_XIR_BAD_STRUCTURE;
+    if ((config->detach_commit || config->retain_output || config->stdout_path || config->stderr_path) && !config->detached)
+        return XR_XIR_BAD_STRUCTURE;
+    if ((config->stdout_path!=NULL)!=(config->stderr_path!=NULL)) return XR_XIR_BAD_STRUCTURE;
     const XrXirCompileContext *context=xr_source_compiler_context(*compiler);
     if (!context || !xr_xir_domain_retain(config->observer_metadata)) return XR_XIR_BUDGET;
     XdapAdapter *s=NULL;XrCompileResourceStatus allocated=xr_compile_resources_calloc(context->resources,1,sizeof(*s),(void **)&s);
@@ -121,6 +124,7 @@ XR_FUNC XrXirStatus xdap_adapter_new(XrSourceCompiler **compiler,const XdapAdapt
     }
     s->execution->resources=s->resources;s->execution->adapter=s;
     s->execution->output=config->instance.output;s->execution->time=config->instance.time;
+    s->execution->retain_output=config->retain_output;
     /* This stable routing owner can outlive the compiler and control connection. */
     s->sink=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,dispatch_output,s,s->config.message_limit};
     s->config.instance.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,detached_output,s->execution};
@@ -185,6 +189,13 @@ static XrXirStatus dispatch_initialize(XdapAdapter *s,const XdapRequest *r) {
     if (s->config.detached) {
         if (body.length && body.bytes[body.length-1]=='}') --body.length;
         XDAP_TEXT(&body,",\"supportTerminateDebuggee\":true}");
+    }
+    if (s->config.stdout_path && s->config.stderr_path) {
+        if (body.length && body.bytes[body.length-1]=='}') --body.length;
+        XDAP_TEXT(&body,",\"xrayRetainedOutput\":{\"stdout\":");
+        xdap_json_quote(&body,s->config.stdout_path,strlen(s->config.stdout_path));
+        XDAP_TEXT(&body,",\"stderr\":");xdap_json_quote(&body,s->config.stderr_path,strlen(s->config.stderr_path));
+        XDAP_TEXT(&body,",\"processId\":");xdap_json_unsigned(&body,s->config.process_id);XDAP_TEXT(&body,"}}");
     }
     XrXirStatus status=xdap_dispatch_response(s,r,true,&body,NULL);xdap_json_writer_free(&body);
     if (status==XR_XIR_OK) { s->initialized=true;status=xdap_dispatch_event(s,"initialized",NULL); }

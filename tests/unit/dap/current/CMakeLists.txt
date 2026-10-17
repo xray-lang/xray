@@ -350,16 +350,35 @@ set_tests_properties(test_dap_values_resources PROPERTIES TIMEOUT 120 LABELS "da
 set_tests_properties(test_dap_values PROPERTIES TIMEOUT 120 LABELS "dap;values;json;source;execution;ownership")
 
 if(XR_BUILD_DAP)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py COPYONLY)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_full_session.py ${CMAKE_CURRENT_BINARY_DIR}/test_full_session.py COPYONLY)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_throw_sites.py ${CMAKE_CURRENT_BINARY_DIR}/test_throw_sites.py COPYONLY)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_exception_filters.py ${CMAKE_CURRENT_BINARY_DIR}/test_exception_filters.py COPYONLY)
+    set(XR_DAP_SCRIPT_DIR "${CMAKE_CURRENT_BINARY_DIR}/worker-scripts")
+    file(MAKE_DIRECTORY "${XR_DAP_SCRIPT_DIR}")
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio_worker.py ${XR_DAP_SCRIPT_DIR}/test_stdio_worker.py COPYONLY)
+    if(WIN32)
+        foreach(XR_DAP_WORKER_MODE unstarted stopped running timer attach output-closed frontend-killed terminate output-normal streams unicode timer-killed)
+            set(XR_DAP_WORKER_SOURCE threads_fixture.xr)
+            if(XR_DAP_WORKER_MODE STREQUAL "unstarted")
+                set(XR_DAP_WORKER_SOURCE wire_fixture.xr)
+            elseif(XR_DAP_WORKER_MODE STREQUAL "streams")
+                set(XR_DAP_WORKER_SOURCE worker_streams_fixture.xr)
+            elseif(XR_DAP_WORKER_MODE MATCHES "^(timer|output-closed|output-normal|unicode|timer-killed)$")
+                set(XR_DAP_WORKER_SOURCE worker_fixture.xr)
+            endif()
+            add_test(NAME dap_current_stdio_worker_${XR_DAP_WORKER_MODE} COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
+                --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/${XR_DAP_WORKER_SOURCE} --scenario worker-${XR_DAP_WORKER_MODE})
+            set_tests_properties(dap_current_stdio_worker_${XR_DAP_WORKER_MODE} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE
+                ENVIRONMENT "PYTHONUTF8=1" LABELS "dap;stdio;worker;detach;cli;execution;ownership")
+        endforeach()
+    endif()
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py ${XR_DAP_SCRIPT_DIR}/test_stdio.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_full_session.py ${XR_DAP_SCRIPT_DIR}/test_full_session.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_throw_sites.py ${XR_DAP_SCRIPT_DIR}/test_throw_sites.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_exception_filters.py ${XR_DAP_SCRIPT_DIR}/test_exception_filters.py COPYONLY)
     foreach(XR_DAP_FILTER_TRANSPORT stdio tcp)
         set(XR_DAP_FILTER_START launch)
         if(XR_DAP_FILTER_TRANSPORT STREQUAL "tcp")
             set(XR_DAP_FILTER_START attach)
         endif()
-        add_test(NAME dap_current_${XR_DAP_FILTER_TRANSPORT}_exception_filters COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+        add_test(NAME dap_current_${XR_DAP_FILTER_TRANSPORT}_exception_filters COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
             --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/exception_flows.xr --transport ${XR_DAP_FILTER_TRANSPORT}
             --scenario exception-filters --start-request ${XR_DAP_FILTER_START} --transcript ${CMAKE_CURRENT_BINARY_DIR}/exception-filters-${XR_DAP_FILTER_TRANSPORT}.json)
         set_tests_properties(dap_current_${XR_DAP_FILTER_TRANSPORT}_exception_filters PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;cli;source;execution;ownership;filters;task")
@@ -369,28 +388,28 @@ if(XR_BUILD_DAP)
         if(XR_DAP_FULL_TRANSPORT STREQUAL "tcp")
             set(XR_DAP_FULL_START attach)
         endif()
-        add_test(NAME dap_current_full_${XR_DAP_FULL_TRANSPORT}_${XR_DAP_FULL_START} COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+        add_test(NAME dap_current_full_${XR_DAP_FULL_TRANSPORT}_${XR_DAP_FULL_START} COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
             --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/full_session.xr --transport ${XR_DAP_FULL_TRANSPORT}
             --scenario full-session --start-request ${XR_DAP_FULL_START} --transcript ${CMAKE_CURRENT_BINARY_DIR}/full-session-${XR_DAP_FULL_TRANSPORT}.json)
         set_tests_properties(dap_current_full_${XR_DAP_FULL_TRANSPORT}_${XR_DAP_FULL_START} PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;cli;source;execution;ownership;full-session")
     endforeach()
     foreach(XR_DAP_THROW_TRANSPORT stdio tcp)
-        add_test(NAME dap_current_${XR_DAP_THROW_TRANSPORT}_throw_sites COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+        add_test(NAME dap_current_${XR_DAP_THROW_TRANSPORT}_throw_sites COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
             --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/throw_sites.xr --transport ${XR_DAP_THROW_TRANSPORT}
             --scenario throw-sites --transcript ${CMAKE_CURRENT_BINARY_DIR}/throw-sites-${XR_DAP_THROW_TRANSPORT}.json)
         set_tests_properties(dap_current_${XR_DAP_THROW_TRANSPORT}_throw_sites PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;cli;source;ownership;exceptions")
     endforeach()
-    add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+    add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr)
     set_tests_properties(dap_current_stdio PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;execution;ownership")
-    add_test(NAME dap_current_stdio_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+    add_test(NAME dap_current_stdio_attach COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --start-request attach)
     set_tests_properties(dap_current_stdio_attach PROPERTIES TIMEOUT 120 LABELS "dap;attach;cli;stdio;execution;ownership")
-    add_test(NAME dap_current_tcp COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+    add_test(NAME dap_current_tcp COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp)
-    add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+    add_test(NAME dap_current_tcp_attach COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr --transport tcp --start-request attach)
     set_tests_properties(dap_current_tcp dap_current_tcp_attach PROPERTIES TIMEOUT 120 LABELS "dap;tcp;cli;execution;ownership")
     foreach(XR_DAP_DETACH_MODE running stopped unstarted timer attach output-closed)
@@ -400,7 +419,7 @@ if(XR_BUILD_DAP)
         elseif(XR_DAP_DETACH_MODE STREQUAL "timer")
             set(XR_DAP_DETACH_SOURCE timer_fixture.xr)
         endif()
-        add_test(NAME dap_current_tcp_detach_${XR_DAP_DETACH_MODE} COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+        add_test(NAME dap_current_tcp_detach_${XR_DAP_DETACH_MODE} COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
             --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/${XR_DAP_DETACH_SOURCE}
             --transport tcp --scenario detach-${XR_DAP_DETACH_MODE})
         set_tests_properties(dap_current_tcp_detach_${XR_DAP_DETACH_MODE} PROPERTIES TIMEOUT 120 LABELS "dap;tcp;detach;cli;execution;ownership")
@@ -415,7 +434,7 @@ if(XR_BUILD_DAP)
         elseif(XR_DAP_WIRE_SCENARIO STREQUAL "owned-oracle")
             set(XR_DAP_WIRE_SOURCE owned_values.xr)
         endif()
-        add_test(NAME dap_original_stdio_${XR_DAP_WIRE_SCENARIO} COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+        add_test(NAME dap_original_stdio_${XR_DAP_WIRE_SCENARIO} COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio.py
             --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/${XR_DAP_WIRE_SOURCE}
             --oracle ${XR_DAP_FIXTURE_DIR}/oracle.json --scenario ${XR_DAP_WIRE_SCENARIO})
         set_tests_properties(dap_original_stdio_${XR_DAP_WIRE_SCENARIO} PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;source;execution;ownership;original-oracle")

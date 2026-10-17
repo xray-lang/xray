@@ -21,6 +21,8 @@ typedef struct DetachFixture {
     size_t length;
     int64_t now;
     uint32_t reads,fail_write,handoff_writes;
+    uint32_t commits;
+    XrXirCallStatus commit_status;
     bool fail_clock,fail_output;
 } DetachFixture;
 static const char detach_request[]="{\"seq\":8,\"type\":\"request\",\"command\":\"disconnect\",\"arguments\":{\"terminateDebuggee\":false}}";
@@ -53,6 +55,19 @@ static XrXirTimeStatus detach_clock(void *context,XrXirClockKind clock,int64_t *
 static XrXirTimeStatus detach_offset(void *context,int64_t seconds,int64_t *output) {
     (void)context;(void)seconds;*output=0;return XR_XIR_TIME_OK;
 }
+static XrXirCallStatus detach_host_commit(void *context) {
+    DetachFixture *fixture=context;XdapAdapter *adapter=fixture->adapter;
+    CHECK(adapter && adapter->busy && adapter->launch && !fixture->target && !adapter->closed);
+    XdapCurrent *current=adapter->launch->control;XdapCurrentResult result={0};
+    CHECK(xdap_adapter_free(adapter)==XR_XIR_CALL_BUSY);
+    CHECK(xdap_current_free(current)==XR_XIR_CALL_BUSY);
+    CHECK(xdap_current_stop(current)==XR_XIR_CALL_BUSY);
+    CHECK(xdap_current_cancel(current)==XR_XIR_CALL_BUSY);
+    CHECK(xdap_current_detach(current,NULL,NULL)==XR_XIR_CALL_BUSY);
+    CHECK(xdap_current_start(current,0,NULL,0)==XR_XIR_CALL_BUSY);
+    CHECK(xdap_current_poll(current,1,&result)==XR_XIR_VALUE_BAD_ARGUMENT);
+    xdap_current_pause(current);++fixture->commits;return fixture->commit_status;
+}
 static void detach_open(DetachFixture *fixture,const char *file,bool attached) {
     memset(fixture,0,sizeof(*fixture));memset(&capture,0,sizeof(capture));fixture->now=1000000000;
     XrCompileResourceLimits limits={67108864,8388608,128000000};
@@ -66,7 +81,7 @@ static void detach_open(DetachFixture *fixture,const char *file,bool attached) {
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
     CHECK(xr_xir_domain_new_budgeted(1048576,&budget,&fixture->domain)==XR_XIR_VALUE_OK);
     XdapAdapterConfig config={.observer_metadata=fixture->domain,.write=detach_capture,.context=fixture,
-        .message_limit=16384,.detached=&fixture->target};
+        .message_limit=16384,.detached=&fixture->target,.detach_commit=detach_host_commit,.detach_context=fixture};
     CHECK(xr_xir_instance_config_init(&config.instance,sizeof(config.instance))==XR_XIR_CALL_READY);
     config.instance.metadata_limit=config.instance.value_limit=config.instance.call_limit=1048576;
     config.instance.requested_value_limit=config.instance.requested_call_limit=1048576;
@@ -238,6 +253,25 @@ static void detach_default_policy(uint32_t mode) {
     }
     detach_close(&fixture);
 }
+static void detach_host_rejection(void) {
+    DetachFixture fixture;detach_open(&fixture,XR_DAP_THREADS_FIXTURE,false);detach_start(&fixture,true,true);
+    XdapLaunch *launch=fixture.adapter->launch;XrXirVmDebugSnapshot *snapshot=fixture.adapter->snapshot;
+    uint64_t epoch=fixture.adapter->stop_epoch;fixture.commit_status=XR_XIR_CALL_BAD_STATE;
+    request(fixture.adapter,detach_request);XrJsonValue *reply=last_response("disconnect",false);xjson_free(reply);
+    CHECK(fixture.commits==1 && !fixture.target && !fixture.adapter->closed && !fixture.adapter->running);
+    CHECK(fixture.adapter->launch==launch && fixture.adapter->snapshot==snapshot && fixture.adapter->stop_epoch==epoch);
+    CHECK(!event_count("terminated") && !fixture.length);
+    fixture.commit_status=XR_XIR_CALL_READY;request(fixture.adapter,detach_request);
+    CHECK(fixture.commits==2 && fixture.target);detach_adapter_drop(&fixture);
+    detach_finish(&fixture,"33\n",3,XR_XIR_CALL_RETURNED);detach_close(&fixture);
+}
+static void detach_host_failure(void) {
+    DetachFixture fixture;detach_open(&fixture,XR_DAP_THREADS_FIXTURE,false);detach_start(&fixture,true,true);
+    fixture.commit_status=XR_XIR_CALL_HOST_ERROR;capture.count=0;
+    CHECK(xdap_adapter_request(fixture.adapter,detach_request,sizeof(detach_request)-1)==XR_XIR_IO);
+    CHECK(fixture.commits==1 && !fixture.target && !fixture.adapter->closed && !capture.count);
+    CHECK(fixture.adapter->snapshot && !fixture.adapter->running);detach_close(&fixture);
+}
 int main(int argc,char **argv) {
     xr_test_suppress_dialogs();bool resources=argc==2 && !strcmp(argv[1],"--resources");CHECK(argc==1 || resources);
     for (uint32_t paused=0;paused<2;++paused) {
@@ -252,6 +286,7 @@ int main(int argc,char **argv) {
     detach_binary_and_cleanup(false,false);detach_binary_and_cleanup(true,false);detach_binary_and_cleanup(false,true);
     detach_active_cleanup(false);detach_active_cleanup(true);
     detach_sequence_budget();for (uint32_t mode=0;mode<3;++mode) detach_default_policy(mode);
+    detach_host_rejection();detach_host_failure();
     puts("Independent detach owner/output/wait, real pending timer and unstarted Source, retained NUL/output faults, IO handoff, budget, reentry and escaped snapshot PASS");
     return 0;
 }

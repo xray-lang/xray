@@ -9,6 +9,7 @@
 #ifndef XDAP_DISPATCH_H
 #define XDAP_DISPATCH_H
 #include "xdap_detached.h"
+#include "xdap_current_control.h"
 #include "xdap_json.h"
 typedef struct XdapAdapter XdapAdapter;
 typedef XrXirStatus (*XdapMessageWrite)(void *,const char *,size_t);
@@ -22,6 +23,13 @@ typedef struct XdapAdapterConfig {
      * and time contexts must outlive the detached target and every DAP object.
      * Transfer is committed before response I/O; the slot owns on I/O failure. */
     XdapDetached **detached;
+    XdapDetachCommit detach_commit;
+    void *detach_context;
+    /* Mirror each original output group to the retained provider before DAP
+     * rendering. Borrowed paths and provider contexts outlive detached cleanup. */
+    bool retain_output;
+    const char *stdout_path,*stderr_path;
+    uint64_t process_id;
 } XdapAdapterConfig;
 /* Success takes compiler; failure preserves both owners. Every method belongs
  * to the sole control/drive owner. Callback reentry cannot mutate the adapter.

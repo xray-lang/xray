@@ -44,7 +44,7 @@ struct XdapDetached {
     XrXirTimeProvider time;
     XrXirCallResult outcome;
     uint64_t wait_epoch,wait_wake,wait_start,wait_duration;
-    bool started,ended,driving;
+    bool started,ended,driving,retain_output;
 };
 struct XdapAdapter {
     XrSourceCompiler *compiler;

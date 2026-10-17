@@ -1,0 +1,4 @@
+import time
+print("before 前\0α")
+time.sleep(1500)
+print("after 后\0β")
