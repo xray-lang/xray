@@ -302,8 +302,10 @@ static XrXirStatus effect_invocation_input_seed(const XrXirCompileContext *work,
         }
     }
     EffectBodyRead read=effect_body_compile_read(work);
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    if (!xir_compile_work(work,sizeof(cursor))) return XR_XIR_BUDGET;
     for (uint32_t i=0;i<head->instruction_count;++i) {
-        XrXirInstruction op;XrXirStatus status=effect_body_instruction_get(&read,head,i,&op);
+        XrXirInstruction op;XrXirStatus status=effect_body_instruction_cursor_get(&read,head,i,&cursor,&op);
         if (status!=XR_XIR_OK) return status;
         if (op.op==XR_XIR_CALL_INDIRECT || op.op==XR_XIR_INVOKE_INDIRECT) continue;
         if (op.op==XR_XIR_SLOT_LOAD || op.op==XR_XIR_SLOT_PLACE || op.op==XR_XIR_SLOT_STORE) {
