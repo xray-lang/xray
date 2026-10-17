@@ -274,7 +274,16 @@ static bool cell_proof_inventory_run(CellProofBuild *build,uint32_t f,
     for (uint32_t i=run->first;i-run->first<run->count;++i) {
         XrXirType type=cell_proof_type(build,f,head->parameter_count+i);
         if (build->status!=XR_XIR_OK || !cell_proof_work(build,3)) return false;
-        XrXirInstruction operation;const XrXirInstruction *op=cell_proof_run_operation(build,f,run,i,&operation);
+        XrXirInstruction operation;const XrXirInstruction *op=NULL;
+        /* The first independent type read precedes the original full literal
+         * check. Later rows borrow that same immutable run only within this
+         * inventory call; each current opcode and independent type still match. */
+        if (run->literal_tail && i!=run->first) {
+            if (!cell_proof_work(build,4+sizeof(op))) return false;
+            op=&run->literal_tail[i-run->first-1];
+            if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT)
+                return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+        } else op=cell_proof_run_operation(build,f,run,i,&operation);
         if (!op) return false;
         if (op->type!=type) return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
         if (!cell_proof_inventory_instruction(build,f,i,type,op->op,tracked)) return false;
