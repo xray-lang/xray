@@ -33060,6 +33060,35 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 6
+    },
+    {
+      "id": "complete_parallel_workload_parallel_plan_close_during_dispatch",
+      "oracle_id": "complete_parallel_workload_parallel_plan_close_during_dispatch",
+      "source": "tests/diff/cases/semantics/stdlib/parallel_plan_close_during_dispatch.xr",
+      "source_lf_sha256": "8dfbb497bc11bbf1cf2b1d86e14f0948976fbe96eb07c373e87a38f60b4cf680",
+      "entry": "run",
+      "stdout_utf8": "true\nclosed\ndone\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P13",
+        "P08",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged active-close original:all8reducer callbacks andhelper/6print expressions retained. Logical close defers state clearing until successful dispatch end;postclose callback rejected,idempotent finalclose. Onlysum>=108 is observed,no exact worker/state allocation/scheduling/release/FI/provider qualification inferred.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/parallel_plan_close_during_dispatch.xr",
+        "source_lf_sha256": "8dfbb497bc11bbf1cf2b1d86e14f0948976fbe96eb07c373e87a38f60b4cf680"
+      },
+      "remaining_gates": [
+        "Whole original8itemactiveclose/helper/6print expressions/postclosedispatch retained;legalSource refusal staysfailure. No physicalstate release/lifetime/cancellation/FI/safety/provider/mixed qualification from logical reference."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
     }
   ]
 }

@@ -188,7 +188,7 @@ class CompleteParallelWorkloads(unittest.TestCase):
 
     def test_plan_cleanup_keeps_all_original_source_prints_and_registered_observations(self):
         rows={row['original_source']:row for row in m.expected_rows() if row['source'] in m._PLAN_PROGRAMS.values()}
-        for name,source in m._PLAN_PROGRAMS.items():
+        for name,source in ((name,path) for name,path in m._PLAN_PROGRAMS.items() if name!=m._ACTIVE_CLOSE_NAME):
             text=(m.ROOT/source).read_text(encoding='utf-8');row=rows[source]
             self.assertEqual(row['source'],source);self.assertIsNone(row['required_target']);self.assertEqual(row['expected']['exit_code'],0)
             self.assertEqual(text.count('print('),10 if 'nested' in name else 9)
@@ -203,5 +203,51 @@ class CompleteParallelWorkloads(unittest.TestCase):
         with mock.patch.object(m,'nested_plan_cleanup_trace',lambda:{**saved(),'observations':['changed']}):
             row=next(x for x in m.expected_rows() if 'nested_dispatch' in x['source'])
             self.assertEqual(row['expected']['stdout_utf8'],'changed\n')
+
+    def test_complete_active_close_preserves_all8items_helper_andthree_outputs(self):
+        trace=m.active_plan_close_trace()
+        self.assertEqual(trace['observations'],[True,'closed','done'])
+        self.assertEqual(trace['original_reduction_count'],8);self.assertEqual(trace['reference_visited_indices'],list(range(8)))
+        self.assertEqual(trace['original_helper_calls'],['closePlan']);self.assertEqual(trace['original_close_trigger_index'],3)
+        event=trace['reference_during_close_events'][0]
+        self.assertTrue(event['active']);self.assertTrue(event['closed']);self.assertTrue(event['release_pending'])
+        self.assertEqual(event['state_count_still_available'],2);self.assertEqual(event['states_already_cleared'],0)
+        self.assertEqual(trace['reference_after_end'],{'active':False,'closed':True,'release_pending':False,'state_count':0,'state_clears':1})
+        self.assertEqual((trace['postclose_callback_calls'],trace['reference_completed_dispatch_ends'],trace['reference_close_calls'],trace['reference_final_state_clears']),(0,1,2,1))
+        self.assertFalse(trace['runtime_state_release_ownership_lifetime_safety_FI_provider_qualified'])
+
+    def test_active_close_only_observes_lower_bound_not_exact_lane_sum(self):
+        for reverse in (False,True):
+            for lanes in (1,2):
+                with self.subTest(reverse=reverse,lanes=lanes):
+                    trace=m.active_plan_close_trace(reverse,lanes)
+                    self.assertEqual(trace['observations'],[True,'closed','done'])
+                    self.assertEqual(trace['reference_visited_indices'],list(range(8)))
+                    self.assertEqual(trace['original_observed_sum_predicate'],'sum>=108;exactsum_NOT_ASSERTED')
+        # Each actual nonnegative lane contributes at least10,independent of identity/order.
+        for lanes in itertools.product((0,1,7),repeat=8):
+            self.assertGreaterEqual(sum(lane+10+index for index,lane in enumerate(lanes)),108)
+
+    def test_active_close_rejects_early_state_clear_and_closed_begin_never_ends(self):
+        original=m.LogicalCleanupPlan.close
+        def premature(plan):
+            original(plan)
+            if plan.active:plan.states.clear()
+        with mock.patch.object(m.LogicalCleanupPlan,'close',premature),self.assertRaises(ZeroDivisionError):m.active_plan_close_trace()
+        plan=m.LogicalCleanupPlan(1,lambda lane:10);plan.close();plan.close()
+        self.assertEqual(plan.state_clears,1);self.assertEqual(plan.completed_ends,0)
+        with self.assertRaises(m.PlanDispatchFailure):plan.dispatch('forEach',1,lambda state,index:None)
+        self.assertEqual(plan.completed_ends,0)
+
+    def test_active_close_whole_original_and_registration_keep_all6print_expressions(self):
+        source=m._ACTIVE_CLOSE_ORIGINAL;text=(m.ROOT/source).read_text(encoding='utf-8')
+        self.assertEqual(text.count('print('),6);self.assertIn('plan.reduce(0..8, 0',text);self.assertIn('if (i == 3)',text)
+        self.assertIn('fn closePlan()',text);self.assertEqual(text.count('plan.close()'),2)
+        self.assertIn('print(sum >= 108)',text);self.assertIn('plan.forEach(0..1',text)
+        row=next(x for x in m.expected_rows() if x['source']==source)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'true\nclosed\ndone\n','stderr_utf8':''})
+        self.assertEqual(row['source'],row['original_source']);self.assertEqual(row['observation_count'],3)
+        case=next(x for x in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases'] if x['id']==row['id'])
+        self.assertEqual(case['source'],source);self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'')
 
 if __name__=='__main__':unittest.main()

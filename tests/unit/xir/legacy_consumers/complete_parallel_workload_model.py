@@ -194,6 +194,8 @@ def expected_rows():
                 'expected':{'exit_code':0,'stdout_utf8':''.join(render({'expected':x})+'\n' for x in trace['observations']),'stderr_utf8':''},
                 'observation_count':len(trace['observations']),'required_semantic_trace':trace,
                 'model':'Complete unchanged Plan cleanup original,allcallbacks/imports/prints/ranges retained;independent logical active-state unwind for ordinary nested-dispatch errors andE0420panic,thenall4post-failureitems. Reference forward/reverse andlanechoices are proof scenarios,not actual scheduling/startcounts/outputrollback/release/cancel/FI/provider qualification.'})
+            if name==_ACTIVE_CLOSE_NAME:
+                rows[-1]['model']='Complete unchanged active-close original:all8reducer callbacks andhelper/6print expressions retained. Logical close defers state clearing until successful dispatch end;postclose callback rejected,idempotent finalclose. Onlysum>=108 is observed,no exact worker/state allocation/scheduling/release/FI/provider qualification inferred.'
             continue
         row={'id':'complete_parallel_workload_'+name,'source':_PROGRAMS[name],'required_target':None,
             'expected':{'exit_code':0,'stdout_utf8':tuples[name]['stdout_utf8'] if name in tuples else '','stderr_utf8':''},
@@ -244,9 +246,12 @@ def plan_division_panic():
 
 class LogicalCleanupPlan:
     """Model public dispatch guard/unwind only; no physical scheduler or owner."""
-    def __init__(self,lane_count):
+    def __init__(self,lane_count,state_factory=None):
         if type(lane_count) is not int or lane_count not in (1,2):raise ValueError('Unreviewed admitted lane-count scenario')
-        self.states=list(range(lane_count));self.active=False;self.closed=False;self.completed_ends=0
+        if state_factory is not None and not callable(state_factory):raise ValueError('Plan initializer must be callable')
+        initialize=(lambda lane:lane) if state_factory is None else state_factory
+        self.states=[initialize(lane) for lane in range(lane_count)];self.active=False;self.closed=False;self.completed_ends=0
+        self.release_pending=False;self.close_calls=0;self.state_clears=0
 
     def begin(self):
         if self.closed:raise PlanDispatchFailure('ClosedPlan')
@@ -268,7 +273,31 @@ class LogicalCleanupPlan:
                 if kind!='forEach':values.append(value)
             return values if kind=='map' else None
         finally:
-            self.active=False;self.completed_ends+=1
+            self.end()
+
+    def end(self):
+        self.active=False;self.completed_ends+=1
+        if self.release_pending:
+            self.states.clear();self.state_clears+=1;self.release_pending=False
+
+    def close(self):
+        self.close_calls+=1
+        if not self.closed:
+            self.closed=True
+            if self.active:self.release_pending=True
+            else:self.states.clear();self.state_clears+=1
+
+    def reduce(self,count,initial,body,combine,reverse=False):
+        if type(count) is not int or count<0 or not callable(body) or not callable(combine):
+            raise ValueError('Unreviewed complete Plan reduction')
+        self.begin()
+        try:
+            accumulator=initial
+            indices=reversed(range(count)) if reverse else range(count)
+            for index in indices:accumulator=combine(accumulator,body(self.states[index%len(self.states)],index))
+            return accumulator
+        finally:
+            self.end()
 
 
 def nested_plan_cleanup_trace(reverse=False,multilane_count=2):
@@ -320,4 +349,40 @@ def panic_plan_cleanup_trace(reverse=False,lane_count=2):
 
 def plan_cleanup_traces():
     return {'parallel_plan_nested_dispatch_cleanup':nested_plan_cleanup_trace(),
-        'parallel_plan_map_cleanup_after_panic':panic_plan_cleanup_trace()}
+        'parallel_plan_map_cleanup_after_panic':panic_plan_cleanup_trace(),
+        _ACTIVE_CLOSE_NAME:active_plan_close_trace()}
+
+
+_ACTIVE_CLOSE_NAME='parallel_plan_close_during_dispatch'
+_ACTIVE_CLOSE_ORIGINAL='tests/diff/cases/semantics/stdlib/parallel_plan_close_during_dispatch.xr'
+_PLAN_PROGRAMS[_ACTIVE_CLOSE_NAME]=_ACTIVE_CLOSE_ORIGINAL
+_NAMES+=(_ACTIVE_CLOSE_NAME,)
+_PROGRAMS[_ACTIVE_CLOSE_NAME]=_ACTIVE_CLOSE_ORIGINAL
+_INPUTS[_ACTIVE_CLOSE_ORIGINAL]='8dfbb497bc11bbf1cf2b1d86e14f0948976fbe96eb07c373e87a38f60b4cf680'
+
+
+def active_plan_close_trace(reverse=False,lane_count=2):
+    plan=LogicalCleanupPlan(lane_count,lambda lane:lane+10);visited=[];close_events=[];helper_calls=[];postclose_callbacks=[]
+    def closePlan():
+        helper_calls.append('closePlan');plan.close()
+        close_events.append({'active':plan.active,'closed':plan.closed,'release_pending':plan.release_pending,
+            'state_count_still_available':len(plan.states),'states_already_cleared':plan.state_clears})
+    def body(state,index):
+        visited.append(index)
+        if index==3:closePlan()
+        return state+index
+    total=plan.reduce(8,0,body,lambda a,b:a+b,reverse=reverse);observations=[total>=108]
+    after_end={'active':plan.active,'closed':plan.closed,'release_pending':plan.release_pending,'state_count':len(plan.states),'state_clears':plan.state_clears}
+    try:
+        plan.dispatch('forEach',1,lambda state,index:postclose_callbacks.append(state+index));observations.append('miss')
+    except PlanDispatchFailure as error:observations.append('closed' if error.variant=='ClosedPlan' else 'other')
+    plan.close();observations.append('done')
+    return {'observations':observations,'original_reduction_count':8,'original_index_domain':list(range(8)),
+        'reference_visited_indices':sorted(visited),'original_close_trigger_index':3,'original_helper_calls':helper_calls,
+        'reference_during_close_events':close_events,'reference_after_end':after_end,'postclose_callback_calls':len(postclose_callbacks),
+        'reference_completed_dispatch_ends':plan.completed_ends,'reference_close_calls':plan.close_calls,
+        'reference_final_state_clears':plan.state_clears,'original_print_expressions':6,
+        'original_observed_sum_predicate':'sum>=108;exactsum_NOT_ASSERTED',
+        'independent_lower_bound':{'items':8,'minimum_state':10,'sum_indices':sum(range(8)),'minimum_total':8*10+sum(range(8))},
+        'model_lane_counts_and_order':'FORWARD_OR_REVERSE_REFERENCE_SCENARIOS_ONLY;actualworkers_and_schedule_NOT_PREDICTED',
+        'runtime_state_release_ownership_lifetime_safety_FI_provider_qualified':False}
