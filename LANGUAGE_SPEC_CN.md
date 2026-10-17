@@ -7589,11 +7589,13 @@ Source nth(index:i64)绑定相同治理声明并生成ITERATOR_NTH180，以Unit�
 
 Source对内建Iterator<T>的for-in只求值一次接收者，并通过相同hasNext/next规范操作逐次取得拥有式值；Unit绑定没有SSA载荷，循环变量保持只读且每次迭代闭包独立捕获该次值。进入循环前登记真实词法cleanup helper，continue保留登记，break、return、throw、panic和取消沿既有cleanup frontier关闭；Array快照和范围循环保留原路径，不登记Iterator helper。普通T泛型参数域不因Iterator<Unit>循环而扩大。
 
+自定义值的for-in沿同一普通方法规则只调用一次iterator()，得到规范Iterator后复用上述词法循环。名义类型的READ方法与声明接口上的泛型见证保留可见性、完整参数/默认值、泛型证明、调用效果及真实Source引用；不是按方法名制造权限。ref receiver使用原可写路径和一次求值的选择器，普通factory返回后结束借用，不能从值副本恢复写权限；真正含yield的方法仍禁止保留外部ref参数。方法所属真实body的yield登记相同Generator角色，READ或静态直接调用生成GENERATOR_NEW，不用普通CALL执行body。已验证的自定义入口包括普通/生成器方法、显式调用、普通声明接口见证、工厂真实等待/抛Error和ref factory；prelude Iterable治理、生成器方法的全部值/见证适配、标签/tuple等循环头及其余合法协议仍未完整接通，不把普通用户接口改称已准入的内建Iterable。
+
 内部ITERATOR_CLOSE181是一个Iterator操作数、Unit结果、独占正常/错误后继的生命周期控制；它不新增Source close()方法。关闭跳过普通producer body，仅由共同FIFO执行器完成已经登记且不抛语言Error、不发生语言挂起的cleanup，再恢复消费者。内部WAIT_ITERATOR_CLOSE7沿既有Call等待槽认证全部身份，取消期间保留该join，不重复入队或提前解除。它没有语言Error或挂起效应；这不是允许用户defer调用hasNext/next、time.sleep、Coro.yield或抛Error，E0387/E0392义务保留。已终态关闭返回Unit，不重新抛出sticky body Error；执行失败和panic仍沿共同退出协议传播。
 
 普通闭包factory返回Iterator或Task时，唯一Error CFG分别保存调用逃逸Error与返回值携带的延迟Error，沿相同封存actual边求固定点。已知空集合不被物理类型改写为未识别Error，真实不安全或未知集合仍拒绝GO。Task activation创建但不消费producer时，不因body的ROOT需求提前拒绝；冷丢弃不执行body或未登记的defer。实际推进必须同时检查producer及消费者执行角色，在hasNext/next缺少缓存及nth每次中间丢弃后再次推进之前拒绝非法worker body；缓存/终态交付及内部关闭不执行普通body。已准入worker producer在实际frame准备完成后复验全部输入，并从相同封存GENERATOR_NEW latent边选择完整上下文，写入现有producer frame的invocation字段；名义worker资格不能代替该证明，Cell仍须OWNED_CAPTURE、同Domain、未借出且非模块存储。当前静态消费来源ROOT精度尚未完整闭合，运行防线不授静态资格。
 
-这些是规范类型、body、工厂、hasNext/next/nth与内建Iterator循环关闭的开发输入，不授完整Generator或Channel资格。Program封装仍核对真实角色/自有body proof，普通Instance.start/Function拒绝直接generator body；低层驱动不替代认证工厂。当前子集已覆盖真实VM/native及双向混合producer/consumer、已启动清理、多activation和root更换；自定义iterator()/Iterable循环、其余隐藏环境/内部视图、完整等待竞争/取消/GC/代码lease、原全部FI/预算/安全和平台矩阵仍须实施与资格验证。没有增加Source close()方法。
+这些是规范类型、body、工厂、hasNext/next/nth与内建Iterator循环关闭的开发输入，不授完整Generator或Channel资格。Program封装仍核对真实角色/自有body proof，普通Instance.start/Function拒绝直接generator body；低层驱动不替代认证工厂。当前子集已覆盖真实VM/native及双向混合producer/consumer、已启动清理、多activation和root更换；完整Iterable/自定义协议及循环头、其余隐藏环境/内部视图、完整等待竞争/取消/GC/代码lease、原全部FI/预算/安全和平台矩阵仍须实施与资格验证。没有增加Source close()方法。
 
 ---
 

@@ -34,6 +34,7 @@ static bool source_for_in_body(SourceContext *ctx, AstNode *node,
     return ok;
 }
 #include "xxir_source_iterator_loop.inc.c"
+#include "xxir_source_iterable.inc.c"
 
 /* A counting loop over [first, bound) or [first, bound] on an i64 cursor cell. The emitter is left in the
  * body block with the loop registered for break and continue; the body reads `index` once per iteration. */
@@ -125,11 +126,13 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
     if (counting) {
         if (!source_range_bounds(ctx,node,&first,&bound)) return false;
     } else {
-        if (!expression(ctx,syntax->collection,&array)) return false;
+        if (!source_iteration_receiver(ctx,node,&array)) return false;
         const XrXirTypeNode *iter=xr_xir_type_node(&ctx->types,array.type);
         if(iter && iter->kind==XR_XIR_TYPE_ITERATOR) return source_iterator_loop(ctx,node,array);
-        if (!xr_xir_type_is_array(&ctx->types,array.type))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"for-in requires a proved built-in Array or Iterator value");
+        if (!xr_xir_type_is_array(&ctx->types,array.type)) {
+            SourceValue iterator;
+            return source_iteration_factory(ctx,node,array,&iterator) && source_iterator_loop(ctx,node,iterator);
+        }
         element_type = xr_xir_array_element(&ctx->types,array.type);
         if (!source_native_array_declaration(ctx) ||
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,{array.id},{0},0,{0}},&bound) ||

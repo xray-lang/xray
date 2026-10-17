@@ -75,7 +75,8 @@ static bool resource_root_arguments(WaitResourceRun *run,uint32_t entry,const Xr
             } else {
                 XrXirWaitRequest wait={0};
                 CHECK(xr_xir_instance_wait_request(run->instance,pending.epoch,pending.outcome.wake,&wait)==XR_XIR_CALL_READY);
-                CHECK(wait.kind==XR_XIR_WAIT_TIMER_MS && (wait.after_ms==5 || wait.after_ms==7));
+                CHECK(wait.kind==XR_XIR_WAIT_TIMER_MS && (wait.after_ms==5 || wait.after_ms==7 ||
+                    (run->mode==16 && wait.after_ms==3)));
                 CHECK(xr_xir_instance_resume(run->instance,pending.epoch,pending.outcome.wake)==XR_XIR_CALL_READY);
             }
             pending=(XrXirInstanceResult){0};continue;
@@ -123,8 +124,19 @@ static bool resource_loop_run(WaitResourceRun *run) {
     }
     return true;
 }
+static bool resource_iterable_run(WaitResourceRun *run) {
+    static const int64_t results[]={13,6,17,19,21,17,9,7,71},stats[]={111,111,1,11,11,0,1,11,11};
+    unsigned mode=run->mode-12;CHECK(mode<9);
+    XrXirValue value={0};uint32_t entry=run->ids[mode<2 ? mode : mode+1];
+    if(!resource_root(run,entry,NULL,&value)) return false;
+    CHECK(value.type==XR_XIR_I64 && value.payload==results[mode]);xr_xir_value_drop(&value);
+    if(!resource_root(run,run->ids[2],NULL,&value)) return false;
+    CHECK(value.type==XR_XIR_I64 && value.payload==stats[mode] &&
+        run->cleanup[0]==(mode==5 ? 0u : 1u));xr_xir_value_drop(&value);return true;
+}
 static bool resource_instance_run(WaitResourceRun *run) {
     const uint32_t *ids=run->ids;
+    if(run->mode>=12) return resource_iterable_run(run);
     if(run->mode>=9) return resource_loop_task_run(run);
     if(!resource_root(run,run->factory,NULL,&run->inner)) return false;
     if(run->mode>=6) return resource_loop_run(run);
@@ -175,7 +187,7 @@ static WaitResourceCost resource_operation(WaitResourceFixture *fixture,const Wa
     unsigned mode=request->mode,cancel_pass=request->cancel_pass;size_t fault=request->fault;
     const XrXirInstanceConfig *limits=request->limits;uint32_t cancel_prefix=request->cancel_prefix;
     bool retire=request->retire;
-    CHECK(mode<12 && !runtime_live && !runtime_bytes && runtime_fail_at==SIZE_MAX);
+    CHECK(mode<21 && !runtime_live && !runtime_bytes && runtime_fail_at==SIZE_MAX);
     WaitResourceCost cost={0};WaitResourceRun runs[2]={0};runtime_attempts=0;runtime_fail_at=fault;
     source_native_event_count=0;source_native_recording=true;resource_observed_instance=NULL;
     for(unsigned i=0;i<2;++i) {
