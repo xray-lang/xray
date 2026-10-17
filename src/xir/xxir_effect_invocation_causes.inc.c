@@ -74,6 +74,21 @@ static XrXirStatus effect_invocation_cause_rows(EffectInvocationWorkspace *owner
     *output=(EffectInvocationCauseRows){heads,next,functions,count};return XR_XIR_OK;
 }
 
+/* Every field is initialized by the node owner. Compare the actual current
+ * empty value before avoiding a redundant store; no proof result is reused. */
+static XrXirStatus effect_invocation_cause_clear(const XrXirCompileContext *work,
+    EffectInvocationCause *cause) {
+    if (!xir_compile_context_valid(work) || !cause) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
+    if (cause->witness.cause==XR_XIR_ROOT_CAUSE_NONE && !cause->witness.instruction &&
+        !cause->witness.callee && !cause->witness.slot && !cause->witness.distance &&
+        cause->next==UINT32_MAX && cause->edge==UINT32_MAX && cause->distance==UINT32_MAX)
+        return XR_XIR_OK;
+    if (!xir_compile_work(work,sizeof(*cause))) return XR_XIR_BUDGET;
+    *cause=(EffectInvocationCause){.next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
+    return XR_XIR_OK;
+}
+
 /* These records describe the full equation key, not only a numeric callee.
  * The same root basis indexes every actual edge on this certificate walk. */
 static XrXirStatus effect_invocation_cause_atom(EffectInvocationWorkspace *owner,
@@ -95,8 +110,8 @@ static XrXirStatus effect_invocation_cause_atom(EffectInvocationWorkspace *owner
         if (local!=(cause->witness.cause!=XR_XIR_ROOT_CAUSE_NONE && cause->distance==0))
             return XR_XIR_BAD_STRUCTURE;
         if (!local) {
-            if (!xir_compile_work(owner->work,sizeof(*cause))) return XR_XIR_BUDGET;
-            *cause=(EffectInvocationCause){.next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
+            XrXirStatus cleared=effect_invocation_cause_clear(owner->work,cause);
+            if (cleared!=XR_XIR_OK) return cleared;
             continue;
         }
         if (pending>=owner->final.capacity || !effect_invocation_atom(node,parameters,atom,false))

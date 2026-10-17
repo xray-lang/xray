@@ -36,11 +36,13 @@
 #include "xir_invocation_native_terminal_cases.h"
 #include "xir_invocation_cell_borrow_cases.h"
 #include "xir_invocation_closed_count_cases.h"
+#include "xir_invocation_cause_empty_cases.h"
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--queued-child-producers")) {
         invocation_queued_child_returned_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--codec-literals")) {
+        invocation_cause_empty_controls();
         invocation_closed_count_controls();
         invocation_cell_borrow_controls();
         invocation_native_terminal_controls();
