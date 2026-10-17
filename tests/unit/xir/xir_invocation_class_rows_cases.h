@@ -135,21 +135,72 @@ static XrXirStatus conditional_class_rows_replay(const XrXirCompileContext *cont
     replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};
     replay.declared=certificate->declared;
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
-    XrXirStatus status=effect_invocation_class_verify_read(&replay,&body);
+    XrXirStatus status=effect_capture_match(context,certificate->final);
+    if(status==XR_XIR_OK) status=effect_invocation_cell_terminals_read(&replay,&body);
     effect_invocation_read_close(&replay);return status;
+}
+
+static EffectCaptureFact *conditional_class_finite_fact(const XrXirCompileContext *work,
+    const XrXirEffects *effects,uint32_t index,uint32_t value,uint32_t flag) {
+    EffectInvocationFinal *final=effects->invocations->final;
+    EffectCaptureRead read={.work=work,.final=final,.body=effect_body_owned_request(work,final->material)};
+    EffectCaptureNode node={0};CHECK(effect_capture_node(&read,index,&node)==XR_XIR_OK && flag<3);
+    uint32_t bit=node.basis.parameters+flag;const EffectCaptureFact *fact=NULL;
+    CHECK(effect_capture_find(&read,(EffectCaptureFact){index,value,node.basis.fn_words+bit/64,bit%64,0},&fact)==XR_XIR_OK);
+    return (EffectCaptureFact *)fact;
+}
+
+static void conditional_class_finite_remove(EffectCaptureProof *proof,EffectCaptureFact *fact) {
+    CHECK(fact && fact>=proof->facts && fact<proof->facts+proof->count);
+    uint32_t at=(uint32_t)(fact-proof->facts);
+    memmove(fact,fact+1,(size_t)(proof->count-at-1)*sizeof(*fact));--proof->count;
+}
+
+/* Counterfactual masks change the real sparse relation. The retained original
+ * allocation is restored byte-for-byte before its owning effects can die. */
+static void conditional_class_finite_mask(const XrXirCompileContext *work,
+    XrXirEffects *effects,uint32_t index,uint32_t value,uint32_t mask) {
+    EffectInvocationFinal *final=effects->invocations->final;
+    EffectCaptureFact *known=conditional_class_finite_fact(work,effects,index,value,2);
+    uint64_t known_rank=known?known->rank:0;
+    for(uint32_t flag=0;flag<3;++flag) {
+        EffectCaptureFact *fact=conditional_class_finite_fact(work,effects,index,value,flag);
+        if(fact) conditional_class_finite_remove(&final->capture,fact);
+    }
+    EffectCaptureRead read={.work=work,.final=final,.body=effect_body_owned_request(work,final->material)};
+    EffectCaptureNode node={0};CHECK(effect_capture_node(&read,index,&node)==XR_XIR_OK);
+    for(uint32_t flag=0;flag<3;++flag) {
+        uint32_t present=flag==0?EFFECT_CLASS_ROOT:flag==1?EFFECT_CLASS_UNKNOWN:EFFECT_CLASS_KNOWN;
+        if(!(mask&present)) continue;
+        uint32_t bit=node.basis.parameters+flag,at=0;
+        EffectCaptureFact fact={index,value,node.basis.fn_words+bit/64,bit%64,flag==2?known_rank:0};
+        CHECK(final->capture.count<final->capture.capacity && effect_capture_lower(&read,&fact,&at)==XR_XIR_OK);
+        memmove(final->capture.facts+at+1,final->capture.facts+at,(size_t)(final->capture.count-at)*sizeof(fact));
+        final->capture.facts[at]=fact;++final->capture.count;
+    }
 }
 
 static void conditional_class_rows_rejections(const XrXirCompileContext *context,
     XrXirEffects *effects,uint32_t node,uint32_t value,uint32_t expected) {
-    EffectInvocationNode *entry=&effects->invocations->final->nodes[node];uint32_t at=0;
-    CHECK(effect_invocation_class_find(context,entry,value,&at)==XR_XIR_OK);
-    EffectInvocationClassFact saved=entry->classes[at];
-    entry->classes[at].mask=expected==1?5:1;entry->classes[at].rank=expected==1?0:1;
-    CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);entry->classes[at]=saved;
-    entry->classes[at].rank=expected==1?0:1;
-    CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);entry->classes[at]=saved;
-    uint32_t count=entry->class_count;entry->class_count=count-1;
-    CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);entry->class_count=count;
+    EffectInvocationFinal *final=effects->invocations->final;EffectCaptureProof saved=final->capture;
+    CHECK(saved.count<UINT32_MAX);XrXirStatus allocated=XR_XIR_OK;
+    EffectCaptureFact *facts=xir_compile_alloc(context,((size_t)saved.count+1)*sizeof(*facts),&allocated);
+    CHECK(facts && allocated==XR_XIR_OK);
+    memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));
+    final->capture=(EffectCaptureProof){facts,saved.count,saved.count+1};
+    conditional_class_finite_mask(context,effects,node,value,expected==1?5:1);
+    uint32_t candidate_mask=0;
+    CHECK(effect_final_class_mask(context,final,node,value,&candidate_mask)==XR_XIR_OK && candidate_mask==(expected==1?5u:1u));
+    CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);
+    memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));final->capture.count=saved.count;
+    EffectCaptureFact *fact=conditional_class_finite_fact(context,effects,node,value,2);CHECK(fact);
+    fact->rank=UINT32_MAX;
+    CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);
+    memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));final->capture.count=saved.count;
+    fact=conditional_class_finite_fact(context,effects,node,value,2);CHECK(fact);
+    conditional_class_finite_remove(&final->capture,fact);
+    CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);
+    final->capture=saved;xr_compile_resources_free(facts);
     CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_OK);
     uint32_t output=7;uint64_t work=rp_stats(context).work;size_t attempts=rp_attempts;
     CHECK(xir_effects_class_value(context,effects,node,3,value,&output)==XR_XIR_BAD_STRUCTURE &&
@@ -192,14 +243,21 @@ static XrXirStatus conditional_class_rows_case(const XrXirCompileContext *contex
         EffectInvocationFinal *owner=certificate->final;
         const uint32_t values[7]={2,9,7,4,9,2,7},masks[7]={1,1,1,5,5,5,5};
         uint32_t selected=owner->roots[3],output=0;
-        CHECK(owner->nodes[selected].class_count);
+        CHECK(owner->capture.count);
+        size_t query_attempts=rp_attempts;
         CHECK(xir_effects_class_value(context,effects,selected,3,values[mode],&output)==XR_XIR_OK && output==masks[mode]);
+        InvocationReturnedLedger ledger={context};
+        XirEffectRuntimeRead runtime={.owner=&ledger,.work=invocation_returned_work};
+        output=0;CHECK(effect_runtime_class_mask(certificate,&runtime,selected,values[mode],&output)==XR_XIR_OK && output==masks[mode]);
+        CHECK(rp_attempts==query_attempts);
         if (mode==6) {
             output=0;CHECK(xir_effects_class_value(context,effects,selected,3,2,&output)==XR_XIR_OK && output==5);
         }
         output=0;CHECK(xir_effects_class_value(context,effects,owner->roots[2],2,0,&output)==XR_XIR_OK && output==5);
-        CHECK(owner->nodes[owner->roots[1]].class_return_mask==1 && owner->nodes[owner->roots[1]].class_return_rank);
-        CHECK(owner->nodes[selected].class_return_mask==masks[mode]);
+        uint32_t factory=owner->roots[1],factory_values=owner->nodes[factory].parameter_count+owner->nodes[factory].instruction_count;
+        output=0;CHECK(effect_final_class_mask(context,owner,factory,factory_values,&output)==XR_XIR_OK && output==1);
+        uint32_t selected_values=owner->nodes[selected].parameter_count+owner->nodes[selected].instruction_count;
+        output=0;CHECK(effect_final_class_mask(context,owner,selected,selected_values,&output)==XR_XIR_OK && output==masks[mode]);
         conditional_class_rows_rejections(context,effects,selected,values[mode],masks[mode]);
     }
     if (status!=XR_XIR_OK && oracle) fprintf(stderr,"INVOCATION_CLASS_ROWS mode=%u phase=%u status=%u f=%u b=%u i=%u\n",

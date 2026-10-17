@@ -41,9 +41,9 @@ int main(int argc,char **argv) {
     if(attack==8) graph->nodes[2].input=(uint64_t *)(uintptr_t)1;
     if(attack==9) graph->nodes[2].cells=(uint64_t *)(uintptr_t)1;
     if(attack==10) graph->nodes[2].local_cells=(uint64_t *)(uintptr_t)1;
-    if(attack==11) graph->nodes[2].parameter_coverage=(uint64_t *)(uintptr_t)1;
-    if(attack==12) { graph->nodes[2].producers=(EffectInvocationProducer *)(uintptr_t)1;graph->nodes[2].producer_capacity=1; }
-    if(attack==13) { graph->nodes[2].classes=(EffectInvocationClassFact *)(uintptr_t)1;graph->nodes[2].class_count=1; }
+    if(attack==11) graph->summary.functions=(EffectFinalFunction *)((uint8_t *)graph->summary.functions+1);
+    if(attack==12) graph->capture.count=graph->capture.capacity+1;
+    if(attack==13) graph->summary.count=effects->count+1;
     if(attack==14) certificate->declared=(EffectInvocationDeclaredBounds *)(uintptr_t)1;
     if(attack==15) { certificate->declared->functions[2].bounds=(EffectInvocationValueBound *)(uintptr_t)1;certificate->declared->functions[2].count=1; }
     if(attack==16) graph->physical=(EffectPhysicalDomain *)(uintptr_t)1;

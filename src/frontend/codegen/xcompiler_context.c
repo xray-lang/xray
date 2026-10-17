@@ -75,12 +75,6 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
     ctx->graph_module_count = 0;
     ctx->max_globals = MAX_GLOBALS;
 
-    ctx->enum_type_names = NULL;
-    ctx->enum_type_count = 0;
-    ctx->enum_type_capacity = 0;
-
-    xr_arena_init(&ctx->arena, 0);
-
     ctx->current_operator = NULL;
     ctx->current_storage_mode = 0;
     ctx->current_elem_tid = 0;
@@ -88,10 +82,6 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
     ctx->current_class_desc = NULL;
     ctx->current_class_node = NULL;
     ctx->current_object_type = NULL;
-
-    ctx->const_entries = NULL;
-    ctx->const_entry_count = 0;
-    ctx->const_entry_capacity = 0;
 
     if (analyzer) {
         ctx->analyzer = analyzer;
@@ -125,24 +115,6 @@ void xr_compiler_context_free(XrCompilerContext *ctx) {
 
     if (ctx->shared_vars) {
         xr_free(ctx->shared_vars);
-    }
-
-    if (ctx->enum_type_names) {
-        for (int i = 0; i < ctx->enum_type_count; i++) {
-            if (ctx->enum_type_names[i]) {
-                xr_free(ctx->enum_type_names[i]);
-            }
-        }
-        xr_free(ctx->enum_type_names);
-    }
-
-    xr_arena_destroy(&ctx->arena);
-
-    if (ctx->const_entries) {
-        xr_free(ctx->const_entries);
-        ctx->const_entries = NULL;
-        ctx->const_entry_count = 0;
-        ctx->const_entry_capacity = 0;
     }
 
     if (ctx->analyzer && ctx->owns_analyzer) {
@@ -219,120 +191,4 @@ void xr_compiler_ctx_set_error(XrCompilerContext *ctx) {
 
 bool xr_compiler_ctx_has_error(XrCompilerContext *ctx) {
     return ctx ? ctx->had_error : false;
-}
-
-void xr_compiler_ctx_register_enum_type(XrCompilerContext *ctx, const char *enum_name) {
-    if (!ctx || !enum_name)
-        return;
-
-    for (int i = 0; i < ctx->enum_type_count; i++) {
-        if (ctx->enum_type_names[i] && strcmp(ctx->enum_type_names[i], enum_name) == 0) {
-            return;
-        }
-    }
-
-    if (ctx->enum_type_count >= ctx->enum_type_capacity) {
-        int new_capacity = ctx->enum_type_capacity == 0 ? 8 : ctx->enum_type_capacity * 2;
-        char **new_array = (char **) xr_malloc(sizeof(char *) * new_capacity);
-        if (!new_array)
-            return;
-
-        if (ctx->enum_type_names) {
-            for (int i = 0; i < ctx->enum_type_count; i++) {
-                new_array[i] = ctx->enum_type_names[i];
-            }
-            xr_free(ctx->enum_type_names);
-        }
-
-        ctx->enum_type_names = new_array;
-        ctx->enum_type_capacity = new_capacity;
-    }
-
-    ctx->enum_type_names[ctx->enum_type_count] = xr_strdup(enum_name);
-    ctx->enum_type_count++;
-    XR_DCHECK(ctx->enum_type_count <= ctx->enum_type_capacity,
-              "register_enum_type: count > capacity");
-}
-
-bool xr_compiler_ctx_is_enum_type(XrCompilerContext *ctx, const char *var_name) {
-    if (!ctx || !var_name)
-        return false;
-
-    for (int i = 0; i < ctx->enum_type_count; i++) {
-        if (ctx->enum_type_names[i] && strcmp(ctx->enum_type_names[i], var_name) == 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static void ensure_const_capacity(XrCompilerContext *ctx) {
-    if (ctx->const_entry_count >= ctx->const_entry_capacity) {
-        int new_capacity = ctx->const_entry_capacity == 0 ? 16 : ctx->const_entry_capacity * 2;
-        ConstEntry *new_entries = (ConstEntry *) xr_malloc(sizeof(ConstEntry) * new_capacity);
-        if (!new_entries)
-            return;
-
-        if (ctx->const_entries) {
-            for (int i = 0; i < ctx->const_entry_count; i++) {
-                new_entries[i] = ctx->const_entries[i];
-            }
-            xr_free(ctx->const_entries);
-        }
-
-        ctx->const_entries = new_entries;
-        ctx->const_entry_capacity = new_capacity;
-    }
-}
-
-void xr_compiler_ctx_add_const_int(XrCompilerContext *ctx, XrString *name, int64_t value) {
-    if (!ctx || !name)
-        return;
-
-    ensure_const_capacity(ctx);
-
-    ConstEntry *entry = &ctx->const_entries[ctx->const_entry_count++];
-    entry->name = name;
-    entry->type = CONST_INT;
-    entry->value.int_val = value;
-}
-
-void xr_compiler_ctx_add_const_float(XrCompilerContext *ctx, XrString *name, double value) {
-    if (!ctx || !name)
-        return;
-
-    ensure_const_capacity(ctx);
-
-    ConstEntry *entry = &ctx->const_entries[ctx->const_entry_count++];
-    entry->name = name;
-    entry->type = CONST_FLOAT;
-    entry->value.float_val = value;
-}
-
-void xr_compiler_ctx_add_const_string(XrCompilerContext *ctx, XrString *name, XrString *value) {
-    if (!ctx || !name)
-        return;
-
-    ensure_const_capacity(ctx);
-
-    ConstEntry *entry = &ctx->const_entries[ctx->const_entry_count++];
-    entry->name = name;
-    entry->type = CONST_STRING;
-    entry->value.str_val = value;
-}
-
-ConstEntry *xr_compiler_ctx_find_const(XrCompilerContext *ctx, XrString *name) {
-    if (!ctx || !name)
-        return NULL;
-
-    for (int i = 0; i < ctx->const_entry_count; i++) {
-        if (ctx->const_entries[i].name == name ||
-            (ctx->const_entries[i].name && name &&
-             strcmp(ctx->const_entries[i].name->data, name->data) == 0)) {
-            return &ctx->const_entries[i];
-        }
-    }
-
-    return NULL;
 }

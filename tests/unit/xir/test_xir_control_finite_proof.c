@@ -136,7 +136,9 @@ static void control_resources(void) {
     less=exact;--less.work;(void)control_measured(less,XR_XIR_BUDGET);
     printf("finite Control whole OOM sites%zu; same-owner retry; three exact/minus-one resource axes\n",sites);
 }
+#include "xir_control_input_terminal_cases.h"
 int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"input-terminals")) { control_current_input_cases();return 0; }
     if(argc==2 && !strcmp(argv[1],"resources")) { control_resources();return 0; }
     CHECK(argc==1);
     pc_control_proof_literals();control_counterfacts();control_unseeded_cycle();

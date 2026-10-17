@@ -70,10 +70,15 @@ static void edges_free(void *memory,size_t bytes) {
         CHECK(edges_direct==final->edge_count-1 && direct->target==final->count-1);
         final->nodes[direct->caller].edge_head=direct->next;--final->edge_count;--final->count;break;
     case 18: final->nodes[direct->target].input[0]=0;break;
-    case 19: final->nodes[direct->target].input[0]=0;final->nodes[direct->target].producer_count=0;break;
+    case 19: final->nodes[direct->target].input[0]=0;edges_capture_erase(final,direct->target,0,0,2);break;
     case 20:
         final->nodes[direct->target].input[0]=0;
-        for(uint32_t n=0;n<final->count;++n) final->nodes[n].producer_count=0;
+        for(uint32_t p=0;p<final->capture.count;) {
+            EffectCaptureFact *fact=&final->capture.facts[p];
+            if(fact->word!=EFFECT_CAPTURE_FLAGS && (uint64_t)fact->word*64+fact->bit<final->site_count) {
+                --final->capture.count;memmove(fact,fact+1,(size_t)(final->capture.count-p)*sizeof(*fact));
+            } else ++p;
+        }
         break;
     case 21: edges_capture_identity(final,direct->target,0)->rank=UINT64_MAX;break;
     case 22: CHECK(edges_capture_identity(final,direct->target,0)->rank);edges_capture_identity(final,direct->target,0)->rank=0;break;
@@ -113,8 +118,8 @@ static void edges_free(void *memory,size_t bytes) {
         CHECK(final->capture.count<final->capture.capacity);
         edges_capture_fake(final,(EffectCaptureFact){final->roots[5],2,0,final->site_count,1});break;
     case 47:
-        final->nodes[direct->target].input[0]=0;final->capture.count=0;
-        for(uint32_t n=0;n<final->count;++n) final->nodes[n].producer_count=0;
+        final->capture.count=0;
+        for(uint32_t n=0;n<final->count;++n) if(final->nodes[n].input) final->nodes[n].input[0]=0;
         break;
     case 48:case 49: final->nodes[direct->target].input[0]=0;break;
     case 50: final->nodes[direct->target].input[0]=24;break;
@@ -176,27 +181,31 @@ static void edges_capture_equal(const EffectInvocationFinal *actual,const Effect
 static void edges_capture_faults(const XrXirCompileContext *work,EffectInvocationFinal *final) {
     uint64_t outer_live=pc_stats(work).live_bytes;size_t outer_physical=live_bytes,outer_blocks=live;
     XrXirStatus allocated_status=XR_XIR_OK;
-    EffectInvocationFinal *staged=xir_compile_alloc(work,sizeof(*staged),&allocated_status);
-    CHECK(staged && allocated_status==XR_XIR_OK);*staged=*final;staged->capture=(EffectCaptureProof){0};
+    EffectInvocationWorkspace *proposal=xir_compile_calloc(work,1,sizeof(*proposal),&allocated_status);
+    CHECK(proposal && allocated_status==XR_XIR_OK);proposal->final=*final;
+    proposal->read.work=work;proposal->read.final=&proposal->final;
+    proposal->states=xir_compile_calloc(work,final->capacity,sizeof(*proposal->states),&allocated_status);
+    CHECK(proposal->states && allocated_status==XR_XIR_OK);
+    EffectInvocationFinal *staged=&proposal->final;staged->capture=(EffectCaptureProof){0};
     uint64_t baseline=pc_stats(work).live_bytes;size_t physical=live_bytes,blocks=live,before=attempts;
-    CHECK(effect_capture_build(work,staged)==XR_XIR_OK);
+    CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
     size_t sites=attempts-before;CHECK(sites && sites<=UINT32_MAX);
     edges_capture_equal(staged,final);
     xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
     CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
     for(size_t cut=0;cut<sites;++cut) {
         fail_at=attempts+cut;injected=false;
-        XrXirStatus status=effect_capture_build(work,staged);
+        XrXirStatus status=effect_capture_build(work,staged,proposal);
         fail_at=SIZE_MAX;CHECK(injected && status==XR_XIR_OUT_OF_MEMORY);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
         CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
-        CHECK(effect_capture_build(work,staged)==XR_XIR_OK);
+        CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
         edges_capture_equal(staged,final);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
         CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
     }
     fprintf(stderr,"actual global capture builder all%zu allocation faults and same-owner retry passed (focused only)\n",sites);
-    xr_compile_resources_free(staged);
+    xr_compile_resources_free(proposal->states);xr_compile_resources_free(proposal);
     CHECK(pc_stats(work).live_bytes==outer_live && live_bytes==outer_physical && live==outer_blocks);
 }
 static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
@@ -272,8 +281,9 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
         ((edges_mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)?32u:0u)):4u) &&
         final->nodes[final->roots[3]].input[0]==(edges_opaque?8u:16u));
     uint64_t saved_binding=bound->input[0];
-    EffectInvocationNode *cycle=&final->nodes[final->roots[5]];
-    CHECK(!cycle->producer_count && !cycle->producer_capacity && !cycle->producers);
+    for(uint32_t p=0;p<final->capture.count;++p)
+        CHECK(final->capture.facts[p].node!=final->roots[5] || final->capture.facts[p].word ||
+            final->capture.facts[p].bit>=final->site_count);
     XrXirStatus allocated_status=XR_XIR_OK;
     CHECK(final->capture.count && final->capture.count<256);
     EffectCaptureFact *residual=xir_compile_calloc(&context,256,sizeof(*residual),&allocated_status);
@@ -286,12 +296,8 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     CHECK(final->edge_count<=32 && final->count<=32);
     memcpy(saved_edges,final->edges,final->edge_count*sizeof(*final->edges));
     memcpy(saved_nodes,final->nodes,final->count*sizeof(*final->nodes));
-    EffectInvocationProducer saved_producers[32][64];
-    for(uint32_t n=0;n<final->count;++n) {
-        CHECK(final->nodes[n].producer_count<=64);
-        if(final->nodes[n].producer_count) memcpy(saved_producers[n],final->nodes[n].producers,
-            final->nodes[n].producer_count*sizeof(EffectInvocationProducer));
-    }
+    uint64_t saved_inputs[32]={0};
+    for(uint32_t n=0;n<final->count;++n) if(final->nodes[n].input) saved_inputs[n]=final->nodes[n].input[0];
     edges_final=mode?final:NULL;edges_cut=cut;edges_frees=0;edges_attacks=0;edges_mode=mode;
     CHECK(!pc_free_hook);pc_free_hook=edges_free;
     status=xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects);
@@ -302,8 +308,7 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     memcpy(final->capture.facts,saved_residual,final->capture.count*sizeof(*final->capture.facts));
     memcpy(final->nodes,saved_nodes,final->count*sizeof(*final->nodes));
     final->nodes[saved_edges[edges_direct].target].input[0]=saved_binding;
-    for(uint32_t n=0;n<final->count;++n) if(final->nodes[n].producer_count)
-        memcpy(final->nodes[n].producers,saved_producers[n],final->nodes[n].producer_count*sizeof(EffectInvocationProducer));
+    for(uint32_t n=0;n<final->count;++n) if(final->nodes[n].input) final->nodes[n].input[0]=saved_inputs[n];
     CHECK(xir_effects_source_terminal(&context,xr_xir_compile_artifact_module(checked),effects)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(ops,0xDC,sizeof(ops));memset(caller,0xDC,sizeof(caller));
     memset(functions,0xDC,sizeof(functions));memset(loop,0xDC,sizeof(loop));memset(type,0xDC,sizeof(type));

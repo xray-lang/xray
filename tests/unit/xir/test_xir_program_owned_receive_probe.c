@@ -49,8 +49,8 @@ int main(void) {
         artifact->module.stage,(void *)certificate->terms.remaining,
         (void *)certificate->body->terms.remaining,(void *)effect_contexts_read(effects));
     XrXirStatus outcomes[6];
-    outcomes[0]=effect_source_certificate(&context,certificate,effects);
-    fprintf(stderr,"independent_certificate=%u\n",outcomes[0]);
+    outcomes[0]=effect_source_relations(&context,certificate,effects);
+    fprintf(stderr,"independent_relations=%u\n",outcomes[0]);
     outcomes[1]=xir_effects_program_final_verify(&context,&artifact->module,effects);
     fprintf(stderr,"current_lowered_receiver=%u\n",outcomes[1]);
     outcomes[2]=effect_source_publication_match(&context,&artifact->module,effects);

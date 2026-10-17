@@ -438,6 +438,7 @@ static bool effect_seed(const XrXirModule *module,const XrXirFunction *function,
         callable=xr_xir_operand_type(function,(uint32_t)instruction->immediate);
     return effect_seed_type(module->types,callable,instruction,effect);
 }
+#include "xxir_effect_control_primitive.inc.c"
 #include "xxir_effects_root.inc.c"
 
 static XrXirStatus effect_reference_graph(const XrXirModule *module,
@@ -507,6 +508,8 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     status=effect_graph_owned_physical_function(remaining,graph,f,&physical);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunction *owned=&graph->material->functions[f];
+    if(!xir_compile_work(remaining,sizeof(*effects->outcomes_work.functions))) return XR_XIR_BUDGET;
+    effects->outcomes_work.functions[f]=(XrXirFunctionEffects){0};
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=0;
     if (!xir_compile_work(remaining,sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
     while (r<physical->count && physical->records[r].value<function->parameter_count) {
@@ -518,6 +521,8 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
         status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
+        status=effect_control_run_seed(&request,f,ref,&effects->outcomes_work.functions[f]);
+        if(status!=XR_XIR_OK) return status;
         if (!(ref->mask&UINT32_C(1))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
@@ -569,10 +574,6 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
     EffectGraphDependencyCounts counts={0};
     if (!xir_compile_work(remaining,2*sizeof(counts))) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    if (!graph->material->control) return XR_XIR_BAD_STRUCTURE;
-    uint64_t control_bytes=(uint64_t)module->function_count*sizeof(*effects->outcomes_work.functions);
-    if (!xir_compile_work(remaining,control_bytes)) return XR_XIR_BUDGET;
-    memcpy(effects->outcomes_work.functions,graph->material->control,(size_t)control_bytes);
     bool symbolic=graph->material->ordinary_identities || graph->material->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE;
     for (uint32_t t=0;t<graph->material->domain.types->count && !symbolic;++t) {
         if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;

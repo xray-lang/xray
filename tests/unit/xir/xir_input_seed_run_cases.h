@@ -19,11 +19,6 @@ static void input_seed_run_roots(void) {
     XrXirRootEffects facts={true,true};
     CHECK(effect_invocation_input_seed(&context,material,1,&facts)==XR_XIR_OK &&
         !facts.requires_root && !facts.unresolved);
-    XrXirRootEffects saved=material->local_roots[1];
-    material->local_roots[1]=(XrXirRootEffects){true,true};facts=(XrXirRootEffects){true,true};
-    CHECK(effect_invocation_input_seed(&context,material,1,&facts)==XR_XIR_OK &&
-        !facts.requires_root && !facts.unresolved);
-    material->local_roots[1]=saved;
     EffectBodyRead read=effect_body_compile_read(&context);const EffectBodyRun *borrowed=NULL;
     CHECK(effect_body_record_ref(&read,&material->functions[1],4,&borrowed)==XR_XIR_OK);
     EffectBodyRun *run=(EffectBodyRun *)borrowed;

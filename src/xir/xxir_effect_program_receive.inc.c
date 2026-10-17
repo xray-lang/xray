@@ -82,7 +82,7 @@ XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *
     const EffectInvocationCertificate *certificate=effects->invocations;
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     if (!final || effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    status=effect_source_certificate(work,certificate,effects);
+    status=effect_source_relations(work,certificate,effects);
     if(status==XR_XIR_OK) status=effect_program_parameter_domains(work,effects);
     bool contexts=source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE &&
         source->declarations && source->declarations->functions;

@@ -417,11 +417,5 @@ XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
     XrXirStatus status=effect_body_operand_type(&read,body,value,&type);
     if (status!=XR_XIR_OK) return status;
     if (!xr_xir_type_is_class(certificate->body->domain.types,type)) return XR_XIR_BAD_STRUCTURE;
-    uint32_t at=0;status=effect_invocation_class_find(context,node,value,&at);
-    if (status!=XR_XIR_OK) return status;
-    EffectInvocationClassFact fact=node->classes[at];
-    if ((fact.mask&~EFFECT_CLASS_VALID) || !(fact.mask&EFFECT_CLASS_KNOWN) ||
-        (fact.mask==EFFECT_CLASS_KNOWN?!fact.rank:fact.rank!=0)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
-    *output=fact.mask;return XR_XIR_OK;
+    return effect_final_class_mask(context,owner,selected,value,output);
 }

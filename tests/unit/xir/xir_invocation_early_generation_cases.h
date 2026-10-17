@@ -98,7 +98,7 @@ static XrXirStatus conditional_generation_counted_callee_head(const EffectBodyRe
 static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner) {
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
-    XrXirStatus status=effect_invocation_origins(&flow);
+    XrXirStatus status=effect_invocation_discovery_origins(&flow);
     if (status!=XR_XIR_OK) { xr_compile_resources_free(flow.memory);return status; }
     uint32_t body=owner->final.nodes[flow.node].body,call=UINT32_MAX,reference=UINT32_MAX;
     for (uint32_t i=0;i<flow.function->instruction_count;++i) {
@@ -253,11 +253,11 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
     }
     CHECK(expected && body==0);
     conditional_generation_shape_reads=0;conditional_generation_shape_refused=false;
-    CHECK(effect_invocation_origins_read(&flow,&read)==XR_XIR_OK &&
+    CHECK(effect_invocation_discovery_origins_read(&flow,&read)==XR_XIR_OK &&
         conditional_generation_shape_reads==expected);
     xr_compile_resources_free(flow.memory);flow.memory=NULL;
     conditional_generation_shape_refused=true;conditional_generation_shape_reads=0;
-    CHECK(effect_invocation_origins_read(&flow,&read)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_discovery_origins_read(&flow,&read)==XR_XIR_BAD_STRUCTURE &&
         conditional_generation_shape_reads==1);
     xr_compile_resources_free(flow.memory);flow.memory=NULL;
     conditional_generation_shape_refused=false;
@@ -267,7 +267,7 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
         if (owner->final.nodes[n].root!=owner->final.nodes[n].body) ++dimensions;
     conditional_generation_full_heads=conditional_generation_dimension_heads=0;
     conditional_generation_dimensions_refused=false;
-    XrXirStatus producer_status=effect_invocation_producers_verify_read(&owner->read,&read);
+    XrXirStatus producer_status=effect_invocation_discovery_verify(owner,&read);
     fprintf(stderr,"generation real producer replay status%u full%u functions%u dimensions%u expected%u\n",
         (unsigned)producer_status,conditional_generation_full_heads,read.domain.function_count,
         conditional_generation_dimension_heads,dimensions);
@@ -278,14 +278,14 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
         conditional_generation_dimension_heads==15);
     size_t attempts=rp_attempts;uint32_t count=owner->final.count;
     conditional_generation_dimensions_refused=true;
-    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_discovery_verify(owner,&read)==XR_XIR_BAD_STRUCTURE &&
         owner->final.count==count && !owner->pending && rp_attempts==attempts);
     conditional_generation_dimensions_refused=false;
     uint32_t root=owner->final.nodes[0].root;owner->final.nodes[0].root=UINT32_MAX;
-    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_discovery_verify(owner,&read)==XR_XIR_BAD_STRUCTURE &&
         owner->final.count==count && !owner->pending && rp_attempts==attempts);
     owner->final.nodes[0].root=root;
-    CHECK(effect_invocation_producers_verify_read(&owner->read,&read)==XR_XIR_OK);
+    CHECK(effect_invocation_discovery_verify(owner,&read)==XR_XIR_OK);
 }
 
 /* This independent literal request selects all four domains freshly through
@@ -316,8 +316,18 @@ static XrXirStatus conditional_generation_publication_stage(const XrXirCompileCo
  * must be completely initialized before its ordinal enters count or queue. */
 static void conditional_generation_reserved_controls(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner) {
-    CHECK(owner->final.local_roots==owner->final.material->local_roots &&
-        owner->final.local_witnesses==owner->final.material->local_witnesses && owner->final.count<owner->final.capacity);
+    CHECK(owner->primitives && owner->primitive_count==effect_body_count(owner->final.material) &&
+        owner->final.count<owner->final.capacity);
+    EffectInvocationPrimitive saved=owner->primitives[0],actual={0};
+    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&actual)==XR_XIR_OK);
+    owner->primitives[0]=(EffectInvocationPrimitive){.facts={true,true}};
+    EffectInvocationPrimitive current={0};
+    CHECK(effect_invocation_primitive_read(context,owner->final.material,0,&current)==XR_XIR_OK &&
+        current.facts.requires_root==actual.facts.requires_root && current.facts.unresolved==actual.facts.unresolved &&
+        effect_invocation_witness_equal(&current.witnesses[0],&actual.witnesses[0]) &&
+        effect_invocation_witness_equal(&current.witnesses[1],&actual.witnesses[1]));
+    owner->primitives[0]=saved;
+    invocation_primitive_allocation_controls(context,owner->final.material);
     size_t bytes=(size_t)(owner->final.capacity-owner->final.count)*sizeof(*owner->final.nodes);
     memset(owner->final.nodes+owner->final.count,0xA5,bytes);
     uint32_t count=owner->final.count,pending=owner->pending;size_t attempts=rp_attempts;
@@ -338,8 +348,7 @@ static void conditional_generation_reserved_controls(const XrXirCompileContext *
 static void conditional_generation_publication_controls(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
     EffectInvocationFinal *owner=certificate->final;
-    CHECK(owner->local_roots==certificate->body->local_roots &&
-        owner->local_witnesses==certificate->body->local_witnesses);
+    CHECK(owner->material==certificate->body && owner->physical==certificate->body->physical);
     size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
     XrXirRootEffectWitness *witnesses=certificate->final->summary.witnesses;
     CHECK(effect_invocation_certificate_project(context,certificate,NULL,NULL)==XR_XIR_BAD_STRUCTURE &&

@@ -327,9 +327,11 @@ static XrXirStatus effect_capture_edges(EffectCaptureRead *read) {
         if(edge->caller>=read->final->count || edge->target>=read->final->count ||
             read->final->nodes[edge->caller].root!=read->final->nodes[edge->target].root) return XR_XIR_BAD_STRUCTURE;
         if(!read->selected || read->selected->node==edge->target) {
-            EffectCaptureNode target={0};XrXirStatus status=effect_capture_node(read,edge->target,&target);if(status!=XR_XIR_OK) return status;
-            for(uint32_t p=0;p<target.head.parameter_count;++p) {
-                if(read->selected && read->selected->value!=target.values+1+p) continue;
+            EffectCaptureNode storage={0};const EffectCaptureNode *target=NULL;
+            XrXirStatus status=effect_capture_node_borrow(read,edge->target,&storage,&target);
+            if(status!=XR_XIR_OK) return status;
+            for(uint32_t p=0;p<target->head.parameter_count;++p) {
+                if(read->selected && read->selected->value!=target->values+1+p) continue;
                 status=effect_capture_argument(read,e,p);if(status!=XR_XIR_OK) return status;
             }
         }

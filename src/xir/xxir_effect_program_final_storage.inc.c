@@ -112,9 +112,6 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
     FINAL_STORAGE(certificate->owners,count,uint32_t);
     FINAL_STORAGE(final->roots,count,uint32_t);
     FINAL_STORAGE(final->root_spaces,count,uint32_t);
-    FINAL_STORAGE(final->local_roots,count,XrXirRootEffects);
-    FINAL_STORAGE(final->local_witnesses,(size_t)count*2,XrXirRootEffectWitness);
-    FINAL_STORAGE(body->control,count,XrXirFunctionEffects);
     FINAL_STORAGE(effects->formula_terminals,(size_t)count*4,XrXirRootEffectWitness);
     FINAL_STORAGE(effects->constant_witnesses,(size_t)count*2,XrXirRootEffectWitness);
     const EffectFinalFunctions *summary=&final->summary;
@@ -136,7 +133,7 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
     for (uint32_t n=0;n<final->count;++n) {
         if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
         const EffectInvocationNode *node=&final->nodes[n];
-        if (node->root>=count || node->body>=count || node->producer_count>node->producer_capacity)
+        if (node->root>=count || node->body>=count)
             return XR_XIR_BAD_STRUCTURE;
         uint32_t parameters=body->functions[node->root].parameter_count;
         uint32_t instructions=body->functions[node->body].instruction_count;
@@ -154,9 +151,6 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
         FINAL_STORAGE(node->input,(size_t)input_words,uint64_t);
         FINAL_STORAGE(node->cells,(size_t)output_words,uint64_t);
         FINAL_STORAGE(node->local_cells,(size_t)output_words,uint64_t);
-        FINAL_STORAGE(node->parameter_coverage,node->parameter_count,uint64_t);
-        FINAL_STORAGE(node->producers,node->producer_capacity,EffectInvocationProducer);
-        FINAL_STORAGE(node->classes,node->class_count,EffectInvocationClassFact);
     }
     for (uint32_t d=0;d<final->deferred_count;++d) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;

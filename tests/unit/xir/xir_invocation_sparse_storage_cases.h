@@ -117,7 +117,7 @@ static void invocation_storage_bitmap_controls(EffectInvocationFlow *flow) {
 }
 static XrXirStatus invocation_storage_rows(EffectInvocationWorkspace *owner,uint32_t node,uint32_t mode,bool oracle) {
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=node,.instruction=UINT32_MAX};
-    XrXirStatus status=effect_invocation_origins(&flow);
+    XrXirStatus status=effect_invocation_discovery_origins(&flow);
     if (status==XR_XIR_OK && oracle) {
         uint32_t body=owner->final.nodes[node].body,expected=0;
         for (uint32_t v=0;v<flow.values;++v) {

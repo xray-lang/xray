@@ -259,62 +259,77 @@ static XrXirStatus capture_runtime_seal(CaptureRuntimeWitness *w,XrXirProgram **
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);xr_xir_compile_artifact_free(checked);
     memset(&fixture,0,sizeof(fixture));native_fixture_owner_free(&owner);return status;
 }
-static bool invocation_capture_owner_run(unsigned mode,bool scalar,const XrXirInstanceConfig *limits,
-    XrXirDomainBudgetStats *cost) {
-    CaptureRuntimeWitness witness={0};witness.mode=mode;witness.scalar=scalar;XrXirProgram *program=NULL;
-    XrXirStatus sealed=capture_runtime_seal(&witness,&program);
-    if (sealed!=XR_XIR_OK) { CHECK(sealed==XR_XIR_OUT_OF_MEMORY && !program);return false; }
+/* Consumes one Program reference, including failed Instance construction. */
+static inline bool invocation_capture_execute(XrXirProgram *program,CaptureRuntimeWitness *witness,
+    const XrXirInstanceConfig *limits,XrXirDomainBudgetStats *cost) {
+    CHECK(program && witness && !witness->domain && !witness->module_cell.type);
+    const unsigned mode=witness->mode;
+    witness->body_calls=0;
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     if (limits) config=*limits;
     XrXirInstance *instance=NULL;XrXirValue result={0};bool complete=false;
     XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
     xr_xir_compile_program_drop(program);
-    if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,witness.entries[1],NULL,0);
+    if (status==XR_XIR_CALL_READY) status=xr_xir_instance_start(instance,witness->entries[1],NULL,0);
     bool polled=status==XR_XIR_CALL_READY;
     if (polled) status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
     if (!capture_runtime_resource(status)) {
         XrXirCallStatus expected=mode>=1 && mode<=5?XR_XIR_CALL_BAD_ARGUMENT:XR_XIR_CALL_RETURNED;
         CHECK(status==expected);
         if (status==XR_XIR_CALL_RETURNED) {
-            CHECK(witness.body_calls==1 && xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
+            CHECK(witness->body_calls==1 && xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
             CHECK(result.type==XR_XIR_I64 && result.payload==42);
-        } else CHECK(!witness.body_calls);
+        } else CHECK(!witness->body_calls);
         complete=true;
     }
+    XrXirCallStatus fault=polled && status!=XR_XIR_CALL_RETURNED?status:XR_XIR_CALL_READY;
+    XrXirCallStatus retirement=function_case_retirement(instance,fault);
     XrXirCallStatus released=xr_xir_instance_free(instance);
-    if (polled && status!=XR_XIR_CALL_RETURNED) CHECK(released==status);
-    else if (polled) {
-        CHECK(released==XR_XIR_CALL_READY || (limits && released==XR_XIR_CALL_LIMIT));
-        if (released!=XR_XIR_CALL_READY) complete=false;
-    } else {
-        /* A rejected preparation has no accepted execution fault. A genuine
-         * exhausted budget remains observable during physical shutdown. */
-        CHECK(released==XR_XIR_CALL_READY || (status==XR_XIR_CALL_LIMIT && released==XR_XIR_CALL_LIMIT));
-    }
-    xr_xir_value_drop(&result);xr_xir_value_drop(&witness.module_cell);
-    if (witness.domain) {
-        if (cost) *cost=xr_xir_domain_budget_stats(witness.domain);
-        const XrXirDomainStats retired=xr_xir_domain_stats(witness.domain);
-        const XrXirDomainBudgetStats budget=xr_xir_domain_budget_stats(witness.domain);
-        CHECK(retired.live_bytes==witness.domain_baseline.live_bytes && retired.allocations==retired.frees+1);
+    CHECK(released==retirement);
+    if(polled && status==XR_XIR_CALL_RETURNED && released!=XR_XIR_CALL_READY)complete=false;
+    xr_xir_value_drop(&result);xr_xir_value_drop(&witness->module_cell);
+    if (witness->domain) {
+        if (cost) *cost=xr_xir_domain_budget_stats(witness->domain);
+        const XrXirDomainStats retired=xr_xir_domain_stats(witness->domain);
+        const XrXirDomainBudgetStats budget=xr_xir_domain_budget_stats(witness->domain);
+        CHECK(retired.live_bytes==witness->domain_baseline.live_bytes && retired.allocations==retired.frees+1);
         CHECK(!budget.metadata_live && !budget.call_live &&
             budget.metadata_allocations==budget.metadata_frees && budget.call_allocations==budget.call_frees);
-        xr_xir_domain_drop(witness.domain);
+        xr_xir_domain_drop(witness->domain);witness->domain=NULL;
     }
+    return complete;
+}
+static bool invocation_capture_owner_run(unsigned mode,bool scalar,const XrXirInstanceConfig *limits,
+    XrXirDomainBudgetStats *cost) {
+    CaptureRuntimeWitness witness={0};witness.mode=mode;witness.scalar=scalar;XrXirProgram *program=NULL;
+    XrXirStatus sealed=capture_runtime_seal(&witness,&program);
+    if(sealed!=XR_XIR_OK) { CHECK(sealed==XR_XIR_OUT_OF_MEMORY && !program);return false; }
+    bool complete=invocation_capture_execute(program,&witness,limits,cost);
     CHECK(witness.releases==1);return complete;
 }
 static void invocation_capture_owner_axes(bool scalar) {
-    XrXirDomainBudgetStats cost={0};CHECK(invocation_capture_owner_run(0,scalar,NULL,&cost));
+    CaptureRuntimeWitness witness={0};witness.scalar=scalar;XrXirProgram *program=NULL;
+    CHECK(capture_runtime_seal(&witness,&program)==XR_XIR_OK && program);
+    XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    XrXirDomainBudgetStats cost={0};
+    CHECK(xr_xir_compile_program_retain(program));
+    CHECK(invocation_capture_execute(program,&witness,NULL,&cost));
     const uint64_t exact[5]={cost.requested_bytes,cost.requested_call_bytes,cost.work,cost.metadata_peak,cost.call_peak};
-    for (unsigned axis=0;axis<5;++axis) for (unsigned minus=0;minus<2;++minus) {
+    for(unsigned axis=0;axis<5;++axis)for(unsigned minus=0;minus<2;++minus) {
         CHECK(exact[axis]);XrXirInstanceConfig limits;
         CHECK(xr_xir_instance_config_init(&limits,sizeof(limits))==XR_XIR_CALL_READY);
-        if (!axis) limits.requested_value_limit=exact[axis]-minus;
-        else if (axis==1) limits.requested_call_limit=exact[axis]-minus;
-        else if (axis==2) limits.work_limit=exact[axis]-minus;
-        else if (axis==3) limits.metadata_limit=exact[axis]-minus;
+        if(!axis)limits.requested_value_limit=exact[axis]-minus;
+        else if(axis==1)limits.requested_call_limit=exact[axis]-minus;
+        else if(axis==2)limits.work_limit=exact[axis]-minus;
+        else if(axis==3)limits.metadata_limit=exact[axis]-minus;
         else limits.call_limit=exact[axis]-minus;
-        CHECK(invocation_capture_owner_run(0,scalar,&limits,NULL)==!minus);
+        CHECK(xr_xir_compile_program_retain(program));
+        CHECK(invocation_capture_execute(program,&witness,&limits,NULL)==!minus);
+        CHECK(atomic_load(&program->references)==1 && !witness.releases);
     }
+    XrCompileResourceStats retired=native_fixture_stats(&program->context);
+    CHECK(retired.work==prefix.work && retired.allocated_bytes==prefix.allocated_bytes &&
+        retired.live_bytes==prefix.live_bytes);
+    xr_xir_compile_program_drop(program);CHECK(witness.releases==1);
 }
 #endif // XIR_INVOCATION_CAPTURE_OWNER_CASES_H

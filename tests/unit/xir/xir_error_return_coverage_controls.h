@@ -87,7 +87,7 @@ static void er_fixture(ReturnErrorFixture *fixture,unsigned mode) {
     }
 }
 
-static void er_golden(const XrXirEffects *effects,unsigned mode) {
+static void er_golden(const XrXirCompileContext *context,const XrXirEffects *effects,unsigned mode) {
     static const uint64_t errors[ER_CASES]={0,8,8,1,0,1};
     CHECK(mode<ER_CASES && effects && effects->count==(mode==4?6u:5u));
     CHECK(effect_final_outcomes(effects)->words==1 && effect_final_outcomes(effects)->atom_count==2 && !effect_final_outcomes(effects)->errors[0]);
@@ -100,7 +100,10 @@ static void er_golden(const XrXirEffects *effects,unsigned mode) {
     CHECK(effects->invocations && effects->invocations->final);
     const EffectInvocationFinal *owner=effects->invocations->final;
     CHECK(owner->site_count);
-    CHECK((owner->nodes[owner->roots[4]].return_coverage!=0)==(mode!=3 && mode!=5));
+    uint32_t root=owner->roots[4],body=owner->nodes[root].body;
+    uint32_t returned=owner->material->functions[body].parameter_count+owner->material->functions[body].instruction_count;
+    bool complete=false;CHECK(effect_final_callable_complete(context,owner,root,returned,&complete)==XR_XIR_OK);
+    CHECK(complete==(mode!=3 && mode!=5));
     /* Coverage must not erase the original opaque NONE advertisement. */
     CHECK(effect_roots_read(effects)->contracts[1].formula.constant_mask==0);
 }
@@ -115,7 +118,7 @@ static XrXirStatus er_whole(const XrXirCompileContext *context,unsigned mode) {
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
     if (status!=XR_XIR_OK) CHECK(!effects);
     xr_xir_compile_artifact_free(checked);
-    if (status==XR_XIR_OK) er_golden(effects,mode);
+    if (status==XR_XIR_OK) er_golden(context,effects,mode);
     else if (status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
         fprintf(stderr,"return errors mode%u status%u f%u b%u i%u\n",mode,status,
             diagnostic.function,diagnostic.block,diagnostic.instruction);

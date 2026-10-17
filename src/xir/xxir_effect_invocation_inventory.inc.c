@@ -15,6 +15,8 @@ static XrXirStatus effect_final_inventory_sites(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final);
 #include "xxir_effect_invocation_edge_inventory.inc.c"
 #include "xxir_effect_capture_global.inc.c"
+#include "xxir_effect_invocation_final_flow.inc.c"
+#include "xxir_effect_invocation_final_view.inc.c"
 static XrXirStatus effect_final_inventory_sites(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final) {
     XrXirStatus status=effect_role_range(work,final->sites,final->site_count,sizeof(*final->sites));

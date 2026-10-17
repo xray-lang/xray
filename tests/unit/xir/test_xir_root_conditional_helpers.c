@@ -42,7 +42,9 @@
 #include "xir_invocation_physical_classification_cases.h"
 #include "xir_invocation_class_rows_cases.h"
 #include "xir_invocation_class_cell_cases.h"
+#include "xir_invocation_class_lifetime_cases.h"
 #include "xir_invocation_compact_snapshot_cases.h"
+#include "xir_invocation_primitive_cases.h"
 #include "xir_invocation_early_generation_cases.h"
 #include "xir_invocation_generation_range_cases.h"
 #include "xir_ordinary_initial_role_cases.h"
@@ -1770,6 +1772,43 @@ static void conditional_ordinary_environment_keys(void) {
 #include "xir_input_seed_run_cases.h"
 
 int main(int argc, char **argv) {
+    if(argc==3 && !strcmp(argv[1],"--class-discovery-lifetime")) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<4);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=conditional_class_discovery_lifetime(&context,mode);
+        fprintf(stderr,"Class discovery lifetime mode%u status%u work%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
+    if(argc==3 && (!strcmp(argv[1],"--class-case") || !strcmp(argv[1],"--class-cell-case"))) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<7);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=!strcmp(argv[1],"--class-case")?conditional_class_rows_case(&context,mode,true):
+            conditional_class_cell_case(&context,mode,true);
+        fprintf(stderr,"%s mode%u status%u work%llu\n",argv[1],mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
+    if(argc==3 && !strcmp(argv[1],"--returned-case")) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<8);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=conditional_invocation_returned(&context,mode,true,false);
+        fprintf(stderr,"returned case mode%u status%u work%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
+    if(argc==3 && !strcmp(argv[1],"--parameter-case")) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<5);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=conditional_parameter_case(&context,mode,true);
+        fprintf(stderr,"parameter case mode%u status%u work%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
     input_seed_run_literals();
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());

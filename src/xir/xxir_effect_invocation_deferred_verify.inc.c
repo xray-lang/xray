@@ -8,8 +8,8 @@
  *
  * KEY CONCEPT:
  *   A delayed invocation owns the real formal and complete physical actuals.
- *   Replaying the common value-origin flow verifies this correspondence before
- *   seal; it neither solves another invocation graph nor publishes permission.
+ *   Constructor discovery proposes the mapping. Sealed correspondence consumes
+ *   the sole finite relation and cannot replay an origin solver or grant access.
  */
 static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
     const EffectInvocationDeferred *record) {
@@ -139,7 +139,7 @@ static XrXirStatus effect_invocation_deferred_verify(const EffectInvocationRead 
         if (status!=XR_XIR_OK) return status;
         if (!needed) continue;
         EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX};
-        status=effect_invocation_origins(&flow);
+        status=owner->roles.construction?effect_invocation_discovery_origins(&flow):effect_invocation_final_view(&flow);
         if (status==XR_XIR_OK) status=effect_invocation_deferred_frontiers(&flow,&matched);
         xr_compile_resources_free(flow.memory);
         if (status!=XR_XIR_OK) return status;
