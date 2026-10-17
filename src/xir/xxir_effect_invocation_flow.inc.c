@@ -247,12 +247,9 @@ static XrXirStatus effect_invocation_origin_join(EffectInvocationFlow *flow,
 /* Opaque masks are origin facts, not the target's physical type identity.
  * Carrying them in the fixed basis prevents a temporary None or a narrower
  * receiver descriptor from erasing a genuine producer UNKNOWN contribution. */
-static XrXirStatus effect_invocation_opaque(EffectInvocationFlow *flow,
-    uint32_t value,bool force_unknown) {
+static XrXirStatus effect_invocation_opaque_actual(EffectInvocationFlow *flow,
+    uint32_t value,bool force_unknown,XrXirType actual_type) {
     if (value>=flow->values) return XR_XIR_BAD_VALUE;
-    XrXirType actual_type=0;
-    XrXirStatus read_status=effect_invocation_flow_type(flow,value,&actual_type);
-    if (read_status!=XR_XIR_OK) return read_status;
     const XrXirTypeNode *signature=xr_xir_callable_signature(flow->body.domain.types,actual_type);
     if (!signature) return XR_XIR_OK;
     uint32_t mask=0;
@@ -266,6 +263,14 @@ static XrXirStatus effect_invocation_opaque(EffectInvocationFlow *flow,
     if (status==XR_XIR_OK && (force_unknown || (mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)))
         status=effect_invocation_origin_bit(flow,value,opaque+2);
     return status;
+}
+
+static XrXirStatus effect_invocation_opaque(EffectInvocationFlow *flow,
+    uint32_t value,bool force_unknown) {
+    if (value>=flow->values) return XR_XIR_BAD_VALUE;
+    XrXirType actual_type=0;
+    XrXirStatus status=effect_invocation_flow_type(flow,value,&actual_type);
+    return status==XR_XIR_OK?effect_invocation_opaque_actual(flow,value,force_unknown,actual_type):status;
 }
 
 static XrXirStatus effect_invocation_ref_target(EffectInvocationFlow *flow,
@@ -391,14 +396,36 @@ static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
     return status;
 }
 
-static XrXirStatus effect_invocation_fixed(EffectInvocationFlow *flow,uint32_t value) {
+/* A native type vector is borrowed only by the enclosing synchronous barrier
+ * walk. Independent fixed and opaque reads keep their original getters. */
+static XrXirStatus effect_invocation_fixed_read(EffectInvocationFlow *flow,uint32_t value,
+    const XrXirType *native_types) {
     if (value>=flow->values) return XR_XIR_BAD_VALUE;
     XrXirStatus status=effect_invocation_flag_put(flow,value,false,&flow->changed);
-    return status==XR_XIR_OK?effect_invocation_opaque(flow,value,false):status;
+    if (status!=XR_XIR_OK) return status;
+    if (!native_types) return effect_invocation_opaque(flow,value,false);
+    if (!xir_compile_work(flow->owner->work,1+sizeof(*native_types))) return XR_XIR_BUDGET;
+    return effect_invocation_opaque_actual(flow,value,false,native_types[value]);
+}
+static XrXirStatus effect_invocation_fixed(EffectInvocationFlow *flow,uint32_t value) {
+    return effect_invocation_fixed_read(flow,value,NULL);
 }
 
 static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
     const XirMetadataDomain *module=&flow->body.domain;
+    /* Storage identity selects this local reader; it carries no origin or
+     * authority result. Every operand still reaches the original receiver. */
+    bool native=flow->types_ready && effect_body_request_sequence_owned(&flow->body);
+    if (native) {
+        XrXirStatus binding=effect_body_request_sequence_binding(&flow->body);
+        if (binding!=XR_XIR_OK) return binding;
+        if (!xir_compile_work(flow->owner->work,8)) return XR_XIR_BUDGET;
+        if (flow->body.owner!=flow->owner->final.material || flow->node>=flow->owner->final.count ||
+            !flow->function || !flow->physical || flow->values!=flow->physical->values ||
+            (uint64_t)flow->function->parameter_count+flow->function->instruction_count!=flow->values ||
+            (flow->values && !flow->types) || (flow->function->instruction_count &&
+                !flow->instruction_refs && !flow->instructions)) return XR_XIR_BAD_STRUCTURE;
+    }
     for (uint32_t r=0;r<flow->physical->count;++r) {
         if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
         if (!(flow->physical->records[r].mask&EFFECT_PHYSICAL_BARRIER)) continue;
@@ -406,8 +433,14 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
         if (physical_value<flow->function->parameter_count || physical_value>=flow->values) return XR_XIR_BAD_STRUCTURE;
         uint32_t i=physical_value-flow->function->parameter_count;
         XrXirInstruction body_op_3;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_3=effect_invocation_flow_instruction(flow,i,&body_op_3,&op);
-        if (body_read_3!=XR_XIR_OK) return body_read_3;
+        if (native) {
+            if (!xir_compile_work(flow->owner->work,1+sizeof(op))) return XR_XIR_BUDGET;
+            op=flow->instruction_refs?flow->instruction_refs[i]:&flow->instructions[i];
+            if (!op) return XR_XIR_BAD_STRUCTURE;
+        } else {
+            XrXirStatus body_read_3=effect_invocation_flow_instruction(flow,i,&body_op_3,&op);
+            if (body_read_3!=XR_XIR_OK) return body_read_3;
+        }
         if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
         bool store=op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_WRITE ||
             op->op==XR_XIR_CELL_LOCAL_WRITE || op->op==XR_XIR_PLACE_WRITE ||
@@ -437,7 +470,7 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
         for (uint32_t a=0;a<count;++a) {
             if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
             uint32_t value=table ? flow->function->operands[op->args[0]+a] : op->args[a];
-            XrXirStatus status=effect_invocation_fixed(flow,value);
+            XrXirStatus status=native?effect_invocation_fixed_read(flow,value,flow->types):effect_invocation_fixed(flow,value);
             if (status!=XR_XIR_OK) return status;
         }
     }
