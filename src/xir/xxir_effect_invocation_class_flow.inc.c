@@ -91,6 +91,40 @@ static XrXirStatus effect_invocation_class_source(EffectInvocationFlow *flow,
     return XR_XIR_OK;
 }
 
+/* A captured identity keeps its complete current Class mask in the existing
+ * flat prefix. A missing solver fact delays the latent input; it is never
+ * replaced with a local or UNKNOWN claim made from the physical type. */
+static XrXirStatus effect_invocation_capture_class(EffectInvocationFlow *flow,
+    uint32_t value,uint64_t *output) {
+    uint32_t at=0;const EffectInvocationRead *owner=flow->read;
+    XrXirStatus status=effect_invocation_class_find(owner->work,&owner->final->nodes[flow->node],value,&at);
+    if(status!=XR_XIR_OK) return status;
+    EffectInvocationClassFact fact=owner->final->nodes[flow->node].classes[at];
+    if(!fact.mask) return XR_XIR_OK;
+    if((fact.mask&~EFFECT_CLASS_VALID) || !(fact.mask&EFFECT_CLASS_KNOWN) ||
+        (fact.mask==EFFECT_CLASS_KNOWN ? !fact.rank : fact.rank!=0)) return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t bit=0;bit<3;++bit) {
+        if(!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+        uint32_t flag=bit==0?EFFECT_CLASS_ROOT:bit==1?EFFECT_CLASS_UNKNOWN:EFFECT_CLASS_KNOWN;
+        if(!(fact.mask&flag)) continue;
+        uint32_t index=flow->basis.parameters+bit;uint64_t mask=UINT64_C(1)<<(index%64);
+        if(!(output[index/64]&mask)) flow->changed=true;
+        output[index/64]|=mask;
+    }
+    return XR_XIR_OK;
+}
+
+/* Class facts and callable prefixes use one equation queue. Refresh only
+ * temporary rows after a Class step; no result survives this body replay. */
+static XrXirStatus effect_invocation_class_origins(EffectInvocationFlow *flow) {
+    if(!flow->read->final->nodes[flow->node].class_count) return XR_XIR_OK;
+    XrXirStatus status=XR_XIR_OK;flow->changed=true;
+    while(status==XR_XIR_OK && flow->changed) {
+        flow->changed=false;status=effect_invocation_origins_pass(flow);
+    }
+    return status;
+}
+
 /* Current complete inputs, not historical smaller environments, determine
  * a direct result. Indirect opaque advertisements remain explicit unknown. */
 static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,

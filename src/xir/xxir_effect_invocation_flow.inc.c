@@ -23,6 +23,9 @@ typedef struct EffectInvocationFlow {
     bool changed,precision;
 } EffectInvocationFlow;
 
+static XrXirStatus effect_invocation_capture_class(EffectInvocationFlow *flow,
+    uint32_t value,uint64_t *output);
+
 /* Requests borrow only for this one replay. Every failed field read is
  * returned before it can be interpreted as a type, origin or permission. */
 static XrXirStatus effect_invocation_flow_instruction(EffectInvocationFlow *flow,
@@ -329,6 +332,8 @@ static XrXirStatus effect_invocation_capture(EffectInvocationFlow *flow,
             uint64_t *cell=binding+flow->basis.origin_words;
             /* Capture Cell facts come only from the shared real producer proof. */
             status=effect_invocation_cell(flow,value,cell,&flow->changed);
+        } else if (xr_xir_type_is_class(flow->body.domain.types,target->parameters[p])) {
+            status=effect_invocation_capture_class(flow,value,binding+flow->basis.origin_words);
         } else if (xr_xir_callable_signature(flow->body.domain.types,target->parameters[p])) {
             const uint64_t *source=effect_invocation_row(flow,value);
             if (!source) return XR_XIR_BAD_STRUCTURE;
@@ -463,6 +468,8 @@ static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
     return XR_XIR_OK;
 }
 
+#include "xxir_effect_invocation_callable_cells.inc.c"
+
 static XrXirStatus effect_invocation_origins_decoded(EffectInvocationFlow *flow,
     uint32_t instruction,const XrXirInstruction *op) {
     uint32_t destination=flow->function->parameter_count+instruction;
@@ -471,6 +478,8 @@ static XrXirStatus effect_invocation_origins_decoded(EffectInvocationFlow *flow,
         return effect_invocation_return_origins(flow,instruction,op);
     case XR_XIR_FUNCTION_REF:
         return effect_invocation_capture(flow,instruction,op);
+    case XR_XIR_CELL_READ:
+        return effect_invocation_callable_cell_origins(flow,instruction,op);
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
@@ -510,6 +519,8 @@ static bool effect_invocation_origins_unused(const EffectInvocationFlow *flow,
             !xr_xir_callable_signature(flow->body.domain.types,type);
     case XR_XIR_INVOKE_RESULT:
         return !flow->read->producer_enabled;
+    case XR_XIR_CELL_READ:
+        return !xr_xir_callable_signature(flow->body.domain.types,type);
     case XR_XIR_FUNCTION_REF:
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:

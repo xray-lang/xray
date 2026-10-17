@@ -76,7 +76,7 @@ static XrXirStatus instance_invocation_function_view(InstanceInvocationRead *rea
             XrXirCallStatus admitted=xr_xir_instance_function_producer(read->view,actual,&captured);
             if(admitted!=XR_XIR_CALL_READY) return admitted==XR_XIR_CALL_LIMIT?XR_XIR_BUDGET:
                 admitted==XR_XIR_CALL_OOM?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_TYPE;
-        } else if (xr_xir_type_node(instance->program->types,expected)) return XR_XIR_BAD_TYPE;
+        }
     }
     *output=producer;*captures=binding;return XR_XIR_OK;
 }
@@ -101,6 +101,19 @@ static XrXirStatus instance_invocation_capture_cell(void *owner,uint32_t paramet
     /* The reader above proved real owned storage. Intrinsic access UNKNOWN is
      * independently retained by the sealed equation's closed-node check. */
     *output=0;return XR_XIR_OK;
+}
+static XrXirStatus instance_invocation_capture_class(void *owner,uint32_t parameter,uint32_t capture,
+    uint32_t site,uint32_t *output) {
+    InstanceInvocationRead *read=owner;XirEffectProducerView producer={0};
+    const XrXirFunctionBinding *binding=NULL;
+    XrXirStatus status=instance_invocation_function_view(read,parameter,&producer,&binding);
+    if(status!=XR_XIR_OK) return status;
+    const XrXirInstance *instance=view_instance(read->view);
+    if(!output || site!=producer.site || capture>=binding->capture_count ||
+        !xr_xir_type_is_class(instance->program->types,(XrXirType)binding->captures[capture].type))
+        return XR_XIR_BAD_TYPE;
+    if(!instance_invocation_work(read,3)) return XR_XIR_BUDGET;
+    *output=xr_xir_class_module_storage(&binding->captures[capture])?1u:0u;return XR_XIR_OK;
 }
 static XrXirCallStatus instance_invocation_select(XrXirCallView *view,uint32_t instruction,
     const XrXirValue *function,const XrXirValue *arguments,uint32_t count,
@@ -136,8 +149,7 @@ static XrXirCallStatus instance_invocation_select(XrXirCallView *view,uint32_t i
             XirEffectProducerView captured_producer={0};
             status=xr_xir_instance_function_producer(view,&binding->captures[p],&captured_producer);
             if(status!=XR_XIR_CALL_READY) return status;
-        } else if (!xr_xir_type_is_cell(program->types,expected) && xr_xir_type_node(program->types,expected))
-            return XR_XIR_CALL_BAD_ARGUMENT;
+        }
         const XrXirValue *value=instance_invocation_parameter(&actual,p);
         status=admit_instance_value(admission,value,expected);
         if (status!=XR_XIR_CALL_READY) return status;
@@ -157,7 +169,8 @@ static XrXirCallStatus instance_invocation_select(XrXirCallView *view,uint32_t i
         .node=current?current->node:UINT32_MAX,.count=target->parameter_count,
         .captures=producer.capture_count,.contextual=current!=NULL,
         .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,.class_value=instance_invocation_class,
-            .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell}};
+            .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell,
+            .capture_class_value=instance_invocation_capture_class}};
     XrXirStatus selected=xir_effects_execution_edge(program->permissions->effects,&request,output);
     return selected==XR_XIR_OK?XR_XIR_CALL_READY:selected==XR_XIR_BUDGET?
         XR_XIR_CALL_LIMIT:selected==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;
@@ -188,7 +201,8 @@ static XrXirCallStatus instance_invocation_direct(XrXirCallView *view,uint32_t i
         .instruction=instruction,.target=target,.producer=UINT32_MAX,
         .node=current?current->node:UINT32_MAX,.count=count,.contextual=current!=NULL,
         .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,.class_value=instance_invocation_class,
-            .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell}};
+            .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell,
+            .capture_class_value=instance_invocation_capture_class}};
     XrXirStatus selected=xir_effects_execution_edge(program->permissions->effects,&request,output);
     return selected==XR_XIR_OK?XR_XIR_CALL_READY:selected==XR_XIR_BUDGET?
         XR_XIR_CALL_LIMIT:selected==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;

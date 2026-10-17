@@ -115,7 +115,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     }
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL_INDIRECT:
-    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_READ:
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:

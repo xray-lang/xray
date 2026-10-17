@@ -70,7 +70,8 @@ XR_FUNC XrXirCallStatus xr_xir_instance_generator_context(XrXirCallView *view,ui
     XirEffectInvocationRequest selected={.caller=caller,.instruction=instruction,.target=request->entry,
         .producer=UINT32_MAX,.node=current?current->node:UINT32_MAX,.count=request->count,
         .contextual=current!=NULL,.read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,
-            .class_value=instance_invocation_class,.function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell}};
+            .class_value=instance_invocation_class,.function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell,
+            .capture_class_value=instance_invocation_capture_class}};
     XrXirStatus status=xir_effects_execution_edge(program->permissions->effects,&selected,output);
     return status==XR_XIR_OK?XR_XIR_CALL_READY:status==XR_XIR_BUDGET?XR_XIR_CALL_LIMIT:
         status==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;

@@ -222,6 +222,8 @@ typedef struct XirEffectRuntimeRead {
     XrXirStatus (*function)(void *owner,uint32_t parameter,uint32_t *producer);
     XrXirStatus (*capture_cell)(void *owner,uint32_t parameter,uint32_t capture,
         uint32_t producer,uint32_t *origin);
+    XrXirStatus (*capture_class_value)(void *owner,uint32_t parameter,uint32_t capture,
+        uint32_t producer,uint32_t *module_storage);
 } XirEffectRuntimeRead;
 typedef enum XirEffectClassAccessKind {
     XIR_EFFECT_ACCESS_CELL_READ,XIR_EFFECT_ACCESS_CELL_WRITE,XIR_EFFECT_ACCESS_PROJECT,
