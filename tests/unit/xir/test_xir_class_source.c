@@ -73,7 +73,18 @@ static XrXirStatus class_source_operation(const XrXirCompileContext *context,voi
 }
 int main(int argc,char **argv){
  C(argc==1 || argc==2);ClassPipelineOwner owner={0};C(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);
- XrXirProgram *program=NULL;C(class_source_program(&owner.context,&program,argc==2?argv[1]:NULL)==XR_XIR_OK);
+ if(argc==2){
+  XrXirArtifact *checked=NULL,*decoded=NULL;XrXirCheckedPacket packet={0};
+  C(class_source_owned(&owner.context,&checked)==XR_XIR_OK);
+  C(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK && packet.length<=262144);
+  xr_xir_compile_artifact_free(checked);
+  C(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
+  xr_xir_compile_artifact_free(decoded);
+  FILE *file=fopen(argv[1],"wb");C(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+  xr_xir_compile_checked_packet_free(&packet);class_pipeline_drop(&owner);class_pipeline_final_zero();
+  puts("Class Checked packet generated; producer retired; physical0; complete runtime FI not run");return 0;
+ }
+ XrXirProgram *program=NULL;C(class_source_program(&owner.context,&program,NULL)==XR_XIR_OK);
  const uint32_t answer=3,retained=4;XrXirValue saved[2]={{0},{0}};
  for(unsigned i=0;i<2;++i){XrXirInstance *instance=NULL;XrXirInstanceConfig config; C(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);C(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);C(xr_xir_instance_start(instance,answer,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);XrXirValue number={0};C(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);C(number.type==XR_XIR_I64&&number.payload==41);xr_xir_value_drop(&number);C(xr_xir_instance_start(instance,retained,NULL,0)==XR_XIR_CALL_READY);C(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);C(xr_xir_instance_take_result(instance,&saved[i])==XR_XIR_CALL_RETURNED);C(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
  xr_xir_compile_program_drop(program);for(unsigned i=0;i<2;++i){XrXirValue value={0};C(xr_xir_class_get(&saved[i],0,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&saved[i]),.work=10000},&value)==XR_XIR_VALUE_OK);C(value.type==XR_XIR_I64&&value.payload==40);xr_xir_value_drop(&value);C(xr_xir_class_get(&saved[i],1,&(XrXirValueAdmission){.arena=xr_xir_value_arena(&saved[i]),.work=10000},&value)==XR_XIR_VALUE_OK);const char *bytes=NULL;size_t length=0;C(xr_xir_string_view(&value,&bytes,&length)&&length==7&&!memcmp(bytes,"counter",7));xr_xir_value_drop(&saved[i]);C(xr_xir_string_view(&value,&bytes,&length)&&length==7&&!memcmp(bytes,"counter",7));xr_xir_value_drop(&value);}puts("source class VM41 retained PASS");C(!runtime_live && !runtime_bytes);class_pipeline_drop(&owner);

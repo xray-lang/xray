@@ -41,7 +41,7 @@ static void class_runtime_faults(XrXirProgram *program) {
 }
 int main(int argc,char **argv){
  ClassPipelineOwner owner={0};C(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);
- class_deep_cases();class_cross_arena_cases();class_exit_cases();class_program_retained_case();class_enum_deep_cases();
+ if(argc==1){class_deep_cases();class_cross_arena_cases();class_exit_cases();class_program_retained_case();class_enum_deep_cases();}
  C(argc==1 || argc==2);FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");C(file);
  C(!fseek(file,0,SEEK_END));long size=ftell(file);C(size>=64 && size<=262144);C(!fseek(file,0,SEEK_SET));
  uint8_t *bytes=malloc((size_t)size);C(bytes);C(fread(bytes,1,(size_t)size,file)==(size_t)size);C(!fclose(file));
@@ -55,6 +55,10 @@ int main(int argc,char **argv){
  C(module->functions[4].name_length==8 && !memcmp(module->functions[4].name,"retained",8));
  XrXirCSource output={0};C(xr_xir_compile_emit_c(lowered,"source_class",1048576,&output)==XR_XIR_OK);
  if(argc==2){file=fopen(argv[1],"wb");C(file);C(fwrite(output.text,1,output.length,file)==output.length);C(!fclose(file));}xr_xir_compile_c_source_free(&output);
+ if(argc==2){
+  xr_xir_compile_artifact_free(lowered);class_pipeline_drop(&owner);class_pipeline_final_zero();
+  puts("Real class C generated; complete runtime/physical FI not run");return 0;
+ }
  XrXirProgram *program=NULL;C(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
  class_runtime_faults(program);
  XrXirValue saved[2]={{0},{0}};
