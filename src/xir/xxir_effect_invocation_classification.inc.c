@@ -22,7 +22,8 @@ enum {
     EFFECT_PHYSICAL_CONTROL=256,
     EFFECT_PHYSICAL_GO=512,
     EFFECT_PHYSICAL_SLOT_PLACE=1024,
-    EFFECT_PHYSICAL_ERROR_ESCAPE=2048
+    EFFECT_PHYSICAL_ERROR_ESCAPE=2048,
+    EFFECT_PHYSICAL_GENERATOR=4096
 };
 
 typedef struct EffectPhysicalRecord { uint32_t value,mask; } EffectPhysicalRecord;
@@ -86,6 +87,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
 static uint32_t effect_physical_opcode(XrXirOp op) {
     uint32_t mask=0;
     if (op==XR_XIR_FUNCTION_REF) mask|=EFFECT_PHYSICAL_REFERENCE;
+    if (op==XR_XIR_GENERATOR_NEW) mask|=EFFECT_PHYSICAL_GENERATOR;
     if (op==XR_XIR_RETURN) mask|=EFFECT_PHYSICAL_RETURN;
     if (op==XR_XIR_SLOT_PLACE) mask|=EFFECT_PHYSICAL_SLOT_PLACE;
     if (!effect_physical_error_empty_opcode(op)) mask|=EFFECT_PHYSICAL_ERROR_ESCAPE;

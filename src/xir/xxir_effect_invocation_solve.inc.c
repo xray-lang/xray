@@ -901,6 +901,8 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
     if (!xir_compile_work(work,sizeof(*read))) return XR_XIR_BUDGET;
     *read=(EffectInvocationRead){.work=work,.effects=effects,.declared=declared,.final=final,
         .body=effect_body_owned_request(work,final->material)};
+    XrXirStatus sites=effect_invocation_sites_match(read);
+    if(sites!=XR_XIR_OK) return sites;
     for (uint32_t f=0;f<effect_body_count(final->material);++f) {
         bool supported=false;XrXirStatus status=effect_invocation_producer_required_read(read,&read->body,f,&supported);
         if (status!=XR_XIR_OK) return status;

@@ -601,3 +601,14 @@ add_test(NAME test_xir_generator_receiver_compiler_allocator_audit
         --allocator-audit "$<TARGET_FILE:test_xir_generator_receiver_compiler>")
 set_tests_properties(test_xir_generator_receiver_compiler_allocator_audit PROPERTIES
     LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
+
+add_executable(test_xir_generator_producer_sites xir/test_xir_generator_producer_sites.c)
+target_link_libraries(test_xir_generator_producer_sites PRIVATE xray_xir)
+if(MSVC)
+    target_compile_options(test_xir_generator_producer_sites PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_generator_producer_sites PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_generator_producer_sites COMMAND test_xir_generator_producer_sites)
+set_tests_properties(test_xir_generator_producer_sites PROPERTIES
+    LABELS "unit;xir;generator;metadata;ownership;compiler-fault" TIMEOUT 120 PROCESSORS 1)
