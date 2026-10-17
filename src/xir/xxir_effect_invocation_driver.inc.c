@@ -87,13 +87,15 @@ static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverI
     if (!input || !output || *output || !receiving || *receiving || !xir_compile_context_valid(input->work) || !input->body ||
         !effect_invocation_projection_sink_matches(input->work,sink,input->body->domain.function_count))
         return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationWorkspace *equations=NULL;
+    EffectInvocationWorkspace *equations=NULL;EffectInvocationRows physical_rows={0};
     XrXirStatus status=effect_invocations_create(input->work,input->body,input->effects,
         input->graph,input->declared,&equations);
-    if (status==XR_XIR_OK) status=effect_invocations_solve(equations);
+    if (status==XR_XIR_OK) {
+        equations->physical_rows=&physical_rows;status=effect_invocations_solve(equations);
+    }
     if (status==XR_XIR_OK) status=effect_invocation_stage(equations,receiving);
     EffectInvocationSealRequest request={&equations,receiving,input->dense};
     if (status==XR_XIR_OK) status=effect_invocation_seal(input->work,&request,output,sink);
-    effect_invocation_free(equations);
+    effect_invocation_rows_drop(&physical_rows);effect_invocation_free(equations);
     return status;
 }

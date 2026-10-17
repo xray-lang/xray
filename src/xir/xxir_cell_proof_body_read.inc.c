@@ -97,7 +97,7 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
     if (output->first!=first || !output->count || output->count>head->instruction_count-first ||
         cursor->function!=f || cursor->next!=first+output->count || output->varying&~UINT32_C(1023) ||
         (output->count==1 && output->varying) ||
-        output->operation.op<=XR_XIR_INVALID || output->operation.op>=XR_XIR_OP_COUNT)
+        !output->operation || output->operation->op<=XR_XIR_INVALID || output->operation->op>=XR_XIR_OP_COUNT)
         return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
     for (uint32_t selected=output->varying;selected;selected&=selected-1) {
         if (!cell_proof_work(build,3)) return false;
@@ -110,11 +110,11 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
  * uses the same ten-word value core and retains its precise failure coordinate. */
 static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,uint32_t f,
     const XrXirCellProofRun *run,uint32_t i,XrXirInstruction *storage) {
-    if (!run || !storage || !run->count || run->varying&~UINT32_C(1023) ||
+    if (!run || !run->operation || !storage || !run->count || run->varying&~UINT32_C(1023) ||
         (run->count==1 && run->varying) || i<run->first || i-run->first>=run->count) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }
-    if (i==run->first) return &run->operation;
+    if (i==run->first) return run->operation;
     uint64_t units=10+sizeof(*storage)+2+10;
     if (!cell_proof_work(build,1+sizeof(uint32_t)+((run->varying&1)?3:0))) return NULL;
     for (uint32_t selected=run->varying;selected;selected&=selected-1) {
@@ -125,7 +125,7 @@ static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,ui
         units+=4;
     }
     if (!cell_proof_work(build,units)) return NULL;
-    XrXirInstruction value=xir_instruction_words_value(&run->operation,NULL,run->varying,run->delta,i-run->first);
+    XrXirInstruction value=xir_instruction_words_value(run->operation,NULL,run->varying,run->delta,i-run->first);
     if (value.op<=XR_XIR_INVALID || value.op>=XR_XIR_OP_COUNT) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }

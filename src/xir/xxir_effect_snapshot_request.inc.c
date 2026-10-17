@@ -251,10 +251,7 @@ static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequ
     if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
     const EffectBodyRun *ref=NULL;
     status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
-    if (status==XR_XIR_OK) status=effect_body_instruction_ref_value(&request->read,ref,i,storage);
-    if (status!=XR_XIR_OK) return status;
-    if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=storage;return XR_XIR_OK;
+    return status==XR_XIR_OK?effect_body_instruction_ref_read(&request->read,ref,i,storage,output):status;
 }
 
 /* Re-read the current final run and exact EOF independently of the cursor.

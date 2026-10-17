@@ -58,8 +58,8 @@ static XrXirStatus effect_invocation_dispatch_constant(EffectInvocationFlow *flo
     uint32_t first=flow->physical->records[*record_index].value;
     if (first<parameters || first>=flow->values || first-parameters<ref->first ||
         first-parameters>=ref->first+ref->count) return XR_XIR_BAD_STRUCTURE;
-    XrXirInstruction op;
-    XrXirStatus status=effect_body_instruction_ref_value(&flow->body.read,ref,first-parameters,&op);
+    XrXirInstruction storage;const XrXirInstruction *op=NULL;
+    XrXirStatus status=effect_body_instruction_ref_read(&flow->body.read,ref,first-parameters,&storage,&op);
     if (status!=XR_XIR_OK) return status;
     while (*record_index<flow->physical->count &&
         flow->physical->records[*record_index].value-parameters<ref->first+ref->count) {
@@ -71,10 +71,10 @@ static XrXirStatus effect_invocation_dispatch_constant(EffectInvocationFlow *flo
         uint32_t i=record.value-parameters;
         if (!flow->precision && !xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
         if (flow->precision) {
-            if (!effect_invocation_dispatch_precision(op.op)) continue;
+            if (!effect_invocation_dispatch_precision(op->op)) continue;
             if (!xir_compile_work(flow->owner->work,1)) return XR_XIR_BUDGET;
         }
-        flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,&op,changed);
+        flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,op,changed);
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
@@ -119,14 +119,14 @@ static XrXirStatus effect_invocation_dispatch_range(EffectInvocationFlow *flow,
             if (!(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;
             uint32_t i=record.value-body->parameter_count;
             if (!flow->precision && !xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            XrXirInstruction op;
-            status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&op);
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
             if (status!=XR_XIR_OK) return status;
             if (flow->precision) {
-                if (!effect_invocation_dispatch_precision(op.op)) continue;
+                if (!effect_invocation_dispatch_precision(op->op)) continue;
                 if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
             }
-            flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,&op,changed);
+            flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,op,changed);
             if (status!=XR_XIR_OK) return status;
         }
     }

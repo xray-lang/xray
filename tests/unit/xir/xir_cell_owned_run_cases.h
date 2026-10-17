@@ -19,8 +19,8 @@ static XrXirStatus cell_owned_run_refuse(const XrXirCompileContext *context,
 static void cell_owned_run_boundary(const XrXirCompileContext *context,
     const XrXirCellProofBodyRead *read,const XrXirCellProvenance *proof) {
     XrXirCellProofRunCursor held={.function=1},cursor=held;
-    XrXirCellProofRun sentinel={.first=123,.count=456,.varying=7,
-        .operation={.op=XR_XIR_RETURN,.type=XR_XIR_F64,.immediate=INT64_MIN}},out=sentinel;
+    const XrXirInstruction held_operation={.op=XR_XIR_RETURN,.type=XR_XIR_F64,.immediate=INT64_MIN};
+    XrXirCellProofRun sentinel={.first=123,.count=456,.varying=7,.operation=&held_operation},out=sentinel;
     CHECK(read->range(NULL,read,&cursor,&out)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&cursor,&held,sizeof(cursor)) && !memcmp(&out,&sentinel,sizeof(out)));
     XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats before=rp_stats(&foreign);
@@ -103,8 +103,10 @@ static void cell_owned_run_source(const XrXirCompileContext *context,
         while (cursor.next<fixture->functions[f].instruction_count) {
             XrXirCellProofRun range;
             CHECK(read.range(context,&read,&cursor,&range)==XR_XIR_OK);
-            CHECK(conditional_compact_same(&range.operation,&fixture->functions[f].instructions[range.first]) &&
+            CHECK(conditional_compact_same(range.operation,&fixture->functions[f].instructions[range.first]) &&
                 range.count && cursor.next==range.first+range.count);
+            CHECK(cursor.run && range.operation==&material->functions[f].runs[cursor.run-1].base &&
+                range.operation!=&fixture->functions[f].instructions[range.first]);
         }
         CHECK(cursor.next==fixture->functions[f].instruction_count);
     }
@@ -118,7 +120,8 @@ static void cell_owned_run_malformed(const XrXirCompileContext *context,
     uint32_t count=body->run_count,column=0;while (!(first->mask&(UINT32_C(1)<<column))) ++column;
     uint32_t old_mask=first->mask,old_first=first->first,old_delta=first->delta[column],old_neighbor=second->first;
     XrXirCellProofRunCursor held={.function=1};
-    XrXirCellProofRun sentinel={.first=99,.count=3,.operation={.op=XR_XIR_RETURN,.immediate=INT64_MIN}};
+    const XrXirInstruction held_operation={.op=XR_XIR_RETURN,.immediate=INT64_MIN};
+    XrXirCellProofRun sentinel={.first=99,.count=3,.operation=&held_operation};
     for (uint32_t mode=0;mode<5;++mode) {
         if (!mode) first->mask|=UINT32_C(1024);
         if (mode==1) first->first=1;

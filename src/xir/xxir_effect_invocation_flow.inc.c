@@ -89,7 +89,7 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     uint64_t flag_offset=(words*sizeof(*flow->rows)+indices+7)&~UINT64_C(7);
     if (flag_words>(SIZE_MAX-flag_offset)/(2*sizeof(uint64_t))) return XR_XIR_BUDGET;
     uint64_t type_offset=flag_offset+2*flag_words*sizeof(uint64_t);
-    bool owned=effect_body_request_sequence_owned(&flow->body);
+    bool owned=effect_body_request_sequence_owned(&flow->body) && !flow->owner->physical_rows;
     uint64_t type_bytes=owned?values*sizeof(XrXirType):0;
     if (type_bytes>SIZE_MAX-type_offset || type_offset+type_bytes>SIZE_MAX-7) return XR_XIR_BUDGET;
     uint64_t instruction_offset=(type_offset+type_bytes+7)&~UINT64_C(7);
@@ -132,6 +132,7 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
 }
 
 #include "xxir_effect_invocation_types.inc.c"
+#include "xxir_effect_invocation_rows.inc.c"
 
 
 /* Both finite flags still represent every actual SSA, including non-callable
@@ -661,9 +662,9 @@ static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
                 if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,i,3,&second);
                 if (status==XR_XIR_OK) status=effect_invocation_origin_transfer(flow,i,(XrXirOp)opcode,first,second);
             } else {
-                XrXirInstruction op;
-                status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&op);
-                if (status==XR_XIR_OK) status=effect_invocation_origins_decoded(flow,i,&op);
+                XrXirInstruction storage;const XrXirInstruction *op=NULL;
+                status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
+                if (status==XR_XIR_OK) status=effect_invocation_origins_decoded(flow,i,op);
             }
             if (status!=XR_XIR_OK) return status;
         }
@@ -732,7 +733,7 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
     if (status!=XR_XIR_OK) return status;
     status=effect_invocation_flow_storage(flow);
     if (status!=XR_XIR_OK) return status;
-    status=effect_invocation_flow_types(flow);
+    status=effect_invocation_flow_rows(flow);
     if (status!=XR_XIR_OK) return status;
     for (uint32_t p=0;p<flow->function->parameter_count;++p) {
         uint64_t *row=effect_invocation_row(flow,p);

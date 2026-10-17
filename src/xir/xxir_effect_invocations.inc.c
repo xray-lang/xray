@@ -141,12 +141,15 @@ typedef struct EffectInvocationFinal {
     uint32_t count,capacity,edge_count,edge_capacity;
 } EffectInvocationFinal;
 
+typedef struct EffectInvocationRows EffectInvocationRows;
 typedef struct EffectInvocationWorkspace {
     EffectInvocationFinal final;
     const XrXirCompileContext *work;
     XrXirEffects *effects;
     EffectGraph *graph;
     const EffectInvocationDeclaredBounds *declared;
+    /* The enclosing construction or read request owns these physical data. */
+    EffectInvocationRows *physical_rows;
     EffectBodyRequest body;
     EffectFinalFunctions *prepared_result;
     uint32_t *edge_index;

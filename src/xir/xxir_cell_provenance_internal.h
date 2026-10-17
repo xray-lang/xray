@@ -53,7 +53,9 @@ typedef struct XrXirCellProofRunCursor {
 } XrXirCellProofRunCursor;
 typedef struct XrXirCellProofRun {
     uint32_t first,count,varying;
-    XrXirInstruction operation;
+    /* The current complete body-read call retains the immutable row owner.
+     * This view never enters a published proof, Artifact or Program. */
+    const XrXirInstruction *operation;
     /* Actual selected physical deltas belong to this stack-local request. */
     uint32_t delta[10];
 } XrXirCellProofRun;
@@ -86,7 +88,8 @@ struct XrXirCellProofBodyRead {
     XrXirStatus (*shape)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,XrXirCellProofInstructionShape *);
     XrXirStatus (*span)(const XrXirCompileContext *,const void *,uint32_t,uint32_t,uint32_t,XrXirCellProofSpanCursor *);
     /* Complete owned runs retain every physical word in the canonical codec.
-     * The callback reads the actual first row, never a semantic permission. */
+     * The first row view lives within this synchronous complete body read;
+     * its caller retains the actual immutable material. No view is published. */
     XrXirStatus (*range)(const XrXirCompileContext *,const XrXirCellProofBodyRead *,
         XrXirCellProofRunCursor *,XrXirCellProofRun *);
 };

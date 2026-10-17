@@ -466,6 +466,30 @@ static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
     return XR_XIR_OK;
 }
 
+/* A current canonical first or constant row already exists in its retained
+ * material. Borrow it only for the synchronous consumer; varying later rows
+ * still use the sole complete value decoder and caller-owned scratch. */
+static XrXirStatus effect_body_instruction_ref_read(const EffectBodyRead *read,
+    const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *storage,
+    const XrXirInstruction **output) {
+    if (!read || !ref || !storage || !output || ref->mask&~EFFECT_BODY_MASK ||
+        (ref->count==1 && ref->mask) || instruction<ref->first ||
+        instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
+    if (instruction!=ref->first && ref->mask) {
+        XrXirStatus status=effect_body_instruction_ref_value(read,ref,instruction,storage);
+        if (status!=XR_XIR_OK) return status;
+        *output=storage;return XR_XIR_OK;
+    }
+    if (!effect_body_read_work(read,1+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t selected=ref->mask;selected;selected&=selected-1) {
+        if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+        if (!ref->delta[(uint32_t)__builtin_ctz(selected)]) return XR_XIR_BAD_STRUCTURE;
+    }
+    *output=&ref->base;return XR_XIR_OK;
+}
+
 static inline XrXirStatus effect_body_instruction_words_publish(const EffectBodyRead *read,
     const uint32_t *words,XrXirInstruction *output) {
     if (!words || !output) return XR_XIR_BAD_STRUCTURE;

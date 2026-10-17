@@ -122,6 +122,8 @@ static XrXirStatus effect_invocation_class_verify_read(EffectInvocationWorkspace
         status=effect_invocation_class_rank_limit_count(owner,request->domain.function_count,&limit);
     for (uint32_t f=0;status==XR_XIR_OK && f<request->domain.function_count;++f)
         status=effect_invocation_class_root_match(owner,request,f);
+    EffectInvocationRows local_rows={0};EffectInvocationRows *enclosing=owner->physical_rows;
+    if (!enclosing) owner->physical_rows=&local_rows;
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->final.count;++n) {
         if (!xir_compile_work(owner->work,4)) { status=XR_XIR_BUDGET;break; }
         const EffectInvocationNode *node=&owner->final.nodes[n];
@@ -135,7 +137,7 @@ static XrXirStatus effect_invocation_class_verify_read(EffectInvocationWorkspace
         if (status==XR_XIR_OK) status=effect_invocation_class_terminals_match(&flow);
         xr_compile_resources_free(flow.memory);
     }
-    return status;
+    owner->physical_rows=enclosing;effect_invocation_rows_drop(&local_rows);return status;
 }
 
 static XrXirStatus effect_invocation_class_verify(EffectInvocationWorkspace *owner) {

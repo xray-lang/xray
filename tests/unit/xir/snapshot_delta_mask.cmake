@@ -25,5 +25,8 @@ endif()
 add_test(NAME test_xir_snapshot_origin_controls COMMAND test_xir_snapshot_read_controls --origin-operand-literals)
 add_test(NAME test_xir_snapshot_existing_controls COMMAND test_xir_snapshot_read_controls --existing-node-literals)
 add_test(NAME test_xir_snapshot_cell_controls COMMAND test_xir_snapshot_read_controls --cell-literals)
-set_tests_properties(test_xir_snapshot_origin_controls test_xir_snapshot_existing_controls test_xir_snapshot_cell_controls PROPERTIES
+add_test(NAME test_xir_snapshot_class_controls COMMAND test_xir_snapshot_read_controls --class-literals)
+add_test(NAME test_xir_snapshot_input_controls COMMAND test_xir_snapshot_read_controls --nonroot-input-seeds-literals)
+add_test(NAME test_xir_snapshot_row_data_controls COMMAND test_xir_snapshot_read_controls --row-data)
+set_tests_properties(test_xir_snapshot_origin_controls test_xir_snapshot_existing_controls test_xir_snapshot_cell_controls test_xir_snapshot_class_controls test_xir_snapshot_input_controls test_xir_snapshot_row_data_controls PROPERTIES
     TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;compiler;ownership;metadata")

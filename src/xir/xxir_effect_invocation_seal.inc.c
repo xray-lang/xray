@@ -326,35 +326,48 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
     if (!final || !summary || summary->count!=count || summary->capacity!=count ||
         !summary->functions || !final->roots || !final->nodes || !final->count || final->count>final->capacity)
         return XR_XIR_BAD_STRUCTURE;
+    uint64_t words=(uint64_t)count+final->count;
+    if (words>SIZE_MAX/sizeof(uint32_t)) return XR_XIR_BUDGET;
+    XrXirStatus status=XR_XIR_OK;
+    uint32_t *directory=xir_compile_alloc(work,(size_t)words*sizeof(*directory),&status);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t *heads=directory,*next=directory+count;uint32_t visited=0;
+    if (!xir_compile_work(work,(uint64_t)count*sizeof(*heads))) { status=XR_XIR_BUDGET;goto done; }
+    memset(heads,0xff,(size_t)count*sizeof(*heads));
+    for (uint32_t n=0;n<final->count;++n) {
+        if (!xir_compile_work(work,4+2*sizeof(uint32_t))) { status=XR_XIR_BUDGET;goto done; }
+        uint32_t body=final->nodes[n].body;
+        if (body>=count) { status=XR_XIR_BAD_STRUCTURE;goto done; }
+        next[n]=heads[body];heads[body]=n;
+    }
+    /* Primitive Input depends on the current physical body, never a call key.
+     * Derive it once here; each actual environment still checks its own masks.
+     * This local directory contains ordinals only, no stored seed or PASS. */
     for (uint32_t f=0;f<count;++f) {
-        if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
-        if (final->roots[f]>=final->count) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(work,6)) { status=XR_XIR_BUDGET;goto done; }
+        if (final->roots[f]>=final->count) { status=XR_XIR_BAD_STRUCTURE;goto done; }
         const EffectInvocationNode *node=&final->nodes[final->roots[f]];
-        if (node->body!=f) return XR_XIR_BAD_STRUCTURE;
-        XrXirRootEffects input={0};XrXirStatus status=effect_invocation_input_seed(work,certificate->body,f,&input);
-        if (status!=XR_XIR_OK) return status;
+        if (node->body!=f) { status=XR_XIR_BAD_STRUCTURE;goto done; }
+        XrXirRootEffects input={0};status=effect_invocation_input_seed(work,certificate->body,f,&input);
+        if (status!=XR_XIR_OK) goto done;
         uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
         if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask ||
             (summary->functions[f].formula.constant_mask&mask)!=mask)
-            return XR_XIR_BAD_STRUCTURE;
+            { status=XR_XIR_BAD_STRUCTURE;goto done; }
+        for (uint32_t n=heads[f];n!=UINT32_MAX;n=next[n]) {
+            if (!xir_compile_work(work,7)) { status=XR_XIR_BUDGET;goto done; }
+            if (n>=final->count || final->nodes[n].body!=f ||
+                (next[n]!=UINT32_MAX && next[n]>=n)) { status=XR_XIR_BAD_STRUCTURE;goto done; }
+            ++visited;if (final->roots[f]==n) continue;
+            const EffectInvocationNode *actual=&final->nodes[n];
+            if ((actual->intrinsic_mask&mask)!=mask || (actual->local_mask&mask)!=mask)
+                { status=XR_XIR_BAD_STRUCTURE;goto done; }
+        }
     }
-    /* Each genuine environment executes the same body's primitive Input.
-     * An intact symbolic root cannot qualify a different erased call key. */
-    for (uint32_t n=0;n<final->count;++n) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
-        const EffectInvocationNode *node=&final->nodes[n];
-        if (node->body>=count) return XR_XIR_BAD_STRUCTURE;
-        if (final->roots[node->body]==n) continue;
-        XrXirRootEffects input={0};
-        XrXirStatus status=effect_invocation_input_seed(work,certificate->body,node->body,&input);
-        if (status!=XR_XIR_OK) return status;
-        uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
-            (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
-        if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask)
-            return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
+    if (visited!=final->count) status=XR_XIR_BAD_STRUCTURE;
+done:
+    xr_compile_resources_free(directory);return status;
 }
 
 /* All failure paths keep both input owners and the occupied output intact.

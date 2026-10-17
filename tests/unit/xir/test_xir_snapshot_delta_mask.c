@@ -52,6 +52,21 @@ static void mask_prefixes(const XrXirCompileContext *context,const EffectBodyFun
     observation.calls=0;observation.reject=UINT64_MAX;
     CHECK(effect_body_instruction_get(&read,body,instruction,&output)==XR_XIR_OK && mask_same(&output,expected));
 }
+static void mask_view_prefixes(const XrXirCompileContext *context,const EffectBodyRun *run,
+    uint32_t instruction,const XrXirInstruction *expected) {
+    MaskRead observation={context,0,UINT64_MAX};EffectBodyRead read={&observation,mask_read_work};
+    const XrXirInstruction sentinel={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.immediate=INT64_MIN};
+    XrXirInstruction storage=sentinel;const XrXirInstruction *output=&sentinel;
+    CHECK(effect_body_instruction_ref_read(&read,run,instruction,&storage,&output)==XR_XIR_OK && mask_same(output,expected));
+    uint64_t points=observation.calls;CHECK(points);
+    for(uint64_t n=0;n<points;++n) {
+        observation.calls=0;observation.reject=n;storage=sentinel;output=&sentinel;
+        CHECK(effect_body_instruction_ref_read(&read,run,instruction,&storage,&output)==XR_XIR_BUDGET &&
+            output==&sentinel && mask_same(&storage,&sentinel) && observation.calls==n+1);
+    }
+    observation.calls=0;observation.reject=UINT64_MAX;
+    CHECK(effect_body_instruction_ref_read(&read,run,instruction,&storage,&output)==XR_XIR_OK && mask_same(output,expected));
+}
 static void mask_matrix(const XrXirCompileContext *context) {
     EffectBodyRead read=effect_body_compile_read(context);unsigned zeros=0;
     for(uint32_t mask=0;mask<1024;++mask) {
@@ -64,7 +79,16 @@ static void mask_matrix(const XrXirCompileContext *context) {
         CHECK(effect_body_record_ref(&read,&body,1,&ref)==XR_XIR_OK && ref==&run);
         XrXirInstruction expected=mask_expected(mask),output={0};
         CHECK(effect_body_instruction_get(&read,&body,1,&output)==XR_XIR_OK && mask_same(&output,&expected));
-        if(mask==0 || mask==1 || mask==512 || mask==513 || mask==1023)mask_prefixes(context,&body,1,&expected);
+        const XrXirInstruction held_view={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.immediate=INT64_MIN};
+        XrXirInstruction view_storage=held_view;const XrXirInstruction *view=&held_view;
+        CHECK(effect_body_instruction_ref_read(&read,&run,0,&view_storage,&view)==XR_XIR_OK &&
+            view==&run.base && mask_same(view,&run.base) && mask_same(&view_storage,&held_view));
+        CHECK(effect_body_instruction_ref_read(&read,&run,1,&view_storage,&view)==XR_XIR_OK &&
+            view==(mask?&view_storage:&run.base) && mask_same(view,&expected));
+        if(mask==0 || mask==1 || mask==512 || mask==513 || mask==1023) {
+            mask_prefixes(context,&body,1,&expected);
+            mask_view_prefixes(context,&run,0,&run.base);mask_view_prefixes(context,&run,1,&expected);
+        }
         for(uint32_t w=0;w<10;++w)if(mask&(1u<<w)) {
             uint32_t delta=run.delta[w];run.delta[w]=0;
             const EffectBodyRun *sentinel=(const EffectBodyRun *)(const void *)&body;ref=sentinel;
@@ -72,6 +96,9 @@ static void mask_matrix(const XrXirCompileContext *context) {
             XrXirInstruction held={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.immediate=INT64_MIN};output=held;
             CHECK(effect_body_instruction_get(&read,&body,1,&output)==XR_XIR_BAD_STRUCTURE && mask_same(&output,&held));
             CHECK(effect_body_instruction_ref_prepare(&read,&run,1)==XR_XIR_BAD_STRUCTURE);
+            view_storage=held_view;view=&held_view;
+            CHECK(effect_body_instruction_ref_read(&read,&run,0,&view_storage,&view)==XR_XIR_BAD_STRUCTURE &&
+                view==&held_view && mask_same(&view_storage,&held_view));
             run.delta[w]=delta;++zeros;
         }
         run.mask|=1024;ref=NULL;
@@ -84,7 +111,7 @@ static void mask_matrix(const XrXirCompileContext *context) {
         CHECK(effect_body_record_ref(&read,&body,1,&ref)==XR_XIR_BAD_STRUCTURE && !ref);
     }
     CHECK(zeros==5120);
-    fprintf(stderr,"Snapshot physical masks1024 and selected zero deltas%u; five complete read-failure prefixes and same-ledger retries\n",zeros);
+    fprintf(stderr,"Snapshot physical masks1024 and selected zero deltas%u; actual first/constant views, full-word oracle and all read-failure prefixes/same-ledger retries\n",zeros);
 }
 static void mask_boundaries(const XrXirCompileContext *context) {
     const uint32_t masks[5]={0,1,512,513,1023};EffectBodyRead read=effect_body_compile_read(context);
@@ -140,15 +167,22 @@ static void mask_cell_values(const XrXirCompileContext *context) {
     unsigned zeroes=0;
     for(uint32_t mask=0;mask<1024;++mask) {
         XrXirCellProofRun run;memset(&run,0xa5,sizeof(run));
-        run.first=7;run.count=2;run.varying=mask;run.operation=mask_expected(0);
+        const XrXirInstruction base=mask_expected(0);
+        run.first=7;run.count=2;run.varying=mask;run.operation=&base;
         const uint32_t delta[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
         for(unsigned w=0;w<10;++w)if(mask&(1u<<w))run.delta[w]=delta[w];
-        CellProofBuild build={.context=context,.status=XR_XIR_OK};XrXirInstruction storage;
+        CellProofBuild build={.context=context,.status=XR_XIR_OK};
+        const XrXirInstruction first_held={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.immediate=INT64_MIN};
+        XrXirInstruction storage=first_held;
         const XrXirInstruction *first=cell_proof_run_operation(&build,0,&run,7,&storage);
-        CHECK(first==&run.operation && mask_same(first,&run.operation));
+        CHECK(first==run.operation && mask_same(first,run.operation) && mask_same(&storage,&first_held));
         const XrXirInstruction *second=cell_proof_run_operation(&build,0,&run,8,&storage);
         XrXirInstruction expected=mask_expected(mask);
         CHECK(second==&storage && mask_same(second,&expected));
+        run.operation=NULL;storage=first_held;
+        CHECK(!cell_proof_run_operation(&build,0,&run,8,&storage) && build.status==XR_XIR_BAD_STRUCTURE &&
+            build.location.function==0 && build.location.instruction==8 && mask_same(&storage,&first_held));
+        run.operation=&base;build.status=XR_XIR_OK;
         for(unsigned w=0;w<10;++w)if(mask&(1u<<w)) {
             run.delta[w]=0;build.status=XR_XIR_OK;
             const XrXirInstruction held={.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,.immediate=INT64_MIN};storage=held;
