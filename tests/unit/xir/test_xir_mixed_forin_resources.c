@@ -7,21 +7,50 @@
  * test_xir_mixed_forin_resources.c - Cumulative limits and original allocation ordinals
  */
 #include "xir_mixed_forin_resources.h"
+/* This independent graph matches a healthy path whose peer never exposed an Iterator. */
+static ForinResourceResult forin_resource_without_argument_probe(const ForinResourceSpec *spec,const ForinResourceResult *normal) {
+    CHECK(spec->mode==3 && normal->argument_probe_mask==3);
+    ForinResourceResult r=forin_resource_operation(spec,SIZE_MAX,NULL,0,true);
+    CHECK(r.complete && !r.fault && r.published==2 && r.disposals==2 && !r.setup && !r.argument_probe_mask);
+    CHECK(r.unaffected[0] && r.unaffected[1] && r.sites==normal->sites && r.phase==normal->phase && r.polls==normal->polls);
+    CHECK(r.root_mask==normal->root_mask && r.terminal==normal->terminal && r.control==normal->control && r.policy==normal->policy);
+    CHECK(!memcmp(r.outputs,normal->outputs,sizeof(r.outputs)) && !memcmp(r.output_count,normal->output_count,sizeof(r.output_count)));
+    for(unsigned owner=0;owner<2;++owner) {
+        CHECK(r.cost[owner].requested_bytes==normal->cost[owner].requested_bytes && r.cost[owner].requested_call_bytes==normal->cost[owner].requested_call_bytes);
+        CHECK(r.cost[owner].work && r.cost[owner].work<=128000000);
+    }
+    printf("For-in no-argument-probe backend=%u scenario=%u mode=3 prefix=0 close=%u drop=%u sites=%zu argumentProbeMask=0 value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu independentOriginalDomains2 lastReferenceZero2 codeLease1 physical0/0\n",
+        spec->backend,spec->scenario,spec->close,spec->drop,r.sites,(unsigned long long)r.cost[0].requested_bytes,(unsigned long long)r.cost[0].requested_call_bytes,(unsigned long long)r.cost[0].work,(unsigned long long)r.cost[1].requested_bytes,(unsigned long long)r.cost[1].requested_call_bytes,(unsigned long long)r.cost[1].work);return r;
+}
 static void forin_resource_early_work(unsigned backend) {
-    for(unsigned scenario=0;scenario<12;++scenario)for(unsigned owner=0;owner<2;++owner) {
-        ForinResourceSpec spec={backend,scenario,3,0,0,0};XrXirInstanceConfig config;
-        CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);config.work_limit=1;
-        ForinResourceResult r=forin_resource_operation(&spec,SIZE_MAX,&config,owner);
-        CHECK(!r.complete && r.fault==XR_XIR_CALL_LIMIT && r.fault_owner==owner && r.unaffected[1-owner]);
-        if(r.published_mask&(1u<<owner))CHECK(r.cost[owner].work<=1);
-        CHECK(r.cost[1-owner].requested_bytes && r.cost[1-owner].requested_call_bytes && r.cost[1-owner].work);
-        printf("For-in early work backend=%u scenario=%u owner=%u cap=1 fault=%u faultPhase=%u faultObserved=%u publishedMask=%u published=%u disposals=%u unaffected=%u sites=%zu firstWork0=%llu firstWork1=%llu value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu originalOwnerContinuation codeLease1 physical0/0\n",backend,scenario,owner,r.fault,r.fault_phase,r.fault_observed,r.published_mask,r.published,r.disposals,(unsigned)r.unaffected[1-owner],r.sites,(unsigned long long)r.fault_cost[0].work,(unsigned long long)r.fault_cost[1].work,(unsigned long long)r.cost[0].requested_bytes,(unsigned long long)r.cost[0].requested_call_bytes,(unsigned long long)r.cost[0].work,(unsigned long long)r.cost[1].requested_bytes,(unsigned long long)r.cost[1].requested_call_bytes,(unsigned long long)r.cost[1].work);
+    for(unsigned scenario=0;scenario<12;++scenario) {
+        ForinResourceSpec spec={backend,scenario,3,0,0,0};ForinResourceResult normal=forin_resource_baseline(&spec);
+        ForinResourceResult reference=forin_resource_without_argument_probe(&spec,&normal);
+        for(unsigned owner=0;owner<2;++owner) {
+            XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);config.work_limit=1;
+            ForinResourceResult r=forin_resource_operation(&spec,SIZE_MAX,&config,owner,false);
+            CHECK(!r.complete && r.fault==XR_XIR_CALL_LIMIT && r.fault_owner==owner && r.unaffected[1-owner] && !r.argument_probe_mask);
+            if(r.published_mask&(1u<<owner))CHECK(r.cost[owner].work<=1);
+            CHECK(r.cost[1-owner].requested_bytes && r.cost[1-owner].requested_call_bytes && r.cost[1-owner].work);
+            CHECK(r.cost[1-owner].requested_bytes==reference.cost[1-owner].requested_bytes);
+            CHECK(r.cost[1-owner].requested_call_bytes==reference.cost[1-owner].requested_call_bytes);
+            CHECK(r.cost[1-owner].work==reference.cost[1-owner].work);
+            printf("For-in early work backend=%u scenario=%u owner=%u cap=1 fault=%u faultPhase=%u faultObserved=%u publishedMask=%u published=%u disposals=%u unaffected=%u sites=%zu firstWork0=%llu firstWork1=%llu value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu argumentProbeMask=%u originalOwnerContinuation codeLease1 physical0/0\n",backend,scenario,owner,r.fault,r.fault_phase,r.fault_observed,r.published_mask,r.published,r.disposals,(unsigned)r.unaffected[1-owner],r.sites,(unsigned long long)r.fault_cost[0].work,(unsigned long long)r.fault_cost[1].work,(unsigned long long)r.cost[0].requested_bytes,(unsigned long long)r.cost[0].requested_call_bytes,(unsigned long long)r.cost[0].work,(unsigned long long)r.cost[1].requested_bytes,(unsigned long long)r.cost[1].requested_call_bytes,(unsigned long long)r.cost[1].work,r.argument_probe_mask);
+        }
     }
 }
 int main(int argc,char **argv) {
     CHECK(argc>=3);(void)forin_resource_original_main;const char *names[]={"0","1","vm","native"};unsigned backend=0;
     while(backend<4 && strcmp(argv[1],names[backend]))++backend;CHECK(backend<4);
     if(!strcmp(argv[2],"early-work")){CHECK(argc==3);forin_resource_early_work(backend);return 0;}
+    if(!strcmp(argv[2],"census-no-argument-probe")) {
+        CHECK(argc==3);
+        for(unsigned scenario=0;scenario<12;++scenario)for(unsigned close=0;close<2;++close)for(unsigned drop=0;drop<2;++drop) {
+            ForinResourceSpec spec={backend,scenario,3,0,close,drop};ForinResourceResult normal=forin_resource_baseline(&spec);
+            (void)forin_resource_without_argument_probe(&spec,&normal);
+        }
+        return 0;
+    }
     if(!strcmp(argv[2],"census")) {
         CHECK(argc==3);
         for(unsigned scenario=0;scenario<12;++scenario)for(unsigned close=0;close<2;++close)for(unsigned drop=0;drop<2;++drop) {
@@ -53,17 +82,21 @@ int main(int argc,char **argv) {
     if(!strcmp(argv[2],"axes")){CHECK(argc==8);forin_resource_axes(&spec,&normal);return 0;}
     CHECK(argc==11 && !strcmp(argv[2],"fi"));unsigned begin=forin_resource_number(argv[8]),end=forin_resource_number(argv[9]),expected=forin_resource_number(argv[10]);
     CHECK(begin<end && end<=expected && normal.sites==expected);
+    ForinResourceResult without_probe=normal;
+    if(spec.mode==3)without_probe=forin_resource_without_argument_probe(&spec,&normal);
     for(unsigned site=begin;site<end;++site) {
         printf("For-in FI start backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u site=%u of%u\n",spec.backend,spec.scenario,spec.mode,spec.prefix,spec.close,spec.drop,site,expected);fflush(stdout);
-        ForinResourceResult failed=forin_resource_operation(&spec,site,NULL,0);
-        printf("For-in FI result backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u site=%u sites=%zu hit=%u fault=%u faultOwner=%u faultPhase=%u faultObserved=%u publishedMask=%u unaffected0=%u unaffected1=%u value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu physical0/0\n",
-            spec.backend,spec.scenario,spec.mode,spec.prefix,spec.close,spec.drop,site,failed.sites,(unsigned)failed.hit,failed.fault,failed.fault_owner,failed.fault_phase,failed.fault_observed,failed.published_mask,(unsigned)failed.unaffected[0],(unsigned)failed.unaffected[1],(unsigned long long)failed.cost[0].requested_bytes,(unsigned long long)failed.cost[0].requested_call_bytes,(unsigned long long)failed.cost[0].work,(unsigned long long)failed.cost[1].requested_bytes,(unsigned long long)failed.cost[1].requested_call_bytes,(unsigned long long)failed.cost[1].work);fflush(stdout);
+        ForinResourceResult failed=forin_resource_operation(&spec,site,NULL,0,false);
+        printf("For-in FI result backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u site=%u sites=%zu hit=%u fault=%u faultOwner=%u faultPhase=%u faultObserved=%u publishedMask=%u argumentProbeMask=%u unaffected0=%u unaffected1=%u value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu physical0/0\n",
+            spec.backend,spec.scenario,spec.mode,spec.prefix,spec.close,spec.drop,site,failed.sites,(unsigned)failed.hit,failed.fault,failed.fault_owner,failed.fault_phase,failed.fault_observed,failed.published_mask,failed.argument_probe_mask,(unsigned)failed.unaffected[0],(unsigned)failed.unaffected[1],(unsigned long long)failed.cost[0].requested_bytes,(unsigned long long)failed.cost[0].requested_call_bytes,(unsigned long long)failed.cost[0].work,(unsigned long long)failed.cost[1].requested_bytes,(unsigned long long)failed.cost[1].requested_call_bytes,(unsigned long long)failed.cost[1].work);fflush(stdout);
         CHECK(!failed.complete && failed.hit && failed.fault==XR_XIR_CALL_OOM);
         CHECK(failed.fault_owner<2 && failed.unaffected[1-failed.fault_owner]);
         unsigned healthy=1-failed.fault_owner;
-        CHECK(failed.cost[healthy].requested_bytes==normal.cost[healthy].requested_bytes);
-        CHECK(failed.cost[healthy].requested_call_bytes==normal.cost[healthy].requested_call_bytes);
-        CHECK(failed.cost[healthy].work==normal.cost[healthy].work);
+        CHECK(!(failed.argument_probe_mask&~3u) && (spec.mode==3 || !failed.argument_probe_mask));
+        const ForinResourceResult *reference=(spec.mode==3 && !(failed.argument_probe_mask&(1u<<healthy)))?&without_probe:&normal;
+        CHECK(failed.cost[healthy].requested_bytes==reference->cost[healthy].requested_bytes);
+        CHECK(failed.cost[healthy].requested_call_bytes==reference->cost[healthy].requested_call_bytes);
+        CHECK(failed.cost[healthy].work==reference->cost[healthy].work);
     }
     printf("For-in completeFI backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u range=%u:%u of%u everyOriginalOrdinal typedOOM physical0/0\n",spec.backend,spec.scenario,spec.mode,spec.prefix,spec.close,spec.drop,begin,end,expected);
     return 0;

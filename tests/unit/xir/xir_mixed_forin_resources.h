@@ -79,6 +79,7 @@ typedef struct ForinResourceResult {
     unsigned phase,polls,published,disposals,entered,registered,root_registered,root_frontier,root_mask;
     unsigned terminal,control,fault,fault_owner,fault_phase,fault_observed,published_mask,outputs[2][8],output_count[2];
     bool unaffected[2];
+    unsigned argument_probe_mask;
     bool complete,hit,policy;
 } ForinResourceResult;
 typedef enum ForinResourceStage {
@@ -96,7 +97,8 @@ typedef struct ForinResourceRun {
     unsigned phase,polls,entered,registered,root_registered,root_frontier,root_mask,terminal,control;
     unsigned owner,first_fault_owner,first_fault_phase,fault_observed;
     unsigned committed[8],committed_count,pending,root_pending;
-    bool complete,published[2],faulted[2],selected,policy;
+    unsigned argument_probe_mask;
+    bool complete,published[2],faulted[2],selected,policy,omit_argument_probe;
 } ForinResourceRun;
 static void forin_resource_fault(ForinResourceRun *run) {
     CHECK(run->owner<2);run->complete=false;run->faulted[run->owner]=true;
@@ -151,11 +153,12 @@ static bool forin_resource_make(ForinResourceRun *run,unsigned owner) {
 }
 static bool forin_resource_start_root(ForinResourceRun *run,const ForinResourceSpec *spec,unsigned owner) {
     ++run->phase;run->owner=owner;ForinTrace *trace=&run->traces[owner];
-        if(spec->mode==3 && run->traces[1-owner].iterator.type) {
+        if(spec->mode==3 && !run->omit_argument_probe && run->traces[1-owner].iterator.type) {
             XrXirValue foreign[]={run->traces[1-owner].iterator,{XR_XIR_I64,0,0}};
             uint64_t epoch=trace->instance->epoch;size_t attempts=runtime_attempts;
             if(!forin_resource_status(run,xr_xir_instance_start(trace->instance,p20_iterator_lifetime_entries[3],foreign,2),XR_XIR_CALL_BAD_ARGUMENT))return false;
             CHECK(epoch==trace->instance->epoch && attempts==runtime_attempts && !trace->output_count);
+            run->argument_probe_mask|=1u<<owner;
         }
         XrXirValue args[]={trace->iterator,{XR_XIR_I64,0,spec->scenario>=2?spec->scenario-2:0}};
         unsigned operation=spec->scenario<2?spec->scenario+1:3;
@@ -332,13 +335,14 @@ static void forin_resource_retire(ForinResourceRun *run,const ForinResourceSpec 
     }
     CHECK(attempts==runtime_attempts);
 }
-static ForinResourceResult forin_resource_operation(const ForinResourceSpec *spec,size_t failure,const XrXirInstanceConfig *limits,unsigned limited_owner) {
+static ForinResourceResult forin_resource_operation(const ForinResourceSpec *spec,size_t failure,const XrXirInstanceConfig *limits,unsigned limited_owner,bool omit_argument_probe) {
     CHECK(spec->backend<4 && spec->scenario<12 && spec->mode<=3 && spec->close<2 && spec->drop<2 && limited_owner<2);
+    CHECK(!omit_argument_probe || (failure==SIZE_MAX && !limits && spec->mode==3));
     CHECK(spec->mode==3 || spec->prefix<=forin_resource_polls[spec->scenario]);
     CHECK(!runtime_live && !runtime_bytes && !effects_compile_live && !forin_borrowed_domain[0] && !forin_borrowed_domain[1]);
     runtime_attempts=0;runtime_fail_at=SIZE_MAX;memset(forin_final_cost,0,sizeof(forin_final_cost));
     memset(forin_previous_cost,0,sizeof(forin_previous_cost));memset(forin_domain_disposals,0,sizeof(forin_domain_disposals));
-    ForinResourceRun run={.fault=limits?XR_XIR_CALL_LIMIT:XR_XIR_CALL_OOM,.complete=true,.first_fault_owner=2};ForinResourceResult result={0};
+    ForinResourceRun run={.fault=limits?XR_XIR_CALL_LIMIT:XR_XIR_CALL_OOM,.complete=true,.first_fault_owner=2,.omit_argument_probe=omit_argument_probe};ForinResourceResult result={0};
     XrXirProgram *program=iterator_program(&run.fixture,spec->backend);result.setup=runtime_attempts;CHECK(!runtime_live && !runtime_bytes);
     XrXirInstanceConfig configs[2];for(unsigned owner=0;owner<2;++owner)CHECK(xr_xir_instance_config_init(&configs[owner],sizeof(configs[owner]))==XR_XIR_CALL_READY);
     if(limits)configs[limited_owner]=*limits;
@@ -362,15 +366,16 @@ static ForinResourceResult forin_resource_operation(const ForinResourceSpec *spe
         else CHECK(!result.cost[owner].requested_bytes && !result.cost[owner].requested_call_bytes && !result.cost[owner].work);
         result.output_count[owner]=run.traces[owner].output_count;memcpy(result.outputs[owner],run.traces[owner].output,sizeof(result.outputs[owner]));
     }
-    result.sites=runtime_attempts;result.complete=run.complete;result.hit=failure!=SIZE_MAX && runtime_attempts>failure;result.policy=run.policy;
+    result.sites=runtime_attempts;result.complete=run.complete;result.hit=failure!=SIZE_MAX && runtime_attempts>failure;result.policy=run.policy;result.argument_probe_mask=run.argument_probe_mask;
     result.phase=run.phase;result.polls=run.polls;result.entered=run.entered;result.registered=run.registered;result.root_registered=run.root_registered;result.root_frontier=run.root_frontier;result.root_mask=run.root_mask;
     result.terminal=run.terminal;result.control=run.control;result.fault=run.accepted_fault;result.fault_owner=run.first_fault_owner;result.fault_phase=run.first_fault_phase;result.fault_observed=run.fault_observed;runtime_fail_at=SIZE_MAX;
     CHECK(!runtime_live && !runtime_bytes && !effects_compile_live && !effects_compile_bytes);return result;
 }
 static ForinResourceResult forin_resource_baseline(const ForinResourceSpec *spec) {
-    ForinResourceResult r=forin_resource_operation(spec,SIZE_MAX,NULL,0);
+    ForinResourceResult r=forin_resource_operation(spec,SIZE_MAX,NULL,0,false);
     CHECK(r.complete && r.published==2 && r.disposals==2 && !r.setup && r.sites && r.sites<20000 && !r.fault);
     CHECK(r.unaffected[0] && r.unaffected[1]);
+    CHECK(r.argument_probe_mask==(spec->mode==3?3u:0u));
     printf("For-in resources backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u sites=%zu polls=%u phase=%u policy=%u entered=%u registered=%u rootRegistered=%u rootFrontier=%u rootMask=%u terminal=%u control=%u value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu originalDomains2 lastReferenceZero2 codeLease1 noAllocateDrop physical0/0\n",spec->backend,spec->scenario,spec->mode,spec->prefix,spec->close,spec->drop,r.sites,r.polls,r.phase,(unsigned)r.policy,r.entered,r.registered,r.root_registered,r.root_frontier,r.root_mask,r.terminal,r.control,(unsigned long long)r.cost[0].requested_bytes,(unsigned long long)r.cost[0].requested_call_bytes,(unsigned long long)r.cost[0].work,(unsigned long long)r.cost[1].requested_bytes,(unsigned long long)r.cost[1].requested_call_bytes,(unsigned long long)r.cost[1].work);return r;
 }
 static void forin_resource_axes(const ForinResourceSpec *spec,const ForinResourceResult *normal) {
@@ -379,7 +384,7 @@ static void forin_resource_axes(const ForinResourceSpec *spec,const ForinResourc
         for(unsigned axis=0;axis<3;++axis)for(unsigned minus=0;minus<2;++minus) {
             CHECK(fees[axis]>1);XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
             uint64_t cap=fees[axis]-minus;if(!axis)config.requested_value_limit=cap;else if(axis==1)config.requested_call_limit=cap;else config.work_limit=cap;
-            ForinResourceResult r=forin_resource_operation(spec,SIZE_MAX,&config,owner);
+            ForinResourceResult r=forin_resource_operation(spec,SIZE_MAX,&config,owner,false);
             printf("For-in axis backend=%u scenario=%u mode=%u prefix=%u close=%u drop=%u owner=%u axis=%u minus=%u cap=%llu complete=%u fault=%u faultOwner=%u faultPhase=%u faultObserved=%u publishedMask=%u phase=%u unaffected0=%u unaffected1=%u firstWork0=%llu firstWork1=%llu value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu physical0/0\n",spec->backend,spec->scenario,spec->mode,spec->prefix,spec->close,spec->drop,owner,axis,minus,(unsigned long long)cap,(unsigned)r.complete,r.fault,r.fault_owner,r.fault_phase,r.fault_observed,r.published_mask,r.phase,(unsigned)r.unaffected[0],(unsigned)r.unaffected[1],(unsigned long long)r.fault_cost[0].work,(unsigned long long)r.fault_cost[1].work,(unsigned long long)r.cost[0].requested_bytes,(unsigned long long)r.cost[0].requested_call_bytes,(unsigned long long)r.cost[0].work,(unsigned long long)r.cost[1].requested_bytes,(unsigned long long)r.cost[1].requested_call_bytes,(unsigned long long)r.cost[1].work);fflush(stdout);
             CHECK(r.complete==!minus && r.fault==(unsigned)(minus?XR_XIR_CALL_LIMIT:XR_XIR_CALL_READY));
             CHECK(r.unaffected[1-owner]);

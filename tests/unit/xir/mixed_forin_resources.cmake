@@ -10,3 +10,10 @@ else()
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/forin_resource_cases.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/forin_resource_fi_cases.cmake")
+foreach(backend IN ITEMS 0 1 vm native)
+    add_test(NAME test_xir_mixed_forin_no_argument_probe_${backend}
+        COMMAND test_xir_mixed_forin_resources ${backend} census-no-argument-probe)
+    set_tests_properties(test_xir_mixed_forin_no_argument_probe_${backend} PROPERTIES
+        TIMEOUT 120 PROCESSORS 1 COST 10
+        LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;forin;resource")
+endforeach()
