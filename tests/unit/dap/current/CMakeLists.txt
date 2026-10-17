@@ -9,6 +9,10 @@ foreach(XR_DAP_INPUT IN LISTS XR_DAP_CURRENT_FIXTURES)
     configure_file("${XR_DAP_INPUT}" "${XR_DAP_FIXTURE_DIR}/${XR_DAP_INPUT_NAME}" COPYONLY)
 endforeach()
 
+if(WIN32)
+    add_subdirectory(process_handoff)
+endif()
+
 add_executable(test_xir_effects_compile_prefix test_effects_compile_prefix.c)
 target_link_libraries(test_xir_effects_compile_prefix PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_effects_compile_prefix PRIVATE

@@ -110,6 +110,10 @@ typedef struct XrProcSpawnOptions {
     XrProcImageMode image_mode;
     XrProcImageObserver image_observer;
     XrProcCompletionPolicy completion_policy;
+    /* Windows console children run without creating or inheriting a console.
+     * This is independent of process-group ownership; GUI windows are outside
+     * this request. POSIX spawn does not create a console window. */
+    bool no_console_window;
 } XrProcSpawnOptions;
 
 typedef struct XrProcImagePumpResult {
@@ -135,6 +139,19 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     const XrProcSpawnOptions *options, XrProcId *output);
 /* Only an owned new_process_group request can be closed. */
 XR_FUNC int xr_proc_close(XrProcId pid);
+/* Release an owned non-observed Windows group without terminating its leader
+ * or descendants. Serialize all operations on that group. The mandatory memory
+ * policy is borrowed only for this call; release allocates nothing and charges
+ * work before querying or changing job limits. Callback reentry cannot wait,
+ * close, kill the group or release it again.
+ *
+ * Failure before commit preserves *owner and the complete group. At commit the
+ * kill-on-close policy is revoked and *owner becomes XR_PROC_INVALID. A later
+ * handle-close error reports IO with *owner already invalid: target execution
+ * has been released and must not be aborted as though the transfer had failed.
+ * Success does not grant another owner or a waitable PID. Image-observed groups
+ * and POSIX release are unsupported and preserve *owner. */
+XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner, const XrProcMemory *memory);
 
 // Wait for the child identified by `pid` to exit. Blocks until the
 // child terminates. On a clean exit, writes the child's exit status

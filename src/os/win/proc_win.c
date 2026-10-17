@@ -38,6 +38,7 @@ typedef struct ProcLive {
     DWORD pid; HANDLE process, job; bool waited;
     DWORD debug_thread;
     ProcDebug *debug;
+    bool releasing;
 } ProcLive;
 static ProcLive g_live[XR_PROC_MAX_LIVE];
 static SRWLOCK g_live_lock = SRWLOCK_INIT;
@@ -464,7 +465,7 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     }
     if (!proc_work(&b, 1)) goto done;
     if (!CreateProcessW(program, command, NULL, NULL, attributes_ready, CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED |
-        (o->new_process_group ? CREATE_NO_WINDOW : 0) | (debug ? DEBUG_PROCESS : 0) |
+        ((o->new_process_group || o->no_console_window) ? CREATE_NO_WINDOW : 0) | (debug ? DEBUG_PROCESS : 0) |
         (attributes_ready ? EXTENDED_STARTUPINFO_PRESENT : 0) | ((o->detached || o->new_process_group) ? CREATE_NEW_PROCESS_GROUP : 0), environment, cwd, &si.StartupInfo, &pi)) { b.status = xr_proc_last_error(); goto done; }
     started = true; if (debug) debug->root = pi.dwProcessId;
     if (job) {
@@ -475,7 +476,7 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
     if (ResumeThread(pi.hThread) == (DWORD)-1) { b.status = xr_proc_last_error(); goto done; }
     if (slot >= 0) {
         AcquireSRWLockExclusive(&g_live_lock);
-        g_live[slot] = (ProcLive){pi.dwProcessId, pi.hProcess, job, false, debug_thread, debug};
+        g_live[slot] = (ProcLive){pi.dwProcessId, pi.hProcess, job, false, debug_thread, debug, false};
         debug = NULL;
         ReleaseSRWLockExclusive(&g_live_lock); pi.hProcess = NULL; job = NULL;
     }
@@ -549,7 +550,8 @@ XR_FUNC XrOsProcStatus xr_proc_pump_images(XrProcId pid, XrProcImagePumpResult *
 static XrProcWaitResult proc_wait(XrProcId pid, DWORD timeout, int *exit_code) {
     HANDLE lease = NULL, original = NULL;
     AcquireSRWLockExclusive(&g_live_lock); ProcLive *p = proc_find(pid);
-    if (p && p->debug && (p->debug->thread != GetCurrentThreadId() || p->debug->pumping || timeout == INFINITE)) {
+    if (p && (p->releasing || (p->debug &&
+        (p->debug->thread != GetCurrentThreadId() || p->debug->pumping || timeout == INFINITE)))) {
         ReleaseSRWLockExclusive(&g_live_lock); SetLastError(ERROR_INVALID_PARAMETER); return XR_PROC_WAIT_ERROR;
     }
     if (p && !p->waited) {
@@ -591,12 +593,12 @@ XR_FUNC int xr_proc_kill(XrProcId pid, int signal) {
 }
 XR_FUNC int xr_proc_kill_tree(XrProcId pid, int signal) {
     AcquireSRWLockExclusive(&g_live_lock); ProcLive *p = proc_find(pid);
-    bool ok = p && p->job && signal > 0 && TerminateJobObject(p->job, XR_PROC_KILLED_EXIT_CODE);
+    bool ok = p && p->job && !p->releasing && signal > 0 && TerminateJobObject(p->job, XR_PROC_KILLED_EXIT_CODE);
     ReleaseSRWLockExclusive(&g_live_lock); return ok ? 0 : -1;
 }
 XR_FUNC int xr_proc_close(XrProcId pid) {
     AcquireSRWLockExclusive(&g_live_lock); ProcLive *p = proc_find(pid); ProcLive owner = {0};
-    if (p && p->debug && (p->debug->thread != GetCurrentThreadId() || p->debug->pumping)) {
+    if (p && (p->releasing || (p->debug && (p->debug->thread != GetCurrentThreadId() || p->debug->pumping)))) {
         ReleaseSRWLockExclusive(&g_live_lock); SetLastError(ERROR_INVALID_PARAMETER); return -1;
     }
     if (p && p->job) { owner = *p; memset(p, 0, sizeof(*p)); }
@@ -616,9 +618,12 @@ XR_FUNC int xr_proc_close(XrProcId pid) {
         if (!proc_debug_cleanup(owner.debug, owner.process)) ok = false;
         owner.debug->memory.free(owner.debug->memory.context, owner.debug);
     } else if (!owner.waited) {
-        if (!TerminateProcess(owner.process, XR_PROC_KILLED_EXIT_CODE) && WaitForSingleObject(owner.process, 0) != WAIT_OBJECT_0) ok = false;
+        /* Job termination already revoked execution. A second termination can
+         * race the leader's final signal and report a spurious ACCESS_DENIED. */
+        if (!job_stopped && !TerminateProcess(owner.process, XR_PROC_KILLED_EXIT_CODE) && WaitForSingleObject(owner.process, 0) != WAIT_OBJECT_0) ok = false;
         if (WaitForSingleObject(owner.process, INFINITE) != WAIT_OBJECT_0) ok = false;
     }
     if (!CloseHandle(owner.process)) ok = false;
     return ok ? 0 : -1;
 }
+#include "proc_handoff_win.inc.c"
