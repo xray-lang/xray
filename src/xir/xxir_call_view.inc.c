@@ -101,7 +101,9 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_drop(XrXirCallView *view,XrXirValue *v
     XR_CHECK(status==XR_XIR_VALUE_OK,"prepaid binding retirement cannot fail");return status;
 }
 static XrXirValueStatus call_view_reserve(CallViewCreation *c) {
+    c->call->admitting=true;
     XrXirValueStatus collected=call_view_collect(c->call,true);
+    c->call->admitting=false;
     if (collected!=XR_XIR_VALUE_OK) return collected;
     /* The pin, registry write, terminal traversal and revocation never need
      * a fresh allocation or quota after the view constructor commits its COW. */
@@ -166,6 +168,29 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_reborrow(XrXirCallView *view,XrXirType
     XrXirValue created={0};XrXirViewAccess access={&c.call->config.admission,call_view_parent_authorize,&c};
     c.call->admitting=true;
     status=xr_xir_view_reborrow(type,parent,&c.spec,&access,&created);
+    call_view_finish(&c,status,&created,output);return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_call_view_local(XrXirCallView *view,XrXirType type,
+    const XrXirValue *root,int64_t offset,int64_t length,XrXirValue *output) {
+    CallViewCreation c={0};XrXirValueStatus status=call_view_prepare(view,type,output,&c);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!call_view_slot(c.frame,root) || !xr_xir_value_valid(root) ||
+        xr_xir_cell_is_projection(root) || xr_xir_cell_module_storage(root) ||
+        offset<0 || length<0) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(c.call->config.admission.arena);
+    const XrXirTypeNode *cell=xr_xir_type_node(types,(XrXirType)root->type);
+    const XrXirTypeNode *result=xr_xir_type_node(types,type);
+    const XrXirTypeNode *array=cell ? xr_xir_type_node(types,cell->element) : NULL;
+    bool string=cell && cell->kind==XR_XIR_TYPE_CELL && cell->element==XR_XIR_STRING;
+    if (!cell || cell->kind!=XR_XIR_TYPE_CELL ||
+        (string ? c.spec.kind!=XR_XIR_TYPE_SLICE || result->element!=XR_XIR_U8 :
+         !array || array->kind!=XR_XIR_TYPE_ARRAY || result->element!=array->element)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    c.spec.authority=c.spec.kind==XR_XIR_TYPE_SLICE ? frame_cell_authority(c.call,c.frame) :
+        (XrXirCellAuthority){c.call,output,c.frame->epoch};
+    c.spec.offset=offset;c.spec.length=length;status=call_view_reserve(&c);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    XrXirValue created={0};c.call->admitting=true;
+    status=xr_xir_view_new(type,root,NULL,&c.spec,&c.call->config.admission,&created);
     call_view_finish(&c,status,&created,output);return status;
 }
 static void frame_view_release(XrXirCall *call,CallFrame *frame) {

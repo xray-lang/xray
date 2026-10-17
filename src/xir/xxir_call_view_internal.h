@@ -20,6 +20,11 @@
  * No caller-supplied authority, binding flag or copied callback is accepted. */
 XR_FUNC XrXirValueStatus xr_xir_call_view_new(XrXirCallView *view,
     XrXirType type,uint32_t parameter,int64_t offset,int64_t length,XrXirValue *output);
+/* A local root is an owned unpublished whole Cell in this actual frame's state. Existing
+ * exclusive loans cannot be bypassed through a copied Cell handle. The native
+ * producer owns the state values; this grants no Source binding/NLL proof. */
+XR_FUNC XrXirValueStatus xr_xir_call_view_local(XrXirCallView *view,
+    XrXirType type,const XrXirValue *root,int64_t offset,int64_t length,XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_call_view_reborrow(XrXirCallView *view,
     XrXirType type,const XrXirValue *parent,int64_t offset,int64_t length,XrXirValue *output);
 /* The caller keeps the Call alive while using this borrowed object. Every use
