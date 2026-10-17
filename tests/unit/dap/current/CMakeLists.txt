@@ -352,8 +352,26 @@ set_tests_properties(test_dap_values PROPERTIES TIMEOUT 120 LABELS "dap;values;j
 if(XR_BUILD_DAP)
     set(XR_DAP_SCRIPT_DIR "${CMAKE_CURRENT_BINARY_DIR}/worker-scripts")
     file(MAKE_DIRECTORY "${XR_DAP_SCRIPT_DIR}")
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio_client.py ${XR_DAP_SCRIPT_DIR}/test_stdio_client.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stdio_win_debug.py ${XR_DAP_SCRIPT_DIR}/stdio_win_debug.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio_handoff.py ${XR_DAP_SCRIPT_DIR}/test_stdio_handoff.py COPYONLY)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio_worker.py ${XR_DAP_SCRIPT_DIR}/test_stdio_worker.py COPYONLY)
     if(WIN32)
+        foreach(XR_DAP_HANDOFF_MODE death fault resources)
+            set(XR_DAP_HANDOFF_ARGS --case postcommit_death)
+            if(XR_DAP_HANDOFF_MODE STREQUAL "fault")
+                set(XR_DAP_HANDOFF_ARGS --case query_reject)
+            elseif(XR_DAP_HANDOFF_MODE STREQUAL "resources")
+                set(XR_DAP_HANDOFF_ARGS --resources)
+            endif()
+            add_test(NAME dap_current_stdio_handoff_${XR_DAP_HANDOFF_MODE} COMMAND ${XRAY_PYTHON} ${XR_DAP_SCRIPT_DIR}/test_stdio_handoff.py
+                --xray $<TARGET_FILE:xray> --paused-fixture ${XR_DAP_FIXTURE_DIR}/threads_fixture.xr
+                --streams-fixture ${XR_DAP_FIXTURE_DIR}/worker_streams_fixture.xr ${XR_DAP_HANDOFF_ARGS}
+                --transcript ${CMAKE_CURRENT_BINARY_DIR}/handoff-${XR_DAP_HANDOFF_MODE}.json)
+            set_tests_properties(dap_current_stdio_handoff_${XR_DAP_HANDOFF_MODE} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE
+                ENVIRONMENT "PYTHONUTF8=1" LABELS "dap;stdio;handoff;process;ownership")
+        endforeach()
+        set_tests_properties(dap_current_stdio_handoff_resources PROPERTIES LABELS "dap;stdio;handoff;process;ownership;resources;fault-injection")
         foreach(XR_DAP_WORKER_MODE unstarted stopped running timer attach output-closed frontend-killed terminate output-normal streams unicode timer-killed)
             set(XR_DAP_WORKER_SOURCE threads_fixture.xr)
             if(XR_DAP_WORKER_MODE STREQUAL "unstarted")
