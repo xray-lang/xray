@@ -659,7 +659,7 @@ def expected_rows():
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
-    return rows
+    return rows+[stack_entry_expected_row()]
 
 
 def named_expected_rows():
@@ -674,4 +674,93 @@ def named_expected_rows():
             'required_original_assertion_results':body.get('assertion_results',[]),
             'model':'Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.'})
         if name in _NAMED_CHANNEL_PROGRAMS or name in _CANCEL_NAMED:rows[-1]['required_semantic_trace']=body['semantic_trace']
-    return rows
+    return rows+[stack_named_expected_row()]
+
+_STACK_SOURCE = 'tests/regression/11_coroutine/1149_module_call_stack_grow.xr'
+_STACK_HELPER = 'tests/regression/11_coroutine/modules/big_stack.xr'
+_STACK_FIXTURE = 'tests/unit/xir/legacy_consumers/fixtures/stack_call_obs/root.xr'
+_STACK_FIXTURE_HELPER = 'tests/unit/xir/legacy_consumers/fixtures/stack_call_obs/modules/big_stack.xr'
+_STACK_ENTRY_ID = 'complete_stack_call_run'
+_STACK_NAMED_ID = 'complete_stack_call_named'
+_STACK_TESTS = ('test_invoke_grows_combined_slab','test_invoke_main_coro','test_repeated_go_reuses_slab')
+_STACK_INPUTS = {'tests/regression/11_coroutine/1149_module_call_stack_grow.xr': 'b1deea660566ad74c64c29594657e775d282ccb77d48cc66812653d84e58533f', 'tests/regression/11_coroutine/modules/big_stack.xr': 'defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2', 'tests/unit/xir/legacy_consumers/fixtures/stack_call_obs/root.xr': 'c4bee90c801e67b2e881c49e6c1edb83e141872c814d8ad13b862267a9bbcd78', 'tests/unit/xir/legacy_consumers/fixtures/stack_call_obs/modules/big_stack.xr': 'defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2', 'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677', 'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915', 'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d', 'spec/source/sections/011-10-concurrency-and-coroutines.md': '27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea'}
+_STACK_TRANSFORMS = [('    assertEqual(d12, d23)\n    assert(r1 > 0)\n    assert(r2 > r1)\n', '    assertEqual(d12, d23)\n    assert(r1 > 0)\n    assert(r2 > r1)\n    print(r1)\n    print(r2)\n    print(r3)\n    print(d12)\n    print(d23)\n'), ('    var r = worker(0)\n    assert(r > 0)\n', '    var r = worker(0)\n    assert(r > 0)\n    print(r)\n'), ('        var r = await t\n        assert(r > 0)\n        i = i + 1\n', '        var r = await t\n        assert(r > 0)\n        print(r)\n        i = i + 1\n')]
+
+
+def stack_wide(seed):
+    values=[seed+index for index in range(30)]
+    return sum(values)
+
+
+def stack_worker(seed,wide=stack_wide):
+    if type(seed) is not int or seed not in {*range(32),100,200}:
+        raise ValueError('Outside selected complete stack-call inputs')
+    worker_locals=[seed+index for index in range(10)]
+    middle_seed=worker_locals[-1];middle_locals=[middle_seed+index for index in range(16)]
+    wide_seed=middle_locals[-1];result=wide(wide_seed)+sum(middle_locals)+sum(worker_locals)
+    return {'seed':seed,'worker_locals':worker_locals,'middle_locals':middle_locals,
+            'wide_seed':wide_seed,'wide_locals':[wide_seed+index for index in range(30)],
+            'result':result}
+
+
+def stack_call_trace(wide=stack_wide):
+    asynchronous=[stack_worker(seed,wide)['result'] for seed in (0,100,200)]
+    d12=asynchronous[1]-asynchronous[0];d23=asynchronous[2]-asynchronous[1]
+    direct=stack_worker(0,wide)['result'];reused=[stack_worker(seed,wide)['result'] for seed in range(32)]
+    checks=[d12==d23,asynchronous[0]>0,asynchronous[1]>asynchronous[0],direct>0,*[value>0 for value in reused]]
+    values={_STACK_TESTS[0]:asynchronous+[d12,d23],_STACK_TESTS[1]:[direct],_STACK_TESTS[2]:reused}
+    return {'per_test_values':values,'assertion_results':checks,'original_test_names':list(_STACK_TESTS),
+            'original_assertion_executions':36,'worker_call_inputs':[0,100,200,0,*range(32)],
+            'source_worker_calls':36,'source_go_calls':35,'source_await_calls':35,
+            'source_Chain_constructor_calls':36,'source_middle_calls':36,'source_wide_calls':36,
+            'source_local_declarations':{'worker':10,'middle':16,'wide':30},
+            'original_reuse_iterations':32,'original_print_sites':0,'added_observation_print_sites':7,
+            'added_runtime_observation_lines':38,'host_orXray_queries':0,
+            'actual_frame_layout_growth_pool_reuse_FI_resources_lifetime_safety_providers_or_mixed_qualified':False}
+
+
+def validate_stack_inputs():
+    required={_STACK_SOURCE,_STACK_HELPER,_STACK_FIXTURE,_STACK_FIXTURE_HELPER,
+              'spec/source/sections/003-2-type-system.md','spec/source/sections/005-4-statements.md',
+              'spec/source/sections/006-5-declarations.md','spec/source/sections/011-10-concurrency-and-coroutines.md'}
+    if set(_STACK_INPUTS)!=required or len(_STACK_TRANSFORMS)!=3:
+        raise ValueError('Complete stack-call source/helper/authority or observation plan lost')
+    for name,digest in _STACK_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Complete stack-call input changed: '+name)
+    source=(ROOT/_STACK_SOURCE).read_text(encoding='utf-8');rebuilt=source
+    for before,after in _STACK_TRANSFORMS:
+        if rebuilt.count(before)!=1:raise ValueError('Stack observation must retain one exact original assertion block')
+        rebuilt=rebuilt.replace(before,after,1)
+    if (ROOT/_STACK_FIXTURE).read_text(encoding='utf-8')!=rebuilt:
+        raise ValueError('Stack fixture changed original bodies beyond added scalar prints')
+    if (ROOT/_STACK_HELPER).read_bytes()!=(ROOT/_STACK_FIXTURE_HELPER).read_bytes():
+        raise ValueError('Imported wide/middle helper copy changed')
+    if re.findall(r'@test\s+fn\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(',source)!=list(_STACK_TESTS):
+        raise ValueError('Complete stack-call named body set or order changed')
+
+
+def stack_entry_expected_row():
+    validate_stack_inputs()
+    return {'id':_STACK_ENTRY_ID,'source':_STACK_SOURCE,'original_source':_STACK_SOURCE,
+            'required_target':None,'expected':{'exit_code':0,'stdout_utf8':'','stderr_utf8':''},
+            'observation_count':0,'required_companions':[{'path':_STACK_HELPER,'lf_sha256':_STACK_INPUTS[_STACK_HELPER]}],
+            'separate_named_body_obligation':{'names':list(_STACK_TESTS),'executed_by_run':False,
+                'required_all36worker_calls_and36assertions':True,'qualification':'OPEN_REQUIRES_ALL_THREE_NAMED_BODIES_AND38EXACT_OBSERVATIONS'},
+            'model':'Complete unchanged standalone module imports its original big_stack helper anddeclares allthree named bodies withoutrootcalls;empty stdout is only standalone execution expectation. Itdoesnotexecute orqualifythethreebodies,35go/awaits,32reuseiterations,36worker/middle/widecalls,framegrowth,poolreuse oranyphysical/resource/safety/provider/mixed duty.'}
+
+
+def stack_named_expected_row():
+    validate_stack_inputs();trace=stack_call_trace()
+    if len(trace['assertion_results'])!=36 or not all(trace['assertion_results']):
+        raise ValueError('Independent complete stack-call original assertions failed')
+    values=trace['per_test_values'];count=sum(map(len,values.values()))
+    if count!=38:raise ValueError('Stack-call exact observation count changed')
+    return {'id':_STACK_NAMED_ID,'source':_STACK_FIXTURE,'original_source':_STACK_SOURCE,
+            'required_target':None,'expected':{'exit_code':0,'stderr_utf8':'',
+                'stdout_utf8':''.join(str(value)+chr(10) for name in _STACK_TESTS for value in values[name]),
+                'required_test_names':list(_STACK_TESTS),
+                'per_test_observations':{name:{'values':values[name]} for name in _STACK_TESTS}},
+            'observation_count':38,'required_original_assertion_results':trace['assertion_results'],
+            'required_semantic_trace':trace,
+            'model':'Complete threeoriginalnamed bodies andunchanged importedChain/wide/middle helper:all30/16/10locals remaininSource,36worker/middle/widecalls,35go/awaits,all36originalassertionsand32reuseiterations retained. Independent exact sums giveworker(n)=56n+1464forselectedbounded inputs. Addprints ofresolvedscalarlocalsafteroriginalassertions:5firstbody/1directbody/32loop=38observations;nohelpercallorsideeffectisduplicated. RealCLI discoveryandfullVM/C/nativebodyinvocationsareseparate. Original64stack/4frames comments arehistoricalpurpose,notcurrentframe/slab/physicalreuse/FI/resource/lifetime/safety/provider/mixedqualification.'}

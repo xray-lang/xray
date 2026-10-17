@@ -82,7 +82,7 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(rows['complete_task_regression_1128_yield']['required_original_yield_checkpoints'],39)
 
     def test_declaration_only_modules_have_separate_full_named_body_requirements(self):
-        entries={x['id']:x for x in model.expected_rows()};named=model.named_expected_rows();self.assertEqual(len(named),13)
+        entries={x['id']:x for x in model.expected_rows()};named=[row for row in model.named_expected_rows() if row['id']!=model._STACK_NAMED_ID];self.assertEqual(len(named),13)
         for row in named:
             name=row['id'].removeprefix('complete_task_named_')
             self.assertEqual(entries['complete_task_regression_'+name]['expected']['stdout_utf8'],'')
@@ -107,7 +107,7 @@ class TaskRegressionTraces(unittest.TestCase):
 
     def test_complete_entries_and_named_bodies_use_their_own_real_routes(self):
         cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
-        for named,rows in [(False,model.expected_rows()),(True,model.named_expected_rows())]:
+        for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id']!=model._STACK_NAMED_ID])]:
             for expected in rows:
                 with self.subTest(case=expected['id']):
                     case=cases[expected['id']]
@@ -313,5 +313,63 @@ class TaskRegressionTraces(unittest.TestCase):
             elif name in roots:
                 self.assertTrue(any(row['source']==path and row['observation_count']==1 for row in model.expected_rows()))
         self.assertEqual(model._CANCEL_NAMED,{'1132_task_monitor':'test_task_monitor','1133_linked_scope_cancel':'test_linked_scope_cancel'})
+
+
+    def test_complete_stack_worker_chain_keeps_all_source_local_values(self):
+        for seed in (0,1,31,100,200):
+            trace=model.stack_worker(seed)
+            self.assertEqual(trace['worker_locals'],list(range(seed,seed+10)))
+            self.assertEqual(trace['middle_locals'],list(range(seed+9,seed+25)))
+            self.assertEqual(trace['wide_locals'],list(range(seed+24,seed+54)))
+            self.assertEqual(trace['result'],56*seed+1464)
+        self.assertEqual([model.stack_worker(n)['result'] for n in (0,100,200)],[1464,7064,12664])
+        for value in (-1,201,True):
+            with self.assertRaises(ValueError):model.stack_worker(value)
+
+    def test_complete_three_stack_bodies_preserve_32reuse_andall36assertions(self):
+        trace=model.stack_call_trace();values=trace['per_test_values']
+        self.assertEqual(values[model._STACK_TESTS[0]],[1464,7064,12664,5600,5600])
+        self.assertEqual(values[model._STACK_TESTS[1]],[1464])
+        self.assertEqual(values[model._STACK_TESTS[2]],[1464+56*i for i in range(32)])
+        self.assertEqual(values[model._STACK_TESTS[2]][-1],3200)
+        self.assertEqual(sum(map(len,values.values())),38);self.assertEqual(trace['assertion_results'],[True]*36)
+        self.assertEqual((trace['source_worker_calls'],trace['source_go_calls'],trace['source_await_calls']),(36,35,35))
+        self.assertEqual((trace['source_middle_calls'],trace['source_wide_calls'],trace['original_reuse_iterations']),(36,36,32))
+        self.assertEqual(trace['source_local_declarations'],{'worker':10,'middle':16,'wide':30})
+        self.assertFalse(trace['actual_frame_layout_growth_pool_reuse_FI_resources_lifetime_safety_providers_or_mixed_qualified'])
+
+    def test_wide_corruption_passes_old_assertions_but_fails_exact_stack_observations(self):
+        wrong=model.stack_call_trace(lambda seed:sum(seed+i for i in range(29)))
+        self.assertEqual(wrong['assertion_results'],[True]*36)
+        self.assertEqual(wrong['per_test_values'][model._STACK_TESTS[0]],[1411,6911,12411,5500,5500])
+        self.assertNotEqual(wrong['per_test_values'],model.stack_call_trace()['per_test_values'])
+        for order in __import__('itertools').permutations((0,100,200)):
+            completed={seed:model.stack_worker(seed)['result'] for seed in order}
+            self.assertEqual([completed[seed] for seed in (0,100,200)],[1464,7064,12664])
+
+    def test_stack_original_helper_and_observed_bodies_are_exactly_pinned(self):
+        saved=Path.read_bytes
+        for name in model._STACK_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==model.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.validate_stack_inputs()
+        with mock.patch.object(model,'_STACK_INPUTS',{}),self.assertRaises(ValueError):model.validate_stack_inputs()
+        with mock.patch.object(model,'_STACK_TRANSFORMS',[]),self.assertRaises(ValueError):model.validate_stack_inputs()
+        original=(model.ROOT/model._STACK_SOURCE).read_text(encoding='utf-8');observed=(model.ROOT/model._STACK_FIXTURE).read_text(encoding='utf-8')
+        self.assertEqual(original.count('@test'),3);self.assertEqual(original.count('print('),0)
+        self.assertEqual(observed.count('print('),7);self.assertIn('while (i < 32)',observed)
+        self.assertEqual((model.ROOT/model._STACK_HELPER).read_bytes(),(model.ROOT/model._STACK_FIXTURE_HELPER).read_bytes())
+
+    def test_stack_standalone_andall_named_observations_have_separate_product_routes(self):
+        cases={row['id']:row for row in json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases']}
+        entry=model.stack_entry_expected_row();named=model.stack_named_expected_row();run=cases[entry['id']];test=cases[named['id']]
+        self.assertEqual((run['source'],run['entry'],run['source_context']),(model._STACK_SOURCE,'run','original_absolute'))
+        self.assertEqual(run['stdout_utf8'],'');self.assertFalse(entry['separate_named_body_obligation']['executed_by_run'])
+        self.assertEqual((test['source'],test['entry']),(model._STACK_FIXTURE,'test'))
+        self.assertEqual(named['expected']['required_test_names'],list(model._STACK_TESTS))
+        self.assertEqual(test['stdout_utf8'],named['expected']['stdout_utf8']);self.assertEqual(len(test['stdout_utf8'].splitlines()),38)
+        self.assertEqual([x['expected'] for x in test['independent_observations']['values']],[v for values in model.stack_call_trace()['per_test_values'].values() for v in values])
+        self.assertEqual(test['companions'],[{'path':model._STACK_FIXTURE_HELPER,'lf_sha256':model._STACK_INPUTS[model._STACK_FIXTURE_HELPER]}])
+        self.assertEqual(run['companions'],[{'path':model._STACK_HELPER,'lf_sha256':model._STACK_INPUTS[model._STACK_HELPER]}])
 
 if __name__=='__main__':unittest.main()

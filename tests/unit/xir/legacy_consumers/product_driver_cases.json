@@ -33353,6 +33353,299 @@
         "Complete four sleeps/untimed andtimedchanneloperations/directRecvprint/threematches/finalclose retained. New genuineChannel timeout must remain distinct from preceding sleep status;actualscheduler/latency/cancel/cleanup/lifetime/FI/resources/safety/providers/mixed remainopen."
       ],
       "independent_observation_count": 4
+    },
+    {
+      "id": "complete_stack_call_run",
+      "oracle_id": "complete_stack_call_run",
+      "source": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
+      "source_lf_sha256": "b1deea660566ad74c64c29594657e775d282ccb77d48cc66812653d84e58533f",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/regression/11_coroutine/modules/big_stack.xr",
+          "lf_sha256": "defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P10",
+        "P09",
+        "P13"
+      ],
+      "independent_execution_model": "Complete unchanged standalone module imports its original big_stack helper anddeclares allthree named bodies withoutrootcalls;empty stdout is only standalone execution expectation. Itdoesnotexecute orqualifythethreebodies,35go/awaits,32reuseiterations,36worker/middle/widecalls,framegrowth,poolreuse oranyphysical/resource/safety/provider/mixed duty.",
+      "remaining_gates": [
+        "Standalone emptyentrydoesnotqualifyanynamedbody;allthreeCLI-discoveredcompletebodies,36worker/middle/widecalls,35go/awaits,32reuses,36assertionsand38exactVM/nativeobservationsmustremain. Realframegrowth/slab/poolreuse/FI/resources/ownership/lifetime/safety/providers/mixed remainOPEN."
+      ],
+      "source_context": "original_absolute"
+    },
+    {
+      "id": "complete_stack_call_named",
+      "oracle_id": "complete_stack_call_named",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/stack_call_obs/root.xr",
+      "source_lf_sha256": "c4bee90c801e67b2e881c49e6c1edb83e141872c814d8ad13b862267a9bbcd78",
+      "entry": "test",
+      "stdout_utf8": "1464\n7064\n12664\n5600\n5600\n1464\n1464\n1520\n1576\n1632\n1688\n1744\n1800\n1856\n1912\n1968\n2024\n2080\n2136\n2192\n2248\n2304\n2360\n2416\n2472\n2528\n2584\n2640\n2696\n2752\n2808\n2864\n2920\n2976\n3032\n3088\n3144\n3200\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [
+        {
+          "path": "tests/unit/xir/legacy_consumers/fixtures/stack_call_obs/modules/big_stack.xr",
+          "lf_sha256": "defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2"
+        }
+      ],
+      "owners": [
+        "P08",
+        "P10",
+        "P09",
+        "P13"
+      ],
+      "independent_execution_model": "Complete threeoriginalnamed bodies andunchanged importedChain/wide/middle helper:all30/16/10locals remaininSource,36worker/middle/widecalls,35go/awaits,all36originalassertionsand32reuseiterations retained. Independent exact sums giveworker(n)=56n+1464forselectedbounded inputs. Addprints ofresolvedscalarlocalsafteroriginalassertions:5firstbody/1directbody/32loop=38observations;nohelpercallorsideeffectisduplicated. RealCLI discoveryandfullVM/C/nativebodyinvocationsareseparate. Original64stack/4frames comments arehistoricalpurpose,notcurrentframe/slab/physicalreuse/FI/resource/lifetime/safety/provider/mixedqualification.",
+      "remaining_gates": [
+        "Standalone emptyentrydoesnotqualifyanynamedbody;allthreeCLI-discoveredcompletebodies,36worker/middle/widecalls,35go/awaits,32reuses,36assertionsand38exactVM/nativeobservationsmustremain. Realframegrowth/slab/poolreuse/FI/resources/ownership/lifetime/safety/providers/mixed remainOPEN."
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
+        "selected_complete_source": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
+        "selected_source_lf_sha256": "b1deea660566ad74c64c29594657e775d282ccb77d48cc66812653d84e58533f",
+        "method": "After unchanged original assertions print already-computed scalar locals;retain imported helper byte-for-byte,allcalls,locals,32loopiterations andallthree namedbodies;noexpression orhelpercall duplicated.",
+        "values": [
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "r1",
+            "expected": 1464,
+            "observation_index": 0
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "r2",
+            "expected": 7064,
+            "observation_index": 1
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "r3",
+            "expected": 12664,
+            "observation_index": 2
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "d12",
+            "expected": 5600,
+            "observation_index": 3
+          },
+          {
+            "test": "test_invoke_grows_combined_slab",
+            "expression": "d23",
+            "expected": 5600,
+            "observation_index": 4
+          },
+          {
+            "test": "test_invoke_main_coro",
+            "expression": "r",
+            "expected": 1464,
+            "observation_index": 0
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1464,
+            "observation_index": 0
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1520,
+            "observation_index": 1
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1576,
+            "observation_index": 2
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1632,
+            "observation_index": 3
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1688,
+            "observation_index": 4
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1744,
+            "observation_index": 5
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1800,
+            "observation_index": 6
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1856,
+            "observation_index": 7
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1912,
+            "observation_index": 8
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 1968,
+            "observation_index": 9
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2024,
+            "observation_index": 10
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2080,
+            "observation_index": 11
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2136,
+            "observation_index": 12
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2192,
+            "observation_index": 13
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2248,
+            "observation_index": 14
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2304,
+            "observation_index": 15
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2360,
+            "observation_index": 16
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2416,
+            "observation_index": 17
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2472,
+            "observation_index": 18
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2528,
+            "observation_index": 19
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2584,
+            "observation_index": 20
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2640,
+            "observation_index": 21
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2696,
+            "observation_index": 22
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2752,
+            "observation_index": 23
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2808,
+            "observation_index": 24
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2864,
+            "observation_index": 25
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2920,
+            "observation_index": 26
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 2976,
+            "observation_index": 27
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3032,
+            "observation_index": 28
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3088,
+            "observation_index": 29
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3144,
+            "observation_index": 30
+          },
+          {
+            "test": "test_repeated_go_reuses_slab",
+            "expression": "r",
+            "expected": 3200,
+            "observation_index": 31
+          }
+        ]
+      }
     }
   ]
 }
