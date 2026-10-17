@@ -107,7 +107,7 @@ static XrXirStatus error_marker_build(const XrXirCompileContext *work,const Effe
     if(!output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=XR_XIR_OK;EffectErrorMarkers *markers=xir_compile_calloc(work,1,sizeof(*markers),&status);
     if(!markers) return status;
-    markers->resources=work->resources;EffectErrorFiniteRead read={proof,work,UINT32_MAX};
+    markers->resources=work->resources;EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};
     for(uint32_t f=0;f<proof->contexts && status==XR_XIR_OK;++f) {
         uint64_t word=0;status=error_finite_word(&read,proof->rows[f].end-(uint64_t)proof->words*64,64,&word);
         if(status!=XR_XIR_OK) break;

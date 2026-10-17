@@ -13,7 +13,7 @@
  *   Closure and positive support consume the sole Input and Final without a solver.
  */
 #define EFFECT_CAPTURE_FLAGS UINT32_MAX
-enum { EFFECT_CAPTURE_FIXED, EFFECT_CAPTURE_RAW };
+enum { EFFECT_CAPTURE_FIXED, EFFECT_CAPTURE_RAW, EFFECT_CAPTURE_COMPLETE };
 enum { EFFECT_CAPTURE_SCALAR, EFFECT_CAPTURE_CALLABLE, EFFECT_CAPTURE_CELL, EFFECT_CAPTURE_CLASS };
 
 typedef struct EffectCaptureNode {
@@ -251,7 +251,7 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
     uint64_t maximum=0;
     for(uint32_t n=0;n<final->count;++n) {
         EffectCaptureNode node={0};status=effect_capture_node(read,n,&node);if(status!=XR_XIR_OK) return status;
-        uint64_t width=(uint64_t)node.basis.row_words*64+2;
+        uint64_t width=(uint64_t)node.basis.row_words*64+3;
         uint64_t values=(uint64_t)node.values+node.head.parameter_count+1;
         if(width && values>(UINT32_MAX-maximum)/width) maximum=UINT32_MAX;else maximum+=values*width;
         status=effect_role_range(read->work,final->nodes[n].input,(uint64_t)node.head.parameter_count*node.basis.row_words,sizeof(uint64_t));
@@ -279,7 +279,8 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
             value=fact->value;have_kind=true;
         }
         if(fact->word==EFFECT_CAPTURE_FLAGS) {
-            bool callable=kind==EFFECT_CAPTURE_CALLABLE && fact->value<node.values && fact->bit<=EFFECT_CAPTURE_RAW;
+            bool callable=kind==EFFECT_CAPTURE_CALLABLE &&
+                ((fact->value<node.values && fact->bit<=EFFECT_CAPTURE_RAW) || fact->bit==EFFECT_CAPTURE_COMPLETE);
             bool object=kind==EFFECT_CAPTURE_CLASS && fact->value<=node.values && fact->bit==EFFECT_CAPTURE_RAW;
             if(!callable && !object) return XR_XIR_BAD_STRUCTURE;
         } else {
@@ -296,6 +297,7 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
 #include "xxir_effect_capture_reference.inc.c"
 #include "xxir_effect_capture_values.inc.c"
 #include "xxir_effect_capture_edges.inc.c"
+#include "xxir_effect_capture_complete.inc.c"
 
 static XrXirStatus effect_capture_selected_node(EffectCaptureRead *read,const EffectCaptureNode *node) {
     const EffectCaptureFact *fact=read->selected;uint32_t value=fact->value;
@@ -414,6 +416,7 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
         status=effect_capture_clauses(&read);if(status!=XR_XIR_OK) return status;
         for(uint32_t p=0;p<final->capture.count;++p) {
             const EffectCaptureFact *fact=&final->capture.facts[p];
+            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_COMPLETE) continue;
             if(read.fixed_only && (fact->word!=EFFECT_CAPTURE_FLAGS || fact->bit!=EFFECT_CAPTURE_FIXED)) continue;
             /* This head is borrowed only within one uninterrupted, allocation-
              * free receiving request. Construction never retains this view. */
@@ -427,7 +430,9 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
             if(!read.supported) return XR_XIR_BAD_STRUCTURE;
         }
     }
-    read.selected=NULL;read.node_view=NULL;return effect_capture_inputs_match(&read);
+    read.selected=NULL;read.node_view=NULL;
+    status=effect_capture_complete_clauses(&read);if(status!=XR_XIR_OK) return status;
+    return effect_capture_inputs_match(&read);
 }
 static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final) {
     if(!final || final->capture.facts || final->capture.count || final->capture.capacity) return XR_XIR_BAD_STRUCTURE;
@@ -453,6 +458,10 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
             if(status!=XR_XIR_OK) break;
             do { read.changed=false;status=effect_capture_clauses(&read); } while(status==XR_XIR_OK && read.changed);
         }
+    }
+    if(status==XR_XIR_OK) {
+        read.fixed_only=false;
+        do { read.changed=false;status=effect_capture_complete_clauses(&read); } while(status==XR_XIR_OK && read.changed);
     }
     if(status==XR_XIR_OK) status=effect_capture_match(work,final);
     if(status!=XR_XIR_OK) { xr_compile_resources_free(final->capture.facts);final->capture=(EffectCaptureProof){0}; }

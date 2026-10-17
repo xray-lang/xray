@@ -24,7 +24,13 @@ static XrXirStatus effect_final_error_unknown(const XrXirCompileContext *work,
         if(!fact) continue;
         /* An opaque alternative with genuine targets needs an independently
          * exhaustive value proof before its Error residual can be discharged. */
-        if(bit==current.basis.parameters && present) return XR_XIR_UNRESOLVED;
+        if(bit==current.basis.parameters && present) {
+            const EffectCaptureFact *complete=NULL;
+            status=effect_capture_find(&read,
+                (EffectCaptureFact){node,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0},&complete);
+            if(status!=XR_XIR_OK) return status;
+            if(complete) continue;
+        }
         unresolved=true;
     }
     *unknown=unresolved;return XR_XIR_OK;

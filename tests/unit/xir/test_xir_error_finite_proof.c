@@ -12,7 +12,7 @@ static void finite_clear(EffectErrorFinite *proof) {
 }
 static XrXirStatus finite_insert(const XrXirCompileContext *work,EffectErrorFinite *proof,
     uint64_t coordinate,uint32_t rank,bool *changed) {
-    EffectErrorFiniteRead read={proof,work,UINT32_MAX};uint32_t at=0;
+    EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};uint32_t at=0;
     XrXirStatus lookup=error_finite_lower(&read,coordinate,&at);if(lookup!=XR_XIR_OK) return lookup;
     if(at<proof->count && proof->facts[at].coordinate==coordinate) return XR_XIR_OK;
     if(proof->count==proof->capacity) {
@@ -56,7 +56,7 @@ static XrXirStatus finite_block_order(const XrXirCompileContext *work,
 static XrXirStatus finite_build(const XrXirCompileContext *work,EffectErrorFinite *proof,const XrXirModule *raw) {
     bool changed=true;
     while(changed) {
-        changed=false;EffectErrorFiniteRead read={proof,work,UINT32_MAX};
+        changed=false;EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};
         for(uint32_t f=0;f<proof->functions;++f) {
             /* The independent dense oracle classifies the raw source array.
              * It never consumes the production canonical run walker. */
@@ -162,7 +162,7 @@ static void finite_cfg(unsigned mode,bool saved) {
     if(status!=XR_XIR_OK) fprintf(stderr,"finite build mode%u saved%u status%u work%llu\n",mode,saved,status,
         (unsigned long long)pc_stats(&context).work);
     CHECK(status==XR_XIR_OK);finite_verify(&context,proof,XR_XIR_OK);
-    EffectErrorFiniteRead read={proof,&context,UINT32_MAX};uint64_t result=UINT64_MAX;
+    EffectErrorFiniteRead read={proof,&context,UINT32_MAX,NULL};uint64_t result=UINT64_MAX;
     CHECK(error_finite_word(&read,proof->rows[1].end-64,64,&result)==XR_XIR_OK);
     CHECK(result==(mode<10?pc_expected((PendingCase)mode,saved):0));
     memset(&fixture,0xDC,sizeof(fixture));
@@ -182,6 +182,24 @@ static void finite_cfg(unsigned mode,bool saved) {
     pc_release(&context,baseline);CHECK(!live && !live_bytes);
     printf("finite Error CFG mode%u saved%u: literal/current Input; closure/rootedness; no callbacks; physical0\n",mode,saved);
 }
+static void finite_input_payloads(const XrXirCompileContext *context,EffectErrorFinite *proof) {
+    EffectBodyFunction *head=&proof->material->functions[0];EffectBodyRun *runs=head->runs;
+    uint32_t node=proof->rows[0].node;proof->rows[0].node=proof->invocations->count;
+    finite_verify(context,proof,XR_XIR_BAD_STRUCTURE);proof->rows[0].node=node;
+    head->runs=(EffectBodyRun *)(uintptr_t)1;finite_verify(context,proof,XR_XIR_BAD_STRUCTURE);head->runs=runs;
+    XrXirStatus status=XR_XIR_OK;
+    EffectBodyRun *dead=xir_compile_calloc(context,head->run_capacity,sizeof(*dead),&status);
+    CHECK(dead && status==XR_XIR_OK);xr_compile_resources_free(dead);
+    head->runs=dead;finite_verify(context,proof,XR_XIR_BAD_STRUCTURE);head->runs=runs;
+    XrXirCompileContext foreign=*context;foreign.resources=NULL;XrCompileResourceLimits caps=pc_caps();
+    CHECK(xr_compile_resources_new(&caps,&foreign.resources)==XR_COMPILE_RESOURCE_OK);
+    EffectBodyRun *other=xir_compile_calloc(&foreign,head->run_capacity,sizeof(*other),&status);
+    CHECK(other && status==XR_XIR_OK);head->runs=other;
+    finite_verify(context,proof,XR_XIR_BAD_STRUCTURE);head->runs=runs;
+    xr_compile_resources_free(other);xr_compile_resources_release(foreign.resources);
+    finite_verify(context,proof,XR_XIR_OK);
+    puts("finite Error current read: invalid context and arbitrary/dead/foreign Input runs rejected before access");
+}
 static void finite_cycle(void) {
     XrXirInstruction ops[2][2]={
         {{.op=XR_XIR_CALL,.immediate=1},{.op=XR_XIR_RETURN}},
@@ -194,6 +212,7 @@ static void finite_cycle(void) {
     EffectBodyMaterial *material=NULL;CHECK(effect_body_material_create(&context,&module,&material)==XR_XIR_OK);
     EffectErrorFinite *proof=finite_prepare(&context,&module,NULL,0);
     CHECK(finite_build(&context,proof,&module)==XR_XIR_OK);finite_verify(&context,proof,XR_XIR_OK);
+    finite_input_payloads(&context,proof);
     bool changed=false;
     CHECK(finite_insert(&context,proof,proof->rows[0].end-64+1,3,&changed)==XR_XIR_OK);
     CHECK(finite_insert(&context,proof,proof->rows[1].end-64+1,3,&changed)==XR_XIR_OK);

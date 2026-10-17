@@ -14,7 +14,7 @@ static void error_finite_release(EffectErrorFinite *proof) {
 }
 static XrXirStatus error_finite_insert(const XrXirCompileContext *work,EffectErrorFinite *proof,
     uint64_t coordinate,uint32_t rank,bool *changed) {
-    EffectErrorFiniteRead read={proof,work,UINT32_MAX};uint32_t at=0;
+    EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};uint32_t at=0;
     XrXirStatus status=error_finite_lower(&read,coordinate,&at);if(status!=XR_XIR_OK) return status;
     if(at<proof->count && proof->facts[at].coordinate==coordinate) return XR_XIR_OK;
     if(proof->count==proof->capacity) {
@@ -50,7 +50,7 @@ static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErr
     bool changed=true;
     for(uint32_t rank=1;changed;++rank) {
         if(rank==UINT32_MAX) return XR_XIR_BUDGET;
-        changed=false;EffectErrorFiniteRead read={proof,work,rank};
+        changed=false;EffectErrorFiniteRead read={proof,work,rank,NULL};
         ErrorFiniteDerive derive={proof,rank,&changed};
         for(uint32_t f=0;f<proof->contexts;++f) {
             bool empty=false;XrXirStatus status=error_finite_walk(&read,f,error_finite_derive_coordinate,&derive,&empty);
@@ -115,7 +115,7 @@ static XrXirStatus error_finite_outcomes_match(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->functions,proof->functions,sizeof(*outcomes->functions));
     if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->task_errors,proof->functions,sizeof(*outcomes->task_errors));
     if(status!=XR_XIR_OK) return status;
-    EffectErrorFiniteRead read={proof,work,UINT32_MAX};
+    EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};
     for(uint32_t f=0;f<proof->contexts;++f) {
         XrXirEffect throws=XR_XIR_EFFECT_NONE;
         for(uint32_t word=0;word<proof->words;++word) {

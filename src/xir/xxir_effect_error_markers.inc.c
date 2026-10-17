@@ -314,7 +314,7 @@ static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,cons
 static XrXirStatus error_marker_permissions_match(const XrXirCompileContext *work,const EffectErrorFinite *proof,
     const XrXirStatus *permissions) {
     XrXirStatus status=error_marker_nodes_match(work,proof);if(status!=XR_XIR_OK) return status;
-    const EffectErrorMarkers *markers=proof->markers;EffectErrorFiniteRead read={proof,work,UINT32_MAX};
+    const EffectErrorMarkers *markers=proof->markers;EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};
     uint32_t root=0,next=0;
     for(uint32_t f=0;f<proof->contexts;++f) {
         uint64_t word=0;status=error_finite_word(&read,proof->rows[f].end-(uint64_t)proof->words*64,64,&word);

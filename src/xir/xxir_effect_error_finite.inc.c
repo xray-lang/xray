@@ -29,10 +29,19 @@ typedef struct EffectErrorFinite {
     uint32_t functions,contexts,atom_count,words,count,capacity;
     bool contextual;
 } EffectErrorFinite;
+/* This identity belongs only to the current callback-free receiving walk.
+ * It retains no rows, computed facts or admission result. Construction never
+ * carries it through an allocator or release callback. */
+typedef struct EffectErrorFiniteView {
+    const XrXirCompileContext *work;
+    const EffectErrorFinite *proof;
+    const EffectBodyMaterial *material;
+} EffectErrorFiniteView;
 typedef struct EffectErrorFiniteRead {
     const EffectErrorFinite *proof;
     const XrXirCompileContext *work;
     uint32_t limit;
+    const EffectErrorFiniteView *current;
 } EffectErrorFiniteRead;
 #include "xxir_effect_error_context_namespace.inc.c"
 
@@ -76,7 +85,7 @@ static XrXirStatus error_finite_entry(const EffectErrorEquationRead *equation,
 static XrXirStatus error_finite_equation(const EffectErrorFiniteRead *read,
     uint32_t function,EffectErrorEquationRead *output) {
     uint32_t body=UINT32_MAX;
-    XrXirStatus status=error_finite_context_body(read->work,read->proof,function,&body);
+    XrXirStatus status=error_finite_context_read(read,function,&body);
     if(status!=XR_XIR_OK) return status;
     *output=(EffectErrorEquationRead){.body=effect_body_owned_request(read->work,read->proof->material),
         .work=read->work,.atoms=read->proof->atoms,.context=function,.function=body,
@@ -259,6 +268,7 @@ static XrXirStatus error_finite_geometry(const XrXirCompileContext *work,const E
         status=effect_role_range(work,head->blocks,head->block_count,sizeof(*head->blocks));
         if(status==XR_XIR_OK) status=effect_role_range(work,head->parameters,head->parameter_count,sizeof(*head->parameters));
         if(status==XR_XIR_OK) status=effect_role_range(work,head->operands,head->operand_count,sizeof(*head->operands));
+        if(status==XR_XIR_OK) status=effect_role_range(work,head->runs,head->run_capacity,sizeof(*head->runs));
         if(status!=XR_XIR_OK) return status;
         uint64_t values=(uint64_t)head->parameter_count+head->instruction_count;
         uint64_t summary=(uint64_t)proof->words*64;
@@ -278,9 +288,16 @@ static XrXirStatus error_finite_geometry(const XrXirCompileContext *work,const E
     }
     return XR_XIR_OK;
 }
-static XrXirStatus error_finite_check(const XrXirCompileContext *work,const EffectErrorFinite *proof) {
+static XrXirStatus error_finite_view_open(const XrXirCompileContext *work,
+    const EffectErrorFinite *proof,EffectErrorFiniteView *output) {
+    if(!output || output->work || output->proof || output->material) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=error_finite_geometry(work,proof);if(status!=XR_XIR_OK) return status;
-    EffectErrorFiniteRead read={proof,work,UINT32_MAX};
+    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=(EffectErrorFiniteView){work,proof,proof->material};return XR_XIR_OK;
+}
+static XrXirStatus error_finite_check_current(const EffectErrorFiniteView *current) {
+    const EffectErrorFinite *proof=current->proof;const XrXirCompileContext *work=current->work;
+    XrXirStatus status=XR_XIR_OK;EffectErrorFiniteRead read={proof,work,UINT32_MAX,current};
     for(uint32_t f=0;f<proof->contexts;++f) {
         const EffectErrorFiniteRow *row=&proof->rows[f];
         bool empty=false;status=error_finite_walk(&read,f,error_finite_compare,NULL,&empty);
@@ -303,4 +320,9 @@ static XrXirStatus error_finite_check(const XrXirCompileContext *work,const Effe
         read.limit=UINT32_MAX;
     }
     return XR_XIR_OK;
+}
+
+static XrXirStatus error_finite_check(const XrXirCompileContext *work,const EffectErrorFinite *proof) {
+    EffectErrorFiniteView current={0};XrXirStatus status=error_finite_view_open(work,proof,&current);
+    return status==XR_XIR_OK?error_finite_check_current(&current):status;
 }

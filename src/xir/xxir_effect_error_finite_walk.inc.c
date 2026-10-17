@@ -18,11 +18,11 @@ typedef XrXirStatus (*ErrorFiniteVisit)(const EffectErrorFiniteRead *,uint32_t,u
 static XrXirStatus error_finite_empty(const EffectErrorFiniteRead *read,
     uint32_t function,bool *empty) {
     uint32_t actual=UINT32_MAX;
-    XrXirStatus status=error_finite_context_body(read->work,read->proof,function,&actual);
+    XrXirStatus status=error_finite_context_read(read,function,&actual);
     if(status!=XR_XIR_OK) return status;
     const EffectBodyFunction *head=&read->proof->material->functions[actual];
     EffectBodyRead body=effect_body_compile_read(read->work);
-    status=effect_role_range(read->work,head->runs,head->run_capacity,sizeof(*head->runs));
+    if(!read->current) status=effect_role_range(read->work,head->runs,head->run_capacity,sizeof(*head->runs));
     if(status!=XR_XIR_OK) return status;
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};*empty=false;
     for(uint32_t run=0;run<head->run_count;++run) {

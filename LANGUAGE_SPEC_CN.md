@@ -7594,6 +7594,8 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+callable 的真实目标与 opaque 广告可同时存在；opaque 仅在实际来源穷尽时可从 Error unknown 中消除。有限证据的来源义务包括全部实参、复制/PHI 输入、局部写入、完整调用 key 对应的全部目标，以及每个真实 RETURN 出口；每项正依赖的 rank 严格下降，未扎根循环和删除全部完备事实均拒绝。声明根形参仍表示外部来源，固定边界或 FUNCTION_WEAKEN 不授予精确身份。接收方从当前拥有式 Input 与同一有限关系检查闭包和正支持，不从旧 coverage rank 恢复权限。捕获环境列仍需独立来源证据，callee 身份不能替代其完备性；这一有限实现不表示全部效果验证与旧求解器退役已经完成。
+
 ---
 
 ## 18. 错误码 (Error Codes)
