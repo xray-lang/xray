@@ -434,7 +434,7 @@ static bool cell_proof_roles(CellProofBuild *build) {
             if (!cell_proof_run(build,function,&cursor,&run) ||
                 !cell_proof_roles_range(build,f,&run,&handled)) return false;
             if (handled) continue;
-            if (!cell_proof_run_walk(build,f,function,&run,cell_proof_role_receive,1)) return false;
+            if (!cell_proof_received_run_walk(build,f,function,&run,cell_proof_role_receive,1)) return false;
         }
     }
     size_t words = 0; uint64_t scopes = 0;
@@ -546,7 +546,7 @@ static bool cell_proof_class_collect(CellProofBuild *build) {
         while (cursor.next<function->instruction_count) {
             XrXirCellProofRun run;
             if (!cell_proof_run(build,function,&cursor,&run) ||
-                !cell_proof_run_walk(build,f,function,&run,cell_proof_class_collect_row,1)) return false;
+                !cell_proof_received_run_walk(build,f,function,&run,cell_proof_class_collect_row,1)) return false;
         }
     }
     return true;
@@ -765,7 +765,7 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
             if (!cell_proof_run(build,&head,&cursor,&run) ||
                 !cell_proof_edges_range(build,f,&head,&run,&handled)) return false;
             if (handled) continue;
-            if (!cell_proof_run_walk(build,f,&head,&run,cell_proof_edge_row,3)) return false;
+            if (!cell_proof_received_run_walk(build,f,&head,&run,cell_proof_edge_row,3)) return false;
         }
     }
     return true;
@@ -916,7 +916,7 @@ static bool cell_proof_validate(CellProofBuild *build) {
             if (!cell_proof_run(build,function,&cursor,&run) ||
                 !cell_proof_zero_operands(build,f,function,&run,&zero)) return false;
             if (zero) continue;
-            if (!cell_proof_run_walk(build,f,function,&run,cell_proof_validate_row,1)) return false;
+            if (!cell_proof_received_run_walk(build,f,function,&run,cell_proof_validate_row,1)) return false;
         }
     }
     return true;

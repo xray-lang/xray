@@ -279,6 +279,7 @@ static void mask_cell_values(const XrXirCompileContext *context) {
 #include "xir_snapshot_literal_block_cell_cases.h"
 #include "xir_cell_complete_run_walk_cases.h"
 #include "xir_cell_literal_inventory_cases.h"
+#include "xir_cell_received_run_walk_cases.h"
 int main(void) {
     const XrCompileResourceLimits caps={8388608,4194304,4000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -290,6 +291,7 @@ int main(void) {
     mask_literal_cell_blocks(&context);
     complete_cell_run_walk_controls(&context);
     cell_literal_inventory_controls(&context);
+    received_cell_run_walk_controls(&context);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK &&
         after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
     fprintf(stderr,"Snapshot no-allocation read matrix work%llu cap4000000 live%llu/%llu\n",
