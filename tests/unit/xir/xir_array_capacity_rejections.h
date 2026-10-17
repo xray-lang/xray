@@ -35,10 +35,11 @@ static void capacity_rejections(void) {
     _Static_assert(sizeof(cases)/sizeof(cases[0])==sizeof(reasons)/sizeof(reasons[0]),
         "Every invalid complete input has one independent semantic reason");
     /* These locations name the rejected receiver, member or argument token.
-     * Array literal, generic-call and member-set factories retain no column. */
+     * Generic calls use their actual method token. Array literal and member-set
+     * factories retain no column. */
     static const int locations[][2]={
-        {1,49},{1,39},{1,0},{2,55},{2,57},{1,56},{1,58},{1,58},{1,0},{1,46},
-        {1,36},{1,0},{1,43},{1,43},{1,50},{1,50},{1,0},{1,70},{1,72},{3,60}};
+        {1,49},{1,39},{1,0},{2,55},{2,57},{1,56},{1,58},{1,58},{1,50},{1,46},
+        {1,36},{1,0},{1,43},{1,43},{1,50},{1,50},{1,43},{1,70},{1,72},{3,60}};
     _Static_assert(sizeof(cases)/sizeof(cases[0])==sizeof(locations)/sizeof(locations[0]),
         "Every invalid complete input has one independent Source location");
     unsigned failures=0;
@@ -57,7 +58,7 @@ static void capacity_rejections(void) {
         const bool semantic=status==XR_XIR_BAD_TYPE&&diagnostic.status==status&&
             !result.checked&&!result.snapshot&&diagnostic.message[0]&&
             !strcmp(diagnostic.message,reasons[n])&&diagnostic.line==locations[n][0]&&
-            diagnostic.column==locations[n][1]&&path&&strstr(path.path,"root.xr");
+            diagnostic.column==locations[n][1]&&path.path&&strstr(path.path,"root.xr");
         if(!semantic){++failures;fprintf(stderr,"capacity rejected%u %s independent semantic oracle FAILED\n",n,cases[n]);}
         xr_xir_compile_source_failure_free(&path);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
         CHECK(capacity_stats(&context).live_bytes==baseline);xr_compile_resources_release(context.resources);
