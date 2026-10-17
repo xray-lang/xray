@@ -38,9 +38,13 @@ int main(int argc,char **argv) {(void)atomic_runtime_before_free;
     for(unsigned ordinal=begin;ordinal<end;++ordinal) {
         printf("Atomic runtime FI start backend=%u close=%u drop=%u ordinal=%u of%u\n",backend,close,drop,ordinal,expected);fflush(stdout);
         AtomicResourceResult r=atomic_resource_transaction(backend,close,drop,NULL,0,ordinal);
-        printf("Atomic runtime FI result backend=%u close=%u drop=%u ordinal=%u fault=%u faultOwner=%u faultStep=%u faultEntry=%u faultObserved=%u publishedMask=%u unaffected=%u/%u hit=%u physical0/0\n",
-            backend,close,drop,ordinal,r.fault,r.fault_owner,r.fault_step,r.fault_entry,r.fault_observed,r.published_mask,(unsigned)r.unaffected[0],(unsigned)r.unaffected[1],(unsigned)r.hit);fflush(stdout);
+        printf("Atomic runtime FI result backend=%u close=%u drop=%u ordinal=%u fault=%u faultOwner=%u faultStep=%u faultEntry=%u faultObserved=%u publishedMask=%u unaffected=%u/%u hit=%u value0=%llu call0=%llu work0=%llu value1=%llu call1=%llu work1=%llu physical0/0\n",
+            backend,close,drop,ordinal,r.fault,r.fault_owner,r.fault_step,r.fault_entry,r.fault_observed,r.published_mask,(unsigned)r.unaffected[0],(unsigned)r.unaffected[1],(unsigned)r.hit,(unsigned long long)r.cost[0].requested_bytes,(unsigned long long)r.cost[0].requested_call_bytes,(unsigned long long)r.cost[0].work,(unsigned long long)r.cost[1].requested_bytes,(unsigned long long)r.cost[1].requested_call_bytes,(unsigned long long)r.cost[1].work);fflush(stdout);
         CHECK(!r.complete && r.hit && r.fault==XR_XIR_CALL_OOM && r.fault_owner<2 && r.unaffected[1-r.fault_owner]);
+        unsigned healthy=1-r.fault_owner;
+        CHECK(r.cost[healthy].requested_bytes==normal.cost[healthy].requested_bytes);
+        CHECK(r.cost[healthy].requested_call_bytes==normal.cost[healthy].requested_call_bytes);
+        CHECK(r.cost[healthy].work==normal.cost[healthy].work);
     }
     printf("Atomic runtime completeFI backend=%u close=%u drop=%u range=%u:%u of%u everyOriginalOrdinal typedOOM physical0/0\n",backend,close,drop,begin,end,expected);return 0;
 }
