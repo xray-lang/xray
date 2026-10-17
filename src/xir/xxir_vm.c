@@ -51,6 +51,7 @@ typedef struct ScalarRun {
 #include "xxir_interpreter_state.h"
 #include "xxir_scalar_core.h"
 _Static_assert(sizeof(ScalarRun)==sizeof(XirScalarCoreRun), "scalar descriptor physical size is unchanged");
+#include "xxir_vm_debug_pending.inc.c"
 
 
 
@@ -846,7 +847,12 @@ static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding 
     if (status != XR_XIR_RUN_OK)
         action = xr_xir_call_numeric_fault(status, at < function->instruction_count &&
             function->instructions[at].op == XR_XIR_REM_INT);
-    if (debug) xir_vm_debug_after(debug, &point, action.kind);
+    if (debug) {
+        XirVmDebugPendingCall pending={0};
+        if (action.kind==XR_XIR_ACTION_CALL && vm_debug_pending(&point,&action,&pending)!=XR_XIR_VALUE_OK)
+            action=xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+        xir_vm_debug_after(debug,&point,action.kind,action.kind==XR_XIR_ACTION_CALL ? &pending : NULL);
+    }
     if (action.kind == XR_XIR_ACTION_FAULT && at < function->instruction_count) {
         uint32_t handler = function->blocks[vm_block(function, at)].panic;
         if (handler) return vm_panic_land(&run, state, handler, action);

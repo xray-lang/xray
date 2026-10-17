@@ -31,6 +31,24 @@ typedef struct XirVmDebugExceptionLocal {
     XirVmDebugExceptionLocalKind kind;
     uint32_t function,handler,accepted;
 } XirVmDebugExceptionLocal;
+typedef enum XirVmDebugExceptionRouteKind {
+    XIR_VM_DEBUG_EXCEPTION_ROUTE_UNKNOWN,
+    XIR_VM_DEBUG_EXCEPTION_ROUTE_SELECTED
+} XirVmDebugExceptionRouteKind;
+/* A selected handler on the authenticated synchronous VM ancestor chain.
+ * UNKNOWN includes native/Task/root boundaries, not a claim of global uncaught. */
+typedef struct XirVmDebugExceptionRoute {
+    XirVmDebugExceptionRouteKind kind;
+    uint32_t function,handler,accepted;
+    uint64_t frame;
+    uint32_t ancestors;
+} XirVmDebugExceptionRoute;
+/* Produced only by the actual VM callback after it prepares CALL. The debug
+ * owner copies these primitives; a later child ENTER proves admission occurred. */
+typedef struct XirVmDebugPendingCall {
+    uint32_t instruction,callee;
+    bool invoked;
+} XirVmDebugPendingCall;
 XR_FUNC bool xir_vm_debug_retain(XrXirVmDebug *debug);
 XR_FUNC bool xir_vm_debug_bind(XrXirVmDebug *debug, const XrXirArtifact *artifact);
 XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program);
@@ -38,7 +56,7 @@ XR_FUNC void xir_vm_debug_unbind(XrXirVmDebug *debug);
 XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     const XirVmDebugPoint *point, bool *stopped);
 XR_FUNC void xir_vm_debug_after(XrXirVmDebug *debug, const XirVmDebugPoint *point,
-    XrXirActionKind action);
+    XrXirActionKind action, const XirVmDebugPendingCall *pending);
 XR_FUNC XrXirValueStatus xir_vm_debug_inbox(XrXirVmDebug *debug, void *state, uint32_t offset);
 XR_FUNC void xir_vm_debug_release(XrXirVmDebug *debug, void *state);
 XR_FUNC void xir_vm_debug_faulted(XrXirVmDebug *,const XrXirCallView *);
@@ -54,6 +72,7 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *,const XrXirCompileCon
  * or ungrouped breakpoint is unfiltered and cannot be silently discarded. */
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot *,XirVmDebugStopCause *);
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_local(const XrXirVmDebugSnapshot *,XirVmDebugExceptionLocal *);
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_route(const XrXirVmDebugSnapshot *,XirVmDebugExceptionRoute *);
 /* Copies only the captured payload of a published, admitted module slot. A
  * retained snapshot never supplies a live frame or module permission. */
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_slot(const XrXirVmDebugSnapshot *,uint32_t,uint32_t,XrXirValue *);

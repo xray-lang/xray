@@ -50,9 +50,9 @@ static XrXirValueStatus debug_selector_match(DebugSelector *run,XrXirDomain *dom
     if (status==XR_XIR_VALUE_OK) *matches=instruction==run->selector->accepted;
     return status;
 }
-static XrXirValueStatus debug_exception_local(XrXirVmDebug *debug,XrXirCallView *view,
-    const SnapshotFrame *frame,uint32_t operand,XirVmDebugExceptionLocal *output) {
-    uint32_t function=frame->info.function,instruction=frame->info.instruction;
+static XrXirValueStatus debug_exception_function(XrXirVmDebug *debug,XrXirCallView *view,
+    XrXirVmDebugLocation location,const XrXirValue *error,XirVmDebugExceptionLocal *output) {
+    uint32_t function=location.function,instruction=location.instruction;
     *output=(XirVmDebugExceptionLocal){XIR_VM_DEBUG_EXCEPTION_LOCAL_UNKNOWN,function,0,UINT32_MAX};
     if (!(debug_source_point(debug,function,instruction).flags&DEBUG_SOURCE_AUTHORED)) return XR_XIR_VALUE_OK;
     if (!xr_xir_call_admission(view) || view->instance!=debug->target || function>=debug->source_functions)
@@ -66,13 +66,15 @@ static XrXirValueStatus debug_exception_local(XrXirVmDebug *debug,XrXirCallView 
     }
     XirVmDebugExceptionLocal result={XIR_VM_DEBUG_EXCEPTION_LOCAL_PROPAGATE,function,0,UINT32_MAX};
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
+    XrXirOp op=module->functions[function].instructions[instruction].op;
+    if (!handler && op!=XR_XIR_THROW && op!=XR_XIR_CALL && op!=XR_XIR_CALL_INDIRECT) return XR_XIR_VALUE_OK;
     while (handler) {
         if (!xr_xir_domain_work(debug->domain,1)) return XR_XIR_VALUE_LIMIT;
         const DebugSourceHandler *route=&debug->source_handlers[debug->source_handler_offsets[function]+handler-1];
         for (uint32_t s=0;s<route->count;++s) {
             if (!xr_xir_domain_work(debug->domain,1)) return XR_XIR_VALUE_LIMIT;
             DebugSelector run={.module=module,.function=&module->functions[function],
-                .selector=&debug->source_selectors[route->first+s],.error=&frame->values[operand],
+                .selector=&debug->source_selectors[route->first+s],.error=error,
                 .observer=debug->domain,.actual=xr_xir_call_admission(view),
                 .admission=*xr_xir_call_admission(view),.root=route->error};
             /* Existing Function/Cell/Class identities keep their real receiving
@@ -88,4 +90,10 @@ static XrXirValueStatus debug_exception_local(XrXirVmDebug *debug,XrXirCallView 
         handler=route->parent;
     }
     *output=result;return XR_XIR_VALUE_OK;
+}
+
+static XrXirValueStatus debug_exception_local(XrXirVmDebug *debug,XrXirCallView *view,
+    const SnapshotFrame *frame,uint32_t operand,XirVmDebugExceptionLocal *output) {
+    XrXirVmDebugLocation location={frame->info.function,frame->info.instruction};
+    return debug_exception_function(debug,view,location,&frame->values[operand],output);
 }

@@ -28,6 +28,8 @@ typedef struct DebugFrame {
     XirVmDebugPoint point;
     uint64_t id;
     unsigned char *known;
+    XirVmDebugPendingCall pending;
+    bool waiting;
 } DebugFrame;
 typedef struct DebugBreakpoint {
     uint32_t function, instruction;
@@ -78,6 +80,7 @@ struct XrXirVmDebugSnapshot {
     SnapshotFrame *frames;
     XrXirValue exception;
     XirVmDebugExceptionLocal exception_local;
+    XirVmDebugExceptionRoute exception_route;
     XirVmDebugStopCause cause;
 };
 struct XrXirVmDebug {
@@ -392,7 +395,7 @@ static XrXirValueStatus register_frame(XrXirVmDebug *debug, const XirVmDebugPoin
     DebugFrame *frame = find_frame(debug, point->state);
     if (frame) {
         if (frame->id!=call->id) return XR_XIR_VALUE_BAD_ARGUMENT;
-        frame->point = stored; *output = frame; return XR_XIR_VALUE_OK;
+        frame->point = stored;frame->waiting=false; *output = frame; return XR_XIR_VALUE_OK;
     }
     if (debug->count >= debug->capacity) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status;
@@ -406,7 +409,7 @@ static XrXirValueStatus register_frame(XrXirVmDebug *debug, const XirVmDebugPoin
     }
     memset(known, 1, function->parameter_count);
     frame = &debug->frames[debug->count++];
-    *frame = (DebugFrame){stored, call->id, known};
+    *frame = (DebugFrame){.point=stored,.id=call->id,.known=known};
     *output = frame;
     return XR_XIR_VALUE_OK;
 }
@@ -464,6 +467,7 @@ static const DebugFrame *find_id(const XrXirVmDebug *debug,uint64_t id) {
     for (uint32_t i=0;i<debug->count;++i) if (debug->frames[i].id==id) return &debug->frames[i];
     return NULL;
 }
+#include "xxir_vm_debug_route.inc.c"
 static bool snapshot_contains(const XrXirVmDebugSnapshot *snapshot,uint32_t count,uint64_t id) {
     for (uint32_t i=0;i<count;++i) if (snapshot->frames[i].info.id==id) return true;
     return false;
@@ -563,6 +567,8 @@ static XrXirValueStatus capture_prepare(XrXirVmDebug *debug,XrXirCallView *view,
         if (!xr_xir_domain_work(debug->domain,1)) { status=XR_XIR_VALUE_LIMIT;goto fail; }
         status=xr_xir_value_copy(&concrete,&snapshot->exception);if (status!=XR_XIR_VALUE_OK) goto fail;
         status=debug_exception_local(debug,view,frame,operand,&snapshot->exception_local);
+        if (status==XR_XIR_VALUE_OK) status=debug_exception_route(debug,view,frame,operand,
+            &snapshot->exception_local,&snapshot->exception_route);
         if (status!=XR_XIR_VALUE_OK) goto fail;
     }
     *output=snapshot;
@@ -647,7 +653,7 @@ XR_FUNC XrXirValueStatus xir_vm_debug_before(XrXirVmDebug *debug,
     return status;
 }
 XR_FUNC void xir_vm_debug_after(XrXirVmDebug *debug, const XirVmDebugPoint *point,
-    XrXirActionKind action) {
+    XrXirActionKind action,const XirVmDebugPendingCall *pending) {
     if (debug->disabled) return;
     DebugFrame *frame = find_frame(debug, point->state);
     if (!frame) return;
@@ -655,6 +661,12 @@ XR_FUNC void xir_vm_debug_after(XrXirVmDebug *debug, const XirVmDebugPoint *poin
     const XrXirFunction *function = &module->functions[point->binding->function];
     if (point->instruction >= function->instruction_count) return;
     const XrXirInstruction *op = &function->instructions[point->instruction];
+    frame->waiting=action==XR_XIR_ACTION_CALL;
+    if (frame->waiting) {
+        XR_CHECK(pending && pending->instruction==point->instruction && pending->callee<module->function_count,
+            "waiting debug facts must come from the actual VM call");
+        frame->pending=*pending;
+    }
     uint32_t id = function->parameter_count + point->instruction;
     if (point->layout->offsets[id] == UINT32_MAX || op->op == XR_XIR_LOCAL_UNINIT) frame->known[id] = 0;
     else if (action == XR_XIR_ACTION_CALL || action == XR_XIR_ACTION_AWAIT_TASK)
@@ -758,6 +770,13 @@ XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_local(const XrXirVmDebu
     if (!snapshot->exception.type) return XR_XIR_VALUE_UNSUPPORTED;
     if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
     *output=snapshot->exception_local;return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_route(const XrXirVmDebugSnapshot *snapshot,
+    XirVmDebugExceptionRoute *output) {
+    if (!snapshot_valid(snapshot) || !output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!snapshot->exception.type) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
+    *output=snapshot->exception_route;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_member(const XrXirVmDebugSnapshot *snapshot,
     uint32_t frame,const XrXirValue *value,uint32_t field,bool *allowed) {

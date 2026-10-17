@@ -141,6 +141,20 @@ add_test(NAME test_dap_source_handlers_resources COMMAND test_dap_source_handler
 set_tests_properties(test_dap_source_handlers PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;exceptions")
 set_tests_properties(test_dap_source_handlers_resources PROPERTIES TIMEOUT 120 LABELS "dap;source;ownership;exceptions;resources;fault-injection")
 
+add_executable(test_dap_source_routes test_source_routes.c)
+target_link_libraries(test_dap_source_routes PRIVATE xray_dap_current)
+target_compile_definitions(test_dap_source_routes PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_dap_source_routes PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_source_routes PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_source_routes COMMAND test_dap_source_routes)
+add_test(NAME test_dap_source_routes_resources COMMAND test_dap_source_routes --resources)
+set_tests_properties(test_dap_source_routes test_dap_source_routes_resources PROPERTIES
+    TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;source;errors;ownership;metadata")
+set_property(TEST test_dap_source_routes_resources APPEND PROPERTY LABELS "resources;fault-injection")
+
 add_executable(test_dap_source_selectors test_source_selectors.c)
 target_link_libraries(test_dap_source_selectors PRIVATE xray_dap_current)
 target_compile_definitions(test_dap_source_selectors PRIVATE XR_DAP_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
